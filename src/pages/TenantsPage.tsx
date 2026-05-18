@@ -9,6 +9,7 @@ import {
   PlusCircle,
   Search,
   Trash2,
+  UserPlus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
@@ -23,6 +24,7 @@ import { SkeletonRow } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { OnboardingWizard } from '@/components/tenants/OnboardingWizard'
 import { TenantForm, TenantFormValues } from '@/components/tenants/TenantForm'
+import { TenantImportModal } from '@/components/tenants/TenantImportModal'
 import {
   TaggedTenant,
   useAllTenants,
@@ -48,6 +50,7 @@ export function TenantsPage() {
   )
 
   const [wizardOpen, setWizardOpen] = React.useState(false)
+  const [importOpen, setImportOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'active' | 'inactive'>('all')
   const [serverFilter, setServerFilter] = React.useState<Set<string>>(
@@ -164,12 +167,22 @@ export function TenantsPage() {
         title="Tenants"
         subtitle={subtitle}
         rightSlot={
-          <Button
-            onClick={() => setWizardOpen(true)}
-            leftIcon={<PlusCircle className="h-4 w-4" />}
-          >
-            Novo tenant
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setImportOpen(true)}
+              disabled={tenantsQ.isLoading || tenantsQ.data.length === 0}
+              leftIcon={<UserPlus className="h-4 w-4" />}
+            >
+              Importar como clientes
+            </Button>
+            <Button
+              onClick={() => setWizardOpen(true)}
+              leftIcon={<PlusCircle className="h-4 w-4" />}
+            >
+              Novo tenant
+            </Button>
+          </div>
         }
       />
 
@@ -384,6 +397,12 @@ export function TenantsPage() {
       <OnboardingWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
+      />
+
+      <TenantImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        tenants={tenantsQ.data}
       />
 
       <Modal

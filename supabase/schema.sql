@@ -104,6 +104,7 @@ create table if not exists public.settings (
   id boolean primary key default true,
   asaas_api_key text,
   asaas_environment text check (asaas_environment in ('sandbox','production')) default 'sandbox',
+  asaas_sync_interval_min int default 15,
   followups_enabled boolean default true,
   followup_templates jsonb,
   updated_at timestamptz not null default now(),

@@ -119,6 +119,8 @@ export interface Payment {
   reference?: string
   note?: string
   source?: 'manual' | 'asaas'
+  /** ID externo (ex.: payment id no Asaas) — usado pra dedup no import. */
+  externalId?: string
   createdAt: string
 }
 
@@ -190,6 +192,8 @@ export interface Client {
 export interface AppSettings {
   asaasApiKey?: string
   asaasEnvironment?: 'sandbox' | 'production'
+  /** Intervalo (minutos) do auto-sync de pagamentos Asaas. 0 desliga. */
+  asaasSyncIntervalMin?: number
   followUpsEnabled?: boolean
   followUpTemplates?: {
     day3?: string

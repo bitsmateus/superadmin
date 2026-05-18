@@ -204,6 +204,7 @@ type SettingsRow = {
   id: boolean
   asaas_api_key: string | null
   asaas_environment: 'sandbox' | 'production' | null
+  asaas_sync_interval_min: number | null
   followups_enabled: boolean | null
   followup_templates: AppSettings['followUpTemplates'] | null
 }
@@ -213,6 +214,7 @@ function rowToSettings(r: SettingsRow | null): AppSettings {
   return {
     asaasApiKey: r.asaas_api_key ?? undefined,
     asaasEnvironment: r.asaas_environment ?? undefined,
+    asaasSyncIntervalMin: r.asaas_sync_interval_min ?? undefined,
     followUpsEnabled: r.followups_enabled ?? undefined,
     followUpTemplates: r.followup_templates ?? undefined,
   }
@@ -223,6 +225,7 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
     id: true,
     asaas_api_key: s.asaasApiKey ?? null,
     asaas_environment: s.asaasEnvironment ?? null,
+    asaas_sync_interval_min: s.asaasSyncIntervalMin ?? null,
     followups_enabled: s.followUpsEnabled ?? null,
     followup_templates: s.followUpTemplates ?? null,
     updated_at: new Date().toISOString(),
@@ -379,6 +382,10 @@ export type CreateClientInput = Pick<
   'name' | 'email' | 'phone' | 'company' | 'responsavel'
 > & {
   stage?: PipelineStage
+  tenantId?: string
+  tenantServerId?: string
+  tenantApiId?: string
+  tenantName?: string
 }
 
 export const db = {
@@ -415,6 +422,10 @@ export const db = {
       stage: data.stage ?? 'welcome',
       createdAt: now,
       stageUpdatedAt: now,
+      tenantId: data.tenantId,
+      tenantServerId: data.tenantServerId,
+      tenantApiId: data.tenantApiId,
+      tenantName: data.tenantName,
       followUpActive: false,
       followUps: [],
       deliveryChecklist: buildDefaultChecklist(),
@@ -440,6 +451,10 @@ export const db = {
         company: client.company,
         responsavel: client.responsavel ?? null,
         stage: client.stage,
+        tenant_id: client.tenantId ?? null,
+        tenant_server_id: client.tenantServerId ?? null,
+        tenant_api_id: client.tenantApiId ?? null,
+        tenant_name: client.tenantName ?? null,
         delivery_checklist: client.deliveryChecklist,
         delivery_handoff_checklist: client.deliveryHandoffChecklist,
         followup_active: false,

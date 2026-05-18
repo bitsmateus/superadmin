@@ -84,6 +84,9 @@ function AsaasBlock() {
   const [env, setEnv] = React.useState<'sandbox' | 'production'>(
     settings.asaasEnvironment ?? 'sandbox',
   )
+  const [syncInterval, setSyncInterval] = React.useState<string>(
+    String(settings.asaasSyncIntervalMin ?? 15),
+  )
   const [show, setShow] = React.useState(false)
   const [testing, setTesting] = React.useState(false)
   const [testResult, setTestResult] = React.useState<
@@ -95,13 +98,16 @@ function AsaasBlock() {
   React.useEffect(() => {
     setApiKey(settings.asaasApiKey ?? '')
     setEnv(settings.asaasEnvironment ?? 'sandbox')
-  }, [settings.asaasApiKey, settings.asaasEnvironment])
+    setSyncInterval(String(settings.asaasSyncIntervalMin ?? 15))
+  }, [settings.asaasApiKey, settings.asaasEnvironment, settings.asaasSyncIntervalMin])
 
   const save = () => {
+    const minutes = Number(syncInterval)
     db.saveSettings({
       ...db.getSettings(),
       asaasApiKey: apiKey.trim() || undefined,
       asaasEnvironment: env,
+      asaasSyncIntervalMin: Number.isFinite(minutes) && minutes >= 0 ? minutes : 15,
     })
     toast.success('Asaas salvo')
   }
@@ -174,6 +180,19 @@ function AsaasBlock() {
               { value: 'production', label: 'Produção' },
             ]}
           />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <Input
+              label="Auto-sync (minutos)"
+              type="number"
+              min={0}
+              max={1440}
+              value={syncInterval}
+              onChange={(e) => setSyncInterval(e.target.value)}
+              hint="0 desliga o auto-sync. Default 15 min."
+            />
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">

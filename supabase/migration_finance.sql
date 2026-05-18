@@ -24,6 +24,10 @@ alter table public.clients
 alter table public.clients
   add column if not exists finance_notes text;
 
+-- Intervalo do auto-sync de pagamentos Asaas (minutos; 0 desliga)
+alter table public.settings
+  add column if not exists asaas_sync_interval_min int default 15;
+
 -- 2. Atualiza o trigger de bloqueio para incluir as novas colunas
 create or replace function public.guard_support_writes()
 returns trigger

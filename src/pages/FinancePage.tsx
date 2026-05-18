@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CalendarRange,
   CreditCard,
+  Download,
   ExternalLink,
   Repeat,
   TrendingUp,
@@ -16,6 +17,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { AsaasImportModal } from '@/components/crm/AsaasImportModal'
 import { useClients } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { canSeeFinancials } from '@/services/supabase'
@@ -75,6 +77,7 @@ export function FinancePage() {
   const [range, setRange] = React.useState<Range>('mtd')
   const [from, setFrom] = React.useState<string>(toISODate(startOfMonth()))
   const [to, setTo] = React.useState<string>(toISODate(new Date()))
+  const [importOpen, setImportOpen] = React.useState(false)
 
   React.useEffect(() => {
     const now = new Date()
@@ -186,6 +189,20 @@ export function FinancePage() {
       <TopBar
         title="Financeiro"
         subtitle="MRR, implementações e inadimplência"
+        rightSlot={
+          <Button
+            variant="secondary"
+            onClick={() => setImportOpen(true)}
+            leftIcon={<Download className="h-4 w-4" />}
+          >
+            Importar do Asaas
+          </Button>
+        }
+      />
+
+      <AsaasImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
       />
 
       <div className="px-8 py-6 space-y-5">

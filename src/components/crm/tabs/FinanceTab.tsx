@@ -6,8 +6,11 @@ import {
   Link2,
   Pencil,
   Plus,
+  RefreshCw,
+  Search,
   StickyNote,
   Trash2,
+  Unlink,
   Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,6 +22,13 @@ import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { db } from '@/services/db'
+import { asaasApi, type AsaasCustomer } from '@/services/asaas'
+import {
+  linkAsaasCustomer,
+  syncPaymentsForClient,
+  unlinkAsaasCustomer,
+} from '@/services/asaasSync'
+import { extractErrorMessage } from '@/api/client'
 import { formatDateShort } from '@/lib/utils'
 import type {
   Client,
@@ -46,9 +56,32 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
 export function FinanceTab({ client }: { client: Client }) {
   const [modalOpen, setModalOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<Payment | null>(null)
+  const [linkOpen, setLinkOpen] = React.useState(false)
+  const [syncing, setSyncing] = React.useState(false)
 
   const payments = client.payments ?? []
   const links = client.extraLinks ?? []
+
+  const onSyncNow = async () => {
+    if (!client.asaasCustomerId) return
+    setSyncing(true)
+    try {
+      const r = await syncPaymentsForClient(client)
+      toast.success(
+        `Asaas sincronizado: ${r.inserted} novo(s), ${r.updated} atualizado(s).`,
+      )
+    } catch (err) {
+      toast.error(extractErrorMessage(err, 'Falha ao sincronizar com Asaas'))
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const onUnlink = () => {
+    if (!confirm('Remover vínculo com Asaas? Pagamentos já importados continuam aqui.')) return
+    unlinkAsaasCustomer(client.id)
+    toast.success('Vínculo Asaas removido')
+  }
 
   const sorted = React.useMemo(
     () =>
@@ -128,6 +161,59 @@ export function FinanceTab({ client }: { client: Client }) {
           value={`R$ ${totalPending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
           tone="warning"
         />
+      </div>
+
+      {/* Asaas */}
+      <div className="flex items-center justify-between rounded-xl border border-line bg-white/[0.02] px-4 py-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+            <CreditCard className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-white">Asaas</div>
+            <div className="text-xs text-white/55 truncate">
+              {client.asaasCustomerId
+                ? `Vinculado · ${client.asaasCustomerId}`
+                : 'Sem vínculo — vincule pra importar pagamentos existentes'}
+              {client.lastPaymentCheck && client.asaasCustomerId && (
+                <> · última verificação {formatDateShort(client.lastPaymentCheck)}</>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {client.asaasCustomerId ? (
+            <>
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={syncing}
+                onClick={onSyncNow}
+                leftIcon={!syncing ? <RefreshCw className="h-3.5 w-3.5" /> : undefined}
+              >
+                Sincronizar
+              </Button>
+              <button
+                type="button"
+                onClick={onUnlink}
+                aria-label="Desvincular Asaas"
+                className="rounded-md p-2 text-white/40 hover:bg-danger/10 hover:text-danger"
+                title="Desvincular Asaas"
+              >
+                <Unlink className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => setLinkOpen(true)}
+              leftIcon={<Link2 className="h-3.5 w-3.5" />}
+            >
+              Vincular Asaas
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Pagamentos */}
@@ -232,6 +318,27 @@ export function FinanceTab({ client }: { client: Client }) {
         onSubmit={(p) => {
           upsertPayment(p)
           setModalOpen(false)
+        }}
+      />
+
+      <LinkAsaasModal
+        open={linkOpen}
+        onClose={() => setLinkOpen(false)}
+        client={client}
+        onLinked={async (customer) => {
+          linkAsaasCustomer(client.id, customer.id)
+          setLinkOpen(false)
+          toast.success(`Vinculado: ${customer.name}`)
+          // Já roda um primeiro sync
+          try {
+            setSyncing(true)
+            const r = await syncPaymentsForClient({ ...client, asaasCustomerId: customer.id })
+            toast.success(`${r.inserted} pagamento(s) importado(s) do Asaas.`)
+          } catch (err) {
+            toast.error(extractErrorMessage(err, 'Falha ao importar pagamentos'))
+          } finally {
+            setSyncing(false)
+          }
         }}
       />
     </div>
@@ -521,6 +628,121 @@ function ExtraLinksSection({
 }
 
 // ---------- Notas livres ----------
+
+// ---------- Modal de vínculo Asaas ----------
+
+function LinkAsaasModal({
+  open,
+  onClose,
+  client,
+  onLinked,
+}: {
+  open: boolean
+  onClose: () => void
+  client: Client
+  onLinked: (customer: AsaasCustomer) => void
+}) {
+  const [query, setQuery] = React.useState('')
+  const [results, setResults] = React.useState<AsaasCustomer[]>([])
+  const [searching, setSearching] = React.useState(false)
+  const [touched, setTouched] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!open) return
+    // Sugere busca inicial pelo email do cliente
+    const initial = client.email || client.company || client.name
+    setQuery(initial ?? '')
+    setResults([])
+    setTouched(false)
+    if (initial) {
+      // executa busca automática
+      void doSearch(initial)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, client.id])
+
+  const doSearch = async (q: string) => {
+    if (!q.trim()) {
+      setResults([])
+      return
+    }
+    setSearching(true)
+    setTouched(true)
+    try {
+      const looksEmail = /@/.test(q)
+      const looksDoc = /^\d{11,14}$/.test(q.replace(/\D+/g, ''))
+      const res = await asaasApi.listCustomers(
+        looksEmail
+          ? { email: q.trim(), limit: 20 }
+          : looksDoc
+            ? { cpfCnpj: q.replace(/\D+/g, ''), limit: 20 }
+            : { name: q.trim(), limit: 20 },
+      )
+      setResults(res.data)
+    } catch (err) {
+      toast.error(extractErrorMessage(err, 'Falha ao buscar no Asaas'))
+      setResults([])
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Vincular cliente Asaas"
+      description="Busque o cliente existente no Asaas por e-mail, CPF/CNPJ ou nome."
+      size="lg"
+    >
+      <div className="flex gap-2">
+        <Input
+          placeholder="email@exemplo.com ou CPF ou nome"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          leftIcon={<Search className="h-4 w-4" />}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void doSearch(query)
+          }}
+        />
+        <Button variant="secondary" onClick={() => doSearch(query)} loading={searching}>
+          Buscar
+        </Button>
+      </div>
+
+      <div className="mt-4 space-y-1.5">
+        {!touched && (
+          <p className="text-xs text-white/45">
+            Use o e-mail cadastrado no Asaas pra match exato.
+          </p>
+        )}
+        {touched && results.length === 0 && !searching && (
+          <EmptyState
+            title="Nenhum cliente encontrado"
+            description="Tente outro termo ou peça pro admin verificar o ambiente Asaas em Configurações."
+          />
+        )}
+        {results.map((c) => (
+          <div
+            key={c.id}
+            className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2.5"
+          >
+            <div className="min-w-0">
+              <div className="text-sm text-white truncate">{c.name}</div>
+              <div className="text-xs text-white/55 truncate">
+                {c.email || '—'}
+                {c.cpfCnpj && <> · CPF/CNPJ {c.cpfCnpj}</>}
+              </div>
+            </div>
+            <Button size="sm" variant="primary" onClick={() => onLinked(c)}>
+              Vincular
+            </Button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  )
+}
 
 function FinanceNotesSection({ client }: { client: Client }) {
   const [value, setValue] = React.useState(client.financeNotes ?? '')

@@ -75,7 +75,9 @@ export interface AsaasCustomer {
 export interface AsaasPayment {
   id: string
   customer: string
+  subscription?: string | null
   value: number
+  netValue?: number
   status:
     | 'PENDING'
     | 'CONFIRMED'
@@ -84,8 +86,19 @@ export interface AsaasPayment {
     | 'REFUNDED'
     | string
   dueDate: string
+  paymentDate?: string | null
+  clientPaymentDate?: string | null
   description?: string
+  invoiceUrl?: string
   billingType: 'BOLETO' | 'PIX' | 'CREDIT_CARD' | 'UNDEFINED' | string
+}
+
+export interface AsaasListResponse<T> {
+  data: T[]
+  hasMore: boolean
+  totalCount: number
+  limit: number
+  offset: number
 }
 
 export interface AsaasSubscription {
@@ -149,6 +162,73 @@ export const asaasApi = {
 
   async getPayment(id: string): Promise<AsaasPayment> {
     return call<AsaasPayment>('GET', `/v3/payments/${encodeURIComponent(id)}`)
+  },
+
+  async listCustomers(params: {
+    email?: string
+    cpfCnpj?: string
+    name?: string
+    offset?: number
+    limit?: number
+  } = {}): Promise<AsaasListResponse<AsaasCustomer>> {
+    const q = new URLSearchParams()
+    if (params.email) q.set('email', params.email)
+    if (params.cpfCnpj) q.set('cpfCnpj', params.cpfCnpj)
+    if (params.name) q.set('name', params.name)
+    q.set('limit', String(params.limit ?? 100))
+    q.set('offset', String(params.offset ?? 0))
+    return call<AsaasListResponse<AsaasCustomer>>(
+      'GET',
+      `/v3/customers?${q.toString()}`,
+    )
+  },
+
+  async listAllCustomers(): Promise<AsaasCustomer[]> {
+    const out: AsaasCustomer[] = []
+    let offset = 0
+    const limit = 100
+    // Hard cap pra evitar loop em conta gigante.
+    for (let i = 0; i < 50; i++) {
+      const page = await asaasApi.listCustomers({ offset, limit })
+      out.push(...page.data)
+      if (!page.hasMore) break
+      offset += limit
+    }
+    return out
+  },
+
+  async listPayments(params: {
+    customer?: string
+    status?: string
+    offset?: number
+    limit?: number
+  } = {}): Promise<AsaasListResponse<AsaasPayment>> {
+    const q = new URLSearchParams()
+    if (params.customer) q.set('customer', params.customer)
+    if (params.status) q.set('status', params.status)
+    q.set('limit', String(params.limit ?? 100))
+    q.set('offset', String(params.offset ?? 0))
+    return call<AsaasListResponse<AsaasPayment>>(
+      'GET',
+      `/v3/payments?${q.toString()}`,
+    )
+  },
+
+  async listAllPaymentsForCustomer(customerId: string): Promise<AsaasPayment[]> {
+    const out: AsaasPayment[] = []
+    let offset = 0
+    const limit = 100
+    for (let i = 0; i < 50; i++) {
+      const page = await asaasApi.listPayments({
+        customer: customerId,
+        offset,
+        limit,
+      })
+      out.push(...page.data)
+      if (!page.hasMore) break
+      offset += limit
+    }
+    return out
   },
 }
 

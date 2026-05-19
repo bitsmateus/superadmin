@@ -1,24 +1,10 @@
 import * as React from 'react'
 import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  closestCorners,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from '@dnd-kit/core'
-import { useDraggable } from '@dnd-kit/core'
-import {
   AlertTriangle,
   ArrowDownCircle,
   ChevronDown,
   ChevronRight,
   Clock,
-  KanbanSquare,
-  List as ListIcon,
   ListChecks,
   PlusCircle,
   Search,
@@ -40,37 +26,10 @@ import { asText, cn, formatDateShort, initials } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
 import type { Client, PipelineStage } from '@/types/client'
 
-type ViewMode = 'kanban' | 'list'
-const VIEW_LS_KEY = 'tenanthub_pipeline_view'
-
-function readView(): ViewMode {
-  if (typeof window === 'undefined') return 'kanban'
-  try {
-    const v = window.localStorage.getItem(VIEW_LS_KEY)
-    return v === 'list' ? 'list' : 'kanban'
-  } catch {
-    return 'kanban'
-  }
-}
-
 export function PipelinePage() {
   const clients = useClients()
   const [search, setSearch] = React.useState('')
-  const [activeId, setActiveId] = React.useState<string | null>(null)
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
-  const [view, setView] = React.useState<ViewMode>(readView)
-
-  React.useEffect(() => {
-    try {
-      window.localStorage.setItem(VIEW_LS_KEY, view)
-    } catch {
-      /* ignore */
-    }
-  }, [view])
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  )
 
   const byStage = React.useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -96,29 +55,6 @@ export function PipelinePage() {
     }
     return buckets
   }, [clients, search])
-
-  const onDragStart = (e: DragStartEvent) => {
-    setActiveId(String(e.active.id))
-  }
-
-  const onDragEnd = (e: DragEndEvent) => {
-    setActiveId(null)
-    const { active, over } = e
-    if (!over) return
-    const targetStage = String(over.id) as PipelineStage
-    if (!PIPELINE_STAGES.includes(targetStage)) return
-    const client = clients.find((c) => c.id === active.id)
-    if (!client || client.stage === targetStage) return
-    db.updateClient(client.id, { stage: targetStage })
-    db.addLog(
-      client.id,
-      'Etapa alterada',
-      `${STAGE_COLORS[client.stage].label} → ${STAGE_COLORS[targetStage].label}`,
-    )
-    toast.success(`${client.name} → ${STAGE_COLORS[targetStage].label}`)
-  }
-
-  const activeClient = activeId ? clients.find((c) => c.id === activeId) : null
 
   const advanceStage = (c: Client) => {
     const next = NEXT_STAGE[c.stage]
@@ -152,7 +88,7 @@ export function PipelinePage() {
       />
 
       <div className="px-8 py-6">
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mb-4">
           <Input
             placeholder="Filtrar por nome ou empresa…"
             value={search}
@@ -160,40 +96,19 @@ export function PipelinePage() {
             leftIcon={<Search className="h-4 w-4" />}
             containerClassName="sm:max-w-sm"
           />
-          <ViewToggle value={view} onChange={setView} />
         </div>
 
-        {view === 'kanban' ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-          >
-            <div className="grid grid-flow-col auto-cols-[280px] gap-3 overflow-x-auto pb-3">
-              {PIPELINE_STAGES.map((stage) => (
-                <Column
-                  key={stage}
-                  stage={stage}
-                  clients={byStage[stage]}
-                  onCardClick={(id) => setOpenClientId(id)}
-                />
-              ))}
-            </div>
-
-            <DragOverlay>
-              {activeClient ? (
-                <ClientCard client={activeClient} dragging onClick={() => {}} />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        ) : (
-          <ListView
-            byStage={byStage}
-            onRowClick={(id) => setOpenClientId(id)}
-            onAdvance={advanceStage}
-          />
-        )}
+        <div className="space-y-3">
+          {PIPELINE_STAGES.map((stage) => (
+            <ListGroup
+              key={stage}
+              stage={stage}
+              clients={byStage[stage]}
+              onRowClick={(id) => setOpenClientId(id)}
+              onAdvance={advanceStage}
+            />
+          ))}
+        </div>
       </div>
 
       <ClientDrawer
@@ -201,89 +116,6 @@ export function PipelinePage() {
         onClose={() => setOpenClientId(null)}
       />
     </>
-  )
-}
-
-function ViewToggle({
-  value,
-  onChange,
-}: {
-  value: ViewMode
-  onChange: (v: ViewMode) => void
-}) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Modo de visualização"
-      className="inline-flex items-center rounded-lg border border-line bg-card p-0.5"
-    >
-      <ToggleBtn
-        active={value === 'kanban'}
-        onClick={() => onChange('kanban')}
-        icon={<KanbanSquare className="h-3.5 w-3.5" />}
-        label="Kanban"
-      />
-      <ToggleBtn
-        active={value === 'list'}
-        onClick={() => onChange('list')}
-        icon={<ListIcon className="h-3.5 w-3.5" />}
-        label="Lista"
-      />
-    </div>
-  )
-}
-
-function ToggleBtn({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean
-  onClick: () => void
-  icon: React.ReactNode
-  label: string
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-        active
-          ? 'bg-accent/15 text-accent ring-1 ring-accent/30'
-          : 'text-white/55 hover:bg-white/[0.04] hover:text-white',
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  )
-}
-
-function ListView({
-  byStage,
-  onRowClick,
-  onAdvance,
-}: {
-  byStage: Record<PipelineStage, Client[]>
-  onRowClick: (id: string) => void
-  onAdvance: (c: Client) => void
-}) {
-  return (
-    <div className="space-y-3">
-      {PIPELINE_STAGES.map((stage) => (
-        <ListGroup
-          key={stage}
-          stage={stage}
-          clients={byStage[stage]}
-          onRowClick={onRowClick}
-          onAdvance={onAdvance}
-        />
-      ))}
-    </div>
   )
 }
 
@@ -455,158 +287,6 @@ function ListGroup({
         </div>
       )}
     </section>
-  )
-}
-
-function Column({
-  stage,
-  clients,
-  onCardClick,
-}: {
-  stage: PipelineStage
-  clients: Client[]
-  onCardClick: (id: string) => void
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage })
-  const style = STAGE_COLORS[stage]
-  return (
-    <section
-      ref={setNodeRef}
-      className={cn(
-        'flex h-full flex-col rounded-xl border border-line bg-card/60 transition-colors',
-        isOver && 'border-accent/40 bg-accent/[0.04]',
-      )}
-    >
-      <header
-        className="flex items-center justify-between gap-2 rounded-t-xl border-b border-line px-3 py-2.5"
-        style={{ background: `linear-gradient(180deg, ${style.bg}, transparent)` }}
-      >
-        <div className="flex items-center gap-2">
-          <span
-            className="h-2 w-2 rounded-full"
-            style={{ background: style.dot }}
-          />
-          <span className="text-xs font-medium" style={{ color: style.text }}>
-            {style.label}
-          </span>
-        </div>
-        <span className="text-[11px] text-white/45">{clients.length}</span>
-      </header>
-      <div className="flex flex-col gap-2 p-2 min-h-[120px]">
-        {clients.length === 0 ? (
-          <p className="px-2 py-6 text-center text-[11px] text-white/30">
-            Solte um cliente aqui
-          </p>
-        ) : (
-          clients.map((c) => (
-            <ClientCard key={c.id} client={c} onClick={() => onCardClick(c.id)} />
-          ))
-        )}
-      </div>
-    </section>
-  )
-}
-
-function ClientCard({
-  client,
-  dragging,
-  onClick,
-}: {
-  client: Client
-  dragging?: boolean
-  onClick: () => void
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id: client.id })
-
-  const style: React.CSSProperties = {
-    transform: transform
-      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
-      : undefined,
-    opacity: isDragging ? 0.4 : 1,
-  }
-
-  const alerts = computeAlerts(client)
-  const setupHint = client.stage === 'setup' ? checklistHint(client) : null
-
-  return (
-    <article
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      className={cn(
-        'rounded-lg border border-line bg-card p-3 transition-shadow',
-        dragging
-          ? 'cursor-grabbing shadow-lg ring-1 ring-accent/40'
-          : 'cursor-grab hover:border-white/15',
-      )}
-    >
-      <div
-        {...listeners}
-        onClick={(e) => {
-          // pointer activation w/ distance prevents click-during-drag; this is reliable
-          if (!isDragging && !dragging) {
-            e.stopPropagation()
-            onClick()
-          }
-        }}
-      >
-        <div className="flex items-start gap-2">
-          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/[0.05] text-[10px] font-medium text-white/85 ring-1 ring-line">
-            {initials(client.name) || '?'}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-white">
-              {asText(client.name, '—')}
-            </p>
-            <p className="truncate text-[11px] text-white/45">
-              {asText(client.company, '—')}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-2">
-          <StageBadge stage={client.stage} size="sm" />
-        </div>
-
-        {setupHint && (
-          <div className="mt-2 flex items-start gap-1.5 rounded-md bg-white/[0.03] px-2 py-1.5 text-[10.5px] text-white/70 ring-1 ring-line">
-            <ListChecks className="mt-0.5 h-3 w-3 shrink-0 text-success" />
-            <div className="min-w-0">
-              <div className="text-[9.5px] uppercase tracking-wider text-white/40">
-                Checklist {setupHint.done}/{setupHint.total}
-              </div>
-              <div className="truncate">{setupHint.label}</div>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1 text-[10px] text-white/45">
-            <Clock className="h-3 w-3" />
-            {timeAgo(client.stageUpdatedAt ?? client.createdAt)}
-          </span>
-          {alerts.length > 0 && (
-            <div className="flex items-center gap-1">
-              {alerts.map((a, i) => (
-                <span
-                  key={i}
-                  title={a.title}
-                  className={cn(
-                    'grid h-5 w-5 place-items-center rounded-full',
-                    a.tone === 'red'
-                      ? 'bg-danger/15 text-danger'
-                      : 'bg-warning/15 text-warning',
-                  )}
-                >
-                  <AlertTriangle className="h-3 w-3" />
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </article>
   )
 }
 

@@ -4,10 +4,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   Building2,
+  CreditCard,
+  Download,
   Mail,
   Phone,
   PlusCircle,
   Search,
+  Server as ServerIcon,
   User as UserIcon,
   UserCircle2,
 } from 'lucide-react'
@@ -21,9 +24,14 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table'
 import { StageBadge } from '@/components/crm/StageBadge'
 import { ClientDrawer } from '@/components/crm/ClientDrawer'
+import { TenantImportModal } from '@/components/tenants/TenantImportModal'
 import { PIPELINE_STAGES, STAGE_COLORS } from '@/constants/stageColors'
 import { useClients } from '@/hooks/useClients'
+import { useAllTenants } from '@/hooks/useTenants'
+import { useAuth } from '@/hooks/useAuth'
 import { db } from '@/services/db'
+import { canSeeFinancials } from '@/services/supabase'
+import { matchTenantsToClients } from '@/services/tenantImport'
 import { asText, initials } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
 import type { PipelineStage } from '@/types/client'
@@ -41,12 +49,22 @@ type NewClientValues = z.infer<typeof newClientSchema>
 
 export function ClientsPage() {
   const clients = useClients()
+  const { data: allTenants } = useAllTenants()
+  const { profile } = useAuth()
+  const seeFinancials = canSeeFinancials(profile?.role)
   const [search, setSearch] = React.useState('')
   const [stageFilter, setStageFilter] = React.useState<PipelineStage | 'all'>(
     'all',
   )
   const [openNew, setOpenNew] = React.useState(false)
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
+  const [importOpen, setImportOpen] = React.useState(false)
+
+  const unlinkedCount = React.useMemo(() => {
+    if (!allTenants.length) return 0
+    const result = matchTenantsToClients(allTenants, clients)
+    return result.newCount + result.suggestCount
+  }, [allTenants, clients])
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -102,12 +120,21 @@ export function ClientsPage() {
         title="Clientes"
         subtitle={`${clients.length} cliente(s) no CRM`}
         rightSlot={
-          <Button
-            onClick={() => setOpenNew(true)}
-            leftIcon={<PlusCircle className="h-4 w-4" />}
-          >
-            Novo cliente
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setImportOpen(true)}
+              leftIcon={<Download className="h-4 w-4" />}
+            >
+              Importar tenants
+            </Button>
+            <Button
+              onClick={() => setOpenNew(true)}
+              leftIcon={<PlusCircle className="h-4 w-4" />}
+            >
+              Novo cliente
+            </Button>
+          </div>
         }
       />
 
@@ -137,6 +164,30 @@ export function ClientsPage() {
             ))}
           </div>
         </div>
+
+        {unlinkedCount > 0 && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/[0.06] px-4 py-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <ServerIcon className="h-4 w-4 shrink-0 text-accent" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-white">
+                  {unlinkedCount} tenant{unlinkedCount !== 1 ? 's' : ''} no servidor sem vínculo no CRM
+                </p>
+                <p className="text-xs text-white/55">
+                  Importe como clientes na etapa "Ativo" para acompanhar financeiro e histórico.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => setImportOpen(true)}
+              leftIcon={<Download className="h-3.5 w-3.5" />}
+            >
+              Importar
+            </Button>
+          </div>
+        )}
 
         {filtered.length === 0 ? (
           <EmptyState
@@ -196,7 +247,30 @@ export function ClientsPage() {
                         </div>
                       </div>
                     </TD>
-                    <TD className="text-white/85">{asText(c.company)}</TD>
+                    <TD>
+                      <div className="text-white/85">{asText(c.company)}</div>
+                      {seeFinancials && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {c.monthlyValue ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-success/10 px-1.5 py-0.5 text-[11px] font-medium text-success ring-1 ring-success/20">
+                              R$ {c.monthlyValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              <span className="font-normal text-success/60">/mês</span>
+                            </span>
+                          ) : null}
+                          {c.asaasCustomerId ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent ring-1 ring-accent/20">
+                              <CreditCard className="h-2.5 w-2.5" />
+                              Asaas
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[11px] text-white/35 ring-1 ring-white/10">
+                              <CreditCard className="h-2.5 w-2.5" />
+                              Sem Asaas
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </TD>
                     <TD>
                       <StageBadge stage={c.stage} />
                     </TD>
@@ -288,6 +362,12 @@ export function ClientsPage() {
           </div>
         </form>
       </Modal>
+
+      <TenantImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        tenants={allTenants}
+      />
 
       <ClientDrawer
         clientId={openClientId}

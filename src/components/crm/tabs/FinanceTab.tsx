@@ -62,6 +62,23 @@ export function FinanceTab({ client }: { client: Client }) {
   const payments = client.payments ?? []
   const links = client.extraLinks ?? []
 
+  // Ao abrir a aba, se o cliente já está vinculado ao Asaas mas não tem
+  // pagamentos em memória (ex.: após restart do servidor), sincroniza
+  // automaticamente sem precisar clicar novamente.
+  React.useEffect(() => {
+    if (!client.asaasCustomerId) return
+    if (payments.length > 0) return
+    setSyncing(true)
+    syncPaymentsForClient(client)
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[finance] auto-sync on open failed', err)
+      })
+      .finally(() => setSyncing(false))
+  // Executa apenas quando o cliente muda ou o vínculo muda.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.id, client.asaasCustomerId])
+
   const onSyncNow = async () => {
     if (!client.asaasCustomerId) return
     setSyncing(true)

@@ -232,6 +232,39 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
   }
 }
 
+// ---------- Settings localStorage backup ----------
+
+const SETTINGS_LS_KEY = 'tenanthub_crm_settings'
+
+function lsReadSettings(): AppSettings {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_LS_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as AppSettings
+  } catch {
+    return {}
+  }
+}
+
+function lsWriteSettings(s: AppSettings): void {
+  try {
+    window.localStorage.setItem(SETTINGS_LS_KEY, JSON.stringify(s))
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+const ASAAS_LINKS_LS_KEY = 'tenanthub_asaas_links'
+
+function lsReadAsaasLinks(): Record<string, string> {
+  try {
+    const raw = window.localStorage.getItem(ASAAS_LINKS_LS_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
 // ---------- Pub/sub + caches ----------
 
 let clientsCache: Client[] = []
@@ -281,9 +314,30 @@ export async function bootDb(): Promise<void> {
         // PGRST116 = no rows; that's fine (singleton may not exist yet).
         // eslint-disable-next-line no-console
         console.error('[db] load settings failed', settingsRes.error)
+        // Fall back to localStorage so settings survive even when Supabase
+        // is unreachable or the upsert had previously failed silently.
+        settingsCache = lsReadSettings()
       } else {
-        settingsCache = rowToSettings(settingsRes.data as SettingsRow | null)
+        const fromSupabase = rowToSettings(settingsRes.data as SettingsRow | null)
+        // If Supabase returned an empty row (no prior upsert succeeded), prefer
+        // the localStorage copy so a restart doesn't wipe the user's config.
+        const hasData = Object.keys(fromSupabase).some(
+          (k) => fromSupabase[k as keyof AppSettings] !== undefined,
+        )
+        settingsCache = hasData ? fromSupabase : lsReadSettings()
+        // Keep localStorage in sync with whatever Supabase returned.
+        if (hasData) lsWriteSettings(fromSupabase)
       }
+      // Aplica vínculos Asaas salvos em localStorage caso a coluna
+      // asaas_customer_id não exista no Supabase ou o PATCH tenha falhado.
+      const asaasLinks = lsReadAsaasLinks()
+      if (Object.keys(asaasLinks).length > 0) {
+        clientsCache = clientsCache.map((c) => {
+          const saved = asaasLinks[c.id]
+          return saved && !c.asaasCustomerId ? { ...c, asaasCustomerId: saved } : c
+        })
+      }
+
       subscribeRealtime()
       booted = true
       notify()
@@ -509,6 +563,17 @@ export const db = {
       if (error) {
         // eslint-disable-next-line no-console
         console.error('[db] UPDATE clients FAILED', error)
+        // PGRST204 = coluna ausente no schema do Supabase.
+        // Não revertemos o cache: o dado está correto em memória e o
+        // vínculo Asaas já foi salvo numa chamada anterior. Apenas avisa
+        // o usuário para rodar a migration SQL.
+        if ((error as { code?: string }).code === 'PGRST204') {
+          const col = /the '(\w+)' column/.exec(error.message)?.[1] ?? 'coluna'
+          toast.error(
+            `Coluna "${col}" ausente no Supabase. Execute a migration SQL em Configurações → Supabase.`,
+          )
+          return
+        }
         const rollback = clientsCache.slice()
         const ridx = rollback.findIndex((c) => c.id === id)
         if (ridx !== -1) rollback[ridx] = prev
@@ -594,6 +659,9 @@ export const db = {
   saveSettings(s: AppSettings): void {
     const prev = settingsCache
     settingsCache = { ...prev, ...s }
+    // Persist to localStorage immediately so a page reload never loses the
+    // settings even if the Supabase upsert fails or is delayed.
+    lsWriteSettings(settingsCache)
     notify()
     void (async () => {
       // eslint-disable-next-line no-console
@@ -605,6 +673,7 @@ export const db = {
         // eslint-disable-next-line no-console
         console.error('[db] UPSERT settings FAILED', error)
         settingsCache = prev
+        lsWriteSettings(prev)
         notify()
         toast.error('Falha ao salvar configurações: ' + error.message)
       } else {

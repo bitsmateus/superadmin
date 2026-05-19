@@ -25,11 +25,12 @@ import { FinanceTab } from './tabs/FinanceTab'
 import { BriefingTab } from './tabs/BriefingTab'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
-import { AccessTenantModal } from '@/components/tenants/AccessTenantModal'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { canDeleteClient, canSeeFinancials } from '@/services/supabase'
 import { db } from '@/services/db'
+import { useServerById } from '@/store/authStore'
+import { useAccessStore } from '@/store/accessStore'
 import { NEXT_STAGE, PIPELINE_STAGES, STAGE_COLORS } from '@/constants/stageColors'
 import { asText, cn, initials } from '@/lib/utils'
 import type { PipelineStage } from '@/types/client'
@@ -59,11 +60,13 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
   const [tab, setTab] = React.useState('overview')
   const [stageMenu, setStageMenu] = React.useState(false)
   const [confirmChurn, setConfirmChurn] = React.useState(false)
-  const [accessOpen, setAccessOpen] = React.useState(false)
   const [user] = useCurrentUser()
   const { profile } = useAuth()
   const seeFinancials = canSeeFinancials(profile?.role)
   const canDelete = canDeleteClient(profile?.role)
+  const { systemUrl } = useAccessStore()
+  const tenantServer = useServerById(client?.tenantServerId)
+  const accessUrl = tenantServer?.loginUrl ?? systemUrl
 
   React.useEffect(() => {
     setTab('overview')
@@ -187,7 +190,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => setAccessOpen(true)}
+                onClick={() => window.open(accessUrl, '_blank', 'noopener,noreferrer')}
                 leftIcon={<ExternalLink className="h-3.5 w-3.5" />}
               >
                 Acessar sistema
@@ -261,21 +264,6 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
           {tab === 'followup' && <FollowUpTab client={client} />}
         </div>
       </Drawer>
-
-      <AccessTenantModal
-        open={accessOpen}
-        tenant={
-          client.tenantId
-            ? {
-                id: client.tenantId,
-                name: client.company || client.name,
-                email: client.email,
-              }
-            : null
-        }
-        defaultEmail={client.email}
-        onClose={() => setAccessOpen(false)}
-      />
 
       <Modal
         open={confirmChurn}

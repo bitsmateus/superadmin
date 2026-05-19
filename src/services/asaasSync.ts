@@ -126,14 +126,46 @@ export function matchCustomersToCrm(
 
 // ---------- Link / unlink ----------
 
+// localStorage backup: persiste o vínculo Asaas mesmo que a coluna
+// asaas_customer_id ainda não exista no Supabase ou o PATCH falhe.
+const ASAAS_LINKS_LS_KEY = 'tenanthub_asaas_links'
+
+function lsReadAsaasLinks(): Record<string, string> {
+  try {
+    const raw = window.localStorage.getItem(ASAAS_LINKS_LS_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function lsWriteAsaasLink(clientId: string, asaasCustomerId: string | null): void {
+  try {
+    const links = lsReadAsaasLinks()
+    if (asaasCustomerId) links[clientId] = asaasCustomerId
+    else delete links[clientId]
+    window.localStorage.setItem(ASAAS_LINKS_LS_KEY, JSON.stringify(links))
+  } catch {
+    /* ignore */
+  }
+}
+
 export function linkAsaasCustomer(clientId: string, asaasCustomerId: string): void {
+  lsWriteAsaasLink(clientId, asaasCustomerId)
   db.updateClient(clientId, { asaasCustomerId })
   db.addLog(clientId, 'Cliente vinculado ao Asaas', asaasCustomerId)
 }
 
 export function unlinkAsaasCustomer(clientId: string): void {
+  lsWriteAsaasLink(clientId, null)
   db.updateClient(clientId, { asaasCustomerId: undefined })
   db.addLog(clientId, 'Vínculo com Asaas removido')
+}
+
+/** Retorna os vínculos Asaas salvos em localStorage.
+ *  Usado pelo bootDb para aplicar sobrescritas sem disparar PATCHes. */
+export function getAsaasLinksFromStorage(): Record<string, string> {
+  return lsReadAsaasLinks()
 }
 
 // ---------- Sync de pagamentos ----------

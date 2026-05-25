@@ -14,7 +14,8 @@
       "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\mateu\\\\OneDrive\\\\Área de Trabalho\\\\superadmin\" -Recurse -Directory | Where-Object { $_.Name -match \"^\\(src|supabase|public\\)$\" } | Select-Object FullName)",
       "Bash(xargs grep -l \"stage_history\\\\|audit_log\\\\|STAGE_COLORS\\\\|NEXT_STAGE\")",
       "Bash(echo \"exit=$?\")",
-      "Bash(echo \"tsc exit=$?\")"
+      "Bash(echo \"tsc exit=$?\")",
+      "Bash(taskkill //F //IM node.exe)"
     ]
   }
 }

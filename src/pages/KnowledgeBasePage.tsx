@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Navigate } from 'react-router-dom'
 import {
   BookOpen,
@@ -159,7 +159,7 @@ function ArticlesTab() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-medium text-white truncate">{a.title}</h3>
+                      <h3 className="text-sm font-medium text-foreground truncate">{a.title}</h3>
                       {!a.published && <Badge tone="warning">Rascunho</Badge>}
                       {a.videoUrl && (
                         <Badge tone="info">
@@ -167,18 +167,18 @@ function ArticlesTab() {
                         </Badge>
                       )}
                     </div>
-                    <div className="mt-0.5 text-[11px] text-white/40">/{a.slug}</div>
+                    <div className="mt-0.5 text-[11px] text-foreground/40">/{a.slug}</div>
                     {cat && (
                       <div className="mt-1">
                         <Badge tone="neutral">{cat.name}</Badge>
                       </div>
                     )}
                     {a.summary && (
-                      <p className="mt-2 line-clamp-2 text-xs text-white/65">
+                      <p className="mt-2 line-clamp-2 text-xs text-foreground/65">
                         {a.summary}
                       </p>
                     )}
-                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-white/45">
+                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-foreground/45">
                       {a.viewsCount > 0 && <span>👁 {a.viewsCount}</span>}
                       {a.helpfulCount > 0 && (
                         <span className="text-success">👍 {a.helpfulCount}</span>
@@ -192,14 +192,14 @@ function ArticlesTab() {
                     <button
                       onClick={() => setEditing(a)}
                       title="Editar"
-                      className="rounded-md p-1.5 text-white/55 hover:bg-white/[0.06] hover:text-white"
+                      className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
                     >
                       <Edit3 className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => setDeleting(a)}
                       title="Remover"
-                      className="rounded-md p-1.5 text-white/40 hover:bg-danger/10 hover:text-danger"
+                      className="rounded-md p-1.5 text-foreground/40 hover:bg-danger/10 hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -246,8 +246,8 @@ function ArticlesTab() {
           </>
         }
       >
-        <p className="text-sm text-white/75">
-          Remover <strong className="text-white">{deleting?.title}</strong>?
+        <p className="text-sm text-foreground/75">
+          Remover <strong className="text-foreground">{deleting?.title}</strong>?
         </p>
       </Modal>
     </>
@@ -403,7 +403,7 @@ function ArticleEditor({
           placeholder={'1. Abra o painel de chat\n2. Vá em Conexões\n3. ...'}
         />
 
-        <label className="flex items-center gap-2 text-sm text-white/75">
+        <label className="flex items-center gap-2 text-sm text-foreground/75">
           <input
             type="checkbox"
             checked={published}
@@ -439,7 +439,7 @@ function CategoriesTab() {
   return (
     <>
       <div className="flex items-center justify-between">
-        <p className="text-xs text-white/55">
+        <p className="text-xs text-foreground/55">
           Categorias aparecem no portal /suporte e definem SLA padrão dos tickets.
         </p>
         <Button onClick={() => setCreating(true)} size="sm" leftIcon={<Plus className="h-4 w-4" />}>
@@ -461,15 +461,15 @@ function CategoriesTab() {
                 <HelpCircle className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-medium text-white truncate">{c.name}</div>
-                <div className="text-[11px] text-white/45">
+                <div className="text-sm font-medium text-foreground truncate">{c.name}</div>
+                <div className="text-[11px] text-foreground/45">
                   SLA {c.defaultSlaHours}h · {c.defaultPriority}
                 </div>
               </div>
             </div>
             <button
               onClick={() => setEditing(c)}
-              className="opacity-0 group-hover:opacity-100 rounded-md p-1.5 text-white/55 hover:bg-white/[0.06] hover:text-white"
+              className="opacity-0 group-hover:opacity-100 rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
             >
               <Edit3 className="h-3.5 w-3.5" />
             </button>
@@ -614,7 +614,7 @@ function CategoryEditor({
             { value: 'urgent', label: 'Urgente' },
           ]}
         />
-        <label className="flex items-center gap-2 text-sm text-white/75">
+        <label className="flex items-center gap-2 text-sm text-foreground/75">
           <input
             type="checkbox"
             checked={active}
@@ -697,7 +697,7 @@ function TriageEditorTab() {
         </Button>
       </div>
 
-      {loading && <div className="text-sm text-white/55">Carregando…</div>}
+      {loading && <div className="text-sm text-foreground/55">Carregando…</div>}
 
       {!loading && steps.length === 0 && (
         <EmptyState
@@ -769,7 +769,7 @@ function TriageNode({
       <div className="flex items-start gap-2">
         <button
           onClick={() => setExpanded((e) => !e)}
-          className="mt-0.5 text-white/40 hover:text-white"
+          className="mt-0.5 text-foreground/40 hover:text-foreground"
         >
           {expanded ? (
             <ChevronDown className="h-4 w-4" />
@@ -778,14 +778,14 @@ function TriageNode({
           )}
         </button>
         <div className="min-w-0 flex-1">
-          <div className="text-sm text-white font-medium">{step.question}</div>
+          <div className="text-sm text-foreground font-medium">{step.question}</div>
           <ul className="mt-2 space-y-1">
             {step.options.map((opt, i) => (
               <li
                 key={i}
-                className="flex items-center gap-1.5 text-xs text-white/65"
+                className="flex items-center gap-1.5 text-xs text-foreground/65"
               >
-                <span className="text-white/40">→</span>
+                <span className="text-foreground/40">→</span>
                 <span>{opt.label}</span>
                 {opt.kbArticleId && (
                   <Badge tone="success">KB</Badge>
@@ -804,14 +804,14 @@ function TriageNode({
           <button
             onClick={() => onAddChild(step.id)}
             title="Adicionar sub-pergunta"
-            className="rounded-md p-1.5 text-white/55 hover:bg-white/[0.06] hover:text-white"
+            className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => onEdit(step)}
             title="Editar"
-            className="rounded-md p-1.5 text-white/55 hover:bg-white/[0.06] hover:text-white"
+            className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
           >
             <Edit3 className="h-3.5 w-3.5" />
           </button>
@@ -965,7 +965,7 @@ function TriageEditor({
 
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] uppercase tracking-wider text-white/45">
+            <span className="text-[11px] uppercase tracking-wider text-foreground/45">
               Opções de resposta
             </span>
             <Button size="sm" variant="ghost" onClick={addOption} leftIcon={<Plus className="h-3.5 w-3.5" />}>
@@ -974,7 +974,7 @@ function TriageEditor({
           </div>
           <ul className="space-y-2">
             {options.map((opt, i) => (
-              <li key={i} className="rounded-lg border border-line bg-white/[0.02] p-3">
+              <li key={i} className="rounded-lg border border-line bg-elevate/[0.02] p-3">
                 <div className="flex items-center gap-2">
                   <Input
                     placeholder="Rótulo (Sim / Não / Não sei)"
@@ -983,7 +983,7 @@ function TriageEditor({
                   />
                   <button
                     onClick={() => removeOption(i)}
-                    className="rounded-md p-2 text-white/40 hover:bg-danger/10 hover:text-danger"
+                    className="rounded-md p-2 text-foreground/40 hover:bg-danger/10 hover:text-danger"
                     title="Remover opção"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -1020,7 +1020,7 @@ function TriageEditor({
                     ]}
                   />
                 </div>
-                <p className="mt-1 text-[10.5px] text-white/40">
+                <p className="mt-1 text-[10.5px] text-foreground/40">
                   Se KB selecionado: sugere artigo. Senão, se sub-pergunta: vai
                   pra ela. Se nenhum: vai direto pra abrir ticket.
                 </p>
@@ -1039,7 +1039,7 @@ function toneClass(color: string): string {
     success: 'bg-success/10 text-success ring-success/20',
     warning: 'bg-warning/10 text-warning ring-warning/20',
     danger: 'bg-danger/10 text-danger ring-danger/20',
-    neutral: 'bg-white/[0.04] text-white/55 ring-white/10',
+    neutral: 'bg-elevate/[0.04] text-foreground/55 ring-elevate/10',
   }
   return map[color] ?? map.neutral
 }

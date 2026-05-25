@@ -1,4 +1,4 @@
-import { Server } from 'lucide-react'
+﻿import { Server } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 
@@ -27,7 +27,7 @@ export function ServerFilter({ selected, onChange, className }: ServerFilterProp
 
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
-      <span className="mr-1 text-[10px] uppercase tracking-wider text-white/40 flex items-center gap-1">
+      <span className="mr-1 text-[10px] uppercase tracking-wider text-foreground/40 flex items-center gap-1">
         <Server className="h-3 w-3" />
         Servidor
       </span>
@@ -37,8 +37,8 @@ export function ServerFilter({ selected, onChange, className }: ServerFilterProp
         className={cn(
           'rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
           allSelected
-            ? 'bg-white/[0.08] text-white ring-1 ring-line'
-            : 'text-white/55 hover:bg-white/[0.04] hover:text-white',
+            ? 'bg-elevate/[0.08] text-foreground ring-1 ring-line'
+            : 'text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground',
         )}
       >
         Todos
@@ -54,7 +54,7 @@ export function ServerFilter({ selected, onChange, className }: ServerFilterProp
               'rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
               active
                 ? 'bg-accent/15 text-accent ring-1 ring-accent/30'
-                : 'text-white/55 hover:bg-white/[0.04] hover:text-white',
+                : 'text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground',
             )}
           >
             {s.name}

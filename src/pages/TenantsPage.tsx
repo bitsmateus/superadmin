@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
@@ -288,12 +288,12 @@ export function TenantsPage() {
                       <TD>
                         <Link
                           to={`/tenants/${t._serverId}/${t.id}`}
-                          className="font-medium text-white hover:text-accent"
+                          className="font-medium text-foreground hover:text-accent"
                         >
                           {asText(t.name)}
                         </Link>
                         {t.domain && (
-                          <div className="text-xs text-white/40">
+                          <div className="text-xs text-foreground/40">
                             {asText(t.domain)}
                           </div>
                         )}
@@ -306,7 +306,7 @@ export function TenantsPage() {
                           {active ? 'Ativo' : 'Inativo'}
                         </Badge>
                       </TD>
-                      <TD className="text-white/60">
+                      <TD className="text-foreground/60">
                         {formatDateShort(t.created_at)}
                       </TD>
                       <TD className="text-right">
@@ -331,7 +331,7 @@ export function TenantsPage() {
                               onClick={() =>
                                 setOpenMenu(openMenu === id ? null : id)
                               }
-                              className="rounded-md p-1.5 text-white/55 hover:bg-white/[0.06] hover:text-white"
+                              className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
                             >
                               <MoreHorizontal className="h-4 w-4" />
                             </button>
@@ -344,7 +344,7 @@ export function TenantsPage() {
                               >
                                 <Link
                                   to={`/tenants/${t._serverId}/${t.id}`}
-                                  className="flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:bg-white/[0.05]"
+                                  className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/80 hover:bg-elevate/[0.05]"
                                   onClick={() => setOpenMenu(null)}
                                 >
                                   <ArrowRight className="h-3.5 w-3.5" />
@@ -355,7 +355,7 @@ export function TenantsPage() {
                                     setOpenMenu(null)
                                     setEditing(t)
                                   }}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-white/80 hover:bg-white/[0.05]"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground/80 hover:bg-elevate/[0.05]"
                                 >
                                   <Edit3 className="h-3.5 w-3.5" />
                                   Editar
@@ -438,9 +438,9 @@ export function TenantsPage() {
           </>
         }
       >
-        <p className="text-sm text-white/70">
+        <p className="text-sm text-foreground/70">
           Excluir{' '}
-          <span className="font-semibold text-white">
+          <span className="font-semibold text-foreground">
             {asText(deleting?.name)}
           </span>{' '}
           do servidor{' '}
@@ -448,7 +448,7 @@ export function TenantsPage() {
             {asText(deleting?._serverName)}
           </span>
           ? Esta ação chama{' '}
-          <code className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-white/80">
+          <code className="rounded bg-elevate/[0.06] px-1.5 py-0.5 text-[11px] text-foreground/80">
             /tenantDeleteApi
           </code>{' '}
           e não pode ser desfeita.

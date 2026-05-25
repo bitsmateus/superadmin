@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+﻿import { Link } from 'react-router-dom'
 import { ArrowUpRight, Building2 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { asText, formatDateShort, initials, isTenantActive } from '@/lib/utils'
@@ -9,7 +9,7 @@ export function TenantCard({ tenant }: { tenant: Tenant }) {
   return (
     <Link
       to={`/tenants/${tenant.id}`}
-      className="group relative flex flex-col gap-4 rounded-xl border border-line bg-card p-5 transition-all hover:border-white/15 hover:bg-card/60 hover:shadow-glow"
+      className="group relative flex flex-col gap-4 rounded-xl border border-line bg-card p-5 transition-all hover:border-elevate/15 hover:bg-card/60 hover:shadow-glow"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -17,20 +17,20 @@ export function TenantCard({ tenant }: { tenant: Tenant }) {
             {initials(asText(tenant.name)) || <Building2 className="h-4 w-4" />}
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">{asText(tenant.name)}</h3>
+            <h3 className="text-sm font-medium text-foreground">{asText(tenant.name)}</h3>
             {tenant.domain && (
-              <p className="mt-0.5 text-xs text-white/40">{String(tenant.domain)}</p>
+              <p className="mt-0.5 text-xs text-foreground/40">{String(tenant.domain)}</p>
             )}
           </div>
         </div>
-        <ArrowUpRight className="h-4 w-4 text-white/30 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-accent" />
+        <ArrowUpRight className="h-4 w-4 text-foreground/30 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-accent" />
       </div>
 
       <div className="flex items-center justify-between">
         <Badge tone={active ? 'success' : 'danger'} dot>
           {active ? 'Ativo' : 'Inativo'}
         </Badge>
-        <span className="text-[11px] text-white/40">
+        <span className="text-[11px] text-foreground/40">
           {formatDateShort(tenant.created_at)}
         </span>
       </div>

@@ -186,6 +186,12 @@ export interface Client {
   deliveryNotes?: string
   deliveryCompletedAt?: string
 
+  // Tipo de implementação (marcado pelo time interno). Aparece nos
+  // painéis correspondentes do Dashboard.
+  hasApiOficial?: boolean
+  hasIa?: boolean
+  hasAutomacaoExterna?: boolean
+
   // Etapa 6 — Follow-up
   followUpActive: boolean
   followUps: FollowUp[]

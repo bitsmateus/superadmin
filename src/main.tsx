@@ -5,7 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { applyStoredTheme } from './hooks/useTheme'
 import './index.css'
+
+// Aplica tema salvo ANTES do React renderizar — evita flash de tema errado.
+applyStoredTheme()
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,13 +31,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <BrowserRouter>
           <App />
           <Toaster
-            theme="dark"
             position="top-right"
             toastOptions={{
               style: {
-                background: '#111114',
-                border: '1px solid rgba(255,255,255,0.08)',
-                color: 'white',
+                background: 'rgb(var(--surface-rgb))',
+                border: '1px solid var(--line)',
+                color: 'rgb(var(--foreground-rgb))',
               },
             }}
             richColors

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { useStageHistory } from '@/hooks/useAnalytics'
 import { computeFunnel } from '@/lib/analytics'
@@ -23,10 +23,10 @@ export function ConversionFunnel({ windowDays }: { windowDays?: number }) {
     <section className="rounded-xl border border-line bg-card p-5">
       <header className="mb-4 flex items-baseline justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-white">
+          <h2 className="text-sm font-semibold text-foreground">
             Funil de conversão
           </h2>
-          <p className="text-xs text-white/55">
+          <p className="text-xs text-foreground/55">
             % avançando entre stages.{' '}
             {windowDays
               ? `Últimos ${windowDays} dias.`
@@ -45,10 +45,10 @@ export function ConversionFunnel({ windowDays }: { windowDays?: number }) {
                 <span className="font-medium" style={{ color: style.text }}>
                   {style.label}
                 </span>
-                <span className="text-white/70">{d.count} cliente(s)</span>
+                <span className="text-foreground/70">{d.count} cliente(s)</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="h-6 flex-1 rounded-md bg-white/[0.03] overflow-hidden">
+                <div className="h-6 flex-1 rounded-md bg-elevate/[0.03] overflow-hidden">
                   <div
                     className="h-full rounded-md transition-all"
                     style={{

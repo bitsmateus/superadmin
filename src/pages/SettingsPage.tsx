@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -59,8 +59,8 @@ export function SettingsPage() {
         <section className="space-y-4">
           <header className="flex items-end justify-between gap-3">
             <div>
-              <h2 className="text-sm font-medium text-white">Servidores</h2>
-              <p className="text-xs text-white/45">
+              <h2 className="text-sm font-medium text-foreground">Servidores</h2>
+              <p className="text-xs text-foreground/45">
                 Cada servidor tem sua própria URL e API token. O servidor
                 selecionado é usado em todas as páginas; troque pelo switcher
                 no rodapé da barra lateral.
@@ -150,14 +150,14 @@ function Stat({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="grid h-9 w-9 place-items-center rounded-lg bg-white/[0.04] ring-1 ring-line">
+      <div className="grid h-9 w-9 place-items-center rounded-lg bg-elevate/[0.04] ring-1 ring-line">
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] uppercase tracking-wider text-white/40">{label}</p>
-        <p className="truncate text-sm font-medium text-white">{value}</p>
+        <p className="text-[11px] uppercase tracking-wider text-foreground/40">{label}</p>
+        <p className="truncate text-sm font-medium text-foreground">{value}</p>
         {sub && (
-          <p className="truncate text-[11px] text-white/40" title={sub}>
+          <p className="truncate text-[11px] text-foreground/40" title={sub}>
             {sub}
           </p>
         )}
@@ -305,14 +305,14 @@ function ServerCard({
               'grid h-8 w-8 place-items-center rounded-lg ring-1',
               isSelected
                 ? 'bg-accent/15 text-accent ring-accent/30'
-                : 'bg-white/[0.04] text-white/65 ring-line',
+                : 'bg-elevate/[0.04] text-foreground/65 ring-line',
             )}
           >
             <ServerIcon className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">{server.name}</h3>
-            <p className="text-[11px] text-white/40">{server.id}</p>
+            <h3 className="text-sm font-medium text-foreground">{server.name}</h3>
+            <p className="text-[11px] text-foreground/40">{server.id}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -321,7 +321,7 @@ function ServerCard({
               Selecionado
             </Badge>
           )}
-          <label className="flex items-center gap-2 rounded-md border border-line bg-white/[0.02] px-2 py-1 text-[11px] text-white/70 cursor-pointer">
+          <label className="flex items-center gap-2 rounded-md border border-line bg-elevate/[0.02] px-2 py-1 text-[11px] text-foreground/70 cursor-pointer">
             <input
               type="checkbox"
               className="h-3.5 w-3.5 accent-[#4F8EF7]"
@@ -362,7 +362,7 @@ function ServerCard({
               <button
                 type="button"
                 onClick={() => copy(current.baseUrl, 'URL')}
-                className="pointer-events-auto text-white/40 hover:text-white/80"
+                className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
                 aria-label="Copiar URL"
               >
                 <Copy className="h-4 w-4" />
@@ -381,7 +381,7 @@ function ServerCard({
             <button
               type="button"
               onClick={() => copy(current.loginUrl, 'URL')}
-              className="pointer-events-auto text-white/40 hover:text-white/80"
+              className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
               aria-label="Copiar URL"
             >
               <Copy className="h-4 w-4" />
@@ -399,11 +399,11 @@ function ServerCard({
           spellCheck={false}
           leftIcon={<KeyRound className="h-4 w-4" />}
           rightIcon={
-            <div className="pointer-events-auto flex items-center gap-2 text-white/40">
+            <div className="pointer-events-auto flex items-center gap-2 text-foreground/40">
               <button
                 type="button"
                 onClick={() => copy(current.apiToken, 'Token')}
-                className="hover:text-white/80"
+                className="hover:text-foreground/80"
                 aria-label="Copiar token"
               >
                 <Copy className="h-4 w-4" />
@@ -411,7 +411,7 @@ function ServerCard({
               <button
                 type="button"
                 onClick={() => setShowToken((s) => !s)}
-                className="hover:text-white/80"
+                className="hover:text-foreground/80"
                 aria-label={showToken ? 'Ocultar' : 'Mostrar'}
               >
                 {showToken ? (
@@ -519,10 +519,10 @@ function AccessSettings() {
   return (
     <section>
       <header className="mb-3">
-        <h2 className="text-sm font-medium text-white">Acesso ao sistema externo</h2>
-        <p className="text-xs text-white/45">
+        <h2 className="text-sm font-medium text-foreground">Acesso ao sistema externo</h2>
+        <p className="text-xs text-foreground/45">
           Masterkey lembrada e URL aberta pelo botão{' '}
-          <span className="text-white/70">Acessar</span> de cada tenant.
+          <span className="text-foreground/70">Acessar</span> de cada tenant.
         </p>
       </header>
 
@@ -544,7 +544,7 @@ function AccessSettings() {
                   type="button"
                   onClick={() => setShowKey((s) => !s)}
                   aria-label={showKey ? 'Ocultar' : 'Mostrar'}
-                  className="pointer-events-auto text-white/40 hover:text-white/80"
+                  className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
                 >
                   {showKey ? (
                     <EyeOff className="h-4 w-4" />
@@ -619,14 +619,14 @@ function AccessSettings() {
         <aside className="space-y-4">
           <div className="rounded-xl border border-line bg-card p-5">
             <header className="mb-3 flex items-center gap-2">
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.04] text-white/70 ring-1 ring-line">
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-elevate/[0.04] text-foreground/70 ring-1 ring-line">
                 <ShieldCheck className="h-4 w-4" />
               </div>
-              <h3 className="text-sm font-medium text-white">Estado do acesso</h3>
+              <h3 className="text-sm font-medium text-foreground">Estado do acesso</h3>
             </header>
             <dl className="space-y-3 text-sm">
               <div>
-                <dt className="text-[11px] uppercase tracking-wider text-white/40">
+                <dt className="text-[11px] uppercase tracking-wider text-foreground/40">
                   Masterkey
                 </dt>
                 <dd className="mt-1 flex items-center gap-2">
@@ -634,17 +634,17 @@ function AccessSettings() {
                     {masterkey ? 'Salva' : 'Não salva'}
                   </Badge>
                   {masterkey && (
-                    <span className="font-mono text-[11px] text-white/55">
+                    <span className="font-mono text-[11px] text-foreground/55">
                       …{masterkey.slice(-4)}
                     </span>
                   )}
                 </dd>
               </div>
               <div>
-                <dt className="text-[11px] uppercase tracking-wider text-white/40">
+                <dt className="text-[11px] uppercase tracking-wider text-foreground/40">
                   URL atual
                 </dt>
-                <dd className="mt-1 truncate text-white/85" title={systemUrl}>
+                <dd className="mt-1 truncate text-foreground/85" title={systemUrl}>
                   {systemUrl}
                 </dd>
               </div>

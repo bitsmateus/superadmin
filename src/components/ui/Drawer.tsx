@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -59,12 +59,12 @@ export function Drawer({
                 {header ?? (
                   <>
                     {title && (
-                      <h2 className="text-base font-semibold text-white">
+                      <h2 className="text-base font-semibold text-foreground">
                         {title}
                       </h2>
                     )}
                     {description && (
-                      <p className="mt-1 text-sm text-white/50">{description}</p>
+                      <p className="mt-1 text-sm text-foreground/50">{description}</p>
                     )}
                   </>
                 )}
@@ -73,7 +73,7 @@ export function Drawer({
                 type="button"
                 onClick={onClose}
                 aria-label="Fechar"
-                className="rounded-md p-1 text-white/50 hover:bg-white/[0.06] hover:text-white focus-ring"
+                className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground focus-ring"
               >
                 <X className="h-4 w-4" />
               </button>

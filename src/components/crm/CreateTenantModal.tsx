@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   CheckCircle2,
   Loader2,
@@ -145,7 +145,7 @@ export function CreateTenantModal({
     >
       <div className="space-y-4">
         <div>
-          <div className="mb-1.5 text-[11px] uppercase tracking-wider text-white/45">
+          <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">
             Servidor
           </div>
           {servers.length === 0 ? (
@@ -175,7 +175,7 @@ export function CreateTenantModal({
         />
 
         {creating && (
-          <p className="inline-flex items-center gap-2 text-xs text-white/55">
+          <p className="inline-flex items-center gap-2 text-xs text-foreground/55">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Criando tenant no servidor selecionado…
           </p>
@@ -202,7 +202,7 @@ function ServerCard({
         'flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors',
         selected
           ? 'border-accent/50 bg-accent/[0.08] ring-1 ring-accent/30'
-          : 'border-line bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]',
+          : 'border-line bg-elevate/[0.02] hover:border-elevate/15 hover:bg-elevate/[0.04]',
       )}
     >
       <span
@@ -210,14 +210,14 @@ function ServerCard({
           'grid h-8 w-8 place-items-center rounded-lg ring-1',
           selected
             ? 'bg-accent/15 text-accent ring-accent/30'
-            : 'bg-white/[0.04] text-white/65 ring-line',
+            : 'bg-elevate/[0.04] text-foreground/65 ring-line',
         )}
       >
         <ServerIcon className="h-4 w-4" />
       </span>
       <div className="min-w-0">
-        <div className="text-sm font-medium text-white">{server.name}</div>
-        <div className="truncate text-[10px] text-white/40">
+        <div className="text-sm font-medium text-foreground">{server.name}</div>
+        <div className="truncate text-[10px] text-foreground/40">
           {server.baseUrl.replace(/^https?:\/\//, '')}
         </div>
       </div>

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Clock3 } from 'lucide-react'
 import { useStageHistory } from '@/hooks/useAnalytics'
 import { computeStageDurations } from '@/lib/analytics'
@@ -23,10 +23,10 @@ export function StageDurations() {
   return (
     <section className="rounded-xl border border-line bg-card p-5">
       <header className="mb-4">
-        <h2 className="text-sm font-semibold text-white">
+        <h2 className="text-sm font-semibold text-foreground">
           Tempo médio em cada etapa
         </h2>
-        <p className="text-xs text-white/55">
+        <p className="text-xs text-foreground/55">
           Quanto leva pra um cliente sair desse stage. Útil pra identificar
           gargalo.
         </p>
@@ -42,7 +42,7 @@ export function StageDurations() {
                 className="flex items-center justify-between text-xs"
               >
                 <span style={{ color: style.text }}>{style.label}</span>
-                <span className="text-white/35">sem dados</span>
+                <span className="text-foreground/35">sem dados</span>
               </li>
             )
           }
@@ -53,13 +53,13 @@ export function StageDurations() {
                 <span className="font-medium" style={{ color: style.text }}>
                   {style.label}
                 </span>
-                <span className="inline-flex items-center gap-1 text-white/70">
+                <span className="inline-flex items-center gap-1 text-foreground/70">
                   <Clock3 className="h-3 w-3" />
                   {d.avgDays.toFixed(1)} dia(s){' '}
-                  <span className="text-white/35">· {d.sampleSize}x</span>
+                  <span className="text-foreground/35">· {d.sampleSize}x</span>
                 </span>
               </div>
-              <div className="h-2 w-full rounded-md bg-white/[0.03]">
+              <div className="h-2 w-full rounded-md bg-elevate/[0.03]">
                 <div
                   className="h-full rounded-md"
                   style={{

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   CheckCircle2,
   Copy,
@@ -110,9 +110,9 @@ export function TemplatesPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-medium text-white truncate">{t.name}</h3>
+                      <h3 className="text-sm font-medium text-foreground truncate">{t.name}</h3>
                       {t.shortcut && (
-                        <code className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-accent">
+                        <code className="rounded bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] text-accent">
                           {t.shortcut}
                         </code>
                       )}
@@ -126,27 +126,27 @@ export function TemplatesPage() {
                     <button
                       onClick={() => copyContent(t.content)}
                       title="Copiar"
-                      className="rounded-md p-1.5 text-white/55 hover:bg-white/[0.06] hover:text-white"
+                      className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
                     >
                       <Copy className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => setEditing(t)}
                       title="Editar"
-                      className="rounded-md p-1.5 text-white/55 hover:bg-white/[0.06] hover:text-white"
+                      className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
                     >
                       <Edit3 className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => setDeleting(t)}
                       title="Remover"
-                      className="rounded-md p-1.5 text-white/40 hover:bg-danger/10 hover:text-danger"
+                      className="rounded-md p-1.5 text-foreground/40 hover:bg-danger/10 hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
-                <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-white/[0.02] p-3 text-xs text-white/75 leading-relaxed">
+                <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-elevate/[0.02] p-3 text-xs text-foreground/75 leading-relaxed">
                   {t.content}
                 </pre>
               </li>
@@ -154,8 +154,8 @@ export function TemplatesPage() {
           </ul>
         )}
 
-        <p className="rounded-lg border border-line bg-white/[0.02] px-4 py-3 text-xs text-white/55">
-          <strong className="text-white/80">Variáveis suportadas:</strong>{' '}
+        <p className="rounded-lg border border-line bg-elevate/[0.02] px-4 py-3 text-xs text-foreground/55">
+          <strong className="text-foreground/80">Variáveis suportadas:</strong>{' '}
           <code className="text-accent">{'{nome}'}</code>{' '}
           <code className="text-accent">{'{empresa}'}</code>{' '}
           <code className="text-accent">{'{ticket_numero}'}</code>{' '}
@@ -198,8 +198,8 @@ export function TemplatesPage() {
           </>
         }
       >
-        <p className="text-sm text-white/75">
-          Remover <strong className="text-white">{deleting?.name}</strong>? Esta
+        <p className="text-sm text-foreground/75">
+          Remover <strong className="text-foreground">{deleting?.name}</strong>? Esta
           ação não pode ser desfeita.
         </p>
       </Modal>
@@ -318,7 +318,7 @@ function TemplateEditor({
             'Olá {nome}! Aqui é o suporte da NX, recebi seu ticket #{ticket_numero} sobre {assunto}. Já estou olhando, qualquer dúvida me chama por aqui mesmo.'
           }
         />
-        <p className="text-[11px] text-white/45">
+        <p className="text-[11px] text-foreground/45">
           Variáveis:{' '}
           <code className="text-accent">{'{nome}'}</code>{' '}
           <code className="text-accent">{'{empresa}'}</code>{' '}
@@ -327,11 +327,11 @@ function TemplateEditor({
         </p>
 
         {content && (
-          <div className="rounded-lg border border-line bg-white/[0.02] p-3">
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-white/45">
+          <div className="rounded-lg border border-line bg-elevate/[0.02] p-3">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-foreground/45">
               Preview (variáveis fictícias)
             </div>
-            <p className="whitespace-pre-wrap text-sm text-white/80">
+            <p className="whitespace-pre-wrap text-sm text-foreground/80">
               {previewWithFakes(content)}
             </p>
           </div>

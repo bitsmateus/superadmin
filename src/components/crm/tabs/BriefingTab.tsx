@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   Bot,
   CheckCircle2,
@@ -106,7 +106,7 @@ export function BriefingTab({ client }: { client: Client }) {
           }
           action={<Badge tone="neutral">Não enviado</Badge>}
         >
-          <p className="text-sm text-white/65">
+          <p className="text-sm text-foreground/65">
             Gere um link único para o cliente preencher o briefing completo.
           </p>
           <div className="mt-3 flex justify-end">
@@ -127,14 +127,14 @@ export function BriefingTab({ client }: { client: Client }) {
           }
           action={<BriefingStatusBadge status={status} />}
         >
-          <p className="text-xs text-white/55">
+          <p className="text-xs text-foreground/55">
             Enviado em {formatDate(client.briefingSentAt)}.
           </p>
           <div className="mt-3 flex items-stretch gap-2">
             <input
               readOnly
               value={link}
-              className="flex-1 rounded-lg border border-white/10 bg-surface px-3 py-2 text-xs text-white/85"
+              className="flex-1 rounded-lg border border-elevate/10 bg-surface px-3 py-2 text-xs text-foreground/85"
               onFocus={(e) => e.currentTarget.select()}
             />
             <Button
@@ -218,7 +218,7 @@ export function BriefingTab({ client }: { client: Client }) {
           </>
         }
       >
-        <p className="text-sm text-white/70">
+        <p className="text-sm text-foreground/70">
           Descreva o que precisa ser ajustado. O cliente receberá a nota junto
           com o link do briefing.
         </p>
@@ -226,7 +226,7 @@ export function BriefingTab({ client }: { client: Client }) {
           value={revisionNote}
           onChange={(e) => setRevisionNote(e.target.value)}
           placeholder="Ex.: O horário de domingo precisa ficar como descanso, sem atendimento."
-          className="mt-3 min-h-[100px] w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+          className="mt-3 min-h-[100px] w-full rounded-lg border border-elevate/10 bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
         />
       </Modal>
     </div>
@@ -298,7 +298,7 @@ function SubTabBtn({
         'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
         active
           ? 'bg-accent/15 text-accent ring-1 ring-accent/30'
-          : 'text-white/55 hover:bg-white/[0.04] hover:text-white',
+          : 'text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground',
       )}
     >
       {icon}
@@ -401,18 +401,18 @@ function AutomationView({ client }: { client: Client }) {
           </span>
         }
       >
-        <p className="text-xs text-white/55">
+        <p className="text-xs text-foreground/55">
           Atalhos para configurar o cliente a partir do briefing.
         </p>
 
         {client.tenantId && (
-          <div className="mt-3 rounded-lg border border-success/30 bg-success/[0.05] px-3 py-2 text-xs text-white/80">
+          <div className="mt-3 rounded-lg border border-success/30 bg-success/[0.05] px-3 py-2 text-xs text-foreground/80">
             <div className="font-medium text-success">
               Tenant vinculado: {client.tenantName ?? client.tenantId}
             </div>
-            <div className="mt-0.5 text-white/55">
+            <div className="mt-0.5 text-foreground/55">
               Servidor: {client.tenantServerId} · Suporte:{' '}
-              <span className="text-white/85">{client.supportEmail ?? '—'}</span>
+              <span className="text-foreground/85">{client.supportEmail ?? '—'}</span>
             </div>
           </div>
         )}
@@ -436,7 +436,7 @@ function AutomationView({ client }: { client: Client }) {
           >
             Criar usuários
             {briefingUsers.length > 0 && (
-              <span className="ml-1 text-[10px] text-white/55">
+              <span className="ml-1 text-[10px] text-foreground/55">
                 ({briefingUsers.length})
               </span>
             )}
@@ -444,7 +444,7 @@ function AutomationView({ client }: { client: Client }) {
         </div>
 
         {!client.tenantApiId && briefingUsers.length > 0 && (
-          <p className="mt-2 text-[11px] text-white/45">
+          <p className="mt-2 text-[11px] text-foreground/45">
             Crie o tenant primeiro para habilitar a criação automática dos{' '}
             {briefingUsers.length} usuário(s) do briefing.
           </p>
@@ -459,12 +459,12 @@ function AutomationView({ client }: { client: Client }) {
           </span>
         }
         action={
-          <span className="text-[11px] text-white/55">
+          <span className="text-[11px] text-foreground/55">
             {done}/{total} concluídos
           </span>
         }
       >
-        <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+        <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-elevate/[0.06]">
           <div
             className="h-full bg-accent transition-all"
             style={{ width: `${pct}%` }}
@@ -508,14 +508,14 @@ function ChecklistRow({
           'flex items-start gap-3 rounded-lg border px-3 py-2 transition-colors',
           item.checked
             ? 'border-success/30 bg-success/[0.05]'
-            : 'border-line bg-white/[0.02] hover:bg-white/[0.04]',
+            : 'border-line bg-elevate/[0.02] hover:bg-elevate/[0.04]',
         )}
       >
         {hasChildren ? (
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="mt-0.5 grid h-4 w-4 place-items-center text-white/45 hover:text-white"
+            className="mt-0.5 grid h-4 w-4 place-items-center text-foreground/45 hover:text-foreground"
             aria-label={open ? 'Recolher' : 'Expandir'}
           >
             {open ? (
@@ -537,13 +537,13 @@ function ChecklistRow({
           <p
             className={cn(
               'text-sm',
-              item.checked ? 'text-white/55 line-through' : 'text-white/90',
+              item.checked ? 'text-foreground/55 line-through' : 'text-foreground/90',
             )}
           >
             {item.label}
           </p>
           {item.checked && (
-            <p className="mt-0.5 text-[10px] text-white/40">
+            <p className="mt-0.5 text-[10px] text-foreground/40">
               por {asText(item.checkedBy, '—')} em{' '}
               {formatDate(item.checkedAt)}
             </p>
@@ -590,11 +590,11 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
           {data.users.map((u, i) => (
             <li
               key={i}
-              className="rounded-md border border-line bg-white/[0.02] px-3 py-1.5 text-xs"
+              className="rounded-md border border-line bg-elevate/[0.02] px-3 py-1.5 text-xs"
             >
-              <span className="font-medium text-white">{asText(u.name)}</span>
-              <span className="text-white/45"> · {asText(u.email)} · </span>
-              <span className="text-white/55">
+              <span className="font-medium text-foreground">{asText(u.name)}</span>
+              <span className="text-foreground/45"> · {asText(u.email)} · </span>
+              <span className="text-foreground/55">
                 {asText(u.sector)} · {asText(u.role)}
               </span>
             </li>
@@ -607,8 +607,8 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
         <ul className="mt-2 space-y-1 text-xs">
           {data.schedule.map((s) => (
             <li key={s.day} className="flex items-center justify-between">
-              <span className="text-white/85">{asText(s.day)}</span>
-              <span className="text-white/55">
+              <span className="text-foreground/85">{asText(s.day)}</span>
+              <span className="text-foreground/55">
                 {s.active ? `${s.start} - ${s.end}` : 'fechado'}
               </span>
             </li>
@@ -654,11 +654,11 @@ function Row({ k, v }: { k: string; v?: string | null }) {
   return (
     <div className="grid grid-cols-3 gap-3 py-1 text-xs">
       {k && (
-        <span className="col-span-1 text-white/45 uppercase tracking-wider">
+        <span className="col-span-1 text-foreground/45 uppercase tracking-wider">
           {k}
         </span>
       )}
-      <span className={cn('whitespace-pre-wrap text-white/85', k ? 'col-span-2' : 'col-span-3')}>
+      <span className={cn('whitespace-pre-wrap text-foreground/85', k ? 'col-span-2' : 'col-span-3')}>
         {v ? asText(v) : '—'}
       </span>
     </div>
@@ -676,16 +676,16 @@ function Accordion({
 }) {
   const [open, setOpen] = React.useState(Boolean(defaultOpen))
   return (
-    <div className="rounded-lg border border-line bg-white/[0.02]">
+    <div className="rounded-lg border border-line bg-elevate/[0.02]">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-white/85 hover:bg-white/[0.04]"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-foreground/85 hover:bg-elevate/[0.04]"
       >
         <span>{title}</span>
         <ChevronDown
           className={cn(
-            'h-4 w-4 text-white/40 transition-transform',
+            'h-4 w-4 text-foreground/40 transition-transform',
             open && 'rotate-180',
           )}
         />

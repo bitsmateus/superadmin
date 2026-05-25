@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -265,7 +265,7 @@ function Stepper({
                     ? 'border-accent bg-accent/15 text-accent'
                     : active
                       ? 'border-accent bg-accent/10 text-accent shadow-ringSoft'
-                      : 'border-white/10 bg-white/[0.03] text-white/40',
+                      : 'border-elevate/10 bg-elevate/[0.03] text-foreground/40',
                 )}
               >
                 {complete ? <Check className="h-3.5 w-3.5" /> : i + 1}
@@ -274,10 +274,10 @@ function Stepper({
                 className={cn(
                   'text-xs',
                   active
-                    ? 'text-white'
+                    ? 'text-foreground'
                     : complete
-                      ? 'text-white/70'
-                      : 'text-white/40',
+                      ? 'text-foreground/70'
+                      : 'text-foreground/40',
                 )}
               >
                 {label}
@@ -287,7 +287,7 @@ function Stepper({
               <div
                 className={cn(
                   'h-px flex-1 transition-colors',
-                  complete ? 'bg-accent/60' : 'bg-white/10',
+                  complete ? 'bg-accent/60' : 'bg-elevate/10',
                 )}
               />
             )}
@@ -424,13 +424,13 @@ function StepSupport({
 
   return (
     <form onSubmit={handleSubmit(onNext)} className="grid grid-cols-1 gap-4">
-      <div className="rounded-lg border border-line bg-white/[0.02] px-3 py-2.5 text-[12px] leading-relaxed text-white/55">
-        <span className="text-white/85">Acesso de suporte</span> — criado junto
+      <div className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2.5 text-[12px] leading-relaxed text-foreground/55">
+        <span className="text-foreground/85">Acesso de suporte</span> — criado junto
         com o tenant. E-mail e senha já vêm preenchidos com o padrão{' '}
-        <code className="rounded bg-white/[0.06] px-1 py-0.5 text-white/85">
+        <code className="rounded bg-elevate/[0.06] px-1 py-0.5 text-foreground/85">
           suportenx-(empresa)@gmail.com
         </code>{' '}
-        / <code className="rounded bg-white/[0.06] px-1 py-0.5 text-white/85">Nxim01@!</code>
+        / <code className="rounded bg-elevate/[0.06] px-1 py-0.5 text-foreground/85">Nxim01@!</code>
         .
       </div>
 
@@ -524,8 +524,8 @@ function StepReview({
 
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-      <section className="rounded-xl border border-line bg-white/[0.02] p-4">
-        <h4 className="text-[11px] font-medium uppercase tracking-wider text-white/40">
+      <section className="rounded-xl border border-line bg-elevate/[0.02] p-4">
+        <h4 className="text-[11px] font-medium uppercase tracking-wider text-foreground/40">
           Tenant
         </h4>
         <dl className="mt-3 space-y-2 text-sm">
@@ -551,8 +551,8 @@ function StepReview({
         </dl>
       </section>
 
-      <section className="rounded-xl border border-line bg-white/[0.02] p-4">
-        <h4 className="text-[11px] font-medium uppercase tracking-wider text-white/40">
+      <section className="rounded-xl border border-line bg-elevate/[0.02] p-4">
+        <h4 className="text-[11px] font-medium uppercase tracking-wider text-foreground/40">
           Acesso de suporte
         </h4>
         <dl className="mt-3 space-y-2 text-sm">
@@ -568,7 +568,7 @@ function StepReview({
           <ReviewRow k="E-mail" v={support.email} />
           <ReviewRow
             k="Senha"
-            v={<code className="font-mono text-white/85">{support.password}</code>}
+            v={<code className="font-mono text-foreground/85">{support.password}</code>}
           />
         </dl>
       </section>
@@ -611,8 +611,8 @@ function StepReview({
 function ReviewRow({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <dt className="text-[11px] uppercase tracking-wider text-white/40">{k}</dt>
-      <dd className="text-sm text-white/90 text-right">{v}</dd>
+      <dt className="text-[11px] uppercase tracking-wider text-foreground/40">{k}</dt>
+      <dd className="text-sm text-foreground/90 text-right">{v}</dd>
     </div>
   )
 }
@@ -655,25 +655,25 @@ function SuccessView({
       <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-success/15 text-success ring-1 ring-success/30">
         <Check className="h-7 w-7" />
       </div>
-      <h3 className="text-base font-semibold text-white">Tenant criado</h3>
-      <p className="mt-1 text-sm text-white/55">
-        <span className="text-white/85">{tenantName}</span> está pronto para uso
+      <h3 className="text-base font-semibold text-foreground">Tenant criado</h3>
+      <p className="mt-1 text-sm text-foreground/55">
+        <span className="text-foreground/85">{tenantName}</span> está pronto para uso
         — acesso de suporte foi criado junto.
       </p>
 
-      <div className="mt-5 w-full rounded-xl border border-line bg-white/[0.02] p-4 text-left">
+      <div className="mt-5 w-full rounded-xl border border-line bg-elevate/[0.02] p-4 text-left">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-wider text-white/40">
+          <span className="text-[11px] uppercase tracking-wider text-foreground/40">
             Credenciais de suporte
           </span>
           <button
             onClick={copy}
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-white/70 hover:bg-white/[0.06] hover:text-white"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-foreground/70 hover:bg-elevate/[0.06] hover:text-foreground"
           >
             <Copy className="h-3 w-3" /> Copiar
           </button>
         </div>
-        <pre className="max-h-56 overflow-auto rounded-md bg-black/40 p-3 text-[11px] leading-relaxed text-white/80">
+        <pre className="max-h-56 overflow-auto rounded-md bg-black/40 p-3 text-[11px] leading-relaxed text-foreground/80">
 {summary}
         </pre>
       </div>

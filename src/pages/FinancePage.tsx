@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   AlertTriangle,
   CalendarRange,
@@ -132,7 +132,7 @@ export function FinancePage() {
 
   if (loading) {
     return (
-      <div className="grid h-full place-items-center p-10 text-sm text-white/55">
+      <div className="grid h-full place-items-center p-10 text-sm text-foreground/55">
         Carregando…
       </div>
     )
@@ -209,7 +209,7 @@ export function FinancePage() {
         {/* Filtro de período */}
         <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-line bg-card p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <CalendarRange className="h-4 w-4 text-white/40" />
+            <CalendarRange className="h-4 w-4 text-foreground/40" />
             <RangePill active={range === 'mtd'} onClick={() => setRange('mtd')}>
               Este mês
             </RangePill>
@@ -290,8 +290,8 @@ export function FinancePage() {
         {/* Gráfico 12 meses */}
         <div className="rounded-xl border border-line bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-white">Últimos 12 meses</h3>
-            <div className="flex items-center gap-3 text-[11px] text-white/55">
+            <h3 className="text-sm font-medium text-foreground">Últimos 12 meses</h3>
+            <div className="flex items-center gap-3 text-[11px] text-foreground/55">
               <LegendDot color="rgba(99,102,241,0.85)" /> Mensalidades
               <LegendDot color="rgba(34,197,94,0.85)" /> Implementação
             </div>
@@ -316,21 +316,21 @@ export function FinancePage() {
                   className="flex items-center justify-between gap-3 rounded-lg border border-danger/20 bg-bg/40 px-3 py-2"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-sm text-white">
+                    <div className="truncate text-sm text-foreground">
                       {client.company || client.name}
                     </div>
-                    <div className="text-xs text-white/55">
+                    <div className="text-xs text-foreground/55">
                       {TYPE_LABEL[payment.type]} · venceu em {formatDateShort(payment.dueDate)}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="tabular-nums text-sm text-white">
+                    <span className="tabular-nums text-sm text-foreground">
                       {brl(payment.value)}
                     </span>
                     <button
                       type="button"
                       onClick={() => navigate(`/clients?open=${client.id}`)}
-                      className="rounded-md p-1.5 text-white/55 hover:bg-white/[0.06] hover:text-white"
+                      className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
                       aria-label="Abrir cliente"
                       title="Abrir cliente"
                     >
@@ -346,7 +346,7 @@ export function FinancePage() {
         {/* Transações no período */}
         <div className="rounded-xl border border-line bg-card">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <h3 className="flex items-center gap-2 text-sm font-medium text-white">
+            <h3 className="flex items-center gap-2 text-sm font-medium text-foreground">
               <CreditCard className="h-3.5 w-3.5 text-accent" />
               Transações no período
             </h3>
@@ -374,12 +374,12 @@ export function FinancePage() {
               <TBody>
                 {txInPeriod.map(({ payment, client }) => (
                   <TR key={payment.id}>
-                    <TD className="text-white/85">{formatDateShort(payment.paidAt)}</TD>
+                    <TD className="text-foreground/85">{formatDateShort(payment.paidAt)}</TD>
                     <TD>
-                      <div className="text-sm text-white">
+                      <div className="text-sm text-foreground">
                         {client.company || client.name}
                       </div>
-                      <div className="text-[11px] text-white/40">
+                      <div className="text-[11px] text-foreground/40">
                         {client.name}
                       </div>
                     </TD>
@@ -388,11 +388,11 @@ export function FinancePage() {
                         {TYPE_LABEL[payment.type]}
                       </Badge>
                     </TD>
-                    <TD className="tabular-nums text-white">{brl(payment.value)}</TD>
-                    <TD className="text-white/60">
+                    <TD className="tabular-nums text-foreground">{brl(payment.value)}</TD>
+                    <TD className="text-foreground/60">
                       {payment.method ? METHOD_LABEL[payment.method] : '—'}
                     </TD>
-                    <TD className="text-white/55">{payment.reference ?? '—'}</TD>
+                    <TD className="text-foreground/55">{payment.reference ?? '—'}</TD>
                   </TR>
                 ))}
               </TBody>
@@ -400,8 +400,8 @@ export function FinancePage() {
           )}
           {txInPeriod.length > 0 && (
             <div className="border-t border-line px-4 py-2.5 flex items-center justify-end gap-4 text-sm">
-              <span className="text-white/55">Total no período</span>
-              <span className="tabular-nums font-semibold text-white">
+              <span className="text-foreground/55">Total no período</span>
+              <span className="tabular-nums font-semibold text-foreground">
                 {brl(totalThisPeriod)}
               </span>
             </div>
@@ -430,23 +430,23 @@ function Metric({
     success: 'bg-success/10 text-success ring-success/20',
     danger: 'bg-danger/10 text-danger ring-danger/20',
     warning: 'bg-warning/10 text-warning ring-warning/20',
-    neutral: 'bg-white/[0.04] text-white/55 ring-white/10',
+    neutral: 'bg-elevate/[0.04] text-foreground/55 ring-elevate/10',
   }
   return (
     <div className="rounded-xl border border-line bg-card p-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wider text-white/45">
+        <span className="text-xs uppercase tracking-wider text-foreground/45">
           {label}
         </span>
         <span className={`grid h-7 w-7 place-items-center rounded-lg ring-1 ${tones[tone]}`}>
           {icon}
         </span>
       </div>
-      <div className="mt-3 text-2xl font-semibold tracking-tight text-white tabular-nums">
+      <div className="mt-3 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
         {value}
       </div>
       {hint && (
-        <div className="mt-1 text-[11px] text-white/45">{hint}</div>
+        <div className="mt-1 text-[11px] text-foreground/45">{hint}</div>
       )}
     </div>
   )
@@ -468,8 +468,8 @@ function RangePill({
       className={
         'rounded-md px-2.5 py-1 text-xs font-medium transition-colors ' +
         (active
-          ? 'bg-white/[0.08] text-white ring-1 ring-line'
-          : 'text-white/55 hover:bg-white/[0.04] hover:text-white')
+          ? 'bg-elevate/[0.08] text-foreground ring-1 ring-line'
+          : 'text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground')
       }
     >
       {children}

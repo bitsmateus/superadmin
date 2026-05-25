@@ -183,6 +183,9 @@ function clientToRowForUpsert(c: Client): Record<string, unknown> {
     followups: c.followUps ?? [],
     notes: c.notes ?? [],
     logs: c.logs ?? [],
+    has_api_oficial: c.hasApiOficial ?? false,
+    has_ia: c.hasIa ?? false,
+    has_automacao_externa: c.hasAutomacaoExterna ?? false,
   }
 }
 

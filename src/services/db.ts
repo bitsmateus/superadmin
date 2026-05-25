@@ -107,6 +107,9 @@ type ClientRow = {
   followups: Client['followUps']
   notes: Client['notes']
   logs: Client['logs']
+  has_api_oficial: boolean | null
+  has_ia: boolean | null
+  has_automacao_externa: boolean | null
 }
 
 function rowToClient(r: ClientRow): Client {
@@ -155,6 +158,9 @@ function rowToClient(r: ClientRow): Client {
     followUps: r.followups ?? [],
     notes: r.notes ?? [],
     logs: r.logs ?? [],
+    hasApiOficial: r.has_api_oficial ?? false,
+    hasIa: r.has_ia ?? false,
+    hasAutomacaoExterna: r.has_automacao_externa ?? false,
   }
 }
 
@@ -203,6 +209,9 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('followUps' in patch) out.followups = patch.followUps ?? []
   if ('notes' in patch) out.notes = patch.notes ?? []
   if ('logs' in patch) out.logs = patch.logs ?? []
+  if ('hasApiOficial' in patch) out.has_api_oficial = patch.hasApiOficial ?? false
+  if ('hasIa' in patch) out.has_ia = patch.hasIa ?? false
+  if ('hasAutomacaoExterna' in patch) out.has_automacao_externa = patch.hasAutomacaoExterna ?? false
   return out
 }
 

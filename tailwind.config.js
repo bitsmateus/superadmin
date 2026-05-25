@@ -4,10 +4,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: '#0A0A0B',
-        surface: '#111114',
-        card: '#1A1A1F',
-        sidebar: '#0D0D10',
+        // Surfaces — drive via CSS vars pra suportar tema claro/escuro.
+        // Sintaxe `rgb(var(--x) / <alpha-value>)` permite usar com /opacity:
+        //   bg-bg/80, text-foreground/55, etc.
+        bg: 'rgb(var(--bg-rgb) / <alpha-value>)',
+        surface: 'rgb(var(--surface-rgb) / <alpha-value>)',
+        card: 'rgb(var(--card-rgb) / <alpha-value>)',
+        sidebar: 'rgb(var(--sidebar-rgb) / <alpha-value>)',
+
+        // Texto principal — substitui o uso de `text-white`.
+        foreground: 'rgb(var(--foreground-rgb) / <alpha-value>)',
+
+        // Overlay/elevation — substitui o uso de `bg-white/[X]` e
+        // `border-white/X`. Branco no dark, preto no light.
+        elevate: 'rgb(var(--elevate-rgb) / <alpha-value>)',
+
+        // Bordas (cor completa com alpha embutido)
+        line: 'var(--line)',
+        lineSoft: 'var(--line-soft)',
+
+        // Cores semânticas — mesmas em ambos os temas
         accent: {
           DEFAULT: '#4F8EF7',
           hover: '#6BA0F9',
@@ -17,8 +33,6 @@ export default {
         danger: '#F87171',
         warning: '#FBBF24',
         muted: '#9CA3AF',
-        line: 'rgba(255,255,255,0.07)',
-        lineSoft: 'rgba(255,255,255,0.05)',
       },
       fontFamily: {
         sans: [

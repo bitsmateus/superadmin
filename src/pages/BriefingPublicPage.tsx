@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useParams } from 'react-router-dom'
 import {
   ArrowRight,
@@ -640,7 +640,7 @@ export function BriefingPublicPage() {
         )}
       </main>
 
-      <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
+      <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-elevate/95 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex flex-col">
             <span className="text-xs uppercase tracking-wider text-slate-400">
@@ -672,7 +672,7 @@ export function BriefingPublicPage() {
               type="button"
               onClick={next}
               disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#6BA0F9] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-[#6BA0F9] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {section === totalSections - 1 ? (
                 <>
@@ -696,7 +696,7 @@ function BriefingHeader({ companyName }: { companyName: string }) {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#4F8EF7] text-white font-bold">
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#4F8EF7] text-foreground font-bold">
             T
           </div>
           <div className="leading-tight">

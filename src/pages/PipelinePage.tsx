@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -139,14 +139,14 @@ function ListGroup({
       style={{ borderLeft: `3px solid ${style.dot}` }}
     >
       <header
-        className="flex cursor-pointer select-none items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.02]"
+        className="flex cursor-pointer select-none items-center justify-between gap-3 px-4 py-3 hover:bg-elevate/[0.02]"
         onClick={() => setOpen((o) => !o)}
       >
         <div className="flex items-center gap-2">
           {open ? (
-            <ChevronDown className="h-4 w-4 text-white/45" />
+            <ChevronDown className="h-4 w-4 text-foreground/45" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-white/45" />
+            <ChevronRight className="h-4 w-4 text-foreground/45" />
           )}
           <span
             className="text-sm font-semibold uppercase tracking-wide"
@@ -154,7 +154,7 @@ function ListGroup({
           >
             {style.label}
           </span>
-          <span className="text-xs text-white/45">
+          <span className="text-xs text-foreground/45">
             {clients.length} cliente{clients.length === 1 ? '' : 's'}
           </span>
         </div>
@@ -163,13 +163,13 @@ function ListGroup({
       {open && (
         <div className="border-t border-line">
           {clients.length === 0 ? (
-            <p className="px-4 py-6 text-center text-xs text-white/35">
+            <p className="px-4 py-6 text-center text-xs text-foreground/35">
               Nenhum cliente nesta etapa.
             </p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-[11px] uppercase tracking-wider text-white/40">
+                <tr className="border-b border-line text-[11px] uppercase tracking-wider text-foreground/40">
                   <th className="px-4 py-2 text-left font-medium">Cliente</th>
                   <th className="px-4 py-2 text-left font-medium">Empresa</th>
                   <th className="px-4 py-2 text-left font-medium">Entrada</th>
@@ -190,15 +190,15 @@ function ListGroup({
                     <tr
                       key={c.id}
                       onClick={() => onRowClick(c.id)}
-                      className="cursor-pointer border-b border-line/60 transition-colors hover:bg-white/[0.03] last:border-b-0"
+                      className="cursor-pointer border-b border-line/60 transition-colors hover:bg-elevate/[0.03] last:border-b-0"
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/[0.05] text-[10px] font-medium text-white/85 ring-1 ring-line">
+                          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.05] text-[10px] font-medium text-foreground/85 ring-1 ring-line">
                             {initials(c.name) || '?'}
                           </div>
                           <div className="min-w-0">
-                            <div className="font-medium text-white">
+                            <div className="font-medium text-foreground">
                               {asText(c.name, '—')}
                             </div>
                             <div className="mt-0.5">
@@ -207,22 +207,22 @@ function ListGroup({
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-white/70">
+                      <td className="px-4 py-3 text-foreground/70">
                         <div>{asText(c.company, '—')}</div>
                         {c.stage === 'setup' &&
                           (() => {
                             const hint = checklistHint(c)
                             return hint ? (
-                              <div className="mt-0.5 text-[10.5px] text-white/45">
+                              <div className="mt-0.5 text-[10.5px] text-foreground/45">
                                 Checklist {hint.done}/{hint.total} · {hint.label}
                               </div>
                             ) : null
                           })()}
                       </td>
-                      <td className="px-4 py-3 text-white/55">
+                      <td className="px-4 py-3 text-foreground/55">
                         {formatDateShort(c.createdAt)}
                       </td>
-                      <td className="px-4 py-3 text-white/55">
+                      <td className="px-4 py-3 text-foreground/55">
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           {timeAgo(c.stageUpdatedAt ?? c.createdAt)}
@@ -230,7 +230,7 @@ function ListGroup({
                       </td>
                       <td className="px-4 py-3">
                         {alerts.length === 0 ? (
-                          <span className="text-xs text-white/30">—</span>
+                          <span className="text-xs text-foreground/30">—</span>
                         ) : (
                           <div className="inline-flex items-center gap-1">
                             {alerts.map((a, i) => (
@@ -272,7 +272,7 @@ function ListGroup({
                             'inline-flex h-7 w-7 items-center justify-center rounded-full ring-1 transition-colors',
                             next
                               ? 'bg-accent/10 text-accent ring-accent/30 hover:bg-accent/20'
-                              : 'cursor-not-allowed bg-white/[0.03] text-white/25 ring-line',
+                              : 'cursor-not-allowed bg-elevate/[0.03] text-foreground/25 ring-line',
                           )}
                         >
                           <ArrowDownCircle className="h-4 w-4" />

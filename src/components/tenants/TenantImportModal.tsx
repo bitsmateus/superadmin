@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
@@ -124,8 +124,8 @@ export function TenantImportModal({
       {done ? (
         <div className="grid place-items-center py-10 text-center">
           <CheckCircle2 className="h-10 w-10 text-success" />
-          <p className="mt-3 text-sm text-white">Import concluído</p>
-          <p className="mt-1 text-xs text-white/55">
+          <p className="mt-3 text-sm text-foreground">Import concluído</p>
+          <p className="mt-1 text-xs text-foreground/55">
             {done.created} criado(s), {done.linked} vinculado(s), {done.skipped}{' '}
             ignorado(s)
             {done.errors > 0 && (
@@ -143,18 +143,18 @@ export function TenantImportModal({
           />
 
           {result.rows.length === 0 ? (
-            <div className="rounded-lg border border-line bg-white/[0.02] px-3 py-4 text-center text-sm text-white/55">
+            <div className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-4 text-center text-sm text-foreground/55">
               Nenhum tenant disponível nos servidores habilitados.
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-line">
-              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 border-b border-line bg-white/[0.02] px-3 py-2 text-[10px] uppercase tracking-wider text-white/45">
+              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 border-b border-line bg-elevate/[0.02] px-3 py-2 text-[10px] uppercase tracking-wider text-foreground/45">
                 <span>Tenant</span>
                 <span>Servidor</span>
                 <span>Status</span>
                 <span className="text-right">Ação</span>
               </div>
-              <ul className="max-h-[44vh] overflow-y-auto divide-y divide-white/[0.04]">
+              <ul className="max-h-[44vh] overflow-y-auto divide-y divide-elevate/[0.04]">
                 {result.rows.map((r) => {
                   const key = keyOf(r)
                   const action = actions[key] ?? 'skip'
@@ -164,10 +164,10 @@ export function TenantImportModal({
                       className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-3 py-2.5"
                     >
                       <div className="min-w-0">
-                        <div className="truncate text-sm text-white">
+                        <div className="truncate text-sm text-foreground">
                           {asText(r.tenant.name, 'Sem nome')}
                         </div>
-                        <div className="truncate text-[11px] text-white/45">
+                        <div className="truncate text-[11px] text-foreground/45">
                           {r.kind === 'linked' && r.candidate && (
                             <>↔ {r.candidate.company || r.candidate.name} (já vinculado)</>
                           )}
@@ -214,7 +214,7 @@ export function TenantImportModal({
           )}
 
           {running && (
-            <div className="grid place-items-center py-3 text-sm text-white/55">
+            <div className="grid place-items-center py-3 text-sm text-foreground/55">
               <span className="inline-flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" /> Importando…
               </span>
@@ -257,14 +257,14 @@ function Stat({
   tone?: 'neutral' | 'success' | 'info' | 'warning'
 }) {
   const tones = {
-    neutral: 'text-white',
+    neutral: 'text-foreground',
     success: 'text-success',
     info: 'text-accent',
     warning: 'text-warning',
   }
   return (
-    <div className="rounded-lg border border-line bg-white/[0.02] px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wider text-white/45">{label}</div>
+    <div className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wider text-foreground/45">{label}</div>
       <div className={`mt-0.5 text-lg font-semibold tabular-nums ${tones[tone]}`}>
         {value}
       </div>

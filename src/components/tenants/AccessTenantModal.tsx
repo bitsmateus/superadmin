@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -124,8 +124,8 @@ export function AccessTenantModal({
           onSubmit={quickForm.handleSubmit(onQuickSubmit)}
           className="grid grid-cols-1 gap-4"
         >
-          <div className="flex items-center justify-between rounded-lg border border-line bg-white/[0.02] px-3 py-2">
-            <span className="flex items-center gap-2 text-xs text-white/65">
+          <div className="flex items-center justify-between rounded-lg border border-line bg-elevate/[0.02] px-3 py-2">
+            <span className="flex items-center gap-2 text-xs text-foreground/65">
               <ShieldCheck className="h-3.5 w-3.5 text-success" />
               Masterkey salva neste dispositivo
             </span>
@@ -143,7 +143,7 @@ export function AccessTenantModal({
             hint="Será copiado para o clipboard ao abrir o sistema."
           />
 
-          <p className="-mt-2 text-[11px] text-white/45">
+          <p className="-mt-2 text-[11px] text-foreground/45">
             Quer trocar a masterkey?{' '}
             <RouterLink
               to="/settings"
@@ -193,7 +193,7 @@ export function AccessTenantModal({
                 type="button"
                 onClick={() => setShowKey((s) => !s)}
                 aria-label={showKey ? 'Ocultar masterkey' : 'Mostrar masterkey'}
-                className="pointer-events-auto text-white/40 hover:text-white/80"
+                className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
               >
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -202,7 +202,7 @@ export function AccessTenantModal({
             error={fullForm.formState.errors.masterkey?.message}
           />
 
-          <label className="flex items-center gap-2.5 rounded-lg border border-line bg-white/[0.02] px-3 py-2.5 text-sm text-white/80 cursor-pointer">
+          <label className="flex items-center gap-2.5 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2.5 text-sm text-foreground/80 cursor-pointer">
             <input
               type="checkbox"
               className="h-4 w-4 accent-[#4F8EF7]"
@@ -210,7 +210,7 @@ export function AccessTenantModal({
             />
             <span>
               Lembrar masterkey neste dispositivo
-              <span className="ml-1 text-[11px] text-white/45">
+              <span className="ml-1 text-[11px] text-foreground/45">
                 (salva em localStorage)
               </span>
             </span>

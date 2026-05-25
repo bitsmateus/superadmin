@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Navigate } from 'react-router-dom'
 import {
   FileSearch,
@@ -204,7 +204,7 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
             tone === 'danger' && 'bg-danger/10 text-danger',
             tone === 'warning' && 'bg-warning/10 text-warning',
             tone === 'info' && 'bg-accent/10 text-accent',
-            tone === 'neutral' && 'bg-white/[0.04] text-white/55',
+            tone === 'neutral' && 'bg-elevate/[0.04] text-foreground/55',
           )}
         >
           {entityIcon(entry.entityType)}
@@ -214,15 +214,15 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
             <Badge tone={tone}>
               {ENTITY_LABEL[entry.entityType] ?? entry.entityType}
             </Badge>
-            <span className="text-[11px] text-white/45">
+            <span className="text-[11px] text-foreground/45">
               {ACTION_LABEL[entry.action] ?? entry.action}
             </span>
-            <span className="text-[11px] text-white/35">·</span>
-            <span className="text-[11px] text-white/45">{timeAgo(entry.at)}</span>
+            <span className="text-[11px] text-foreground/35">·</span>
+            <span className="text-[11px] text-foreground/45">{timeAgo(entry.at)}</span>
           </div>
-          <div className="mt-1 text-sm text-white">{entry.summary ?? '—'}</div>
-          <div className="mt-1 flex items-center gap-2 text-[11px] text-white/45">
-            <div className="grid h-5 w-5 place-items-center rounded-full bg-white/[0.04] text-[9px] text-white/70 ring-1 ring-line">
+          <div className="mt-1 text-sm text-foreground">{entry.summary ?? '—'}</div>
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-foreground/45">
+            <div className="grid h-5 w-5 place-items-center rounded-full bg-elevate/[0.04] text-[9px] text-foreground/70 ring-1 ring-line">
               {initials(entry.actorName ?? entry.actorEmail ?? '?')}
             </div>
             <span>
@@ -238,12 +238,12 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
             </button>
           )}
           {expanded && hasChanges && (
-            <pre className="mt-2 overflow-x-auto rounded-lg border border-line bg-bg p-2 text-[11px] text-white/70">
+            <pre className="mt-2 overflow-x-auto rounded-lg border border-line bg-bg p-2 text-[11px] text-foreground/70">
               {JSON.stringify(entry.changes, null, 2)}
             </pre>
           )}
         </div>
-        <div className="shrink-0 text-right text-[11px] text-white/45">
+        <div className="shrink-0 text-right text-[11px] text-foreground/45">
           {new Date(entry.at).toLocaleString('pt-BR')}
         </div>
       </div>

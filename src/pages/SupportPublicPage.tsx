@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
@@ -66,7 +66,7 @@ export function SupportPublicPage() {
   const [triagePath, setTriagePath] = React.useState<TriagePathEntry[]>([])
 
   return (
-    <div className="min-h-screen bg-bg text-white">
+    <div className="min-h-screen bg-bg text-foreground">
       <Header />
 
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
@@ -152,8 +152,8 @@ function Header() {
             <MessageCircle className="h-4 w-4 text-accent" />
           </div>
           <div className="leading-tight">
-            <div className="text-sm font-semibold text-white">Central de Suporte</div>
-            <div className="text-[10px] uppercase tracking-wider text-white/40">
+            <div className="text-sm font-semibold text-foreground">Central de Suporte</div>
+            <div className="text-[10px] uppercase tracking-wider text-foreground/40">
               Atendimento NX
             </div>
           </div>
@@ -258,7 +258,7 @@ function IdentifyStep({
                 {looking ? 'Buscando…' : 'Continuar'}
               </button>
             </div>
-            <p className="text-xs text-white/45">
+            <p className="text-xs text-foreground/45">
               Usamos seu e-mail pra identificar sua empresa e agilizar o
               atendimento.
             </p>
@@ -266,7 +266,7 @@ function IdentifyStep({
             <hr className="border-line" />
 
             <div className="flex items-center justify-between gap-3 text-xs">
-              <div className="text-white/55">
+              <div className="text-foreground/55">
                 Já tem um ticket aberto? Acompanhe pelo número/código:
               </div>
               <div className="flex items-center gap-2">
@@ -358,11 +358,11 @@ function IdentifyStep({
             <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/[0.05] px-4 py-3">
               <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
               <div>
-                <div className="text-sm font-medium text-white">
+                <div className="text-sm font-medium text-foreground">
                   Identificamos você
                 </div>
-                <div className="mt-0.5 text-xs text-white/60">
-                  Empresa: <strong className="text-white">{matched.clientCompany ?? '—'}</strong>
+                <div className="mt-0.5 text-xs text-foreground/60">
+                  Empresa: <strong className="text-foreground">{matched.clientCompany ?? '—'}</strong>
                   {matched.openTickets !== undefined && matched.openTickets > 0 && (
                     <>
                       {' · '}
@@ -405,7 +405,7 @@ function Hero() {
       <h1 className="text-2xl font-semibold tracking-tight">
         Como podemos ajudar?
       </h1>
-      <p className="text-sm text-white/55">
+      <p className="text-sm text-foreground/55">
         Conte o que aconteceu — sugerimos um vídeo/artigo na hora. Se não
         resolver, abrimos um ticket pra você.
       </p>
@@ -469,7 +469,7 @@ function CategoryStep({
       />
 
       {loading ? (
-        <div className="text-sm text-white/55">Carregando…</div>
+        <div className="text-sm text-foreground/55">Carregando…</div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {categories.map((c) => (
@@ -487,14 +487,14 @@ function CategoryStep({
                 <HelpCircle className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-medium text-white">{c.name}</div>
+                <div className="text-sm font-medium text-foreground">{c.name}</div>
                 {c.description && (
-                  <div className="mt-0.5 text-xs text-white/55">
+                  <div className="mt-0.5 text-xs text-foreground/55">
                     {c.description}
                   </div>
                 )}
               </div>
-              <ArrowRight className="ml-auto mt-1 h-4 w-4 text-white/30 group-hover:text-accent" />
+              <ArrowRight className="ml-auto mt-1 h-4 w-4 text-foreground/30 group-hover:text-accent" />
             </button>
           ))}
         </div>
@@ -518,7 +518,7 @@ function categoryColorCls(color: string): string {
       return 'bg-accent/10 text-accent ring-accent/20'
     case 'neutral':
     default:
-      return 'bg-white/[0.04] text-white/70 ring-white/10'
+      return 'bg-elevate/[0.04] text-foreground/70 ring-elevate/10'
   }
 }
 
@@ -633,7 +633,7 @@ function TriageStep({
 
   if (loading) {
     return (
-      <div className="text-sm text-white/55 py-8 text-center">
+      <div className="text-sm text-foreground/55 py-8 text-center">
         Carregando triagem…
       </div>
     )
@@ -645,7 +645,7 @@ function TriageStep({
       <div className="space-y-4">
         <StepHeader onBack={onBack} title={category.name} />
         <Card>
-          <p className="text-sm text-white/65">
+          <p className="text-sm text-foreground/65">
             Ainda não temos perguntas pré-configuradas pra essa área. Vamos
             direto pra abertura do ticket.
           </p>
@@ -673,10 +673,10 @@ function TriageStep({
           {path.map((p, i) => (
             <div
               key={i}
-              className="rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-xs"
+              className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-xs"
             >
-              <div className="text-white/45">{p.question}</div>
-              <div className="mt-0.5 text-white">→ {p.answer}</div>
+              <div className="text-foreground/45">{p.question}</div>
+              <div className="mt-0.5 text-foreground">→ {p.answer}</div>
             </div>
           ))}
         </div>
@@ -684,21 +684,21 @@ function TriageStep({
 
       {currentStep && (
         <Card>
-          <h3 className="text-base font-medium text-white">{currentStep.question}</h3>
+          <h3 className="text-base font-medium text-foreground">{currentStep.question}</h3>
           <div className="mt-4 grid grid-cols-1 gap-2">
             {currentStep.options.map((opt, i) => (
               <button
                 key={i}
                 onClick={() => chooseOption(opt.label)}
-                className="flex items-center justify-between rounded-lg border border-line bg-white/[0.02] px-4 py-3 text-sm text-white hover:border-accent/40 hover:bg-accent/[0.04] transition-colors"
+                className="flex items-center justify-between rounded-lg border border-line bg-elevate/[0.02] px-4 py-3 text-sm text-foreground hover:border-accent/40 hover:bg-accent/[0.04] transition-colors"
               >
                 <span>{opt.label}</span>
-                <ArrowRight className="h-4 w-4 text-white/40" />
+                <ArrowRight className="h-4 w-4 text-foreground/40" />
               </button>
             ))}
             <button
               onClick={onEscalate}
-              className="mt-2 text-xs text-white/45 hover:text-white/70 underline-offset-2 hover:underline self-start"
+              className="mt-2 text-xs text-foreground/45 hover:text-foreground/70 underline-offset-2 hover:underline self-start"
             >
               Nenhuma dessas opções · abrir ticket direto
             </button>
@@ -736,9 +736,9 @@ function KbResolutionCard({
             <Sparkles className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-white">{article.title}</h3>
+            <h3 className="text-base font-semibold text-foreground">{article.title}</h3>
             {article.summary && (
-              <p className="mt-0.5 text-sm text-white/65">{article.summary}</p>
+              <p className="mt-0.5 text-sm text-foreground/65">{article.summary}</p>
             )}
           </div>
         </div>
@@ -756,7 +756,7 @@ function KbResolutionCard({
         )}
 
         {article.bodyMarkdown && (
-          <div className="prose prose-sm prose-invert max-w-none whitespace-pre-wrap rounded-lg border border-line bg-white/[0.02] p-4 text-sm text-white/85">
+          <div className="prose prose-sm prose-invert max-w-none whitespace-pre-wrap rounded-lg border border-line bg-elevate/[0.02] p-4 text-sm text-foreground/85">
             {article.bodyMarkdown}
           </div>
         )}
@@ -775,7 +775,7 @@ function KbResolutionCard({
         )}
 
         <div className="flex flex-col items-stretch gap-2 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <span className="text-sm text-white/65">Isso resolveu sua dúvida?</span>
+          <span className="text-sm text-foreground/65">Isso resolveu sua dúvida?</span>
           <div className="flex gap-2">
             <button onClick={onNotResolved} className={cn(btnSecondary, 'gap-1.5')}>
               <ThumbsDown className="h-3.5 w-3.5" />
@@ -895,21 +895,21 @@ function ComposeStep({
               placeholder="Conta o que aconteceu, quando começou, o que você já tentou. Se tiver print, descreva."
               className={textareaCls}
             />
-            <div className="mt-1 text-[11px] text-white/35 text-right">
+            <div className="mt-1 text-[11px] text-foreground/35 text-right">
               {description.length}/5000
             </div>
           </Field>
 
           {triagePath.length > 0 && (
-            <div className="rounded-lg border border-line bg-white/[0.02] px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider text-white/40">
+            <div className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider text-foreground/40">
                 Triagem feita
               </div>
-              <ul className="mt-1.5 space-y-0.5 text-xs text-white/65">
+              <ul className="mt-1.5 space-y-0.5 text-xs text-foreground/65">
                 {triagePath.map((p, i) => (
                   <li key={i}>
-                    <span className="text-white/45">{p.question}</span> →{' '}
-                    <strong className="text-white/85">{p.answer}</strong>
+                    <span className="text-foreground/45">{p.question}</span> →{' '}
+                    <strong className="text-foreground/85">{p.answer}</strong>
                   </li>
                 ))}
               </ul>
@@ -926,8 +926,8 @@ function ComposeStep({
 
       <Card>
         <div className="flex items-center justify-between gap-3 text-xs">
-          <div className="text-white/55">Identificação</div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-white/75">
+          <div className="text-foreground/55">Identificação</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-foreground/75">
             <span className="inline-flex items-center gap-1">
               <Mail className="h-3 w-3" /> {identity.email}
             </span>
@@ -965,12 +965,12 @@ function CreatedStep({
   return (
     <div className="grid place-items-center pt-10 text-center">
       <CheckCircle2 className="h-12 w-12 text-success" />
-      <h2 className="mt-4 text-xl font-semibold text-white">Ticket criado!</h2>
-      <p className="mt-2 max-w-md text-sm text-white/65">
+      <h2 className="mt-4 text-xl font-semibold text-foreground">Ticket criado!</h2>
+      <p className="mt-2 max-w-md text-sm text-foreground/65">
         Nosso suporte foi notificado e vai te responder em breve. Salve o link
         abaixo pra acompanhar a conversa:
       </p>
-      <div className="mt-4 w-full max-w-md rounded-lg border border-line bg-card px-3 py-2 text-xs text-white/75 break-all">
+      <div className="mt-4 w-full max-w-md rounded-lg border border-line bg-card px-3 py-2 text-xs text-foreground/75 break-all">
         {url}
       </div>
       <div className="mt-5 flex gap-2">
@@ -989,7 +989,7 @@ function CreatedStep({
       </div>
       <button
         onClick={onNewTicket}
-        className="mt-6 text-xs text-white/45 hover:text-white/70"
+        className="mt-6 text-xs text-foreground/45 hover:text-foreground/70"
       >
         Abrir outro ticket
       </button>
@@ -1104,13 +1104,13 @@ function TrackStep({
           <Card>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[10px] uppercase tracking-wider text-white/40">
+                <div className="text-[10px] uppercase tracking-wider text-foreground/40">
                   Ticket #{ticket.number}
                 </div>
-                <h2 className="mt-1 text-base font-semibold text-white">
+                <h2 className="mt-1 text-base font-semibold text-foreground">
                   {ticket.subject}
                 </h2>
-                <div className="mt-1 text-xs text-white/45 inline-flex items-center gap-1.5">
+                <div className="mt-1 text-xs text-foreground/45 inline-flex items-center gap-1.5">
                   <Clock className="h-3 w-3" />
                   Aberto em {new Date(ticket.openedAt).toLocaleString('pt-BR')}
                 </div>
@@ -1129,7 +1129,7 @@ function TrackStep({
           <Card>
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               {ticket.messages.length === 0 && (
-                <div className="text-sm text-white/45">Sem mensagens ainda.</div>
+                <div className="text-sm text-foreground/45">Sem mensagens ainda.</div>
               )}
               {ticket.messages.map((m) => {
                 const isCustomer = m.authorType === 'customer'
@@ -1145,8 +1145,8 @@ function TrackStep({
                       className={cn(
                         'max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm',
                         isCustomer
-                          ? 'bg-accent/15 text-white border border-accent/30'
-                          : 'bg-white/[0.04] text-white/90 border border-line',
+                          ? 'bg-accent/15 text-foreground border border-accent/30'
+                          : 'bg-elevate/[0.04] text-foreground/90 border border-line',
                       )}
                     >
                       <div className="mb-0.5 text-[10px] uppercase tracking-wider opacity-70">
@@ -1193,7 +1193,7 @@ function TrackStep({
           </Card>
 
           <div className="text-center">
-            <button onClick={onBackHome} className="text-xs text-white/45 hover:text-white/70">
+            <button onClick={onBackHome} className="text-xs text-foreground/45 hover:text-foreground/70">
               ← Abrir novo ticket
             </button>
           </div>
@@ -1221,15 +1221,15 @@ function StepHeader({
       {onBack && (
         <button
           onClick={onBack}
-          className="grid h-8 w-8 place-items-center rounded-lg border border-line text-white/55 hover:bg-white/[0.04] hover:text-white"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-line text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground"
           aria-label="Voltar"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
       )}
       <div className="min-w-0">
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        {subtitle && <p className="mt-0.5 text-sm text-white/55">{subtitle}</p>}
+        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-sm text-foreground/55">{subtitle}</p>}
       </div>
     </div>
   )
@@ -1260,7 +1260,7 @@ function Field({
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[11px] uppercase tracking-wider text-white/45">
+    <div className="text-[11px] uppercase tracking-wider text-foreground/45">
       {children}
     </div>
   )
@@ -1300,21 +1300,21 @@ function toneCls(tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral'): s
     case 'info':
       return 'bg-accent/10 text-accent border-accent/20'
     default:
-      return 'bg-white/[0.04] text-white/70 border-white/10'
+      return 'bg-elevate/[0.04] text-foreground/70 border-elevate/10'
   }
 }
 
 const inputCls =
-  'h-10 w-full rounded-lg bg-surface px-3 text-sm text-white border border-white/10 placeholder:text-white/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors'
+  'h-10 w-full rounded-lg bg-surface px-3 text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors'
 
 const textareaCls =
-  'w-full rounded-lg bg-surface px-3 py-2 text-sm text-white border border-white/10 placeholder:text-white/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors resize-y'
+  'w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors resize-y'
 
 const btnPrimary =
   'inline-flex items-center justify-center h-10 px-4 rounded-lg bg-accent text-white font-medium text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity'
 
 const btnSecondary =
-  'inline-flex items-center justify-center h-10 px-4 rounded-lg bg-white/[0.06] text-white font-medium text-sm hover:bg-white/[0.10] border border-white/10 transition-colors'
+  'inline-flex items-center justify-center h-10 px-4 rounded-lg bg-elevate/[0.06] text-foreground font-medium text-sm hover:bg-elevate/[0.10] border border-elevate/10 transition-colors'
 
 const btnGhost =
-  'inline-flex items-center justify-center h-10 px-3 rounded-lg text-white/55 hover:text-white hover:bg-white/[0.04] text-sm transition-colors'
+  'inline-flex items-center justify-center h-10 px-3 rounded-lg text-foreground/55 hover:text-foreground hover:bg-elevate/[0.04] text-sm transition-colors'

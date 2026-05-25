@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   AlertTriangle,
   Calendar,
@@ -236,10 +236,10 @@ export function ContractTab({ client }: { client: Client }) {
             onChange={(e) => setContractUrl(e.target.value)}
             onBlur={saveUrl}
           />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs text-white/55">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs text-foreground/55">
             <div>
               <FieldLabel>Enviado em</FieldLabel>
-              <p className="mt-1 text-white/85">
+              <p className="mt-1 text-foreground/85">
                 {client.contractSentAt
                   ? formatDate(client.contractSentAt)
                   : '—'}
@@ -247,7 +247,7 @@ export function ContractTab({ client }: { client: Client }) {
             </div>
             <div>
               <FieldLabel>Assinado em</FieldLabel>
-              <p className="mt-1 text-white/85">
+              <p className="mt-1 text-foreground/85">
                 {client.contractSignedAt
                   ? formatDate(client.contractSignedAt)
                   : '—'}
@@ -337,7 +337,7 @@ export function ContractTab({ client }: { client: Client }) {
             }}
           />
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/40">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-foreground/40">
           <span>
             {client.asaasCustomerId
               ? `Cliente Asaas: ${client.asaasCustomerId}`

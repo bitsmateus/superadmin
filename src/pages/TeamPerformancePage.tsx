@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Navigate } from 'react-router-dom'
 import {
   Award,
@@ -107,10 +107,10 @@ export function TeamPerformancePage() {
                 <div className="text-[10px] uppercase tracking-wider text-success">
                   Líder do mês
                 </div>
-                <div className="text-lg font-semibold text-white">
+                <div className="text-lg font-semibold text-foreground">
                   {leader.agentKey}
                 </div>
-                <div className="text-xs text-white/60">
+                <div className="text-xs text-foreground/60">
                   {leader.conversionsThisMonth} conversão(ões) ·{' '}
                   {leader.ticketsResolvedThisMonth} ticket(s) resolvido(s) ·{' '}
                   {leader.activeClients} cliente(s) ativo(s)
@@ -136,10 +136,10 @@ export function TeamPerformancePage() {
         ) : (
           <section className="rounded-xl border border-line bg-card">
             <header className="border-b border-line px-5 py-3">
-              <h2 className="text-sm font-semibold text-white">
+              <h2 className="text-sm font-semibold text-foreground">
                 Ranking individual
               </h2>
-              <p className="text-xs text-white/55">
+              <p className="text-xs text-foreground/55">
                 Ordenado por conversões + tickets resolvidos no mês corrente.
               </p>
             </header>
@@ -171,19 +171,19 @@ function PerfRow({
           rank === 1 && 'bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-400/30',
           rank === 2 && 'bg-zinc-300/15 text-zinc-200 ring-1 ring-zinc-300/30',
           rank === 3 && 'bg-amber-700/15 text-amber-600 ring-1 ring-amber-700/30',
-          !isPodium && 'bg-white/[0.04] text-white/55 ring-1 ring-line',
+          !isPodium && 'bg-elevate/[0.04] text-foreground/55 ring-1 ring-line',
         )}
       >
         {rank}
       </div>
-      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[0.04] text-[11px] font-medium text-white/80 ring-1 ring-line">
+      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[11px] font-medium text-foreground/80 ring-1 ring-line">
         {initials(agent.agentKey)}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-white truncate">
+        <div className="text-sm font-medium text-foreground truncate">
           {agent.agentKey}
         </div>
-        <div className="text-[11px] text-white/45">
+        <div className="text-[11px] text-foreground/45">
           {agent.activeClients} cliente(s) ativo(s)
         </div>
       </div>
@@ -235,7 +235,7 @@ function Stat({
         {icon}
         <span className="font-semibold">{value}</span>
       </div>
-      <div className="text-[10px] uppercase tracking-wider text-white/45">
+      <div className="text-[10px] uppercase tracking-wider text-foreground/45">
         {label}
       </div>
     </div>
@@ -260,7 +260,7 @@ function SummaryCard({
   return (
     <div className="rounded-xl border border-line bg-card p-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wider text-white/45">
+        <span className="text-xs uppercase tracking-wider text-foreground/45">
           {label}
         </span>
         <span
@@ -276,7 +276,7 @@ function SummaryCard({
         {value === null ? (
           <Skeleton className="h-7 w-16" />
         ) : (
-          <span className="text-2xl font-semibold tracking-tight text-white">
+          <span className="text-2xl font-semibold tracking-tight text-foreground">
             {value.toLocaleString('pt-BR')}
           </span>
         )}

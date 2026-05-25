@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -183,10 +183,10 @@ export function ClientsPage() {
             <div className="flex items-center gap-3 min-w-0">
               <ServerIcon className="h-4 w-4 shrink-0 text-accent" />
               <div className="min-w-0">
-                <p className="text-sm font-medium text-white">
+                <p className="text-sm font-medium text-foreground">
                   {unlinkedCount} tenant{unlinkedCount !== 1 ? 's' : ''} no servidor sem vínculo no CRM
                 </p>
-                <p className="text-xs text-white/55">
+                <p className="text-xs text-foreground/55">
                   Importe como clientes na etapa "Ativo" para acompanhar financeiro e histórico.
                 </p>
               </div>
@@ -245,23 +245,23 @@ export function ClientsPage() {
                   <TR key={c.id}>
                     <TD>
                       <div className="flex items-center gap-3">
-                        <div className="grid h-8 w-8 place-items-center rounded-full bg-white/[0.04] text-[11px] font-medium text-white/80 ring-1 ring-line">
+                        <div className="grid h-8 w-8 place-items-center rounded-full bg-elevate/[0.04] text-[11px] font-medium text-foreground/80 ring-1 ring-line">
                           {initials(c.name) || (
                             <UserCircle2 className="h-4 w-4" />
                           )}
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-white">
+                          <div className="text-sm font-medium text-foreground">
                             {asText(c.name, '—')}
                           </div>
-                          <div className="text-[11px] text-white/40">
+                          <div className="text-[11px] text-foreground/40">
                             {asText(c.email)}
                           </div>
                         </div>
                       </div>
                     </TD>
                     <TD>
-                      <div className="text-white/85">{asText(c.company)}</div>
+                      <div className="text-foreground/85">{asText(c.company)}</div>
                       {seeFinancials && (
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
                           {c.monthlyValue ? (
@@ -276,7 +276,7 @@ export function ClientsPage() {
                               Asaas
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[11px] text-white/35 ring-1 ring-white/10">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-elevate/[0.04] px-1.5 py-0.5 text-[11px] text-foreground/35 ring-1 ring-elevate/10">
                               <CreditCard className="h-2.5 w-2.5" />
                               Sem Asaas
                             </span>
@@ -287,8 +287,8 @@ export function ClientsPage() {
                     <TD>
                       <StageBadge stage={c.stage} />
                     </TD>
-                    <TD className="text-white/60">{days} dia(s)</TD>
-                    <TD className="text-white/60">
+                    <TD className="text-foreground/60">{days} dia(s)</TD>
+                    <TD className="text-foreground/60">
                       {summarizeNextAction(c)}
                     </TD>
                     <TD className="text-right">
@@ -406,8 +406,8 @@ function StageChip({
       className={cn(
         'rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
         active
-          ? 'bg-white/[0.08] text-white ring-1 ring-line'
-          : 'text-white/55 hover:bg-white/[0.04] hover:text-white',
+          ? 'bg-elevate/[0.08] text-foreground ring-1 ring-line'
+          : 'text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground',
       )}
     >
       {label}

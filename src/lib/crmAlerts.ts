@@ -1,16 +1,19 @@
-import { daysSince, isPast, isSameDay } from './time'
+import { daysSince, isSameDay } from './time'
 import type { Client, FollowUp } from '@/types/client'
 
+/**
+ * Alertas exibidos no Dashboard principal. Focados no fluxo de
+ * implementação/entrega + flags de tipo de implementação.
+ */
 export type AlertKind =
-  | 'followup_today'
-  | 'followup_late'
-  | 'contract_no_signature'
-  | 'briefing_no_response'
-  | 'payment_overdue'
-  | 'briefing_ready_to_setup'
-  | 'delivery_meeting'
-  | 'setup_pending_config'
-  | 'inactive_long'
+  | 'briefing_pending_send'
+  | 'briefing_filled_no_setup'
+  | 'setup_in_progress'
+  | 'delivery_scheduled'
+  | 'delivery_done_this_week'
+  | 'impl_api_oficial'
+  | 'impl_ia'
+  | 'impl_automacao_externa'
 
 export interface CrmAlert {
   kind: AlertKind
@@ -21,158 +24,179 @@ export interface CrmAlert {
   subtitle: string
   message?: string
   tone: 'danger' | 'warning' | 'info' | 'success'
-  /** Optional ISO datetime used for sorting (e.g. delivery meetings). */
+  /** Optional ISO datetime used for sorting (e.g. delivery meetings, deadlines). */
   whenAt?: string
 }
 
+const SETUP_DEADLINE_DAYS = 3
+const DAY_MS = 24 * 60 * 60 * 1000
+
 export function computeAlerts(clients: Client[]): CrmAlert[] {
   const out: CrmAlert[] = []
-  const today = new Date()
+  const now = new Date()
+  const todayStart = startOfDay(now)
+  const weekAgo = todayStart - 7 * DAY_MS
 
   for (const c of clients) {
     if (c.stage === 'churned') continue
 
-    // Follow-ups
-    if (c.stage === 'active') {
-      for (const fu of c.followUps) {
-        if (fu.sentAt) continue
-        const scheduled = new Date(fu.scheduledFor)
-        if (isSameDay(scheduled, today)) {
-          out.push({
-            kind: 'followup_today',
-            client: c,
-            followUp: fu,
-            tone: 'info',
-            title: `${c.name} — ${c.company}`,
-            subtitle: `Follow-up do dia ${fu.dayNumber}`,
-            message: fu.message,
-          })
-        } else if (isPast(fu.scheduledFor)) {
-          const days = daysSince(fu.scheduledFor)
-          out.push({
-            kind: 'followup_late',
-            client: c,
-            followUp: fu,
-            daysLate: days,
-            tone: 'danger',
-            title: `${c.name} — ${c.company}`,
-            subtitle: `Follow-up dia ${fu.dayNumber} · ${days} dias de atraso`,
-            message: fu.message,
-          })
-        }
-      }
-    }
-
-    // Contract enviado há +3 dias sem assinatura
-    if (c.contractSentAt && !c.contractSignedAt) {
-      const days = daysSince(c.contractSentAt)
-      if (days >= 3) {
-        out.push({
-          kind: 'contract_no_signature',
-          client: c,
-          daysLate: days,
-          tone: 'danger',
-          title: `Cobrar assinatura de ${c.name}`,
-          subtitle: `Contrato enviado há ${days} dias`,
-        })
-      }
-    }
-
-    // Briefing enviado há +5 dias sem resposta
+    // ===== 1. Aguardando envio do briefing =====
+    // Cliente já passou da etapa de contrato (assinou) mas o briefing
+    // ainda não foi enviado pra ele responder.
     if (
-      c.briefingSentAt &&
-      (c.briefingStatus === 'sent' || c.briefingStatus === 'revision')
+      c.contractSignedAt &&
+      !c.briefingSentAt &&
+      c.briefingStatus !== 'filled' &&
+      c.briefingStatus !== 'approved' &&
+      c.stage !== 'setup' &&
+      c.stage !== 'delivery' &&
+      c.stage !== 'active'
     ) {
-      const days = daysSince(c.briefingSentAt)
-      if (days >= 5) {
-        out.push({
-          kind: 'briefing_no_response',
-          client: c,
-          daysLate: days,
-          tone: 'warning',
-          title: `Briefing pendente de ${c.name}`,
-          subtitle: `Enviado há ${days} dias sem resposta`,
-        })
-      }
-    }
-
-    // Pagamento vencido
-    if (c.paymentStatus === 'overdue') {
+      const days = daysSince(c.contractSignedAt)
       out.push({
-        kind: 'payment_overdue',
+        kind: 'briefing_pending_send',
         client: c,
-        tone: 'danger',
-        title: `Pagamento vencido: ${c.name}`,
-        subtitle: c.company,
+        daysLate: days,
+        tone: days >= 5 ? 'danger' : 'warning',
+        title: `${c.company || c.name}`,
+        subtitle:
+          days > 0
+            ? `Contrato assinado há ${days} dia(s) · briefing ainda não enviado`
+            : 'Contrato assinado · enviar briefing',
       })
     }
 
-    // Briefing aprovado e ainda na etapa briefing
-    if (c.briefingStatus === 'approved' && c.stage === 'briefing') {
+    // ===== 2. Briefing preenchido sem início da configuração =====
+    // Cliente respondeu o briefing (filled/approved) mas ainda não foi
+    // movido pra etapa 'setup'.
+    if (
+      (c.briefingStatus === 'filled' || c.briefingStatus === 'approved') &&
+      c.stage !== 'setup' &&
+      c.stage !== 'delivery' &&
+      c.stage !== 'active'
+    ) {
+      const ref =
+        c.briefingApprovedAt ?? c.briefingSentAt ?? c.stageUpdatedAt
+      const days = ref ? daysSince(ref) : 0
       out.push({
-        kind: 'briefing_ready_to_setup',
+        kind: 'briefing_filled_no_setup',
         client: c,
-        tone: 'success',
-        title: `Pronto para configurar: ${c.name}`,
-        subtitle: 'Briefing aprovado — avançar para configuração',
+        daysLate: days,
+        tone: days >= 3 ? 'danger' : 'warning',
+        title: `${c.company || c.name}`,
+        subtitle:
+          c.briefingStatus === 'approved'
+            ? `Briefing aprovado${days > 0 ? ` há ${days} dia(s)` : ''} · iniciar configuração`
+            : `Briefing preenchido${days > 0 ? ` há ${days} dia(s)` : ''} · revisar e iniciar configuração`,
       })
     }
 
-    // Reunião de entrega agendada (hoje ou no futuro, ainda não concluída)
+    // ===== 3. Configuração em andamento =====
+    // Cliente em stage 'setup'. Mostra prazo limite (stage_updated_at + 3 dias)
+    // e qual etapa do checklist está pendente.
+    if (c.stage === 'setup') {
+      const startedAt = c.stageUpdatedAt
+        ? new Date(c.stageUpdatedAt).getTime()
+        : now.getTime()
+      const deadlineMs = startedAt + SETUP_DEADLINE_DAYS * DAY_MS
+      const deadlineDate = new Date(deadlineMs)
+      const daysToDeadline = Math.ceil(
+        (deadlineMs - now.getTime()) / DAY_MS,
+      )
+      const overdue = deadlineMs < now.getTime()
+
+      const items = c.deliveryChecklist ?? []
+      const total = items.length
+      const done = items.filter((i) => i.checked).length
+      const next = items.find((i) => !i.checked)
+
+      const deadlineLabel = overdue
+        ? `Atrasado ${Math.abs(daysToDeadline)} dia(s) · prazo era ${formatDate(deadlineDate)}`
+        : daysToDeadline === 0
+          ? `Vence hoje (${formatDate(deadlineDate)})`
+          : `Prazo ${formatDate(deadlineDate)} (${daysToDeadline} dia(s))`
+
+      const stepLabel =
+        total > 0
+          ? next
+            ? `${done}/${total} · ${next.label}`
+            : `${done}/${total} concluídos`
+          : 'sem checklist'
+
+      out.push({
+        kind: 'setup_in_progress',
+        client: c,
+        daysLate: overdue ? Math.abs(daysToDeadline) : undefined,
+        tone: overdue ? 'danger' : daysToDeadline <= 1 ? 'warning' : 'info',
+        title: `${c.company || c.name}`,
+        subtitle: `${stepLabel} · ${deadlineLabel}`,
+        whenAt: new Date(deadlineMs).toISOString(),
+      })
+    }
+
+    // ===== 4. Entrega agendada =====
+    // Reunião/data de entrega marcada e ainda não concluída.
     if (
       c.deliveryDate &&
       !c.deliveryCompletedAt &&
-      new Date(c.deliveryDate).getTime() >= startOfToday(today)
+      new Date(c.deliveryDate).getTime() >= todayStart
     ) {
       const when = new Date(c.deliveryDate)
       out.push({
-        kind: 'delivery_meeting',
+        kind: 'delivery_scheduled',
         client: c,
-        tone: isSameDay(when, today) ? 'info' : 'success',
-        title: `${c.name} — ${c.company}`,
+        tone: isSameDay(when, now) ? 'info' : 'success',
+        title: `${c.company || c.name}`,
         subtitle: formatScheduleLabel(when),
         whenAt: c.deliveryDate,
       })
     }
 
-    // Inatividade: cliente ativo sem nenhuma interação nos últimos 30 dias.
-    // Considera última nota / log como sinal de interação.
-    if (c.stage === 'active') {
-      const lastNote = (c.notes ?? []).map((n) => n.createdAt).sort().pop()
-      const lastLog = (c.logs ?? []).map((l) => l.createdAt).sort().pop()
-      const lastTouchIso =
-        [lastNote, lastLog, c.stageUpdatedAt, c.createdAt]
-          .filter(Boolean)
-          .sort()
-          .pop() ?? c.createdAt
-      const days = daysSince(lastTouchIso)
-      if (days >= 30) {
-        out.push({
-          kind: 'inactive_long',
-          client: c,
-          tone: days >= 60 ? 'warning' : 'info',
-          title: `${c.name} — ${c.company}`,
-          subtitle: `Sem interação há ${days} dia(s)`,
-          whenAt: lastTouchIso,
-        })
-      }
+    // ===== 5. Entrega realizada nos últimos 7 dias =====
+    if (
+      c.deliveryCompletedAt &&
+      new Date(c.deliveryCompletedAt).getTime() >= weekAgo
+    ) {
+      const when = new Date(c.deliveryCompletedAt)
+      out.push({
+        kind: 'delivery_done_this_week',
+        client: c,
+        tone: 'success',
+        title: `${c.company || c.name}`,
+        subtitle: `Entregue em ${formatDate(when)}`,
+        whenAt: c.deliveryCompletedAt,
+      })
     }
 
-    // Configurações pendentes (cliente em setup com checklist incompleto)
-    if (c.stage === 'setup') {
-      const items = c.deliveryChecklist ?? []
-      const total = items.length
-      const done = items.filter((i) => i.checked).length
-      if (total > 0 && done < total) {
-        const next = items.find((i) => !i.checked)
-        out.push({
-          kind: 'setup_pending_config',
-          client: c,
-          tone: 'warning',
-          title: `${c.name} — ${c.company}`,
-          subtitle: `Configuração ${done}/${total}${next ? ` · ${next.label}` : ''}`,
-        })
-      }
+    // ===== 6/7/8. Flags de tipo de implementação =====
+    // Aparecem em painéis dedicados pra o suporte ter visibilidade de
+    // quais clientes usam quais recursos especiais.
+    if (c.hasApiOficial) {
+      out.push({
+        kind: 'impl_api_oficial',
+        client: c,
+        tone: 'info',
+        title: `${c.company || c.name}`,
+        subtitle: c.stage === 'active' ? 'Ativo' : `Etapa: ${c.stage}`,
+      })
+    }
+    if (c.hasIa) {
+      out.push({
+        kind: 'impl_ia',
+        client: c,
+        tone: 'info',
+        title: `${c.company || c.name}`,
+        subtitle: c.stage === 'active' ? 'Ativo' : `Etapa: ${c.stage}`,
+      })
+    }
+    if (c.hasAutomacaoExterna) {
+      out.push({
+        kind: 'impl_automacao_externa',
+        client: c,
+        tone: 'info',
+        title: `${c.company || c.name}`,
+        subtitle: c.stage === 'active' ? 'Ativo' : `Etapa: ${c.stage}`,
+      })
     }
   }
 
@@ -186,17 +210,21 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
   return out.sort((a, b) => toneRank[a.tone] - toneRank[b.tone])
 }
 
-function startOfToday(today: Date): number {
-  const d = new Date(today)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
+function startOfDay(d: Date): number {
+  const c = new Date(d)
+  c.setHours(0, 0, 0, 0)
+  return c.getTime()
 }
 
-function formatScheduleLabel(d: Date): string {
-  const date = d.toLocaleDateString('pt-BR', {
+function formatDate(d: Date): string {
+  return d.toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: 'short',
   })
+}
+
+function formatScheduleLabel(d: Date): string {
+  const date = formatDate(d)
   const time = d.toLocaleTimeString('pt-BR', {
     hour: '2-digit',
     minute: '2-digit',

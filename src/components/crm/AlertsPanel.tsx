@@ -1,15 +1,15 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
-  AlertTriangle,
   ArrowRight,
-  Bell,
+  Bot,
   Calendar,
   CheckCircle2,
-  CreditCard,
-  FileText,
+  Cpu,
+  PlugZap,
   Send,
   Settings2,
   Sparkles,
+  Truck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
@@ -31,67 +31,67 @@ interface PanelDef {
 
 const PANELS: PanelDef[] = [
   {
-    key: 'meetings',
-    title: 'Reuniões de entrega',
-    description: 'Treinamentos agendados — hoje e nos próximos dias',
-    kinds: ['delivery_meeting'],
-    icon: <Calendar className="h-3.5 w-3.5" />,
-    tone: 'info',
-  },
-  {
-    key: 'config_pending',
-    title: 'Configurações pendentes de preenchimento',
-    description: 'Clientes na etapa de configuração com checklist em aberto',
-    kinds: ['setup_pending_config'],
-    icon: <Settings2 className="h-3.5 w-3.5" />,
-    tone: 'warning',
-  },
-  {
-    key: 'followups',
-    title: 'Follow-ups do dia',
-    description: 'Mensagens para enviar hoje ou em atraso',
-    kinds: ['followup_today', 'followup_late'],
+    key: 'briefing_pending',
+    title: 'Aguardando envio do briefing',
+    description: 'Contrato assinado e briefing ainda não foi enviado',
+    kinds: ['briefing_pending_send'],
     icon: <Send className="h-3.5 w-3.5" />,
+    tone: 'warning',
+  },
+  {
+    key: 'briefing_filled',
+    title: 'Briefing preenchido, sem configuração',
+    description: 'Cliente respondeu mas ainda não foi pra etapa de setup',
+    kinds: ['briefing_filled_no_setup'],
+    icon: <Sparkles className="h-3.5 w-3.5" />,
+    tone: 'warning',
+  },
+  {
+    key: 'setup_in_progress',
+    title: 'Configuração em andamento',
+    description: 'Setup ativo — prazo de 3 dias + etapa atual do checklist',
+    kinds: ['setup_in_progress'],
+    icon: <Settings2 className="h-3.5 w-3.5" />,
     tone: 'info',
   },
   {
-    key: 'contracts',
-    title: 'Contratos sem assinatura',
-    description: 'Enviados há 3+ dias e ainda pendentes',
-    kinds: ['contract_no_signature'],
-    icon: <FileText className="h-3.5 w-3.5" />,
-    tone: 'danger',
+    key: 'impl_api_oficial',
+    title: 'Clientes — API Oficial',
+    description: 'Implementações que usam WhatsApp API Oficial',
+    kinds: ['impl_api_oficial'],
+    icon: <PlugZap className="h-3.5 w-3.5" />,
+    tone: 'info',
   },
   {
-    key: 'briefings',
-    title: 'Briefings sem resposta',
-    description: 'Enviados há 5+ dias sem retorno do cliente',
-    kinds: ['briefing_no_response'],
-    icon: <AlertTriangle className="h-3.5 w-3.5" />,
-    tone: 'warning',
+    key: 'impl_ia',
+    title: 'Clientes — IA',
+    description: 'Implementações com IA integrada (atendimento automático)',
+    kinds: ['impl_ia'],
+    icon: <Bot className="h-3.5 w-3.5" />,
+    tone: 'info',
   },
   {
-    key: 'payments',
-    title: 'Pagamentos vencidos',
-    description: 'Cobranças marcadas como vencidas no Asaas',
-    kinds: ['payment_overdue'],
-    icon: <CreditCard className="h-3.5 w-3.5" />,
-    tone: 'danger',
+    key: 'impl_automacao_externa',
+    title: 'Clientes — Automação externa',
+    description: 'Integração com automações externas (n8n, Make, etc.)',
+    kinds: ['impl_automacao_externa'],
+    icon: <Cpu className="h-3.5 w-3.5" />,
+    tone: 'info',
   },
   {
-    key: 'inactive',
-    title: 'Clientes sem interação',
-    description: 'Ativos há 30+ dias sem nota ou atividade — risco de churn silencioso',
-    kinds: ['inactive_long'],
-    icon: <AlertTriangle className="h-3.5 w-3.5" />,
-    tone: 'warning',
+    key: 'delivery_scheduled',
+    title: 'Entrega agendada',
+    description: 'Treinamentos marcados — hoje e nos próximos dias',
+    kinds: ['delivery_scheduled'],
+    icon: <Calendar className="h-3.5 w-3.5" />,
+    tone: 'success',
   },
   {
-    key: 'ready',
-    title: 'Prontos para avançar',
-    description: 'Briefings aprovados aguardando configuração',
-    kinds: ['briefing_ready_to_setup'],
-    icon: <Sparkles className="h-3.5 w-3.5" />,
+    key: 'delivery_done',
+    title: 'Entregas realizadas (7 dias)',
+    description: 'Clientes que foram entregues na última semana',
+    kinds: ['delivery_done_this_week'],
+    icon: <Truck className="h-3.5 w-3.5" />,
     tone: 'success',
   },
 ]
@@ -124,33 +124,13 @@ export function AlertsPanel() {
     return map
   }, [alerts])
 
-  const activePanels = PANELS.filter(
-    (p) => (grouped.get(p.key)?.length ?? 0) > 0,
-  )
-
-  if (activePanels.length === 0) {
-    return (
-      <div className="flex items-center gap-3 rounded-2xl border border-line bg-card px-5 py-6">
-        <span className="grid h-9 w-9 place-items-center rounded-lg bg-success/10 text-success ring-1 ring-success/20">
-          <Bell className="h-4 w-4" />
-        </span>
-        <div>
-          <h3 className="text-sm font-medium text-white">
-            Sem alertas no momento
-          </h3>
-          <p className="text-xs text-white/55">
-            Quando houver reuniões agendadas, follow-ups, contratos ou
-            briefings pendentes, eles aparecem aqui.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
+  // Mostra SEMPRE todos os painéis pré-definidos, mesmo com contador 0.
+  // Dashboard de suporte fica com estrutura previsível em vez de aparecer
+  // só quando há alertas.
   return (
     <>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {activePanels.map((panel) => (
+        {PANELS.map((panel) => (
           <PanelCard
             key={panel.key}
             panel={panel}
@@ -181,36 +161,51 @@ function PanelCard({
     success: 'bg-success/10 text-success ring-success/20',
   }[panel.tone]
 
+  const empty = alerts.length === 0
+
   return (
-    <section className="flex flex-col rounded-2xl border border-line bg-card">
+    <section
+      className={cn(
+        'flex flex-col rounded-2xl border bg-card transition-opacity',
+        empty ? 'border-line opacity-60' : 'border-line',
+      )}
+    >
       <header className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
         <div className="flex items-start gap-2.5">
           <span
             className={cn(
               'grid h-7 w-7 shrink-0 place-items-center rounded-lg ring-1',
-              toneClasses,
+              empty
+                ? 'bg-elevate/[0.04] text-foreground/40 ring-line'
+                : toneClasses,
             )}
           >
             {panel.icon}
           </span>
           <div>
-            <h3 className="text-sm font-medium text-white">{panel.title}</h3>
-            <p className="text-[11px] text-white/45">{panel.description}</p>
+            <h3 className="text-sm font-medium text-foreground">{panel.title}</h3>
+            <p className="text-[11px] text-foreground/45">{panel.description}</p>
           </div>
         </div>
-        <Badge tone={panel.tone} dot>
+        <Badge tone={empty ? 'neutral' : panel.tone} dot={!empty}>
           {alerts.length}
         </Badge>
       </header>
-      <ul className="divide-y divide-line">
-        {alerts.map((a) => (
-          <AlertRow
-            key={`${panel.key}-${a.client.id}-${a.kind}-${a.followUp?.id ?? a.whenAt ?? ''}`}
-            alert={a}
-            onOpen={() => onOpen(a.client.id)}
-          />
-        ))}
-      </ul>
+      {empty ? (
+        <div className="px-4 py-5 text-center">
+          <p className="text-xs text-foreground/40">Nada por aqui agora</p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-line">
+          {alerts.map((a) => (
+            <AlertRow
+              key={`${panel.key}-${a.client.id}-${a.kind}-${a.followUp?.id ?? a.whenAt ?? ''}`}
+              alert={a}
+              onOpen={() => onOpen(a.client.id)}
+            />
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
@@ -238,12 +233,12 @@ function AlertRow({
   }
 
   return (
-    <li className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.02]">
+    <li className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-elevate/[0.02]">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-white">{alert.title}</p>
-        <p className="truncate text-[11px] text-white/55">{alert.subtitle}</p>
+        <p className="truncate text-sm font-medium text-foreground">{alert.title}</p>
+        <p className="truncate text-[11px] text-foreground/55">{alert.subtitle}</p>
         {alert.message && (
-          <p className="mt-1 line-clamp-2 text-[11px] text-white/45">
+          <p className="mt-1 line-clamp-2 text-[11px] text-foreground/45">
             {alert.message.length > 110
               ? alert.message.slice(0, 110) + '…'
               : alert.message}

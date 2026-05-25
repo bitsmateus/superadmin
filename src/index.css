@@ -2,8 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =====================================================================
+ * Theme tokens — CSS variables
+ *
+ * Estrutura:
+ *  - *-rgb: três bytes (R G B) sem alpha. Usados pelo Tailwind via
+ *    `rgb(var(--foo-rgb) / <alpha-value>)` → permite `text-foreground/55`.
+ *  - --line / --line-soft: cores completas (com alpha) — usadas como
+ *    `border-color: var(--line)` direto pelo Tailwind.
+ *
+ * Tema padrão: dark (mantém comportamento atual). [data-theme="light"]
+ * sobrescreve. O atributo é aplicado no <html> pelo useTheme().
+ * ===================================================================== */
 :root {
   color-scheme: dark;
+
+  /* Surfaces */
+  --bg-rgb: 10 10 11;
+  --surface-rgb: 17 17 20;
+  --card-rgb: 26 26 31;
+  --sidebar-rgb: 13 13 16;
+
+  /* Foreground (texto principal) */
+  --foreground-rgb: 255 255 255;
+
+  /* Elevate — overlay/border/hover. Branco no dark, preto no light. */
+  --elevate-rgb: 255 255 255;
+
+  /* Borders prontas com alpha embutido */
+  --line: rgba(255, 255, 255, 0.07);
+  --line-soft: rgba(255, 255, 255, 0.05);
+
+  /* Focus ring background (cor do bg do ring outer) */
+  --focus-ring-bg: #0a0a0b;
+
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.16);
+
+  /* Skeleton shimmer */
+  --skeleton-base: rgba(255, 255, 255, 0.04);
+  --skeleton-shine: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-rgb: 246 247 250;
+  --surface-rgb: 255 255 255;
+  --card-rgb: 255 255 255;
+  --sidebar-rgb: 242 244 248;
+
+  /* Foreground em preto puro: textos com opacity (/45, /55) ficam bem
+     mais legíveis sobre fundo branco do que cinza-azulado #111827. */
+  --foreground-rgb: 0 0 0;
+  --elevate-rgb: 0 0 0;
+
+  /* Linhas mais densas pra dar estrutura visível no tema claro. */
+  --line: rgba(0, 0, 0, 0.16);
+  --line-soft: rgba(0, 0, 0, 0.09);
+
+  --focus-ring-bg: #ffffff;
+
+  --scrollbar-thumb: rgba(0, 0, 0, 0.22);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.36);
+
+  --skeleton-base: rgba(0, 0, 0, 0.07);
+  --skeleton-shine: rgba(0, 0, 0, 0.12);
 }
 
 html,
@@ -16,6 +81,8 @@ body {
   font-family: 'Geist', 'DM Sans', 'Inter', system-ui, -apple-system, sans-serif;
   font-feature-settings: 'cv11', 'ss01', 'ss03';
   -webkit-font-smoothing: antialiased;
+  background-color: rgb(var(--bg-rgb));
+  color: rgb(var(--foreground-rgb));
 }
 
 ::selection {
@@ -32,20 +99,20 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--scrollbar-thumb);
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Skeleton shimmer */
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.08) 40%,
-    rgba(255, 255, 255, 0.04) 80%
+    var(--skeleton-base) 0%,
+    var(--skeleton-shine) 40%,
+    var(--skeleton-base) 80%
   );
   background-size: 1000px 100%;
   animation: shimmer 1.8s linear infinite;
@@ -54,7 +121,9 @@ body {
 /* Focus ring */
 .focus-ring:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px #0a0a0b, 0 0 0 4px rgba(79, 142, 247, 0.6);
+  box-shadow:
+    0 0 0 2px var(--focus-ring-bg),
+    0 0 0 4px rgba(79, 142, 247, 0.6);
 }
 
 /* Subtle inner highlight for primary buttons */

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import {
   Eye,
@@ -75,10 +75,10 @@ export function LoginPage() {
           <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-card ring-1 ring-line shadow-glow">
             <ShieldCheck className="h-6 w-6 text-accent" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             TenantHub
           </h1>
-          <p className="mt-1 text-sm text-white/50">
+          <p className="mt-1 text-sm text-foreground/50">
             Painel interno de gestão de tenants
           </p>
         </div>
@@ -88,8 +88,8 @@ export function LoginPage() {
           className="rounded-2xl border border-line bg-card/80 p-6 shadow-2xl backdrop-blur-sm"
         >
           <div className="mb-1">
-            <h2 className="text-sm font-medium text-white">Entrar</h2>
-            <p className="mt-0.5 text-xs text-white/45">
+            <h2 className="text-sm font-medium text-foreground">Entrar</h2>
+            <p className="mt-0.5 text-xs text-foreground/45">
               Acesse com seu e-mail e senha
             </p>
           </div>
@@ -124,7 +124,7 @@ export function LoginPage() {
                   type="button"
                   onClick={() => setShow((s) => !s)}
                   aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}
-                  className="pointer-events-auto text-white/40 hover:text-white/80"
+                  className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
                 >
                   {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -143,10 +143,10 @@ export function LoginPage() {
             {loading ? 'Validando…' : 'Entrar'}
           </Button>
 
-          <div className="mt-5 rounded-lg border border-line bg-white/[0.02] px-3 py-2.5">
-            <p className="text-[11px] leading-relaxed text-white/55">
+          <div className="mt-5 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2.5">
+            <p className="text-[11px] leading-relaxed text-foreground/55">
               Não tem acesso? Peça para um administrador criar sua conta na
-              página <span className="text-white/85">Usuários</span>.
+              página <span className="text-foreground/85">Usuários</span>.
             </p>
           </div>
         </form>

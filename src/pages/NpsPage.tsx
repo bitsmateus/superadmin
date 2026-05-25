@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import {
   Award,
@@ -133,7 +133,7 @@ export function NpsPage() {
         {/* Distribuição */}
         {total > 0 && (
           <section className="rounded-xl border border-line bg-card p-4">
-            <h3 className="mb-3 text-sm font-medium text-white">
+            <h3 className="mb-3 text-sm font-medium text-foreground">
               Distribuição de notas
             </h3>
             <Distribution distribution={distribution} />
@@ -144,13 +144,13 @@ export function NpsPage() {
         {pending.length > 0 && (
           <section className="rounded-xl border border-line bg-card p-4">
             <header className="mb-3 flex items-center justify-between">
-              <h3 className="inline-flex items-center gap-2 text-sm font-medium text-white">
+              <h3 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
                 <Send className="h-4 w-4 text-accent" />
                 Pesquisas pendentes
               </h3>
               <Badge tone="info">{pending.length}</Badge>
             </header>
-            <p className="mb-3 text-xs text-white/55">
+            <p className="mb-3 text-xs text-foreground/55">
               Pesquisas criadas automaticamente após a entrega — copie o link e
               envie pro cliente (WhatsApp, e-mail).
             </p>
@@ -162,13 +162,13 @@ export function NpsPage() {
                 return (
                   <li
                     key={r.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2"
                   >
                     <div className="min-w-0">
-                      <div className="text-sm text-white truncate">
+                      <div className="text-sm text-foreground truncate">
                         {client?.company || client?.name || 'Cliente removido'}
                       </div>
-                      <div className="text-[11px] text-white/55">
+                      <div className="text-[11px] text-foreground/55">
                         {ready ? 'Pronta pra enviar' : `Agendada pra ${formatDateShort(r.scheduledFor)}`}
                         {r.sentAt && ` · Enviada ${timeAgo(r.sentAt)}`}
                       </div>
@@ -197,7 +197,7 @@ export function NpsPage() {
               })}
             </ul>
             {pending.length > 10 && (
-              <div className="mt-2 text-center text-[11px] text-white/45">
+              <div className="mt-2 text-center text-[11px] text-foreground/45">
                 + {pending.length - 10} pendentes
               </div>
             )}
@@ -214,7 +214,7 @@ export function NpsPage() {
               </h3>
               <Badge tone="danger">{detractorList.length}</Badge>
             </header>
-            <p className="mb-3 text-xs text-white/65">
+            <p className="mb-3 text-xs text-foreground/65">
               Clientes que deram nota 0-6. Vale uma ligação pra entender o que
               aconteceu e tentar reverter.
             </p>
@@ -232,15 +232,15 @@ export function NpsPage() {
                           <span className="grid h-6 w-6 place-items-center rounded-md bg-danger/15 text-danger ring-1 ring-danger/30 text-[11px] font-semibold">
                             {r.score}
                           </span>
-                          <span className="text-sm text-white truncate">
+                          <span className="text-sm text-foreground truncate">
                             {client?.company || client?.name || 'Cliente removido'}
                           </span>
-                          <span className="text-[10px] text-white/40">
+                          <span className="text-[10px] text-foreground/40">
                             {timeAgo(r.respondedAt ?? '')}
                           </span>
                         </div>
                         {r.comment && (
-                          <p className="mt-2 text-xs text-white/80 whitespace-pre-wrap">
+                          <p className="mt-2 text-xs text-foreground/80 whitespace-pre-wrap">
                             "{r.comment}"
                           </p>
                         )}
@@ -248,7 +248,7 @@ export function NpsPage() {
                       {client && (
                         <button
                           onClick={() => navigate(`/clients?open=${client.id}`)}
-                          className="shrink-0 rounded-md p-1.5 text-white/55 hover:bg-white/[0.06] hover:text-white"
+                          className="shrink-0 rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
                           title="Abrir cliente"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
@@ -265,7 +265,7 @@ export function NpsPage() {
         {/* Histórico recente */}
         <section className="rounded-xl border border-line bg-card p-4">
           <header className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-white">Respostas recentes</h3>
+            <h3 className="text-sm font-medium text-foreground">Respostas recentes</h3>
             <Badge tone="neutral">{answered.length}</Badge>
           </header>
 
@@ -309,17 +309,17 @@ function NpsScoreCard({
   return (
     <div className="rounded-xl border border-line bg-card p-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wider text-white/45">
+        <span className="text-xs uppercase tracking-wider text-foreground/45">
           NPS
         </span>
         <span className={cn('grid h-7 w-7 place-items-center rounded-lg ring-1', toneCls)}>
           <Award className="h-4 w-4" />
         </span>
       </div>
-      <div className="mt-3 text-3xl font-semibold tracking-tight text-white tabular-nums">
+      <div className="mt-3 text-3xl font-semibold tracking-tight text-foreground tabular-nums">
         {total === 0 ? '—' : nps}
       </div>
-      <div className="mt-1 text-[11px] text-white/55">
+      <div className="mt-1 text-[11px] text-foreground/55">
         Média {avgScore.toFixed(1)} · {total} resposta(s)
       </div>
     </div>
@@ -347,17 +347,17 @@ function ClassMetric({
   return (
     <div className="rounded-xl border border-line bg-card p-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wider text-white/45">
+        <span className="text-xs uppercase tracking-wider text-foreground/45">
           {label}
         </span>
         <span className={cn('grid h-7 w-7 place-items-center rounded-lg ring-1', toneCls)}>
           {icon}
         </span>
       </div>
-      <div className="mt-3 text-2xl font-semibold tabular-nums text-white">
+      <div className="mt-3 text-2xl font-semibold tabular-nums text-foreground">
         {value}
       </div>
-      <div className="mt-1 text-[11px] text-white/55">{pct.toFixed(0)}%</div>
+      <div className="mt-1 text-[11px] text-foreground/55">{pct.toFixed(0)}%</div>
     </div>
   )
 }
@@ -375,7 +375,7 @@ function Distribution({
         const tone = i <= 6 ? 'danger' : i <= 8 ? 'warning' : 'success'
         return (
           <div key={i} className="flex flex-col items-center">
-            <div className="h-24 w-full rounded-md bg-white/[0.04] relative overflow-hidden">
+            <div className="h-24 w-full rounded-md bg-elevate/[0.04] relative overflow-hidden">
               <div
                 className={cn(
                   'absolute inset-x-0 bottom-0 transition-all',
@@ -388,8 +388,8 @@ function Distribution({
                 style={{ height: `${heightPct}%` }}
               />
             </div>
-            <div className="mt-1 text-[10px] text-white/45 tabular-nums">{i}</div>
-            <div className="text-[10px] font-medium text-white tabular-nums">{count}</div>
+            <div className="mt-1 text-[10px] text-foreground/45 tabular-nums">{i}</div>
+            <div className="text-[10px] font-medium text-foreground tabular-nums">{count}</div>
           </div>
         )
       })}
@@ -420,7 +420,7 @@ function ResponseRow({
         : Meh
 
   return (
-    <li className="flex items-center gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2">
+    <li className="flex items-center gap-3 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2">
       <span
         className={cn(
           'grid h-7 w-7 place-items-center rounded-md ring-1 text-[11px] font-semibold',
@@ -434,15 +434,15 @@ function ResponseRow({
         {response.score}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-sm text-white">
+        <div className="flex items-center gap-2 text-sm text-foreground">
           <Icon className="h-3.5 w-3.5 opacity-70" />
           <span className="truncate">{clientName ?? 'Cliente'}</span>
-          <span className="text-[10px] text-white/40">
+          <span className="text-[10px] text-foreground/40">
             {timeAgo(response.respondedAt ?? '')}
           </span>
         </div>
         {response.comment && (
-          <p className="mt-0.5 text-xs text-white/65 truncate">
+          <p className="mt-0.5 text-xs text-foreground/65 truncate">
             "{response.comment}"
           </p>
         )}
@@ -450,7 +450,7 @@ function ResponseRow({
       {onOpenClient && (
         <button
           onClick={onOpenClient}
-          className="shrink-0 rounded-md p-1.5 text-white/40 hover:bg-white/[0.06] hover:text-white"
+          className="shrink-0 rounded-md p-1.5 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
         >
           <ExternalLink className="h-3.5 w-3.5" />
         </button>

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -223,13 +223,13 @@ export function TenantDetailPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-white">{asText(tenant.name, 'Tenant')}</h2>
+              <h2 className="text-lg font-semibold text-foreground">{asText(tenant.name, 'Tenant')}</h2>
               <Badge tone={active ? 'success' : 'danger'} dot>
                 {active ? 'Ativo' : 'Inativo'}
               </Badge>
             </div>
-            <p className="mt-0.5 text-xs text-white/45">
-              ID: <code className="text-white/70">{String(tenant.id)}</code>
+            <p className="mt-0.5 text-xs text-foreground/45">
+              ID: <code className="text-foreground/70">{String(tenant.id)}</code>
               {tenant.created_at && (
                 <>
                   {' · '}criado em {formatDate(tenant.created_at)}
@@ -241,12 +241,12 @@ export function TenantDetailPage() {
 
         <section className="mt-6 rounded-xl border border-line bg-card">
           <header className="border-b border-line px-5 py-3">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-white/45">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-foreground/45">
               Informações
             </h3>
           </header>
           {entries.length === 0 ? (
-            <div className="px-5 py-6 text-sm text-white/50">
+            <div className="px-5 py-6 text-sm text-foreground/50">
               Nenhuma informação adicional disponível.
             </div>
           ) : (
@@ -261,10 +261,10 @@ export function TenantDetailPage() {
         <section className="mt-8">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <UsersIcon className="h-4 w-4 text-white/60" />
-              <h3 className="text-sm font-medium text-white">Usuários</h3>
+              <UsersIcon className="h-4 w-4 text-foreground/60" />
+              <h3 className="text-sm font-medium text-foreground">Usuários</h3>
               {usersQ.data && (
-                <span className="text-xs text-white/40">({usersQ.data.length})</span>
+                <span className="text-xs text-foreground/40">({usersQ.data.length})</span>
               )}
             </div>
             <Button
@@ -334,28 +334,28 @@ export function TenantDetailPage() {
                     <TR key={String(u.id)}>
                       <TD>
                         <div className="flex items-center gap-3">
-                          <div className="grid h-8 w-8 place-items-center rounded-full bg-white/[0.04] text-[11px] font-medium text-white/80 ring-1 ring-line">
+                          <div className="grid h-8 w-8 place-items-center rounded-full bg-elevate/[0.04] text-[11px] font-medium text-foreground/80 ring-1 ring-line">
                             {initials(asText(u.name)) || <UserCircle2 className="h-4 w-4" />}
                           </div>
                           <div>
-                            <div className="text-sm font-medium text-white">{asText(u.name, '—')}</div>
+                            <div className="text-sm font-medium text-foreground">{asText(u.name, '—')}</div>
                             {u.role && (
-                              <div className="text-[11px] text-white/40">{asText(u.role)}</div>
+                              <div className="text-[11px] text-foreground/40">{asText(u.role)}</div>
                             )}
                           </div>
                         </div>
                       </TD>
-                      <TD className="text-white/70">{asText(u.email)}</TD>
+                      <TD className="text-foreground/70">{asText(u.email)}</TD>
                       <TD>
                         <Badge tone={isActive ? 'success' : 'neutral'} dot>
                           {u.status ? asText(u.status, isActive ? 'Ativo' : 'Inativo') : isActive ? 'Ativo' : 'Inativo'}
                         </Badge>
                       </TD>
-                      <TD className="text-white/60">{formatDateShort(u.created_at)}</TD>
+                      <TD className="text-foreground/60">{formatDateShort(u.created_at)}</TD>
                       <TD className="text-right">
                         <button
                           onClick={() => setUserModal({ mode: 'edit', user: u })}
-                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-white/70 hover:bg-white/[0.06] hover:text-white"
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground/70 hover:bg-elevate/[0.06] hover:text-foreground"
                           aria-label="Editar usuário"
                         >
                           <Edit3 className="h-3.5 w-3.5" />
@@ -428,10 +428,10 @@ function InfoCell({ k, v }: { k: string; v: unknown }) {
       )}
     >
       <div className="min-w-0 flex-1">
-        <dt className="text-[11px] uppercase tracking-wider text-white/40">
+        <dt className="text-[11px] uppercase tracking-wider text-foreground/40">
           {humanize(k)}
         </dt>
-        <dd className="mt-1 truncate text-sm text-white/85">
+        <dd className="mt-1 truncate text-sm text-foreground/85">
           {isSensitive && !shown ? '••••••••' : value}
         </dd>
       </div>
@@ -439,7 +439,7 @@ function InfoCell({ k, v }: { k: string; v: unknown }) {
         {isSensitive && (
           <button
             onClick={() => setShown((s) => !s)}
-            className="rounded-md p-1 text-white/50 hover:bg-white/[0.06] hover:text-white"
+            className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground"
             aria-label={shown ? 'Ocultar' : 'Mostrar'}
           >
             <KeyRound className="h-3.5 w-3.5" />
@@ -448,7 +448,7 @@ function InfoCell({ k, v }: { k: string; v: unknown }) {
         {value !== '—' && (
           <button
             onClick={copy}
-            className="rounded-md p-1 text-white/50 hover:bg-white/[0.06] hover:text-white"
+            className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground"
             aria-label="Copiar"
           >
             <Copy className="h-3.5 w-3.5" />

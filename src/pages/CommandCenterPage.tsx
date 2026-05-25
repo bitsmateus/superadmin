@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
@@ -108,8 +108,8 @@ function TeamSummary({
     <section className="rounded-xl border border-line bg-card p-5">
       <header className="mb-3 flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-white">Equipe — Top 3</h2>
-          <p className="text-xs text-white/55">Por conversões no mês</p>
+          <h2 className="text-sm font-semibold text-foreground">Equipe — Top 3</h2>
+          <p className="text-xs text-foreground/55">Por conversões no mês</p>
         </div>
         <Button size="sm" variant="secondary" onClick={onSeeFull}>
           Ver tudo
@@ -118,7 +118,7 @@ function TeamSummary({
       {!ready ? (
         <Skeleton className="h-24 w-full" />
       ) : top3.length === 0 ? (
-        <p className="text-xs text-white/45">
+        <p className="text-xs text-foreground/45">
           Nenhum responsável atribuído a clientes ainda.
         </p>
       ) : (
@@ -126,17 +126,17 @@ function TeamSummary({
           {top3.map((p, i) => (
             <li
               key={p.agentKey}
-              className="flex items-center gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2"
+              className="flex items-center gap-3 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2"
             >
-              <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/[0.04] text-[10px] font-semibold text-white/80 ring-1 ring-line">
+              <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[10px] font-semibold text-foreground/80 ring-1 ring-line">
                 {i + 1}
               </div>
-              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/[0.04] text-[10px] text-white/80 ring-1 ring-line">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[10px] text-foreground/80 ring-1 ring-line">
                 {initials(p.agentKey)}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-white">{p.agentKey}</div>
-                <div className="text-[10px] text-white/45">
+                <div className="truncate text-sm text-foreground">{p.agentKey}</div>
+                <div className="text-[10px] text-foreground/45">
                   {p.activeClients} cliente(s) ativo(s)
                 </div>
               </div>
@@ -145,7 +145,7 @@ function TeamSummary({
                   <TrendingUp className="h-3 w-3" />
                   <strong>{p.conversionsThisMonth}</strong>
                 </div>
-                <div className="text-[10px] text-white/45">conv.</div>
+                <div className="text-[10px] text-foreground/45">conv.</div>
               </div>
             </li>
           ))}
@@ -181,13 +181,13 @@ function BillingQueue({ clients }: { clients: Client[] }) {
     <section className="rounded-xl border border-line bg-card p-5">
       <header className="mb-3 flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-white">Fila de cobrança</h2>
-          <p className="text-xs text-white/55">
+          <h2 className="text-sm font-semibold text-foreground">Fila de cobrança</h2>
+          <p className="text-xs text-foreground/55">
             {overdue.length} cliente(s) com pagamento vencido
           </p>
         </div>
         <div className="text-right">
-          <div className="text-xs text-white/45">Total devido</div>
+          <div className="text-xs text-foreground/45">Total devido</div>
           <div
             className={cn(
               'text-sm font-semibold',
@@ -215,10 +215,10 @@ function BillingQueue({ clients }: { clients: Client[] }) {
               >
                 <CreditCard className="h-4 w-4 shrink-0 text-danger" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm text-white">
+                  <div className="truncate text-sm text-foreground">
                     {client.company || client.name}
                   </div>
-                  <div className="text-[10px] text-white/45">
+                  <div className="text-[10px] text-foreground/45">
                     {daysLate} dia(s) em atraso
                   </div>
                 </div>
@@ -240,7 +240,7 @@ function BillingQueue({ clients }: { clients: Client[] }) {
             <li>
               <button
                 onClick={() => navigate('/financeiro')}
-                className="flex w-full items-center justify-center gap-1 rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-xs text-white/70 hover:bg-white/[0.04]"
+                className="flex w-full items-center justify-center gap-1 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-xs text-foreground/70 hover:bg-elevate/[0.04]"
               >
                 Ver todos no Financeiro
                 <ArrowRight className="h-3 w-3" />

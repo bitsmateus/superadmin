@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Activity,
@@ -171,7 +171,7 @@ export function HistoryTab({ client }: { client: Client }) {
           <ol className="space-y-5">
             {groups.map(([day, items]) => (
               <li key={day}>
-                <div className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
+                <div className="mb-2 text-[10px] uppercase tracking-wider text-foreground/40">
                   {formatDay(day)}
                 </div>
                 <ol className="relative space-y-2 border-l border-line pl-5">
@@ -234,13 +234,13 @@ function TimelineRow({
           'rounded-lg border p-3 transition-colors',
           event.internal
             ? 'border-warning/30 bg-warning/[0.05]'
-            : 'border-line bg-white/[0.02]',
+            : 'border-line bg-elevate/[0.02]',
         )}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="text-sm font-medium text-white">
+              <span className="text-sm font-medium text-foreground">
                 {event.title}
               </span>
               {event.internal && (
@@ -251,19 +251,19 @@ function TimelineRow({
               )}
             </div>
             {event.description && (
-              <p className="mt-1 whitespace-pre-wrap text-xs text-white/65 line-clamp-3">
+              <p className="mt-1 whitespace-pre-wrap text-xs text-foreground/65 line-clamp-3">
                 {event.description}
               </p>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <span className="text-[10px] text-white/35">
+            <span className="text-[10px] text-foreground/35">
               {timeAgo(event.at)}
             </span>
             {event.ticketId && (
               <button
                 onClick={() => onOpenTicket(event.ticketId!)}
-                className="rounded-md p-1 text-white/40 hover:bg-white/[0.06] hover:text-white"
+                className="rounded-md p-1 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
                 title="Abrir ticket"
               >
                 <ExternalLink className="h-3 w-3" />
@@ -327,7 +327,7 @@ function toneBg(tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral'): st
     case 'info':
       return 'bg-accent/20 text-accent'
     default:
-      return 'bg-white/[0.06] text-white/55'
+      return 'bg-elevate/[0.06] text-foreground/55'
   }
 }
 

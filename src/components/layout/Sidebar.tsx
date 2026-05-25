@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+﻿import { NavLink, useNavigate } from 'react-router-dom'
 import {
   BookOpen,
   Building2,
@@ -8,15 +8,18 @@ import {
   LogOut,
   MessageCircle,
   MessageSquare,
+  Moon,
   Settings,
   ShieldCheck,
   Star,
+  Sun,
   Trophy,
   UserCircle2,
   Users,
   Wallet,
   Zap,
 } from 'lucide-react'
+import { useTheme } from '@/hooks/useTheme'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { signOut, useAuth } from '@/hooks/useAuth'
@@ -81,14 +84,14 @@ export function Sidebar() {
   ]
 
   return (
-    <aside className="fixed left-0 top-0 z-30 flex h-screen w-[220px] flex-col border-r border-white/[0.05] bg-sidebar">
+    <aside className="fixed left-0 top-0 z-30 flex h-screen w-[220px] flex-col border-r border-elevate/[0.05] bg-sidebar">
       <div className="flex items-center gap-2 px-5 py-5">
         <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent/15 ring-1 ring-accent/30">
           <span className="text-accent font-bold leading-none">T</span>
         </div>
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold text-white">TenantHub</span>
-          <span className="text-[10px] uppercase tracking-wider text-white/40">
+          <span className="text-sm font-semibold text-foreground">TenantHub</span>
+          <span className="text-[10px] uppercase tracking-wider text-foreground/40">
             Painel interno
           </span>
         </div>
@@ -110,8 +113,8 @@ export function Sidebar() {
                 cn(
                   'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
                   isActive
-                    ? 'bg-white/[0.05] text-white'
-                    : 'text-white/55 hover:bg-white/[0.03] hover:text-white/90',
+                    ? 'bg-elevate/[0.05] text-foreground'
+                    : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
                 )
               }
             >
@@ -122,7 +125,7 @@ export function Sidebar() {
                       'h-4 w-4 shrink-0',
                       isActive
                         ? 'text-accent'
-                        : 'text-white/50 group-hover:text-white/75',
+                        : 'text-foreground/50 group-hover:text-foreground/75',
                     )}
                   />
                   <span>{item.label}</span>
@@ -137,7 +140,7 @@ export function Sidebar() {
           )
         })}
 
-        <div className="my-2 h-px bg-white/[0.05]" />
+        <div className="my-2 h-px bg-elevate/[0.05]" />
 
         {secondaryItems.map(({ to, label, icon: Icon }) => (
           <NavLink
@@ -147,8 +150,8 @@ export function Sidebar() {
               cn(
                 'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
                 isActive
-                  ? 'bg-white/[0.05] text-white'
-                  : 'text-white/55 hover:bg-white/[0.03] hover:text-white/90',
+                  ? 'bg-elevate/[0.05] text-foreground'
+                  : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
               )
             }
           >
@@ -159,7 +162,7 @@ export function Sidebar() {
                     'h-4 w-4 shrink-0',
                     isActive
                       ? 'text-accent'
-                      : 'text-white/50 group-hover:text-white/75',
+                      : 'text-foreground/50 group-hover:text-foreground/75',
                   )}
                 />
                 <span>{label}</span>
@@ -169,31 +172,49 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-white/[0.05] p-3">
+      <div className="border-t border-elevate/[0.05] p-3">
         <div className="mb-3">
           <ServerSwitcher />
         </div>
         <div className="mb-2 flex items-center gap-2 rounded-lg px-2 py-1.5">
-          <div className="grid h-7 w-7 place-items-center rounded-full bg-white/[0.05] text-white/70 ring-1 ring-line">
+          <div className="grid h-7 w-7 place-items-center rounded-full bg-elevate/[0.05] text-foreground/70 ring-1 ring-line">
             <UserCircle2 className="h-4 w-4" />
           </div>
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-xs font-medium text-white/90">
+            <div className="truncate text-xs font-medium text-foreground/90">
               {profile?.name || profile?.email || '—'}
             </div>
-            <div className="text-[10px] uppercase tracking-wider text-white/40">
+            <div className="text-[10px] uppercase tracking-wider text-foreground/40">
               {profile ? ROLE_LABELS[profile.role] : '…'}
             </div>
           </div>
         </div>
-        <button
-          onClick={onLogout}
-          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-white/55 transition-colors hover:bg-white/[0.04] hover:text-white"
-        >
-          <LogOut className="h-4 w-4" />
-          Sair
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onLogout}
+            className="flex flex-1 items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground/55 transition-colors hover:bg-elevate/[0.04] hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </button>
+          <ThemeToggle />
+        </div>
       </div>
     </aside>
+  )
+}
+
+function ThemeToggle() {
+  const [theme, setTheme] = useTheme()
+  const isDark = theme === 'dark'
+  return (
+    <button
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      aria-label={isDark ? 'Trocar pra tema claro' : 'Trocar pra tema escuro'}
+      title={isDark ? 'Tema claro' : 'Tema escuro'}
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-foreground/55 transition-colors hover:bg-elevate/[0.04] hover:text-foreground"
+    >
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </button>
   )
 }

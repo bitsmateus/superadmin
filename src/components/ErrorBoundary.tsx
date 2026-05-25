@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button } from './ui/Button'
 
@@ -35,8 +35,8 @@ export class ErrorBoundary extends React.Component<
           <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl bg-danger/15 text-danger">
             <AlertTriangle className="h-6 w-6" />
           </div>
-          <h1 className="text-lg font-semibold text-white">Algo deu errado</h1>
-          <p className="mt-2 text-sm text-white/60">
+          <h1 className="text-lg font-semibold text-foreground">Algo deu errado</h1>
+          <p className="mt-2 text-sm text-foreground/60">
             {this.state.error?.message || 'Erro inesperado ao renderizar a aplicação.'}
           </p>
           <div className="mt-6 flex justify-center">

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Navigate } from 'react-router-dom'
 import {
   CheckCircle2,
@@ -130,7 +130,7 @@ export function UsersPage() {
 
       <div className="px-8 py-6">
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-white/55">
+          <div className="flex items-center gap-2 text-sm text-foreground/55">
             <Loader2 className="h-4 w-4 animate-spin" />
             Carregando equipe…
           </div>
@@ -173,8 +173,8 @@ export function UsersPage() {
           </Table>
         )}
 
-        <p className="mt-6 rounded-lg border border-line bg-white/[0.02] px-4 py-3 text-[11.5px] text-white/55">
-          <strong className="text-white/80">Como criar um novo usuário:</strong>{' '}
+        <p className="mt-6 rounded-lg border border-line bg-elevate/[0.02] px-4 py-3 text-[11.5px] text-foreground/55">
+          <strong className="text-foreground/80">Como criar um novo usuário:</strong>{' '}
           clique em <em>"Novo usuário"</em> — você cria o e-mail e a senha; ele
           entra com role <em>suporte</em> por padrão e você pode promover aqui.
           A exclusão completa precisa ser feita pelo dashboard do Supabase
@@ -232,13 +232,13 @@ function ProfileRow({
     <TR>
       <TD>
         <div className="flex items-center gap-3">
-          <div className="grid h-8 w-8 place-items-center rounded-full bg-white/[0.04] text-[11px] font-medium text-white/80 ring-1 ring-line">
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-elevate/[0.04] text-[11px] font-medium text-foreground/80 ring-1 ring-line">
             {initials(profile.name || profile.email) || (
               <UserCircle2 className="h-4 w-4" />
             )}
           </div>
           <div>
-            <div className="text-sm font-medium text-white">
+            <div className="text-sm font-medium text-foreground">
               {profile.name || '—'}
               {isSelf && (
                 <span className="ml-2 text-[10px] uppercase tracking-wider text-accent">
@@ -249,7 +249,7 @@ function ProfileRow({
           </div>
         </div>
       </TD>
-      <TD className="text-white/70">{profile.email}</TD>
+      <TD className="text-foreground/70">{profile.email}</TD>
       <TD>
         <div className="flex items-center gap-2">
           <Badge tone={ROLE_TONE[profile.role]}>
@@ -268,7 +268,7 @@ function ProfileRow({
           )}
         </div>
       </TD>
-      <TD className="text-white/60">{formatDateShort(profile.created_at)}</TD>
+      <TD className="text-foreground/60">{formatDateShort(profile.created_at)}</TD>
       <TD className="text-right">
         {!isSelf && (
           <button
@@ -303,9 +303,9 @@ function ProfileRow({
           </>
         }
       >
-        <p className="text-sm text-white/75">
+        <p className="text-sm text-foreground/75">
           Remove o profile de{' '}
-          <strong className="text-white">{profile.email}</strong> — o usuário
+          <strong className="text-foreground">{profile.email}</strong> — o usuário
           perde acesso ao painel. A conta de autenticação no Supabase continua
           existindo (você pode excluir completamente em Authentication →
           Users), mas sem profile não consegue entrar.
@@ -455,7 +455,7 @@ function InviteUserModal({
           onChange={(e) => setPassword(e.target.value)}
         />
         <div>
-          <div className="mb-1.5 text-[11px] uppercase tracking-wider text-white/45">
+          <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">
             Papel
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -468,11 +468,11 @@ function InviteUserModal({
                   'rounded-lg border px-3 py-2.5 text-left text-xs transition-colors',
                   role === o.value
                     ? 'border-accent/50 bg-accent/[0.08] ring-1 ring-accent/30'
-                    : 'border-line bg-white/[0.02] hover:border-white/15',
+                    : 'border-line bg-elevate/[0.02] hover:border-elevate/15',
                 )}
               >
-                <div className="text-sm font-medium text-white">{o.label}</div>
-                <div className="mt-0.5 text-[10.5px] leading-relaxed text-white/55">
+                <div className="text-sm font-medium text-foreground">{o.label}</div>
+                <div className="mt-0.5 text-[10.5px] leading-relaxed text-foreground/55">
                   {o.description}
                 </div>
               </button>

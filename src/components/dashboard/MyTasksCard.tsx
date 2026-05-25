@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   Bell,
   CheckCircle2,
@@ -34,7 +34,7 @@ export function MyTasksCard() {
   return (
     <section className="rounded-xl border border-line bg-card p-4">
       <header className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="inline-flex items-center gap-2 text-sm font-medium text-white">
+        <h3 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
           <Bell className="h-4 w-4 text-accent" />
           Minhas tarefas
         </h3>
@@ -91,7 +91,7 @@ function Group({
       <div
         className={cn(
           'mb-1.5 text-[10px] uppercase tracking-wider',
-          tone === 'warning' ? 'text-warning' : 'text-white/45',
+          tone === 'warning' ? 'text-warning' : 'text-foreground/45',
         )}
       >
         {label}
@@ -119,19 +119,19 @@ function ReminderRow({
         'group flex items-start justify-between gap-2 rounded-lg border px-3 py-2',
         overdue
           ? 'border-warning/30 bg-warning/[0.04]'
-          : 'border-line bg-white/[0.02]',
+          : 'border-line bg-elevate/[0.02]',
       )}
     >
       <div className="min-w-0 flex-1">
-        <div className="text-sm text-white">{reminder.title}</div>
-        <div className="mt-0.5 text-[11px] text-white/55 inline-flex items-center gap-2 flex-wrap">
+        <div className="text-sm text-foreground">{reminder.title}</div>
+        <div className="mt-0.5 text-[11px] text-foreground/55 inline-flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {overdue ? 'Atrasada ' : ''}
             {timeAgo(reminder.dueAt)}
           </span>
           {client && (
-            <span className="text-white/40">
+            <span className="text-foreground/40">
               · {client.company || client.name}
             </span>
           )}
@@ -144,7 +144,7 @@ function ReminderRow({
             toast.success('Tarefa concluída')
           }}
           title="Concluir"
-          className="rounded-md p-1 text-white/55 hover:bg-success/10 hover:text-success"
+          className="rounded-md p-1 text-foreground/55 hover:bg-success/10 hover:text-success"
         >
           <CheckCircle2 className="h-3.5 w-3.5" />
         </button>
@@ -153,7 +153,7 @@ function ReminderRow({
             await ticketsService.deleteReminder(reminder.id)
           }}
           title="Remover"
-          className="rounded-md p-1 text-white/40 hover:bg-danger/10 hover:text-danger"
+          className="rounded-md p-1 text-foreground/40 hover:bg-danger/10 hover:text-danger"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>

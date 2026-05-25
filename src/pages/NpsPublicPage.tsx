@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useParams } from 'react-router-dom'
 import { CheckCircle2, MessageCircle, Star } from 'lucide-react'
 import { toast } from 'sonner'
@@ -56,7 +56,7 @@ export function NpsPublicPage() {
   if (loading) {
     return (
       <Shell>
-        <p className="text-center text-sm text-white/55 py-12">Carregando…</p>
+        <p className="text-center text-sm text-foreground/55 py-12">Carregando…</p>
       </Shell>
     )
   }
@@ -64,7 +64,7 @@ export function NpsPublicPage() {
   if (error) {
     return (
       <Shell>
-        <p className="text-center text-sm text-white/65 py-12">{error}</p>
+        <p className="text-center text-sm text-foreground/65 py-12">{error}</p>
       </Shell>
     )
   }
@@ -74,8 +74,8 @@ export function NpsPublicPage() {
       <Shell>
         <div className="text-center pt-10">
           <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
-          <h2 className="mt-4 text-xl font-semibold text-white">Obrigado!</h2>
-          <p className="mt-2 max-w-md mx-auto text-sm text-white/65">
+          <h2 className="mt-4 text-xl font-semibold text-foreground">Obrigado!</h2>
+          <p className="mt-2 max-w-md mx-auto text-sm text-foreground/65">
             Sua resposta foi registrada. Nosso time vai dar continuidade —
             qualquer coisa, é só chamar.
           </p>
@@ -93,7 +93,7 @@ export function NpsPublicPage() {
           <h1 className="text-2xl font-semibold tracking-tight">
             Sua opinião conta{greeting}!
           </h1>
-          <p className="mt-2 max-w-md mx-auto text-sm text-white/55">
+          <p className="mt-2 max-w-md mx-auto text-sm text-foreground/55">
             De 0 a 10, o quanto você recomendaria a NX pra um amigo?
           </p>
         </div>
@@ -101,7 +101,7 @@ export function NpsPublicPage() {
         <div className="rounded-2xl border border-line bg-card p-5">
           <ScoreSelector value={score} onChange={setScore} />
 
-          <div className="mt-6 flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider text-white/40">
+          <div className="mt-6 flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider text-foreground/40">
             <span>Nem provável</span>
             <span>Muito provável</span>
           </div>
@@ -113,7 +113,7 @@ export function NpsPublicPage() {
           )}
 
           <div className="mt-5">
-            <label className="text-[11px] uppercase tracking-wider text-white/45 inline-flex items-center gap-1.5">
+            <label className="text-[11px] uppercase tracking-wider text-foreground/45 inline-flex items-center gap-1.5">
               <MessageCircle className="h-3 w-3" />
               {score !== null && score <= 6
                 ? 'O que podemos melhorar?'
@@ -127,9 +127,9 @@ export function NpsPublicPage() {
               rows={4}
               maxLength={2000}
               placeholder="Conta pra gente…"
-              className="mt-1.5 w-full rounded-lg bg-surface px-3 py-2 text-sm text-white border border-white/10 placeholder:text-white/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 resize-y"
+              className="mt-1.5 w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 resize-y"
             />
-            <div className="mt-1 text-right text-[10px] text-white/30">
+            <div className="mt-1 text-right text-[10px] text-foreground/30">
               {comment.length}/2000
             </div>
           </div>
@@ -146,7 +146,7 @@ export function NpsPublicPage() {
         </div>
 
         {info?.clientCompany && (
-          <p className="text-center text-[11px] text-white/35">
+          <p className="text-center text-[11px] text-foreground/35">
             Empresa: {info.clientCompany}
           </p>
         )}
@@ -157,15 +157,15 @@ export function NpsPublicPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-bg text-white">
+    <div className="min-h-screen bg-bg text-foreground">
       <header className="border-b border-line bg-card/40 backdrop-blur">
         <div className="mx-auto max-w-2xl px-4 py-4 flex items-center gap-2">
           <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent/15 ring-1 ring-accent/30">
             <Star className="h-4 w-4 text-accent" />
           </div>
           <div className="leading-tight">
-            <div className="text-sm font-semibold text-white">Pesquisa de satisfação</div>
-            <div className="text-[10px] uppercase tracking-wider text-white/40">NX</div>
+            <div className="text-sm font-semibold text-foreground">Pesquisa de satisfação</div>
+            <div className="text-[10px] uppercase tracking-wider text-foreground/40">NX</div>
           </div>
         </div>
       </header>
@@ -193,7 +193,7 @@ function ScoreSelector({
               'aspect-square rounded-lg border text-sm font-medium transition-all',
               isSelected
                 ? scoreBg(i)
-                : 'border-line bg-white/[0.02] text-white/65 hover:bg-white/[0.06]',
+                : 'border-line bg-elevate/[0.02] text-foreground/65 hover:bg-elevate/[0.06]',
             )}
             aria-label={`Nota ${i}`}
           >

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   CheckCircle2,
   Download,
@@ -122,24 +122,24 @@ export function DeliveryTab({ client }: { client: Client }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white/[0.02] px-4 py-3">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-elevate/[0.02] px-4 py-3">
         <div className="flex items-center gap-2">
           <ListChecks className="h-4 w-4 text-accent" />
-          <span className="text-sm text-white/80">
+          <span className="text-sm text-foreground/80">
             Checklist de criação da empresa
           </span>
-          <span className="text-[11px] text-white/45">
+          <span className="text-[11px] text-foreground/45">
             {done}/{total} concluídos
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-elevate/[0.06]">
             <div
               className="h-full bg-accent transition-all"
               style={{ width: `${pct}%` }}
             />
           </div>
-          <span className="text-[11px] text-white/50">
+          <span className="text-[11px] text-foreground/50">
             Editar em <span className="text-accent">Briefing → Automação</span>
           </span>
         </div>
@@ -171,7 +171,7 @@ export function DeliveryTab({ client }: { client: Client }) {
                 'flex items-start gap-3 rounded-lg border px-3 py-2 transition-colors',
                 item.checked
                   ? 'border-success/30 bg-success/[0.05]'
-                  : 'border-line bg-white/[0.02] hover:bg-white/[0.04]',
+                  : 'border-line bg-elevate/[0.02] hover:bg-elevate/[0.04]',
               )}
             >
               <input
@@ -184,19 +184,19 @@ export function DeliveryTab({ client }: { client: Client }) {
                 <p
                   className={cn(
                     'text-sm',
-                    item.checked ? 'text-white/55 line-through' : 'text-white/90',
+                    item.checked ? 'text-foreground/55 line-through' : 'text-foreground/90',
                   )}
                 >
                   {item.label}
                 </p>
                 {item.checked && (
-                  <p className="mt-0.5 text-[10px] text-white/40">
+                  <p className="mt-0.5 text-[10px] text-foreground/40">
                     por {asText(item.checkedBy, '—')} em{' '}
                     {formatDate(item.checkedAt)}
                   </p>
                 )}
                 {item.id === 'handoff_access_sent' && !item.checked && (
-                  <p className="mt-0.5 text-[10.5px] text-white/45">
+                  <p className="mt-0.5 text-[10.5px] text-foreground/45">
                     Use "Baixar acessos" para gerar o PDF — marca automaticamente
                     ao baixar.
                   </p>
@@ -238,7 +238,7 @@ export function DeliveryTab({ client }: { client: Client }) {
         </div>
       </Section>
 
-      <div className="flex flex-col items-stretch gap-2 rounded-xl border border-line bg-white/[0.02] p-4">
+      <div className="flex flex-col items-stretch gap-2 rounded-xl border border-line bg-elevate/[0.02] p-4">
         {client.deliveryCompletedAt ? (
           <p className="text-sm text-success inline-flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4" />
@@ -246,7 +246,7 @@ export function DeliveryTab({ client }: { client: Client }) {
           </p>
         ) : (
           <>
-            <p className="text-xs text-white/55">
+            <p className="text-xs text-foreground/55">
               Conclui a entrega quando o checklist estiver 100% e o cliente
               tiver confirmado que está funcionando. Os follow-ups são
               agendados automaticamente para dias 3, 7, 15 e 30.

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { Layout } from './components/layout/Layout'
@@ -68,7 +68,7 @@ const SupportPublicPage = React.lazy(() =>
 
 function PageFallback() {
   return (
-    <div className="grid min-h-[40vh] place-items-center text-sm text-white/55">
+    <div className="grid min-h-[40vh] place-items-center text-sm text-foreground/55">
       <span className="inline-flex items-center gap-2">
         <Loader2 className="h-4 w-4 animate-spin" />
         Carregando…

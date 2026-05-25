@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   AlertCircle,
@@ -232,14 +232,14 @@ function TicketRow({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) {
         )}
       >
         <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/[0.04] text-[11px] font-medium text-white/80 ring-1 ring-line">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[11px] font-medium text-foreground/80 ring-1 ring-line">
             {initials(ticket.customerName ?? ticket.customerCompany ?? ticket.customerEmail) || (
               <UserIcon className="h-4 w-4" />
             )}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wider text-white/35">
+              <span className="text-[10px] uppercase tracking-wider text-foreground/35">
                 #{ticket.number}
               </span>
               <Badge tone={TICKET_STATUS_TONE[ticket.status]} dot>
@@ -258,17 +258,17 @@ function TicketRow({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) {
                 </Badge>
               )}
             </div>
-            <div className="mt-1 text-sm font-medium text-white truncate">
+            <div className="mt-1 text-sm font-medium text-foreground truncate">
               {ticket.subject}
             </div>
-            <div className="mt-0.5 text-xs text-white/55 truncate">
+            <div className="mt-0.5 text-xs text-foreground/55 truncate">
               {ticket.customerName ?? '—'}
               {ticket.customerCompany && ` · ${ticket.customerCompany}`}
               {' · '}
-              <span className="text-white/40">{ticket.customerEmail}</span>
+              <span className="text-foreground/40">{ticket.customerEmail}</span>
             </div>
           </div>
-          <div className="shrink-0 text-right text-[11px] text-white/45">
+          <div className="shrink-0 text-right text-[11px] text-foreground/45">
             <div>{timeAgo(ticket.lastMessageAt)}</div>
             {ticket.slaDueAt && (
               <div
@@ -437,15 +437,15 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
             </div>
 
             {ticket.triagePath.length > 0 && (
-              <details className="rounded-xl border border-line bg-white/[0.02] px-4 py-3">
-                <summary className="cursor-pointer text-xs text-white/55 hover:text-white">
+              <details className="rounded-xl border border-line bg-elevate/[0.02] px-4 py-3">
+                <summary className="cursor-pointer text-xs text-foreground/55 hover:text-foreground">
                   Triagem feita pelo cliente ({ticket.triagePath.length} passo(s))
                 </summary>
-                <ul className="mt-2 space-y-1 text-xs text-white/70">
+                <ul className="mt-2 space-y-1 text-xs text-foreground/70">
                   {ticket.triagePath.map((p, i) => (
                     <li key={i}>
-                      <span className="text-white/45">{p.question}</span> →{' '}
-                      <strong className="text-white/90">{p.answer}</strong>
+                      <span className="text-foreground/45">{p.question}</span> →{' '}
+                      <strong className="text-foreground/90">{p.answer}</strong>
                     </li>
                   ))}
                 </ul>
@@ -470,13 +470,13 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
                     : 'Resposta ao cliente…'
                 }
                 className={cn(
-                  'w-full rounded-lg bg-surface px-3 py-2 text-sm text-white border border-white/10 placeholder:text-white/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 resize-y min-h-[100px]',
+                  'w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 resize-y min-h-[100px]',
                   isInternal && 'border-warning/30 bg-warning/[0.03]',
                 )}
                 maxLength={5000}
               />
               <div className="mt-2 flex items-center justify-between">
-                <label className="inline-flex items-center gap-2 text-xs text-white/65 cursor-pointer">
+                <label className="inline-flex items-center gap-2 text-xs text-foreground/65 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={isInternal}
@@ -518,7 +518,7 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
 function ThreadMessages({ messages }: { messages: TicketMessage[] }) {
   if (messages.length === 0) {
     return (
-      <div className="rounded-xl border border-line bg-white/[0.02] px-4 py-6 text-center text-sm text-white/45">
+      <div className="rounded-xl border border-line bg-elevate/[0.02] px-4 py-6 text-center text-sm text-foreground/45">
         Sem mensagens ainda.
       </div>
     )
@@ -536,11 +536,11 @@ function ThreadMessages({ messages }: { messages: TicketMessage[] }) {
                 ? 'border-warning/30 bg-warning/[0.06]'
                 : isAgent
                   ? 'border-accent/30 bg-accent/[0.05]'
-                  : 'border-line bg-white/[0.02]',
+                  : 'border-line bg-elevate/[0.02]',
             )}
           >
             <div className="mb-1 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-white/55">
+              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-foreground/55">
                 <span>{m.authorName ?? (isAgent ? 'Suporte' : 'Cliente')}</span>
                 {m.isInternal && (
                   <span className="inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-warning">
@@ -549,11 +549,11 @@ function ThreadMessages({ messages }: { messages: TicketMessage[] }) {
                   </span>
                 )}
               </div>
-              <span className="text-[11px] text-white/35">
+              <span className="text-[11px] text-foreground/35">
                 {timeAgo(m.createdAt)}
               </span>
             </div>
-            <p className="whitespace-pre-wrap text-sm text-white/90 leading-relaxed">
+            <p className="whitespace-pre-wrap text-sm text-foreground/90 leading-relaxed">
               {m.content}
             </p>
           </div>
@@ -582,13 +582,13 @@ function ContextCard({
     <section className="rounded-xl border border-line bg-card p-4 space-y-4">
       {/* Identificação */}
       <div>
-        <h3 className="text-[10px] uppercase tracking-wider text-white/45">
+        <h3 className="text-[10px] uppercase tracking-wider text-foreground/45">
           Cliente
         </h3>
-        <div className="mt-2 text-sm text-white">
+        <div className="mt-2 text-sm text-foreground">
           {ticket.customerName ?? ticket.customerCompany ?? ticket.customerEmail}
         </div>
-        <div className="mt-1 space-y-0.5 text-xs text-white/55">
+        <div className="mt-1 space-y-0.5 text-xs text-foreground/55">
           <div className="inline-flex items-center gap-1.5">
             <Mail className="h-3 w-3" /> {ticket.customerEmail}
           </div>
@@ -623,40 +623,40 @@ function ContextCard({
         </div>
       ) : client ? (
         <>
-          <div className="rounded-lg border border-line bg-white/[0.02] p-3 space-y-2 text-xs">
+          <div className="rounded-lg border border-line bg-elevate/[0.02] p-3 space-y-2 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-white/45">Empresa</span>
-              <span className="text-white/90 truncate ml-2">{client.company || client.name}</span>
+              <span className="text-foreground/45">Empresa</span>
+              <span className="text-foreground/90 truncate ml-2">{client.company || client.name}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-white/45">Etapa</span>
+              <span className="text-foreground/45">Etapa</span>
               <Badge tone="info">{client.stage}</Badge>
             </div>
             {client.responsavel && (
               <div className="flex items-center justify-between">
-                <span className="text-white/45">Responsável</span>
-                <span className="text-white/90">{client.responsavel}</span>
+                <span className="text-foreground/45">Responsável</span>
+                <span className="text-foreground/90">{client.responsavel}</span>
               </div>
             )}
           </div>
 
           {/* Tenant */}
           {client.tenantId && (
-            <div className="rounded-lg border border-line bg-white/[0.02] p-3 space-y-2 text-xs">
+            <div className="rounded-lg border border-line bg-elevate/[0.02] p-3 space-y-2 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-white/45">Tenant</span>
-                <span className="text-white/90 truncate ml-2">
+                <span className="text-foreground/45">Tenant</span>
+                <span className="text-foreground/90 truncate ml-2">
                   {client.tenantName ?? client.tenantId}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-white/45">Servidor</span>
-                <span className="text-white/90">{tenantServer?.name ?? client.tenantServerId}</span>
+                <span className="text-foreground/45">Servidor</span>
+                <span className="text-foreground/90">{tenantServer?.name ?? client.tenantServerId}</span>
               </div>
               {client.supportEmail && (
                 <div className="flex items-center justify-between">
-                  <span className="text-white/45">E-mail suporte</span>
-                  <span className="text-white/85 truncate ml-2">{client.supportEmail}</span>
+                  <span className="text-foreground/45">E-mail suporte</span>
+                  <span className="text-foreground/85 truncate ml-2">{client.supportEmail}</span>
                 </div>
               )}
               {tenantServer?.loginUrl && (
@@ -676,7 +676,7 @@ function ContextCard({
           <FinanceSummary client={client} />
 
           {/* Briefing/Contrato */}
-          <div className="rounded-lg border border-line bg-white/[0.02] p-3 space-y-1.5 text-xs">
+          <div className="rounded-lg border border-line bg-elevate/[0.02] p-3 space-y-1.5 text-xs">
             <Row
               label="Contrato"
               value={
@@ -719,20 +719,20 @@ function ContextCard({
           </Button>
         </>
       ) : (
-        <div className="text-xs text-white/45">Cliente vinculado mas não encontrado em cache.</div>
+        <div className="text-xs text-foreground/45">Cliente vinculado mas não encontrado em cache.</div>
       )}
 
       {/* SLA */}
       {ticket.slaDueAt && (
-        <div className="rounded-lg border border-line bg-white/[0.02] p-3 text-xs">
+        <div className="rounded-lg border border-line bg-elevate/[0.02] p-3 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-white/45">SLA</span>
+            <span className="text-foreground/45">SLA</span>
             <span
               className={cn(
                 'inline-flex items-center gap-1',
                 new Date(ticket.slaDueAt) < new Date() && ticket.status !== 'resolved' && ticket.status !== 'closed'
                   ? 'text-danger'
-                  : 'text-white/85',
+                  : 'text-foreground/85',
               )}
             >
               <Clock3 className="h-3 w-3" />
@@ -741,7 +741,7 @@ function ContextCard({
           </div>
           {ticket.firstResponseAt && (
             <div className="mt-1 flex items-center justify-between text-success">
-              <span className="text-white/45">Respondido</span>
+              <span className="text-foreground/45">Respondido</span>
               <span className="inline-flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3" />
                 {timeAgo(ticket.firstResponseAt)}
@@ -770,7 +770,7 @@ function FinanceSummary({ client }: { client: Client }) {
     <div
       className={cn(
         'rounded-lg border p-3 space-y-1.5 text-xs',
-        overdue ? 'border-danger/30 bg-danger/[0.04]' : 'border-line bg-white/[0.02]',
+        overdue ? 'border-danger/30 bg-danger/[0.04]' : 'border-line bg-elevate/[0.02]',
       )}
     >
       {overdue && (
@@ -804,8 +804,8 @@ function FinanceSummary({ client }: { client: Client }) {
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-white/45">{label}</span>
-      <span className="text-white/85 truncate ml-2">{value}</span>
+      <span className="text-foreground/45">{label}</span>
+      <span className="text-foreground/85 truncate ml-2">{value}</span>
     </div>
   )
 }
@@ -890,7 +890,7 @@ function LinkClientModal({
 
         <div className="max-h-80 overflow-y-auto space-y-1.5">
           {filtered.length === 0 && (
-            <p className="text-xs text-white/45 text-center py-4">
+            <p className="text-xs text-foreground/45 text-center py-4">
               Nenhum cliente encontrado.
             </p>
           )}
@@ -898,31 +898,31 @@ function LinkClientModal({
             <button
               key={c.id}
               onClick={() => link(c.id)}
-              className="flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-left hover:bg-accent/[0.04] hover:border-accent/40 transition-colors"
+              className="flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-left hover:bg-accent/[0.04] hover:border-accent/40 transition-colors"
             >
               <div className="min-w-0">
-                <div className="text-sm text-white truncate">
+                <div className="text-sm text-foreground truncate">
                   {c.company || c.name}
                 </div>
-                <div className="text-xs text-white/55 truncate">{c.email}</div>
+                <div className="text-xs text-foreground/55 truncate">{c.email}</div>
               </div>
-              <Link2 className="h-4 w-4 text-white/40" />
+              <Link2 className="h-4 w-4 text-foreground/40" />
             </button>
           ))}
         </div>
 
-        <div className="rounded-lg border border-dashed border-line bg-white/[0.02] p-3 text-xs">
+        <div className="rounded-lg border border-dashed border-line bg-elevate/[0.02] p-3 text-xs">
           <div className="flex items-start gap-2">
             <Sparkles className="mt-0.5 h-3.5 w-3.5 text-accent" />
             <div className="flex-1">
-              <p className="text-white/65">
+              <p className="text-foreground/65">
                 Não achou? Cria um cliente novo no CRM com os dados que o ticket
                 trouxe (e-mail{' '}
-                <strong className="text-white">{ticket.customerEmail}</strong>
+                <strong className="text-foreground">{ticket.customerEmail}</strong>
                 {ticket.customerCompany && (
                   <>
                     , empresa{' '}
-                    <strong className="text-white">{ticket.customerCompany}</strong>
+                    <strong className="text-foreground">{ticket.customerCompany}</strong>
                   </>
                 )}
                 ).

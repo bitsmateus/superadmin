@@ -25,7 +25,7 @@ await app.register(cors, {
 await app.register(jwt, { secret: JWT_SECRET });
 
 // Attach authenticate decorator
-app.decorate('authenticate', async function (req: Parameters<typeof app.authenticate>[0], reply: Parameters<typeof app.authenticate>[1]) {
+app.decorate('authenticate', async function (req: import('fastify').FastifyRequest, reply: import('fastify').FastifyReply) {
   try {
     await req.jwtVerify();
   } catch (err) {

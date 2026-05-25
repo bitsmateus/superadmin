@@ -31,7 +31,8 @@ import {
   useDeleteTenantApi,
   useUpdateTenant,
 } from '@/hooks/useTenants'
-import { useAuthStore, getServerById } from '@/store/authStore'
+import { getServerById, useAuthStore } from '@/store/authStore'
+import { useServerFilter } from '@/hooks/useServerFilter'
 import { useAuth } from '@/hooks/useAuth'
 import { canDeleteClient } from '@/services/supabase'
 import { extractErrorMessage } from '@/api/client'
@@ -44,18 +45,12 @@ export function TenantsPage() {
   const { profile } = useAuth()
   const canDelete = canDeleteClient(profile?.role)
   const enabledServers = useAuthStore((s) => s.servers.filter((x) => x.enabled))
-  const enabledIds = React.useMemo(
-    () => enabledServers.map((s) => s.id),
-    [enabledServers],
-  )
 
   const [wizardOpen, setWizardOpen] = React.useState(false)
   const [importOpen, setImportOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'active' | 'inactive'>('all')
-  const [serverFilter, setServerFilter] = React.useState<Set<string>>(
-    () => new Set(enabledIds),
-  )
+  const { selected: serverFilter, setSelected: setServerFilter } = useServerFilter()
   const [openMenu, setOpenMenu] = React.useState<string | null>(null)
   const [editing, setEditing] = React.useState<TaggedTenant | null>(null)
   const [deleting, setDeleting] = React.useState<TaggedTenant | null>(null)
@@ -72,23 +67,22 @@ export function TenantsPage() {
     }
   }
 
+  // Fecha menu de ações ao clicar fora (mousedown evita o race com o
+  // próprio toggle do botão — `stopPropagation` no wrapper continua
+  // protegendo o menu aberto). Também fecha com ESC.
   React.useEffect(() => {
-    // Keep the filter consistent if servers list changes
-    setServerFilter((prev) => {
-      const next = new Set(prev)
-      for (const id of Array.from(next)) {
-        if (!enabledIds.includes(id)) next.delete(id)
-      }
-      if (next.size === 0) for (const id of enabledIds) next.add(id)
-      return next
-    })
-  }, [enabledIds])
-
-  React.useEffect(() => {
-    const close = () => setOpenMenu(null)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
-  }, [])
+    if (!openMenu) return
+    const onMouseDown = () => setOpenMenu(null)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenu(null)
+    }
+    window.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [openMenu])
 
   const filtered = React.useMemo(() => {
     const list = tenantsQ.data
@@ -319,6 +313,7 @@ export function TenantsPage() {
                         <div
                           className="flex items-center justify-end gap-1"
                           onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
                         >
                           <button
                             type="button"

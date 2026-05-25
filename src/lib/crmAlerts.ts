@@ -10,6 +10,7 @@ export type AlertKind =
   | 'briefing_ready_to_setup'
   | 'delivery_meeting'
   | 'setup_pending_config'
+  | 'inactive_long'
 
 export interface CrmAlert {
   kind: AlertKind
@@ -132,6 +133,29 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
         subtitle: formatScheduleLabel(when),
         whenAt: c.deliveryDate,
       })
+    }
+
+    // Inatividade: cliente ativo sem nenhuma interação nos últimos 30 dias.
+    // Considera última nota / log como sinal de interação.
+    if (c.stage === 'active') {
+      const lastNote = (c.notes ?? []).map((n) => n.createdAt).sort().pop()
+      const lastLog = (c.logs ?? []).map((l) => l.createdAt).sort().pop()
+      const lastTouchIso =
+        [lastNote, lastLog, c.stageUpdatedAt, c.createdAt]
+          .filter(Boolean)
+          .sort()
+          .pop() ?? c.createdAt
+      const days = daysSince(lastTouchIso)
+      if (days >= 30) {
+        out.push({
+          kind: 'inactive_long',
+          client: c,
+          tone: days >= 60 ? 'warning' : 'info',
+          title: `${c.name} — ${c.company}`,
+          subtitle: `Sem interação há ${days} dia(s)`,
+          whenAt: lastTouchIso,
+        })
+      }
     }
 
     // Configurações pendentes (cliente em setup com checklist incompleto)

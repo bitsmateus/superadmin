@@ -348,6 +348,8 @@ function AutomationView({ client }: { client: Client }) {
       return
     }
     setCreatingUsers(true)
+    const defaultPassword =
+      db.getSettings().defaultTenantPassword || 'Nxim01@!'
     let success = 0
     const failures: string[] = []
     for (const u of briefingUsers) {
@@ -356,7 +358,7 @@ function AutomationView({ client }: { client: Client }) {
           tenant_id: client.tenantId,
           name: u.name,
           email: u.email,
-          password: 'Nxim01@!',
+          password: defaultPassword,
           role: u.role || 'user',
           permissions: [u.role || 'user'],
         })

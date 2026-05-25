@@ -10,34 +10,20 @@ import { ServerFilter } from '@/components/layout/ServerFilter'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useAllTenants } from '@/hooks/useTenants'
-import { useAuthStore } from '@/store/authStore'
+import { useServerFilter } from '@/hooks/useServerFilter'
 import { OnboardingWizard } from '@/components/tenants/OnboardingWizard'
 import { AlertsPanel } from '@/components/crm/AlertsPanel'
+import { MyTasksCard } from '@/components/dashboard/MyTasksCard'
+import { GoalsCard } from '@/components/analytics/GoalsCard'
+import { useSettings } from '@/hooks/useClients'
 import { cn, isTenantActive } from '@/lib/utils'
 
 export function DashboardPage() {
   const [wizardOpen, setWizardOpen] = React.useState(false)
   const tenantsQ = useAllTenants()
-  const enabledServers = useAuthStore((s) => s.servers.filter((x) => x.enabled))
-  const enabledIds = React.useMemo(
-    () => enabledServers.map((s) => s.id),
-    [enabledServers],
-  )
-
-  const [serverFilter, setServerFilter] = React.useState<Set<string>>(
-    () => new Set(enabledIds),
-  )
-
-  React.useEffect(() => {
-    setServerFilter((prev) => {
-      const next = new Set(prev)
-      for (const id of Array.from(next)) {
-        if (!enabledIds.includes(id)) next.delete(id)
-      }
-      if (next.size === 0) for (const id of enabledIds) next.add(id)
-      return next
-    })
-  }, [enabledIds])
+  const settings = useSettings()
+  const { selected: serverFilter, setSelected: setServerFilter } =
+    useServerFilter()
 
   const scopedTenants = React.useMemo(
     () => tenantsQ.data.filter((t) => serverFilter.has(t._serverId)),
@@ -89,8 +75,15 @@ export function DashboardPage() {
           />
         </div>
 
-        <section className="mt-6">
+        {settings.goalsEnabled && (
+          <div className="mt-6">
+            <GoalsCard hideIfDisabled />
+          </div>
+        )}
+
+        <section className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[1fr_360px]">
           <AlertsPanel />
+          <MyTasksCard />
         </section>
       </div>
 

@@ -13,6 +13,8 @@ export interface NoteEntry {
   text: string
   author: string
   createdAt: string
+  /** Quando true, nota só é visível pra time interno (não aparece em portais públicos). */
+  internal?: boolean
 }
 
 export interface LogEntry {
@@ -40,13 +42,17 @@ export interface ChecklistItem {
   children?: ChecklistItem[]
 }
 
-export type UserRole = 'atendente' | 'supervisor' | 'admin'
+/**
+ * Papel dentro do tenant criado (não confundir com `UserRole` do painel
+ * em services/supabase.ts, que é admin/supervisor/suporte).
+ */
+export type BriefingUserRole = 'atendente' | 'supervisor' | 'admin'
 
 export interface BriefingUser {
   name: string
   email: string
   sector: string
-  role: UserRole
+  role: BriefingUserRole
 }
 
 export interface BriefingScheduleSlot {
@@ -194,6 +200,12 @@ export interface AppSettings {
   asaasEnvironment?: 'sandbox' | 'production'
   /** Intervalo (minutos) do auto-sync de pagamentos Asaas. 0 desliga. */
   asaasSyncIntervalMin?: number
+  /** Senha padrão usada na criação de tenant/usuários (não hardcoded no código). */
+  defaultTenantPassword?: string
+  /** Senha padrão para acessos enviados no PDF de handoff. */
+  defaultAccessPassword?: string
+  /** Número de suporte impresso no PDF de acessos. */
+  supportPhone?: string
   followUpsEnabled?: boolean
   followUpTemplates?: {
     day3?: string
@@ -201,4 +213,45 @@ export interface AppSettings {
     day15?: string
     day30?: string
   }
+  /** Dias após delivery_completed_at pra disparar NPS automático. */
+  npsDelayDays?: number
+  /** Liga/desliga criação automática de NPS. */
+  npsEnabled?: boolean
+  /** URL da Edge Function notify-ticket (notificação por e-mail). */
+  notifyEdgeFunctionUrl?: string
+  /** Liga/desliga notificação por e-mail. */
+  notifyEnabled?: boolean
+  /** Meta de novos clientes no mês (clientes que viraram active no período). */
+  goalNewClientsMonthly?: number
+  /** Meta de MRR (R$) no mês. */
+  goalMrrMonthly?: number
+  /** Meta de NPS médio do mês. */
+  goalNpsMonthly?: number
+  /** Liga exibição de metas no dashboard / centro de comando. */
+  goalsEnabled?: boolean
+  /** Último backup feito (ISO). Usado pra avisar quando passar de N dias. */
+  lastBackupAt?: string
+  /** Quantos dias sem backup antes de mostrar aviso. Default 7. */
+  backupRemindDays?: number
+}
+
+export interface StageHistoryEntry {
+  id: string
+  clientId: string
+  fromStage: PipelineStage | null
+  toStage: PipelineStage
+  at: string
+}
+
+export interface AuditEntry {
+  id: string
+  actorId?: string
+  actorEmail?: string
+  actorName?: string
+  entityType: string
+  entityId?: string
+  action: string
+  summary?: string
+  changes?: Record<string, unknown>
+  at: string
 }

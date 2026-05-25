@@ -1,3 +1,4 @@
+import * as React from 'react'
 import {
   useMutation,
   useQueries,
@@ -50,16 +51,38 @@ export function useAllTenants() {
     })),
   })
 
-  const data: TaggedTenant[] = queries.flatMap((q) => q.data ?? [])
+  // Hash estável dos query states pra evitar arrays/objetos novos a cada render.
+  const queriesSig = queries
+    .map(
+      (q) =>
+        `${q.status}:${q.fetchStatus}:${(q.data as TaggedTenant[] | undefined)?.length ?? 0}:${q.dataUpdatedAt}`,
+    )
+    .join('|')
+
+  const data = React.useMemo<TaggedTenant[]>(
+    () => queries.flatMap((q) => q.data ?? []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queriesSig],
+  )
+
+  const errorsByServer = React.useMemo(
+    () =>
+      queries
+        .map((q, i) => ({ server: servers[i], error: q.error as unknown }))
+        .filter((x) => x.error),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queriesSig, servers],
+  )
+
+  const refetch = React.useCallback(
+    () => queries.forEach((q) => q.refetch()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queriesSig],
+  )
+
   const isLoading = queries.some((q) => q.isLoading)
   const isFetching = queries.some((q) => q.isFetching)
   const isError = queries.some((q) => q.isError)
-  const errorsByServer = queries
-    .map((q, i) => ({
-      server: servers[i],
-      error: q.error as unknown,
-    }))
-    .filter((x) => x.error)
   const firstError = errorsByServer[0]?.error ?? null
 
   return {
@@ -69,7 +92,7 @@ export function useAllTenants() {
     isError,
     error: firstError,
     errorsByServer,
-    refetch: () => queries.forEach((q) => q.refetch()),
+    refetch,
   }
 }
 

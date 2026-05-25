@@ -22,7 +22,9 @@ import { cn, deriveSupportEmail } from '@/lib/utils'
 import type { Client } from '@/types/client'
 import type { Tenant } from '@/types'
 
-const DEFAULT_PASSWORD = 'Nxim01@!'
+// Default tenant password — pode ser sobrescrito em /settings (Asaas/Acesso).
+// Mantido como fallback p/ instalações que ainda não configuraram.
+const FALLBACK_TENANT_PASSWORD = 'Nxim01@!'
 
 export function CreateTenantModal({
   client,
@@ -64,6 +66,8 @@ export function CreateTenantModal({
       return
     }
     setCreating(true)
+    const tenantPassword =
+      db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD
     try {
       const created = await tenantsApi.store(server, {
         status: 'active',
@@ -72,7 +76,7 @@ export function CreateTenantModal({
         maxConnections: 10,
         acceptTerms: true,
         email: finalEmail,
-        password: DEFAULT_PASSWORD,
+        password: tenantPassword,
         userName: client.name || 'Suporte',
         profile: 'admin',
       })
@@ -92,7 +96,7 @@ export function CreateTenantModal({
         tenantApiId: apiId,
         tenantName: typeof t.name === 'string' ? t.name : undefined,
         supportEmail: finalEmail,
-        supportPassword: DEFAULT_PASSWORD,
+        supportPassword: tenantPassword,
         deliveryChecklist: checked,
       })
       db.addLog(
@@ -167,7 +171,7 @@ export function CreateTenantModal({
           leftIcon={<Mail className="h-4 w-4" />}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          hint={`Senha padrão: ${DEFAULT_PASSWORD}`}
+          hint={`Senha padrão: ${db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD}`}
         />
 
         {creating && (

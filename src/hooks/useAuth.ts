@@ -1,7 +1,10 @@
 import * as React from 'react'
-import type { Session } from '@supabase/supabase-js'
+import type { Session, Subscription } from '@supabase/supabase-js'
+import { toast } from 'sonner'
 import { supabase, type Profile, type UserRole } from '@/services/supabase'
 import { bootDb, setCurrentProfile, teardownDb } from '@/services/db'
+import { bootTickets, teardownTickets } from '@/services/tickets'
+import { bootAnalytics, teardownAnalytics } from '@/services/analytics'
 
 /**
  * Holds the authentication session. On change, hydrates / unloads the CRM
@@ -10,6 +13,9 @@ import { bootDb, setCurrentProfile, teardownDb } from '@/services/db'
  * - When a session appears: fetches profile, calls `bootDb()` to populate
  *   the cache and open realtime subscriptions.
  * - When the session disappears: tears down the cache and channel.
+ *
+ * `onAuthStateChange` já emite um INITIAL_SESSION ao subscrever, então não
+ * chamamos `getSession()` manualmente (evita race / double-boot).
  */
 
 interface AuthState {
@@ -18,7 +24,7 @@ interface AuthState {
   loading: boolean
 }
 
-let listeners = new Set<(s: AuthState) => void>()
+const listeners = new Set<(s: AuthState) => void>()
 let state: AuthState = { session: null, profile: null, loading: true }
 
 function setState(next: Partial<AuthState>) {
@@ -27,35 +33,55 @@ function setState(next: Partial<AuthState>) {
 }
 
 let initialized = false
+let authSubscription: Subscription | null = null
+// Token monotônico: se uma transição mais nova chegar antes do fetchProfile
+// antigo terminar, descartamos o resultado obsoleto.
+let authTransition = 0
+
 function init() {
   if (initialized) return
   initialized = true
 
-  // Initial session check.
-  supabase.auth.getSession().then(async ({ data }) => {
-    const session = data.session
+  const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const myToken = ++authTransition
     if (session) {
       const profile = await fetchProfile(session.user.id)
-      setCurrentProfile(profile)
-      setState({ session, profile, loading: false })
-      void bootDb()
-    } else {
-      setState({ session: null, profile: null, loading: false })
-    }
-  })
+      // Outra transição já aconteceu? Descarta este resultado.
+      if (myToken !== authTransition) return
 
-  // Subscribe to subsequent auth changes (login, logout, token refresh).
-  supabase.auth.onAuthStateChange(async (_event, session) => {
-    if (session) {
-      const profile = await fetchProfile(session.user.id)
+      if (!profile) {
+        // Usuário autenticado mas sem profile (trigger handle_new_user falhou
+        // ou RLS bloqueou). Trata como erro fatal — desloga.
+        // eslint-disable-next-line no-console
+        console.error('[auth] sessão sem profile — deslogando')
+        toast.error('Perfil não encontrado. Contate o admin.')
+        await supabase.auth.signOut()
+        return
+      }
+
       setCurrentProfile(profile)
       setState({ session, profile, loading: false })
       void bootDb()
+      void bootTickets()
+      void bootAnalytics()
     } else {
       await teardownDb()
+      await teardownTickets()
+      await teardownAnalytics()
       setCurrentProfile(null)
       setState({ session: null, profile: null, loading: false })
     }
+  })
+  authSubscription = data.subscription
+}
+
+// HMR-friendly: limpa subscription quando módulo é substituído em dev.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    authSubscription?.unsubscribe()
+    authSubscription = null
+    initialized = false
+    listeners.clear()
   })
 }
 
@@ -79,7 +105,6 @@ export function useAuth(): AuthState {
   React.useEffect(() => {
     const fn = (s: AuthState) => setSnapshot(s)
     listeners.add(fn)
-    // re-sync if state changed between init() and effect
     setSnapshot(state)
     return () => {
       listeners.delete(fn)

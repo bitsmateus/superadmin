@@ -58,6 +58,8 @@ export function FinanceTab({ client }: { client: Client }) {
   const [editing, setEditing] = React.useState<Payment | null>(null)
   const [linkOpen, setLinkOpen] = React.useState(false)
   const [syncing, setSyncing] = React.useState(false)
+  const [confirmDelete, setConfirmDelete] = React.useState<Payment | null>(null)
+  const [confirmUnlink, setConfirmUnlink] = React.useState(false)
 
   const payments = client.payments ?? []
   const links = client.extraLinks ?? []
@@ -94,17 +96,19 @@ export function FinanceTab({ client }: { client: Client }) {
     }
   }
 
-  const onUnlink = () => {
-    if (!confirm('Remover vínculo com Asaas? Pagamentos já importados continuam aqui.')) return
+  const onUnlink = () => setConfirmUnlink(true)
+
+  const confirmUnlinkAction = () => {
     unlinkAsaasCustomer(client.id)
+    setConfirmUnlink(false)
     toast.success('Vínculo Asaas removido')
   }
 
   const sorted = React.useMemo(
     () =>
       [...payments].sort((a, b) => {
-        const ad = a.paidAt ?? a.dueDate ?? a.createdAt
-        const bd = b.paidAt ?? b.dueDate ?? b.createdAt
+        const ad = a.paidAt ?? a.dueDate ?? a.createdAt ?? ''
+        const bd = b.paidAt ?? b.dueDate ?? b.createdAt ?? ''
         return bd.localeCompare(ad)
       }),
     [payments],
@@ -144,11 +148,16 @@ export function FinanceTab({ client }: { client: Client }) {
     toast.success(idx === -1 ? 'Pagamento registrado' : 'Pagamento atualizado')
   }
 
-  const removePayment = (id: string) => {
-    if (!confirm('Remover este registro de pagamento?')) return
-    const nextList = (client.payments ?? []).filter((p) => p.id !== id)
+  const removePayment = (p: Payment) => {
+    setConfirmDelete(p)
+  }
+
+  const confirmDeletePayment = () => {
+    if (!confirmDelete) return
+    const nextList = (client.payments ?? []).filter((p) => p.id !== confirmDelete.id)
     db.updateClient(client.id, { payments: nextList })
     db.addLog(client.id, 'Pagamento removido')
+    setConfirmDelete(null)
     toast.success('Pagamento removido')
   }
 
@@ -304,7 +313,7 @@ export function FinanceTab({ client }: { client: Client }) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => removePayment(p.id)}
+                          onClick={() => removePayment(p)}
                           aria-label="Remover"
                           className="rounded-md p-1.5 text-white/40 hover:bg-danger/10 hover:text-danger"
                         >
@@ -358,6 +367,56 @@ export function FinanceTab({ client }: { client: Client }) {
           }
         }}
       />
+
+      <Modal
+        open={Boolean(confirmDelete)}
+        onClose={() => setConfirmDelete(null)}
+        title="Remover pagamento"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmDelete(null)}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={confirmDeletePayment}>
+              Remover
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-white/75">
+          Remover este pagamento de{' '}
+          <strong className="text-white">
+            R${' '}
+            {(confirmDelete?.value ?? 0).toLocaleString('pt-BR', {
+              minimumFractionDigits: 2,
+            })}
+          </strong>
+          ? A ação não pode ser desfeita.
+        </p>
+      </Modal>
+
+      <Modal
+        open={confirmUnlink}
+        onClose={() => setConfirmUnlink(false)}
+        title="Desvincular Asaas"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmUnlink(false)}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={confirmUnlinkAction}>
+              Desvincular
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-white/75">
+          Remove o vínculo com o cliente Asaas. Pagamentos já importados
+          continuam no histórico. Você pode vincular novamente depois.
+        </p>
+      </Modal>
     </div>
   )
 }

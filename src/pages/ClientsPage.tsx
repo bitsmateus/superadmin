@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -58,6 +59,18 @@ export function ClientsPage() {
   )
   const [openNew, setOpenNew] = React.useState(false)
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
+
+  // ?open=<id> abre o drawer direto (vindo de outras páginas, ex.: /financeiro).
+  const [searchParams, setSearchParams] = useSearchParams()
+  React.useEffect(() => {
+    const id = searchParams.get('open')
+    if (!id) return
+    setOpenClientId(id)
+    // remove o param sem entrar na history pra não voltar ao "?open=" depois
+    const next = new URLSearchParams(searchParams)
+    next.delete('open')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
   const [importOpen, setImportOpen] = React.useState(false)
 
   const unlinkedCount = React.useMemo(() => {

@@ -139,7 +139,9 @@ export async function executeImportPlan(
           tenantServerId: item.tenant._serverId,
           tenantName: asText(item.tenant.name),
           tenantApiId:
-            typeof item.tenant.apiId === 'string' ? item.tenant.apiId : undefined,
+            item.tenant.apiId !== undefined && item.tenant.apiId !== null
+              ? String(item.tenant.apiId)
+              : undefined,
         })
         db.addLog(item.existing.id, 'Tenant vinculado', `${item.tenant._serverName} · ${asText(item.tenant.name)}`)
         result.linked++
@@ -160,7 +162,9 @@ export async function executeImportPlan(
           tenantServerId: item.tenant._serverId,
           tenantName: name,
           tenantApiId:
-            typeof item.tenant.apiId === 'string' ? item.tenant.apiId : undefined,
+            item.tenant.apiId !== undefined && item.tenant.apiId !== null
+              ? String(item.tenant.apiId)
+              : undefined,
         })
         result.created++
       }

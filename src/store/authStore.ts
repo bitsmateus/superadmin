@@ -10,13 +10,21 @@ export interface ServerConfig {
   enabled: boolean
 }
 
+// API tokens dos servidores externos não devem estar hardcoded no bundle JS.
+// Os defaults aqui ficam com apiToken vazio — o operador configura em
+// /settings (persistido em localStorage por usuário). Em DEV é possível
+// pré-popular via .env (VITE_DEV_TOKEN_CHAT etc.) — não use em produção.
+function devToken(key: string): string {
+  if (!import.meta.env.DEV) return ''
+  return (import.meta.env[`VITE_DEV_TOKEN_${key}` as const] as string) ?? ''
+}
+
 export const DEFAULT_SERVERS: ServerConfig[] = [
   {
     id: 'chat',
     name: 'Chat',
     baseUrl: 'https://chatapi.nxsystems.com.br',
-    apiToken:
-      '62f1d5ba289734b6c9a6b84d2f92fd6100f94e98bda8e45a86e5c7beed501ecf',
+    apiToken: devToken('CHAT'),
     loginUrl: 'https://chat.nxsystems.com.br/login',
     enabled: true,
   },
@@ -24,8 +32,7 @@ export const DEFAULT_SERVERS: ServerConfig[] = [
     id: 'app',
     name: 'App',
     baseUrl: 'https://appapi.nxsystems.com.br',
-    apiToken:
-      '4367ee5a9ff5303c57e99c37fbbaa5d49529a225f1e6de24cce4ef72300b8241',
+    apiToken: devToken('APP'),
     loginUrl: 'https://app.nxsystems.com.br/login',
     enabled: true,
   },
@@ -33,8 +40,7 @@ export const DEFAULT_SERVERS: ServerConfig[] = [
     id: 'web',
     name: 'Web',
     baseUrl: 'https://webapi.nxsystems.com.br',
-    apiToken:
-      'ecc277735fe4bd5066dd608b2c24b93f4143fcac10bcdc6c1a37a478e61eb192',
+    apiToken: devToken('WEB'),
     loginUrl: 'https://web.nxsystems.com.br/login',
     enabled: true,
   },
@@ -102,7 +108,7 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'tenanthub-auth',
       version: 4,
-      migrate: (persisted, fromVersion) => {
+      migrate: (persisted, _fromVersion) => {
         // v1/v2: kept old admin auth fields. v3: introduced loginUrl. v4:
         // dropped admin auth (Supabase took over).
         const old = persisted as Partial<AuthState> & {

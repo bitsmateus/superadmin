@@ -30,6 +30,7 @@ import type { Client } from '@/types/client'
 export function OverviewTab({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [noteText, setNoteText] = React.useState('')
+  const [noteInternal, setNoteInternal] = React.useState(false)
   const tenantServer = useServerById(client.tenantServerId)
 
   const addNote = () => {
@@ -39,9 +40,10 @@ export function OverviewTab({ client }: { client: Client }) {
       toast.error('Defina seu nome em Configurações antes de registrar notas.')
       return
     }
-    db.addNote(client.id, trimmed, user)
-    db.addLog(client.id, 'Nota registrada')
+    db.addNote(client.id, trimmed, user, noteInternal)
+    db.addLog(client.id, noteInternal ? 'Nota interna registrada' : 'Nota registrada')
     setNoteText('')
+    setNoteInternal(false)
     toast.success('Nota registrada')
   }
 
@@ -165,25 +167,40 @@ export function OverviewTab({ client }: { client: Client }) {
               className="min-h-[80px] flex-1 resize-y rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
             />
           </div>
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-2">
+            <label className="inline-flex items-center gap-2 text-xs text-white/65 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={noteInternal}
+                onChange={(e) => setNoteInternal(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[#4F8EF7]"
+              />
+              <StickyNote className="h-3.5 w-3.5" />
+              Nota interna (só o time vê)
+            </label>
             <Button
               size="sm"
               onClick={addNote}
               disabled={!noteText.trim()}
               leftIcon={<MessageSquare className="h-3.5 w-3.5" />}
             >
-              Registrar mensagem
+              {noteInternal ? 'Registrar nota interna' : 'Registrar mensagem'}
             </Button>
           </div>
 
-          {client.notes.length === 0 ? (
+          {(client.notes ?? []).length === 0 ? (
             <p className="text-xs text-white/40">Nenhuma mensagem ainda.</p>
           ) : (
             <ul className="space-y-2">
-              {client.notes.map((n) => (
+              {(client.notes ?? []).map((n) => (
                 <li
                   key={n.id}
-                  className="rounded-lg border border-line bg-white/[0.02] p-3"
+                  className={cn(
+                    'rounded-lg border p-3',
+                    n.internal
+                      ? 'border-warning/30 bg-warning/[0.06]'
+                      : 'border-line bg-white/[0.02]',
+                  )}
                 >
                   <div className="flex items-start gap-3">
                     <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/[0.04] text-[10px] font-medium text-white/85 ring-1 ring-line">
@@ -193,8 +210,14 @@ export function OverviewTab({ client }: { client: Client }) {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-white">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white">
                           {asText(n.author, '—')}
+                          {n.internal && (
+                            <span className="inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning">
+                              <StickyNote className="h-3 w-3" />
+                              interna
+                            </span>
+                          )}
                         </span>
                         <span className="text-[10px] text-white/40">
                           {timeAgo(n.createdAt)}
@@ -220,11 +243,11 @@ export function OverviewTab({ client }: { client: Client }) {
           </span>
         }
       >
-        {client.logs.length === 0 ? (
+        {(client.logs ?? []).length === 0 ? (
           <p className="text-xs text-white/40">Sem atividade ainda.</p>
         ) : (
           <ol className="space-y-2.5">
-            {client.logs.map((log) => (
+            {(client.logs ?? []).map((log) => (
               <li key={log.id} className="flex items-start gap-3">
                 <span className="mt-1.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/[0.04] text-white/55 ring-1 ring-line">
                   {iconForAction(log.action)}

@@ -2,6 +2,7 @@ import * as React from 'react'
 import {
   Activity,
   ChevronDown,
+  Clock,
   Copy,
   ExternalLink,
   FileText,
@@ -25,8 +26,10 @@ import { FinanceTab } from './tabs/FinanceTab'
 import { BriefingTab } from './tabs/BriefingTab'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
+import { HistoryTab } from './tabs/HistoryTab'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
+import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { canDeleteClient, canSeeFinancials } from '@/services/supabase'
 import { db } from '@/services/db'
 import { useServerById } from '@/store/authStore'
@@ -43,6 +46,7 @@ interface TabDef {
 
 const TAB_DEFS: TabDef[] = [
   { value: 'overview', label: 'Visão Geral', icon: <Activity className="h-3.5 w-3.5" /> },
+  { value: 'history', label: 'Histórico', icon: <Clock className="h-3.5 w-3.5" /> },
   { value: 'contract', label: 'Contrato', icon: <FileText className="h-3.5 w-3.5" /> },
   { value: 'finance', label: 'Financeiro', icon: <Wallet className="h-3.5 w-3.5" /> },
   { value: 'briefing', label: 'Briefing', icon: <MessageSquare className="h-3.5 w-3.5" /> },
@@ -59,6 +63,8 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
   const client = useClient(clientId ?? undefined)
   const [tab, setTab] = React.useState('overview')
   const [stageMenu, setStageMenu] = React.useState(false)
+  const stageMenuRef = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(stageMenuRef, stageMenu, () => setStageMenu(false))
   const [confirmChurn, setConfirmChurn] = React.useState(false)
   const [user] = useCurrentUser()
   const { profile } = useAuth()
@@ -141,7 +147,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
+              <div className="relative" ref={stageMenuRef}>
                 <Button
                   size="sm"
                   variant="primary"
@@ -253,6 +259,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
 
         <div className="p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
+          {tab === 'history' && <HistoryTab client={client} />}
           {tab === 'contract' && seeFinancials && (
             <ContractTab client={client} />
           )}

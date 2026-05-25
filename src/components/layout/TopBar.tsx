@@ -4,8 +4,20 @@ import { ChevronRight } from 'lucide-react'
 const labels: Record<string, string> = {
   '': 'Dashboard',
   tenants: 'Tenants',
-  users: 'Usuários',
+  clients: 'Clientes',
+  pipeline: 'Pipeline',
+  financeiro: 'Financeiro',
+  users: 'Equipe',
+  settings: 'Configurações',
+  briefing: 'Briefing',
   edit: 'Editar',
+  comando: 'Centro de Comando',
+  equipe: 'Performance',
+  auditoria: 'Auditoria',
+  tickets: 'Tickets',
+  templates: 'Templates',
+  kb: 'Conhecimento',
+  nps: 'NPS',
 }
 
 export interface TopBarProps {

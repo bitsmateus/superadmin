@@ -1,28 +1,7 @@
 import { create } from 'zustand'
-
-const MASTERKEY_LS_KEY = 'tenanthub_masterkey'
-const SYSTEM_URL_LS_KEY = 'tenanthub_system_url'
+import { persist } from 'zustand/middleware'
 
 export const DEFAULT_SYSTEM_URL = 'https://chat.nxsystems.com.br/login'
-
-function readLs(key: string): string | null {
-  if (typeof window === 'undefined') return null
-  try {
-    return window.localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-
-function writeLs(key: string, value: string | null): void {
-  if (typeof window === 'undefined') return
-  try {
-    if (value === null) window.localStorage.removeItem(key)
-    else window.localStorage.setItem(key, value)
-  } catch {
-    /* ignore quota / privacy errors */
-  }
-}
 
 interface AccessState {
   masterkey: string | null
@@ -33,25 +12,50 @@ interface AccessState {
   resetSystemUrl: () => void
 }
 
-export const useAccessStore = create<AccessState>((set) => ({
-  masterkey: readLs(MASTERKEY_LS_KEY),
-  systemUrl: readLs(SYSTEM_URL_LS_KEY) ?? DEFAULT_SYSTEM_URL,
-  setMasterkey: (key) => {
-    const v = key && key.trim() ? key.trim() : null
-    writeLs(MASTERKEY_LS_KEY, v)
-    set({ masterkey: v })
-  },
-  clearMasterkey: () => {
-    writeLs(MASTERKEY_LS_KEY, null)
-    set({ masterkey: null })
-  },
-  setSystemUrl: (url) => {
-    const normalized = url.trim() || DEFAULT_SYSTEM_URL
-    writeLs(SYSTEM_URL_LS_KEY, normalized)
-    set({ systemUrl: normalized })
-  },
-  resetSystemUrl: () => {
-    writeLs(SYSTEM_URL_LS_KEY, null)
-    set({ systemUrl: DEFAULT_SYSTEM_URL })
-  },
-}))
+// Persistido sob a chave única `tenanthub-access` (versionada). Antes a
+// store fazia leituras/escritas manuais em localStorage usando duas chaves
+// separadas (`tenanthub_masterkey` / `tenanthub_system_url`) — a migração
+// abaixo cobre quem tinha a versão antiga e move pro novo formato.
+export const useAccessStore = create<AccessState>()(
+  persist(
+    (set) => ({
+      masterkey: null,
+      systemUrl: DEFAULT_SYSTEM_URL,
+      setMasterkey: (key) => {
+        const v = key && key.trim() ? key.trim() : null
+        set({ masterkey: v })
+      },
+      clearMasterkey: () => set({ masterkey: null }),
+      setSystemUrl: (url) => {
+        const normalized = url.trim() || DEFAULT_SYSTEM_URL
+        set({ systemUrl: normalized })
+      },
+      resetSystemUrl: () => set({ systemUrl: DEFAULT_SYSTEM_URL }),
+    }),
+    {
+      name: 'tenanthub-access',
+      version: 1,
+      migrate: (persisted) => {
+        // Quando persisted vem null ou shape antigo, tenta ler do LS legado.
+        const fallback = readLegacyLs()
+        const p = (persisted as Partial<AccessState> | null) ?? {}
+        return {
+          masterkey: p.masterkey ?? fallback.masterkey,
+          systemUrl: p.systemUrl ?? fallback.systemUrl ?? DEFAULT_SYSTEM_URL,
+        } as AccessState
+      },
+    },
+  ),
+)
+
+function readLegacyLs(): { masterkey: string | null; systemUrl: string | null } {
+  if (typeof window === 'undefined') return { masterkey: null, systemUrl: null }
+  try {
+    return {
+      masterkey: window.localStorage.getItem('tenanthub_masterkey'),
+      systemUrl: window.localStorage.getItem('tenanthub_system_url'),
+    }
+  } catch {
+    return { masterkey: null, systemUrl: null }
+  }
+}

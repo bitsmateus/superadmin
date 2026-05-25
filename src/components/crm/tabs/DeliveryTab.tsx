@@ -70,17 +70,26 @@ export function DeliveryTab({ client }: { client: Client }) {
   }
 
   const saveMeeting = () => {
-    db.updateClient(client.id, {
+    // Monta tudo num único patch pra evitar race entre dois UPDATEs em
+    // sequência (o segundo capturava state stale do primeiro).
+    const patch: Partial<Client> = {
       deliveryDate: deliveryDate || undefined,
       deliveryNotes: deliveryNotes || undefined,
-    })
+    }
+    if (
+      deliveryDate &&
+      !handoff.find((i) => i.id === 'handoff_meeting_scheduled')?.checked
+    ) {
+      patch.deliveryHandoffChecklist = setChecklistItem(
+        handoff,
+        'handoff_meeting_scheduled',
+        true,
+        user,
+      )
+    }
+    db.updateClient(client.id, patch)
     db.addLog(client.id, 'Reunião de treinamento atualizada')
     toast.success('Reunião salva')
-    // Auto-check "Reunião agendada" once a date is recorded.
-    if (deliveryDate && !handoff.find((i) => i.id === 'handoff_meeting_scheduled')?.checked) {
-      const next = setChecklistItem(handoff, 'handoff_meeting_scheduled', true, user)
-      db.updateClient(client.id, { deliveryHandoffChecklist: next })
-    }
   }
 
   const completeDelivery = () => {
@@ -105,8 +114,9 @@ export function DeliveryTab({ client }: { client: Client }) {
     toast.success('Entrega concluída · cliente em acompanhamento')
   }
 
-  const done = client.deliveryChecklist.filter((i) => i.checked).length
-  const total = client.deliveryChecklist.length
+  const checklist = client.deliveryChecklist ?? []
+  const done = checklist.filter((i) => i.checked).length
+  const total = checklist.length
   const pct = total === 0 ? 0 : Math.round((done / total) * 100)
   const canComplete = done === total && total > 0
 

@@ -40,11 +40,18 @@ function uuid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
   }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0
-    const v = c === 'x' ? r : (r & 0x3) | 0x8
-    return v.toString(16)
-  })
+  // Fallback usando crypto.getRandomValues (disponível em qualquer contexto,
+  // mesmo não-seguro). Math.random como último recurso.
+  const bytes = new Uint8Array(16)
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes)
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256)
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40 // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80 // variant 10
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 // Snake_case row → camelCase Client mapping. Listing every field explicitly
@@ -205,8 +212,21 @@ type SettingsRow = {
   asaas_api_key: string | null
   asaas_environment: 'sandbox' | 'production' | null
   asaas_sync_interval_min: number | null
+  default_tenant_password: string | null
+  default_access_password: string | null
+  support_phone: string | null
   followups_enabled: boolean | null
   followup_templates: AppSettings['followUpTemplates'] | null
+  nps_delay_days: number | null
+  nps_enabled: boolean | null
+  notify_edge_function_url: string | null
+  notify_enabled: boolean | null
+  goal_new_clients_monthly: number | null
+  goal_mrr_monthly: number | null
+  goal_nps_monthly: number | null
+  goals_enabled: boolean | null
+  last_backup_at: string | null
+  backup_remind_days: number | null
 }
 
 function rowToSettings(r: SettingsRow | null): AppSettings {
@@ -215,8 +235,21 @@ function rowToSettings(r: SettingsRow | null): AppSettings {
     asaasApiKey: r.asaas_api_key ?? undefined,
     asaasEnvironment: r.asaas_environment ?? undefined,
     asaasSyncIntervalMin: r.asaas_sync_interval_min ?? undefined,
+    defaultTenantPassword: r.default_tenant_password ?? undefined,
+    defaultAccessPassword: r.default_access_password ?? undefined,
+    supportPhone: r.support_phone ?? undefined,
     followUpsEnabled: r.followups_enabled ?? undefined,
     followUpTemplates: r.followup_templates ?? undefined,
+    npsDelayDays: r.nps_delay_days ?? undefined,
+    npsEnabled: r.nps_enabled ?? undefined,
+    notifyEdgeFunctionUrl: r.notify_edge_function_url ?? undefined,
+    notifyEnabled: r.notify_enabled ?? undefined,
+    goalNewClientsMonthly: r.goal_new_clients_monthly ?? undefined,
+    goalMrrMonthly: r.goal_mrr_monthly ?? undefined,
+    goalNpsMonthly: r.goal_nps_monthly ?? undefined,
+    goalsEnabled: r.goals_enabled ?? undefined,
+    lastBackupAt: r.last_backup_at ?? undefined,
+    backupRemindDays: r.backup_remind_days ?? undefined,
   }
 }
 
@@ -226,8 +259,21 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
     asaas_api_key: s.asaasApiKey ?? null,
     asaas_environment: s.asaasEnvironment ?? null,
     asaas_sync_interval_min: s.asaasSyncIntervalMin ?? null,
+    default_tenant_password: s.defaultTenantPassword ?? null,
+    default_access_password: s.defaultAccessPassword ?? null,
+    support_phone: s.supportPhone ?? null,
     followups_enabled: s.followUpsEnabled ?? null,
     followup_templates: s.followUpTemplates ?? null,
+    nps_delay_days: s.npsDelayDays ?? null,
+    nps_enabled: s.npsEnabled ?? null,
+    notify_edge_function_url: s.notifyEdgeFunctionUrl ?? null,
+    notify_enabled: s.notifyEnabled ?? null,
+    goal_new_clients_monthly: s.goalNewClientsMonthly ?? null,
+    goal_mrr_monthly: s.goalMrrMonthly ?? null,
+    goal_nps_monthly: s.goalNpsMonthly ?? null,
+    goals_enabled: s.goalsEnabled ?? null,
+    last_backup_at: s.lastBackupAt ?? null,
+    backup_remind_days: s.backupRemindDays ?? null,
     updated_at: new Date().toISOString(),
   }
 }
@@ -560,29 +606,34 @@ export const db = {
         .update(rowPatch)
         .eq('id', id)
         .select('id')
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.error('[db] UPDATE clients FAILED', error)
-        // PGRST204 = coluna ausente no schema do Supabase.
-        // Não revertemos o cache: o dado está correto em memória e o
-        // vínculo Asaas já foi salvo numa chamada anterior. Apenas avisa
-        // o usuário para rodar a migration SQL.
-        if ((error as { code?: string }).code === 'PGRST204') {
-          const col = /the '(\w+)' column/.exec(error.message)?.[1] ?? 'coluna'
-          toast.error(
-            `Coluna "${col}" ausente no Supabase. Execute a migration SQL em Configurações → Supabase.`,
-          )
-          return
-        }
+      const rollbackCache = () => {
         const rollback = clientsCache.slice()
         const ridx = rollback.findIndex((c) => c.id === id)
         if (ridx !== -1) rollback[ridx] = prev
         clientsCache = rollback
         notify()
+      }
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('[db] UPDATE clients FAILED', error)
+        // PGRST204 = coluna ausente no schema. Reverte cache pra evitar
+        // que o usuário continue vendo dado que não foi persistido.
+        if ((error as { code?: string }).code === 'PGRST204') {
+          const col = /the '(\w+)' column/.exec(error.message)?.[1] ?? 'coluna'
+          rollbackCache()
+          toast.error(
+            `Coluna "${col}" ausente no Supabase. Execute a migration SQL em Configurações → Supabase.`,
+          )
+          return
+        }
+        rollbackCache()
         toast.error('Falha ao salvar: ' + error.message)
       } else if (!data || data.length === 0) {
+        // 0 rows: RLS bloqueou ou id sumiu. Reverte o cache — caso contrário
+        // o usuário continua editando algo que o servidor já rejeitou.
         // eslint-disable-next-line no-console
         console.warn('[db] UPDATE clients returned 0 rows — RLS blocked or id mismatch', { id })
+        rollbackCache()
         toast.error(
           'Salvamento bloqueado pelo banco (verifique permissões/role).',
         )
@@ -636,6 +687,7 @@ export const db = {
     clientId: string,
     text: string,
     author: string,
+    internal = false,
   ): NoteEntry | undefined {
     const client = db.getClient(clientId)
     if (!client) return undefined
@@ -644,6 +696,7 @@ export const db = {
       text,
       author: author || 'Anônimo',
       createdAt: new Date().toISOString(),
+      internal: internal || undefined,
     }
     const nextNotes = [note, ...(client.notes ?? [])]
     db.updateClient(clientId, { notes: nextNotes })

@@ -68,7 +68,7 @@ export function FollowUpTab({ client }: { client: Client }) {
         </span>
       </div>
 
-      {client.followUps.length === 0 ? (
+      {(client.followUps ?? []).length === 0 ? (
         <Section>
           <p className="text-sm text-white/55">
             Os follow-ups são agendados automaticamente quando você concluir a
@@ -77,7 +77,7 @@ export function FollowUpTab({ client }: { client: Client }) {
         </Section>
       ) : (
         <ol className="relative space-y-3 border-l border-line pl-5">
-          {client.followUps.map((fu) => {
+          {(client.followUps ?? []).map((fu) => {
             const state = fuState(fu)
             const isEditing = editing === fu.id
             return (

@@ -30,9 +30,11 @@ import { extractErrorMessage, toMessage } from '@/api/client'
 import { tenantKeys } from '@/hooks/useTenants'
 import { userKeys } from '@/hooks/useUsers'
 import { useAuthStore, getServerById } from '@/store/authStore'
+import { db } from '@/services/db'
 import type { StoreTenantPayload } from '@/types'
 
-const SUPPORT_PASSWORD = 'Nxim01@!'
+// Fallback usado quando settings.defaultTenantPassword não está configurado.
+const FALLBACK_SUPPORT_PASSWORD = 'Nxim01@!'
 const SUPPORT_USER_NAME = 'Suporte NX'
 
 const tenantStep = z.object({
@@ -209,7 +211,9 @@ export function OnboardingWizard({
                 supportData ?? {
                   userName: SUPPORT_USER_NAME,
                   email: deriveSupportEmail(tenantData?.name ?? ''),
-                  password: SUPPORT_PASSWORD,
+                  password:
+                    db.getSettings().defaultTenantPassword ||
+                    FALLBACK_SUPPORT_PASSWORD,
                   profile: 'admin',
                 }
               }

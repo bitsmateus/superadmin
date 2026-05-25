@@ -1,19 +1,27 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
+  BookOpen,
   Building2,
   Columns3,
+  FileSearch,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
+  MessageSquare,
   Settings,
   ShieldCheck,
+  Star,
+  Trophy,
   UserCircle2,
   Users,
   Wallet,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { signOut, useAuth } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
+import { useUnreadTicketsCount } from '@/hooks/useTickets'
 import { ServerSwitcher } from './ServerSwitcher'
 
 const primaryItems = [
@@ -21,6 +29,7 @@ const primaryItems = [
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
+  { to: '/tickets', label: 'Tickets', icon: MessageCircle, badgeKey: 'tickets' as const },
 ]
 
 const ROLE_LABELS = {
@@ -41,17 +50,32 @@ export function Sidebar() {
 
   const isAdmin = canManageUsers(profile?.role)
   const seeFinancials = canSeeFinancials(profile?.role)
+  const unreadTickets = useUnreadTicketsCount()
 
   const primary = [
     ...primaryItems,
     ...(seeFinancials
-      ? [{ to: '/financeiro', label: 'Financeiro', icon: Wallet }]
+      ? [
+          { to: '/comando', label: 'Comando', icon: Zap },
+          { to: '/financeiro', label: 'Financeiro', icon: Wallet },
+          { to: '/nps', label: 'NPS', icon: Star },
+        ]
       : []),
   ]
 
   const secondaryItems = [
+    { to: '/templates', label: 'Templates', icon: MessageSquare },
+    ...(isAdmin
+      ? [{ to: '/kb', label: 'Conhecimento', icon: BookOpen }]
+      : []),
+    ...(isAdmin
+      ? [{ to: '/equipe', label: 'Performance', icon: Trophy }]
+      : []),
     ...(isAdmin
       ? [{ to: '/users', label: 'Equipe', icon: ShieldCheck }]
+      : []),
+    ...(isAdmin
+      ? [{ to: '/auditoria', label: 'Auditoria', icon: FileSearch }]
       : []),
     { to: '/settings', label: 'Configurações', icon: Settings },
   ]
@@ -71,35 +95,47 @@ export function Sidebar() {
       </div>
 
       <nav className="mt-2 flex flex-1 flex-col gap-0.5 px-3">
-        {primary.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              cn(
-                'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
-                isActive
-                  ? 'bg-white/[0.05] text-white'
-                  : 'text-white/55 hover:bg-white/[0.03] hover:text-white/90',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon
-                  className={cn(
-                    'h-4 w-4 shrink-0',
-                    isActive
-                      ? 'text-accent'
-                      : 'text-white/50 group-hover:text-white/75',
+        {primary.map((item) => {
+          const Icon = item.icon
+          const badge =
+            'badgeKey' in item && item.badgeKey === 'tickets' && unreadTickets > 0
+              ? unreadTickets
+              : null
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={'end' in item ? item.end : undefined}
+              className={({ isActive }) =>
+                cn(
+                  'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+                  isActive
+                    ? 'bg-white/[0.05] text-white'
+                    : 'text-white/55 hover:bg-white/[0.03] hover:text-white/90',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    className={cn(
+                      'h-4 w-4 shrink-0',
+                      isActive
+                        ? 'text-accent'
+                        : 'text-white/50 group-hover:text-white/75',
+                    )}
+                  />
+                  <span>{item.label}</span>
+                  {badge !== null && (
+                    <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-semibold text-white">
+                      {badge > 99 ? '99+' : badge}
+                    </span>
                   )}
-                />
-                <span>{label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+                </>
+              )}
+            </NavLink>
+          )
+        })}
 
         <div className="my-2 h-px bg-white/[0.05]" />
 

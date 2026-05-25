@@ -31,7 +31,7 @@ do $$
 begin
   if not exists (select 1 from pg_type where typname = 'pipeline_stage') then
     create type public.pipeline_stage as enum (
-      'welcome','contract','briefing','setup','delivery','active','churned'
+      'lead','welcome','contract','briefing','setup','delivery','active','churned'
     );
   end if;
 end $$;
@@ -105,6 +105,9 @@ create table if not exists public.settings (
   asaas_api_key text,
   asaas_environment text check (asaas_environment in ('sandbox','production')) default 'sandbox',
   asaas_sync_interval_min int default 15,
+  default_tenant_password text,
+  default_access_password text,
+  support_phone text,
   followups_enabled boolean default true,
   followup_templates jsonb,
   updated_at timestamptz not null default now(),
@@ -122,6 +125,7 @@ create table if not exists public.clients (
   stage public.pipeline_stage not null default 'welcome',
   created_at timestamptz not null default now(),
   stage_updated_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
 
   -- Tenant vinculado (criado em um dos 3 servidores)
   tenant_id text,
@@ -140,7 +144,8 @@ create table if not exists public.clients (
   asaas_subscription_id text,
   implementation_value numeric,
   monthly_value numeric,
-  due_day int check (due_day between 1 and 28),
+  due_day int,
+  constraint clients_due_day_range check (due_day is null or (due_day between 1 and 31)),
   payment_status public.payment_status,
   last_payment_check timestamptz,
 
@@ -176,6 +181,28 @@ create table if not exists public.clients (
 create index if not exists clients_stage_idx on public.clients (stage);
 create index if not exists clients_created_at_idx on public.clients (created_at desc);
 create index if not exists clients_briefing_token_idx on public.clients (briefing_token);
+create index if not exists clients_asaas_customer_id_idx
+  on public.clients (asaas_customer_id) where asaas_customer_id is not null;
+create index if not exists clients_tenant_link_idx
+  on public.clients (tenant_server_id, tenant_id) where tenant_id is not null;
+create index if not exists clients_email_lower_idx
+  on public.clients (lower(email)) where email is not null and email <> '';
+
+-- Auto-touch updated_at em qualquer UPDATE
+create or replace function public.touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists clients_touch_updated_at on public.clients;
+create trigger clients_touch_updated_at
+  before update on public.clients
+  for each row execute function public.touch_updated_at();
 
 -- Mantém stage_updated_at sincronizado quando stage muda
 create or replace function public.touch_stage_updated_at()
@@ -351,9 +378,11 @@ grant execute on function public.submit_briefing(text, jsonb) to anon, authentic
 
 -- ---------- 6. Realtime ----------
 -- Sinaliza ao Supabase que essas tabelas devem emitir eventos via Realtime.
+-- Settings NÃO entra no publication — a coluna asaas_api_key vazaria pra
+-- todos os clientes conectados. Cada cliente lê settings sob demanda (e
+-- atualiza via saveSettings sem precisar broadcast).
 alter publication supabase_realtime add table public.clients;
 alter publication supabase_realtime add table public.profiles;
-alter publication supabase_realtime add table public.settings;
 
 -- =====================================================================
 -- FIM — depois de rodar, crie sua conta em Auth → Users e rode:

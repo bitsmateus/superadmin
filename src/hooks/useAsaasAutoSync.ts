@@ -7,36 +7,43 @@ import { canSeeFinancials } from '@/services/supabase'
 /**
  * Auto-sync polling de pagamentos Asaas.
  *
- * Comportamento:
- *  - Só roda se usuário pode ver financeiro (admin/supervisor)
- *  - Lê intervalo de db.getSettings().asaasSyncIntervalMin (default 15min, 0 desliga)
- *  - Pausa quando a aba não está visível (Page Visibility API)
- *  - Não roda se sem chave Asaas configurada
+ * Estratégia:
+ *  - Um único setInterval (não recreia em toda notify do db)
+ *  - Lê settings dentro do callback (pega valor atualizado)
+ *  - Throttle de visibilitychange: só roda se passou >60s do último sync
+ *  - Pausa quando a aba está hidden
  *  - Falhas viram console.warn, sem toast — pra não poluir
  */
 export function useAsaasAutoSync(): void {
   const { profile } = useAuth()
   const canSee = canSeeFinancials(profile?.role)
 
-  // Tick: força re-leitura dos settings quando atualizam
-  const [tick, setTick] = React.useState(0)
-  React.useEffect(() => db.subscribe(() => setTick((n) => n + 1)), [])
-
-  const settings = db.getSettings()
-  const intervalMin = settings.asaasSyncIntervalMin ?? 15
-  const hasKey = Boolean(settings.asaasApiKey)
-  const enabled = canSee && hasKey && intervalMin > 0 && isBooted()
-
   React.useEffect(() => {
-    if (!enabled) return
+    if (!canSee) return
 
-    let timerId: number | null = null
     let cancelled = false
     let running = false
+    let lastRunAt = 0
+    let interval: number | null = null
+
+    const tickMs = () => {
+      const min = db.getSettings().asaasSyncIntervalMin ?? 15
+      return Math.max(1, min) * 60 * 1000
+    }
+
+    const shouldRun = () => {
+      if (cancelled || running || document.hidden) return false
+      if (!isBooted()) return false
+      const s = db.getSettings()
+      if (!s.asaasApiKey) return false
+      if ((s.asaasSyncIntervalMin ?? 15) <= 0) return false
+      return true
+    }
 
     const runOnce = async () => {
-      if (running || document.hidden) return
+      if (!shouldRun()) return
       running = true
+      lastRunAt = Date.now()
       try {
         const r = await syncAllLinked()
         // eslint-disable-next-line no-console
@@ -49,32 +56,34 @@ export function useAsaasAutoSync(): void {
       }
     }
 
-    const schedule = () => {
-      if (cancelled) return
-      timerId = window.setTimeout(
-        async () => {
-          await runOnce()
-          schedule()
-        },
-        intervalMin * 60 * 1000,
-      )
+    // Setup do interval recorrente
+    const restartInterval = () => {
+      if (interval) window.clearInterval(interval)
+      interval = window.setInterval(() => {
+        void runOnce()
+      }, tickMs())
     }
 
     // Primeiro tick depois de 30s pra dar tempo da UI estabilizar
-    timerId = window.setTimeout(async () => {
-      await runOnce()
-      schedule()
+    const firstTickId = window.setTimeout(() => {
+      void runOnce()
+      restartInterval()
     }, 30_000)
 
+    // Visibility: re-sync quando aba volta a ficar visível, mas só se
+    // passou >60s do último (evita spam em troca de aba rápida).
     const onVisibility = () => {
-      if (!document.hidden) void runOnce()
+      if (document.hidden) return
+      if (Date.now() - lastRunAt < 60_000) return
+      void runOnce()
     }
     document.addEventListener('visibilitychange', onVisibility)
 
     return () => {
       cancelled = true
-      if (timerId) window.clearTimeout(timerId)
+      window.clearTimeout(firstTickId)
+      if (interval) window.clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [enabled, intervalMin, tick])
+  }, [canSee])
 }

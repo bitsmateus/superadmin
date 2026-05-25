@@ -1,12 +1,18 @@
 import type { Client } from '@/types/client'
 import type { ServerConfig } from '@/store/authStore'
+import { db } from '@/services/db'
 
+// Defaults usados quando settings ainda não foram configuradas no painel.
+// Em produção, configure em /settings → Asaas / Acesso.
 export const DEFAULT_CLIENT_PASSWORD = '12345678'
 export const SUPPORT_PHONE = '48 93618-0186'
 
 export interface AccessSheetParams {
   client: Client
   server?: ServerConfig
+  /** Sobreescrever defaults via param (opcional). */
+  password?: string
+  supportPhone?: string
 }
 
 /**
@@ -42,12 +48,22 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
-function renderAccessSheetHtml({ client, server }: AccessSheetParams): string {
+function renderAccessSheetHtml({
+  client,
+  server,
+  password,
+  supportPhone,
+}: AccessSheetParams): string {
   const today = new Date().toLocaleDateString('pt-BR')
   const company = client.company || client.name || '—'
   const supportEmail = client.supportEmail || '—'
   const loginUrl = server?.loginUrl || '—'
   const serverName = server?.name || client.tenantServerId || '—'
+  const settings = db.getSettings()
+  const effectivePassword =
+    password ?? settings.defaultAccessPassword ?? DEFAULT_CLIENT_PASSWORD
+  const effectiveSupportPhone =
+    supportPhone ?? settings.supportPhone ?? SUPPORT_PHONE
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -143,7 +159,7 @@ function renderAccessSheetHtml({ client, server }: AccessSheetParams): string {
   </div>
   <div class="row">
     <div class="k">Senha padrão</div>
-    <div class="v"><strong>${escapeHtml(DEFAULT_CLIENT_PASSWORD)}</strong></div>
+    <div class="v"><strong>${escapeHtml(effectivePassword)}</strong></div>
   </div>
 </div>
 
@@ -168,7 +184,7 @@ function renderAccessSheetHtml({ client, server }: AccessSheetParams): string {
 </div>
 
 <div class="footer">
-  <div>📞 <strong>Suporte oficial:</strong> ${escapeHtml(SUPPORT_PHONE)}</div>
+  <div>📞 <strong>Suporte oficial:</strong> ${escapeHtml(effectiveSupportPhone)}</div>
   <div style="margin-top: 6px; color: #666; font-size: 12px;">
     Recomendamos alterar a senha padrão no primeiro acesso.
   </div>

@@ -119,11 +119,20 @@ export function ContractTab({ client }: { client: Client }) {
         description: `Implementação — ${client.company}`,
       })
 
+      // Calcula próxima data de vencimento. Se dueDay informado, usa o dia
+      // do mês (clamp 1..28 pra evitar mês curto). Se a data resultante
+      // for <= hoje, joga pro próximo mês.
       const nextDue = new Date(today)
-      nextDue.setDate(
-        dueDay ? Math.min(Number(dueDay), 28) : nextDue.getDate(),
-      )
-      if (nextDue < today) nextDue.setMonth(nextDue.getMonth() + 1)
+      if (dueDay) {
+        const clampedDay = Math.min(Math.max(Number(dueDay), 1), 28)
+        nextDue.setDate(clampedDay)
+      } else {
+        // padrão: próximo mês mesma data
+        nextDue.setMonth(nextDue.getMonth() + 1)
+      }
+      if (nextDue.getTime() <= today.getTime()) {
+        nextDue.setMonth(nextDue.getMonth() + 1)
+      }
 
       const subscription = await asaasApi.createSubscription({
         customer: asaasCustomerId!,
@@ -314,10 +323,18 @@ export function ContractTab({ client }: { client: Client }) {
             label="Dia de vencimento"
             type="number"
             min={1}
-            max={28}
+            max={31}
             leftIcon={<Calendar className="h-4 w-4" />}
             value={dueDay}
-            onChange={(e) => setDueDay(e.target.value)}
+            onChange={(e) => {
+              const raw = e.target.value
+              if (!raw) {
+                setDueDay('')
+                return
+              }
+              const n = Math.min(Math.max(Number(raw), 1), 31)
+              setDueDay(String(n))
+            }}
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/40">

@@ -9,7 +9,7 @@
  *  - nunca sobrescreve pagamentos manuais (sem externalId).
  */
 
-import { db } from './db'
+import { db, getCurrentProfile } from './db'
 import { asaasApi, type AsaasCustomer, type AsaasPayment } from './asaas'
 import type { Client, Payment, PaymentMethod, PaymentType } from '@/types/client'
 
@@ -128,11 +128,20 @@ export function matchCustomersToCrm(
 
 // localStorage backup: persiste o vínculo Asaas mesmo que a coluna
 // asaas_customer_id ainda não exista no Supabase ou o PATCH falhe.
-const ASAAS_LINKS_LS_KEY = 'tenanthub_asaas_links'
+//
+// Chave escopada por user id pra evitar vazamento de vínculos entre
+// múltiplas contas no mesmo browser. Se não há profile (rara), usa
+// "anon" como fallback.
+const ASAAS_LINKS_LS_PREFIX = 'tenanthub_asaas_links:'
+
+function currentLinksKey(): string {
+  const p = getCurrentProfile()
+  return ASAAS_LINKS_LS_PREFIX + (p?.id ?? 'anon')
+}
 
 function lsReadAsaasLinks(): Record<string, string> {
   try {
-    const raw = window.localStorage.getItem(ASAAS_LINKS_LS_KEY)
+    const raw = window.localStorage.getItem(currentLinksKey())
     return raw ? (JSON.parse(raw) as Record<string, string>) : {}
   } catch {
     return {}
@@ -144,7 +153,7 @@ function lsWriteAsaasLink(clientId: string, asaasCustomerId: string | null): voi
     const links = lsReadAsaasLinks()
     if (asaasCustomerId) links[clientId] = asaasCustomerId
     else delete links[clientId]
-    window.localStorage.setItem(ASAAS_LINKS_LS_KEY, JSON.stringify(links))
+    window.localStorage.setItem(currentLinksKey(), JSON.stringify(links))
   } catch {
     /* ignore */
   }
@@ -227,7 +236,18 @@ export async function syncPaymentsForClient(client: Client): Promise<SyncResult>
   if (!client.asaasCustomerId) {
     throw new Error('Cliente sem vínculo Asaas.')
   }
-  const remote = await asaasApi.listAllPaymentsForCustomer(client.asaasCustomerId)
+  // Sync incremental: se já temos um lastPaymentCheck, pede só pagamentos
+  // criados a partir de ~3 dias antes (margem pra captura de status updates).
+  let sinceIso: string | undefined
+  if (client.lastPaymentCheck) {
+    const d = new Date(client.lastPaymentCheck)
+    d.setDate(d.getDate() - 3)
+    sinceIso = d.toISOString()
+  }
+  const remote = await asaasApi.listAllPaymentsForCustomer(
+    client.asaasCustomerId,
+    { sinceIso },
+  )
   const current = client.payments ?? []
   const byExt = new Map<string, Payment>()
   for (const p of current) {

@@ -7,35 +7,40 @@ const ASAAS_PROXY_SANDBOX_PREFIX = '/_proxy/asaas-sandbox'
 export const ASAAS_PRODUCTION_URL = 'https://api.asaas.com'
 export const ASAAS_SANDBOX_URL = 'https://sandbox.asaas.com/api'
 
-function getBaseUrl(): string {
-  const { asaasEnvironment } = db.getSettings()
+function getBaseUrl(envOverride?: 'sandbox' | 'production'): string {
+  const env = envOverride ?? db.getSettings().asaasEnvironment
   if (import.meta.env.DEV) {
-    return asaasEnvironment === 'production'
+    return env === 'production'
       ? ASAAS_PROXY_PREFIX
       : ASAAS_PROXY_SANDBOX_PREFIX
   }
-  return asaasEnvironment === 'production'
-    ? ASAAS_PRODUCTION_URL
-    : ASAAS_SANDBOX_URL
+  return env === 'production' ? ASAAS_PRODUCTION_URL : ASAAS_SANDBOX_URL
 }
 
-function getApiKey(): string {
+function getApiKey(override?: string): string {
+  if (override !== undefined) return override.trim()
   return db.getSettings().asaasApiKey?.trim() ?? ''
+}
+
+interface CallOptions {
+  apiKeyOverride?: string
+  envOverride?: 'sandbox' | 'production'
 }
 
 async function call<T = unknown>(
   method: 'GET' | 'POST',
   path: string,
   body?: unknown,
+  opts: CallOptions = {},
 ): Promise<T> {
-  const apiKey = getApiKey()
+  const apiKey = getApiKey(opts.apiKeyOverride)
   if (!apiKey) {
     throw new Error('Configure a API Key do Asaas em /settings.')
   }
   try {
     const { data } = await axios.request<T>({
       method,
-      baseURL: getBaseUrl(),
+      baseURL: getBaseUrl(opts.envOverride),
       url: path,
       data: body,
       headers: {
@@ -119,8 +124,8 @@ export interface AsaasAccount {
 }
 
 export const asaasApi = {
-  async me(): Promise<AsaasAccount> {
-    return call<AsaasAccount>('GET', '/v3/myAccount')
+  async me(opts?: CallOptions): Promise<AsaasAccount> {
+    return call<AsaasAccount>('GET', '/v3/myAccount', undefined, opts)
   },
 
   async createCustomer(input: {
@@ -187,12 +192,20 @@ export const asaasApi = {
     const out: AsaasCustomer[] = []
     let offset = 0
     const limit = 100
-    // Hard cap pra evitar loop em conta gigante.
-    for (let i = 0; i < 50; i++) {
+    const MAX_PAGES = 50
+    let i = 0
+    for (; i < MAX_PAGES; i++) {
       const page = await asaasApi.listCustomers({ offset, limit })
       out.push(...page.data)
       if (!page.hasMore) break
       offset += limit
+    }
+    if (i === MAX_PAGES) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[asaas] listAllCustomers atingiu ${MAX_PAGES} páginas (${MAX_PAGES * limit} customers). ` +
+          'Resultado possivelmente truncado — use filtros mais específicos.',
+      )
     }
     return out
   },
@@ -200,12 +213,15 @@ export const asaasApi = {
   async listPayments(params: {
     customer?: string
     status?: string
+    /** ISO date YYYY-MM-DD; só pagamentos criados >= esta data. */
+    dateCreatedGe?: string
     offset?: number
     limit?: number
   } = {}): Promise<AsaasListResponse<AsaasPayment>> {
     const q = new URLSearchParams()
     if (params.customer) q.set('customer', params.customer)
     if (params.status) q.set('status', params.status)
+    if (params.dateCreatedGe) q.set('dateCreated[ge]', params.dateCreatedGe)
     q.set('limit', String(params.limit ?? 100))
     q.set('offset', String(params.offset ?? 0))
     return call<AsaasListResponse<AsaasPayment>>(
@@ -214,19 +230,33 @@ export const asaasApi = {
     )
   },
 
-  async listAllPaymentsForCustomer(customerId: string): Promise<AsaasPayment[]> {
+  async listAllPaymentsForCustomer(
+    customerId: string,
+    opts: { sinceIso?: string } = {},
+  ): Promise<AsaasPayment[]> {
     const out: AsaasPayment[] = []
     let offset = 0
     const limit = 100
-    for (let i = 0; i < 50; i++) {
+    const MAX_PAGES = 50
+    // Asaas espera YYYY-MM-DD em dateCreated[ge].
+    const dateCreatedGe = opts.sinceIso ? opts.sinceIso.slice(0, 10) : undefined
+    let i = 0
+    for (; i < MAX_PAGES; i++) {
       const page = await asaasApi.listPayments({
         customer: customerId,
+        dateCreatedGe,
         offset,
         limit,
       })
       out.push(...page.data)
       if (!page.hasMore) break
       offset += limit
+    }
+    if (i === MAX_PAGES) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[asaas] listAllPaymentsForCustomer ${customerId}: ${MAX_PAGES} páginas atingidas, possivelmente truncado.`,
+      )
     }
     return out
   },

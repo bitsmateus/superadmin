@@ -15,13 +15,14 @@ import {
   Trash2,
   Users,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { supabase } from '@/services/supabase'
 import { asText, cn } from '@/lib/utils'
 import type {
   BriefingData,
   BriefingStatus,
   BriefingUser,
-  UserRole,
+  BriefingUserRole,
 } from '@/types/client'
 
 const DAYS = [
@@ -206,7 +207,7 @@ export function BriefingPublicPage() {
     })
     setSubmitting(false)
     if (error) {
-      alert('Falha ao enviar: ' + error.message)
+      toast.error('Falha ao enviar: ' + error.message)
       return
     }
     setSubmitted(true)
@@ -337,7 +338,7 @@ export function BriefingPublicPage() {
                           value={u.role}
                           onChange={(v) => {
                             const users = [...state.users]
-                            users[i] = { ...users[i], role: v as UserRole }
+                            users[i] = { ...users[i], role: v as BriefingUserRole }
                             setState({ ...state, users })
                           }}
                           options={[

@@ -349,11 +349,12 @@ function InviteUserModal({
       return
     }
     setCreating(true)
-    // Sem service_role key não conseguimos criar usuários direto pelo client.
-    // Usamos signUp do anon key — funciona se "Allow new users to sign up"
-    // estiver habilitado no Authentication → Settings. O trigger
-    // handle_new_user cria o profile automaticamente. Depois rebaixamos
-    // a role pro valor escolhido.
+    // signUp via anon key substitui a sessão atual pela do novo usuário.
+    // Salvamos a sessão do admin antes e restauramos via setSession depois,
+    // pra que o admin continue logado.
+    const { data: sess } = await supabase.auth.getSession()
+    const adminSession = sess.session
+
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
@@ -368,20 +369,38 @@ function InviteUserModal({
       return
     }
     const newUserId = data.user?.id
-    if (newUserId && role !== 'suporte') {
-      // Set the desired role (trigger defaults to 'suporte').
+
+    // Restaura a sessão original do admin ANTES de qualquer outra chamada
+    // (RLS de profiles update depende de quem está autenticado).
+    if (adminSession) {
+      const { error: restoreErr } = await supabase.auth.setSession({
+        access_token: adminSession.access_token,
+        refresh_token: adminSession.refresh_token,
+      })
+      if (restoreErr) {
+        // eslint-disable-next-line no-console
+        console.error('[users] falha ao restaurar sessão admin', restoreErr)
+        toast.error(
+          'Usuário criado, mas você precisa logar novamente: ' +
+            restoreErr.message,
+        )
+        setCreating(false)
+        onCreated()
+        return
+      }
+    }
+
+    if (newUserId && (role !== 'suporte' || name.trim())) {
+      const patch: { role?: UserRole; name?: string } = {}
+      if (role !== 'suporte') patch.role = role
+      if (name.trim()) patch.name = name.trim()
       const { error: rerr } = await supabase
         .from('profiles')
-        .update({ role, name: name.trim() || null })
+        .update(patch)
         .eq('id', newUserId)
       if (rerr) {
         toast.error('Conta criada mas falhou ao setar papel: ' + rerr.message)
       }
-    } else if (newUserId && name.trim()) {
-      await supabase
-        .from('profiles')
-        .update({ name: name.trim() })
-        .eq('id', newUserId)
     }
     setCreating(false)
     toast.success('Usuário criado')

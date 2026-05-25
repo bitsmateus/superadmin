@@ -79,6 +79,14 @@ const PANELS: PanelDef[] = [
     tone: 'danger',
   },
   {
+    key: 'inactive',
+    title: 'Clientes sem interação',
+    description: 'Ativos há 30+ dias sem nota ou atividade — risco de churn silencioso',
+    kinds: ['inactive_long'],
+    icon: <AlertTriangle className="h-3.5 w-3.5" />,
+    tone: 'warning',
+  },
+  {
     key: 'ready',
     title: 'Prontos para avançar',
     description: 'Briefings aprovados aguardando configuração',
@@ -195,9 +203,9 @@ function PanelCard({
         </Badge>
       </header>
       <ul className="divide-y divide-line">
-        {alerts.map((a, i) => (
+        {alerts.map((a) => (
           <AlertRow
-            key={`${panel.key}-${a.client.id}-${a.kind}-${i}`}
+            key={`${panel.key}-${a.client.id}-${a.kind}-${a.followUp?.id ?? a.whenAt ?? ''}`}
             alert={a}
             onOpen={() => onOpen(a.client.id)}
           />
@@ -216,7 +224,7 @@ function AlertRow({
 }) {
   const markSent = () => {
     if (!alert.followUp) return
-    const next = alert.client.followUps.map((f) =>
+    const next = (alert.client.followUps ?? []).map((f) =>
       f.id === alert.followUp!.id
         ? { ...f, sentAt: new Date().toISOString() }
         : f,

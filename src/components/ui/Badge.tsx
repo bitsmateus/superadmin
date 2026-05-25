@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { cn } from '@/lib/utils'
 
 type Tone = 'success' | 'danger' | 'warning' | 'info' | 'neutral'
@@ -13,7 +13,7 @@ const tones: Record<Tone, string> = {
   danger: 'bg-danger/10 text-danger border-danger/20',
   warning: 'bg-warning/10 text-warning border-warning/20',
   info: 'bg-accent/10 text-accent border-accent/20',
-  neutral: 'bg-elevate/[0.04] text-foreground/70 border-elevate/10',
+  neutral: 'bg-white/[0.04] text-white/70 border-white/10',
 }
 
 const dotColors: Record<Tone, string> = {
@@ -21,7 +21,7 @@ const dotColors: Record<Tone, string> = {
   danger: 'bg-danger',
   warning: 'bg-warning',
   info: 'bg-accent',
-  neutral: 'bg-elevate/40',
+  neutral: 'bg-white/40',
 }
 
 export function Badge({

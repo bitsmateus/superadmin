@@ -3,7 +3,8 @@ import {
   buildDefaultChecklist,
   buildHandoffChecklist,
 } from '@/constants/checklist'
-import { supabase, type Profile } from '@/services/supabase'
+import type { Profile } from '@/services/supabase'
+import { api, onSseEvent } from '@/services/api'
 import type {
   AppSettings,
   Client,
@@ -12,50 +13,22 @@ import type {
   PipelineStage,
 } from '@/types/client'
 
-/**
- * Supabase-backed CRM data layer.
- *
- * STRATEGY:
- * Components were written against a SYNC API (read returns Client[] directly).
- * Supabase is async. To avoid changing every component we keep a local cache
- * mirror that:
- *   - is hydrated once on boot via `boot()`
- *   - is kept fresh by Realtime subscriptions on `clients` and `settings`
- *   - is mutated optimistically by writes, then reconciled by the realtime
- *     event from Postgres
- *
- * Public read methods (`getClients`, `getClient`, `getSettings`) stay sync
- * and read from the cache. Writes (`createClient`, `updateClient`, etc.) kick
- * off a Supabase request in the background and refresh the cache when done.
- * The pub/sub `subscribe(fn)` semantics are unchanged.
- */
-
-// ---------- Helpers ----------
-
 function uuid(): string {
-  // Prefer crypto.randomUUID — only available in secure contexts (HTTPS or
-  // localhost). When accessing the dev server via a LAN IP (e.g. 192.168.x.x)
-  // the API is undefined and we need a fallback that still produces a valid
-  // RFC-4122 v4 UUID, otherwise Postgres rejects the value for `uuid` columns.
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
   }
-  // Fallback usando crypto.getRandomValues (disponível em qualquer contexto,
-  // mesmo não-seguro). Math.random como último recurso.
   const bytes = new Uint8Array(16)
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
     crypto.getRandomValues(bytes)
   } else {
     for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256)
   }
-  bytes[6] = (bytes[6] & 0x0f) | 0x40 // version 4
-  bytes[8] = (bytes[8] & 0x3f) | 0x80 // variant 10
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-// Snake_case row → camelCase Client mapping. Listing every field explicitly
-// keeps the contract obvious and the two layers loosely coupled.
 type ClientRow = {
   id: string
   name: string
@@ -87,13 +60,7 @@ type ClientRow = {
   extra_links: Client['extraLinks']
   finance_notes: string | null
   briefing_token: string | null
-  briefing_status:
-    | 'not_sent'
-    | 'sent'
-    | 'filled'
-    | 'approved'
-    | 'revision'
-    | null
+  briefing_status: 'not_sent' | 'sent' | 'filled' | 'approved' | 'revision' | null
   briefing_sent_at: string | null
   briefing_data: Client['briefingData'] | null
   briefing_approved_at: string | null
@@ -164,8 +131,6 @@ function rowToClient(r: ClientRow): Client {
   }
 }
 
-// Maps a camelCase patch to snake_case columns. Only keys present in `patch`
-// are emitted so partial updates remain partial in Supabase.
 function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   if ('name' in patch) out.name = patch.name
@@ -215,9 +180,7 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   return out
 }
 
-// settings table is a singleton (id=true). Map camelCase ↔ snake_case.
 type SettingsRow = {
-  id: boolean
   asaas_api_key: string | null
   asaas_environment: 'sandbox' | 'production' | null
   asaas_sync_interval_min: number | null
@@ -264,7 +227,6 @@ function rowToSettings(r: SettingsRow | null): AppSettings {
 
 function settingsToRow(s: AppSettings): Record<string, unknown> {
   return {
-    id: true,
     asaas_api_key: s.asaasApiKey ?? null,
     asaas_environment: s.asaasEnvironment ?? null,
     asaas_sync_interval_min: s.asaasSyncIntervalMin ?? null,
@@ -283,121 +245,50 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
     goals_enabled: s.goalsEnabled ?? null,
     last_backup_at: s.lastBackupAt ?? null,
     backup_remind_days: s.backupRemindDays ?? null,
-    updated_at: new Date().toISOString(),
   }
 }
-
-// ---------- Settings localStorage backup ----------
 
 const SETTINGS_LS_KEY = 'tenanthub_crm_settings'
-
 function lsReadSettings(): AppSettings {
-  try {
-    const raw = window.localStorage.getItem(SETTINGS_LS_KEY)
-    if (!raw) return {}
-    return JSON.parse(raw) as AppSettings
-  } catch {
-    return {}
-  }
+  try { return JSON.parse(window.localStorage.getItem(SETTINGS_LS_KEY) ?? 'null') ?? {} } catch { return {} }
 }
-
 function lsWriteSettings(s: AppSettings): void {
-  try {
-    window.localStorage.setItem(SETTINGS_LS_KEY, JSON.stringify(s))
-  } catch {
-    /* ignore quota errors */
-  }
+  try { window.localStorage.setItem(SETTINGS_LS_KEY, JSON.stringify(s)) } catch { /* quota */ }
 }
 
-const ASAAS_LINKS_LS_KEY = 'tenanthub_asaas_links'
-
-function lsReadAsaasLinks(): Record<string, string> {
-  try {
-    const raw = window.localStorage.getItem(ASAAS_LINKS_LS_KEY)
-    return raw ? (JSON.parse(raw) as Record<string, string>) : {}
-  } catch {
-    return {}
-  }
-}
-
-// ---------- Pub/sub + caches ----------
-
+// ---------- State ----------
 let clientsCache: Client[] = []
 let settingsCache: AppSettings = {}
 let currentProfile: Profile | null = null
 
 const subscribers = new Set<() => void>()
-function notify() {
-  for (const fn of subscribers) fn()
-}
-
-// ---------- Boot + Realtime ----------
+function notify() { for (const fn of subscribers) fn() }
 
 let bootingPromise: Promise<void> | null = null
 let booted = false
-let realtimeChannel: ReturnType<typeof supabase.channel> | null = null
+let unsubSse: (() => void) | null = null
 
-export function isBooted(): boolean {
-  return booted
-}
+export function isBooted(): boolean { return booted }
 
 export async function bootDb(): Promise<void> {
   if (bootingPromise) return bootingPromise
   bootingPromise = (async () => {
     try {
-      // eslint-disable-next-line no-console
       console.info('[db] boot: loading clients + settings…')
-      const [clientsRes, settingsRes] = await Promise.all([
-        supabase
-          .from('clients')
-          .select('*')
-          .order('created_at', { ascending: false }),
-        supabase.from('settings').select('*').eq('id', true).maybeSingle(),
+      const [clientRows, settingsRow] = await Promise.all([
+        api.get<ClientRow[]>('/api/clients'),
+        api.get<SettingsRow | null>('/api/settings').catch(() => null),
       ])
-      if (clientsRes.error) {
-        // eslint-disable-next-line no-console
-        console.error('[db] load clients failed', clientsRes.error)
-        toast.error('Falha ao carregar clientes: ' + clientsRes.error.message)
-      } else {
-        clientsCache = (clientsRes.data as ClientRow[] | null ?? []).map(
-          rowToClient,
-        )
-        // eslint-disable-next-line no-console
-        console.info('[db] loaded', clientsCache.length, 'clients')
-      }
-      if (settingsRes.error && settingsRes.error.code !== 'PGRST116') {
-        // PGRST116 = no rows; that's fine (singleton may not exist yet).
-        // eslint-disable-next-line no-console
-        console.error('[db] load settings failed', settingsRes.error)
-        // Fall back to localStorage so settings survive even when Supabase
-        // is unreachable or the upsert had previously failed silently.
-        settingsCache = lsReadSettings()
-      } else {
-        const fromSupabase = rowToSettings(settingsRes.data as SettingsRow | null)
-        // If Supabase returned an empty row (no prior upsert succeeded), prefer
-        // the localStorage copy so a restart doesn't wipe the user's config.
-        const hasData = Object.keys(fromSupabase).some(
-          (k) => fromSupabase[k as keyof AppSettings] !== undefined,
-        )
-        settingsCache = hasData ? fromSupabase : lsReadSettings()
-        // Keep localStorage in sync with whatever Supabase returned.
-        if (hasData) lsWriteSettings(fromSupabase)
-      }
-      // Aplica vínculos Asaas salvos em localStorage caso a coluna
-      // asaas_customer_id não exista no Supabase ou o PATCH tenha falhado.
-      const asaasLinks = lsReadAsaasLinks()
-      if (Object.keys(asaasLinks).length > 0) {
-        clientsCache = clientsCache.map((c) => {
-          const saved = asaasLinks[c.id]
-          return saved && !c.asaasCustomerId ? { ...c, asaasCustomerId: saved } : c
-        })
-      }
+      clientsCache = (clientRows ?? []).map(rowToClient)
+      const fromApi = rowToSettings(settingsRow)
+      const hasData = Object.keys(fromApi).some((k) => fromApi[k as keyof AppSettings] !== undefined)
+      settingsCache = hasData ? fromApi : lsReadSettings()
+      if (hasData) lsWriteSettings(fromApi)
 
       subscribeRealtime()
       booted = true
       notify()
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('[db] boot crash', err)
       toast.error('Falha ao inicializar dados')
     }
@@ -406,10 +297,8 @@ export async function bootDb(): Promise<void> {
 }
 
 export async function teardownDb(): Promise<void> {
-  if (realtimeChannel) {
-    await supabase.removeChannel(realtimeChannel)
-    realtimeChannel = null
-  }
+  unsubSse?.()
+  unsubSse = null
   clientsCache = []
   settingsCache = {}
   currentProfile = null
@@ -419,170 +308,71 @@ export async function teardownDb(): Promise<void> {
 }
 
 function subscribeRealtime() {
-  if (realtimeChannel) return
-  realtimeChannel = supabase
-    .channel('crm-changes')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'clients' },
-      (payload) => {
-        if (payload.eventType === 'DELETE') {
-          const oldId = (payload.old as { id?: string }).id
-          if (oldId) {
-            clientsCache = clientsCache.filter((c) => c.id !== oldId)
-            notify()
-          }
-          return
-        }
-        const next = rowToClient(payload.new as ClientRow)
-        const idx = clientsCache.findIndex((c) => c.id === next.id)
-        if (idx === -1) {
-          clientsCache = [next, ...clientsCache]
-        } else {
-          const copy = clientsCache.slice()
-          copy[idx] = next
-          clientsCache = copy
-        }
-        notify()
-      },
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'settings' },
-      (payload) => {
-        if (payload.eventType === 'DELETE') {
-          settingsCache = {}
-        } else {
-          settingsCache = rowToSettings(payload.new as SettingsRow)
-        }
-        notify()
-      },
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'profiles' },
-      (payload) => {
-        // If our own profile was updated (role/name), refresh local copy.
-        const newRow = payload.new as Profile | undefined
-        if (newRow && currentProfile && newRow.id === currentProfile.id) {
-          currentProfile = newRow
-          notify()
-        }
-      },
-    )
-    .subscribe()
+  if (unsubSse) return
+  unsubSse = onSseEvent((table, type, data) => {
+    if (table === 'clients') {
+      if (type === 'DELETE') {
+        const id = (data as { id?: string }).id
+        if (id) { clientsCache = clientsCache.filter((c) => c.id !== id); notify() }
+        return
+      }
+      const next = rowToClient(data as ClientRow)
+      const idx = clientsCache.findIndex((c) => c.id === next.id)
+      if (idx === -1) { clientsCache = [next, ...clientsCache] }
+      else { const copy = clientsCache.slice(); copy[idx] = next; clientsCache = copy }
+      notify()
+    } else if (table === 'settings') {
+      if (type !== 'DELETE') { settingsCache = rowToSettings(data as SettingsRow); notify() }
+    } else if (table === 'profiles') {
+      const row = data as Profile
+      if (currentProfile && row.id === currentProfile.id) { currentProfile = row; notify() }
+    }
+  })
 }
 
-// ---------- Profile (current user) ----------
+export function setCurrentProfile(p: Profile | null): void { currentProfile = p; notify() }
+export function getCurrentProfile(): Profile | null { return currentProfile }
 
-export function setCurrentProfile(p: Profile | null): void {
-  currentProfile = p
-  notify()
-}
-
-export function getCurrentProfile(): Profile | null {
-  return currentProfile
-}
-
-// ---------- Public API ----------
-
-export type CreateClientInput = Pick<
-  Client,
-  'name' | 'email' | 'phone' | 'company' | 'responsavel'
-> & {
+export type CreateClientInput = Pick<Client, 'name' | 'email' | 'phone' | 'company' | 'responsavel'> & {
   stage?: PipelineStage
-  tenantId?: string
-  tenantServerId?: string
-  tenantApiId?: string
-  tenantName?: string
+  tenantId?: string; tenantServerId?: string; tenantApiId?: string; tenantName?: string
 }
 
 export const db = {
   subscribe(fn: () => void): () => void {
     subscribers.add(fn)
-    return () => {
-      subscribers.delete(fn)
-    }
+    return () => { subscribers.delete(fn) }
   },
 
-  // ---- Clients ----
+  getClients(): Client[] { return clientsCache },
+  getClient(id: string): Client | undefined { return clientsCache.find((c) => c.id === id) },
 
-  getClients(): Client[] {
-    return clientsCache
-  },
-
-  getClient(id: string): Client | undefined {
-    return clientsCache.find((c) => c.id === id)
-  },
-
-  /**
-   * Optimistically inserts a client and pushes to Supabase. The realtime
-   * event will replace our optimistic copy with the canonical row.
-   */
   createClient(data: CreateClientInput): Client {
     const now = new Date().toISOString()
     const client: Client = {
-      id: uuid(),
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      company: data.company,
-      responsavel: data.responsavel,
-      stage: data.stage ?? 'welcome',
-      createdAt: now,
-      stageUpdatedAt: now,
-      tenantId: data.tenantId,
-      tenantServerId: data.tenantServerId,
-      tenantApiId: data.tenantApiId,
-      tenantName: data.tenantName,
-      followUpActive: false,
-      followUps: [],
+      id: uuid(), name: data.name, email: data.email, phone: data.phone,
+      company: data.company, responsavel: data.responsavel, stage: data.stage ?? 'welcome',
+      createdAt: now, stageUpdatedAt: now,
+      tenantId: data.tenantId, tenantServerId: data.tenantServerId,
+      tenantApiId: data.tenantApiId, tenantName: data.tenantName,
+      followUpActive: false, followUps: [],
       deliveryChecklist: buildDefaultChecklist(),
       deliveryHandoffChecklist: buildHandoffChecklist(),
       notes: [],
-      logs: [
-        {
-          id: uuid(),
-          action: 'Cliente criado',
-          createdAt: now,
-        },
-      ],
+      logs: [{ id: uuid(), action: 'Cliente criado', createdAt: now }],
     }
     clientsCache = [client, ...clientsCache]
     notify()
 
     void (async () => {
-      const row = {
-        id: client.id,
-        name: client.name,
-        email: client.email,
-        phone: client.phone,
-        company: client.company,
-        responsavel: client.responsavel ?? null,
-        stage: client.stage,
-        tenant_id: client.tenantId ?? null,
-        tenant_server_id: client.tenantServerId ?? null,
-        tenant_api_id: client.tenantApiId ?? null,
-        tenant_name: client.tenantName ?? null,
-        delivery_checklist: client.deliveryChecklist,
-        delivery_handoff_checklist: client.deliveryHandoffChecklist,
-        followup_active: false,
-        followups: [],
-        notes: [],
-        logs: client.logs,
-      }
-      // eslint-disable-next-line no-console
-      console.info('[db] INSERT clients', { id: client.id, name: client.name })
-      const { error } = await supabase.from('clients').insert(row)
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.error('[db] INSERT clients FAILED', error)
+      const row = patchToRow(client as unknown as Partial<Client>)
+      row.id = client.id
+      try {
+        await api.post('/api/clients', row)
+      } catch (err) {
         clientsCache = clientsCache.filter((c) => c.id !== client.id)
         notify()
-        toast.error('Falha ao criar cliente: ' + error.message)
-      } else {
-        // eslint-disable-next-line no-console
-        console.info('[db] INSERT clients OK', client.id)
+        toast.error('Falha ao criar cliente: ' + (err as Error).message)
       }
     })()
 
@@ -591,64 +381,23 @@ export const db = {
 
   updateClient(id: string, patch: Partial<Client>): Client | undefined {
     const idx = clientsCache.findIndex((c) => c.id === id)
-    if (idx === -1) {
-      // eslint-disable-next-line no-console
-      console.warn('[db] updateClient skipped: id not in cache', id)
-      return undefined
-    }
+    if (idx === -1) return undefined
     const prev = clientsCache[idx]
     const next: Client = { ...prev, ...patch }
-    if (patch.stage && patch.stage !== prev.stage) {
-      next.stageUpdatedAt = new Date().toISOString()
-    }
-    const copy = clientsCache.slice()
-    copy[idx] = next
-    clientsCache = copy
+    if (patch.stage && patch.stage !== prev.stage) next.stageUpdatedAt = new Date().toISOString()
+    const copy = clientsCache.slice(); copy[idx] = next; clientsCache = copy
     notify()
 
     void (async () => {
-      const rowPatch = patchToRow(patch)
-      // eslint-disable-next-line no-console
-      console.info('[db] UPDATE clients', { id, keys: Object.keys(rowPatch) })
-      const { data, error } = await supabase
-        .from('clients')
-        .update(rowPatch)
-        .eq('id', id)
-        .select('id')
-      const rollbackCache = () => {
+      try {
+        await api.patch(`/api/clients/${id}`, patchToRow(patch))
+      } catch (err) {
         const rollback = clientsCache.slice()
         const ridx = rollback.findIndex((c) => c.id === id)
         if (ridx !== -1) rollback[ridx] = prev
         clientsCache = rollback
         notify()
-      }
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.error('[db] UPDATE clients FAILED', error)
-        // PGRST204 = coluna ausente no schema. Reverte cache pra evitar
-        // que o usuário continue vendo dado que não foi persistido.
-        if ((error as { code?: string }).code === 'PGRST204') {
-          const col = /the '(\w+)' column/.exec(error.message)?.[1] ?? 'coluna'
-          rollbackCache()
-          toast.error(
-            `Coluna "${col}" ausente no Supabase. Execute a migration SQL em Configurações → Supabase.`,
-          )
-          return
-        }
-        rollbackCache()
-        toast.error('Falha ao salvar: ' + error.message)
-      } else if (!data || data.length === 0) {
-        // 0 rows: RLS bloqueou ou id sumiu. Reverte o cache — caso contrário
-        // o usuário continua editando algo que o servidor já rejeitou.
-        // eslint-disable-next-line no-console
-        console.warn('[db] UPDATE clients returned 0 rows — RLS blocked or id mismatch', { id })
-        rollbackCache()
-        toast.error(
-          'Salvamento bloqueado pelo banco (verifique permissões/role).',
-        )
-      } else {
-        // eslint-disable-next-line no-console
-        console.info('[db] UPDATE clients OK', id, Object.keys(rowPatch))
+        toast.error('Falha ao salvar: ' + (err as Error).message)
       }
     })()
 
@@ -659,97 +408,49 @@ export const db = {
     const prev = clientsCache
     clientsCache = clientsCache.filter((c) => c.id !== id)
     notify()
-    // eslint-disable-next-line no-console
-    console.info('[db] DELETE clients', id)
-    const { error } = await supabase.from('clients').delete().eq('id', id)
-    if (error) {
-      // eslint-disable-next-line no-console
-      console.error('[db] DELETE clients FAILED', error)
-      clientsCache = prev
-      notify()
-      toast.error('Falha ao excluir: ' + error.message)
-      throw error
+    try {
+      await api.delete(`/api/clients/${id}`)
+    } catch (err) {
+      clientsCache = prev; notify()
+      toast.error('Falha ao excluir: ' + (err as Error).message)
+      throw err
     }
-    // eslint-disable-next-line no-console
-    console.info('[db] DELETE clients OK', id)
   },
 
-  addLog(
-    clientId: string,
-    action: string,
-    detail?: string,
-  ): LogEntry | undefined {
+  addLog(clientId: string, action: string, detail?: string): LogEntry | undefined {
     const client = db.getClient(clientId)
     if (!client) return undefined
-    const entry: LogEntry = {
-      id: uuid(),
-      action,
-      detail,
-      createdAt: new Date().toISOString(),
-    }
-    const nextLogs = [entry, ...(client.logs ?? [])]
-    db.updateClient(clientId, { logs: nextLogs })
+    const entry: LogEntry = { id: uuid(), action, detail, createdAt: new Date().toISOString() }
+    db.updateClient(clientId, { logs: [entry, ...(client.logs ?? [])] })
     return entry
   },
 
-  addNote(
-    clientId: string,
-    text: string,
-    author: string,
-    internal = false,
-  ): NoteEntry | undefined {
+  addNote(clientId: string, text: string, author: string, internal = false): NoteEntry | undefined {
     const client = db.getClient(clientId)
     if (!client) return undefined
-    const note: NoteEntry = {
-      id: uuid(),
-      text,
-      author: author || 'Anônimo',
-      createdAt: new Date().toISOString(),
-      internal: internal || undefined,
-    }
-    const nextNotes = [note, ...(client.notes ?? [])]
-    db.updateClient(clientId, { notes: nextNotes })
+    const note: NoteEntry = { id: uuid(), text, author: author || 'Anônimo', createdAt: new Date().toISOString(), internal: internal || undefined }
+    db.updateClient(clientId, { notes: [note, ...(client.notes ?? [])] })
     return note
   },
 
-  // ---- Settings ----
-
-  getSettings(): AppSettings {
-    return settingsCache
-  },
+  getSettings(): AppSettings { return settingsCache },
 
   saveSettings(s: AppSettings): void {
     const prev = settingsCache
     settingsCache = { ...prev, ...s }
-    // Persist to localStorage immediately so a page reload never loses the
-    // settings even if the Supabase upsert fails or is delayed.
     lsWriteSettings(settingsCache)
     notify()
     void (async () => {
-      // eslint-disable-next-line no-console
-      console.info('[db] UPSERT settings', Object.keys(s))
-      const { error } = await supabase
-        .from('settings')
-        .upsert(settingsToRow(settingsCache), { onConflict: 'id' })
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.error('[db] UPSERT settings FAILED', error)
-        settingsCache = prev
-        lsWriteSettings(prev)
-        notify()
-        toast.error('Falha ao salvar configurações: ' + error.message)
-      } else {
-        // eslint-disable-next-line no-console
-        console.info('[db] UPSERT settings OK')
+      try {
+        await api.put('/api/settings', settingsToRow(settingsCache))
+      } catch (err) {
+        settingsCache = prev; lsWriteSettings(prev); notify()
+        toast.error('Falha ao salvar configurações: ' + (err as Error).message)
       }
     })()
   },
 
-  // ---- Current user (profile.name) ----
-
-  getCurrentUser(): string {
-    return currentProfile?.name ?? currentProfile?.email ?? ''
-  },
+  getCurrentUser(): string { return currentProfile?.name ?? currentProfile?.email ?? '' },
 
   setCurrentUser(name: string): void {
     if (!currentProfile) return
@@ -757,21 +458,14 @@ export const db = {
     currentProfile = { ...currentProfile, name }
     notify()
     void (async () => {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ name })
-        .eq('id', prev.id)
-      if (error) {
-        currentProfile = prev
-        notify()
-        toast.error('Falha ao salvar nome: ' + error.message)
+      try {
+        await api.patch(`/api/users/${prev.id}`, { name })
+      } catch {
+        currentProfile = prev; notify()
+        toast.error('Falha ao salvar nome')
       }
     })()
   },
-
-  // ---- Briefing tokens ----
-  // Tokens are now stored directly on the client row (briefing_token column).
-  // No separate token table needed.
 
   createBriefingToken(clientId: string): string {
     const client = db.getClient(clientId)
@@ -782,16 +476,9 @@ export const db = {
     return token
   },
 
-  /**
-   * Returns the client ID for a given briefing token. Lookups happen in the
-   * local cache for authenticated views; the public /briefing/:token page
-   * should call the `get_client_by_briefing_token` RPC instead.
-   */
   getClientByToken(token: string): string | undefined {
     return clientsCache.find((c) => c.briefingToken === token)?.id
   },
 
-  newId(): string {
-    return uuid()
-  },
+  newId(): string { return uuid() },
 }

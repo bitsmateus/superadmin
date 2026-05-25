@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { Award, DollarSign, Star, Users } from 'lucide-react'
 import { useClients, useSettings } from '@/hooks/useClients'
 import { useStageHistory } from '@/hooks/useAnalytics'
@@ -41,13 +41,13 @@ export function GoalsCard({
     <section className="rounded-xl border border-line bg-card p-5">
       <header className="mb-4 flex items-baseline justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Metas do mês</h2>
-          <p className="text-xs text-foreground/55 capitalize">{monthName}</p>
+          <h2 className="text-sm font-semibold text-white">Metas do mês</h2>
+          <p className="text-xs text-white/55 capitalize">{monthName}</p>
         </div>
       </header>
 
       {!hasAnyGoal ? (
-        <p className="text-xs text-foreground/45">
+        <p className="text-xs text-white/45">
           Nenhuma meta definida ainda. Vá em Configurações → Metas pra
           configurar.
         </p>
@@ -77,16 +77,16 @@ export function GoalsCard({
             actuals.npsResponses === 0 ? (
               <div>
                 <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="inline-flex items-center gap-1.5 text-foreground/70">
+                  <span className="inline-flex items-center gap-1.5 text-white/70">
                     <Star className="h-3.5 w-3.5" />
                     NPS
                   </span>
-                  <span className="text-foreground/40">
+                  <span className="text-white/40">
                     — / {settings.goalNpsMonthly}
                   </span>
                 </div>
-                <div className="mt-1.5 h-2 w-full overflow-hidden rounded-md bg-elevate/[0.04]" />
-                <div className="mt-1 text-[10px] text-foreground/45">
+                <div className="mt-1.5 h-2 w-full overflow-hidden rounded-md bg-white/[0.04]" />
+                <div className="mt-1 text-[10px] text-white/45">
                   Sem respostas no mês — meta começa a contar a partir da
                   primeira resposta
                 </div>
@@ -136,24 +136,24 @@ function GoalBar({
   return (
     <div>
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="inline-flex items-center gap-1.5 text-foreground/70">
+        <span className="inline-flex items-center gap-1.5 text-white/70">
           {icon}
           {label}
         </span>
-        <span className="text-foreground/90">
+        <span className="text-white/90">
           <strong className={cn(reached && 'text-success')}>
             {format(current)}
           </strong>
-          <span className="text-foreground/40"> / {format(target)}</span>
+          <span className="text-white/40"> / {format(target)}</span>
         </span>
       </div>
-      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-md bg-elevate/[0.04]">
+      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-md bg-white/[0.04]">
         <div
           className={cn('h-full transition-all', toneClass)}
           style={{ width: `${Math.min(pct, 100)}%` }}
         />
       </div>
-      <div className="mt-1 flex items-center justify-between text-[10px] text-foreground/45">
+      <div className="mt-1 flex items-center justify-between text-[10px] text-white/45">
         <span>
           {reached ? (
             <span className="inline-flex items-center gap-1 text-success">

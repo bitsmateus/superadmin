@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -65,17 +65,17 @@ export function Modal({
           <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
             <div>
               {title && (
-                <h2 className="text-base font-semibold text-foreground">{title}</h2>
+                <h2 className="text-base font-semibold text-white">{title}</h2>
               )}
               {description && (
-                <p className="mt-1 text-sm text-foreground/50">{description}</p>
+                <p className="mt-1 text-sm text-white/50">{description}</p>
               )}
             </div>
             <button
               type="button"
               onClick={onClose}
               aria-label="Fechar"
-              className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground focus-ring"
+              className="rounded-md p-1 text-white/50 hover:bg-white/[0.06] hover:text-white focus-ring"
             >
               <X className="h-4 w-4" />
             </button>
@@ -83,7 +83,7 @@ export function Modal({
         )}
         <div className="px-6 py-5 max-h-[70vh] overflow-y-auto">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-line bg-elevate/[0.02] px-6 py-3">
+          <div className="flex items-center justify-end gap-2 border-t border-line bg-white/[0.02] px-6 py-3">
             {footer}
           </div>
         )}

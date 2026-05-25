@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import {
   AlertCircle,
   Bell,
@@ -100,15 +100,15 @@ function GoalsBlock() {
           <Trophy className="h-3.5 w-3.5" />
         </span>
         <div>
-          <h2 className="text-sm font-medium text-foreground">Metas do mês</h2>
-          <p className="text-xs text-foreground/45">
+          <h2 className="text-sm font-medium text-white">Metas do mês</h2>
+          <p className="text-xs text-white/45">
             Aparecem no Dashboard e no Centro de Comando. Deixe em branco pra
             esconder uma meta específica.
           </p>
         </div>
       </header>
       <div className="space-y-3 rounded-xl border border-line bg-card p-4">
-        <label className="inline-flex items-center gap-2 text-sm text-foreground/85 cursor-pointer">
+        <label className="inline-flex items-center gap-2 text-sm text-white/85 cursor-pointer">
           <input
             type="checkbox"
             checked={enabled}
@@ -223,8 +223,8 @@ function BackupBlock() {
           <Download className="h-3.5 w-3.5" />
         </span>
         <div>
-          <h2 className="text-sm font-medium text-foreground">Backup</h2>
-          <p className="text-xs text-foreground/45">
+          <h2 className="text-sm font-medium text-white">Backup</h2>
+          <p className="text-xs text-white/45">
             Baixa snapshot JSON com clientes + configurações. Guarde em local
             seguro.
           </p>
@@ -268,7 +268,7 @@ function BackupBlock() {
             Restaurar de arquivo…
           </Button>
         </div>
-        <p className="text-[11px] text-foreground/45">
+        <p className="text-[11px] text-white/45">
           Restauração faz <strong>upsert por id</strong>: clientes existentes
           são sobrescritos, novos são inseridos. Settings não são restauradas
           por padrão.
@@ -304,18 +304,18 @@ function RestoreConfirmModal({
       <div className="w-full max-w-md rounded-xl border border-line bg-card p-5 shadow-xl">
         <header className="mb-3 flex items-center gap-2">
           <AlertCircle className="h-5 w-5 text-warning" />
-          <h3 className="text-base font-semibold text-foreground">Confirmar restauração</h3>
+          <h3 className="text-base font-semibold text-white">Confirmar restauração</h3>
         </header>
-        <div className="space-y-3 text-sm text-foreground/80">
+        <div className="space-y-3 text-sm text-white/80">
           <p>
-            Vai restaurar <strong className="text-foreground">{payload.clients.length}</strong>{' '}
+            Vai restaurar <strong className="text-white">{payload.clients.length}</strong>{' '}
             cliente(s) do backup criado em{' '}
-            <strong className="text-foreground">
+            <strong className="text-white">
               {new Date(payload.createdAt).toLocaleString('pt-BR')}
             </strong>
             .
           </p>
-          <p className="text-xs text-foreground/55">
+          <p className="text-xs text-white/55">
             Clientes existentes (mesmo id) serão sobrescritos. Esta ação é
             registrada em auditoria.
           </p>
@@ -363,8 +363,8 @@ function UserNameBlock() {
           <UserCircle2 className="h-3.5 w-3.5" />
         </span>
         <div>
-          <h2 className="text-sm font-medium text-foreground">Meu nome</h2>
-          <p className="text-xs text-foreground/45">
+          <h2 className="text-sm font-medium text-white">Meu nome</h2>
+          <p className="text-xs text-white/45">
             Usado nos logs, checklists e mensagens registradas.
           </p>
         </div>
@@ -453,10 +453,10 @@ function NotificationsBlock() {
           <Bell className="h-3.5 w-3.5" />
         </span>
         <div>
-          <h2 className="text-sm font-medium text-foreground">
+          <h2 className="text-sm font-medium text-white">
             Notificações de tickets
           </h2>
-          <p className="text-xs text-foreground/45">
+          <p className="text-xs text-white/45">
             Som + notificação no navegador (local) e e-mail pro responsável
             (precisa Edge Function + Resend configurado).
           </p>
@@ -465,11 +465,11 @@ function NotificationsBlock() {
 
       <div className="space-y-4 rounded-xl border border-line bg-card p-5">
         {/* Local: som + browser notification */}
-        <div className="space-y-2 rounded-lg border border-line bg-elevate/[0.02] p-3">
-          <div className="text-[11px] uppercase tracking-wider text-foreground/45">
+        <div className="space-y-2 rounded-lg border border-line bg-white/[0.02] p-3">
+          <div className="text-[11px] uppercase tracking-wider text-white/45">
             Neste navegador
           </div>
-          <label className="flex items-center gap-2 text-sm text-foreground/85 cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-white/85 cursor-pointer">
             <input
               type="checkbox"
               checked={browserNotif}
@@ -480,7 +480,7 @@ function NotificationsBlock() {
             Tocar som + mostrar notificação no navegador quando entra ticket
           </label>
           {browserNotif && (
-            <div className="text-[11px] text-foreground/45">
+            <div className="text-[11px] text-white/45">
               Permissão do navegador:{' '}
               <strong className={
                 permission === 'granted'
@@ -492,7 +492,7 @@ function NotificationsBlock() {
                 {permission === 'granted' ? 'concedida' : permission === 'denied' ? 'negada' : 'pendente'}
               </strong>
               {permission === 'denied' && (
-                <span className="text-foreground/45"> · Reabilite nas permissões do site.</span>
+                <span className="text-white/45"> · Reabilite nas permissões do site.</span>
               )}
             </div>
           )}
@@ -500,10 +500,10 @@ function NotificationsBlock() {
 
         {/* E-mail via Edge Function */}
         <div className="space-y-3">
-          <div className="text-[11px] uppercase tracking-wider text-foreground/45">
+          <div className="text-[11px] uppercase tracking-wider text-white/45">
             E-mail pro responsável
           </div>
-          <label className="flex items-center gap-2 text-sm text-foreground/85 cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-white/85 cursor-pointer">
             <input
               type="checkbox"
               checked={enabled}
@@ -520,8 +520,8 @@ function NotificationsBlock() {
             onChange={(e) => setEdgeUrl(e.target.value)}
             hint="Deploy a função em supabase/functions/notify-ticket e cole a URL pública aqui. Veja README."
           />
-          <p className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-[11px] text-foreground/55">
-            <strong className="text-foreground/80">Pra ativar:</strong>{' '}
+          <p className="rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-[11px] text-white/55">
+            <strong className="text-white/80">Pra ativar:</strong>{' '}
             (1) crie conta em resend.com e gere uma API key,{' '}
             (2) deploy a função: <code className="text-accent">supabase functions deploy notify-ticket --no-verify-jwt</code>,{' '}
             (3) configure as env vars (Settings → Edge Functions): <code className="text-accent">RESEND_API_KEY</code>, <code className="text-accent">RESEND_FROM_EMAIL</code>, <code className="text-accent">PUBLIC_PANEL_URL</code>, <code className="text-accent">FALLBACK_TO_EMAIL</code>.
@@ -572,8 +572,8 @@ function NpsBlock() {
           <Star className="h-3.5 w-3.5" />
         </span>
         <div>
-          <h2 className="text-sm font-medium text-foreground">Pesquisa NPS</h2>
-          <p className="text-xs text-foreground/45">
+          <h2 className="text-sm font-medium text-white">Pesquisa NPS</h2>
+          <p className="text-xs text-white/45">
             Cria automaticamente uma pesquisa pendente N dias após a entrega
             ser concluída. O link aparece em <em>/nps</em> pra você enviar.
           </p>
@@ -581,7 +581,7 @@ function NpsBlock() {
       </header>
 
       <div className="space-y-4 rounded-xl border border-line bg-card p-5">
-        <label className="flex items-center gap-2 text-sm text-foreground/85 cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-white/85 cursor-pointer">
           <input
             type="checkbox"
             checked={enabled}
@@ -673,8 +673,8 @@ function AsaasBlock() {
           <CreditCard className="h-3.5 w-3.5" />
         </span>
         <div>
-          <h2 className="text-sm font-medium text-foreground">Asaas (cobrança)</h2>
-          <p className="text-xs text-foreground/45">
+          <h2 className="text-sm font-medium text-white">Asaas (cobrança)</h2>
+          <p className="text-xs text-white/45">
             Chave usada para criar clientes, cobranças e assinaturas.
           </p>
         </div>
@@ -693,7 +693,7 @@ function AsaasBlock() {
                 <button
                   type="button"
                   onClick={() => setShow((s) => !s)}
-                  className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
+                  className="pointer-events-auto text-white/40 hover:text-white/80"
                   aria-label={show ? 'Ocultar' : 'Mostrar'}
                 >
                   {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -816,10 +816,10 @@ function CredentialsBlock() {
           <KeyRound className="h-3.5 w-3.5" />
         </span>
         <div>
-          <h2 className="text-sm font-medium text-foreground">
+          <h2 className="text-sm font-medium text-white">
             Senhas e contato de suporte
           </h2>
-          <p className="text-xs text-foreground/45">
+          <p className="text-xs text-white/45">
             Antes ficavam fixos no código. Configure aqui pra usar nos
             modais de criação de tenant e na folha de acessos do cliente.
           </p>
@@ -841,7 +841,7 @@ function CredentialsBlock() {
               <button
                 type="button"
                 onClick={() => setShowTenant((s) => !s)}
-                className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
+                className="pointer-events-auto text-white/40 hover:text-white/80"
                 aria-label={showTenant ? 'Ocultar' : 'Mostrar'}
               >
                 {showTenant ? (
@@ -866,7 +866,7 @@ function CredentialsBlock() {
               <button
                 type="button"
                 onClick={() => setShowAccess((s) => !s)}
-                className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
+                className="pointer-events-auto text-white/40 hover:text-white/80"
                 aria-label={showAccess ? 'Ocultar' : 'Mostrar'}
               >
                 {showAccess ? (
@@ -951,20 +951,20 @@ function FollowUpBlock() {
           <Bell className="h-3.5 w-3.5" />
         </span>
         <div>
-          <h2 className="text-sm font-medium text-foreground">
+          <h2 className="text-sm font-medium text-white">
             Follow-up automático
           </h2>
-          <p className="text-xs text-foreground/45">
+          <p className="text-xs text-white/45">
             Os alertas aparecem no Dashboard nos dias 3, 7, 15 e 30. Variáveis:{' '}
-            <code className="text-foreground/70">{'{nome}'}</code>{' '}
-            <code className="text-foreground/70">{'{empresa}'}</code>{' '}
-            <code className="text-foreground/70">{'{dia}'}</code>.
+            <code className="text-white/70">{'{nome}'}</code>{' '}
+            <code className="text-white/70">{'{empresa}'}</code>{' '}
+            <code className="text-white/70">{'{dia}'}</code>.
           </p>
         </div>
       </header>
 
       <div className="space-y-4 rounded-xl border border-line bg-card p-5">
-        <label className="flex items-center gap-2 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2.5 text-sm text-foreground/85">
+        <label className="flex items-center gap-2 rounded-lg border border-line bg-white/[0.02] px-3 py-2.5 text-sm text-white/85">
           <input
             type="checkbox"
             checked={enabled}

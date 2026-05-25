@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
@@ -128,7 +128,7 @@ export function AsaasImportModal({
       }
     >
       {step === 'loading' && (
-        <div className="grid place-items-center py-12 text-sm text-foreground/55">
+        <div className="grid place-items-center py-12 text-sm text-white/55">
           <span className="inline-flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" />
             Consultando Asaas…
@@ -139,8 +139,8 @@ export function AsaasImportModal({
       {step === 'done' && summary && (
         <div className="grid place-items-center py-12 text-center">
           <CheckCircle2 className="h-10 w-10 text-success" />
-          <p className="mt-3 text-sm text-foreground">Pronto!</p>
-          <p className="mt-1 max-w-md text-xs text-foreground/55">{summary}</p>
+          <p className="mt-3 text-sm text-white">Pronto!</p>
+          <p className="mt-1 max-w-md text-xs text-white/55">{summary}</p>
         </div>
       )}
 
@@ -156,20 +156,20 @@ export function AsaasImportModal({
 
           {m.alreadyLinked.length > 0 && (
             <Section title="Já vinculados" tone="success" count={m.alreadyLinked.length}>
-              <ul className="divide-y divide-elevate/[0.04]">
+              <ul className="divide-y divide-white/[0.04]">
                 {m.alreadyLinked.slice(0, 8).map(({ client, asaas }) => (
                   <li key={client.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                    <span className="text-foreground">{client.company || client.name}</span>
-                    <span className="text-xs text-foreground/55">↔ {asaas.name}</span>
+                    <span className="text-white">{client.company || client.name}</span>
+                    <span className="text-xs text-white/55">↔ {asaas.name}</span>
                   </li>
                 ))}
                 {m.alreadyLinked.length > 8 && (
-                  <li className="py-2 text-center text-xs text-foreground/45">
+                  <li className="py-2 text-center text-xs text-white/45">
                     + {m.alreadyLinked.length - 8} mais
                   </li>
                 )}
               </ul>
-              <p className="mt-2 text-xs text-foreground/45">
+              <p className="mt-2 text-xs text-white/45">
                 Vão ser sincronizados automaticamente também.
               </p>
             </Section>
@@ -177,7 +177,7 @@ export function AsaasImportModal({
 
           {m.suggestions.length > 0 ? (
             <Section title="Sugestões de vínculo" tone="info" count={m.suggestions.length}>
-              <ul className="divide-y divide-elevate/[0.04]">
+              <ul className="divide-y divide-white/[0.04]">
                 {m.suggestions.map(({ client, asaas, via }) => {
                   const isSelected = selected.has(client.id)
                   return (
@@ -190,11 +190,11 @@ export function AsaasImportModal({
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggle(client.id)}
-                          className="h-4 w-4 rounded border-elevate/20 bg-surface accent-accent"
+                          className="h-4 w-4 rounded border-white/20 bg-surface accent-accent"
                         />
                         <div>
-                          <div className="text-sm text-foreground">{client.company || client.name}</div>
-                          <div className="text-xs text-foreground/55">
+                          <div className="text-sm text-white">{client.company || client.name}</div>
+                          <div className="text-xs text-white/55">
                             ↔ {asaas.name} · {asaas.email || asaas.cpfCnpj || asaas.id}
                           </div>
                         </div>
@@ -218,7 +218,7 @@ export function AsaasImportModal({
 
           {m.unmatchedCrm.length > 0 && (
             <Section title="Clientes CRM sem match no Asaas" tone="warning" count={m.unmatchedCrm.length}>
-              <p className="text-xs text-foreground/55">
+              <p className="text-xs text-white/55">
                 Cadastrados aqui mas não localizados na sua conta Asaas. Crie a cobrança pelo card do cliente
                 ou vincule manualmente.
               </p>
@@ -227,7 +227,7 @@ export function AsaasImportModal({
 
           {m.unmatchedAsaas.length > 0 && (
             <Section title="Customers Asaas sem cliente no CRM" tone="warning" count={m.unmatchedAsaas.length}>
-              <p className="text-xs text-foreground/55">
+              <p className="text-xs text-white/55">
                 Existem no Asaas mas não há cliente correspondente aqui. Crie-os manualmente em Clientes
                 pra incluí-los no painel financeiro.
               </p>
@@ -282,14 +282,14 @@ function Stat({
   tone?: 'neutral' | 'success' | 'info' | 'warning'
 }) {
   const tones = {
-    neutral: 'text-foreground',
+    neutral: 'text-white',
     success: 'text-success',
     info: 'text-accent',
     warning: 'text-warning',
   }
   return (
-    <div className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wider text-foreground/45">{label}</div>
+    <div className="rounded-lg border border-line bg-white/[0.02] px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wider text-white/45">{label}</div>
       <div className={`mt-0.5 text-lg font-semibold tabular-nums ${tones[tone]}`}>{value}</div>
     </div>
   )
@@ -307,9 +307,9 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-xl border border-line bg-elevate/[0.02] p-3">
+    <section className="rounded-xl border border-line bg-white/[0.02] p-3">
       <header className="mb-2 flex items-center justify-between">
-        <h4 className="text-sm font-medium text-foreground">{title}</h4>
+        <h4 className="text-sm font-medium text-white">{title}</h4>
         <Badge tone={tone}>{count}</Badge>
       </header>
       {children}

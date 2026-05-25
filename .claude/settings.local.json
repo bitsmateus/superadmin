@@ -15,7 +15,15 @@
       "Bash(xargs grep -l \"stage_history\\\\|audit_log\\\\|STAGE_COLORS\\\\|NEXT_STAGE\")",
       "Bash(echo \"exit=$?\")",
       "Bash(echo \"tsc exit=$?\")",
-      "Bash(taskkill //F //IM node.exe)"
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(git fsck *)",
+      "Bash(git config *)",
+      "Bash(git rev-list *)",
+      "PowerShell(npm run dev 2>&1)",
+      "PowerShell(npm install 2>&1)",
+      "Bash(Get-ChildItem -Path src -Recurse -Filter *.ts -o EV)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\mateu\\\\Desktop\\\\superadmin\\\\src\" -Recurse -Filter \"*.ts\" -o Name)"
     ]
   }
 }

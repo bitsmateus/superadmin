@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import {
   CheckCircle2,
   Clock3,
@@ -190,14 +190,14 @@ export function FinanceTab({ client }: { client: Client }) {
       </div>
 
       {/* Asaas */}
-      <div className="flex items-center justify-between rounded-xl border border-line bg-elevate/[0.02] px-4 py-3">
+      <div className="flex items-center justify-between rounded-xl border border-line bg-white/[0.02] px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
             <CreditCard className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">Asaas</div>
-            <div className="text-xs text-foreground/55 truncate">
+            <div className="text-sm font-medium text-white">Asaas</div>
+            <div className="text-xs text-white/55 truncate">
               {client.asaasCustomerId
                 ? `Vinculado · ${client.asaasCustomerId}`
                 : 'Sem vínculo — vincule pra importar pagamentos existentes'}
@@ -223,7 +223,7 @@ export function FinanceTab({ client }: { client: Client }) {
                 type="button"
                 onClick={onUnlink}
                 aria-label="Desvincular Asaas"
-                className="rounded-md p-2 text-foreground/40 hover:bg-danger/10 hover:text-danger"
+                className="rounded-md p-2 text-white/40 hover:bg-danger/10 hover:text-danger"
                 title="Desvincular Asaas"
               >
                 <Unlink className="h-4 w-4" />
@@ -270,7 +270,7 @@ export function FinanceTab({ client }: { client: Client }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider text-foreground/40">
+                <tr className="text-left text-[11px] uppercase tracking-wider text-white/40">
                   <th className="py-2 pr-3 font-normal">Tipo</th>
                   <th className="py-2 pr-3 font-normal">Valor</th>
                   <th className="py-2 pr-3 font-normal">Vencimento</th>
@@ -279,9 +279,9 @@ export function FinanceTab({ client }: { client: Client }) {
                   <th className="py-2 pr-0 text-right font-normal">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-elevate/[0.04]">
+              <tbody className="divide-y divide-white/[0.04]">
                 {sorted.map((p) => (
-                  <tr key={p.id} className="text-foreground/85">
+                  <tr key={p.id} className="text-white/85">
                     <td className="py-2 pr-3">
                       <Badge tone={p.type === 'implementation' ? 'info' : p.type === 'monthly' ? 'success' : 'neutral'}>
                         {TYPE_LABEL[p.type]}
@@ -290,7 +290,7 @@ export function FinanceTab({ client }: { client: Client }) {
                     <td className="py-2 pr-3 tabular-nums">
                       R$ {p.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="py-2 pr-3 text-foreground/60">{formatDateShort(p.dueDate)}</td>
+                    <td className="py-2 pr-3 text-white/60">{formatDateShort(p.dueDate)}</td>
                     <td className="py-2 pr-3">
                       {p.paidAt ? (
                         <Badge tone="success" dot>{formatDateShort(p.paidAt)}</Badge>
@@ -298,7 +298,7 @@ export function FinanceTab({ client }: { client: Client }) {
                         <Badge tone="warning" dot>Em aberto</Badge>
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-foreground/60">
+                    <td className="py-2 pr-3 text-white/60">
                       {p.method ? METHOD_LABEL[p.method] : '—'}
                     </td>
                     <td className="py-2 pr-0 text-right">
@@ -307,7 +307,7 @@ export function FinanceTab({ client }: { client: Client }) {
                           type="button"
                           onClick={() => openEdit(p)}
                           aria-label="Editar"
-                          className="rounded-md p-1.5 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground"
+                          className="rounded-md p-1.5 text-white/50 hover:bg-white/[0.06] hover:text-white"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -315,7 +315,7 @@ export function FinanceTab({ client }: { client: Client }) {
                           type="button"
                           onClick={() => removePayment(p)}
                           aria-label="Remover"
-                          className="rounded-md p-1.5 text-foreground/40 hover:bg-danger/10 hover:text-danger"
+                          className="rounded-md p-1.5 text-white/40 hover:bg-danger/10 hover:text-danger"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -384,9 +384,9 @@ export function FinanceTab({ client }: { client: Client }) {
           </>
         }
       >
-        <p className="text-sm text-foreground/75">
+        <p className="text-sm text-white/75">
           Remover este pagamento de{' '}
-          <strong className="text-foreground">
+          <strong className="text-white">
             R${' '}
             {(confirmDelete?.value ?? 0).toLocaleString('pt-BR', {
               minimumFractionDigits: 2,
@@ -412,7 +412,7 @@ export function FinanceTab({ client }: { client: Client }) {
           </>
         }
       >
-        <p className="text-sm text-foreground/75">
+        <p className="text-sm text-white/75">
           Remove o vínculo com o cliente Asaas. Pagamentos já importados
           continuam no histórico. Você pode vincular novamente depois.
         </p>
@@ -438,9 +438,9 @@ function SummaryCard({
     warning: 'bg-warning/10 text-warning ring-warning/20',
   }
   return (
-    <div className="rounded-xl border border-line bg-elevate/[0.02] p-3">
+    <div className="rounded-xl border border-line bg-white/[0.02] p-3">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-wider text-foreground/45">
+        <span className="text-[11px] uppercase tracking-wider text-white/45">
           {label}
         </span>
         <span
@@ -449,7 +449,7 @@ function SummaryCard({
           {icon}
         </span>
       </div>
-      <div className="mt-1.5 text-lg font-semibold tabular-nums text-foreground">
+      <div className="mt-1.5 text-lg font-semibold tabular-nums text-white">
         {value}
       </div>
     </div>
@@ -658,10 +658,10 @@ function ExtraLinksSection({
           {links.map((l) => (
             <li
               key={l.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2"
+              className="flex items-center justify-between gap-2 rounded-lg border border-line bg-white/[0.02] px-3 py-2"
             >
               <div className="min-w-0">
-                <div className="truncate text-sm text-foreground">{l.label}</div>
+                <div className="truncate text-sm text-white">{l.label}</div>
                 <a
                   href={l.url}
                   target="_blank"
@@ -675,7 +675,7 @@ function ExtraLinksSection({
                 type="button"
                 onClick={() => remove(l.id)}
                 aria-label="Remover"
-                className="rounded-md p-1.5 text-foreground/40 hover:bg-danger/10 hover:text-danger"
+                className="rounded-md p-1.5 text-white/40 hover:bg-danger/10 hover:text-danger"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -788,7 +788,7 @@ function LinkAsaasModal({
 
       <div className="mt-4 space-y-1.5">
         {!touched && (
-          <p className="text-xs text-foreground/45">
+          <p className="text-xs text-white/45">
             Use o e-mail cadastrado no Asaas pra match exato.
           </p>
         )}
@@ -801,11 +801,11 @@ function LinkAsaasModal({
         {results.map((c) => (
           <div
             key={c.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2.5"
+            className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2.5"
           >
             <div className="min-w-0">
-              <div className="text-sm text-foreground truncate">{c.name}</div>
-              <div className="text-xs text-foreground/55 truncate">
+              <div className="text-sm text-white truncate">{c.name}</div>
+              <div className="text-xs text-white/55 truncate">
                 {c.email || '—'}
                 {c.cpfCnpj && <> · CPF/CNPJ {c.cpfCnpj}</>}
               </div>

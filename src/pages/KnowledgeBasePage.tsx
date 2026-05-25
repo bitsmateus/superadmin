@@ -28,7 +28,7 @@ import { useTicketCategories, useKbArticles } from '@/hooks/useTickets'
 import { ticketsService } from '@/services/tickets'
 import { useAuth } from '@/hooks/useAuth'
 import { canManageUsers } from '@/services/supabase'
-import { supabase } from '@/services/supabase'
+import { api } from '@/services/api'
 import { cn, slugify } from '@/lib/utils'
 import type {
   KbArticle,
@@ -648,25 +648,23 @@ function TriageEditorTab() {
   const reload = React.useCallback(async () => {
     if (!selectedCat) return
     setLoading(true)
-    const { data, error } = await supabase
-      .from('ticket_triage_steps')
-      .select('*')
-      .eq('category_id', selectedCat)
-    setLoading(false)
-    if (error) {
-      toast.error('Falha ao carregar: ' + error.message)
-      return
+    try {
+      const data = await api.get<Array<Record<string, unknown>>>(`/api/triage-steps?category_id=${selectedCat}`)
+      setSteps(
+        (data ?? []).map((r) => ({
+          id: r.id as string,
+          categoryId: r.category_id as string,
+          parentId: (r.parent_id as string) ?? null,
+          question: r.question as string,
+          options: (r.options as TriageOption[]) ?? [],
+          position: (r.position as number) ?? 0,
+        })),
+      )
+    } catch (err) {
+      toast.error('Falha ao carregar: ' + (err instanceof Error ? err.message : 'Erro'))
+    } finally {
+      setLoading(false)
     }
-    setSteps(
-      ((data as Array<Record<string, unknown>> | null) ?? []).map((r) => ({
-        id: r.id as string,
-        categoryId: r.category_id as string,
-        parentId: (r.parent_id as string) ?? null,
-        question: r.question as string,
-        options: (r.options as TriageOption[]) ?? [],
-        position: (r.position as number) ?? 0,
-      })),
-    )
   }, [selectedCat])
 
   React.useEffect(() => {
@@ -904,14 +902,16 @@ function TriageEditor({
       question: question.trim(),
       options: cleanOptions,
     }
-    if (initial) {
-      const { error } = await supabase.from('ticket_triage_steps').update(row).eq('id', initial.id)
-      if (error) toast.error('Falha: ' + error.message)
-      else toast.success('Pergunta atualizada')
-    } else {
-      const { error } = await supabase.from('ticket_triage_steps').insert(row)
-      if (error) toast.error('Falha: ' + error.message)
-      else toast.success('Pergunta criada')
+    try {
+      if (initial) {
+        await api.patch(`/api/triage-steps/${initial.id}`, row)
+        toast.success('Pergunta atualizada')
+      } else {
+        await api.post('/api/triage-steps', row)
+        toast.success('Pergunta criada')
+      }
+    } catch (err) {
+      toast.error('Falha: ' + (err instanceof Error ? err.message : 'Erro'))
     }
     setSaving(false)
     onSaved()
@@ -920,15 +920,14 @@ function TriageEditor({
   const remove = async () => {
     if (!initial) return
     setDeleting(true)
-    const { error } = await supabase
-      .from('ticket_triage_steps')
-      .delete()
-      .eq('id', initial.id)
-    setDeleting(false)
-    if (error) toast.error('Falha: ' + error.message)
-    else {
+    try {
+      await api.delete(`/api/triage-steps/${initial.id}`)
       toast.success('Pergunta removida')
       onSaved()
+    } catch (err) {
+      toast.error('Falha: ' + (err instanceof Error ? err.message : 'Erro'))
+    } finally {
+      setDeleting(false)
     }
   }
 

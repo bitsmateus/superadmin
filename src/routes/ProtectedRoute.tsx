@@ -3,7 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth()
+  const { profile: session, loading } = useAuth()
   const location = useLocation()
 
   if (loading) {

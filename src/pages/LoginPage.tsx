@@ -16,7 +16,7 @@ import { signIn, useAuth } from '@/hooks/useAuth'
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation() as { state?: { from?: string } }
-  const { session, loading: authLoading } = useAuth()
+  const { profile, loading: authLoading } = useAuth()
 
   const [email, setEmail] = React.useState('')
   const [pass, setPass] = React.useState('')
@@ -24,7 +24,7 @@ export function LoginPage() {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
-  if (!authLoading && session) {
+  if (!authLoading && profile) {
     return <Navigate to={location.state?.from || '/'} replace />
   }
 
@@ -36,18 +36,16 @@ export function LoginPage() {
     }
     setLoading(true)
     setError(null)
-    const { error: err } = await signIn(email.trim(), pass)
-    setLoading(false)
-    if (err) {
-      const msg =
-        err.message === 'Invalid login credentials'
-          ? 'E-mail ou senha incorretos'
-          : err.message
-      setError(msg)
-      return
+    try {
+      await signIn(email.trim(), pass)
+      toast.success('Bem-vindo de volta')
+      navigate(location.state?.from || '/', { replace: true })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Credenciais inválidas'
+      setError(msg.includes('inválid') || msg.includes('Invalid') ? 'E-mail ou senha incorretos' : msg)
+    } finally {
+      setLoading(false)
     }
-    toast.success('Bem-vindo de volta')
-    navigate(location.state?.from || '/', { replace: true })
   }
 
   return (

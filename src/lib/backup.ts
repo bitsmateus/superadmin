@@ -5,7 +5,7 @@
  * Restore aceita o mesmo JSON e faz upsert via Supabase. Como pode sobrescrever
  * dados em produção, é uma operação destrutiva — só admin executa.
  */
-import { supabase } from '@/services/supabase'
+import { api } from '@/services/api'
 import { analyticsService } from '@/services/analytics'
 import { db } from '@/services/db'
 import type { AppSettings, Client } from '@/types/client'
@@ -95,22 +95,19 @@ export async function restoreBackup(
 
   const existing = new Set(db.getClients().map((c) => c.id))
 
-  // Faz upsert em lotes de 50 pra evitar payloads gigantes.
-  const batchSize = 50
-  for (let i = 0; i < payload.clients.length; i += batchSize) {
-    const batch = payload.clients.slice(i, i + batchSize)
-    const rows = batch.map(clientToRowForUpsert)
-    const { error } = await supabase
-      .from('clients')
-      .upsert(rows, { onConflict: 'id' })
-    if (error) {
-      result.errors.push(`Lote ${i}: ${error.message}`)
-      result.clientsSkipped += batch.length
-      continue
-    }
-    for (const c of batch) {
-      if (existing.has(c.id)) result.clientsUpdated += 1
-      else result.clientsInserted += 1
+  for (const c of payload.clients) {
+    try {
+      const row = clientToRowForUpsert(c)
+      if (existing.has(c.id)) {
+        await api.patch(`/api/clients/${c.id}`, row)
+        result.clientsUpdated++
+      } else {
+        await api.post('/api/clients', row)
+        result.clientsInserted++
+      }
+    } catch (err) {
+      result.errors.push(`${c.id}: ${err instanceof Error ? err.message : String(err)}`)
+      result.clientsSkipped++
     }
   }
 

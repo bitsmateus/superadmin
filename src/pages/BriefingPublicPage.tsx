@@ -16,7 +16,7 @@ import {
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { supabase } from '@/services/supabase'
+import { api } from '@/services/api'
 import { asText, cn } from '@/lib/utils'
 import type {
   BriefingData,
@@ -118,23 +118,20 @@ export function BriefingPublicPage() {
     }
     let cancelled = false
     ;(async () => {
-      const { data, error } = await supabase.rpc(
-        'get_client_by_briefing_token',
-        { token_in: token },
-      )
-      if (cancelled) return
-      if (error || !data || (Array.isArray(data) && data.length === 0)) {
+      try {
+        const row = await api.get<PublicClient>(`/api/public/briefing/${token}`)
+        if (cancelled) return
+        setClient({
+          id: row.id,
+          name: row.name,
+          company: row.company,
+          briefing_status: row.briefing_status ?? null,
+          briefing_revision_note: row.briefing_revision_note ?? null,
+        })
+      } catch {
+        if (cancelled) return
         setClient(null)
-        return
       }
-      const row = Array.isArray(data) ? data[0] : data
-      setClient({
-        id: row.id,
-        name: row.name,
-        company: row.company,
-        briefing_status: row.briefing_status ?? null,
-        briefing_revision_note: row.briefing_revision_note ?? null,
-      })
     })()
     return () => {
       cancelled = true
@@ -201,16 +198,14 @@ export function BriefingPublicPage() {
       submittedAt: new Date().toISOString(),
     }
     setSubmitting(true)
-    const { error } = await supabase.rpc('submit_briefing', {
-      token_in: token,
-      data_in: data,
-    })
-    setSubmitting(false)
-    if (error) {
-      toast.error('Falha ao enviar: ' + error.message)
-      return
+    try {
+      await api.post(`/api/public/briefing/${token}`, { data })
+      setSubmitted(true)
+    } catch (err) {
+      toast.error('Falha ao enviar: ' + (err instanceof Error ? err.message : 'Erro'))
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitted(true)
   }
 
   const totalSections = 7

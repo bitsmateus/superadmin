@@ -15,7 +15,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { useClients } from '@/hooks/useClients'
 import { useTickets } from '@/hooks/useTickets'
 import { useAnalyticsBooted, useStageHistory } from '@/hooks/useAnalytics'
-import { canManageUsers, supabase, type Profile } from '@/services/supabase'
+import { canManageUsers, type Profile } from '@/services/supabase'
+import { api } from '@/services/api'
 import { computeAgentPerformance } from '@/lib/analytics'
 import { cn, initials } from '@/lib/utils'
 
@@ -32,12 +33,14 @@ export function TeamPerformancePage() {
     if (!canManageUsers(profile?.role)) return
     void (async () => {
       setLoadingProfiles(true)
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: true })
-      setProfiles((data as Profile[]) ?? [])
-      setLoadingProfiles(false)
+      try {
+        const data = await api.get<Profile[]>('/api/users')
+        setProfiles(data ?? [])
+      } catch {
+        setProfiles([])
+      } finally {
+        setLoadingProfiles(false)
+      }
     })()
   }, [profile?.role])
 

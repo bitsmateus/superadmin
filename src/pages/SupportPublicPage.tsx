@@ -20,7 +20,7 @@ import {
   ThumbsUp,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { supabase } from '@/services/supabase'
+import { api } from '@/services/api'
 import { publicSupport } from '@/services/tickets'
 import { cn } from '@/lib/utils'
 import type {
@@ -432,31 +432,27 @@ function CategoryStep({
 
   React.useEffect(() => {
     void (async () => {
-      const { data, error } = await supabase
-        .from('ticket_categories')
-        .select('*')
-        .eq('active', true)
-        .order('position')
-      if (error) {
-        toast.error('Falha ao carregar categorias: ' + error.message)
+      try {
+        const data = await api.get<Array<Record<string, unknown>>>('/api/public/ticket-categories')
+        setCategories(
+          (data ?? []).map((r) => ({
+            id: r.id as string,
+            name: r.name as string,
+            description: (r.description as string) ?? undefined,
+            icon: (r.icon as string) ?? 'HelpCircle',
+            color: (r.color as string) ?? 'info',
+            position: (r.position as number) ?? 0,
+            active: r.active as boolean,
+            defaultSlaHours: (r.default_sla_hours as number) ?? 24,
+            defaultPriority: r.default_priority as TicketCategory['defaultPriority'],
+            createdAt: r.created_at as string,
+          })),
+        )
+      } catch (err) {
+        toast.error('Falha ao carregar categorias: ' + (err instanceof Error ? err.message : 'Erro'))
+      } finally {
         setLoading(false)
-        return
       }
-      setCategories(
-        (data ?? []).map((r: Record<string, unknown>) => ({
-          id: r.id as string,
-          name: r.name as string,
-          description: (r.description as string) ?? undefined,
-          icon: (r.icon as string) ?? 'HelpCircle',
-          color: (r.color as string) ?? 'info',
-          position: (r.position as number) ?? 0,
-          active: r.active as boolean,
-          defaultSlaHours: (r.default_sla_hours as number) ?? 24,
-          defaultPriority: r.default_priority as TicketCategory['defaultPriority'],
-          createdAt: r.created_at as string,
-        })),
-      )
-      setLoading(false)
     })()
   }, [])
 
@@ -550,18 +546,10 @@ function TriageStep({
 
   React.useEffect(() => {
     void (async () => {
-      const [stRes, kbRes] = await Promise.all([
-        supabase
-          .from('ticket_triage_steps')
-          .select('*')
-          .eq('category_id', category.id),
-        supabase
-          .from('kb_articles')
-          .select('*')
-          .eq('published', true)
-          .eq('category_id', category.id),
+      const [stRows, kbRows] = await Promise.all([
+        api.get<Record<string, unknown>[]>(`/api/public/triage-steps?category_id=${category.id}`).catch(() => []),
+        api.get<Record<string, unknown>[]>(`/api/public/kb-articles?category_id=${category.id}`).catch(() => []),
       ])
-      const stRows = (stRes.data ?? []) as Record<string, unknown>[]
       const mappedSteps = stRows.map((r): TicketTriageStep => ({
         id: r.id as string,
         categoryId: r.category_id as string,
@@ -571,11 +559,8 @@ function TriageStep({
         position: (r.position as number) ?? 0,
       }))
       setSteps(mappedSteps)
-
-      const kbRows = (kbRes.data ?? []) as Record<string, unknown>[]
       setArticles(kbRows.map(mapKbRow))
 
-      // Acha o primeiro passo raiz
       const root = mappedSteps
         .filter((s) => !s.parentId)
         .sort((a, b) => a.position - b.position)[0]
@@ -614,19 +599,14 @@ function TriageStep({
 
   const markResolved = async () => {
     if (suggestedArticle) {
-      // RPC SECURITY DEFINER — RLS bloqueia UPDATE direto pra anon
-      await supabase
-        .rpc('kb_mark_helpful', { article_id_in: suggestedArticle.id })
-        .then(() => {}, () => {})
+      await api.post('/api/public/kb-helpful', { article_id: suggestedArticle.id, helpful: true }).catch(() => {})
     }
     onResolved()
   }
 
   const markNotResolved = async () => {
     if (suggestedArticle) {
-      await supabase
-        .rpc('kb_mark_not_helpful', { article_id_in: suggestedArticle.id })
-        .then(() => {}, () => {})
+      await api.post('/api/public/kb-helpful', { article_id: suggestedArticle.id, helpful: false }).catch(() => {})
     }
     onEscalate()
   }

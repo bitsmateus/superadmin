@@ -119,9 +119,57 @@ export async function ticketRoutes(app: FastifyInstance) {
   );
 
   // GET /api/triage-steps
-  app.get('/api/triage-steps', { onRequest: [app.authenticate] }, async () => {
-    return query('SELECT * FROM ticket_triage_steps');
-  });
+  app.get<{ Querystring: { category_id?: string } }>(
+    '/api/triage-steps',
+    { onRequest: [app.authenticate] },
+    async (req) => {
+      if (req.query.category_id) {
+        return query('SELECT * FROM ticket_triage_steps WHERE category_id = $1', [req.query.category_id]);
+      }
+      return query('SELECT * FROM ticket_triage_steps');
+    }
+  );
+
+  // POST /api/triage-steps
+  app.post<{ Body: Record<string, unknown> }>(
+    '/api/triage-steps',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const b = req.body;
+      const [step] = await query(
+        `INSERT INTO ticket_triage_steps (category_id, parent_id, question, options, position)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [b.category_id, b.parent_id ?? null, b.question, JSON.stringify(b.options ?? []), b.position ?? 0]
+      );
+      return reply.status(201).send(step);
+    }
+  );
+
+  // PATCH /api/triage-steps/:id
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/api/triage-steps/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const b = req.body;
+      const [step] = await query(
+        `UPDATE ticket_triage_steps SET question = $1, options = $2, parent_id = $3
+         WHERE id = $4 RETURNING *`,
+        [b.question, JSON.stringify(b.options ?? []), b.parent_id ?? null, req.params.id]
+      );
+      if (!step) return reply.status(404).send({ message: 'Passo não encontrado' });
+      return step;
+    }
+  );
+
+  // DELETE /api/triage-steps/:id
+  app.delete<{ Params: { id: string } }>(
+    '/api/triage-steps/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      await query('DELETE FROM ticket_triage_steps WHERE id = $1', [req.params.id]);
+      return reply.status(204).send();
+    }
+  );
 
   // GET /api/kb-articles
   app.get('/api/kb-articles', { onRequest: [app.authenticate] }, async () => {

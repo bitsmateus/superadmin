@@ -40,6 +40,50 @@ export async function publicRoutes(app: FastifyInstance) {
     }
   );
 
+  // GET /api/public/ticket-categories
+  app.get('/api/public/ticket-categories', async () => {
+    return query('SELECT * FROM ticket_categories WHERE active = true ORDER BY position');
+  });
+
+  // GET /api/public/triage-steps?category_id=xxx
+  app.get<{ Querystring: { category_id?: string } }>(
+    '/api/public/triage-steps',
+    async (req) => {
+      if (req.query.category_id) {
+        return query('SELECT * FROM ticket_triage_steps WHERE category_id = $1', [req.query.category_id]);
+      }
+      return query('SELECT * FROM ticket_triage_steps');
+    }
+  );
+
+  // GET /api/public/kb-articles?category_id=xxx
+  app.get<{ Querystring: { category_id?: string } }>(
+    '/api/public/kb-articles',
+    async (req) => {
+      if (req.query.category_id) {
+        return query(
+          'SELECT * FROM kb_articles WHERE published = true AND category_id = $1',
+          [req.query.category_id]
+        );
+      }
+      return query('SELECT * FROM kb_articles WHERE published = true');
+    }
+  );
+
+  // POST /api/public/kb-helpful
+  app.post<{ Body: { article_id: string; helpful: boolean } }>(
+    '/api/public/kb-helpful',
+    async (req) => {
+      const { article_id, helpful } = req.body;
+      const col = helpful ? 'helpful_count' : 'not_helpful_count';
+      await query(
+        `UPDATE kb_articles SET ${col} = ${col} + 1 WHERE id = $1`,
+        [article_id]
+      );
+      return { ok: true };
+    }
+  );
+
   // POST /api/public/support-lookup
   app.post<{ Body: { email: string } }>(
     '/api/public/support-lookup',

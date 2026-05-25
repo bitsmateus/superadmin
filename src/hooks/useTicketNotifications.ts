@@ -1,19 +1,8 @@
 import * as React from 'react'
-import { supabase } from '@/services/supabase'
+import { onSseEvent } from '@/services/api'
 import { useAuth } from '@/hooks/useAuth'
 import { canSeeFinancials } from '@/services/supabase'
 
-/**
- * Notificações de tickets pro time interno:
- *  - Toca um som curto (Web Audio API — sem arquivo) quando entra novo ticket
- *  - Mostra Notification API se a aba está oculta (após permissão)
- *
- * Comportamento:
- *  - Só roda se o usuário pode ver tickets (admin/supervisor)
- *  - Pede permissão de Notification apenas 1x (interação do usuário)
- *  - Som não toca em respostas próprias do operador
- *  - Configurável via localStorage `tenanthub_notif_enabled`
- */
 const LS_KEY = 'tenanthub_notif_enabled'
 
 export function readNotificationPref(): boolean {
@@ -59,10 +48,9 @@ function playBeep() {
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35)
     osc.start(ctx.currentTime)
     osc.stop(ctx.currentTime + 0.4)
-    // Fecha o contexto após o som — evita leaks
     setTimeout(() => ctx.close().catch(() => {}), 600)
   } catch {
-    /* ignore — sound is best-effort */
+    /* ignore */
   }
 }
 
@@ -74,47 +62,40 @@ export function useTicketNotifications(): void {
     if (!canSee) return
     if (typeof window === 'undefined') return
 
-    const channel = supabase
-      .channel('ticket-notifications')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'tickets' },
-        (payload) => {
-          const row = payload.new as {
-            id: string
-            number: number
-            subject: string
-            customer_name: string | null
-            customer_company: string | null
-            priority: string
-          }
+    const unsub = onSseEvent((table, type, data) => {
+      if (table !== 'tickets' || type !== 'INSERT') return
 
-          if (!readNotificationPref()) return
+      const row = data as {
+        id: string
+        number: number
+        subject: string
+        customer_name: string | null
+        customer_company: string | null
+        priority: string
+      }
 
-          playBeep()
+      if (!readNotificationPref()) return
 
-          if (
-            typeof Notification !== 'undefined' &&
-            Notification.permission === 'granted' &&
-            document.hidden
-          ) {
-            const n = new Notification(`Novo ticket #${row.number}`, {
-              body: `${row.customer_company ?? row.customer_name ?? 'Cliente'}\n${row.subject}`,
-              tag: `ticket-${row.id}`,
-              icon: '/favicon.ico',
-            })
-            n.onclick = () => {
-              window.focus()
-              window.location.assign(`/tickets/${row.id}`)
-              n.close()
-            }
-          }
-        },
-      )
-      .subscribe()
+      playBeep()
 
-    return () => {
-      void supabase.removeChannel(channel)
-    }
+      if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted' &&
+        document.hidden
+      ) {
+        const n = new Notification(`Novo ticket #${row.number}`, {
+          body: `${row.customer_company ?? row.customer_name ?? 'Cliente'}\n${row.subject}`,
+          tag: `ticket-${row.id}`,
+          icon: '/favicon.ico',
+        })
+        n.onclick = () => {
+          window.focus()
+          window.location.assign(`/tickets/${row.id}`)
+          n.close()
+        }
+      }
+    })
+
+    return unsub
   }, [canSee])
 }

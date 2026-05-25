@@ -324,7 +324,7 @@ function subscribeRealtime() {
     } else if (table === 'settings') {
       if (type !== 'DELETE') { settingsCache = rowToSettings(data as SettingsRow); notify() }
     } else if (table === 'profiles') {
-      const row = data as Profile
+      const row = data as unknown as Profile
       if (currentProfile && row.id === currentProfile.id) { currentProfile = row; notify() }
     }
   })

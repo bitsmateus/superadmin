@@ -43,8 +43,7 @@ export function Sidebar() {
   const { profile } = useAuth()
 
   const onLogout = async () => {
-    const { error } = await signOut()
-    if (error) toast.error('Falha ao sair: ' + error.message)
+    await signOut()
     navigate('/login', { replace: true })
   }
 

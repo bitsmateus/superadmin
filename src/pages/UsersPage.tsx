@@ -20,10 +20,10 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { useAuth } from '@/hooks/useAuth'
 import {
   canManageUsers,
-  supabase,
   type Profile,
   type UserRole,
 } from '@/services/supabase'
+import { api, onSseEvent } from '@/services/api'
 import { cn, formatDateShort, initials } from '@/lib/utils'
 
 const ROLE_OPTIONS: { value: UserRole; label: string; description: string }[] = [
@@ -64,16 +64,14 @@ export function UsersPage() {
 
   const reload = React.useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: true })
-    if (error) {
-      toast.error('Falha ao carregar equipe: ' + error.message)
-    } else {
-      setProfiles((data as Profile[]) ?? [])
+    try {
+      const data = await api.get<Profile[]>('/api/users')
+      setProfiles(data ?? [])
+    } catch (err) {
+      toast.error('Falha ao carregar equipe: ' + (err instanceof Error ? err.message : 'Erro'))
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   React.useEffect(() => {
@@ -81,19 +79,10 @@ export function UsersPage() {
   }, [profile?.role, reload])
 
   React.useEffect(() => {
-    const channel = supabase
-      .channel('profiles-watch')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles' },
-        () => {
-          void reload()
-        },
-      )
-      .subscribe()
-    return () => {
-      void supabase.removeChannel(channel)
-    }
+    const unsub = onSseEvent((table) => {
+      if (table === 'profiles') void reload()
+    })
+    return unsub
   }, [reload])
 
   if (authLoading) return null
@@ -102,15 +91,13 @@ export function UsersPage() {
   }
 
   const changeRole = async (id: string, role: UserRole) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ role })
-      .eq('id', id)
-    if (error) {
-      toast.error('Falha ao alterar papel: ' + error.message)
-      return
+    try {
+      await api.patch(`/api/users/${id}`, { role })
+      toast.success('Papel atualizado')
+      void reload()
+    } catch (err) {
+      toast.error('Falha ao alterar papel: ' + (err instanceof Error ? err.message : 'Erro'))
     }
-    toast.success('Papel atualizado')
   }
 
   return (
@@ -177,8 +164,6 @@ export function UsersPage() {
           <strong className="text-foreground/80">Como criar um novo usuário:</strong>{' '}
           clique em <em>"Novo usuário"</em> — você cria o e-mail e a senha; ele
           entra com role <em>suporte</em> por padrão e você pode promover aqui.
-          A exclusão completa precisa ser feita pelo dashboard do Supabase
-          (Authentication → Users), aqui só rebaixa o papel.
         </p>
       </div>
 
@@ -210,22 +195,16 @@ function ProfileRow({
 
   const removeProfile = async () => {
     setRemoving(true)
-    // We can't delete from auth.users via the anon key (admin API only). We
-    // can however delete the profiles row, which is what controls access in
-    // the app. The user will still exist in Supabase Auth but with no role
-    // (effectively locked out until re-promoted).
-    const { error } = await supabase
-      .from('profiles')
-      .delete()
-      .eq('id', profile.id)
-    setRemoving(false)
-    if (error) {
-      toast.error('Falha ao remover: ' + error.message)
-      return
+    try {
+      await api.delete(`/api/users/${profile.id}`)
+      toast.success('Acesso removido')
+      setConfirmRemoveOpen(false)
+      onDeleted()
+    } catch (err) {
+      toast.error('Falha ao remover: ' + (err instanceof Error ? err.message : 'Erro'))
+    } finally {
+      setRemoving(false)
     }
-    toast.success('Acesso removido')
-    setConfirmRemoveOpen(false)
-    onDeleted()
   }
 
   return (
@@ -304,11 +283,9 @@ function ProfileRow({
         }
       >
         <p className="text-sm text-foreground/75">
-          Remove o profile de{' '}
+          Remove o acesso de{' '}
           <strong className="text-foreground">{profile.email}</strong> — o usuário
-          perde acesso ao painel. A conta de autenticação no Supabase continua
-          existindo (você pode excluir completamente em Authentication →
-          Users), mas sem profile não consegue entrar.
+          perde acesso ao painel imediatamente.
         </p>
       </Modal>
     </TR>
@@ -349,62 +326,20 @@ function InviteUserModal({
       return
     }
     setCreating(true)
-    // signUp via anon key substitui a sessão atual pela do novo usuário.
-    // Salvamos a sessão do admin antes e restauramos via setSession depois,
-    // pra que o admin continue logado.
-    const { data: sess } = await supabase.auth.getSession()
-    const adminSession = sess.session
-
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        data: { name: name.trim() || null },
-        emailRedirectTo: window.location.origin,
-      },
-    })
-    if (error) {
-      setCreating(false)
-      toast.error('Falha ao criar: ' + error.message)
-      return
-    }
-    const newUserId = data.user?.id
-
-    // Restaura a sessão original do admin ANTES de qualquer outra chamada
-    // (RLS de profiles update depende de quem está autenticado).
-    if (adminSession) {
-      const { error: restoreErr } = await supabase.auth.setSession({
-        access_token: adminSession.access_token,
-        refresh_token: adminSession.refresh_token,
+    try {
+      await api.post('/api/users', {
+        email: email.trim(),
+        name: name.trim() || undefined,
+        password,
+        role,
       })
-      if (restoreErr) {
-        // eslint-disable-next-line no-console
-        console.error('[users] falha ao restaurar sessão admin', restoreErr)
-        toast.error(
-          'Usuário criado, mas você precisa logar novamente: ' +
-            restoreErr.message,
-        )
-        setCreating(false)
-        onCreated()
-        return
-      }
+      toast.success('Usuário criado')
+      onCreated()
+    } catch (err) {
+      toast.error('Falha ao criar: ' + (err instanceof Error ? err.message : 'Erro'))
+    } finally {
+      setCreating(false)
     }
-
-    if (newUserId && (role !== 'suporte' || name.trim())) {
-      const patch: { role?: UserRole; name?: string } = {}
-      if (role !== 'suporte') patch.role = role
-      if (name.trim()) patch.name = name.trim()
-      const { error: rerr } = await supabase
-        .from('profiles')
-        .update(patch)
-        .eq('id', newUserId)
-      if (rerr) {
-        toast.error('Conta criada mas falhou ao setar papel: ' + rerr.message)
-      }
-    }
-    setCreating(false)
-    toast.success('Usuário criado')
-    onCreated()
   }
 
   return (

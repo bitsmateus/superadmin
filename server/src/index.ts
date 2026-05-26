@@ -10,6 +10,7 @@ import { ticketRoutes } from './routes/tickets.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { publicRoutes } from './routes/public.js';
 import { sseRoutes } from './routes/sse.js';
+import { proxyRoutes } from './routes/proxy.js';
 
 async function main() {
   const app = Fastify({ logger: true });
@@ -39,6 +40,7 @@ async function main() {
   await app.register(analyticsRoutes);
   await app.register(publicRoutes);
   await app.register(sseRoutes);
+  await app.register(proxyRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

@@ -2,9 +2,14 @@ import axios, { AxiosError, AxiosRequestConfig } from 'axios'
 import { toast } from 'sonner'
 import { type ServerConfig } from '@/store/authStore'
 
+// In dev, Vite proxies /_proxy/:id → server.baseUrl (no CORS).
+// In production, calls go through our Fastify backend at /api/proxy/* which
+// forwards server-to-server, avoiding browser CORS restrictions entirely.
+const BACKEND_URL = import.meta.env.VITE_API_URL ?? ''
+
 export function buildBaseURL(server: ServerConfig): string {
   if (import.meta.env.DEV) return `/_proxy/${server.id}`
-  return server.baseUrl
+  return `${BACKEND_URL}/api/proxy`
 }
 
 let warned401: Record<string, number> = {}
@@ -24,6 +29,22 @@ export async function apiRequest<T = unknown>(
   server: ServerConfig,
   options: AxiosRequestConfig,
 ): Promise<T> {
+  const isProxy = !import.meta.env.DEV
+
+  // When going through the backend proxy in production, we need:
+  //   Authorization: our panel JWT (to pass Fastify's authenticate hook)
+  //   X-Proxy-Target: the external server's base URL
+  //   X-Api-Token: the external server's API token
+  const extraHeaders: Record<string, string> = isProxy
+    ? {
+        'X-Proxy-Target': server.baseUrl,
+        'X-Api-Token': server.apiToken,
+        Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}`,
+      }
+    : {
+        Authorization: `Bearer ${server.apiToken}`,
+      }
+
   try {
     const response = await axios.request<T>({
       ...options,
@@ -32,7 +53,7 @@ export async function apiRequest<T = unknown>(
         'Content-Type': 'application/json',
         Accept: 'application/json',
         ...(options.headers ?? {}),
-        Authorization: `Bearer ${server.apiToken}`,
+        ...extraHeaders,
       },
       timeout: 30_000,
     })

@@ -20,7 +20,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="mb-1.5 block text-xs font-medium text-white/70">
+          <label htmlFor={inputId} className="mb-1.5 block text-xs font-medium text-foreground/70">
             {label}
           </label>
         )}
@@ -29,8 +29,8 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             ref={ref}
             id={inputId}
             className={cn(
-              'h-10 w-full appearance-none rounded-lg bg-surface px-3 pr-9 text-sm text-white',
-              'border border-white/10 focus:outline-none transition-colors',
+              'h-10 w-full appearance-none rounded-lg bg-surface px-3 pr-9 text-sm text-foreground',
+              'border border-line focus:outline-none transition-colors',
               'focus:border-accent focus:ring-4 focus:ring-accent/15',
               error && 'border-danger/60 focus:border-danger focus:ring-danger/15',
               className,
@@ -38,15 +38,15 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             {...rest}
           >
             {options.map((opt) => (
-              <option key={opt.value} value={opt.value} className="bg-card text-white">
+              <option key={opt.value} value={opt.value} className="bg-card text-foreground">
                 {opt.label}
               </option>
             ))}
           </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40" />
         </div>
         {(hint || error) && (
-          <p className={cn('mt-1.5 text-xs', error ? 'text-danger' : 'text-white/40')}>
+          <p className={cn('mt-1.5 text-xs', error ? 'text-danger' : 'text-foreground/40')}>
             {error || hint}
           </p>
         )}

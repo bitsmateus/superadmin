@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   ArrowRight,
   Check,
@@ -86,9 +86,9 @@ export function OverviewTab({ client }: { client: Client }) {
           />
           <div className="sm:col-span-2">
             <FieldLabel>Entrada</FieldLabel>
-            <p className="mt-1 text-sm text-white/85">
+            <p className="mt-1 text-sm text-foreground/85">
               {formatDate(client.createdAt)}{' '}
-              <span className="text-white/40">({timeAgo(client.createdAt)})</span>
+              <span className="text-foreground/40">({timeAgo(client.createdAt)})</span>
             </p>
           </div>
         </div>
@@ -113,21 +113,21 @@ export function OverviewTab({ client }: { client: Client }) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <FieldLabel>Nome do tenant</FieldLabel>
-              <p className="mt-1 text-sm text-white/85">
+              <p className="mt-1 text-sm text-foreground/85">
                 {client.tenantName ?? client.tenantId ?? '—'}
               </p>
             </div>
             <div>
               <FieldLabel>ID</FieldLabel>
-              <p className="mt-1 text-sm text-white/85">
-                <code className="text-white/70">{client.tenantId ?? '—'}</code>
+              <p className="mt-1 text-sm text-foreground/85">
+                <code className="text-foreground/70">{client.tenantId ?? '—'}</code>
               </p>
             </div>
             <div className="sm:col-span-2">
               <FieldLabel>E-mail de suporte</FieldLabel>
               <div className="mt-1 flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5 text-white/40" />
-                <span className="text-sm text-white/85">
+                <Mail className="h-3.5 w-3.5 text-foreground/40" />
+                <span className="text-sm text-foreground/85">
                   {client.supportEmail ?? '—'}
                 </span>
                 {client.supportEmail && (
@@ -138,7 +138,7 @@ export function OverviewTab({ client }: { client: Client }) {
                       if (ok) toast.success('E-mail copiado')
                       else toast.error('Não foi possível copiar')
                     }}
-                    className="rounded-md p-1 text-white/40 hover:bg-white/[0.06] hover:text-white"
+                    className="rounded-md p-1 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
                     aria-label="Copiar e-mail"
                   >
                     <Copy className="h-3.5 w-3.5" />
@@ -164,11 +164,11 @@ export function OverviewTab({ client }: { client: Client }) {
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
               placeholder="Registre aqui mensagens trocadas, observações ou qualquer informação relevante…"
-              className="min-h-[80px] flex-1 resize-y rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+              className="min-h-[80px] flex-1 resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
             />
           </div>
           <div className="flex items-center justify-between gap-2">
-            <label className="inline-flex items-center gap-2 text-xs text-white/65 cursor-pointer">
+            <label className="inline-flex items-center gap-2 text-xs text-foreground/65 cursor-pointer">
               <input
                 type="checkbox"
                 checked={noteInternal}
@@ -189,7 +189,7 @@ export function OverviewTab({ client }: { client: Client }) {
           </div>
 
           {(client.notes ?? []).length === 0 ? (
-            <p className="text-xs text-white/40">Nenhuma mensagem ainda.</p>
+            <p className="text-xs text-foreground/40">Nenhuma mensagem ainda.</p>
           ) : (
             <ul className="space-y-2">
               {(client.notes ?? []).map((n) => (
@@ -199,18 +199,18 @@ export function OverviewTab({ client }: { client: Client }) {
                     'rounded-lg border p-3',
                     n.internal
                       ? 'border-warning/30 bg-warning/[0.06]'
-                      : 'border-line bg-white/[0.02]',
+                      : 'border-line bg-elevate/[0.02]',
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/[0.04] text-[10px] font-medium text-white/85 ring-1 ring-line">
+                    <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[10px] font-medium text-foreground/85 ring-1 ring-line">
                       {initials(n.author) || (
                         <UserCircle2 className="h-3.5 w-3.5" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
                           {asText(n.author, '—')}
                           {n.internal && (
                             <span className="inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning">
@@ -219,11 +219,11 @@ export function OverviewTab({ client }: { client: Client }) {
                             </span>
                           )}
                         </span>
-                        <span className="text-[10px] text-white/40">
+                        <span className="text-[10px] text-foreground/40">
                           {timeAgo(n.createdAt)}
                         </span>
                       </div>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-white/85">
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">
                         {asText(n.text)}
                       </p>
                     </div>
@@ -244,25 +244,25 @@ export function OverviewTab({ client }: { client: Client }) {
         }
       >
         {(client.logs ?? []).length === 0 ? (
-          <p className="text-xs text-white/40">Sem atividade ainda.</p>
+          <p className="text-xs text-foreground/40">Sem atividade ainda.</p>
         ) : (
           <ol className="space-y-2.5">
             {(client.logs ?? []).map((log) => (
               <li key={log.id} className="flex items-start gap-3">
-                <span className="mt-1.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/[0.04] text-white/55 ring-1 ring-line">
+                <span className="mt-1.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-foreground/55 ring-1 ring-line">
                   {iconForAction(log.action)}
                 </span>
-                <div className="min-w-0 flex-1 rounded-md border border-line bg-white/[0.02] px-3 py-2">
+                <div className="min-w-0 flex-1 rounded-md border border-line bg-elevate/[0.02] px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-white/90">
+                    <span className="text-sm text-foreground/90">
                       {asText(log.action)}
                     </span>
-                    <span className="text-[10px] text-white/40">
+                    <span className="text-[10px] text-foreground/40">
                       {timeAgo(log.createdAt)}
                     </span>
                   </div>
                   {log.detail && (
-                    <p className="mt-0.5 text-xs text-white/55">
+                    <p className="mt-0.5 text-xs text-foreground/55">
                       {asText(log.detail)}
                     </p>
                   )}
@@ -340,13 +340,13 @@ function InlineField({
           onClick={() => setEditing(true)}
           className={cn(
             'group mt-1 flex w-full items-center justify-between gap-2 rounded-md border border-transparent px-2 py-1.5 text-left text-sm transition-colors',
-            'hover:border-line hover:bg-white/[0.02]',
+            'hover:border-line hover:bg-elevate/[0.02]',
           )}
         >
-          <span className={value ? 'text-white/90' : 'text-white/40'}>
+          <span className={value ? 'text-foreground/90' : 'text-foreground/40'}>
             {value || placeholder || '—'}
           </span>
-          <Pencil className="h-3 w-3 text-white/30 opacity-0 transition-opacity group-hover:opacity-100" />
+          <Pencil className="h-3 w-3 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
       )}
     </div>

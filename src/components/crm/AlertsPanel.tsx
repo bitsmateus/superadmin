@@ -108,10 +108,10 @@ export function AlertsPanel() {
           <Bell className="h-4 w-4" />
         </span>
         <div>
-          <h3 className="text-sm font-medium text-white">
+          <h3 className="text-sm font-medium text-foreground">
             Sem alertas no momento
           </h3>
-          <p className="text-xs text-white/55">
+          <p className="text-xs text-foreground/55">
             Quando houver reuniões agendadas, follow-ups, contratos ou
             briefings pendentes, eles aparecem aqui.
           </p>
@@ -167,8 +167,8 @@ function PanelCard({
             {panel.icon}
           </span>
           <div>
-            <h3 className="text-sm font-medium text-white">{panel.title}</h3>
-            <p className="text-[11px] text-white/45">{panel.description}</p>
+            <h3 className="text-sm font-medium text-foreground">{panel.title}</h3>
+            <p className="text-[11px] text-foreground/45">{panel.description}</p>
           </div>
         </div>
         <Badge tone={panel.tone} dot>
@@ -211,12 +211,12 @@ function AlertRow({
   }
 
   return (
-    <li className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.02]">
+    <li className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-elevate/[0.02]">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-white">{alert.title}</p>
-        <p className="truncate text-[11px] text-white/55">{alert.subtitle}</p>
+        <p className="truncate text-sm font-medium text-foreground">{alert.title}</p>
+        <p className="truncate text-[11px] text-foreground/55">{alert.subtitle}</p>
         {alert.message && (
-          <p className="mt-1 line-clamp-2 text-[11px] text-white/45">
+          <p className="mt-1 line-clamp-2 text-[11px] text-foreground/45">
             {alert.message.length > 110
               ? alert.message.slice(0, 110) + '…'
               : alert.message}

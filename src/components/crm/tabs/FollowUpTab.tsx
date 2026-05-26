@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import {
   Bell,
   CheckCircle2,
@@ -59,7 +59,7 @@ export function FollowUpTab({ client }: { client: Client }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start gap-2 rounded-lg border border-accent/20 bg-accent/[0.05] px-3 py-2.5 text-sm text-white/85">
+      <div className="flex items-start gap-2 rounded-lg border border-accent/20 bg-accent/[0.05] px-3 py-2.5 text-sm text-foreground/85">
         <Bell className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
         <span>
           Os alertas de follow-up aparecem no <strong>Dashboard</strong> nos
@@ -70,7 +70,7 @@ export function FollowUpTab({ client }: { client: Client }) {
 
       {(client.followUps ?? []).length === 0 ? (
         <Section>
-          <p className="text-sm text-white/55">
+          <p className="text-sm text-foreground/55">
             Os follow-ups são agendados automaticamente quando você concluir a
             entrega.
           </p>
@@ -94,13 +94,13 @@ export function FollowUpTab({ client }: { client: Client }) {
                           : 'bg-white/30',
                   )}
                 />
-                <div className="rounded-xl border border-line bg-white/[0.02] p-3">
+                <div className="rounded-xl border border-line bg-elevate/[0.02] p-3">
                   <header className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-white">
+                      <span className="text-sm font-medium text-foreground">
                         Dia {fu.dayNumber}
                       </span>
-                      <span className="text-[11px] text-white/45">
+                      <span className="text-[11px] text-foreground/45">
                         {formatDate(fu.scheduledFor)}
                       </span>
                     </div>
@@ -130,13 +130,13 @@ export function FollowUpTab({ client }: { client: Client }) {
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-white/85">
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/85">
                       {fu.message}
                     </p>
                   )}
 
                   <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                    <label className="mr-auto inline-flex items-center gap-1.5 text-[11px] text-white/55">
+                    <label className="mr-auto inline-flex items-center gap-1.5 text-[11px] text-foreground/55">
                       <input
                         type="checkbox"
                         className="h-3.5 w-3.5 accent-[#4F8EF7]"

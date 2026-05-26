@@ -13,7 +13,7 @@ export function THead({ className, ...rest }: React.HTMLAttributes<HTMLTableSect
   return (
     <thead
       className={cn(
-        'bg-white/[0.02] text-[11px] uppercase tracking-wider text-white/45',
+        'bg-elevate/[0.02] text-[11px] uppercase tracking-wider text-foreground/45',
         className,
       )}
       {...rest}
@@ -29,7 +29,7 @@ export function TR({ className, ...rest }: React.HTMLAttributes<HTMLTableRowElem
   return (
     <tr
       className={cn(
-        'border-b border-line/80 last:border-b-0 transition-colors hover:bg-white/[0.03]',
+        'border-b border-line/80 last:border-b-0 transition-colors hover:bg-elevate/[0.03]',
         className,
       )}
       {...rest}
@@ -48,6 +48,6 @@ export function TH({ className, ...rest }: React.ThHTMLAttributes<HTMLTableCellE
 
 export function TD({ className, ...rest }: React.TdHTMLAttributes<HTMLTableCellElement>) {
   return (
-    <td className={cn('px-4 py-3.5 align-middle text-white/85', className)} {...rest} />
+    <td className={cn('px-4 py-3.5 align-middle text-foreground/85', className)} {...rest} />
   )
 }

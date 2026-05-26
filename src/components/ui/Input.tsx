@@ -21,14 +21,14 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="mb-1.5 block text-xs font-medium text-white/70"
+            className="mb-1.5 block text-xs font-medium text-foreground/70"
           >
             {label}
           </label>
         )}
         <div className="relative">
           {leftIcon && (
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40">
               {leftIcon}
             </span>
           )}
@@ -36,8 +36,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={cn(
-              'h-10 w-full rounded-lg bg-surface px-3 text-sm text-white',
-              'border border-white/10 placeholder:text-white/30',
+              'h-10 w-full rounded-lg bg-surface px-3 text-sm text-foreground',
+              'border border-line placeholder:text-foreground/30',
               'transition-colors focus:outline-none',
               'focus:border-accent focus:ring-4 focus:ring-accent/15',
               leftIcon && 'pl-9',
@@ -48,7 +48,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             {...rest}
           />
           {rightIcon && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40">
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40">
               {rightIcon}
             </span>
           )}
@@ -57,7 +57,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <p
             className={cn(
               'mt-1.5 text-xs',
-              error ? 'text-danger' : 'text-white/40',
+              error ? 'text-danger' : 'text-foreground/40',
             )}
           >
             {error || hint}
@@ -83,7 +83,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="mb-1.5 block text-xs font-medium text-white/70"
+            className="mb-1.5 block text-xs font-medium text-foreground/70"
           >
             {label}
           </label>
@@ -92,8 +92,8 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'w-full rounded-lg bg-surface px-3 py-2 text-sm text-white',
-            'border border-white/10 placeholder:text-white/30',
+            'w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground',
+            'border border-line placeholder:text-foreground/30',
             'transition-colors focus:outline-none min-h-[90px] resize-y',
             'focus:border-accent focus:ring-4 focus:ring-accent/15',
             error && 'border-danger/60 focus:border-danger focus:ring-danger/15',
@@ -105,7 +105,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           <p
             className={cn(
               'mt-1.5 text-xs',
-              error ? 'text-danger' : 'text-white/40',
+              error ? 'text-danger' : 'text-foreground/40',
             )}
           >
             {error || hint}

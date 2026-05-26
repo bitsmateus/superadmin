@@ -83,7 +83,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
   if (!clientId || !client) {
     return (
       <Drawer open={Boolean(clientId)} onClose={onClose} title="Cliente">
-        <div className="grid h-full place-items-center p-10 text-sm text-white/50">
+        <div className="grid h-full place-items-center p-10 text-sm text-foreground/50">
           <span className="inline-flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" /> Cliente não encontrado
           </span>
@@ -130,16 +130,16 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
                 {initials(client.name)}
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-base font-semibold text-white">
+                <h2 className="truncate text-base font-semibold text-foreground">
                   {asText(client.name, 'Cliente')}
                 </h2>
-                <p className="truncate text-xs text-white/50">
+                <p className="truncate text-xs text-foreground/50">
                   {asText(client.company, '—')}
                 </p>
                 <div className="mt-1.5 flex items-center gap-2">
                   <StageBadge stage={client.stage} />
                   {user && (
-                    <span className="text-[10px] uppercase tracking-wider text-white/40">
+                    <span className="text-[10px] uppercase tracking-wider text-foreground/40">
                       Operador: {user}
                     </span>
                   )}
@@ -164,7 +164,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
                           <button
                             type="button"
                             onClick={() => advance(NEXT_STAGE[client.stage]!)}
-                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm text-white hover:bg-white/[0.05]"
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm text-foreground hover:bg-elevate/[0.05]"
                           >
                             Próxima
                             <StageBadge
@@ -181,7 +181,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
                             <button
                               type="button"
                               onClick={() => advance(s)}
-                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm text-white/70 hover:bg-white/[0.05] hover:text-white"
+                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm text-foreground/70 hover:bg-elevate/[0.05] hover:text-foreground"
                             >
                               {STAGE_COLORS[s].label}
                               <StageBadge stage={s} size="sm" />
@@ -206,7 +206,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
                   type="button"
                   onClick={() => setConfirmChurn(true)}
                   aria-label="Marcar como cancelado"
-                  className="ml-auto rounded-md p-2 text-white/40 hover:bg-danger/10 hover:text-danger transition-colors"
+                  className="ml-auto rounded-md p-2 text-foreground/40 hover:bg-danger/10 hover:text-danger transition-colors"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -288,9 +288,9 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
           </>
         }
       >
-        <p className="text-sm text-white/70">
+        <p className="text-sm text-foreground/70">
           Confirma marcar{' '}
-          <span className="font-semibold text-white">
+          <span className="font-semibold text-foreground">
             {asText(client.name)}
           </span>{' '}
           como cancelado? Ele sai do pipeline ativo (vai para "churned").
@@ -303,7 +303,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
 // Helper for sub-components (keeps Tailwind happy with consistent labels)
 export function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[11px] uppercase tracking-wider text-white/40">
+    <div className="text-[11px] uppercase tracking-wider text-foreground/40">
       {children}
     </div>
   )
@@ -321,11 +321,11 @@ export function Section({
   className?: string
 }) {
   return (
-    <section className={cn('rounded-xl border border-line bg-white/[0.02] p-4', className)}>
+    <section className={cn('rounded-xl border border-line bg-elevate/[0.02] p-4', className)}>
       {(title || action) && (
         <header className="mb-3 flex items-center justify-between gap-2">
           {title && (
-            <h3 className="text-sm font-medium text-white">{title}</h3>
+            <h3 className="text-sm font-medium text-foreground">{title}</h3>
           )}
           {action}
         </header>

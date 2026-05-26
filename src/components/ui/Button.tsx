@@ -16,12 +16,12 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 const variants: Record<Variant, string> = {
   primary: 'btn-primary text-white',
   secondary:
-    'bg-white/[0.04] hover:bg-white/[0.08] text-white border border-line',
-  ghost: 'bg-transparent hover:bg-white/[0.05] text-white/80 hover:text-white',
+    'bg-elevate/[0.04] hover:bg-elevate/[0.08] text-foreground border border-line',
+  ghost: 'bg-transparent hover:bg-elevate/[0.05] text-foreground/80 hover:text-foreground',
   danger:
     'bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30',
   outline:
-    'bg-transparent hover:bg-white/[0.04] text-white border border-line',
+    'bg-transparent hover:bg-elevate/[0.04] text-foreground border border-line',
 }
 
 const sizes: Record<Size, string> = {

@@ -7,7 +7,7 @@ export function Layout() {
   useAsaasAutoSync()
   useTicketNotifications()
   return (
-    <div className="min-h-screen bg-bg text-white">
+    <div className="min-h-screen bg-bg text-foreground">
       <Sidebar />
       <main className="pl-[220px]">
         <div className="min-h-screen">

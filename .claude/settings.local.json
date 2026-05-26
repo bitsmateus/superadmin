@@ -23,7 +23,12 @@
       "PowerShell(npm install 2>&1)",
       "Bash(Get-ChildItem -Path src -Recurse -Filter *.ts -o EV)",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\mateu\\\\Desktop\\\\superadmin\\\\src\" -Recurse -Filter \"*.ts\" -o Name)"
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\mateu\\\\Desktop\\\\superadmin\\\\src\" -Recurse -Filter \"*.ts\" -o Name)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(powershell -Command ' *)",
+      "Bash(npx vite *)"
     ]
   }
 }

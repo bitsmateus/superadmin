@@ -18,14 +18,14 @@ export type Theme = 'dark' | 'light'
 const LS_KEY = 'tenanthub_theme'
 
 export function readStoredTheme(): Theme {
-  if (typeof window === 'undefined') return 'dark'
+  if (typeof window === 'undefined') return 'light'
   try {
     const raw = window.localStorage.getItem(LS_KEY)
     if (raw === 'light' || raw === 'dark') return raw
   } catch {
     /* ignore */
   }
-  return 'dark'
+  return 'light'
 }
 
 export function writeStoredTheme(theme: Theme): void {

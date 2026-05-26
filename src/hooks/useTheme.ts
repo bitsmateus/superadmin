@@ -15,7 +15,7 @@ import * as React from 'react'
  */
 export type Theme = 'dark' | 'light'
 
-const LS_KEY = 'tenanthub_theme'
+const LS_KEY = 'tenanthub_theme_v2'
 
 export function readStoredTheme(): Theme {
   if (typeof window === 'undefined') return 'light'

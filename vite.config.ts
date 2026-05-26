@@ -1,6 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
+import { execSync } from 'node:child_process'
+
+function getAppVersion(): string {
+  try {
+    const count = execSync('git rev-list --count HEAD', { timeout: 5000 })
+      .toString()
+      .trim()
+    return `1.${count}`
+  } catch {
+    return '1.0'
+  }
+}
 
 const PROXY_SERVERS = [
   { id: 'chat', target: 'https://chatapi.nxsystems.com.br' },
@@ -33,6 +45,9 @@ export default defineConfig(() => {
 
   return {
     plugins: [react()],
+    define: {
+      __APP_VERSION__: JSON.stringify(getAppVersion()),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

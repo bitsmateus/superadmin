@@ -55,13 +55,13 @@
   /* Sidebar branca/quase branca com borda pra separar do conteúdo */
   --sidebar-rgb: 248 250 255;
 
-  /* Foreground navy escuro — mais suave que preto puro, mas legível */
-  --foreground-rgb: 15 23 42;
-  --elevate-rgb: 15 23 42;
+  /* Preto puro: /40 → #666, /55 → #737373, /70 → #4d4d4d — todos legíveis */
+  --foreground-rgb: 0 0 0;
+  --elevate-rgb: 0 0 0;
 
   /* Bordas sutis azuladas */
-  --line: rgba(79, 142, 247, 0.14);
-  --line-soft: rgba(79, 142, 247, 0.08);
+  --line: rgba(0, 0, 0, 0.10);
+  --line-soft: rgba(0, 0, 0, 0.06);
 
   --focus-ring-bg: #ffffff;
 

@@ -171,11 +171,13 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-line p-3">
-        <div className="mb-3">
+      <div className="border-t border-line p-3 space-y-1">
+        <div className="mb-2">
           <ServerSwitcher />
         </div>
-        <div className="mb-2 flex items-center gap-2 rounded-lg px-2 py-1.5">
+
+        {/* Usuário */}
+        <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
           <div className="grid h-7 w-7 place-items-center rounded-full bg-elevate/[0.05] text-foreground/70 ring-1 ring-line">
             <UserCircle2 className="h-4 w-4" />
           </div>
@@ -183,26 +185,35 @@ export function Sidebar() {
             <div className="truncate text-xs font-medium text-foreground/90">
               {profile?.name || profile?.email || '—'}
             </div>
-            <div className="text-[10px] uppercase tracking-wider text-foreground/40">
+            <div className="text-[10px] uppercase tracking-wider text-foreground/50">
               {profile ? ROLE_LABELS[profile.role] : '…'}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onLogout}
-            className="flex flex-1 items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground/55 transition-colors hover:bg-elevate/[0.04] hover:text-foreground"
-          >
-            <LogOut className="h-4 w-4" />
-            Sair
-          </button>
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/45 transition-colors hover:bg-elevate/[0.05] hover:text-foreground/80"
-          >
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
+
+        {/* Tema */}
+        <button
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground/65 transition-colors hover:bg-elevate/[0.04] hover:text-foreground"
+        >
+          {theme === 'dark'
+            ? <Sun className="h-4 w-4 shrink-0" />
+            : <Moon className="h-4 w-4 shrink-0" />}
+          <span>{theme === 'dark' ? 'Tema claro' : 'Tema escuro'}</span>
+        </button>
+
+        {/* Sair */}
+        <button
+          onClick={onLogout}
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground/65 transition-colors hover:bg-elevate/[0.04] hover:text-foreground"
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          Sair
+        </button>
+
+        {/* Versão */}
+        <div className="pt-1 text-center text-[10px] text-foreground/30 select-none">
+          v{__APP_VERSION__}
         </div>
       </div>
     </aside>

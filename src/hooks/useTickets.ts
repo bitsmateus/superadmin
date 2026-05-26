@@ -60,6 +60,11 @@ export function useOpenReminders(userId: string | undefined): Reminder[] {
   return React.useMemo(() => list.filter((r) => !r.completedAt), [list])
 }
 
+export function useAllOpenReminders(): Reminder[] {
+  const all = useSnapshot(ticketsService.getReminders)
+  return React.useMemo(() => all.filter((r) => !r.completedAt), [all])
+}
+
 /** Tickets que esperam ação do suporte (novo / em aberto / aguardando). */
 export function useActiveTickets(): Ticket[] {
   const tickets = useTickets()

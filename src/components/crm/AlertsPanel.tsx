@@ -1,12 +1,14 @@
 import * as React from 'react'
 import {
   ArrowRight,
-  Bell,
+  Bot,
   Calendar,
   CheckCircle2,
   FileText,
+  MessageSquare,
   Settings2,
   Sparkles,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
@@ -15,6 +17,7 @@ import { ClientDrawer } from '@/components/crm/ClientDrawer'
 import { useClients } from '@/hooks/useClients'
 import { computeAlerts, type AlertKind, type CrmAlert } from '@/lib/crmAlerts'
 import { db } from '@/services/db'
+import { STAGE_COLORS } from '@/constants/stageColors'
 import { cn } from '@/lib/utils'
 
 interface PanelDef {
@@ -28,16 +31,16 @@ interface PanelDef {
 
 const PANELS: PanelDef[] = [
   {
-    key: 'pending_briefing',
-    title: 'Aguardando envio do briefing',
-    description: 'Contrato assinado mas briefing ainda não enviado',
-    kinds: ['briefing_pending_send'],
+    key: 'briefing_sent_waiting',
+    title: 'Briefing enviado aguardando preenchimento',
+    description: 'Link enviado ao cliente · aguardando resposta',
+    kinds: ['briefing_sent_waiting'],
     icon: <FileText className="h-3.5 w-3.5" />,
     tone: 'warning',
   },
   {
     key: 'briefing_done',
-    title: 'Briefings preenchidos',
+    title: 'Briefing preenchido aguardando configuração',
     description: 'Briefing respondido — aguardando início da configuração',
     kinds: ['briefing_filled_no_setup'],
     icon: <Sparkles className="h-3.5 w-3.5" />,
@@ -45,7 +48,7 @@ const PANELS: PanelDef[] = [
   },
   {
     key: 'setup',
-    title: 'Configuração em andamento',
+    title: 'Em configuração',
     description: 'Clientes na etapa de configuração',
     kinds: ['setup_in_progress'],
     icon: <Settings2 className="h-3.5 w-3.5" />,
@@ -53,7 +56,7 @@ const PANELS: PanelDef[] = [
   },
   {
     key: 'delivery',
-    title: 'Entregas agendadas',
+    title: 'Reunião de entrega agendada',
     description: 'Reuniões e datas de entrega marcadas',
     kinds: ['delivery_scheduled'],
     icon: <Calendar className="h-3.5 w-3.5" />,
@@ -61,11 +64,43 @@ const PANELS: PanelDef[] = [
   },
   {
     key: 'delivered',
-    title: 'Entregas da semana',
+    title: 'Reunião entregue',
     description: 'Clientes entregues nos últimos 7 dias',
     kinds: ['delivery_done_this_week'],
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
     tone: 'success',
+  },
+  {
+    key: 'followup',
+    title: 'Follow-up de mensagem',
+    description: 'Clientes ativos com follow-ups pendentes',
+    kinds: ['followup_pending'],
+    icon: <MessageSquare className="h-3.5 w-3.5" />,
+    tone: 'warning',
+  },
+  {
+    key: 'impl_api_oficial',
+    title: 'API Oficial',
+    description: 'Clientes com integração de API oficial',
+    kinds: ['impl_api_oficial'],
+    icon: <Zap className="h-3.5 w-3.5" />,
+    tone: 'info',
+  },
+  {
+    key: 'impl_ia',
+    title: 'IA',
+    description: 'Clientes com inteligência artificial',
+    kinds: ['impl_ia'],
+    icon: <Bot className="h-3.5 w-3.5" />,
+    tone: 'info',
+  },
+  {
+    key: 'impl_automacao',
+    title: 'Automação',
+    description: 'Clientes com automação externa',
+    kinds: ['impl_automacao_externa'],
+    icon: <Settings2 className="h-3.5 w-3.5" />,
+    tone: 'info',
   },
 ]
 
@@ -76,19 +111,19 @@ export function AlertsPanel() {
 
   const grouped = React.useMemo(() => {
     const map = new Map<string, CrmAlert[]>()
+    for (const p of PANELS) map.set(p.key, [])
     for (const a of alerts) {
       for (const p of PANELS) {
         if (p.kinds.includes(a.kind)) {
-          const list = map.get(p.key) ?? []
-          list.push(a)
-          map.set(p.key, list)
+          map.get(p.key)!.push(a)
           break
         }
       }
     }
-    const meetings = map.get('meetings')
-    if (meetings) {
-      meetings.sort((a, b) => {
+    // Sort delivery by date
+    const delivery = map.get('delivery')
+    if (delivery) {
+      delivery.sort((a, b) => {
         const ta = a.whenAt ? new Date(a.whenAt).getTime() : 0
         const tb = b.whenAt ? new Date(b.whenAt).getTime() : 0
         return ta - tb
@@ -97,33 +132,10 @@ export function AlertsPanel() {
     return map
   }, [alerts])
 
-  const activePanels = PANELS.filter(
-    (p) => (grouped.get(p.key)?.length ?? 0) > 0,
-  )
-
-  if (activePanels.length === 0) {
-    return (
-      <div className="flex items-center gap-3 rounded-2xl border border-line bg-card px-5 py-6">
-        <span className="grid h-9 w-9 place-items-center rounded-lg bg-success/10 text-success ring-1 ring-success/20">
-          <Bell className="h-4 w-4" />
-        </span>
-        <div>
-          <h3 className="text-sm font-medium text-foreground">
-            Sem alertas no momento
-          </h3>
-          <p className="text-xs text-foreground/55">
-            Quando houver reuniões agendadas, follow-ups, contratos ou
-            briefings pendentes, eles aparecem aqui.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {activePanels.map((panel) => (
+        {PANELS.map((panel) => (
           <PanelCard
             key={panel.key}
             panel={panel}
@@ -154,6 +166,8 @@ function PanelCard({
     success: 'bg-success/10 text-success ring-success/20',
   }[panel.tone]
 
+  const badgeTone = alerts.length === 0 ? 'neutral' : panel.tone
+
   return (
     <section className="flex flex-col rounded-2xl border border-line bg-card">
       <header className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
@@ -171,19 +185,27 @@ function PanelCard({
             <p className="text-[11px] text-foreground/45">{panel.description}</p>
           </div>
         </div>
-        <Badge tone={panel.tone} dot>
+        <Badge tone={badgeTone} dot={alerts.length > 0}>
           {alerts.length}
         </Badge>
       </header>
-      <ul className="divide-y divide-line">
-        {alerts.map((a) => (
-          <AlertRow
-            key={`${panel.key}-${a.client.id}-${a.kind}-${a.followUp?.id ?? a.whenAt ?? ''}`}
-            alert={a}
-            onOpen={() => onOpen(a.client.id)}
-          />
-        ))}
-      </ul>
+
+      {alerts.length === 0 ? (
+        <p className="px-4 py-5 text-center text-xs text-foreground/35">
+          Nenhum cliente nesta situação
+        </p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {alerts.map((a) => (
+            <AlertRow
+              key={`${panel.key}-${a.client.id}-${a.kind}-${a.followUp?.id ?? a.whenAt ?? ''}`}
+              alert={a}
+              onOpen={() => onOpen(a.client.id)}
+              showStage={panel.key.startsWith('impl_')}
+            />
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
@@ -191,9 +213,11 @@ function PanelCard({
 function AlertRow({
   alert,
   onOpen,
+  showStage,
 }: {
   alert: CrmAlert
   onOpen: () => void
+  showStage?: boolean
 }) {
   const markSent = () => {
     if (!alert.followUp) return
@@ -210,10 +234,22 @@ function AlertRow({
     toast.success('Marcado como enviado')
   }
 
+  const stageStyle = showStage ? STAGE_COLORS[alert.client.stage] : null
+
   return (
     <li className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-elevate/[0.02]">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">{alert.title}</p>
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-medium text-foreground">{alert.title}</p>
+          {stageStyle && (
+            <span
+              className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+              style={{ background: stageStyle.bg, color: stageStyle.text }}
+            >
+              {stageStyle.label}
+            </span>
+          )}
+        </div>
         <p className="truncate text-[11px] text-foreground/55">{alert.subtitle}</p>
         {alert.message && (
           <p className="mt-1 line-clamp-2 text-[11px] text-foreground/45">

@@ -6,11 +6,13 @@ import type { Client, FollowUp } from '@/types/client'
  * implementação/entrega + flags de tipo de implementação.
  */
 export type AlertKind =
+  | 'briefing_sent_waiting'
   | 'briefing_pending_send'
   | 'briefing_filled_no_setup'
   | 'setup_in_progress'
   | 'delivery_scheduled'
   | 'delivery_done_this_week'
+  | 'followup_pending'
   | 'impl_api_oficial'
   | 'impl_ia'
   | 'impl_automacao_externa'
@@ -39,6 +41,31 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
 
   for (const c of clients) {
     if (c.stage === 'churned') continue
+
+    // ===== 0. Briefing enviado aguardando preenchimento =====
+    // Link já foi gerado/enviado mas o cliente ainda não preencheu.
+    if (
+      c.briefingSentAt &&
+      (c.briefingStatus === 'sent' || c.briefingStatus === 'revision') &&
+      c.stage !== 'setup' &&
+      c.stage !== 'delivery' &&
+      c.stage !== 'active'
+    ) {
+      const days = daysSince(c.briefingSentAt)
+      out.push({
+        kind: 'briefing_sent_waiting',
+        client: c,
+        daysLate: days,
+        tone: days >= 7 ? 'danger' : days >= 3 ? 'warning' : 'info',
+        title: `${c.company || c.name}`,
+        subtitle:
+          c.briefingStatus === 'revision'
+            ? `Revisão solicitada há ${days} dia(s) · aguardando reenvio`
+            : days > 0
+              ? `Enviado há ${days} dia(s) · aguardando preenchimento`
+              : 'Briefing enviado · aguardando preenchimento',
+      })
+    }
 
     // ===== 1. Aguardando envio do briefing =====
     // Cliente já passou da etapa de contrato (assinou) mas o briefing
@@ -168,9 +195,25 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
       })
     }
 
-    // ===== 6/7/8. Flags de tipo de implementação =====
-    // Aparecem em painéis dedicados pra o suporte ter visibilidade de
-    // quais clientes usam quais recursos especiais.
+    // ===== 6. Follow-ups pendentes =====
+    // Clientes ativos com mensagens de follow-up não enviadas.
+    if (c.followUpActive && c.stage === 'active') {
+      const pending = (c.followUps ?? []).filter((f) => !f.sentAt)
+      for (const f of pending) {
+        const isOverdue = new Date(f.scheduledFor).getTime() < Date.now()
+        out.push({
+          kind: 'followup_pending',
+          client: c,
+          followUp: f,
+          tone: isOverdue ? 'warning' : 'info',
+          title: `${c.company || c.name}`,
+          subtitle: `Follow-up dia ${f.dayNumber} · ${isOverdue ? 'atrasado' : 'agendado para'} ${formatDate(new Date(f.scheduledFor))}`,
+          message: f.message,
+          whenAt: f.scheduledFor,
+        })
+      }
+    }
+
     if (c.hasApiOficial) {
       out.push({
         kind: 'impl_api_oficial',

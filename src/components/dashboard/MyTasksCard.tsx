@@ -1,10 +1,12 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import {
   Bell,
   CheckCircle2,
   Clock,
   Plus,
   Trash2,
+  Users,
+  User,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
@@ -12,18 +14,23 @@ import { Input, Textarea } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useAuth } from '@/hooks/useAuth'
-import { useOpenReminders } from '@/hooks/useTickets'
+import { useOpenReminders, useAllOpenReminders } from '@/hooks/useTickets'
 import { useClients } from '@/hooks/useClients'
 import { ticketsService } from '@/services/tickets'
 import { Select } from '@/components/ui/Select'
 import { cn } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
 
-/** Card "Minhas tarefas" pro Dashboard. */
+type TaskFilter = 'mine' | 'all'
+
 export function MyTasksCard() {
   const { profile } = useAuth()
-  const reminders = useOpenReminders(profile?.id)
+  const myReminders = useOpenReminders(profile?.id)
+  const allReminders = useAllOpenReminders()
+  const [filter, setFilter] = React.useState<TaskFilter>('mine')
   const [creating, setCreating] = React.useState(false)
+
+  const reminders = filter === 'mine' ? myReminders : allReminders
 
   const todayEnd = new Date()
   todayEnd.setHours(23, 59, 59, 999)
@@ -36,36 +43,46 @@ export function MyTasksCard() {
       <header className="mb-3 flex items-center justify-between gap-2">
         <h3 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
           <Bell className="h-4 w-4 text-accent" />
-          Minhas tarefas
+          Tarefas
         </h3>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => setCreating(true)}
-          leftIcon={<Plus className="h-3.5 w-3.5" />}
-        >
-          Novo
-        </Button>
+        <div className="flex items-center gap-1">
+          <FilterToggle
+            value={filter}
+            onChange={setFilter}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setCreating(true)}
+            leftIcon={<Plus className="h-3.5 w-3.5" />}
+          >
+            Novo
+          </Button>
+        </div>
       </header>
 
       {reminders.length === 0 ? (
         <EmptyState
-          title="Sem tarefas pendentes"
-          description="Adicione lembretes pra clientes específicos ou geral. Aparecem aqui quando a data chegar."
+          title={filter === 'mine' ? 'Sem tarefas pendentes' : 'Sem tarefas no time'}
+          description={
+            filter === 'mine'
+              ? 'Adicione lembretes pra clientes específicos ou geral.'
+              : 'Nenhum membro tem tarefas pendentes no momento.'
+          }
         />
       ) : (
         <div className="space-y-4">
           {today.length > 0 && (
             <Group label={`Para hoje · ${today.length}`} tone="warning">
               {today.map((r) => (
-                <ReminderRow key={r.id} reminder={r} />
+                <ReminderRow key={r.id} reminder={r} showUser={filter === 'all'} currentUserId={profile?.id} />
               ))}
             </Group>
           )}
           {upcoming.length > 0 && (
             <Group label={`Próximas · ${upcoming.length}`} tone="info">
-              {upcoming.slice(0, 5).map((r) => (
-                <ReminderRow key={r.id} reminder={r} />
+              {upcoming.slice(0, 8).map((r) => (
+                <ReminderRow key={r.id} reminder={r} showUser={filter === 'all'} currentUserId={profile?.id} />
               ))}
             </Group>
           )}
@@ -74,6 +91,47 @@ export function MyTasksCard() {
 
       <CreateReminderModal open={creating} onClose={() => setCreating(false)} />
     </section>
+  )
+}
+
+function FilterToggle({
+  value,
+  onChange,
+}: {
+  value: TaskFilter
+  onChange: (v: TaskFilter) => void
+}) {
+  return (
+    <div className="flex items-center rounded-lg border border-line bg-surface p-0.5">
+      <button
+        type="button"
+        onClick={() => onChange('mine')}
+        title="Minhas tarefas"
+        className={cn(
+          'flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
+          value === 'mine'
+            ? 'bg-accent/10 text-accent'
+            : 'text-foreground/50 hover:text-foreground',
+        )}
+      >
+        <User className="h-3 w-3" />
+        Meus
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('all')}
+        title="Todas as tarefas do time"
+        className={cn(
+          'flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
+          value === 'all'
+            ? 'bg-accent/10 text-accent'
+            : 'text-foreground/50 hover:text-foreground',
+        )}
+      >
+        <Users className="h-3 w-3" />
+        Todos
+      </button>
+    </div>
   )
 }
 
@@ -103,8 +161,12 @@ function Group({
 
 function ReminderRow({
   reminder,
+  showUser,
+  currentUserId,
 }: {
   reminder: import('@/types/ticket').Reminder
+  showUser?: boolean
+  currentUserId?: string
 }) {
   const clients = useClients()
   const client = reminder.clientId
@@ -112,6 +174,7 @@ function ReminderRow({
     : null
   const due = new Date(reminder.dueAt)
   const overdue = due < new Date()
+  const isOwn = reminder.userId === currentUserId
 
   return (
     <li
@@ -123,7 +186,14 @@ function ReminderRow({
       )}
     >
       <div className="min-w-0 flex-1">
-        <div className="text-sm text-foreground">{reminder.title}</div>
+        <div className="flex items-center gap-1.5">
+          <div className="text-sm text-foreground truncate">{reminder.title}</div>
+          {showUser && !isOwn && (
+            <span className="shrink-0 rounded-full bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] text-foreground/45 ring-1 ring-line">
+              outro
+            </span>
+          )}
+        </div>
         <div className="mt-0.5 text-[11px] text-foreground/55 inline-flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3 w-3" />
@@ -137,27 +207,29 @@ function ReminderRow({
           )}
         </div>
       </div>
-      <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={async () => {
-            await ticketsService.completeReminder(reminder.id)
-            toast.success('Tarefa concluída')
-          }}
-          title="Concluir"
-          className="rounded-md p-1 text-foreground/55 hover:bg-success/10 hover:text-success"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={async () => {
-            await ticketsService.deleteReminder(reminder.id)
-          }}
-          title="Remover"
-          className="rounded-md p-1 text-foreground/40 hover:bg-danger/10 hover:text-danger"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      {isOwn && (
+        <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={async () => {
+              await ticketsService.completeReminder(reminder.id)
+              toast.success('Tarefa concluída')
+            }}
+            title="Concluir"
+            className="rounded-md p-1 text-foreground/55 hover:bg-success/10 hover:text-success"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={async () => {
+              await ticketsService.deleteReminder(reminder.id)
+            }}
+            title="Remover"
+            className="rounded-md p-1 text-foreground/40 hover:bg-danger/10 hover:text-danger"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </li>
   )
 }

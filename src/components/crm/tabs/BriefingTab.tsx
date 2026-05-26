@@ -94,8 +94,46 @@ export function BriefingTab({ client }: { client: Client }) {
   const hasData = Boolean(client.briefingData)
   const showSubTabs = hasData && (status === 'filled' || status === 'approved')
 
+  const toggleFlag = (flag: 'hasApiOficial' | 'hasIa' | 'hasAutomacaoExterna') => {
+    db.updateClient(client.id, { [flag]: !client[flag] })
+  }
+
   return (
     <div className="space-y-5">
+      <Section
+        title={
+          <span className="flex items-center gap-2">
+            <Wand2 className="h-3.5 w-3.5 text-accent" />
+            Tipo de implementação
+          </span>
+        }
+      >
+        <p className="text-xs text-foreground/55">
+          Marque os recursos que este cliente utiliza. Aparecem nos painéis do dashboard.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {([
+            { flag: 'hasApiOficial', label: 'API Oficial' },
+            { flag: 'hasIa', label: 'IA' },
+            { flag: 'hasAutomacaoExterna', label: 'Automação' },
+          ] as const).map(({ flag, label }) => (
+            <button
+              key={flag}
+              type="button"
+              onClick={() => toggleFlag(flag)}
+              className={cn(
+                'rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+                client[flag]
+                  ? 'border-accent/40 bg-accent/10 text-accent'
+                  : 'border-line bg-surface text-foreground/55 hover:border-accent/30 hover:text-foreground/80',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </Section>
+
       {status === 'not_sent' && (
         <Section
           title={

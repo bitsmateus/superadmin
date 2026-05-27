@@ -152,6 +152,7 @@ export function BriefingPublicPage() {
   const [section, setSection] = React.useState(0)
   const [submittedData, setSubmittedData] = React.useState<{ greeting: string; offHours: string } | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
+  const [chatbotConfirmOpen, setChatbotConfirmOpen] = React.useState(false)
 
   React.useEffect(() => {
     if (!token) { setClient(null); return }
@@ -266,13 +267,22 @@ export function BriefingPublicPage() {
     }
   }
 
-  const next = () => {
+  const advanceSection = () => {
     if (section < totalSections - 1) {
       setSection(section + 1)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
       void submit()
     }
+  }
+
+  const next = () => {
+    // On chatbot section show confirmation before advancing
+    if (currentKey === 'chatbot') {
+      setChatbotConfirmOpen(true)
+      return
+    }
+    advanceSection()
   }
   const prev = () => {
     if (section > 0) {
@@ -284,10 +294,18 @@ export function BriefingPublicPage() {
   const maxUsers = cfg?.maxUsers ?? 0
 
   const addSector = () => {
-    const s = state.newSectorInput.trim()
-    if (!s) return
-    if (state.sectors.includes(s)) return
-    setState((prev) => ({ ...prev, sectors: [...prev.sectors, s], newSectorInput: '' }))
+    const parts = state.newSectorInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (!parts.length) return
+    setState((prev) => {
+      const next = [...prev.sectors]
+      for (const p of parts) {
+        if (!next.includes(p)) next.push(p)
+      }
+      return { ...prev, sectors: next, newSectorInput: '' }
+    })
   }
 
   const removeSector = (idx: number) => {
@@ -362,7 +380,21 @@ export function BriefingPublicPage() {
                 <div className="flex gap-2">
                   <PlainInput
                     value={state.newSectorInput}
-                    onChange={(v) => setState({ ...state, newSectorInput: v })}
+                    onChange={(v) => {
+                      // Auto-add when user types a comma followed by content
+                      if (v.endsWith(',')) {
+                        const parts = v.split(',').map((s) => s.trim()).filter(Boolean)
+                        if (parts.length) {
+                          setState((prev) => {
+                            const next = [...prev.sectors]
+                            for (const p of parts) if (!next.includes(p)) next.push(p)
+                            return { ...prev, sectors: next, newSectorInput: '' }
+                          })
+                          return
+                        }
+                      }
+                      setState({ ...state, newSectorInput: v })
+                    }}
                     placeholder="Ex: Comercial, Suporte, Financeiro…"
                     className="flex-1"
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSector() } }}
@@ -708,7 +740,7 @@ export function BriefingPublicPage() {
                     <button
                       type="button"
                       onClick={() => setState({ ...state, greetingEditing: true })}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
                     >
                       Personalizar mensagem
                     </button>
@@ -756,7 +788,7 @@ export function BriefingPublicPage() {
                     <button
                       type="button"
                       onClick={() => setState({ ...state, offHoursEditing: true })}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
                     >
                       Personalizar mensagem
                     </button>
@@ -888,6 +920,69 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
       </main>
+
+      {/* ── Modal de confirmação das mensagens do chatbot ── */}
+      {chatbotConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-base font-semibold text-slate-900">
+                Confirmar mensagens do chatbot
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Revise as mensagens abaixo. Elas serão configuradas exatamente como estão.
+              </p>
+            </div>
+
+            <div className="space-y-4 px-6 py-4 max-h-[60vh] overflow-y-auto">
+              <div>
+                <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Saudação
+                </p>
+                <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-3">
+                  <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                    {state.greetingMessage}
+                  </pre>
+                </div>
+              </div>
+              <div>
+                <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Fora do horário
+                </p>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                    {state.offHoursMessage}
+                  </pre>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                ⚠️ <strong>Atenção:</strong> essas mensagens serão instaladas no seu sistema exatamente como exibidas acima. Você poderá solicitar ajustes futuramente ao nosso time.
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setChatbotConfirmOpen(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Voltar e editar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setChatbotConfirmOpen(false)
+                  advanceSection()
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-5 py-2 text-sm font-medium text-white hover:bg-[#6BA0F9]"
+              >
+                <Check className="h-4 w-4" /> Confirmar e continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">

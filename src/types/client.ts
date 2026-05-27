@@ -112,7 +112,7 @@ export interface BriefingData {
 
 export type ConnectionType = 'api_oficial' | 'api_comum'
 export type AutomationType = 'chatbot' | 'ia_basica' | 'ia_avancada'
-export type BriefingChannel = 'instagram' | 'messenger' | 'wavoip' | 'olx' | 'mercadolivre' | 'email'
+export type BriefingChannel = 'whatsapp' | 'instagram' | 'messenger' | 'wavoip' | 'olx' | 'mercadolivre' | 'email'
 
 export interface BriefingConfig {
   connectionTypes: ConnectionType[]

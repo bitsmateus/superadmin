@@ -69,6 +69,7 @@ const AUTOMATION_OPTIONS: { value: AutomationType; label: string }[] = [
 ]
 
 const CHANNEL_OPTIONS: { value: BriefingChannel; label: string }[] = [
+  { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'instagram', label: 'Instagram' },
   { value: 'messenger', label: 'Messenger' },
   { value: 'wavoip', label: 'WaVoip' },

@@ -41,9 +41,7 @@ import { cn } from '@/lib/utils'
 const newClientSchema = z.object({
   name: z.string().min(2, 'Mínimo 2 caracteres'),
   company: z.string().min(2, 'Mínimo 2 caracteres'),
-  email: z.string().email('E-mail inválido'),
   phone: z.string().min(8, 'Telefone inválido'),
-  responsavel: z.string().optional().or(z.literal('')),
 })
 
 type NewClientValues = z.infer<typeof newClientSchema>
@@ -117,9 +115,9 @@ export function ClientsPage() {
     const client = db.createClient({
       name: values.name.trim(),
       company: values.company.trim(),
-      email: values.email.trim(),
+      email: '',
       phone: values.phone.trim(),
-      responsavel: (values.responsavel ?? '').trim() || undefined,
+      responsavel: undefined,
     })
     toast.success(`Cliente "${client.name}" criado`)
     setOpenNew(false)
@@ -338,24 +336,12 @@ export function ClientsPage() {
               error={errors.company?.message}
             />
           </div>
-          <Input
-            label="E-mail *"
-            type="email"
-            leftIcon={<Mail className="h-4 w-4" />}
-            {...register('email')}
-            error={errors.email?.message}
-          />
-          <Input
-            label="Telefone *"
-            leftIcon={<Phone className="h-4 w-4" />}
-            {...register('phone')}
-            error={errors.phone?.message}
-          />
           <div className="sm:col-span-2">
             <Input
-              label="Responsável (interno)"
-              placeholder="Quem está cuidando deste cliente"
-              {...register('responsavel')}
+              label="Telefone *"
+              leftIcon={<Phone className="h-4 w-4" />}
+              {...register('phone')}
+              error={errors.phone?.message}
             />
           </div>
           <div className="sm:col-span-2 mt-2 flex items-center justify-end gap-2">

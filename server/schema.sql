@@ -138,7 +138,15 @@ CREATE TABLE IF NOT EXISTS clients (
 
   has_api_oficial BOOLEAN NOT NULL DEFAULT FALSE,
   has_ia BOOLEAN NOT NULL DEFAULT FALSE,
-  has_automacao_externa BOOLEAN NOT NULL DEFAULT FALSE
+  has_automacao_externa BOOLEAN NOT NULL DEFAULT FALSE,
+
+  briefing_config JSONB,
+  accesses JSONB,
+  platform_app BOOLEAN NOT NULL DEFAULT FALSE,
+  platform_web BOOLEAN NOT NULL DEFAULT FALSE,
+  platform_chat BOOLEAN NOT NULL DEFAULT FALSE,
+  contract_file TEXT,
+  contract_file_name TEXT
 );
 
 CREATE INDEX IF NOT EXISTS clients_stage_idx ON clients(stage);

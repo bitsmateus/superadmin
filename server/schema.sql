@@ -134,7 +134,11 @@ CREATE TABLE IF NOT EXISTS clients (
   followup_active BOOLEAN NOT NULL DEFAULT FALSE,
   followups JSONB NOT NULL DEFAULT '[]',
   notes JSONB NOT NULL DEFAULT '[]',
-  logs JSONB NOT NULL DEFAULT '[]'
+  logs JSONB NOT NULL DEFAULT '[]',
+
+  has_api_oficial BOOLEAN NOT NULL DEFAULT FALSE,
+  has_ia BOOLEAN NOT NULL DEFAULT FALSE,
+  has_automacao_externa BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS clients_stage_idx ON clients(stage);

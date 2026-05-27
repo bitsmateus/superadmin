@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { useParams } from 'react-router-dom'
 import {
   ArrowRight,
@@ -14,12 +14,14 @@ import {
   StickyNote,
   Trash2,
   Users,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/services/api'
 import { asText, cn } from '@/lib/utils'
 import type {
   BriefingData,
+  BriefingConfig,
   BriefingStatus,
   BriefingUser,
   BriefingUserRole,
@@ -35,32 +37,55 @@ const DAYS = [
   'Domingo',
 ]
 
+type SectionKey =
+  | 'empresa'
+  | 'usuarios'
+  | 'horarios'
+  | 'integracoes'
+  | 'chatbot'
+  | 'ia'
+  | 'automacao_externa'
+  | 'observacoes'
+
+function buildSections(cfg: BriefingConfig | null): SectionKey[] {
+  const sections: SectionKey[] = ['empresa', 'usuarios', 'horarios', 'integracoes']
+  if (!cfg) {
+    sections.push('chatbot', 'ia', 'observacoes')
+    return sections
+  }
+  if (cfg.automationTypes.includes('chatbot')) sections.push('chatbot')
+  if (cfg.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada'))
+    sections.push('ia')
+  if (cfg.hasExternalAutomation) sections.push('automacao_externa')
+  sections.push('observacoes')
+  return sections
+}
+
 interface BriefingFormState {
   razaoSocial: string
   nomeFantasia: string
   cnpj: string
   site: string
-
   users: BriefingUser[]
-
   schedule: { day: string; active: boolean; start: string; end: string }[]
   timezone: string
-
   whatsappNumbers: string
   whatsappType: string
   useFacebook: boolean
   facebookToken: string
-
+  wavoipInfo: string
+  olxInfo: string
+  mercadolivreInfo: string
+  emailConfig: string
   mainFlow: string
   greetingMessage: string
   offHoursMessage: string
   departments: string
-
   useAI: boolean
   aiTone: 'formal' | 'casual' | 'tecnico'
   aiInstructions: string
   aiRestrictions: string
-
+  externalAutomationInfo: string
   extraNotes: string
 }
 
@@ -81,6 +106,10 @@ const initialState: BriefingFormState = {
   whatsappType: 'baileys',
   useFacebook: false,
   facebookToken: '',
+  wavoipInfo: '',
+  olxInfo: '',
+  mercadolivreInfo: '',
+  emailConfig: '',
   mainFlow: '',
   greetingMessage: '',
   offHoursMessage: '',
@@ -89,6 +118,7 @@ const initialState: BriefingFormState = {
   aiTone: 'casual',
   aiInstructions: '',
   aiRestrictions: '',
+  externalAutomationInfo: '',
   extraNotes: '',
 }
 
@@ -98,6 +128,7 @@ interface PublicClient {
   company: string
   briefing_status: BriefingStatus | null
   briefing_revision_note: string | null
+  briefing_config: BriefingConfig | null
 }
 
 export function BriefingPublicPage() {
@@ -105,17 +136,13 @@ export function BriefingPublicPage() {
   const [client, setClient] = React.useState<PublicClient | null | undefined>(
     undefined,
   )
-
   const [state, setState] = React.useState<BriefingFormState>(initialState)
   const [section, setSection] = React.useState(0)
   const [submitted, setSubmitted] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
 
   React.useEffect(() => {
-    if (!token) {
-      setClient(null)
-      return
-    }
+    if (!token) { setClient(null); return }
     let cancelled = false
     ;(async () => {
       try {
@@ -127,16 +154,25 @@ export function BriefingPublicPage() {
           company: row.company,
           briefing_status: row.briefing_status ?? null,
           briefing_revision_note: row.briefing_revision_note ?? null,
+          briefing_config: row.briefing_config ?? null,
         })
+        // Pre-check Facebook if instagram/messenger in channels
+        const cfg = row.briefing_config
+        if (cfg && (cfg.channels.includes('instagram') || cfg.channels.includes('messenger'))) {
+          setState((s) => ({ ...s, useFacebook: true }))
+        }
       } catch {
         if (cancelled) return
         setClient(null)
       }
     })()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [token])
+
+  const cfg = client?.briefing_config ?? null
+  const sections = React.useMemo(() => buildSections(cfg), [cfg])
+  const totalSections = sections.length
+  const currentKey = sections[section]
 
   if (client === undefined) {
     return (
@@ -146,13 +182,8 @@ export function BriefingPublicPage() {
     )
   }
 
-  if (!token || !client) {
-    return <BriefingErrorPage />
-  }
-
-  if (submitted) {
-    return <BriefingSuccessPage company={client.company} />
-  }
+  if (!token || !client) return <BriefingErrorPage />
+  if (submitted) return <BriefingSuccessPage company={client.company} />
 
   const submit = async () => {
     const data: BriefingData = {
@@ -176,9 +207,11 @@ export function BriefingPublicPage() {
         .filter(Boolean),
       whatsappType: state.whatsappType,
       useFacebook: state.useFacebook,
-      facebookToken: state.useFacebook
-        ? state.facebookToken.trim() || undefined
-        : undefined,
+      facebookToken: state.useFacebook ? state.facebookToken.trim() || undefined : undefined,
+      wavoipInfo: state.wavoipInfo.trim() || undefined,
+      olxInfo: state.olxInfo.trim() || undefined,
+      mercadolivreInfo: state.mercadolivreInfo.trim() || undefined,
+      emailConfig: state.emailConfig.trim() || undefined,
       mainFlow: state.mainFlow.trim(),
       greetingMessage: state.greetingMessage.trim(),
       offHoursMessage: state.offHoursMessage.trim(),
@@ -188,12 +221,9 @@ export function BriefingPublicPage() {
         .filter(Boolean),
       useAI: state.useAI,
       aiTone: state.useAI ? state.aiTone : undefined,
-      aiInstructions: state.useAI
-        ? state.aiInstructions.trim() || undefined
-        : undefined,
-      aiRestrictions: state.useAI
-        ? state.aiRestrictions.trim() || undefined
-        : undefined,
+      aiInstructions: state.useAI ? state.aiInstructions.trim() || undefined : undefined,
+      aiRestrictions: state.useAI ? state.aiRestrictions.trim() || undefined : undefined,
+      externalAutomationInfo: state.externalAutomationInfo.trim() || undefined,
       extraNotes: state.extraNotes.trim() || undefined,
       submittedAt: new Date().toISOString(),
     }
@@ -207,8 +237,6 @@ export function BriefingPublicPage() {
       setSubmitting(false)
     }
   }
-
-  const totalSections = 7
 
   const next = () => {
     if (section < totalSections - 1) {
@@ -225,6 +253,13 @@ export function BriefingPublicPage() {
     }
   }
 
+  const showFacebook =
+    !cfg ||
+    cfg.channels.includes('instagram') ||
+    cfg.channels.includes('messenger')
+
+  const maxUsers = cfg?.maxUsers ?? 0
+
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <BriefingHeader companyName={client.company} />
@@ -237,9 +272,10 @@ export function BriefingPublicPage() {
           </div>
         )}
 
-        {section === 0 && (
+        {/* ── Seção 1: Dados da empresa ── */}
+        {currentKey === 'empresa' && (
           <SectionBlock
-            number={1}
+            number={section + 1}
             total={totalSections}
             title="Dados da empresa"
             icon={<Building2 className="h-5 w-5 text-[#4F8EF7]" />}
@@ -275,13 +311,18 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
 
-        {section === 1 && (
+        {/* ── Seção 2: Usuários ── */}
+        {currentKey === 'usuarios' && (
           <SectionBlock
-            number={2}
+            number={section + 1}
             total={totalSections}
             title="Usuários e setores"
             icon={<Users className="h-5 w-5 text-[#4F8EF7]" />}
-            description="Quem vai usar o sistema? Adicione um por linha."
+            description={
+              maxUsers > 0
+                ? `Quem vai usar o sistema? Você pode cadastrar até ${maxUsers} usuário(s).`
+                : 'Quem vai usar o sistema? Adicione um por linha.'
+            }
           >
             <div className="space-y-3">
               {state.users.map((u, i) => (
@@ -361,28 +402,36 @@ export function BriefingPublicPage() {
                   )}
                 </div>
               ))}
-              <button
-                type="button"
-                onClick={() =>
-                  setState({
-                    ...state,
-                    users: [
-                      ...state.users,
-                      { name: '', email: '', sector: '', role: 'atendente' },
-                    ],
-                  })
-                }
-                className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
-              >
-                <Plus className="h-4 w-4" /> Adicionar usuário
-              </button>
+              {(maxUsers === 0 || state.users.length < maxUsers) && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setState({
+                      ...state,
+                      users: [
+                        ...state.users,
+                        { name: '', email: '', sector: '', role: 'atendente' },
+                      ],
+                    })
+                  }
+                  className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
+                >
+                  <Plus className="h-4 w-4" /> Adicionar usuário
+                </button>
+              )}
+              {maxUsers > 0 && state.users.length >= maxUsers && (
+                <p className="text-xs text-slate-400">
+                  Limite de {maxUsers} usuário(s) atingido.
+                </p>
+              )}
             </div>
           </SectionBlock>
         )}
 
-        {section === 2 && (
+        {/* ── Seção 3: Horários ── */}
+        {currentKey === 'horarios' && (
           <SectionBlock
-            number={3}
+            number={section + 1}
             total={totalSections}
             title="Horários de atendimento"
             icon={<Clock className="h-5 w-5 text-[#4F8EF7]" />}
@@ -453,66 +502,156 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
 
-        {section === 3 && (
+        {/* ── Seção 4: Integrações ── */}
+        {currentKey === 'integracoes' && (
           <SectionBlock
-            number={4}
+            number={section + 1}
             total={totalSections}
-            title="WhatsApp e integrações"
+            title="Canais e integrações"
             icon={<Phone className="h-5 w-5 text-[#4F8EF7]" />}
           >
             <div className="space-y-4">
-              <Field label="Número(s) do WhatsApp">
-                <PlainTextarea
-                  value={state.whatsappNumbers}
-                  onChange={(v) => setState({ ...state, whatsappNumbers: v })}
-                  placeholder="11999999999, 1133334444"
-                  rows={2}
-                />
-                <p className="mt-1 text-xs text-slate-400">
-                  Separe múltiplos por vírgula ou linha.
-                </p>
-              </Field>
-              <Field label="Tipo de conexão">
-                <PlainSelect
-                  value={state.whatsappType}
-                  onChange={(v) => setState({ ...state, whatsappType: v })}
-                  options={[
-                    { value: 'baileys', label: 'Baileys' },
-                    { value: 'evolution', label: 'Evolution' },
-                    { value: 'uazapi', label: 'Uazapi' },
-                    { value: 'zapi', label: 'Z-API' },
-                    { value: 'meow', label: 'Meow' },
-                    { value: 'evo', label: 'Evo' },
-                  ]}
-                />
-              </Field>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={state.useFacebook}
-                  onChange={(e) =>
-                    setState({ ...state, useFacebook: e.target.checked })
-                  }
-                  className="h-4 w-4 accent-[#4F8EF7]"
-                />
-                Vamos integrar Facebook/Instagram
-              </label>
-              {state.useFacebook && (
-                <Field label="Token do Meta">
-                  <PlainInput
-                    value={state.facebookToken}
-                    onChange={(v) => setState({ ...state, facebookToken: v })}
-                    placeholder="EAA…"
-                  />
-                </Field>
+              {/* WhatsApp — always shown */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">
+                  WhatsApp
+                </h3>
+                <div className="space-y-3">
+                  <Field label="Número(s) do WhatsApp">
+                    <PlainTextarea
+                      value={state.whatsappNumbers}
+                      onChange={(v) => setState({ ...state, whatsappNumbers: v })}
+                      placeholder="11999999999, 1133334444"
+                      rows={2}
+                    />
+                    <p className="mt-1 text-xs text-slate-400">
+                      Separe múltiplos por vírgula ou linha.
+                    </p>
+                  </Field>
+                  <Field label="Tipo de conexão">
+                    <PlainSelect
+                      value={state.whatsappType}
+                      onChange={(v) => setState({ ...state, whatsappType: v })}
+                      options={[
+                        { value: 'baileys', label: 'Baileys' },
+                        { value: 'evolution', label: 'Evolution' },
+                        { value: 'uazapi', label: 'Uazapi' },
+                        { value: 'zapi', label: 'Z-API' },
+                        { value: 'meow', label: 'Meow' },
+                        { value: 'evo', label: 'Evo' },
+                      ]}
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Facebook / Instagram / Messenger */}
+              {showFacebook && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-slate-800">
+                    {cfg?.channels.includes('messenger') && !cfg.channels.includes('instagram')
+                      ? 'Messenger'
+                      : 'Instagram / Facebook'}
+                  </h3>
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={state.useFacebook}
+                        onChange={(e) =>
+                          setState({ ...state, useFacebook: e.target.checked })
+                        }
+                        className="h-4 w-4 accent-[#4F8EF7]"
+                      />
+                      Vamos integrar{' '}
+                      {cfg?.channels.includes('messenger')
+                        ? 'Messenger/Instagram'
+                        : 'Facebook/Instagram'}
+                    </label>
+                    {state.useFacebook && (
+                      <Field label="Token do Meta">
+                        <PlainInput
+                          value={state.facebookToken}
+                          onChange={(v) =>
+                            setState({ ...state, facebookToken: v })
+                          }
+                          placeholder="EAA…"
+                        />
+                      </Field>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* WaVoip */}
+              {cfg?.channels.includes('wavoip') && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-slate-800">WaVoip</h3>
+                  <Field label="Informações da conta WaVoip">
+                    <PlainTextarea
+                      value={state.wavoipInfo}
+                      onChange={(v) => setState({ ...state, wavoipInfo: v })}
+                      placeholder="Usuário, token ou demais dados de acesso WaVoip"
+                      rows={3}
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {/* OLX */}
+              {cfg?.channels.includes('olx') && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-slate-800">OLX</h3>
+                  <Field label="Informações da conta OLX">
+                    <PlainTextarea
+                      value={state.olxInfo}
+                      onChange={(v) => setState({ ...state, olxInfo: v })}
+                      placeholder="E-mail, token ou dados de acesso OLX"
+                      rows={3}
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {/* Mercado Livre */}
+              {cfg?.channels.includes('mercadolivre') && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-slate-800">
+                    Mercado Livre
+                  </h3>
+                  <Field label="Informações da conta Mercado Livre">
+                    <PlainTextarea
+                      value={state.mercadolivreInfo}
+                      onChange={(v) => setState({ ...state, mercadolivreInfo: v })}
+                      placeholder="Usuário, token ou dados de acesso Mercado Livre"
+                      rows={3}
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {/* E-mail */}
+              {cfg?.channels.includes('email') && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-slate-800">E-mail</h3>
+                  <Field label="Configurações de e-mail">
+                    <PlainTextarea
+                      value={state.emailConfig}
+                      onChange={(v) => setState({ ...state, emailConfig: v })}
+                      placeholder="Endereço de e-mail, servidor SMTP, credenciais…"
+                      rows={3}
+                    />
+                  </Field>
+                </div>
               )}
             </div>
           </SectionBlock>
         )}
 
-        {section === 4 && (
+        {/* ── Seção 5: Chatbot ── */}
+        {currentKey === 'chatbot' && (
           <SectionBlock
-            number={5}
+            number={section + 1}
             total={totalSections}
             title="Chatbot"
             icon={<MessageSquare className="h-5 w-5 text-[#4F8EF7]" />}
@@ -529,18 +668,14 @@ export function BriefingPublicPage() {
               <Field label="Mensagem de saudação inicial">
                 <PlainTextarea
                   value={state.greetingMessage}
-                  onChange={(v) =>
-                    setState({ ...state, greetingMessage: v })
-                  }
+                  onChange={(v) => setState({ ...state, greetingMessage: v })}
                   rows={3}
                 />
               </Field>
               <Field label="Mensagem fora do horário">
                 <PlainTextarea
                   value={state.offHoursMessage}
-                  onChange={(v) =>
-                    setState({ ...state, offHoursMessage: v })
-                  }
+                  onChange={(v) => setState({ ...state, offHoursMessage: v })}
                   rows={3}
                 />
               </Field>
@@ -556,21 +691,25 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
 
-        {section === 5 && (
+        {/* ── Seção 6: IA ── */}
+        {currentKey === 'ia' && (
           <SectionBlock
-            number={6}
+            number={section + 1}
             total={totalSections}
             title="Inteligência Artificial"
             icon={<Sparkles className="h-5 w-5 text-[#4F8EF7]" />}
+            description={
+              cfg?.automationTypes.includes('ia_avancada')
+                ? 'Configuração de IA avançada para atendimento autônomo.'
+                : 'Configuração de IA para apoiar o atendimento.'
+            }
           >
             <div className="space-y-4">
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
                   checked={state.useAI}
-                  onChange={(e) =>
-                    setState({ ...state, useAI: e.target.checked })
-                  }
+                  onChange={(e) => setState({ ...state, useAI: e.target.checked })}
                   className="h-4 w-4 accent-[#4F8EF7]"
                 />
                 Desejo usar IA no atendimento
@@ -593,13 +732,12 @@ export function BriefingPublicPage() {
                       ]}
                     />
                   </Field>
-                  <Field label="Instruções principais">
+                  <Field label="Instruções principais para a IA">
                     <PlainTextarea
                       value={state.aiInstructions}
-                      onChange={(v) =>
-                        setState({ ...state, aiInstructions: v })
-                      }
+                      onChange={(v) => setState({ ...state, aiInstructions: v })}
                       rows={4}
+                      placeholder="Descreva o que a IA deve fazer, o perfil da empresa, produtos/serviços…"
                     />
                   </Field>
                   <Field label="O que a IA NÃO deve fazer">
@@ -609,6 +747,7 @@ export function BriefingPublicPage() {
                         setState({ ...state, aiRestrictions: v })
                       }
                       rows={3}
+                      placeholder="Ex.: Não citar concorrentes, não dar preços sem consultar um atendente…"
                     />
                   </Field>
                 </>
@@ -617,9 +756,36 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
 
-        {section === 6 && (
+        {/* ── Seção 7: Automação externa ── */}
+        {currentKey === 'automacao_externa' && (
           <SectionBlock
-            number={7}
+            number={section + 1}
+            total={totalSections}
+            title="Automação externa"
+            icon={<Zap className="h-5 w-5 text-[#4F8EF7]" />}
+            description={
+              cfg?.externalAutomationNotes
+                ? cfg.externalAutomationNotes
+                : 'Precisamos de algumas informações sobre a automação externa que será integrada.'
+            }
+          >
+            <Field label="Informações necessárias para a automação">
+              <PlainTextarea
+                value={state.externalAutomationInfo}
+                onChange={(v) =>
+                  setState({ ...state, externalAutomationInfo: v })
+                }
+                rows={6}
+                placeholder="Descreva as integrações, credenciais ou dados que serão necessários…"
+              />
+            </Field>
+          </SectionBlock>
+        )}
+
+        {/* ── Seção 8: Observações ── */}
+        {currentKey === 'observacoes' && (
+          <SectionBlock
+            number={section + 1}
             total={totalSections}
             title="Observações finais"
             icon={<StickyNote className="h-5 w-5 text-[#4F8EF7]" />}
@@ -635,7 +801,7 @@ export function BriefingPublicPage() {
         )}
       </main>
 
-      <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-elevate/95 backdrop-blur">
+      <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex flex-col">
             <span className="text-xs uppercase tracking-wider text-slate-400">
@@ -647,9 +813,7 @@ export function BriefingPublicPage() {
             <div className="mt-1 h-1 w-32 overflow-hidden rounded-full bg-slate-200">
               <div
                 className="h-full bg-[#4F8EF7] transition-all"
-                style={{
-                  width: `${((section + 1) / totalSections) * 100}%`,
-                }}
+                style={{ width: `${((section + 1) / totalSections) * 100}%` }}
               />
             </div>
           </div>
@@ -667,7 +831,7 @@ export function BriefingPublicPage() {
               type="button"
               onClick={next}
               disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-[#6BA0F9] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#6BA0F9] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {section === totalSections - 1 ? (
                 <>
@@ -691,7 +855,7 @@ function BriefingHeader({ companyName }: { companyName: string }) {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#4F8EF7] text-foreground font-bold">
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#4F8EF7] font-bold text-white">
             T
           </div>
           <div className="leading-tight">

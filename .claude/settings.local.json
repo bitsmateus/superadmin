@@ -28,7 +28,9 @@
       "Bash(git commit *)",
       "Bash(git push *)",
       "Bash(powershell -Command ' *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(git pull *)",
+      "Bash(git stash *)"
     ]
   }
 }

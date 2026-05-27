@@ -98,6 +98,24 @@ export interface BriefingData {
   aiInstructions?: string
   aiRestrictions?: string
 
+  // IA Básica — campos estruturados para geração de prompt
+  aiAgentName?: string
+  aiCompanyDescription?: string
+  aiServices?: string
+  aiHasPrices?: boolean
+  aiPrices?: string
+  aiLocation?: string
+  aiSocialMedia?: string
+  aiAttendanceFlow?: string
+  aiTransferConditions?: string
+
+  // IA Avançada — integração com sistema externo
+  aiExternalSystem?: string
+  aiExternalApiUrl?: string
+  aiExternalWhatToQuery?: string
+  aiExternalAuth?: string
+  aiExternalExamples?: string
+
   extraNotes?: string
 
   // Channel-specific info (populated when client submits the public form)

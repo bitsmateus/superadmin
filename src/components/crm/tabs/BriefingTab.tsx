@@ -126,13 +126,15 @@ export function BriefingTab({ client }: { client: Client }) {
       return
     }
     const token = db.createBriefingToken(client.id)
+    const PRE_BRIEFING_STAGES = ['lead', 'welcome', 'contract']
     db.updateClient(client.id, {
       briefingToken: token,
       briefingStatus: 'sent',
       briefingSentAt: new Date().toISOString(),
+      ...(PRE_BRIEFING_STAGES.includes(client.stage) ? { stage: 'briefing' } : {}),
     })
-    db.addLog(client.id, 'Briefing enviado', 'Link gerado e marcado como enviado')
-    toast.success('Link do briefing gerado')
+    db.addLog(client.id, 'Briefing enviado', 'Link gerado e etapa avançada para Briefing')
+    toast.success('Link do briefing gerado · etapa avançada para Briefing')
   }
 
   const copy = async () => {

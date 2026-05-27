@@ -99,8 +99,22 @@ interface BriefingFormState {
   offHoursEditing: boolean
   useAI: boolean
   aiTone: AiTone
-  aiInstructions: string
+  aiAgentName: string
+  aiCompanyDescription: string
+  aiServices: string
+  aiHasPrices: boolean
+  aiPrices: string
+  aiLocation: string
+  aiSocialMedia: string
+  aiAttendanceFlow: string
+  aiTransferConditions: string
   aiRestrictions: string
+  // IA Avançada
+  aiExternalSystem: string
+  aiExternalApiUrl: string
+  aiExternalWhatToQuery: string
+  aiExternalAuth: string
+  aiExternalExamples: string
   externalAutomationInfo: string
   extraNotes: string
 }
@@ -129,8 +143,21 @@ function initialFormState(company: string): BriefingFormState {
     offHoursEditing: false,
     useAI: false,
     aiTone: 'casual',
-    aiInstructions: '',
+    aiAgentName: '',
+    aiCompanyDescription: '',
+    aiServices: '',
+    aiHasPrices: false,
+    aiPrices: '',
+    aiLocation: '',
+    aiSocialMedia: '',
+    aiAttendanceFlow: '',
+    aiTransferConditions: '',
     aiRestrictions: '',
+    aiExternalSystem: '',
+    aiExternalApiUrl: '',
+    aiExternalWhatToQuery: '',
+    aiExternalAuth: '',
+    aiExternalExamples: '',
     externalAutomationInfo: '',
     extraNotes: '',
   }
@@ -243,8 +270,22 @@ export function BriefingPublicPage() {
       departments: state.sectors,
       useAI: state.useAI,
       aiTone: state.useAI ? state.aiTone : undefined,
-      aiInstructions: state.useAI ? state.aiInstructions.trim() || undefined : undefined,
+      aiAgentName: state.useAI ? state.aiAgentName.trim() || undefined : undefined,
+      aiCompanyDescription: state.useAI ? state.aiCompanyDescription.trim() || undefined : undefined,
+      aiServices: state.useAI ? state.aiServices.trim() || undefined : undefined,
+      aiHasPrices: state.useAI ? state.aiHasPrices : undefined,
+      aiPrices: state.useAI && state.aiHasPrices ? state.aiPrices.trim() || undefined : undefined,
+      aiLocation: state.useAI ? state.aiLocation.trim() || undefined : undefined,
+      aiSocialMedia: state.useAI ? state.aiSocialMedia.trim() || undefined : undefined,
+      aiAttendanceFlow: state.useAI ? state.aiAttendanceFlow.trim() || undefined : undefined,
+      aiTransferConditions: state.useAI ? state.aiTransferConditions.trim() || undefined : undefined,
       aiRestrictions: state.useAI ? state.aiRestrictions.trim() || undefined : undefined,
+      aiExternalSystem: state.useAI ? state.aiExternalSystem.trim() || undefined : undefined,
+      aiExternalApiUrl: state.useAI ? state.aiExternalApiUrl.trim() || undefined : undefined,
+      aiExternalWhatToQuery: state.useAI ? state.aiExternalWhatToQuery.trim() || undefined : undefined,
+      aiExternalAuth: state.useAI ? state.aiExternalAuth.trim() || undefined : undefined,
+      aiExternalExamples: state.useAI ? state.aiExternalExamples.trim() || undefined : undefined,
+      aiInstructions: undefined,
       wavoipInfo: state.wavoipInfo.trim() || undefined,
       olxInfo: state.olxInfo.trim() || undefined,
       mercadolivreInfo: state.mercadolivreInfo.trim() || undefined,
@@ -825,54 +866,190 @@ export function BriefingPublicPage() {
           <SectionBlock
             number={section + 1}
             total={totalSections}
-            title="Inteligência Artificial"
+            title={cfg?.automationTypes.includes('ia_avancada') ? 'Inteligência Artificial Avançada' : 'Inteligência Artificial'}
             icon={<Sparkles className="h-5 w-5 text-[#4F8EF7]" />}
-            description={
-              cfg?.automationTypes.includes('ia_avancada')
-                ? 'Configuração de IA avançada para atendimento autônomo.'
-                : 'Configuração de IA para apoiar o atendimento.'
-            }
+            description="Preencha as informações abaixo para configurarmos a IA do seu atendimento."
           >
-            <div className="space-y-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={state.useAI}
-                  onChange={(e) => setState({ ...state, useAI: e.target.checked })}
-                  className="h-4 w-4 accent-[#4F8EF7]"
-                />
-                Desejo usar IA no atendimento
-              </label>
-              {state.useAI && (
-                <>
-                  <Field label="Tom da IA">
+            <div className="space-y-5">
+
+              {/* Identidade da IA */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Identidade da IA</h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label="Nome da IA (ex: Ana, Max, Bia)">
+                    <PlainInput
+                      value={state.aiAgentName}
+                      onChange={(v) => setState({ ...state, aiAgentName: v })}
+                      placeholder="Ex: Ana"
+                    />
+                  </Field>
+                  <Field label="Tom de comunicação">
                     <PlainSelect
                       value={state.aiTone}
                       onChange={(v) => setState({ ...state, aiTone: v as AiTone })}
                       options={[
-                        { value: 'formal', label: 'Formal' },
-                        { value: 'casual', label: 'Casual' },
-                        { value: 'tecnico', label: 'Técnico' },
+                        { value: 'formal', label: 'Formal — linguagem profissional e respeitosa' },
+                        { value: 'casual', label: 'Casual — amigável e descontraído' },
+                        { value: 'tecnico', label: 'Técnico — objetivo e preciso' },
                       ]}
                     />
                   </Field>
-                  <Field label="Instruções principais para a IA">
+                </div>
+              </div>
+
+              {/* Sobre a empresa */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Sobre a empresa</h3>
+                <div className="space-y-3">
+                  <Field label="Descreva o que a empresa faz e para quem atende *">
                     <PlainTextarea
-                      value={state.aiInstructions}
-                      onChange={(v) => setState({ ...state, aiInstructions: v })}
-                      rows={4}
-                      placeholder="Descreva o que a IA deve fazer, o perfil da empresa, produtos/serviços…"
+                      value={state.aiCompanyDescription}
+                      onChange={(v) => setState({ ...state, aiCompanyDescription: v })}
+                      rows={3}
+                      placeholder="Ex: Somos uma clínica de estética que atende mulheres entre 25 e 50 anos, oferecendo tratamentos faciais e corporais…"
                     />
                   </Field>
-                  <Field label="O que a IA NÃO deve fazer">
+                  <Field label="Localização (cidade, estado ou região de atendimento)">
+                    <PlainInput
+                      value={state.aiLocation}
+                      onChange={(v) => setState({ ...state, aiLocation: v })}
+                      placeholder="Ex: São Paulo, SP — ou atendimento nacional"
+                    />
+                  </Field>
+                  <Field label="Redes sociais (Instagram, Facebook, TikTok…)">
+                    <PlainInput
+                      value={state.aiSocialMedia}
+                      onChange={(v) => setState({ ...state, aiSocialMedia: v })}
+                      placeholder="Ex: Instagram @suaempresa · Facebook /suaempresa"
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Serviços e valores */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Serviços e valores</h3>
+                <div className="space-y-3">
+                  <Field label="Liste os principais serviços/produtos *">
+                    <PlainTextarea
+                      value={state.aiServices}
+                      onChange={(v) => setState({ ...state, aiServices: v })}
+                      rows={4}
+                      placeholder={'Ex:\n- Limpeza de pele: procedimento de 1h\n- Botox: tratamento para rugas\n- Depilação a laser: pacotes de 6 sessões'}
+                    />
+                  </Field>
+                  <div>
+                    <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                      A IA pode informar os preços dos serviços?
+                    </span>
+                    <div className="flex items-center gap-3">
+                      {[{ v: true, l: 'Sim, pode informar' }, { v: false, l: 'Não, enviar para atendente' }].map(({ v, l }) => (
+                        <label key={String(v)} className="inline-flex items-center gap-1.5 cursor-pointer text-sm">
+                          <input
+                            type="radio"
+                            checked={state.aiHasPrices === v}
+                            onChange={() => setState({ ...state, aiHasPrices: v })}
+                            className="h-4 w-4 accent-[#4F8EF7]"
+                          />
+                          {l}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {state.aiHasPrices && (
+                    <Field label="Informe a tabela de preços">
+                      <PlainTextarea
+                        value={state.aiPrices}
+                        onChange={(v) => setState({ ...state, aiPrices: v })}
+                        rows={4}
+                        placeholder={'Ex:\n- Limpeza de pele: R$ 180\n- Botox (por área): R$ 450\n- Depilação laser (axila): R$ 120/sessão'}
+                      />
+                    </Field>
+                  )}
+                </div>
+              </div>
+
+              {/* Fluxo de atendimento */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Fluxo de atendimento</h3>
+                <div className="space-y-3">
+                  <Field label="Como a IA deve conduzir a conversa? *">
+                    <PlainTextarea
+                      value={state.aiAttendanceFlow}
+                      onChange={(v) => setState({ ...state, aiAttendanceFlow: v })}
+                      rows={4}
+                      placeholder={'Ex: 1. Saudar o cliente pelo nome\n2. Perguntar o que está procurando\n3. Apresentar os serviços relacionados\n4. Oferecer agendamento\n5. Se o cliente tiver dúvidas complexas, transferir para atendente'}
+                    />
+                  </Field>
+                  <Field label="Quando a IA deve transferir para um atendente humano?">
+                    <PlainTextarea
+                      value={state.aiTransferConditions}
+                      onChange={(v) => setState({ ...state, aiTransferConditions: v })}
+                      rows={3}
+                      placeholder={'Ex:\n- Quando o cliente reclamar de um serviço\n- Quando pedir falar com um responsável\n- Quando a pergunta não tiver resposta clara\n- Fora do horário comercial'}
+                    />
+                  </Field>
+                  <Field label="O que a IA NÃO deve fazer ou dizer?">
                     <PlainTextarea
                       value={state.aiRestrictions}
                       onChange={(v) => setState({ ...state, aiRestrictions: v })}
                       rows={3}
-                      placeholder="Ex.: Não citar concorrentes, não dar preços sem consultar um atendente…"
+                      placeholder={'Ex:\n- Não citar concorrentes\n- Não dar desconto sem autorização\n- Não confirmar agendamentos sem verificar disponibilidade'}
                     />
                   </Field>
-                </>
+                </div>
+              </div>
+
+              {/* IA Avançada — integração externa */}
+              {cfg?.automationTypes.includes('ia_avancada') && (
+                <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
+                  <h3 className="mb-1 text-sm font-semibold text-purple-900">
+                    Integração com sistema externo
+                  </h3>
+                  <p className="mb-3 text-xs text-purple-700">
+                    A IA avançada pode consultar seu sistema interno (CRM, ERP, plataforma própria) em tempo real. Preencha os dados abaixo.
+                  </p>
+                  <div className="space-y-3">
+                    <Field label="Qual sistema será integrado? (nome do sistema)">
+                      <PlainInput
+                        value={state.aiExternalSystem}
+                        onChange={(v) => setState({ ...state, aiExternalSystem: v })}
+                        placeholder="Ex: Protheus, Sales Force, sistema próprio, plataforma da loja…"
+                      />
+                    </Field>
+                    <Field label="O que a IA precisa consultar neste sistema? *">
+                      <PlainTextarea
+                        value={state.aiExternalWhatToQuery}
+                        onChange={(v) => setState({ ...state, aiExternalWhatToQuery: v })}
+                        rows={3}
+                        placeholder={'Ex:\n- Verificar status de pedido pelo CPF\n- Consultar estoque de produto\n- Ver histórico de compras do cliente\n- Confirmar agendamento'}
+                      />
+                    </Field>
+                    <Field label="URL da API ou webhook (se já tiver)">
+                      <PlainInput
+                        value={state.aiExternalApiUrl}
+                        onChange={(v) => setState({ ...state, aiExternalApiUrl: v })}
+                        placeholder="https://api.suaempresa.com.br/v1/..."
+                      />
+                    </Field>
+                    <Field label="Como autenticar na API? (token, usuário/senha, chave…)">
+                      <PlainTextarea
+                        value={state.aiExternalAuth}
+                        onChange={(v) => setState({ ...state, aiExternalAuth: v })}
+                        rows={2}
+                        placeholder="Ex: Bearer token no header Authorization, ou usuário admin + senha…"
+                      />
+                    </Field>
+                    <Field label="Descreva exemplos de situações em que a IA consultaria o sistema">
+                      <PlainTextarea
+                        value={state.aiExternalExamples}
+                        onChange={(v) => setState({ ...state, aiExternalExamples: v })}
+                        rows={3}
+                        placeholder={'Ex:\nCliente pergunta "Meu pedido já saiu?" → IA consulta API com CPF → retorna status\nCliente quer saber estoque → IA consulta catálogo → responde disponibilidade'}
+                      />
+                    </Field>
+                  </div>
+                </div>
               )}
             </div>
           </SectionBlock>

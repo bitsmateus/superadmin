@@ -3,7 +3,10 @@ import {
   CheckCircle2,
   Loader2,
   Mail,
+  MessageSquare,
+  Monitor,
   Server as ServerIcon,
+  Smartphone,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
@@ -35,7 +38,8 @@ export function CreateTenantModal({
   open: boolean
   onClose: () => void
 }) {
-  const servers = useAuthStore((s) => s.servers.filter((x) => x.enabled))
+  const allServers = useAuthStore((s) => s.servers)
+  const servers = React.useMemo(() => allServers.filter((x) => x.enabled), [allServers])
   const [user] = useCurrentUser()
 
   const [serverId, setServerId] = React.useState<string>(
@@ -47,12 +51,20 @@ export function CreateTenantModal({
   )
   const [email, setEmail] = React.useState(client.supportEmail || defaultEmail)
   const [creating, setCreating] = React.useState(false)
+  const [platformApp, setPlatformApp] = React.useState(client.platformApp ?? false)
+  const [platformWeb, setPlatformWeb] = React.useState(client.platformWeb ?? false)
+  const [platformChat, setPlatformChat] = React.useState(client.platformChat ?? false)
 
+  // Reset form when modal opens — intentionally uses only `open` as dep so user
+  // edits inside the modal are not overwritten by store updates mid-session.
   React.useEffect(() => {
     if (!open) return
     setServerId(client.tenantServerId ?? servers[0]?.id ?? '')
     setEmail(client.supportEmail || defaultEmail)
-  }, [open, client.tenantServerId, client.supportEmail, defaultEmail, servers])
+    setPlatformApp(client.platformApp ?? false)
+    setPlatformWeb(client.platformWeb ?? false)
+    setPlatformChat(client.platformChat ?? false)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const create = async () => {
     const server = servers.find((s) => s.id === serverId)
@@ -98,6 +110,9 @@ export function CreateTenantModal({
         supportEmail: finalEmail,
         supportPassword: tenantPassword,
         deliveryChecklist: checked,
+        platformApp,
+        platformWeb,
+        platformChat,
       })
       db.addLog(
         client.id,
@@ -173,6 +188,34 @@ export function CreateTenantModal({
           onChange={(e) => setEmail(e.target.value)}
           hint={`Senha padrão: ${db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD}`}
         />
+
+        <div>
+          <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">
+            Plataforma(s)
+          </div>
+          <div className="flex items-center gap-2">
+            {([
+              { state: platformApp, set: setPlatformApp, label: 'App', icon: <Smartphone className="h-3.5 w-3.5" /> },
+              { state: platformWeb, set: setPlatformWeb, label: 'Web', icon: <Monitor className="h-3.5 w-3.5" /> },
+              { state: platformChat, set: setPlatformChat, label: 'Chat', icon: <MessageSquare className="h-3.5 w-3.5" /> },
+            ] as const).map(({ state, set, label, icon }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => set(!state)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+                  state
+                    ? 'border-accent/50 bg-accent/10 text-accent ring-1 ring-accent/30'
+                    : 'border-line bg-elevate/[0.02] text-foreground/55 hover:border-accent/20 hover:text-foreground/80',
+                )}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {creating && (
           <p className="inline-flex items-center gap-2 text-xs text-foreground/55">

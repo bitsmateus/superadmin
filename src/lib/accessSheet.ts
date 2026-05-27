@@ -22,7 +22,9 @@ export interface AccessSheetParams {
  */
 export function openAccessSheet({ client, server }: AccessSheetParams): boolean {
   const html = renderAccessSheetHtml({ client, server })
-  const w = window.open('', '_blank', 'noopener,noreferrer,width=900,height=1000')
+  // NOTE: noopener/noreferrer make window.open return null per spec — omit them
+  // so we can write to the new window's document.
+  const w = window.open('', '_blank', 'width=900,height=1000')
   if (!w) return false
   w.document.open()
   w.document.write(html)

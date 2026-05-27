@@ -150,7 +150,7 @@ export function BriefingPublicPage() {
   const [client, setClient] = React.useState<PublicClient | null | undefined>(undefined)
   const [state, setState] = React.useState<BriefingFormState>(initialFormState(''))
   const [section, setSection] = React.useState(0)
-  const [submitted, setSubmitted] = React.useState(false)
+  const [submittedData, setSubmittedData] = React.useState<{ greeting: string; offHours: string } | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
 
   React.useEffect(() => {
@@ -206,7 +206,13 @@ export function BriefingPublicPage() {
   }
 
   if (!token || !client) return <BriefingErrorPage />
-  if (submitted) return <BriefingSuccessPage company={client.company} />
+  if (submittedData) return (
+    <BriefingSuccessPage
+      company={client.company}
+      greeting={submittedData.greeting}
+      offHours={submittedData.offHours}
+    />
+  )
 
   const submit = async () => {
     const data: BriefingData = {
@@ -249,7 +255,10 @@ export function BriefingPublicPage() {
     setSubmitting(true)
     try {
       await api.post(`/api/public/briefing/${token}`, { data })
-      setSubmitted(true)
+      setSubmittedData({
+        greeting: state.greetingMessage,
+        offHours: state.offHoursMessage,
+      })
     } catch (err) {
       toast.error('Falha ao enviar: ' + (err instanceof Error ? err.message : 'Erro'))
     } finally {
@@ -1018,18 +1027,63 @@ function BriefingErrorPage() {
   )
 }
 
-function BriefingSuccessPage({ company }: { company: string }) {
+function BriefingSuccessPage({
+  company,
+  greeting,
+  offHours,
+}: {
+  company: string
+  greeting: string
+  offHours: string
+}) {
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center">
-      <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-green-50 text-green-500">
-          <Check className="h-7 w-7" />
+    <div className="min-h-screen bg-slate-50 p-6">
+      <div className="mx-auto max-w-2xl space-y-6">
+        {/* Confirmação */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
+          <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-green-50 text-green-500">
+            <Check className="h-7 w-7" />
+          </div>
+          <h1 className="text-lg font-semibold text-slate-900">Recebemos suas informações!</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Obrigado por preencher o briefing, {company || 'cliente'}. Nossa equipe revisará
+            tudo e entrará em contato em breve.
+          </p>
         </div>
-        <h1 className="text-lg font-semibold text-slate-900">Recebemos suas informações!</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Obrigado por preencher o briefing, {company || 'cliente'}. Nossa equipe revisará
-          tudo e entrará em contato em breve.
-        </p>
+
+        {/* Mensagens enviadas */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+          <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-[#4F8EF7]" />
+            Mensagens configuradas
+          </h2>
+
+          <div>
+            <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">
+              Saudação
+            </p>
+            <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-4">
+              <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                {greeting}
+              </pre>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">
+              Fora do horário de atendimento
+            </p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                {offHours}
+              </pre>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400">
+            Essas mensagens serão configuradas pelo nosso time durante a implementação. Você poderá personalizá-las depois.
+          </p>
+        </div>
       </div>
     </div>
   )

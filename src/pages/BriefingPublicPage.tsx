@@ -2,10 +2,11 @@ import * as React from 'react'
 import { useParams } from 'react-router-dom'
 import {
   ArrowRight,
-  Building2,
   Check,
+  ChevronDown,
   Clock,
   Globe,
+  HelpCircle,
   MessageSquare,
   Phone,
   Plus,
@@ -14,6 +15,7 @@ import {
   StickyNote,
   Trash2,
   Users,
+  X,
   Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -25,20 +27,14 @@ import type {
   BriefingStatus,
   BriefingUser,
   BriefingUserRole,
+  AiTone,
 } from '@/types/client'
 
-const DAYS = [
-  'Segunda',
-  'Terça',
-  'Quarta',
-  'Quinta',
-  'Sexta',
-  'Sábado',
-  'Domingo',
-]
+const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+
+const SECTOR_EMOJIS = ['📈', '🛠️', '💰', '🎯', '📞', '💡', '🔧', '📋', '🎨', '🚀']
 
 type SectionKey =
-  | 'empresa'
   | 'usuarios'
   | 'horarios'
   | 'integracoes'
@@ -48,7 +44,7 @@ type SectionKey =
   | 'observacoes'
 
 function buildSections(cfg: BriefingConfig | null): SectionKey[] {
-  const sections: SectionKey[] = ['empresa', 'usuarios', 'horarios', 'integracoes']
+  const sections: SectionKey[] = ['usuarios', 'horarios', 'integracoes']
   if (!cfg) {
     sections.push('chatbot', 'ia', 'observacoes')
     return sections
@@ -61,65 +57,83 @@ function buildSections(cfg: BriefingConfig | null): SectionKey[] {
   return sections
 }
 
+function buildGreeting(company: string, sectors: string[]): string {
+  const menuItems = sectors.length > 0
+    ? sectors
+        .map((s, i) => `👉 ${i + 1} - ${s} ${SECTOR_EMOJIS[i] ?? '📌'}`)
+        .join('\n')
+    : '👉 1 - Comercial 📈\n👉 2 - Suporte Técnico 🛠️\n👉 3 - Financeiro 💰'
+
+  return `Olá! Seja muito bem-vindo(a) à ${company || 'nossa empresa'}! ✨
+
+É um prazer ter você aqui. Para que eu possa te direcionar para o atendimento ideal, por favor, escolha uma das opções abaixo:
+
+${menuItems}
+
+Clique em uma opção ou digite o número correspondente para continuar.`
+}
+
+function buildOffHours(company: string): string {
+  return `Olá! Obrigado por entrar em contato com a ${company || 'nossa empresa'}! ✨
+
+No momento, nossa equipe está fora do horário de expediente. Nosso atendimento acontece de Segunda a Sexta, das 08h às 18h.
+
+Assim que nossa equipe retornar, entraremos em contato com você com total prioridade! 🗓️👋`
+}
+
 interface BriefingFormState {
-  razaoSocial: string
-  nomeFantasia: string
-  cnpj: string
   site: string
+  sectors: string[]
+  newSectorInput: string
   users: BriefingUser[]
   schedule: { day: string; active: boolean; start: string; end: string }[]
   timezone: string
   whatsappNumbers: string
-  whatsappType: string
-  useFacebook: boolean
-  facebookToken: string
   wavoipInfo: string
   olxInfo: string
   mercadolivreInfo: string
   emailConfig: string
-  mainFlow: string
   greetingMessage: string
   offHoursMessage: string
-  departments: string
+  greetingEditing: boolean
+  offHoursEditing: boolean
   useAI: boolean
-  aiTone: 'formal' | 'casual' | 'tecnico'
+  aiTone: AiTone
   aiInstructions: string
   aiRestrictions: string
   externalAutomationInfo: string
   extraNotes: string
 }
 
-const initialState: BriefingFormState = {
-  razaoSocial: '',
-  nomeFantasia: '',
-  cnpj: '',
-  site: '',
-  users: [{ name: '', email: '', sector: '', role: 'atendente' }],
-  schedule: DAYS.map((day) => ({
-    day,
-    active: day !== 'Sábado' && day !== 'Domingo',
-    start: '08:00',
-    end: '18:00',
-  })),
-  timezone: 'America/Sao_Paulo',
-  whatsappNumbers: '',
-  whatsappType: 'baileys',
-  useFacebook: false,
-  facebookToken: '',
-  wavoipInfo: '',
-  olxInfo: '',
-  mercadolivreInfo: '',
-  emailConfig: '',
-  mainFlow: '',
-  greetingMessage: '',
-  offHoursMessage: '',
-  departments: '',
-  useAI: false,
-  aiTone: 'casual',
-  aiInstructions: '',
-  aiRestrictions: '',
-  externalAutomationInfo: '',
-  extraNotes: '',
+function initialFormState(company: string): BriefingFormState {
+  return {
+    site: '',
+    sectors: [],
+    newSectorInput: '',
+    users: [{ name: '', email: '', sector: '', role: 'atendente' }],
+    schedule: DAYS.map((day) => ({
+      day,
+      active: day !== 'Sábado' && day !== 'Domingo',
+      start: '08:00',
+      end: '18:00',
+    })),
+    timezone: 'America/Sao_Paulo',
+    whatsappNumbers: '',
+    wavoipInfo: '',
+    olxInfo: '',
+    mercadolivreInfo: '',
+    emailConfig: '',
+    greetingMessage: buildGreeting(company, []),
+    offHoursMessage: buildOffHours(company),
+    greetingEditing: false,
+    offHoursEditing: false,
+    useAI: false,
+    aiTone: 'casual',
+    aiInstructions: '',
+    aiRestrictions: '',
+    externalAutomationInfo: '',
+    extraNotes: '',
+  }
 }
 
 interface PublicClient {
@@ -133,10 +147,8 @@ interface PublicClient {
 
 export function BriefingPublicPage() {
   const { token } = useParams<{ token: string }>()
-  const [client, setClient] = React.useState<PublicClient | null | undefined>(
-    undefined,
-  )
-  const [state, setState] = React.useState<BriefingFormState>(initialState)
+  const [client, setClient] = React.useState<PublicClient | null | undefined>(undefined)
+  const [state, setState] = React.useState<BriefingFormState>(initialFormState(''))
   const [section, setSection] = React.useState(0)
   const [submitted, setSubmitted] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
@@ -156,11 +168,7 @@ export function BriefingPublicPage() {
           briefing_revision_note: row.briefing_revision_note ?? null,
           briefing_config: row.briefing_config ?? null,
         })
-        // Pre-check Facebook if instagram/messenger in channels
-        const cfg = row.briefing_config
-        if (cfg && (cfg.channels.includes('instagram') || cfg.channels.includes('messenger'))) {
-          setState((s) => ({ ...s, useFacebook: true }))
-        }
+        setState(initialFormState(row.company))
       } catch {
         if (cancelled) return
         setClient(null)
@@ -169,10 +177,25 @@ export function BriefingPublicPage() {
     return () => { cancelled = true }
   }, [token])
 
+  // Regenerate greeting when sectors change (if not being edited)
+  React.useEffect(() => {
+    if (!state.greetingEditing && client?.company) {
+      setState((s) => ({
+        ...s,
+        greetingMessage: buildGreeting(client.company, s.sectors),
+      }))
+    }
+  }, [state.sectors, state.greetingEditing, client?.company])
+
   const cfg = client?.briefing_config ?? null
   const sections = React.useMemo(() => buildSections(cfg), [cfg])
   const totalSections = sections.length
   const currentKey = sections[section]
+
+  const needsSite =
+    !cfg ||
+    cfg.connectionTypes.includes('api_oficial') ||
+    cfg.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada')
 
   if (client === undefined) {
     return (
@@ -187,9 +210,9 @@ export function BriefingPublicPage() {
 
   const submit = async () => {
     const data: BriefingData = {
-      razaoSocial: state.razaoSocial.trim(),
-      nomeFantasia: state.nomeFantasia.trim(),
-      cnpj: state.cnpj.trim(),
+      razaoSocial: client.company,
+      nomeFantasia: client.company,
+      cnpj: '',
       site: state.site.trim() || undefined,
       users: state.users
         .filter((u) => u.name.trim() && u.email.trim())
@@ -205,24 +228,20 @@ export function BriefingPublicPage() {
         .split(/[\s,;]+/)
         .map((s) => s.trim())
         .filter(Boolean),
-      whatsappType: state.whatsappType,
-      useFacebook: state.useFacebook,
-      facebookToken: state.useFacebook ? state.facebookToken.trim() || undefined : undefined,
-      wavoipInfo: state.wavoipInfo.trim() || undefined,
-      olxInfo: state.olxInfo.trim() || undefined,
-      mercadolivreInfo: state.mercadolivreInfo.trim() || undefined,
-      emailConfig: state.emailConfig.trim() || undefined,
-      mainFlow: state.mainFlow.trim(),
+      whatsappType: 'baileys',
+      useFacebook: false,
+      mainFlow: '',
       greetingMessage: state.greetingMessage.trim(),
       offHoursMessage: state.offHoursMessage.trim(),
-      departments: state.departments
-        .split(/[\n,;]+/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      departments: state.sectors,
       useAI: state.useAI,
       aiTone: state.useAI ? state.aiTone : undefined,
       aiInstructions: state.useAI ? state.aiInstructions.trim() || undefined : undefined,
       aiRestrictions: state.useAI ? state.aiRestrictions.trim() || undefined : undefined,
+      wavoipInfo: state.wavoipInfo.trim() || undefined,
+      olxInfo: state.olxInfo.trim() || undefined,
+      mercadolivreInfo: state.mercadolivreInfo.trim() || undefined,
+      emailConfig: state.emailConfig.trim() || undefined,
       externalAutomationInfo: state.externalAutomationInfo.trim() || undefined,
       extraNotes: state.extraNotes.trim() || undefined,
       submittedAt: new Date().toISOString(),
@@ -253,15 +272,21 @@ export function BriefingPublicPage() {
     }
   }
 
-  const showFacebook =
-    !cfg ||
-    cfg.channels.includes('instagram') ||
-    cfg.channels.includes('messenger')
-
   const maxUsers = cfg?.maxUsers ?? 0
 
+  const addSector = () => {
+    const s = state.newSectorInput.trim()
+    if (!s) return
+    if (state.sectors.includes(s)) return
+    setState((prev) => ({ ...prev, sectors: [...prev.sectors, s], newSectorInput: '' }))
+  }
+
+  const removeSector = (idx: number) => {
+    setState((prev) => ({ ...prev, sectors: prev.sectors.filter((_, i) => i !== idx) }))
+  }
+
   return (
-    <div className="min-h-screen bg-white text-slate-900">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       <BriefingHeader companyName={client.company} />
 
       <main className="mx-auto max-w-3xl px-4 pb-32 pt-8 sm:px-6">
@@ -272,163 +297,217 @@ export function BriefingPublicPage() {
           </div>
         )}
 
-        {/* ── Seção 1: Dados da empresa ── */}
-        {currentKey === 'empresa' && (
-          <SectionBlock
-            number={section + 1}
-            total={totalSections}
-            title="Dados da empresa"
-            icon={<Building2 className="h-5 w-5 text-[#4F8EF7]" />}
-          >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Razão social *">
-                <PlainInput
-                  value={state.razaoSocial}
-                  onChange={(v) => setState({ ...state, razaoSocial: v })}
-                />
-              </Field>
-              <Field label="Nome fantasia *">
-                <PlainInput
-                  value={state.nomeFantasia}
-                  onChange={(v) => setState({ ...state, nomeFantasia: v })}
-                />
-              </Field>
-              <Field label="CNPJ *">
-                <PlainInput
-                  value={state.cnpj}
-                  onChange={(v) => setState({ ...state, cnpj: v })}
-                  placeholder="00.000.000/0000-00"
-                />
-              </Field>
-              <Field label="Site">
-                <PlainInput
-                  value={state.site}
-                  onChange={(v) => setState({ ...state, site: v })}
-                  placeholder="https://"
-                />
-              </Field>
-            </div>
-          </SectionBlock>
-        )}
-
-        {/* ── Seção 2: Usuários ── */}
+        {/* ── Seção 1: Usuários e setores ── */}
         {currentKey === 'usuarios' && (
           <SectionBlock
             number={section + 1}
             total={totalSections}
             title="Usuários e setores"
             icon={<Users className="h-5 w-5 text-[#4F8EF7]" />}
-            description={
-              maxUsers > 0
-                ? `Quem vai usar o sistema? Você pode cadastrar até ${maxUsers} usuário(s).`
-                : 'Quem vai usar o sistema? Adicione um por linha.'
-            }
+            description="Primeiro crie os setores da sua empresa, depois cadastre quem vai usar o sistema."
           >
-            <div className="space-y-3">
-              {state.users.map((u, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-                >
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
-                    <div className="sm:col-span-3">
-                      <Field label="Nome">
-                        <PlainInput
-                          value={u.name}
-                          onChange={(v) => {
-                            const users = [...state.users]
-                            users[i] = { ...users[i], name: v }
-                            setState({ ...state, users })
-                          }}
-                        />
-                      </Field>
+            <div className="space-y-6">
+              {/* Site — only for API Oficial or IA */}
+              {needsSite && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                  <Field label="Site da empresa">
+                    <PlainInput
+                      value={state.site}
+                      onChange={(v) => setState({ ...state, site: v })}
+                      placeholder="https://www.suaempresa.com.br"
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {/* Setores */}
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-800">
+                    1. Setores da empresa
+                  </h3>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                    {state.sectors.length} criado(s)
+                  </span>
+                </div>
+                <p className="mb-3 text-xs text-slate-500">
+                  Adicione os departamentos que terão filas de atendimento (ex: Comercial, Suporte, Financeiro).
+                </p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {state.sectors.map((s, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-[#4F8EF7]/10 px-3 py-1 text-sm font-medium text-[#4F8EF7]"
+                    >
+                      {s}
+                      <button
+                        type="button"
+                        onClick={() => removeSector(i)}
+                        className="ml-0.5 rounded-full p-0.5 hover:bg-[#4F8EF7]/20"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <PlainInput
+                    value={state.newSectorInput}
+                    onChange={(v) => setState({ ...state, newSectorInput: v })}
+                    placeholder="Ex: Comercial, Suporte, Financeiro…"
+                    className="flex-1"
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSector() } }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addSector}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#4F8EF7] px-3 py-2 text-sm font-medium text-white hover:bg-[#6BA0F9]"
+                  >
+                    <Plus className="h-4 w-4" /> Adicionar
+                  </button>
+                </div>
+              </div>
+
+              {/* Usuários */}
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-800">
+                    2. Usuários do sistema
+                  </h3>
+                  {maxUsers > 0 && (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                      {state.users.length}/{maxUsers}
+                    </span>
+                  )}
+                  <RoleInfoPopover />
+                </div>
+
+                <div className="space-y-3">
+                  {state.users.map((u, i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+                        <div className="sm:col-span-3">
+                          <Field label="Nome">
+                            <PlainInput
+                              value={u.name}
+                              onChange={(v) => {
+                                const users = [...state.users]
+                                users[i] = { ...users[i], name: v }
+                                setState({ ...state, users })
+                              }}
+                              placeholder="João Silva"
+                            />
+                          </Field>
+                        </div>
+                        <div className="sm:col-span-4">
+                          <Field label="E-mail">
+                            <PlainInput
+                              type="email"
+                              value={u.email}
+                              onChange={(v) => {
+                                const users = [...state.users]
+                                users[i] = { ...users[i], email: v }
+                                setState({ ...state, users })
+                              }}
+                              placeholder="joao@empresa.com"
+                            />
+                          </Field>
+                        </div>
+                        <div className="sm:col-span-3">
+                          <Field label="Setor">
+                            {state.sectors.length > 0 ? (
+                              <PlainSelect
+                                value={u.sector}
+                                onChange={(v) => {
+                                  const users = [...state.users]
+                                  users[i] = { ...users[i], sector: v }
+                                  setState({ ...state, users })
+                                }}
+                                options={[
+                                  { value: '', label: 'Selecionar…' },
+                                  ...state.sectors.map((s) => ({ value: s, label: s })),
+                                ]}
+                              />
+                            ) : (
+                              <PlainInput
+                                value={u.sector}
+                                onChange={(v) => {
+                                  const users = [...state.users]
+                                  users[i] = { ...users[i], sector: v }
+                                  setState({ ...state, users })
+                                }}
+                                placeholder="Crie setores acima"
+                              />
+                            )}
+                          </Field>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <Field label="Perfil">
+                            <PlainSelect
+                              value={u.role}
+                              onChange={(v) => {
+                                const users = [...state.users]
+                                users[i] = { ...users[i], role: v as BriefingUserRole }
+                                setState({ ...state, users })
+                              }}
+                              options={[
+                                { value: 'atendente', label: 'Atendente' },
+                                { value: 'supervisor', label: 'Supervisor' },
+                                { value: 'admin', label: 'Admin' },
+                              ]}
+                            />
+                          </Field>
+                        </div>
+                      </div>
+                      {state.users.length > 1 && (
+                        <button
+                          type="button"
+                          className="mt-3 inline-flex items-center gap-1 text-xs text-rose-500 hover:underline"
+                          onClick={() =>
+                            setState({
+                              ...state,
+                              users: state.users.filter((_, x) => x !== i),
+                            })
+                          }
+                        >
+                          <Trash2 className="h-3 w-3" /> Remover usuário
+                        </button>
+                      )}
                     </div>
-                    <div className="sm:col-span-4">
-                      <Field label="E-mail">
-                        <PlainInput
-                          type="email"
-                          value={u.email}
-                          onChange={(v) => {
-                            const users = [...state.users]
-                            users[i] = { ...users[i], email: v }
-                            setState({ ...state, users })
-                          }}
-                        />
-                      </Field>
-                    </div>
-                    <div className="sm:col-span-3">
-                      <Field label="Setor">
-                        <PlainInput
-                          value={u.sector}
-                          onChange={(v) => {
-                            const users = [...state.users]
-                            users[i] = { ...users[i], sector: v }
-                            setState({ ...state, users })
-                          }}
-                        />
-                      </Field>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Field label="Tipo">
-                        <PlainSelect
-                          value={u.role}
-                          onChange={(v) => {
-                            const users = [...state.users]
-                            users[i] = { ...users[i], role: v as BriefingUserRole }
-                            setState({ ...state, users })
-                          }}
-                          options={[
-                            { value: 'atendente', label: 'Atendente' },
-                            { value: 'supervisor', label: 'Supervisor' },
-                            { value: 'admin', label: 'Admin' },
-                          ]}
-                        />
-                      </Field>
-                    </div>
-                  </div>
-                  {state.users.length > 1 && (
+                  ))}
+
+                  {(maxUsers === 0 || state.users.length < maxUsers) && (
                     <button
                       type="button"
-                      className="mt-2 inline-flex items-center gap-1 text-xs text-rose-600 hover:underline"
                       onClick={() =>
                         setState({
                           ...state,
-                          users: state.users.filter((_, x) => x !== i),
+                          users: [
+                            ...state.users,
+                            { name: '', email: '', sector: '', role: 'atendente' },
+                          ],
                         })
                       }
+                      className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 py-2.5 text-sm text-slate-500 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
                     >
-                      <Trash2 className="h-3 w-3" /> Remover
+                      <Plus className="h-4 w-4" /> Adicionar usuário
                     </button>
                   )}
+                  {maxUsers > 0 && state.users.length >= maxUsers && (
+                    <p className="text-xs text-slate-400">
+                      Limite de {maxUsers} usuário(s) atingido.
+                    </p>
+                  )}
                 </div>
-              ))}
-              {(maxUsers === 0 || state.users.length < maxUsers) && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setState({
-                      ...state,
-                      users: [
-                        ...state.users,
-                        { name: '', email: '', sector: '', role: 'atendente' },
-                      ],
-                    })
-                  }
-                  className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
-                >
-                  <Plus className="h-4 w-4" /> Adicionar usuário
-                </button>
-              )}
-              {maxUsers > 0 && state.users.length >= maxUsers && (
-                <p className="text-xs text-slate-400">
-                  Limite de {maxUsers} usuário(s) atingido.
-                </p>
-              )}
+              </div>
             </div>
           </SectionBlock>
         )}
 
-        {/* ── Seção 3: Horários ── */}
+        {/* ── Seção: Horários ── */}
         {currentKey === 'horarios' && (
           <SectionBlock
             number={section + 1}
@@ -440,7 +519,7 @@ export function BriefingPublicPage() {
               {state.schedule.map((s, i) => (
                 <div
                   key={s.day}
-                  className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5"
+                  className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5"
                 >
                   <label className="inline-flex w-32 items-center gap-2 text-sm">
                     <input
@@ -484,7 +563,7 @@ export function BriefingPublicPage() {
                   )}
                 </div>
               ))}
-              <div>
+              <div className="mt-2">
                 <Field label="Fuso horário">
                   <PlainSelect
                     value={state.timezone}
@@ -502,90 +581,35 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
 
-        {/* ── Seção 4: Integrações ── */}
+        {/* ── Seção: Canais ── */}
         {currentKey === 'integracoes' && (
           <SectionBlock
             number={section + 1}
             total={totalSections}
-            title="Canais e integrações"
+            title="Números e canais"
             icon={<Phone className="h-5 w-5 text-[#4F8EF7]" />}
+            description="Informe quais números de WhatsApp vamos conectar ao sistema."
           >
             <div className="space-y-4">
-              {/* WhatsApp — always shown */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <h3 className="mb-3 text-sm font-semibold text-slate-800">
-                  WhatsApp
-                </h3>
-                <div className="space-y-3">
-                  <Field label="Número(s) do WhatsApp">
-                    <PlainTextarea
-                      value={state.whatsappNumbers}
-                      onChange={(v) => setState({ ...state, whatsappNumbers: v })}
-                      placeholder="11999999999, 1133334444"
-                      rows={2}
-                    />
-                    <p className="mt-1 text-xs text-slate-400">
-                      Separe múltiplos por vírgula ou linha.
-                    </p>
-                  </Field>
-                  <Field label="Tipo de conexão">
-                    <PlainSelect
-                      value={state.whatsappType}
-                      onChange={(v) => setState({ ...state, whatsappType: v })}
-                      options={[
-                        { value: 'baileys', label: 'Baileys' },
-                        { value: 'evolution', label: 'Evolution' },
-                        { value: 'uazapi', label: 'Uazapi' },
-                        { value: 'zapi', label: 'Z-API' },
-                        { value: 'meow', label: 'Meow' },
-                        { value: 'evo', label: 'Evo' },
-                      ]}
-                    />
-                  </Field>
-                </div>
+              {/* WhatsApp */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">WhatsApp</h3>
+                <Field label="Número(s) que vamos conectar">
+                  <PlainTextarea
+                    value={state.whatsappNumbers}
+                    onChange={(v) => setState({ ...state, whatsappNumbers: v })}
+                    placeholder={'(11) 99999-9999\n(11) 3333-4444'}
+                    rows={3}
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    Um número por linha ou separados por vírgula. Inclua o DDD.
+                  </p>
+                </Field>
               </div>
-
-              {/* Facebook / Instagram / Messenger */}
-              {showFacebook && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-slate-800">
-                    {cfg?.channels.includes('messenger') && !cfg.channels.includes('instagram')
-                      ? 'Messenger'
-                      : 'Instagram / Facebook'}
-                  </h3>
-                  <div className="space-y-3">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={state.useFacebook}
-                        onChange={(e) =>
-                          setState({ ...state, useFacebook: e.target.checked })
-                        }
-                        className="h-4 w-4 accent-[#4F8EF7]"
-                      />
-                      Vamos integrar{' '}
-                      {cfg?.channels.includes('messenger')
-                        ? 'Messenger/Instagram'
-                        : 'Facebook/Instagram'}
-                    </label>
-                    {state.useFacebook && (
-                      <Field label="Token do Meta">
-                        <PlainInput
-                          value={state.facebookToken}
-                          onChange={(v) =>
-                            setState({ ...state, facebookToken: v })
-                          }
-                          placeholder="EAA…"
-                        />
-                      </Field>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* WaVoip */}
               {cfg?.channels.includes('wavoip') && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <h3 className="mb-3 text-sm font-semibold text-slate-800">WaVoip</h3>
                   <Field label="Informações da conta WaVoip">
                     <PlainTextarea
@@ -600,7 +624,7 @@ export function BriefingPublicPage() {
 
               {/* OLX */}
               {cfg?.channels.includes('olx') && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <h3 className="mb-3 text-sm font-semibold text-slate-800">OLX</h3>
                   <Field label="Informações da conta OLX">
                     <PlainTextarea
@@ -615,10 +639,8 @@ export function BriefingPublicPage() {
 
               {/* Mercado Livre */}
               {cfg?.channels.includes('mercadolivre') && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-slate-800">
-                    Mercado Livre
-                  </h3>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-slate-800">Mercado Livre</h3>
                   <Field label="Informações da conta Mercado Livre">
                     <PlainTextarea
                       value={state.mercadolivreInfo}
@@ -632,13 +654,13 @@ export function BriefingPublicPage() {
 
               {/* E-mail */}
               {cfg?.channels.includes('email') && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <h3 className="mb-3 text-sm font-semibold text-slate-800">E-mail</h3>
                   <Field label="Configurações de e-mail">
                     <PlainTextarea
                       value={state.emailConfig}
                       onChange={(v) => setState({ ...state, emailConfig: v })}
-                      placeholder="Endereço de e-mail, servidor SMTP, credenciais…"
+                      placeholder="Endereço, servidor SMTP, credenciais…"
                       rows={3}
                     />
                   </Field>
@@ -648,50 +670,116 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
 
-        {/* ── Seção 5: Chatbot ── */}
+        {/* ── Seção: Chatbot ── */}
         {currentKey === 'chatbot' && (
           <SectionBlock
             number={section + 1}
             total={totalSections}
             title="Chatbot"
             icon={<MessageSquare className="h-5 w-5 text-[#4F8EF7]" />}
+            description="Configuração das mensagens automáticas do chatbot."
           >
-            <div className="space-y-4">
-              <Field label="Como será o fluxo principal de atendimento?">
-                <PlainTextarea
-                  value={state.mainFlow}
-                  onChange={(v) => setState({ ...state, mainFlow: v })}
-                  rows={5}
-                  placeholder="Ex.: Saudação → menu de opções (Vendas, Suporte, Financeiro) → encaminhamento ao setor"
-                />
-              </Field>
-              <Field label="Mensagem de saudação inicial">
-                <PlainTextarea
-                  value={state.greetingMessage}
-                  onChange={(v) => setState({ ...state, greetingMessage: v })}
-                  rows={3}
-                />
-              </Field>
-              <Field label="Mensagem fora do horário">
-                <PlainTextarea
-                  value={state.offHoursMessage}
-                  onChange={(v) => setState({ ...state, offHoursMessage: v })}
-                  rows={3}
-                />
-              </Field>
-              <Field label="Departamentos / categorias">
-                <PlainTextarea
-                  value={state.departments}
-                  onChange={(v) => setState({ ...state, departments: v })}
-                  rows={2}
-                  placeholder="Vendas, Suporte, Financeiro…"
-                />
-              </Field>
+            <div className="space-y-6">
+              {/* Mensagem de saudação */}
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-xs font-medium text-slate-600">
+                    Mensagem de saudação
+                  </label>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    Demonstrativo — será configurado pelo nosso time
+                  </span>
+                </div>
+
+                {!state.greetingEditing ? (
+                  <div className="relative rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-4">
+                    <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                      {state.greetingMessage}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => setState({ ...state, greetingEditing: true })}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      Personalizar mensagem
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <PlainTextarea
+                      value={state.greetingMessage}
+                      onChange={(v) => setState({ ...state, greetingMessage: v })}
+                      rows={8}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setState({
+                          ...state,
+                          greetingEditing: false,
+                          greetingMessage: buildGreeting(client.company, state.sectors),
+                        })
+                      }}
+                      className="mt-2 text-xs text-[#4F8EF7] hover:underline"
+                    >
+                      Restaurar mensagem padrão
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Mensagem fora do horário */}
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-xs font-medium text-slate-600">
+                    Mensagem fora do horário de atendimento
+                  </label>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    Demonstrativo
+                  </span>
+                </div>
+
+                {!state.offHoursEditing ? (
+                  <div className="relative rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                      {state.offHoursMessage}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => setState({ ...state, offHoursEditing: true })}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      Personalizar mensagem
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <PlainTextarea
+                      value={state.offHoursMessage}
+                      onChange={(v) => setState({ ...state, offHoursMessage: v })}
+                      rows={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setState({
+                          ...state,
+                          offHoursEditing: false,
+                          offHoursMessage: buildOffHours(client.company),
+                        })
+                      }}
+                      className="mt-2 text-xs text-[#4F8EF7] hover:underline"
+                    >
+                      Restaurar mensagem padrão
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </SectionBlock>
         )}
 
-        {/* ── Seção 6: IA ── */}
+        {/* ── Seção: IA ── */}
         {currentKey === 'ia' && (
           <SectionBlock
             number={section + 1}
@@ -719,12 +807,7 @@ export function BriefingPublicPage() {
                   <Field label="Tom da IA">
                     <PlainSelect
                       value={state.aiTone}
-                      onChange={(v) =>
-                        setState({
-                          ...state,
-                          aiTone: v as BriefingFormState['aiTone'],
-                        })
-                      }
+                      onChange={(v) => setState({ ...state, aiTone: v as AiTone })}
                       options={[
                         { value: 'formal', label: 'Formal' },
                         { value: 'casual', label: 'Casual' },
@@ -743,9 +826,7 @@ export function BriefingPublicPage() {
                   <Field label="O que a IA NÃO deve fazer">
                     <PlainTextarea
                       value={state.aiRestrictions}
-                      onChange={(v) =>
-                        setState({ ...state, aiRestrictions: v })
-                      }
+                      onChange={(v) => setState({ ...state, aiRestrictions: v })}
                       rows={3}
                       placeholder="Ex.: Não citar concorrentes, não dar preços sem consultar um atendente…"
                     />
@@ -756,7 +837,7 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
 
-        {/* ── Seção 7: Automação externa ── */}
+        {/* ── Seção: Automação externa ── */}
         {currentKey === 'automacao_externa' && (
           <SectionBlock
             number={section + 1}
@@ -764,17 +845,14 @@ export function BriefingPublicPage() {
             title="Automação externa"
             icon={<Zap className="h-5 w-5 text-[#4F8EF7]" />}
             description={
-              cfg?.externalAutomationNotes
-                ? cfg.externalAutomationNotes
-                : 'Precisamos de algumas informações sobre a automação externa que será integrada.'
+              cfg?.externalAutomationNotes ??
+              'Precisamos de algumas informações sobre a automação externa que será integrada.'
             }
           >
             <Field label="Informações necessárias para a automação">
               <PlainTextarea
                 value={state.externalAutomationInfo}
-                onChange={(v) =>
-                  setState({ ...state, externalAutomationInfo: v })
-                }
+                onChange={(v) => setState({ ...state, externalAutomationInfo: v })}
                 rows={6}
                 placeholder="Descreva as integrações, credenciais ou dados que serão necessários…"
               />
@@ -782,7 +860,7 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
 
-        {/* ── Seção 8: Observações ── */}
+        {/* ── Seção: Observações ── */}
         {currentKey === 'observacoes' && (
           <SectionBlock
             number={section + 1}
@@ -795,6 +873,7 @@ export function BriefingPublicPage() {
                 value={state.extraNotes}
                 onChange={(v) => setState({ ...state, extraNotes: v })}
                 rows={6}
+                placeholder="Informações adicionais, preferências, dúvidas…"
               />
             </Field>
           </SectionBlock>
@@ -804,9 +883,7 @@ export function BriefingPublicPage() {
       <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex flex-col">
-            <span className="text-xs uppercase tracking-wider text-slate-400">
-              Briefing
-            </span>
+            <span className="text-xs uppercase tracking-wider text-slate-400">Briefing</span>
             <span className="text-sm font-medium text-slate-900">
               Seção {section + 1} de {totalSections}
             </span>
@@ -831,11 +908,11 @@ export function BriefingPublicPage() {
               type="button"
               onClick={next}
               disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#6BA0F9] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#6BA0F9] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {section === totalSections - 1 ? (
                 <>
-                  <Send className="h-4 w-4" /> {submitting ? 'Enviando…' : 'Enviar'}
+                  <Send className="h-4 w-4" /> {submitting ? 'Enviando…' : 'Enviar briefing'}
                 </>
               ) : (
                 <>
@@ -850,9 +927,62 @@ export function BriefingPublicPage() {
   )
 }
 
+// ── Info popover para perfis de usuário ──
+function RoleInfoPopover() {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="grid h-5 w-5 place-items-center rounded-full border border-slate-300 text-slate-400 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-7 z-50 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl text-xs text-slate-700 space-y-3">
+          <p className="font-semibold text-slate-900 text-sm">Sobre os campos</p>
+          <div className="space-y-1.5">
+            <p><strong>Nome:</strong> nome do usuário que vai utilizar a ferramenta</p>
+            <p><strong>E-mail:</strong> e-mail de acesso ao sistema</p>
+            <p><strong>Senha:</strong> será definida pela nossa equipe — o usuário poderá alterar após o primeiro acesso</p>
+            <p><strong>Setor:</strong> qual fila de atendimento o usuário terá acesso</p>
+          </div>
+          <hr className="border-slate-100" />
+          <div className="space-y-2">
+            <p className="font-semibold text-slate-900">Perfis de acesso</p>
+            <div>
+              <span className="font-medium text-slate-800">Atendente —</span>{' '}
+              acesso somente aos próprios atendimentos do setor. Acesso restrito a configurações.
+            </div>
+            <div>
+              <span className="font-medium text-slate-800">Supervisor —</span>{' '}
+              acesso geral a conversas e relatórios, mas não pode gerenciar usuários nem alterar configurações gerais.
+            </div>
+            <div>
+              <span className="font-medium text-slate-800">Administrador —</span>{' '}
+              acesso total: todas as conversas, números, configurações e usuários.
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BriefingHeader({ companyName }: { companyName: string }) {
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="border-b border-slate-200 bg-white shadow-sm">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2">
           <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#4F8EF7] font-bold text-white">
@@ -878,12 +1008,10 @@ function BriefingErrorPage() {
         <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-xl bg-rose-50 text-rose-500">
           <Trash2 className="h-6 w-6" />
         </div>
-        <h1 className="text-lg font-semibold text-slate-900">
-          Link inválido ou expirado
-        </h1>
+        <h1 className="text-lg font-semibold text-slate-900">Link inválido ou expirado</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Este link de briefing não existe mais. Entre em contato com o
-          responsável pelo seu onboarding para receber um novo.
+          Este link de briefing não existe mais. Entre em contato com o responsável pelo
+          seu onboarding para receber um novo.
         </p>
       </div>
     </div>
@@ -897,12 +1025,10 @@ function BriefingSuccessPage({ company }: { company: string }) {
         <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-green-50 text-green-500">
           <Check className="h-7 w-7" />
         </div>
-        <h1 className="text-lg font-semibold text-slate-900">
-          Recebemos suas informações!
-        </h1>
+        <h1 className="text-lg font-semibold text-slate-900">Recebemos suas informações!</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Obrigado por preencher o briefing, {company || 'cliente'}. Nossa
-          equipe revisará tudo e entrará em contato em breve.
+          Obrigado por preencher o briefing, {company || 'cliente'}. Nossa equipe revisará
+          tudo e entrará em contato em breve.
         </p>
       </div>
     </div>
@@ -910,12 +1036,7 @@ function BriefingSuccessPage({ company }: { company: string }) {
 }
 
 function SectionBlock({
-  number,
-  total,
-  title,
-  description,
-  icon,
-  children,
+  number, total, title, description, icon, children,
 }: {
   number: number
   total: number
@@ -927,7 +1048,7 @@ function SectionBlock({
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <header className="mb-5 flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-lg bg-[#4F8EF7]/10 text-[#4F8EF7]">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#4F8EF7]/10 text-[#4F8EF7]">
           {icon}
         </div>
         <div>
@@ -935,9 +1056,7 @@ function SectionBlock({
             Seção {number} de {total}
           </p>
           <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-          {description && (
-            <p className="text-sm text-slate-500">{description}</p>
-          )}
+          {description && <p className="text-sm text-slate-500">{description}</p>}
         </div>
       </header>
       {children}
@@ -945,35 +1064,24 @@ function SectionBlock({
   )
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-medium text-slate-600">
-        {label}
-      </span>
+      <span className="mb-1.5 block text-xs font-medium text-slate-600">{label}</span>
       {children}
     </label>
   )
 }
 
 function PlainInput({
-  type = 'text',
-  value,
-  onChange,
-  placeholder,
-  className,
+  type = 'text', value, onChange, placeholder, className, onKeyDown,
 }: {
   type?: string
   value: string
   onChange: (v: string) => void
   placeholder?: string
   className?: string
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
 }) {
   return (
     <input
@@ -981,6 +1089,7 @@ function PlainInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
+      onKeyDown={onKeyDown}
       className={cn(
         'block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400',
         'focus:border-[#4F8EF7] focus:outline-none focus:ring-4 focus:ring-[#4F8EF7]/15',
@@ -991,10 +1100,7 @@ function PlainInput({
 }
 
 function PlainTextarea({
-  value,
-  onChange,
-  placeholder,
-  rows = 3,
+  value, onChange, placeholder, rows = 3,
 }: {
   value: string
   onChange: (v: string) => void
@@ -1013,9 +1119,7 @@ function PlainTextarea({
 }
 
 function PlainSelect({
-  value,
-  onChange,
-  options,
+  value, onChange, options,
 }: {
   value: string
   onChange: (v: string) => void
@@ -1028,9 +1132,7 @@ function PlainSelect({
       className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[#4F8EF7] focus:outline-none focus:ring-4 focus:ring-[#4F8EF7]/15"
     >
       {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
+        <option key={o.value} value={o.value}>{o.label}</option>
       ))}
     </select>
   )
@@ -1038,3 +1140,4 @@ function PlainSelect({
 
 // Unused-import safety net
 export const _globe = Globe
+export const _chevronDown = ChevronDown

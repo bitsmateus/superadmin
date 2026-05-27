@@ -65,6 +65,7 @@ type ClientRow = {
   briefing_data: Client['briefingData'] | null
   briefing_approved_at: string | null
   briefing_revision_note: string | null
+  briefing_config: Client['briefingConfig'] | null
   delivery_checklist: Client['deliveryChecklist']
   delivery_handoff_checklist: Client['deliveryHandoffChecklist']
   delivery_date: string | null
@@ -77,6 +78,12 @@ type ClientRow = {
   has_api_oficial: boolean | null
   has_ia: boolean | null
   has_automacao_externa: boolean | null
+  accesses: Client['accesses'] | null
+  platform_app: boolean | null
+  platform_web: boolean | null
+  platform_chat: boolean | null
+  contract_file: string | null
+  contract_file_name: string | null
 }
 
 function rowToClient(r: ClientRow): Client {
@@ -116,6 +123,7 @@ function rowToClient(r: ClientRow): Client {
     briefingData: r.briefing_data ?? undefined,
     briefingApprovedAt: r.briefing_approved_at ?? undefined,
     briefingRevisionNote: r.briefing_revision_note ?? undefined,
+    briefingConfig: r.briefing_config ?? undefined,
     deliveryChecklist: r.delivery_checklist ?? [],
     deliveryHandoffChecklist: r.delivery_handoff_checklist ?? [],
     deliveryDate: r.delivery_date ?? undefined,
@@ -128,6 +136,12 @@ function rowToClient(r: ClientRow): Client {
     hasApiOficial: r.has_api_oficial ?? false,
     hasIa: r.has_ia ?? false,
     hasAutomacaoExterna: r.has_automacao_externa ?? false,
+    accesses: r.accesses ?? undefined,
+    platformApp: r.platform_app ?? false,
+    platformWeb: r.platform_web ?? false,
+    platformChat: r.platform_chat ?? false,
+    contractFile: r.contract_file ?? undefined,
+    contractFileName: r.contract_file_name ?? undefined,
   }
 }
 
@@ -177,6 +191,13 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('hasApiOficial' in patch) out.has_api_oficial = patch.hasApiOficial ?? false
   if ('hasIa' in patch) out.has_ia = patch.hasIa ?? false
   if ('hasAutomacaoExterna' in patch) out.has_automacao_externa = patch.hasAutomacaoExterna ?? false
+  if ('briefingConfig' in patch) out.briefing_config = patch.briefingConfig ?? null
+  if ('accesses' in patch) out.accesses = patch.accesses ?? null
+  if ('platformApp' in patch) out.platform_app = patch.platformApp ?? false
+  if ('platformWeb' in patch) out.platform_web = patch.platformWeb ?? false
+  if ('platformChat' in patch) out.platform_chat = patch.platformChat ?? false
+  if ('contractFile' in patch) out.contract_file = patch.contractFile ?? null
+  if ('contractFileName' in patch) out.contract_file_name = patch.contractFileName ?? null
   return out
 }
 

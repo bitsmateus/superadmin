@@ -1,5 +1,6 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import {
+  AlertCircle,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -11,6 +12,7 @@ import {
   Loader2,
   PenLine,
   Send,
+  SlidersHorizontal,
   Sparkles,
   UserPlus,
   Wand2,
@@ -35,9 +37,45 @@ import {
   toggleChecklistItem,
 } from '@/constants/checklist'
 import { asText, cn, formatDate } from '@/lib/utils'
-import type { Client, BriefingStatus, ChecklistItem } from '@/types/client'
+import type {
+  Client,
+  BriefingStatus,
+  BriefingConfig,
+  ConnectionType,
+  AutomationType,
+  BriefingChannel,
+  ChecklistItem,
+} from '@/types/client'
 
 type SubView = 'briefing' | 'automation'
+
+const emptyConfig: BriefingConfig = {
+  connectionTypes: [],
+  automationTypes: [],
+  channels: [],
+  maxUsers: 0,
+  hasExternalAutomation: false,
+}
+
+const CONNECTION_OPTIONS: { value: ConnectionType; label: string }[] = [
+  { value: 'api_oficial', label: 'API Oficial' },
+  { value: 'api_comum', label: 'API Comum' },
+]
+
+const AUTOMATION_OPTIONS: { value: AutomationType; label: string }[] = [
+  { value: 'chatbot', label: 'Chatbot' },
+  { value: 'ia_basica', label: 'IA Básica' },
+  { value: 'ia_avancada', label: 'IA Avançada' },
+]
+
+const CHANNEL_OPTIONS: { value: BriefingChannel; label: string }[] = [
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'messenger', label: 'Messenger' },
+  { value: 'wavoip', label: 'WaVoip' },
+  { value: 'olx', label: 'OLX' },
+  { value: 'mercadolivre', label: 'Mercado Livre' },
+  { value: 'email', label: 'E-mail' },
+]
 
 export function BriefingTab({ client }: { client: Client }) {
   const status: BriefingStatus = client.briefingStatus ?? 'not_sent'
@@ -47,8 +85,45 @@ export function BriefingTab({ client }: { client: Client }) {
     client.briefingRevisionNote ?? '',
   )
   const [subView, setSubView] = React.useState<SubView>('briefing')
+  const [config, setConfig] = React.useState<BriefingConfig>(
+    client.briefingConfig ?? emptyConfig,
+  )
+
+  React.useEffect(() => {
+    setConfig(client.briefingConfig ?? emptyConfig)
+    setRevisionNote(client.briefingRevisionNote ?? '')
+  }, [client.id])
+
+  const updateConfig = (patch: Partial<BriefingConfig>) => {
+    const next = { ...config, ...patch }
+    setConfig(next)
+    db.updateClient(client.id, {
+      briefingConfig: next,
+      hasApiOficial: next.connectionTypes.includes('api_oficial'),
+      hasIa: next.automationTypes.some((t) => t !== 'chatbot'),
+      hasAutomacaoExterna: next.hasExternalAutomation,
+    })
+  }
+
+  const toggleMulti = <T extends string>(
+    arr: T[],
+    val: T,
+    setter: (v: T[]) => void,
+  ) => {
+    setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val])
+  }
+
+  const configComplete =
+    config.connectionTypes.length > 0 &&
+    config.automationTypes.length > 0 &&
+    config.channels.length > 0 &&
+    config.maxUsers > 0
 
   const generate = () => {
+    if (!configComplete) {
+      toast.error('Preencha a configuração antes de gerar o briefing')
+      return
+    }
     const token = db.createBriefingToken(client.id)
     db.updateClient(client.id, {
       briefingToken: token,
@@ -63,6 +138,14 @@ export function BriefingTab({ client }: { client: Client }) {
     if (!link) return
     const ok = await copyToClipboard(link)
     if (ok) toast.success('Link copiado')
+    else toast.error('Não foi possível copiar')
+  }
+
+  const copyMessage = async () => {
+    if (!link) return
+    const msg = buildWhatsAppMessage(client.name || 'cliente', link)
+    const ok = await copyToClipboard(msg)
+    if (ok) toast.success('Mensagem copiada')
     else toast.error('Não foi possível copiar')
   }
 
@@ -94,46 +177,121 @@ export function BriefingTab({ client }: { client: Client }) {
   const hasData = Boolean(client.briefingData)
   const showSubTabs = hasData && (status === 'filled' || status === 'approved')
 
-  const toggleFlag = (flag: 'hasApiOficial' | 'hasIa' | 'hasAutomacaoExterna') => {
-    db.updateClient(client.id, { [flag]: !client[flag] })
-  }
-
   return (
     <div className="space-y-5">
+      {/* ── Configuração do briefing ── */}
       <Section
         title={
           <span className="flex items-center gap-2">
-            <Wand2 className="h-3.5 w-3.5 text-accent" />
-            Tipo de implementação
+            <SlidersHorizontal className="h-3.5 w-3.5 text-accent" />
+            Configuração do briefing
           </span>
         }
+        action={
+          configComplete ? (
+            <Badge tone="success">Completo</Badge>
+          ) : (
+            <Badge tone="neutral">Incompleto</Badge>
+          )
+        }
       >
-        <p className="text-xs text-foreground/55">
-          Marque os recursos que este cliente utiliza. Aparecem nos painéis do dashboard.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {([
-            { flag: 'hasApiOficial', label: 'API Oficial' },
-            { flag: 'hasIa', label: 'IA' },
-            { flag: 'hasAutomacaoExterna', label: 'Automação' },
-          ] as const).map(({ flag, label }) => (
-            <button
-              key={flag}
-              type="button"
-              onClick={() => toggleFlag(flag)}
-              className={cn(
-                'rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
-                client[flag]
-                  ? 'border-accent/40 bg-accent/10 text-accent'
-                  : 'border-line bg-surface text-foreground/55 hover:border-accent/30 hover:text-foreground/80',
-              )}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="space-y-4">
+          <ConfigGroup label="Forma de Conexão *">
+            {CONNECTION_OPTIONS.map((opt) => (
+              <ChipBtn
+                key={opt.value}
+                active={config.connectionTypes.includes(opt.value)}
+                onClick={() =>
+                  toggleMulti(config.connectionTypes, opt.value, (v) =>
+                    updateConfig({ connectionTypes: v as ConnectionType[] }),
+                  )
+                }
+              >
+                {opt.label}
+              </ChipBtn>
+            ))}
+          </ConfigGroup>
+
+          <ConfigGroup label="Automação *">
+            {AUTOMATION_OPTIONS.map((opt) => (
+              <ChipBtn
+                key={opt.value}
+                active={config.automationTypes.includes(opt.value)}
+                onClick={() =>
+                  toggleMulti(config.automationTypes, opt.value, (v) =>
+                    updateConfig({ automationTypes: v as AutomationType[] }),
+                  )
+                }
+              >
+                {opt.label}
+              </ChipBtn>
+            ))}
+          </ConfigGroup>
+
+          <ConfigGroup label="Canais *">
+            {CHANNEL_OPTIONS.map((opt) => (
+              <ChipBtn
+                key={opt.value}
+                active={config.channels.includes(opt.value)}
+                onClick={() =>
+                  toggleMulti(config.channels, opt.value, (v) =>
+                    updateConfig({ channels: v as BriefingChannel[] }),
+                  )
+                }
+              >
+                {opt.label}
+              </ChipBtn>
+            ))}
+          </ConfigGroup>
+
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-foreground/40 mb-1.5">
+              Máx. de usuários *
+            </div>
+            <input
+              type="number"
+              min="1"
+              max="999"
+              value={config.maxUsers || ''}
+              onChange={(e) =>
+                updateConfig({ maxUsers: Math.max(0, parseInt(e.target.value) || 0) })
+              }
+              placeholder="Ex.: 5"
+              className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm text-foreground/80">
+              <input
+                type="checkbox"
+                checked={config.hasExternalAutomation}
+                onChange={(e) =>
+                  updateConfig({ hasExternalAutomation: e.target.checked })
+                }
+                className="h-4 w-4 accent-[#4F8EF7]"
+              />
+              Automação externa
+            </label>
+            {config.hasExternalAutomation && (
+              <textarea
+                value={config.externalAutomationNotes ?? ''}
+                onChange={(e) =>
+                  updateConfig({ externalAutomationNotes: e.target.value })
+                }
+                onBlur={() =>
+                  db.updateClient(client.id, { briefingConfig: config })
+                }
+                placeholder="O que precisamos do cliente para a automação externa?"
+                rows={3}
+                className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+              />
+            )}
+          </div>
         </div>
       </Section>
 
+      {/* ── Gerar link (quando ainda não enviado) ── */}
       {status === 'not_sent' && (
         <Section
           title={
@@ -144,17 +302,28 @@ export function BriefingTab({ client }: { client: Client }) {
           }
           action={<Badge tone="neutral">Não enviado</Badge>}
         >
+          {!configComplete && (
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2.5 text-xs text-warning">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Preencha a configuração acima (marcada com *) antes de gerar o briefing.
+            </div>
+          )}
           <p className="text-sm text-foreground/65">
-            Gere um link único para o cliente preencher o briefing completo.
+            Gere um link único para o cliente preencher o briefing de onboarding.
           </p>
           <div className="mt-3 flex justify-end">
-            <Button onClick={generate} leftIcon={<Send className="h-3.5 w-3.5" />}>
+            <Button
+              onClick={generate}
+              disabled={!configComplete}
+              leftIcon={<Send className="h-3.5 w-3.5" />}
+            >
               Gerar link do briefing
             </Button>
           </div>
         </Section>
       )}
 
+      {/* ── Link gerado ── */}
       {link && status !== 'not_sent' && (
         <Section
           title={
@@ -181,7 +350,17 @@ export function BriefingTab({ client }: { client: Client }) {
               onClick={copy}
               leftIcon={<Copy className="h-4 w-4" />}
             >
-              Copiar
+              Copiar link
+            </Button>
+          </div>
+          <div className="mt-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={copyMessage}
+              leftIcon={<Copy className="h-3.5 w-3.5" />}
+            >
+              Copiar mensagem para cliente
             </Button>
           </div>
           {status === 'revision' && client.briefingRevisionNote && (
@@ -271,6 +450,65 @@ export function BriefingTab({ client }: { client: Client }) {
   )
 }
 
+// ── Small helpers ────────────────────────────────────────────────────────────
+
+function ConfigGroup({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/40">
+        {label}
+      </div>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  )
+}
+
+function ChipBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+        active
+          ? 'border-accent/40 bg-accent/10 text-accent'
+          : 'border-line bg-surface text-foreground/55 hover:border-accent/30 hover:text-foreground/80',
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function buildWhatsAppMessage(name: string, link: string): string {
+  return `Olá, ${name}!
+
+Para continuarmos com o seu processo de onboarding, preparamos um briefing onde precisamos que você preencha algumas informações sobre a sua empresa.
+
+👉 Acesse o link abaixo e responda com atenção:
+${link}
+
+Essas informações são fundamentais para configurarmos tudo de acordo com as necessidades da sua empresa.
+
+Qualquer dúvida, é só nos chamar! 😊`
+}
+
+// ── Status badge ─────────────────────────────────────────────────────────────
+
 function BriefingStatusBadge({ status }: { status: BriefingStatus }) {
   const map: Record<
     BriefingStatus,
@@ -285,6 +523,8 @@ function BriefingStatusBadge({ status }: { status: BriefingStatus }) {
   const v = map[status]
   return <Badge tone={v.tone}>{v.label}</Badge>
 }
+
+// ── Sub-tabs ──────────────────────────────────────────────────────────────────
 
 function SubTabs({
   value,
@@ -345,12 +585,13 @@ function SubTabBtn({
   )
 }
 
+// ── Automation view ───────────────────────────────────────────────────────────
+
 function AutomationView({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [tenantModalOpen, setTenantModalOpen] = React.useState(false)
   const [creatingUsers, setCreatingUsers] = React.useState(false)
 
-  // Always render an up-to-date tree (briefing-enriched) without mutating storage.
   const tree = React.useMemo(
     () => enrichChecklistFromBriefing(client.deliveryChecklist, client.briefingData),
     [client.deliveryChecklist, client.briefingData],
@@ -607,13 +848,23 @@ function ChecklistRow({
   )
 }
 
+// ── Link builder ──────────────────────────────────────────────────────────────
+
 function buildBriefingLink(token?: string): string | null {
   if (!token) return null
   if (typeof window === 'undefined') return `/briefing/${token}`
   return `${window.location.origin}/briefing/${token}`
 }
 
+// ── Briefing viewer ───────────────────────────────────────────────────────────
+
 function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> }) {
+  const hasExtraChannels =
+    data.wavoipInfo ||
+    data.olxInfo ||
+    data.mercadolivreInfo ||
+    data.emailConfig
+
   return (
     <div className="space-y-2">
       <Accordion title="1. Empresa" defaultOpen>
@@ -661,29 +912,45 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
         {data.useFacebook && (
           <Row k="Token" v={data.facebookToken ? '••••••••' : '—'} />
         )}
-      </Accordion>
-
-      <Accordion title="5. Chatbot" defaultOpen>
-        <Row k="Fluxo principal" v={data.mainFlow} />
-        <Row k="Saudação" v={data.greetingMessage} />
-        <Row k="Fora do horário" v={data.offHoursMessage} />
-        <Row k="Departamentos" v={data.departments.join(', ')} />
-      </Accordion>
-
-      <Accordion title="6. IA" defaultOpen>
-        <Row k="Usar IA" v={data.useAI ? 'Sim' : 'Não'} />
-        {data.useAI && (
+        {hasExtraChannels && (
           <>
-            <Row k="Tom" v={data.aiTone} />
-            <Row k="Instruções" v={data.aiInstructions} />
-            <Row k="Restrições" v={data.aiRestrictions} />
+            {data.wavoipInfo && <Row k="WaVoip" v={data.wavoipInfo} />}
+            {data.olxInfo && <Row k="OLX" v={data.olxInfo} />}
+            {data.mercadolivreInfo && <Row k="Mercado Livre" v={data.mercadolivreInfo} />}
+            {data.emailConfig && <Row k="E-mail" v={data.emailConfig} />}
           </>
         )}
       </Accordion>
 
-      <Accordion title="7. Observações">
-        <Row k="" v={data.extraNotes || '—'} />
-      </Accordion>
+      {data.mainFlow && (
+        <Accordion title="5. Chatbot" defaultOpen>
+          <Row k="Fluxo principal" v={data.mainFlow} />
+          <Row k="Saudação" v={data.greetingMessage} />
+          <Row k="Fora do horário" v={data.offHoursMessage} />
+          <Row k="Departamentos" v={data.departments.join(', ')} />
+        </Accordion>
+      )}
+
+      {data.useAI && (
+        <Accordion title="6. IA" defaultOpen>
+          <Row k="Usar IA" v="Sim" />
+          <Row k="Tom" v={data.aiTone} />
+          <Row k="Instruções" v={data.aiInstructions} />
+          <Row k="Restrições" v={data.aiRestrictions} />
+        </Accordion>
+      )}
+
+      {data.externalAutomationInfo && (
+        <Accordion title="7. Automação externa" defaultOpen>
+          <Row k="" v={data.externalAutomationInfo} />
+        </Accordion>
+      )}
+
+      {data.extraNotes && (
+        <Accordion title="Observações">
+          <Row k="" v={data.extraNotes} />
+        </Accordion>
+      )}
     </div>
   )
 }

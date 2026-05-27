@@ -1,13 +1,12 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import {
-  AlertTriangle,
-  Calendar,
   CheckCircle2,
-  CreditCard,
+  Download,
   FileSignature,
   Link as LinkIcon,
-  Loader2,
-  RefreshCw,
+  Paperclip,
+  Trash2,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Section, FieldLabel } from '../ClientDrawer'
@@ -15,31 +14,19 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { db } from '@/services/db'
-import { asaasApi, paymentStatusFromAsaas } from '@/services/asaas'
 import { formatDate } from '@/lib/utils'
-import { extractErrorMessage } from '@/api/client'
 import type { Client } from '@/types/client'
+
+const MAX_FILE_BYTES = 8 * 1024 * 1024 // 8 MB
 
 export function ContractTab({ client }: { client: Client }) {
   const [contractUrl, setContractUrl] = React.useState(client.contractUrl ?? '')
-  React.useEffect(() => setContractUrl(client.contractUrl ?? ''), [client.id])
-
-  const [implValue, setImplValue] = React.useState(
-    client.implementationValue?.toString() ?? '',
-  )
-  const [monthly, setMonthly] = React.useState(
-    client.monthlyValue?.toString() ?? '',
-  )
-  const [dueDay, setDueDay] = React.useState(client.dueDay?.toString() ?? '')
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = React.useState(false)
 
   React.useEffect(() => {
-    setImplValue(client.implementationValue?.toString() ?? '')
-    setMonthly(client.monthlyValue?.toString() ?? '')
-    setDueDay(client.dueDay?.toString() ?? '')
+    setContractUrl(client.contractUrl ?? '')
   }, [client.id])
-
-  const [creatingCharge, setCreatingCharge] = React.useState(false)
-  const [checkingPayment, setCheckingPayment] = React.useState(false)
 
   const saveUrl = () => {
     const url = contractUrl.trim()
@@ -49,152 +36,64 @@ export function ContractTab({ client }: { client: Client }) {
   }
 
   const markSent = () => {
-    const sentAt = new Date().toISOString()
-    db.updateClient(client.id, { contractSentAt: sentAt })
+    db.updateClient(client.id, { contractSentAt: new Date().toISOString() })
     db.addLog(client.id, 'Contrato marcado como enviado')
     toast.success('Contrato marcado como enviado')
   }
 
-  const maybeAdvance = (
-    base: Partial<Client>,
-    signedAt?: string | null,
-    paymentId?: string | null,
-  ): Partial<Client> => {
-    const signed = signedAt ?? client.contractSignedAt
-    const payment = paymentId ?? client.asaasPaymentId
-    if (client.stage === 'contract' && signed && payment) {
-      return { ...base, stage: 'briefing' }
-    }
-    return base
-  }
-
   const markSigned = () => {
     const signedAt = new Date().toISOString()
-    const patch = maybeAdvance({ contractSignedAt: signedAt }, signedAt, null)
+    const patch: Partial<Client> = { contractSignedAt: signedAt }
+    // Avança pra briefing se a cobrança já foi criada
+    if (client.stage === 'contract' && client.asaasPaymentId) {
+      patch.stage = 'briefing'
+    }
     db.updateClient(client.id, patch)
     db.addLog(client.id, 'Contrato assinado')
     if (patch.stage === 'briefing') {
       toast.success('Contrato assinado · etapa avançada para Briefing')
-    } else if (!client.asaasPaymentId) {
-      toast.success('Contrato assinado · crie a cobrança para avançar')
     } else {
       toast.success('Contrato assinado')
     }
   }
 
-  const saveFinancials = () => {
-    const next: Partial<Client> = {
-      implementationValue: implValue ? Number(implValue) : undefined,
-      monthlyValue: monthly ? Number(monthly) : undefined,
-      dueDay: dueDay ? Number(dueDay) : undefined,
-    }
-    db.updateClient(client.id, next)
-    db.addLog(client.id, 'Valores financeiros atualizados')
-    toast.success('Valores salvos')
-  }
-
-  const createCharge = async () => {
-    if (!implValue || !monthly) {
-      toast.error('Informe valor de implementação e mensalidade.')
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error('Arquivo muito grande (máx. 8 MB). Compacte o PDF antes de anexar.')
       return
     }
-    setCreatingCharge(true)
+    setUploading(true)
     try {
-      let asaasCustomerId = client.asaasCustomerId
-      if (!asaasCustomerId) {
-        const customer = await asaasApi.createCustomer({
-          name: client.name,
-          email: client.email,
-          phone: client.phone,
-          mobilePhone: client.phone,
-        })
-        asaasCustomerId = customer.id
-      }
-      const today = new Date()
-      const dueDate = today.toISOString().slice(0, 10)
-      const payment = await asaasApi.createPayment({
-        customer: asaasCustomerId!,
-        value: Number(implValue),
-        dueDate,
-        description: `Implementação — ${client.company}`,
-      })
-
-      // Calcula próxima data de vencimento. Se dueDay informado, usa o dia
-      // do mês (clamp 1..28 pra evitar mês curto). Se a data resultante
-      // for <= hoje, joga pro próximo mês.
-      const nextDue = new Date(today)
-      if (dueDay) {
-        const clampedDay = Math.min(Math.max(Number(dueDay), 1), 28)
-        nextDue.setDate(clampedDay)
-      } else {
-        // padrão: próximo mês mesma data
-        nextDue.setMonth(nextDue.getMonth() + 1)
-      }
-      if (nextDue.getTime() <= today.getTime()) {
-        nextDue.setMonth(nextDue.getMonth() + 1)
-      }
-
-      const subscription = await asaasApi.createSubscription({
-        customer: asaasCustomerId!,
-        value: Number(monthly),
-        nextDueDate: nextDue.toISOString().slice(0, 10),
-        description: `Mensalidade — ${client.company}`,
-      })
-
-      const patch = maybeAdvance(
-        {
-          asaasCustomerId,
-          asaasPaymentId: payment.id,
-          asaasSubscriptionId: subscription.id,
-          implementationValue: Number(implValue),
-          monthlyValue: Number(monthly),
-          dueDay: dueDay ? Number(dueDay) : undefined,
-          paymentStatus: paymentStatusFromAsaas(payment.status),
-          lastPaymentCheck: new Date().toISOString(),
-        },
-        null,
-        payment.id,
-      )
-      db.updateClient(client.id, patch)
-      db.addLog(
-        client.id,
-        'Cobrança criada no Asaas',
-        `Impl: R$ ${implValue} · Mensal: R$ ${monthly}`,
-      )
-      if (patch.stage === 'briefing') {
-        toast.success('Cobrança criada · etapa avançada para Briefing')
-      } else if (!client.contractSignedAt) {
-        toast.success('Cobrança criada · marque o contrato como assinado para avançar')
-      } else {
-        toast.success('Cobrança criada no Asaas')
-      }
-    } catch (err) {
-      toast.error(extractErrorMessage(err, 'Falha ao criar cobrança'))
-    } finally {
-      setCreatingCharge(false)
-    }
-  }
-
-  const checkPayment = async () => {
-    if (!client.asaasPaymentId) {
-      toast.error('Nenhuma cobrança Asaas vinculada.')
-      return
-    }
-    setCheckingPayment(true)
-    try {
-      const payment = await asaasApi.getPayment(client.asaasPaymentId)
-      const status = paymentStatusFromAsaas(payment.status)
+      const dataUrl = await fileToDataUrl(file)
       db.updateClient(client.id, {
-        paymentStatus: status,
-        lastPaymentCheck: new Date().toISOString(),
+        contractFile: dataUrl,
+        contractFileName: file.name,
       })
-      db.addLog(client.id, 'Status de pagamento verificado', payment.status)
-      toast.success(`Status: ${payment.status}`)
-    } catch (err) {
-      toast.error(extractErrorMessage(err, 'Falha ao verificar pagamento'))
+      db.addLog(client.id, 'Arquivo do contrato anexado', file.name)
+      toast.success('Contrato anexado')
+    } catch {
+      toast.error('Falha ao ler o arquivo.')
     } finally {
-      setCheckingPayment(false)
+      setUploading(false)
+      // Reset input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  const removeFile = () => {
+    db.updateClient(client.id, { contractFile: undefined, contractFileName: undefined })
+    db.addLog(client.id, 'Arquivo do contrato removido')
+    toast.success('Arquivo removido')
+  }
+
+  const downloadFile = () => {
+    if (!client.contractFile || !client.contractFileName) return
+    const a = document.createElement('a')
+    a.href = client.contractFile
+    a.download = client.contractFileName
+    a.click()
   }
 
   const contractStatus: 'Não enviado' | 'Enviado' | 'Assinado' = client.contractSignedAt
@@ -202,19 +101,11 @@ export function ContractTab({ client }: { client: Client }) {
     : client.contractSentAt
       ? 'Enviado'
       : 'Não enviado'
-  const contractTone =
-    contractStatus === 'Assinado'
-      ? 'success'
-      : contractStatus === 'Enviado'
-        ? 'info'
-        : 'neutral'
 
-  const paymentTone =
-    client.paymentStatus === 'paid'
-      ? 'success'
-      : client.paymentStatus === 'overdue'
-        ? 'danger'
-        : 'warning'
+  const contractTone =
+    contractStatus === 'Assinado' ? 'success'
+    : contractStatus === 'Enviado' ? 'info'
+    : 'neutral'
 
   return (
     <div className="space-y-5">
@@ -236,24 +127,68 @@ export function ContractTab({ client }: { client: Client }) {
             onChange={(e) => setContractUrl(e.target.value)}
             onBlur={saveUrl}
           />
+
+          {/* Arquivo anexado */}
+          <div>
+            <FieldLabel>Arquivo do contrato</FieldLabel>
+            {client.contractFile && client.contractFileName ? (
+              <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2">
+                <Paperclip className="h-4 w-4 shrink-0 text-accent" />
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground/85">
+                  {client.contractFileName}
+                </span>
+                <button
+                  type="button"
+                  onClick={downloadFile}
+                  className="rounded-md p-1.5 text-foreground/50 hover:bg-accent/10 hover:text-accent"
+                  aria-label="Baixar arquivo"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={removeFile}
+                  className="rounded-md p-1.5 text-foreground/40 hover:bg-danger/10 hover:text-danger"
+                  aria-label="Remover arquivo"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="mt-1.5 flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-3 py-3 text-sm text-foreground/45 transition-colors hover:border-accent/40 hover:bg-accent/[0.03] hover:text-accent disabled:opacity-50"
+              >
+                <Paperclip className="h-4 w-4 shrink-0" />
+                {uploading ? 'Carregando…' : 'Anexar arquivo do contrato (PDF, até 8 MB)'}
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </div>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs text-foreground/55">
             <div>
               <FieldLabel>Enviado em</FieldLabel>
               <p className="mt-1 text-foreground/85">
-                {client.contractSentAt
-                  ? formatDate(client.contractSentAt)
-                  : '—'}
+                {client.contractSentAt ? formatDate(client.contractSentAt) : '—'}
               </p>
             </div>
             <div>
               <FieldLabel>Assinado em</FieldLabel>
               <p className="mt-1 text-foreground/85">
-                {client.contractSignedAt
-                  ? formatDate(client.contractSignedAt)
-                  : '—'}
+                {client.contractSignedAt ? formatDate(client.contractSignedAt) : '—'}
               </p>
             </div>
           </div>
+
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               size="sm"
@@ -275,106 +210,15 @@ export function ContractTab({ client }: { client: Client }) {
           </div>
         </div>
       </Section>
-
-      {client.paymentStatus === 'overdue' && (
-        <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            Pagamento vencido — considere bloquear o tenant até regularizar.
-          </span>
-        </div>
-      )}
-
-      <Section
-        title={
-          <span className="flex items-center gap-2">
-            <CreditCard className="h-3.5 w-3.5 text-accent" />
-            Cobrança (Asaas)
-          </span>
-        }
-        action={
-          client.paymentStatus ? (
-            <Badge tone={paymentTone} dot>
-              {client.paymentStatus === 'paid'
-                ? 'Pago'
-                : client.paymentStatus === 'overdue'
-                  ? 'Vencido'
-                  : 'Pendente'}
-            </Badge>
-          ) : null
-        }
-      >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Input
-            label="Implementação (R$)"
-            type="number"
-            inputMode="decimal"
-            value={implValue}
-            onChange={(e) => setImplValue(e.target.value)}
-          />
-          <Input
-            label="Mensalidade (R$)"
-            type="number"
-            inputMode="decimal"
-            value={monthly}
-            onChange={(e) => setMonthly(e.target.value)}
-          />
-          <Input
-            label="Dia de vencimento"
-            type="number"
-            min={1}
-            max={31}
-            leftIcon={<Calendar className="h-4 w-4" />}
-            value={dueDay}
-            onChange={(e) => {
-              const raw = e.target.value
-              if (!raw) {
-                setDueDay('')
-                return
-              }
-              const n = Math.min(Math.max(Number(raw), 1), 31)
-              setDueDay(String(n))
-            }}
-          />
-        </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-foreground/40">
-          <span>
-            {client.asaasCustomerId
-              ? `Cliente Asaas: ${client.asaasCustomerId}`
-              : 'Sem cliente Asaas vinculado'}
-            {client.lastPaymentCheck && (
-              <> · última verificação: {formatDate(client.lastPaymentCheck)}</>
-            )}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={saveFinancials}
-            >
-              Salvar valores
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={checkPayment}
-              loading={checkingPayment}
-              leftIcon={!checkingPayment ? <RefreshCw className="h-3.5 w-3.5" /> : undefined}
-              disabled={!client.asaasPaymentId}
-            >
-              Verificar pagamento
-            </Button>
-            <Button
-              size="sm"
-              onClick={createCharge}
-              loading={creatingCharge}
-              leftIcon={!creatingCharge ? <CreditCard className="h-3.5 w-3.5" /> : undefined}
-            >
-              Criar cobrança no Asaas
-            </Button>
-          </div>
-        </div>
-      </Section>
     </div>
   )
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }

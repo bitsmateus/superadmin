@@ -1,31 +1,54 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import {
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronRight,
   Copy,
+  Eye,
+  EyeOff,
+  ExternalLink,
   FileText,
+  Globe,
+  KeyRound,
   ListChecks,
   Mail,
   MessageSquare,
+  Monitor,
   Pencil,
+  Phone,
+  PlusCircle,
   Send,
   Server as ServerIcon,
+  Smartphone,
   Sparkles,
   StickyNote,
+  Trash2,
   UserCircle2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Section, FieldLabel } from '../ClientDrawer'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
+import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { useServerById } from '@/store/authStore'
 import { copyToClipboard } from '@/lib/clipboard'
 import { asText, cn, formatDate, initials } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
-import type { Client } from '@/types/client'
+import type { Client, ClientAccess } from '@/types/client'
+
+// Default accesses always shown when the client has none
+const DEFAULT_ACCESS_NAMES = ['Facebook', 'Instagram']
+
+function getAccesses(client: Client): ClientAccess[] {
+  if (client.accesses && client.accesses.length > 0) return client.accesses
+  return DEFAULT_ACCESS_NAMES.map((name, i) => ({
+    id: `default-${i}`,
+    name,
+  }))
+}
 
 export function OverviewTab({ client }: { client: Client }) {
   const [user] = useCurrentUser()
@@ -47,8 +70,13 @@ export function OverviewTab({ client }: { client: Client }) {
     toast.success('Nota registrada')
   }
 
+  const togglePlatform = (flag: 'platformApp' | 'platformWeb' | 'platformChat') => {
+    db.updateClient(client.id, { [flag]: !client[flag] })
+  }
+
   return (
     <div className="space-y-5">
+      {/* Dados do cliente */}
       <Section title="Dados do cliente">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <InlineField
@@ -84,6 +112,61 @@ export function OverviewTab({ client }: { client: Client }) {
               db.addLog(client.id, 'Responsável atualizado')
             }
           />
+
+          {/* E-mail de suporte */}
+          <div className="sm:col-span-2">
+            <FieldLabel>E-mail de suporte</FieldLabel>
+            <div className="mt-1 flex items-center gap-2">
+              <Mail className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+              <span className="text-sm text-foreground/85">
+                {client.supportEmail ?? (
+                  <span className="text-foreground/35">Sem informação</span>
+                )}
+              </span>
+              {client.supportEmail && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = await copyToClipboard(client.supportEmail!)
+                    if (ok) toast.success('E-mail copiado')
+                    else toast.error('Não foi possível copiar')
+                  }}
+                  className="rounded-md p-1 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
+                  aria-label="Copiar e-mail"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Plataformas */}
+          <div className="sm:col-span-2">
+            <FieldLabel>Criado em</FieldLabel>
+            <div className="mt-1.5 flex items-center gap-2">
+              {([
+                { flag: 'platformApp', label: 'App', icon: <Smartphone className="h-3 w-3" /> },
+                { flag: 'platformWeb', label: 'Web', icon: <Monitor className="h-3 w-3" /> },
+                { flag: 'platformChat', label: 'Chat', icon: <MessageSquare className="h-3 w-3" /> },
+              ] as const).map(({ flag, label, icon }) => (
+                <button
+                  key={flag}
+                  type="button"
+                  onClick={() => togglePlatform(flag)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
+                    client[flag]
+                      ? 'border-accent/40 bg-accent/10 text-accent'
+                      : 'border-line bg-surface text-foreground/40 hover:border-accent/20 hover:text-foreground/65',
+                  )}
+                >
+                  {icon}
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="sm:col-span-2">
             <FieldLabel>Entrada</FieldLabel>
             <p className="mt-1 text-sm text-foreground/85">
@@ -94,6 +177,10 @@ export function OverviewTab({ client }: { client: Client }) {
         </div>
       </Section>
 
+      {/* Acessos */}
+      <AccessesSection client={client} />
+
+      {/* Tenant vinculado */}
       {(client.tenantId || client.supportEmail) && (
         <Section
           title={
@@ -104,9 +191,9 @@ export function OverviewTab({ client }: { client: Client }) {
           }
           action={
             tenantServer ? (
-              <Badge tone="info">{tenantServer.name}</Badge>
-            ) : client.tenantServerId ? (
-              <Badge tone="neutral">{client.tenantServerId}</Badge>
+              <span className="rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent ring-1 ring-accent/20">
+                {tenantServer.name}
+              </span>
             ) : null
           }
         >
@@ -123,33 +210,11 @@ export function OverviewTab({ client }: { client: Client }) {
                 <code className="text-foreground/70">{client.tenantId ?? '—'}</code>
               </p>
             </div>
-            <div className="sm:col-span-2">
-              <FieldLabel>E-mail de suporte</FieldLabel>
-              <div className="mt-1 flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5 text-foreground/40" />
-                <span className="text-sm text-foreground/85">
-                  {client.supportEmail ?? '—'}
-                </span>
-                {client.supportEmail && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const ok = await copyToClipboard(client.supportEmail!)
-                      if (ok) toast.success('E-mail copiado')
-                      else toast.error('Não foi possível copiar')
-                    }}
-                    className="rounded-md p-1 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
-                    aria-label="Copiar e-mail"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
         </Section>
       )}
 
+      {/* Notas */}
       <Section
         title={
           <span className="flex items-center gap-2">
@@ -235,6 +300,7 @@ export function OverviewTab({ client }: { client: Client }) {
         </div>
       </Section>
 
+      {/* Timeline */}
       <Section
         title={
           <span className="flex items-center gap-2">
@@ -276,11 +342,351 @@ export function OverviewTab({ client }: { client: Client }) {
   )
 }
 
+// ─── Acessos ────────────────────────────────────────────────────────────────
+
+function AccessesSection({ client }: { client: Client }) {
+  const [addOpen, setAddOpen] = React.useState(false)
+  const accesses = getAccesses(client)
+
+  const saveAccess = (entry: Omit<ClientAccess, 'id'>) => {
+    const current = client.accesses && client.accesses.length > 0
+      ? client.accesses
+      : DEFAULT_ACCESS_NAMES.map((name, i) => ({ id: `default-${i}`, name }))
+    const next = [...current, { ...entry, id: db.newId() }]
+    db.updateClient(client.id, { accesses: next })
+  }
+
+  const removeAccess = (id: string) => {
+    const current = client.accesses && client.accesses.length > 0
+      ? client.accesses
+      : DEFAULT_ACCESS_NAMES.map((name, i) => ({ id: `default-${i}`, name }))
+    db.updateClient(client.id, { accesses: current.filter((a) => a.id !== id) })
+  }
+
+  const updateAccess = (id: string, patch: Partial<ClientAccess>) => {
+    const current = client.accesses && client.accesses.length > 0
+      ? client.accesses
+      : DEFAULT_ACCESS_NAMES.map((name, i) => ({ id: `default-${i}`, name }))
+    db.updateClient(client.id, {
+      accesses: current.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+    })
+  }
+
+  return (
+    <Section
+      title={
+        <span className="flex items-center gap-2">
+          <KeyRound className="h-3.5 w-3.5 text-accent" />
+          Acessos
+        </span>
+      }
+      action={
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setAddOpen(true)}
+          leftIcon={<PlusCircle className="h-3.5 w-3.5" />}
+        >
+          Adicionar acesso
+        </Button>
+      }
+    >
+      <ul className="space-y-2">
+        {accesses.map((a) => (
+          <AccessRow
+            key={a.id}
+            access={a}
+            onRemove={() => removeAccess(a.id)}
+            onUpdate={(patch) => updateAccess(a.id, patch)}
+          />
+        ))}
+      </ul>
+
+      <AddAccessModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSave={saveAccess}
+      />
+    </Section>
+  )
+}
+
+function AccessRow({
+  access,
+  onRemove,
+  onUpdate,
+}: {
+  access: ClientAccess
+  onRemove: () => void
+  onUpdate: (patch: Partial<ClientAccess>) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [showPass, setShowPass] = React.useState(false)
+  const hasDetails = Boolean(access.emailOrPhone || access.password || access.url)
+
+  return (
+    <li className="overflow-hidden rounded-lg border border-line bg-surface">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-elevate/[0.03]"
+      >
+        {open ? (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+        )}
+        <span className="flex-1 text-sm font-medium text-foreground">{access.name}</span>
+        {!hasDetails && (
+          <span className="text-[11px] text-foreground/35">Sem informação</span>
+        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
+          className="rounded-md p-1 text-foreground/30 opacity-0 hover:bg-danger/10 hover:text-danger group-hover:opacity-100 transition-opacity"
+          aria-label="Remover acesso"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </button>
+
+      {open && (
+        <div className="border-t border-line px-3 py-3 space-y-2.5">
+          <AccessDetailRow
+            icon={<Mail className="h-3.5 w-3.5" />}
+            label="E-mail / Telefone"
+            value={access.emailOrPhone}
+            placeholder="Sem informação"
+            onSave={(v) => onUpdate({ emailOrPhone: v })}
+            copyable
+          />
+          <AccessDetailRow
+            icon={<KeyRound className="h-3.5 w-3.5" />}
+            label="Senha"
+            value={access.password}
+            placeholder="Sem informação"
+            onSave={(v) => onUpdate({ password: v })}
+            secret
+            showSecret={showPass}
+            onToggleSecret={() => setShowPass((s) => !s)}
+            copyable
+          />
+          <AccessDetailRow
+            icon={<Globe className="h-3.5 w-3.5" />}
+            label="Link"
+            value={access.url}
+            placeholder="Sem informação"
+            onSave={(v) => onUpdate({ url: v })}
+            href={access.url}
+          />
+        </div>
+      )}
+    </li>
+  )
+}
+
+function AccessDetailRow({
+  icon,
+  label,
+  value,
+  placeholder,
+  onSave,
+  copyable,
+  secret,
+  showSecret,
+  onToggleSecret,
+  href,
+}: {
+  icon: React.ReactNode
+  label: string
+  value?: string
+  placeholder?: string
+  onSave: (v: string) => void
+  copyable?: boolean
+  secret?: boolean
+  showSecret?: boolean
+  onToggleSecret?: () => void
+  href?: string
+}) {
+  const [editing, setEditing] = React.useState(false)
+  const [draft, setDraft] = React.useState(value ?? '')
+
+  React.useEffect(() => {
+    if (!editing) setDraft(value ?? '')
+  }, [value, editing])
+
+  const commit = () => {
+    onSave(draft.trim())
+    setEditing(false)
+  }
+
+  const display = secret && !showSecret && value
+    ? '••••••••'
+    : (value || <span className="text-foreground/35">{placeholder}</span>)
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="shrink-0 text-foreground/40">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] uppercase tracking-wider text-foreground/35 mb-0.5">{label}</div>
+        {editing ? (
+          <input
+            autoFocus
+            type={secret && !showSecret ? 'password' : 'text'}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit()
+              if (e.key === 'Escape') { setDraft(value ?? ''); setEditing(false) }
+            }}
+            className="w-full rounded-md border border-accent/40 bg-surface px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/20"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="group flex items-center gap-1 text-left text-sm text-foreground/85 hover:text-foreground transition-colors"
+          >
+            {display}
+            <Pencil className="h-3 w-3 shrink-0 text-foreground/25 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        {secret && value && onToggleSecret && (
+          <button
+            type="button"
+            onClick={onToggleSecret}
+            className="rounded-md p-1 text-foreground/35 hover:bg-elevate/[0.06] hover:text-foreground"
+            aria-label={showSecret ? 'Ocultar senha' : 'Mostrar senha'}
+          >
+            {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+        )}
+        {copyable && value && (
+          <button
+            type="button"
+            onClick={async () => {
+              const ok = await copyToClipboard(value)
+              if (ok) toast.success(`${label} copiado`)
+            }}
+            className="rounded-md p-1 text-foreground/35 hover:bg-elevate/[0.06] hover:text-foreground"
+            aria-label={`Copiar ${label}`}
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {href && (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md p-1 text-foreground/35 hover:bg-elevate/[0.06] hover:text-foreground"
+            aria-label="Abrir link"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AddAccessModal({
+  open,
+  onClose,
+  onSave,
+}: {
+  open: boolean
+  onClose: () => void
+  onSave: (entry: Omit<ClientAccess, 'id'>) => void
+}) {
+  const [name, setName] = React.useState('')
+  const [emailOrPhone, setEmailOrPhone] = React.useState('')
+  const [password, setPassword] = React.useState('')
+  const [url, setUrl] = React.useState('')
+
+  React.useEffect(() => {
+    if (!open) return
+    setName('')
+    setEmailOrPhone('')
+    setPassword('')
+    setUrl('')
+  }, [open])
+
+  const submit = () => {
+    if (!name.trim()) {
+      toast.error('Informe o nome do acesso.')
+      return
+    }
+    onSave({
+      name: name.trim(),
+      emailOrPhone: emailOrPhone.trim() || undefined,
+      password: password.trim() || undefined,
+      url: url.trim() || undefined,
+    })
+    onClose()
+    toast.success('Acesso adicionado')
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Adicionar acesso"
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button onClick={submit}>Adicionar</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <Input
+          label="Nome *"
+          placeholder="Ex: Instagram, Painel Admin…"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          leftIcon={<KeyRound className="h-4 w-4" />}
+        />
+        <Input
+          label="E-mail / Telefone"
+          placeholder="usuario@email.com ou (11) 99999-9999"
+          value={emailOrPhone}
+          onChange={(e) => setEmailOrPhone(e.target.value)}
+          leftIcon={<Phone className="h-4 w-4" />}
+        />
+        <Input
+          label="Senha"
+          type="text"
+          placeholder="Senha de acesso"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          leftIcon={<KeyRound className="h-4 w-4" />}
+        />
+        <Input
+          label="Link"
+          placeholder="https://..."
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          leftIcon={<Globe className="h-4 w-4" />}
+        />
+      </div>
+    </Modal>
+  )
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
 function iconForAction(action: string): React.ReactNode {
   const a = action.toLowerCase()
   if (a.includes('contrato')) return <FileText className="h-3 w-3" />
-  if (a.includes('briefing'))
-    return <MessageSquare className="h-3 w-3" />
+  if (a.includes('briefing')) return <MessageSquare className="h-3 w-3" />
   if (a.includes('cobrança') || a.includes('pagamento') || a.includes('asaas'))
     return <ArrowRight className="h-3 w-3" />
   if (a.includes('checklist') || a.includes('entrega'))

@@ -2,8 +2,6 @@ import * as React from 'react'
 import {
   Activity,
   ChevronDown,
-  Clock,
-  Copy,
   ExternalLink,
   FileText,
   ListChecks,
@@ -26,7 +24,6 @@ import { FinanceTab } from './tabs/FinanceTab'
 import { BriefingTab } from './tabs/BriefingTab'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
-import { HistoryTab } from './tabs/HistoryTab'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
@@ -46,12 +43,11 @@ interface TabDef {
 
 const TAB_DEFS: TabDef[] = [
   { value: 'overview', label: 'Visão Geral', icon: <Activity className="h-3.5 w-3.5" /> },
-  { value: 'history', label: 'Histórico', icon: <Clock className="h-3.5 w-3.5" /> },
-  { value: 'contract', label: 'Contrato', icon: <FileText className="h-3.5 w-3.5" /> },
-  { value: 'finance', label: 'Financeiro', icon: <Wallet className="h-3.5 w-3.5" /> },
   { value: 'briefing', label: 'Briefing', icon: <MessageSquare className="h-3.5 w-3.5" /> },
   { value: 'delivery', label: 'Entrega', icon: <ListChecks className="h-3.5 w-3.5" /> },
   { value: 'followup', label: 'Follow-up', icon: <Send className="h-3.5 w-3.5" /> },
+  { value: 'contract', label: 'Contrato', icon: <FileText className="h-3.5 w-3.5" /> },
+  { value: 'finance', label: 'Financeiro', icon: <Wallet className="h-3.5 w-3.5" /> },
 ]
 
 export interface ClientDrawerProps {
@@ -259,7 +255,6 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
 
         <div className="p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
-          {tab === 'history' && <HistoryTab client={client} />}
           {tab === 'contract' && seeFinancials && (
             <ContractTab client={client} />
           )}

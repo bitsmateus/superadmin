@@ -100,7 +100,27 @@ export interface BriefingData {
 
   extraNotes?: string
 
+  // Channel-specific info (populated when client submits the public form)
+  wavoipInfo?: string
+  olxInfo?: string
+  mercadolivreInfo?: string
+  emailConfig?: string
+  externalAutomationInfo?: string
+
   submittedAt: string
+}
+
+export type ConnectionType = 'api_oficial' | 'api_comum'
+export type AutomationType = 'chatbot' | 'ia_basica' | 'ia_avancada'
+export type BriefingChannel = 'instagram' | 'messenger' | 'wavoip' | 'olx' | 'mercadolivre' | 'email'
+
+export interface BriefingConfig {
+  connectionTypes: ConnectionType[]
+  automationTypes: AutomationType[]
+  channels: BriefingChannel[]
+  maxUsers: number
+  hasExternalAutomation: boolean
+  externalAutomationNotes?: string
 }
 
 export type ContractStatus = 'not_sent' | 'sent' | 'signed'
@@ -122,6 +142,8 @@ export interface Payment {
   dueDate?: string
   paidAt?: string
   method?: PaymentMethod
+  /** Texto livre indicando onde/como foi pago (ex.: "Infinity Tape", "Sicredi"). */
+  paidVia?: string
   reference?: string
   note?: string
   source?: 'manual' | 'asaas'
@@ -134,6 +156,14 @@ export interface ExtraLink {
   id: string
   label: string
   url: string
+}
+
+export interface ClientAccess {
+  id: string
+  name: string
+  emailOrPhone?: string
+  password?: string
+  url?: string
 }
 
 export interface Client {
@@ -157,6 +187,10 @@ export interface Client {
   contractUrl?: string
   contractSentAt?: string
   contractSignedAt?: string
+  /** Data URL (base64) ou URL externa do arquivo do contrato. */
+  contractFile?: string
+  /** Nome do arquivo do contrato. */
+  contractFileName?: string
   asaasCustomerId?: string
   asaasPaymentId?: string
   asaasSubscriptionId?: string
@@ -165,6 +199,14 @@ export interface Client {
   dueDay?: number
   paymentStatus?: PaymentStatus
   lastPaymentCheck?: string
+
+  // Plataformas onde o cliente usa o sistema
+  platformApp?: boolean
+  platformWeb?: boolean
+  platformChat?: boolean
+
+  // Acessos (redes sociais, painéis externos, etc.)
+  accesses?: ClientAccess[]
 
   // Financeiro — registros manuais
   payments?: Payment[]
@@ -178,6 +220,7 @@ export interface Client {
   briefingData?: BriefingData
   briefingApprovedAt?: string
   briefingRevisionNote?: string
+  briefingConfig?: BriefingConfig
 
   // Etapa 4 — Entrega
   deliveryChecklist: ChecklistItem[]

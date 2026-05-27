@@ -8,7 +8,7 @@ export async function publicRoutes(app: FastifyInstance) {
     '/api/public/briefing/:token',
     async (req, reply) => {
       const row = await queryOne(
-        `SELECT id, name, company, briefing_status, briefing_data, briefing_revision_note
+        `SELECT id, name, company, briefing_status, briefing_data, briefing_revision_note, briefing_config
          FROM clients WHERE briefing_token = $1`,
         [req.params.token]
       );

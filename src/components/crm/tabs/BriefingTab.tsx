@@ -596,8 +596,8 @@ function AutomationView({ client }: { client: Client }) {
   const [creatingUsers, setCreatingUsers] = React.useState(false)
 
   const tree = React.useMemo(
-    () => enrichChecklistFromBriefing(client.deliveryChecklist, client.briefingData),
-    [client.deliveryChecklist, client.briefingData],
+    () => enrichChecklistFromBriefing(client.deliveryChecklist, client.briefingData, client.briefingConfig),
+    [client.deliveryChecklist, client.briefingData, client.briefingConfig],
   )
 
   const persist = (next: ChecklistItem[], log: string) => {

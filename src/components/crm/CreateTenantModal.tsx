@@ -87,6 +87,7 @@ export function CreateTenantModal({
       const enriched = enrichChecklistFromBriefing(
         client.deliveryChecklist,
         client.briefingData,
+        client.briefingConfig,
       )
       const checked = setChecklistItem(enriched, 'tenant_created', true, user)
 

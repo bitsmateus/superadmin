@@ -259,7 +259,7 @@ export function BriefingPublicPage() {
       schedule: state.schedule,
       timezone: state.timezone,
       whatsappNumbers: state.whatsappNumbers
-        .split(/[\s,;]+/)
+        .split(/[\n,;]+/)
         .map((s) => s.trim())
         .filter(Boolean),
       whatsappType: 'baileys',

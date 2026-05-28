@@ -1,24 +1,33 @@
 ﻿import * as React from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import {
   AlertTriangle,
   ArrowDownCircle,
+  ArrowUpCircle,
+  Building2,
   ChevronDown,
   ChevronRight,
   Clock,
   ListChecks,
+  Phone,
   PlusCircle,
   Search,
+  UserCircle2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
 import { ClientDrawer } from '@/components/crm/ClientDrawer'
 import { StageBadge } from '@/components/crm/StageBadge'
 import { useClients } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import {
   NEXT_STAGE,
+  PREV_STAGE,
   PIPELINE_STAGES,
   STAGE_COLORS,
 } from '@/constants/stageColors'
@@ -26,10 +35,42 @@ import { asText, cn, formatDateShort, initials } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
 import type { Client, PipelineStage } from '@/types/client'
 
+const newClientSchema = z.object({
+  name: z.string().min(2, 'Mínimo 2 caracteres'),
+  company: z.string().min(2, 'Mínimo 2 caracteres'),
+  phone: z.string().min(8, 'Telefone inválido'),
+})
+type NewClientValues = z.infer<typeof newClientSchema>
+
 export function PipelinePage() {
   const clients = useClients()
   const [search, setSearch] = React.useState('')
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
+  const [openNew, setOpenNew] = React.useState(false)
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isValid },
+  } = useForm<NewClientValues>({
+    resolver: zodResolver(newClientSchema),
+    mode: 'onChange',
+  })
+
+  const onCreate = (values: NewClientValues) => {
+    const client = db.createClient({
+      name: values.name.trim(),
+      company: values.company.trim(),
+      email: '',
+      phone: values.phone.trim(),
+      responsavel: undefined,
+    })
+    toast.success(`Cliente "${client.name}" criado`)
+    setOpenNew(false)
+    reset()
+    setOpenClientId(client.id)
+  }
 
   const byStage = React.useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -58,17 +99,18 @@ export function PipelinePage() {
 
   const advanceStage = (c: Client) => {
     const next = NEXT_STAGE[c.stage]
-    if (!next) {
-      toast.info('Cliente já está na etapa final')
-      return
-    }
+    if (!next) { toast.info('Cliente já está na etapa final'); return }
     db.updateClient(c.id, { stage: next })
-    db.addLog(
-      c.id,
-      'Etapa alterada',
-      `${STAGE_COLORS[c.stage].label} → ${STAGE_COLORS[next].label}`,
-    )
+    db.addLog(c.id, 'Etapa alterada', `${STAGE_COLORS[c.stage].label} → ${STAGE_COLORS[next].label}`)
     toast.success(`${c.name} → ${STAGE_COLORS[next].label}`)
+  }
+
+  const regressStage = (c: Client) => {
+    const prev = PREV_STAGE[c.stage]
+    if (!prev) { toast.info('Cliente já está na primeira etapa'); return }
+    db.updateClient(c.id, { stage: prev })
+    db.addLog(c.id, 'Etapa revertida', `${STAGE_COLORS[c.stage].label} → ${STAGE_COLORS[prev].label}`)
+    toast.success(`${c.name} → ${STAGE_COLORS[prev].label}`)
   }
 
   return (
@@ -78,9 +120,8 @@ export function PipelinePage() {
         subtitle={`${clients.length} cliente(s) no funil`}
         rightSlot={
           <Button
-            onClick={() => toast.info('Crie clientes em /clients')}
+            onClick={() => setOpenNew(true)}
             leftIcon={<PlusCircle className="h-4 w-4" />}
-            variant="secondary"
           >
             Novo cliente
           </Button>
@@ -106,6 +147,7 @@ export function PipelinePage() {
               clients={byStage[stage]}
               onRowClick={(id) => setOpenClientId(id)}
               onAdvance={advanceStage}
+              onRegress={regressStage}
             />
           ))}
         </div>
@@ -115,6 +157,52 @@ export function PipelinePage() {
         clientId={openClientId}
         onClose={() => setOpenClientId(null)}
       />
+
+      <Modal
+        open={openNew}
+        onClose={() => { setOpenNew(false); reset() }}
+        title="Novo cliente"
+        description="Começa na etapa 'Boas-vindas'. Avance pelo pipeline depois."
+        size="md"
+      >
+        <form
+          onSubmit={handleSubmit(onCreate)}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+        >
+          <div className="sm:col-span-2">
+            <Input
+              label="Nome *"
+              leftIcon={<UserCircle2 className="h-4 w-4" />}
+              {...register('name')}
+              error={errors.name?.message}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Input
+              label="Empresa *"
+              leftIcon={<Building2 className="h-4 w-4" />}
+              {...register('company')}
+              error={errors.company?.message}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Input
+              label="Telefone *"
+              leftIcon={<Phone className="h-4 w-4" />}
+              {...register('phone')}
+              error={errors.phone?.message}
+            />
+          </div>
+          <div className="sm:col-span-2 mt-2 flex items-center justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => { setOpenNew(false); reset() }}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={!isValid}>
+              Criar cliente
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </>
   )
 }
@@ -124,11 +212,13 @@ function ListGroup({
   clients,
   onRowClick,
   onAdvance,
+  onRegress,
 }: {
   stage: PipelineStage
   clients: Client[]
   onRowClick: (id: string) => void
   onAdvance: (c: Client) => void
+  onRegress: (c: Client) => void
 }) {
   const [open, setOpen] = React.useState(true)
   const style = STAGE_COLORS[stage]
@@ -186,6 +276,7 @@ function ListGroup({
                 {clients.map((c) => {
                   const alerts = computeAlerts(c)
                   const next = NEXT_STAGE[c.stage]
+                  const prev = PREV_STAGE[c.stage]
                   return (
                     <tr
                       key={c.id}
@@ -251,32 +342,36 @@ function ListGroup({
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          aria-label={
-                            next
-                              ? `Avançar para ${STAGE_COLORS[next].label}`
-                              : 'Sem próxima etapa'
-                          }
-                          title={
-                            next
-                              ? `Avançar para ${STAGE_COLORS[next].label}`
-                              : 'Já está na etapa final'
-                          }
-                          disabled={!next}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onAdvance(c)
-                          }}
-                          className={cn(
-                            'inline-flex h-7 w-7 items-center justify-center rounded-full ring-1 transition-colors',
-                            next
-                              ? 'bg-accent/10 text-accent ring-accent/30 hover:bg-accent/20'
-                              : 'cursor-not-allowed bg-elevate/[0.03] text-foreground/25 ring-line',
-                          )}
-                        >
-                          <ArrowDownCircle className="h-4 w-4" />
-                        </button>
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            title={prev ? `Voltar para ${STAGE_COLORS[prev].label}` : 'Sem etapa anterior'}
+                            disabled={!prev}
+                            onClick={(e) => { e.stopPropagation(); onRegress(c) }}
+                            className={cn(
+                              'inline-flex h-7 w-7 items-center justify-center rounded-full ring-1 transition-colors',
+                              prev
+                                ? 'bg-elevate/[0.06] text-foreground/50 ring-line hover:bg-warning/10 hover:text-warning hover:ring-warning/30'
+                                : 'cursor-not-allowed bg-elevate/[0.03] text-foreground/20 ring-line',
+                            )}
+                          >
+                            <ArrowUpCircle className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            title={next ? `Avançar para ${STAGE_COLORS[next].label}` : 'Já está na etapa final'}
+                            disabled={!next}
+                            onClick={(e) => { e.stopPropagation(); onAdvance(c) }}
+                            className={cn(
+                              'inline-flex h-7 w-7 items-center justify-center rounded-full ring-1 transition-colors',
+                              next
+                                ? 'bg-accent/10 text-accent ring-accent/30 hover:bg-accent/20'
+                                : 'cursor-not-allowed bg-elevate/[0.03] text-foreground/25 ring-line',
+                            )}
+                          >
+                            <ArrowDownCircle className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )

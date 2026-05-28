@@ -179,14 +179,15 @@ export async function publicRoutes(app: FastifyInstance) {
   app.get<{ Params: { token: string } }>(
     '/api/public/tickets/:token',
     async (req, reply) => {
+      const rawToken = req.params.token;
       const ticket = await queryOne(
         `SELECT t.id, t.number, t.subject, t.status, t.priority,
                 t.customer_name, t.customer_email, t.customer_company,
                 t.opened_at, t.last_message_at, t.category_id
-         FROM tickets t WHERE t.public_token = $1`,
-        [req.params.token]
+         FROM tickets t WHERE t.public_token = $1 OR t.number::text = $1`,
+        [rawToken]
       ) as Record<string, unknown> | null;
-      if (!ticket) return reply.status(404).send({ message: 'Token inválido' });
+      if (!ticket) return reply.status(404).send({ message: 'Ticket não encontrado. Verifique o código.' });
 
       const messages = await query(
         `SELECT id, author_type, author_name, content, created_at

@@ -44,6 +44,7 @@ import {
  */
 
 type Step = 'identify' | 'category' | 'triage' | 'compose' | 'created' | 'track'
+type IdentifySubStep = 'email' | 'fallback' | 'confirm'
 
 interface Identification {
   email: string
@@ -55,6 +56,20 @@ interface Identification {
   matched: boolean
 }
 
+function validateCnpj(v: string): boolean {
+  const d = v.replace(/\D/g, '')
+  return d.length === 14
+}
+
+function formatCnpj(v: string): string {
+  const d = v.replace(/\D/g, '').slice(0, 14)
+  if (d.length <= 2) return d
+  if (d.length <= 5) return `${d.slice(0,2)}.${d.slice(2)}`
+  if (d.length <= 8) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5)}`
+  if (d.length <= 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8)}`
+  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`
+}
+
 export function SupportPublicPage() {
   const [searchParams] = useSearchParams()
   const incomingToken = searchParams.get('t')
@@ -62,6 +77,7 @@ export function SupportPublicPage() {
   const [step, setStep] = React.useState<Step>(incomingToken ? 'track' : 'identify')
   const [trackToken, setTrackToken] = React.useState<string>(incomingToken ?? '')
   const [identity, setIdentity] = React.useState<Identification | null>(null)
+  const [identifySubStep, setIdentifySubStep] = React.useState<IdentifySubStep>('email')
   const [category, setCategory] = React.useState<TicketCategory | null>(null)
   const [triagePath, setTriagePath] = React.useState<TriagePathEntry[]>([])
 
@@ -72,6 +88,8 @@ export function SupportPublicPage() {
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
         {step === 'identify' && (
           <IdentifyStep
+            initialSubStep={identifySubStep}
+            onSubStepChange={setIdentifySubStep}
             onDone={(ident) => {
               setIdentity(ident)
               setStep('category')
@@ -158,6 +176,12 @@ function Header() {
             </div>
           </div>
         </div>
+        <a
+          href="/"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground transition-colors"
+        >
+          ← Sair
+        </a>
       </div>
     </header>
   )
@@ -168,9 +192,13 @@ function Header() {
 // =====================================================================
 
 function IdentifyStep({
+  initialSubStep,
+  onSubStepChange,
   onDone,
   onTrackInstead,
 }: {
+  initialSubStep: IdentifySubStep
+  onSubStepChange: (s: IdentifySubStep) => void
   onDone: (i: Identification) => void
   onTrackInstead: (token: string) => void
 }) {
@@ -179,7 +207,8 @@ function IdentifyStep({
   const [phone, setPhone] = React.useState('')
   const [company, setCompany] = React.useState('')
   const [cnpj, setCnpj] = React.useState('')
-  const [step, setStepLocal] = React.useState<'email' | 'fallback' | 'confirm'>('email')
+  const [step, setStepLocalRaw] = React.useState<IdentifySubStep>(initialSubStep)
+  const setStepLocal = (s: IdentifySubStep) => { setStepLocalRaw(s); onSubStepChange(s) }
   const [matched, setMatched] = React.useState<{
     clientId: string
     clientName?: string
@@ -219,6 +248,13 @@ function IdentifyStep({
   }
 
   const confirmAndProceed = () => {
+    // Validações para o sub-step 'fallback'
+    if (step === 'fallback') {
+      const words = name.trim().split(/\s+/).filter(Boolean)
+      if (words.length < 2) { toast.error('Informe seu nome completo (nome e sobrenome).'); return }
+      if (!cnpj.trim() || !validateCnpj(cnpj)) { toast.error('Informe o CNPJ da empresa no formato correto.'); return }
+      if (company.trim().length < 3) { toast.error('Nome da empresa deve ter ao menos 3 caracteres.'); return }
+    }
     onDone({
       email: email.trim(),
       name: name.trim() || undefined,
@@ -297,11 +333,11 @@ function IdentifyStep({
               </span>
             </div>
             <Grid2>
-              <Field label="Seu nome">
+              <Field label="Seu nome completo *">
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Nome completo"
+                  placeholder="Nome e sobrenome"
                   className={inputCls}
                 />
               </Field>
@@ -313,21 +349,28 @@ function IdentifyStep({
                   className={inputCls}
                 />
               </Field>
-              <Field label="CNPJ da empresa">
+              <Field label="CNPJ da empresa *">
                 <input
                   value={cnpj}
-                  onChange={(e) => setCnpj(e.target.value)}
+                  onChange={(e) => setCnpj(formatCnpj(e.target.value))}
                   placeholder="00.000.000/0000-00"
                   className={inputCls}
+                  maxLength={18}
                 />
+                {cnpj.trim() && !validateCnpj(cnpj) && (
+                  <p className="mt-1 text-xs text-danger">CNPJ inválido — 14 dígitos</p>
+                )}
               </Field>
-              <Field label="Nome da empresa">
+              <Field label="Nome da empresa *">
                 <input
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   placeholder="Razão social ou fantasia"
                   className={inputCls}
                 />
+                {company.trim().length > 0 && company.trim().length < 3 && (
+                  <p className="mt-1 text-xs text-danger">Mínimo 3 caracteres</p>
+                )}
               </Field>
               <Field label="Telefone (WhatsApp)">
                 <input
@@ -344,7 +387,12 @@ function IdentifyStep({
               </button>
               <button
                 onClick={confirmAndProceed}
-                disabled={!email.trim() || (!cnpj.trim() && !company.trim())}
+                disabled={
+                  !email.trim() ||
+                  name.trim().split(/\s+/).filter(Boolean).length < 2 ||
+                  !validateCnpj(cnpj) ||
+                  company.trim().length < 3
+                }
                 className={btnPrimary}
               >
                 Continuar
@@ -1149,8 +1197,14 @@ function TrackStep({
                 <textarea
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      void post()
+                    }
+                  }}
                   rows={2}
-                  placeholder="Responder…"
+                  placeholder="Responder… (Enter envia · Shift+Enter quebra linha)"
                   className={cn(textareaCls, 'flex-1 min-h-[44px]')}
                   maxLength={5000}
                 />

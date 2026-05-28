@@ -70,8 +70,13 @@ export function OverviewTab({ client }: { client: Client }) {
     toast.success('Nota registrada')
   }
 
-  const togglePlatform = (flag: 'platformApp' | 'platformWeb' | 'platformChat') => {
-    db.updateClient(client.id, { [flag]: !client[flag] })
+  // Radio: selecting a platform deselects the others
+  const setPlatform = (flag: 'platformApp' | 'platformWeb' | 'platformChat') => {
+    db.updateClient(client.id, {
+      platformApp: flag === 'platformApp',
+      platformWeb: flag === 'platformWeb',
+      platformChat: flag === 'platformChat',
+    })
   }
 
   return (
@@ -152,7 +157,7 @@ export function OverviewTab({ client }: { client: Client }) {
                 <button
                   key={flag}
                   type="button"
-                  onClick={() => togglePlatform(flag)}
+                  onClick={() => setPlatform(flag)}
                   className={cn(
                     'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
                     client[flag]

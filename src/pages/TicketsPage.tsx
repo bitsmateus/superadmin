@@ -138,50 +138,50 @@ export function TicketsPage() {
       />
 
       <div className="px-8 py-6 space-y-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             placeholder="Buscar por assunto, cliente, e-mail, #número…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             leftIcon={<Search className="h-4 w-4" />}
-            containerClassName="lg:max-w-md"
+            containerClassName="flex-1 min-w-48"
           />
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-              options={[
-                { value: 'active', label: 'Ativos' },
-                { value: 'all', label: 'Todos' },
-                { value: 'new', label: 'Novos' },
-                { value: 'open', label: 'Em andamento' },
-                { value: 'pending_customer', label: 'Aguardando cliente' },
-                { value: 'resolved', label: 'Resolvidos' },
-                { value: 'closed', label: 'Fechados' },
-              ]}
-            />
-            <Select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value as typeof priorityFilter)}
-              options={[
-                { value: 'all', label: 'Qualquer prioridade' },
-                { value: 'urgent', label: 'Urgente' },
-                { value: 'high', label: 'Alta' },
-                { value: 'normal', label: 'Normal' },
-                { value: 'low', label: 'Baixa' },
-              ]}
-            />
-            <Select
-              value={assigneeFilter}
-              onChange={(e) => setAssigneeFilter(e.target.value as typeof assigneeFilter)}
-              options={[
-                { value: 'all', label: 'Qualquer atendente' },
-                { value: 'mine', label: 'Meus' },
-                { value: 'unassigned', label: 'Sem atribuição' },
-              ]}
-            />
-          </div>
+          <Select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            options={[
+              { value: 'active', label: 'Ativos' },
+              { value: 'all', label: 'Todos' },
+              { value: 'new', label: 'Novos' },
+              { value: 'open', label: 'Em andamento' },
+              { value: 'pending_customer', label: 'Aguard. cliente' },
+              { value: 'resolved', label: 'Resolvidos' },
+              { value: 'closed', label: 'Fechados' },
+            ]}
+            className="!h-9 !text-xs !w-36"
+          />
+          <Select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value as typeof priorityFilter)}
+            options={[
+              { value: 'all', label: 'Prioridade' },
+              { value: 'urgent', label: 'Urgente' },
+              { value: 'high', label: 'Alta' },
+              { value: 'normal', label: 'Normal' },
+              { value: 'low', label: 'Baixa' },
+            ]}
+            className="!h-9 !text-xs !w-28"
+          />
+          <Select
+            value={assigneeFilter}
+            onChange={(e) => setAssigneeFilter(e.target.value as typeof assigneeFilter)}
+            options={[
+              { value: 'all', label: 'Atendente' },
+              { value: 'mine', label: 'Meus' },
+              { value: 'unassigned', label: 'Sem atribuição' },
+            ]}
+            className="!h-9 !text-xs !w-32"
+          />
         </div>
 
         {!booted ? (
@@ -216,6 +216,13 @@ export function TicketsPage() {
   )
 }
 
+const PRIORITY_ROW_CLS: Record<string, string> = {
+  urgent: 'border-l-4 border-l-red-500 bg-red-500/[0.04] hover:bg-red-500/[0.07]',
+  high:   'border-l-4 border-l-orange-400 bg-orange-400/[0.04] hover:bg-orange-400/[0.07]',
+  normal: 'hover:border-accent/40 hover:bg-accent/[0.03]',
+  low:    'hover:border-accent/40 hover:bg-accent/[0.03]',
+}
+
 function TicketRow({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) {
   const overdue =
     ticket.slaDueAt &&
@@ -227,8 +234,9 @@ function TicketRow({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) {
       <button
         onClick={onOpen}
         className={cn(
-          'w-full rounded-xl border border-line bg-card px-4 py-3 text-left transition-colors hover:border-accent/40 hover:bg-accent/[0.03]',
-          overdue && 'border-danger/30 bg-danger/[0.04]',
+          'w-full rounded-xl border border-line bg-card px-4 py-3 text-left transition-colors',
+          PRIORITY_ROW_CLS[ticket.priority] ?? PRIORITY_ROW_CLS.normal,
+          overdue && 'border-l-danger border-danger/30 bg-danger/[0.04]',
         )}
       >
         <div className="flex items-start gap-3">
@@ -463,11 +471,17 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
               <textarea
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    void sendReply()
+                  }
+                }}
                 rows={4}
                 placeholder={
                   isInternal
                     ? 'Nota interna — só o time vê'
-                    : 'Resposta ao cliente…'
+                    : 'Resposta ao cliente… (Enter envia · Shift+Enter quebra linha)'
                 }
                 className={cn(
                   'w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 resize-y min-h-[100px]',
@@ -829,8 +843,8 @@ function LinkClientModal({
 
   React.useEffect(() => {
     if (open) {
-      // Sugere busca por email / empresa do ticket
-      setQuery(ticket.customerCompany || ticket.customerEmail || '')
+      // Prioriza empresa e CNPJ na busca inicial
+      setQuery(ticket.customerCompany || ticket.customerCnpj || '')
     }
   }, [open, ticket])
 
@@ -840,7 +854,7 @@ function LinkClientModal({
     return clients
       .filter((c) => {
         const blob =
-          (c.name + ' ' + c.email + ' ' + c.company + ' ' + (c.tenantName ?? '')).toLowerCase()
+          (c.name + ' ' + c.email + ' ' + c.company + ' ' + (c.tenantName ?? '') + ' ' + (ticket.customerCnpj ?? '')).toLowerCase()
         return blob.includes(q)
       })
       .slice(0, 20)

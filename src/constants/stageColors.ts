@@ -83,3 +83,11 @@ export const NEXT_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
   setup: 'delivery',
   delivery: 'active',
 }
+
+export const PREV_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
+  contract: 'welcome',
+  briefing: 'contract',
+  setup: 'briefing',
+  delivery: 'setup',
+  active: 'delivery',
+}

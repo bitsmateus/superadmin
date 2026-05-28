@@ -24,9 +24,9 @@ export async function settingsRoutes(app: FastifyInstance) {
           followups_enabled, followup_templates,
           nps_delay_days, nps_enabled, notify_edge_function_url, notify_enabled,
           goal_new_clients_monthly, goal_mrr_monthly, goal_nps_monthly, goals_enabled,
-          last_backup_at, backup_remind_days, updated_at
+          last_backup_at, backup_remind_days, servers, updated_at
         ) VALUES (
-          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW()
+          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           asaas_api_key = EXCLUDED.asaas_api_key,
@@ -47,6 +47,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           goals_enabled = EXCLUDED.goals_enabled,
           last_backup_at = EXCLUDED.last_backup_at,
           backup_remind_days = EXCLUDED.backup_remind_days,
+          servers = COALESCE(EXCLUDED.servers, settings.servers),
           updated_at = NOW()
         RETURNING *`,
         [
@@ -61,6 +62,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           b.goal_new_clients_monthly ?? null, b.goal_mrr_monthly ?? null,
           b.goal_nps_monthly ?? null, b.goals_enabled ?? false,
           b.last_backup_at ?? null, b.backup_remind_days ?? 7,
+          b.servers ? JSON.stringify(b.servers) : null,
         ]
       );
       return row;

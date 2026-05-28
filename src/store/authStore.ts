@@ -63,6 +63,8 @@ interface AuthState {
   servers: ServerConfig[]
   selectedServerId: string
   setSelectedServer: (id: string) => void
+  /** Bulk-replace servers — called when syncing from backend. */
+  setServers: (servers: ServerConfig[]) => void
   upsertServer: (server: ServerConfig) => void
   removeServer: (id: string) => void
   toggleServer: (id: string, enabled: boolean) => void
@@ -78,6 +80,7 @@ export const useAuthStore = create<AuthState>()(
         set((s) =>
           s.servers.find((x) => x.id === id) ? { selectedServerId: id } : {},
         ),
+      setServers: (servers) => set({ servers }),
       upsertServer: (server) =>
         set((s) => {
           const idx = s.servers.findIndex((x) => x.id === server.id)
@@ -107,31 +110,17 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'tenanthub-auth',
-      version: 4,
+      // v5: servers moved to shared backend settings — strip from localStorage
+      version: 5,
       migrate: (persisted, _fromVersion) => {
-        // v1/v2: kept old admin auth fields. v3: introduced loginUrl. v4:
-        // dropped admin auth (Supabase took over).
-        const old = persisted as Partial<AuthState> & {
-          isAdminAuthenticated?: boolean
-          adminUser?: string | null
-        } | undefined
-        const servers = (old?.servers ?? DEFAULT_SERVERS).map((s) => {
-          if (s.loginUrl) return s
-          const fromDefault = DEFAULT_SERVERS.find((d) => d.id === s.id)
-          return {
-            ...s,
-            loginUrl:
-              fromDefault?.loginUrl ?? deriveLoginUrlFromBaseUrl(s.baseUrl),
-          }
-        })
+        const old = persisted as Partial<AuthState> | undefined
         return {
-          servers,
           selectedServerId:
             old?.selectedServerId ?? DEFAULT_SERVERS[0].id,
         } as AuthState
       },
+      // Only persist selectedServerId — servers come from the shared backend
       partialize: (state) => ({
-        servers: state.servers,
         selectedServerId: state.selectedServerId,
       }),
     },

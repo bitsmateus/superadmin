@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
-import { startRealtimeListener, onDbChange } from './db.js';
+import { startRealtimeListener, onDbChange, runMigrations } from './db.js';
 import { broadcast } from './sse.js';
 import { authRoutes } from './routes/auth.js';
 import { clientRoutes } from './routes/clients.js';
@@ -50,6 +50,7 @@ async function main() {
 
   const PORT = parseInt(process.env.PORT ?? '3001');
 
+  await runMigrations();
   await startRealtimeListener();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);

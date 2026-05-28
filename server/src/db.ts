@@ -53,6 +53,12 @@ export function onDbChange(handler: NotifyHandler) {
   handlers.push(handler);
 }
 
+/** Idempotent schema migrations — safe to run on every startup. */
+export async function runMigrations() {
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB`);
+  console.log('[db] migrations applied');
+}
+
 export async function startRealtimeListener() {
   listenerClient = await pool.connect();
   listenerClient.on('notification', (msg) => {

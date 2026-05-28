@@ -37,6 +37,7 @@ import { extractErrorMessage } from '@/api/client'
 import { cn } from '@/lib/utils'
 import { copyToClipboard } from '@/lib/clipboard'
 import { CrmSettingsSection } from '@/components/crm/CrmSettingsSection'
+import { db } from '@/services/db'
 
 export function SettingsPage() {
   const qc = useQueryClient()
@@ -45,6 +46,12 @@ export function SettingsPage() {
   const setSelectedServer = useAuthStore((s) => s.setSelectedServer)
   const upsertServer = useAuthStore((s) => s.upsertServer)
   const toggleServer = useAuthStore((s) => s.toggleServer)
+  const resetServers = useAuthStore((s) => s.resetServers)
+
+  /** Persist the current server list to the shared backend after any mutation. */
+  const persistServers = (nextServers: typeof servers) => {
+    db.saveSettings({ ...db.getSettings(), servers: nextServers } as Parameters<typeof db.saveSettings>[0])
+  }
 
   return (
     <>
@@ -70,7 +77,8 @@ export function SettingsPage() {
               size="sm"
               variant="ghost"
               onClick={() => {
-                DEFAULT_SERVERS.forEach((s) => upsertServer(s))
+                resetServers()
+                persistServers(DEFAULT_SERVERS)
                 toast.success('Servidores padrão restaurados')
               }}
               leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
@@ -88,10 +96,16 @@ export function SettingsPage() {
                 onSelect={() => setSelectedServer(server.id)}
                 onSave={(next) => {
                   upsertServer(next)
+                  const updated = useAuthStore.getState().servers
+                  persistServers(updated)
                   qc.invalidateQueries()
                   toast.success(`Servidor "${next.name}" salvo`)
                 }}
-                onToggle={(enabled) => toggleServer(server.id, enabled)}
+                onToggle={(enabled) => {
+                  toggleServer(server.id, enabled)
+                  const updated = useAuthStore.getState().servers
+                  persistServers(updated)
+                }}
               />
             ))}
           </div>

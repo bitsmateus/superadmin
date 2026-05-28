@@ -79,9 +79,12 @@ CREATE TABLE IF NOT EXISTS settings (
   goals_enabled BOOLEAN DEFAULT FALSE,
   last_backup_at TIMESTAMPTZ,
   backup_remind_days INT DEFAULT 7,
+  servers JSONB,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT settings_singleton CHECK (id = TRUE)
 );
+-- add column if running against existing DB
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB;
 
 -- ---------- clients ----------
 CREATE TABLE IF NOT EXISTS clients (

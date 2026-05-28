@@ -5,6 +5,8 @@ import {
 } from '@/constants/checklist'
 import type { Profile } from '@/services/supabase'
 import { api, onSseEvent } from '@/services/api'
+import { DEFAULT_SERVERS, useAuthStore } from '@/store/authStore'
+import type { ServerConfig } from '@/store/authStore'
 import type {
   AppSettings,
   Client,
@@ -220,6 +222,7 @@ type SettingsRow = {
   goals_enabled: boolean | null
   last_backup_at: string | null
   backup_remind_days: number | null
+  servers: ServerConfig[] | null
 }
 
 function rowToSettings(r: SettingsRow | null): AppSettings {
@@ -266,6 +269,17 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
     goals_enabled: s.goalsEnabled ?? null,
     last_backup_at: s.lastBackupAt ?? null,
     backup_remind_days: s.backupRemindDays ?? null,
+    servers: useAuthStore.getState().servers,
+  }
+}
+
+/** Syncs servers from a settings row into authStore. Falls back to DEFAULT_SERVERS. */
+function syncServersFromRow(row: SettingsRow | null) {
+  const servers = row?.servers
+  if (Array.isArray(servers) && servers.length > 0) {
+    useAuthStore.getState().setServers(servers as ServerConfig[])
+  } else {
+    useAuthStore.getState().setServers(DEFAULT_SERVERS)
   }
 }
 
@@ -306,6 +320,9 @@ export async function bootDb(): Promise<void> {
       settingsCache = hasData ? fromApi : lsReadSettings()
       if (hasData) lsWriteSettings(fromApi)
 
+      // Sync shared server configs to authStore
+      syncServersFromRow(settingsRow)
+
       subscribeRealtime()
       booted = true
       notify()
@@ -343,7 +360,12 @@ function subscribeRealtime() {
       else { const copy = clientsCache.slice(); copy[idx] = next; clientsCache = copy }
       notify()
     } else if (table === 'settings') {
-      if (type !== 'DELETE') { settingsCache = rowToSettings(data as SettingsRow); notify() }
+      if (type !== 'DELETE') {
+        const row = data as SettingsRow
+        settingsCache = rowToSettings(row)
+        syncServersFromRow(row)
+        notify()
+      }
     } else if (table === 'profiles') {
       const row = data as unknown as Profile
       if (currentProfile && row.id === currentProfile.id) { currentProfile = row; notify() }

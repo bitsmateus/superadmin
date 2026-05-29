@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { tenantsApi } from '@/api/tenants'
+import { queuesApi } from '@/api/queues'
 import { extractErrorMessage } from '@/api/client'
 import { useAuthStore, type ServerConfig } from '@/store/authStore'
 import { useCurrentUser } from '@/hooks/useClients'
@@ -23,6 +24,42 @@ import type { Client } from '@/types/client'
 import type { Tenant } from '@/types'
 
 const FALLBACK_TENANT_PASSWORD = 'Nxim01@!'
+
+/** Lê o primeiro campo não-nulo de um objeto de resposta (formato variável). */
+function pick(obj: unknown, ...keys: string[]): unknown {
+  if (obj && typeof obj === 'object') {
+    for (const k of keys) {
+      const v = (obj as Record<string, unknown>)[k]
+      if (v !== undefined && v !== null) return v
+    }
+  }
+  return undefined
+}
+
+function genToken(): string {
+  return (
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 6)
+  )
+}
+
+/** Setores do briefing (departamentos + setores dos usuários), deduplicados. */
+function collectSectors(client: Client): string[] {
+  const fromDepartments = client.briefingData?.departments ?? []
+  const fromUsers = (client.briefingData?.users ?? []).flatMap((u) =>
+    u.sectors ?? (u.sector ? [u.sector] : []),
+  )
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const s of [...fromDepartments, ...fromUsers]) {
+    const t = s.trim()
+    if (t && !seen.has(t.toLowerCase())) {
+      seen.add(t.toLowerCase())
+      out.push(t)
+    }
+  }
+  return out
+}
 
 export function CreateTenantModal({
   client,
@@ -81,8 +118,71 @@ export function CreateTenantModal({
       })
 
       const t = created as Tenant
-      // apiId may be returned as string or number — use id as fallback
-      const apiId = t.apiId != null ? String(t.apiId) : String(t.id)
+      const tenantId = t.id ?? undefined
+      const userId = pick(t, 'userId', 'user_id', 'ownerId', 'owner_id', 'adminUserId') ?? 1
+
+      // Tipo de conexão configurado no briefing. Canal + API são criados
+      // automaticamente apenas para API NÃO OFICIAL (a API só pode ser criada
+      // depois do canal). Para API Oficial, isso é feito pelo fluxo da Meta.
+      const connTypes = client.briefingConfig?.connectionTypes ?? []
+      const officialOnly =
+        connTypes.includes('api_oficial') && !connTypes.includes('api_comum')
+      const sessionType = String(client.briefingData?.whatsappType || 'baileys')
+
+      // apiId começa com o que a resposta do tenant trouxe (fallback p/ id do
+      // tenant, mantendo o comportamento anterior quando não provisionamos).
+      let apiId = t.apiId != null ? String(t.apiId) : String(t.id ?? '')
+      const steps: string[] = []
+
+      if (!officialOnly && tenantId != null) {
+        try {
+          // 1) Criar canal (sessão WhatsApp)
+          const session = await tenantsApi.createSession(server, {
+            tenant: tenantId,
+            name: `${client.company || client.name} WhatsApp`.slice(0, 60),
+            status: 'DISCONNECTED',
+            type: sessionType,
+          })
+          const sessionId = pick(session, 'id', 'sessionId', 'session_id')
+          steps.push('canal')
+
+          // 2) Criar API vinculada à sessão
+          const apiResp = await tenantsApi.createApi(server, {
+            name: `API ${client.company || client.name}`.slice(0, 60),
+            sessionId: sessionId as string | number | undefined,
+            urlServiceStatus: null,
+            urlMessageStatus: null,
+            userId: userId as string | number,
+            authToken: genToken(),
+            tenant: tenantId,
+          })
+          const createdApiId = pick(apiResp, 'id', 'apiId', 'api_id')
+          if (createdApiId != null) {
+            apiId = String(createdApiId)
+            steps.push('API')
+          }
+
+          // 3) Criar filas a partir dos setores do briefing
+          if (apiId) {
+            const sectors = collectSectors(client)
+            let queues = 0
+            for (const q of sectors) {
+              try {
+                await queuesApi.create(server, apiId, { queue: q, isActive: true })
+                queues++
+              } catch {
+                /* fila duplicada / erro pontual — segue */
+              }
+            }
+            if (queues > 0) steps.push(`${queues} fila(s)`)
+          }
+        } catch (err) {
+          toast.error(
+            'Tenant criado, mas falhou ao provisionar canal/API: ' +
+              extractErrorMessage(err, 'erro'),
+          )
+        }
+      }
 
       const enriched = enrichChecklistFromBriefing(
         client.deliveryChecklist,
@@ -97,9 +197,9 @@ export function CreateTenantModal({
       const advancedStage = preSetup.includes(client.stage) ? 'setup' : client.stage
 
       db.updateClient(client.id, {
-        tenantId: t.id !== undefined ? String(t.id) : undefined,
+        tenantId: tenantId !== undefined ? String(tenantId) : undefined,
         tenantServerId: server.id,
-        tenantApiId: apiId,
+        tenantApiId: apiId || undefined,
         tenantName: typeof t.name === 'string' ? t.name : undefined,
         supportEmail: finalEmail,
         supportPassword: tenantPassword,
@@ -109,12 +209,16 @@ export function CreateTenantModal({
       db.addLog(
         client.id,
         'Tenant criado',
-        `${server.name} · ${finalEmail}`,
+        `${server.name} · ${finalEmail}${steps.length ? ` · ${steps.join(', ')}` : ''}`,
       )
       if (advancedStage !== client.stage) {
         db.addLog(client.id, 'Etapa: Configuração', 'Avançado automaticamente após criar o tenant')
       }
-      toast.success(`Tenant criado em ${server.name}`)
+      toast.success(
+        steps.length
+          ? `Tenant provisionado em ${server.name} (${steps.join(', ')})`
+          : `Tenant criado em ${server.name}`,
+      )
       onClose()
     } catch (err) {
       toast.error(extractErrorMessage(err, 'Falha ao criar tenant'))

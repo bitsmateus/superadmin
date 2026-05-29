@@ -31,10 +31,24 @@ export interface TenantListResponse {
 }
 
 export interface CreateApiPayload {
-  tenant_id?: string | number
   name?: string
+  /** Sessão/canal WhatsApp ao qual a API fica vinculada. */
+  sessionId?: string | number
+  urlServiceStatus?: string | null
+  urlMessageStatus?: string | null
+  userId?: string | number
+  authToken?: string
+  tenant?: string | number
+  tenant_id?: string | number
   domain?: string
   description?: string
+  [key: string]: unknown
+}
+
+/** Fila (queue) criada via /v2/api/external/{apiId}/createQueueData. */
+export interface CreateQueuePayload {
+  queue: string
+  isActive?: boolean
   [key: string]: unknown
 }
 
@@ -71,8 +85,12 @@ export interface DeleteApiPayload {
 }
 
 export interface CreateSessionTenantPayload {
-  tenant_id: string | number
-  email?: string
+  tenant: string | number
+  name: string
+  /** Ex.: "DISCONNECTED" ao criar. */
+  status?: string
+  /** Tipos suportados: whatsapp, baileys, meow, evo, uazapi, zapi. */
+  type?: string
   [key: string]: unknown
 }
 

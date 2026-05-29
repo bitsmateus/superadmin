@@ -87,6 +87,9 @@ export interface BriefingData {
   whatsappType: WhatsAppType | string
   useFacebook: boolean
   facebookToken?: string
+  /** Credenciais da conta Meta/Facebook para API Oficial */
+  facebookEmail?: string
+  facebookPassword?: string
 
   mainFlow: string
   greetingMessage: string

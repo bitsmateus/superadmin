@@ -89,6 +89,8 @@ interface BriefingFormState {
   schedule: { day: string; active: boolean; start: string; end: string }[]
   timezone: string
   whatsappNumbers: string
+  facebookEmail: string
+  facebookPassword: string
   wavoipInfo: string
   olxInfo: string
   mercadolivreInfo: string
@@ -133,6 +135,8 @@ function initialFormState(company: string): BriefingFormState {
     })),
     timezone: 'America/Sao_Paulo',
     whatsappNumbers: '',
+    facebookEmail: '',
+    facebookPassword: '',
     wavoipInfo: '',
     olxInfo: '',
     mercadolivreInfo: '',
@@ -263,7 +267,9 @@ export function BriefingPublicPage() {
         .map((s) => s.trim())
         .filter(Boolean),
       whatsappType: 'baileys',
-      useFacebook: false,
+      useFacebook: Boolean(state.facebookEmail.trim()),
+      facebookEmail: state.facebookEmail.trim() || undefined,
+      facebookPassword: state.facebookPassword.trim() || undefined,
       mainFlow: '',
       greetingMessage: state.greetingMessage.trim(),
       offHoursMessage: state.offHoursMessage.trim(),
@@ -688,6 +694,43 @@ export function BriefingPublicPage() {
                   </p>
                 </Field>
               </div>
+
+              {/* Facebook — obrigatório para API Oficial */}
+              {cfg?.connectionTypes.includes('api_oficial') && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-800">Facebook (Meta)</h3>
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                      API Oficial — obrigatório
+                    </span>
+                  </div>
+                  <p className="mb-3 text-xs text-slate-500">
+                    A API Oficial do WhatsApp exige uma conta Meta Business vinculada. Informe o
+                    login da conta que administra o número de WhatsApp.
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label="E-mail da conta Facebook/Meta *">
+                      <PlainInput
+                        type="email"
+                        value={state.facebookEmail}
+                        onChange={(v) => setState({ ...state, facebookEmail: v })}
+                        placeholder="seuemail@exemplo.com"
+                      />
+                    </Field>
+                    <Field label="Senha da conta Facebook/Meta *">
+                      <PlainInput
+                        type="password"
+                        value={state.facebookPassword}
+                        onChange={(v) => setState({ ...state, facebookPassword: v })}
+                        placeholder="••••••••"
+                      />
+                    </Field>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    🔒 Suas credenciais são transmitidas de forma segura e usadas somente para configurar a integração.
+                  </p>
+                </div>
+              )}
 
               {/* WaVoip */}
               {cfg?.channels.includes('wavoip') && (

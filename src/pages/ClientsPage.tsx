@@ -240,7 +240,11 @@ export function ClientsPage() {
               {filtered.map((c) => {
                 const days = daysSince(c.createdAt)
                 return (
-                  <TR key={c.id}>
+                  <TR
+                    key={c.id}
+                    className="cursor-pointer"
+                    onClick={() => setOpenClientId(c.id)}
+                  >
                     <TD>
                       <div className="flex items-center gap-3">
                         <div className="grid h-8 w-8 place-items-center rounded-full bg-elevate/[0.04] text-[11px] font-medium text-foreground/80 ring-1 ring-line">
@@ -293,7 +297,10 @@ export function ClientsPage() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => setOpenClientId(c.id)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOpenClientId(c.id)
+                        }}
                       >
                         Abrir
                       </Button>

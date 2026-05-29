@@ -861,6 +861,15 @@ function buildBriefingLink(token?: string): string | null {
 
 // ── Briefing viewer ───────────────────────────────────────────────────────────
 
+const CHANNEL_LABELS: Record<string, string> = {
+  instagram: 'Instagram',
+  messenger: 'Facebook / Messenger',
+  olx: 'OLX',
+  mercadolivre: 'Mercado Livre',
+  wavoip: 'WaVoip',
+  email: 'E-mail',
+}
+
 function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> }) {
   const hasExtraChannels =
     data.wavoipInfo ||
@@ -887,7 +896,10 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
               <span className="font-medium text-foreground">{asText(u.name)}</span>
               <span className="text-foreground/45"> · {asText(u.email)} · </span>
               <span className="text-foreground/55">
-                {asText(u.sector)} · {asText(u.role)}
+                {asText(
+                  (u.sectors ?? (u.sector ? [u.sector] : [])).join(', '),
+                )}{' '}
+                · {asText(u.role)}
               </span>
             </li>
           ))}
@@ -923,6 +935,16 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
             {data.emailConfig && <Row k="E-mail" v={data.emailConfig} />}
           </>
         )}
+        {data.channelAccess &&
+          Object.entries(data.channelAccess).map(([key, acc]) => (
+            <React.Fragment key={key}>
+              {acc.email && <Row k={`${CHANNEL_LABELS[key] ?? key} · login`} v={acc.email} />}
+              {acc.password && (
+                <Row k={`${CHANNEL_LABELS[key] ?? key} · senha`} v={acc.password} />
+              )}
+              {acc.notes && <Row k={`${CHANNEL_LABELS[key] ?? key} · obs.`} v={acc.notes} />}
+            </React.Fragment>
+          ))}
       </Accordion>
 
       {data.mainFlow && (

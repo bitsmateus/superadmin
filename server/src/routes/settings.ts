@@ -62,7 +62,9 @@ export async function settingsRoutes(app: FastifyInstance) {
           b.goal_new_clients_monthly ?? null, b.goal_mrr_monthly ?? null,
           b.goal_nps_monthly ?? null, b.goals_enabled ?? false,
           b.last_backup_at ?? null, b.backup_remind_days ?? 7,
-          b.servers ? JSON.stringify(b.servers) : null,
+          Array.isArray(b.servers) && b.servers.length > 0
+            ? JSON.stringify(b.servers)
+            : null,
         ]
       );
       return row;

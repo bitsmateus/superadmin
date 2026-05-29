@@ -7,7 +7,6 @@ import {
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { AlertsPanel } from '@/components/crm/AlertsPanel'
-import { MyTasksCard } from '@/components/dashboard/MyTasksCard'
 import { useTickets, useTicketsBooted } from '@/hooks/useTickets'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
@@ -15,8 +14,8 @@ import { cn } from '@/lib/utils'
 /**
  * Dashboard principal — visão do suporte:
  *  - 4 cards de métricas de tickets (sempre visíveis, zerados quando vazio)
- *  - AlertsPanel com todas as seções pré-definidas (vazias mostram "Nada por aqui")
- *  - MyTasksCard (lembretes pessoais do operador)
+ *  - AlertsPanel com todas as seções pré-definidas (vazias mostram "Nada por aqui"),
+ *    incluindo follow-ups pendentes (copiar mensagem / marcar como enviado)
  *
  * Sem tenants, sem financeiro, sem metas — esses ficam no /comando.
  */
@@ -89,9 +88,8 @@ export function DashboardPage() {
           />
         </div>
 
-        <section className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[1fr_360px]">
+        <section className="mt-6">
           <AlertsPanel />
-          <MyTasksCard />
         </section>
       </div>
     </>

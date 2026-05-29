@@ -273,13 +273,17 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
   }
 }
 
-/** Syncs servers from a settings row into authStore. Falls back to DEFAULT_SERVERS. */
+/**
+ * Sincroniza os servers vindos do backend para o authStore.
+ * O backend é a fonte compartilhada — mas só sobrescreve o estado local
+ * quando realmente tem dados. Se o backend ainda não tem servers (coluna
+ * recém-criada / primeiro deploy), mantemos o que está no store (fallback do
+ * localStorage), evitando zerar um token de API já configurado.
+ */
 function syncServersFromRow(row: SettingsRow | null) {
   const servers = row?.servers
   if (Array.isArray(servers) && servers.length > 0) {
     useAuthStore.getState().setServers(servers as ServerConfig[])
-  } else {
-    useAuthStore.getState().setServers(DEFAULT_SERVERS)
   }
 }
 
@@ -322,6 +326,17 @@ export async function bootDb(): Promise<void> {
 
       // Sync shared server configs to authStore
       syncServersFromRow(settingsRow)
+
+      // Se o backend ainda não tem servers mas temos uma config local com
+      // token (ex.: migrada de versão antiga), envia pro backend pra virar
+      // compartilhada. Só funciona pra admin (rota é admin-only); para os
+      // demais o PUT é ignorado silenciosamente.
+      const sharedServers = settingsRow?.servers
+      const localServers = useAuthStore.getState().servers
+      const localHasToken = localServers.some((s) => s.apiToken?.trim())
+      if ((!Array.isArray(sharedServers) || sharedServers.length === 0) && localHasToken) {
+        void api.put('/api/settings', settingsToRow(settingsCache)).catch(() => {})
+      }
 
       subscribeRealtime()
       booted = true

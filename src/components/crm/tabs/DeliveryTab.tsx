@@ -87,8 +87,16 @@ export function DeliveryTab({ client }: { client: Client }) {
         user,
       )
     }
+    // Agendar a reunião de entrega tira o cliente da Configuração e o leva
+    // para a etapa de Entrega (sem regredir quem já passou disso).
+    const preDelivery = ['lead', 'welcome', 'contract', 'briefing', 'setup']
+    const willAdvance = Boolean(deliveryDate) && preDelivery.includes(client.stage)
+    if (willAdvance) patch.stage = 'delivery'
     db.updateClient(client.id, patch)
     db.addLog(client.id, 'Reunião de treinamento atualizada')
+    if (willAdvance) {
+      db.addLog(client.id, 'Etapa: Entrega', 'Avançado automaticamente ao agendar a reunião de entrega')
+    }
     toast.success('Reunião salva')
   }
 

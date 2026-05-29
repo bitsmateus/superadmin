@@ -4,6 +4,7 @@ import {
   Bot,
   Calendar,
   CheckCircle2,
+  Copy,
   FileText,
   MessageSquare,
   Settings2,
@@ -234,6 +235,17 @@ function AlertRow({
     toast.success('Marcado como enviado')
   }
 
+  const copyMessage = async () => {
+    const text = alert.message ?? alert.followUp?.message
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('Mensagem copiada')
+    } catch {
+      toast.error('Não foi possível copiar')
+    }
+  }
+
   const stageStyle = showStage ? STAGE_COLORS[alert.client.stage] : null
 
   return (
@@ -261,14 +273,24 @@ function AlertRow({
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {alert.followUp && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={markSent}
-            leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
-          >
-            Enviado
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={copyMessage}
+              leftIcon={<Copy className="h-3.5 w-3.5" />}
+            >
+              Copiar
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={markSent}
+              leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
+            >
+              Enviado
+            </Button>
+          </>
         )}
         <Button
           size="sm"

@@ -24,6 +24,7 @@ import { asText, cn } from '@/lib/utils'
 import type {
   BriefingData,
   BriefingConfig,
+  BriefingChannel,
   BriefingStatus,
   BriefingUser,
   BriefingUserRole,
@@ -32,7 +33,41 @@ import type {
 
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
 
-const SECTOR_EMOJIS = ['📈', '🛠️', '💰', '🎯', '📞', '💡', '🔧', '📋', '🎨', '🚀']
+const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+function numberEmoji(i: number): string {
+  return NUMBER_EMOJIS[i] ?? `${i + 1}.`
+}
+
+/**
+ * Canais que exigem credenciais de acesso (e-mail/usuário + senha) do cliente.
+ * Só aparecem no briefing quando habilitados na config do cliente.
+ */
+const CREDENTIAL_CHANNELS: { key: BriefingChannel; label: string }[] = [
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'messenger', label: 'Facebook / Messenger' },
+  { key: 'olx', label: 'OLX' },
+  { key: 'mercadolivre', label: 'Mercado Livre' },
+]
+
+/** Remove canais sem nenhum dado preenchido antes de enviar. */
+function cleanChannelAccess(
+  raw: Record<string, { email?: string; password?: string; notes?: string }>,
+): Record<string, { email?: string; password?: string; notes?: string }> | undefined {
+  const out: Record<string, { email?: string; password?: string; notes?: string }> = {}
+  for (const [key, v] of Object.entries(raw)) {
+    const email = v.email?.trim()
+    const password = v.password?.trim()
+    const notes = v.notes?.trim()
+    if (email || password || notes) {
+      out[key] = {
+        ...(email ? { email } : {}),
+        ...(password ? { password } : {}),
+        ...(notes ? { notes } : {}),
+      }
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
 
 type SectionKey =
   | 'usuarios'
@@ -59,10 +94,8 @@ function buildSections(cfg: BriefingConfig | null): SectionKey[] {
 
 function buildGreeting(company: string, sectors: string[]): string {
   const menuItems = sectors.length > 0
-    ? sectors
-        .map((s, i) => `👉 ${i + 1} - ${s} ${SECTOR_EMOJIS[i] ?? '📌'}`)
-        .join('\n')
-    : '👉 1 - Comercial 📈\n👉 2 - Suporte Técnico 🛠️\n👉 3 - Financeiro 💰'
+    ? sectors.map((s, i) => `${numberEmoji(i)} ${s}`).join('\n')
+    : '1️⃣ Comercial\n2️⃣ Suporte Técnico\n3️⃣ Financeiro'
 
   return `Olá! Seja muito bem-vindo(a) à ${company || 'nossa empresa'}! ✨
 
@@ -95,6 +128,7 @@ interface BriefingFormState {
   olxInfo: string
   mercadolivreInfo: string
   emailConfig: string
+  channelAccess: Record<string, { email?: string; password?: string; notes?: string }>
   greetingMessage: string
   offHoursMessage: string
   greetingEditing: boolean
@@ -126,7 +160,7 @@ function initialFormState(company: string): BriefingFormState {
     site: '',
     sectors: [],
     newSectorInput: '',
-    users: [{ name: '', email: '', sector: '', role: 'atendente' }],
+    users: [{ name: '', email: '', sectors: [], role: 'atendente' }],
     schedule: DAYS.map((day) => ({
       day,
       active: day !== 'Sábado' && day !== 'Domingo',
@@ -141,6 +175,7 @@ function initialFormState(company: string): BriefingFormState {
     olxInfo: '',
     mercadolivreInfo: '',
     emailConfig: '',
+    channelAccess: {},
     greetingMessage: buildGreeting(company, []),
     offHoursMessage: buildOffHours(company),
     greetingEditing: false,
@@ -257,7 +292,7 @@ export function BriefingPublicPage() {
         .map((u) => ({
           name: u.name.trim(),
           email: u.email.trim(),
-          sector: u.sector.trim(),
+          sectors: u.sectors.map((s) => s.trim()).filter(Boolean),
           role: u.role,
         })),
       schedule: state.schedule,
@@ -296,6 +331,7 @@ export function BriefingPublicPage() {
       olxInfo: state.olxInfo.trim() || undefined,
       mercadolivreInfo: state.mercadolivreInfo.trim() || undefined,
       emailConfig: state.emailConfig.trim() || undefined,
+      channelAccess: cleanChannelAccess(state.channelAccess),
       externalAutomationInfo: state.externalAutomationInfo.trim() || undefined,
       extraNotes: state.extraNotes.trim() || undefined,
       submittedAt: new Date().toISOString(),
@@ -505,29 +541,50 @@ export function BriefingPublicPage() {
                           </Field>
                         </div>
                         <div className="sm:col-span-3">
-                          <Field label="Setor">
+                          <Field label="Setor(es)">
                             {state.sectors.length > 0 ? (
-                              <PlainSelect
-                                value={u.sector}
-                                onChange={(v) => {
-                                  const users = [...state.users]
-                                  users[i] = { ...users[i], sector: v }
-                                  setState({ ...state, users })
-                                }}
-                                options={[
-                                  { value: '', label: 'Selecionar…' },
-                                  ...state.sectors.map((s) => ({ value: s, label: s })),
-                                ]}
-                              />
+                              <div className="flex flex-wrap gap-1.5">
+                                {state.sectors.map((s) => {
+                                  const active = (u.sectors ?? []).includes(s)
+                                  return (
+                                    <button
+                                      key={s}
+                                      type="button"
+                                      onClick={() => {
+                                        const users = [...state.users]
+                                        const cur = users[i].sectors ?? []
+                                        const next = active
+                                          ? cur.filter((x) => x !== s)
+                                          : [...cur, s]
+                                        users[i] = { ...users[i], sectors: next }
+                                        setState({ ...state, users })
+                                      }}
+                                      className={
+                                        active
+                                          ? 'rounded-full border border-[#4F8EF7] bg-[#4F8EF7] px-2.5 py-1 text-xs font-medium text-white'
+                                          : 'rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-[#4F8EF7] hover:text-[#4F8EF7]'
+                                      }
+                                    >
+                                      {s}
+                                    </button>
+                                  )
+                                })}
+                              </div>
                             ) : (
                               <PlainInput
-                                value={u.sector}
+                                value={(u.sectors ?? []).join(', ')}
                                 onChange={(v) => {
                                   const users = [...state.users]
-                                  users[i] = { ...users[i], sector: v }
+                                  users[i] = {
+                                    ...users[i],
+                                    sectors: v
+                                      .split(',')
+                                      .map((x) => x.trim())
+                                      .filter(Boolean),
+                                  }
                                   setState({ ...state, users })
                                 }}
-                                placeholder="Crie setores acima"
+                                placeholder="Crie setores acima ou separe por vírgula"
                               />
                             )}
                           </Field>
@@ -575,7 +632,7 @@ export function BriefingPublicPage() {
                           ...state,
                           users: [
                             ...state.users,
-                            { name: '', email: '', sector: '', role: 'atendente' },
+                            { name: '', email: '', sectors: [], role: 'atendente' },
                           ],
                         })
                       }
@@ -747,35 +804,53 @@ export function BriefingPublicPage() {
                 </div>
               )}
 
-              {/* OLX */}
-              {cfg?.channels.includes('olx') && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-slate-800">OLX</h3>
-                  <Field label="Informações da conta OLX">
-                    <PlainTextarea
-                      value={state.olxInfo}
-                      onChange={(v) => setState({ ...state, olxInfo: v })}
-                      placeholder="E-mail, token ou dados de acesso OLX"
-                      rows={3}
-                    />
-                  </Field>
-                </div>
-              )}
-
-              {/* Mercado Livre */}
-              {cfg?.channels.includes('mercadolivre') && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-slate-800">Mercado Livre</h3>
-                  <Field label="Informações da conta Mercado Livre">
-                    <PlainTextarea
-                      value={state.mercadolivreInfo}
-                      onChange={(v) => setState({ ...state, mercadolivreInfo: v })}
-                      placeholder="Usuário, token ou dados de acesso Mercado Livre"
-                      rows={3}
-                    />
-                  </Field>
-                </div>
-              )}
+              {/* Canais com credenciais de acesso (Instagram, Facebook, OLX, Mercado Livre) */}
+              {CREDENTIAL_CHANNELS.filter((ch) => cfg?.channels.includes(ch.key)).map((ch) => {
+                const acc = state.channelAccess[ch.key] ?? {}
+                const setAcc = (patch: { email?: string; password?: string; notes?: string }) =>
+                  setState({
+                    ...state,
+                    channelAccess: {
+                      ...state.channelAccess,
+                      [ch.key]: { ...acc, ...patch },
+                    },
+                  })
+                return (
+                  <div key={ch.key} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <h3 className="mb-3 text-sm font-semibold text-slate-800">{ch.label}</h3>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <Field label="E-mail / usuário de acesso">
+                        <PlainInput
+                          value={acc.email ?? ''}
+                          onChange={(v) => setAcc({ email: v })}
+                          placeholder="login@exemplo.com"
+                        />
+                      </Field>
+                      <Field label="Senha de acesso">
+                        <PlainInput
+                          type="password"
+                          value={acc.password ?? ''}
+                          onChange={(v) => setAcc({ password: v })}
+                          placeholder="••••••••"
+                        />
+                      </Field>
+                    </div>
+                    <div className="mt-3">
+                      <Field label="Outras informações (opcional)">
+                        <PlainTextarea
+                          value={acc.notes ?? ''}
+                          onChange={(v) => setAcc({ notes: v })}
+                          placeholder="Página, token, observações…"
+                          rows={2}
+                        />
+                      </Field>
+                    </div>
+                    <p className="mt-2 text-[11px] text-slate-400">
+                      🔒 Usamos suas credenciais apenas para configurar a integração.
+                    </p>
+                  </div>
+                )
+              })}
 
               {/* E-mail */}
               {cfg?.channels.includes('email') && (

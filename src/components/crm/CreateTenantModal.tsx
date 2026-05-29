@@ -91,6 +91,11 @@ export function CreateTenantModal({
       )
       const checked = setChecklistItem(enriched, 'tenant_created', true, user)
 
+      // Criar o tenant já avança o cliente para a etapa de Configuração
+      // (a menos que ele já esteja em uma etapa posterior).
+      const preSetup = ['lead', 'welcome', 'contract', 'briefing']
+      const advancedStage = preSetup.includes(client.stage) ? 'setup' : client.stage
+
       db.updateClient(client.id, {
         tenantId: t.id !== undefined ? String(t.id) : undefined,
         tenantServerId: server.id,
@@ -99,12 +104,16 @@ export function CreateTenantModal({
         supportEmail: finalEmail,
         supportPassword: tenantPassword,
         deliveryChecklist: checked,
+        stage: advancedStage,
       })
       db.addLog(
         client.id,
         'Tenant criado',
         `${server.name} · ${finalEmail}`,
       )
+      if (advancedStage !== client.stage) {
+        db.addLog(client.id, 'Etapa: Configuração', 'Avançado automaticamente após criar o tenant')
+      }
       toast.success(`Tenant criado em ${server.name}`)
       onClose()
     } catch (err) {

@@ -110,17 +110,25 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'tenanthub-auth',
-      // v5: servers moved to shared backend settings — strip from localStorage
-      version: 5,
+      // v6: servers são compartilhados via backend (settings), MAS mantemos
+      // uma cópia local também — assim um deploy/migração nunca apaga um token
+      // de API já configurado. Na inicialização o backend vence quando tem
+      // dados; o localStorage serve de fallback e de semente.
+      version: 6,
       migrate: (persisted, _fromVersion) => {
         const old = persisted as Partial<AuthState> | undefined
+        const oldServers = old?.servers
         return {
-          selectedServerId:
-            old?.selectedServerId ?? DEFAULT_SERVERS[0].id,
+          servers:
+            Array.isArray(oldServers) && oldServers.length > 0
+              ? oldServers
+              : DEFAULT_SERVERS,
+          selectedServerId: old?.selectedServerId ?? DEFAULT_SERVERS[0].id,
         } as AuthState
       },
-      // Only persist selectedServerId — servers come from the shared backend
+      // Persistimos servers (backup local) + servidor selecionado.
       partialize: (state) => ({
+        servers: state.servers,
         selectedServerId: state.selectedServerId,
       }),
     },

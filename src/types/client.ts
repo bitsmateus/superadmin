@@ -51,7 +51,10 @@ export type BriefingUserRole = 'atendente' | 'supervisor' | 'admin'
 export interface BriefingUser {
   name: string
   email: string
-  sector: string
+  /** @deprecated mantido só pra ler briefings antigos — use `sectors`. */
+  sector?: string
+  /** Um usuário pode pertencer a mais de um setor. */
+  sectors: string[]
   role: BriefingUserRole
 }
 
@@ -127,6 +130,12 @@ export interface BriefingData {
   mercadolivreInfo?: string
   emailConfig?: string
   externalAutomationInfo?: string
+
+  /**
+   * Credenciais de acesso por canal (instagram, messenger, olx, mercadolivre…).
+   * Solicitadas no briefing somente quando o canal está habilitado na config.
+   */
+  channelAccess?: Record<string, { email?: string; password?: string; notes?: string }>
 
   submittedAt: string
 }

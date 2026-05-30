@@ -2,6 +2,35 @@ import { FastifyInstance } from 'fastify';
 import https from 'https';
 import http from 'http';
 import { URL } from 'url';
+import { queryOne } from '../db.js';
+
+type StoredServer = { id?: string; baseUrl?: string; apiToken?: string };
+
+// Cache curto dos servers (com token real) — o token nunca trafega pelo
+// navegador; é resolvido aqui no servidor a partir das settings.
+let serversCache: { at: number; servers: StoredServer[] } | null = null;
+
+async function resolveServerToken(targetBase: string): Promise<string | undefined> {
+  const now = Date.now();
+  if (!serversCache || now - serversCache.at > 15_000) {
+    try {
+      const row = await queryOne<{ servers: StoredServer[] | null }>(
+        'SELECT servers FROM settings WHERE id = true'
+      );
+      serversCache = {
+        at: now,
+        servers: Array.isArray(row?.servers) ? (row!.servers as StoredServer[]) : [],
+      };
+    } catch {
+      serversCache = { at: now, servers: [] };
+    }
+  }
+  const base = targetBase.replace(/\/$/, '');
+  const match = serversCache.servers.find(
+    (s) => (s.baseUrl ?? '').replace(/\/$/, '') === base
+  );
+  return match?.apiToken || undefined;
+}
 
 export async function proxyRoutes(app: FastifyInstance) {
   // Forward all requests to an external API server-to-server, avoiding browser CORS restrictions.
@@ -12,11 +41,19 @@ export async function proxyRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
   }, async (req, reply) => {
     const targetBase = req.headers['x-proxy-target'] as string | undefined;
-    const apiToken = req.headers['x-api-token'] as string | undefined;
+    const headerToken = req.headers['x-api-token'] as string | undefined;
 
     if (!targetBase) {
       return reply.status(400).send({ message: 'Missing X-Proxy-Target header' });
     }
+
+    // Um token explícito no header (ex.: token da API do tenant para
+    // /v2/api/external/{apiId}/...) tem precedência. Caso contrário, o token
+    // do servidor é resolvido aqui no backend — nunca é exposto no front.
+    const apiToken =
+      headerToken && headerToken.trim()
+        ? headerToken
+        : await resolveServerToken(targetBase);
 
     // Strip the '/api/proxy' prefix to get the rest of the path
     const suffix = (req.url as string).replace(/^\/api\/proxy/, '');

@@ -2,9 +2,16 @@ import { FastifyInstance } from 'fastify';
 import { queryOne, query } from '../db.js';
 
 export async function settingsRoutes(app: FastifyInstance) {
-  // GET /api/settings
+  // GET /api/settings — token dos servers é mascarado (nunca vai pro front).
   app.get('/api/settings', { onRequest: [app.authenticate] }, async () => {
-    const row = await queryOne('SELECT * FROM settings WHERE id = true');
+    const row = await queryOne<Record<string, unknown>>('SELECT * FROM settings WHERE id = true');
+    if (row && Array.isArray(row.servers)) {
+      row.servers = (row.servers as Array<Record<string, unknown>>).map((s) => ({
+        ...s,
+        apiToken: '',
+        apiTokenSet: Boolean(s.apiToken),
+      }));
+    }
     return row ?? {};
   });
 
@@ -17,6 +24,31 @@ export async function settingsRoutes(app: FastifyInstance) {
       if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
 
       const b = req.body;
+
+      // Merge dos servers preservando o token existente quando o front manda
+      // vazio (token mascarado). Remove o flag de UI apiTokenSet. Só grava o
+      // token quando o admin digita um novo.
+      let serversParam: string | null = null;
+      if (Array.isArray(b.servers) && b.servers.length > 0) {
+        const existing = await queryOne<{ servers: Array<Record<string, unknown>> | null }>(
+          'SELECT servers FROM settings WHERE id = true'
+        );
+        const existingServers = Array.isArray(existing?.servers) ? existing!.servers : [];
+        const merged = (b.servers as Array<Record<string, unknown>>).map((s) => {
+          const rest: Record<string, unknown> = { ...s };
+          delete rest.apiTokenSet; // flag de UI — não persiste
+          const token = typeof s.apiToken === 'string' ? s.apiToken.trim() : '';
+          if (token) {
+            rest.apiToken = token;
+          } else {
+            const prev = existingServers.find((e) => e.id === s.id);
+            rest.apiToken = (prev?.apiToken as string) ?? '';
+          }
+          return rest;
+        });
+        serversParam = JSON.stringify(merged);
+      }
+
       const [row] = await query(
         `INSERT INTO settings (
           id, asaas_api_key, asaas_environment, asaas_sync_interval_min,
@@ -62,9 +94,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           b.goal_new_clients_monthly ?? null, b.goal_mrr_monthly ?? null,
           b.goal_nps_monthly ?? null, b.goals_enabled ?? false,
           b.last_backup_at ?? null, b.backup_remind_days ?? 7,
-          Array.isArray(b.servers) && b.servers.length > 0
-            ? JSON.stringify(b.servers)
-            : null,
+          serversParam,
         ]
       );
       return row;

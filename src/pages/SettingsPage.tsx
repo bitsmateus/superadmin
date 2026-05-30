@@ -186,7 +186,10 @@ const serverSchema = z.object({
     .string()
     .min(8, 'URL inválida')
     .url('URL inválida — use o formato https://…'),
-  apiToken: z.string().min(8, 'Token muito curto'),
+  // Vazio = manter o token atual (que fica só no backend, oculto por segurança).
+  apiToken: z
+    .string()
+    .refine((v) => v === '' || v.trim().length >= 8, 'Token muito curto (mín. 8)'),
   loginUrl: z
     .string()
     .min(8, 'URL inválida')
@@ -412,16 +415,9 @@ function ServerCard({
           autoComplete="off"
           spellCheck={false}
           leftIcon={<KeyRound className="h-4 w-4" />}
+          placeholder={server.apiTokenSet ? '•••••••• (configurado)' : 'Cole o token da API'}
           rightIcon={
             <div className="pointer-events-auto flex items-center gap-2 text-foreground/40">
-              <button
-                type="button"
-                onClick={() => copy(current.apiToken, 'Token')}
-                className="hover:text-foreground/80"
-                aria-label="Copiar token"
-              >
-                <Copy className="h-4 w-4" />
-              </button>
               <button
                 type="button"
                 onClick={() => setShowToken((s) => !s)}
@@ -438,7 +434,7 @@ function ServerCard({
           }
           {...register('apiToken')}
           error={errors.apiToken?.message}
-          hint="Enviado como Authorization: Bearer {apiToken}."
+          hint="Por segurança o token fica só no servidor e não é exibido. Deixe em branco para manter o atual."
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3">

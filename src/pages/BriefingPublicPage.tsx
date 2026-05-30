@@ -125,8 +125,6 @@ interface BriefingFormState {
   facebookEmail: string
   facebookPassword: string
   wavoipInfo: string
-  olxInfo: string
-  mercadolivreInfo: string
   emailConfig: string
   channelAccess: Record<string, { email?: string; password?: string; notes?: string }>
   greetingMessage: string
@@ -172,8 +170,6 @@ function initialFormState(company: string): BriefingFormState {
     facebookEmail: '',
     facebookPassword: '',
     wavoipInfo: '',
-    olxInfo: '',
-    mercadolivreInfo: '',
     emailConfig: '',
     channelAccess: {},
     greetingMessage: buildGreeting(company, []),
@@ -328,8 +324,6 @@ export function BriefingPublicPage() {
       aiExternalExamples: state.useAI ? state.aiExternalExamples.trim() || undefined : undefined,
       aiInstructions: undefined,
       wavoipInfo: state.wavoipInfo.trim() || undefined,
-      olxInfo: state.olxInfo.trim() || undefined,
-      mercadolivreInfo: state.mercadolivreInfo.trim() || undefined,
       emailConfig: state.emailConfig.trim() || undefined,
       channelAccess: cleanChannelAccess(state.channelAccess),
       externalAutomationInfo: state.externalAutomationInfo.trim() || undefined,

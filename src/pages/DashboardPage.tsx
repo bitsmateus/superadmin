@@ -57,7 +57,7 @@ export function DashboardPage() {
     <>
       <TopBar
         title="Dashboard"
-        subtitle="Painel do suporte — alertas e tarefas do dia"
+        subtitle="Painel do suporte — alertas e follow-ups do dia"
       />
 
       <div className="px-8 py-6">

@@ -278,16 +278,21 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
 
 /**
  * Sincroniza os servers vindos do backend para o authStore.
- * O backend é a fonte compartilhada — mas só sobrescreve o estado local
- * quando realmente tem dados. Se o backend ainda não tem servers (coluna
- * recém-criada / primeiro deploy), mantemos o que está no store (fallback do
- * localStorage), evitando zerar um token de API já configurado.
+ * O backend é a fonte compartilhada e devolve o token MASCARADO (vazio) — o
+ * token real nunca chega ao navegador. Quando o token vem vazio, preservamos
+ * o token já presente no store (ex.: token de DEV vindo de .env), evitando
+ * apagá-lo; em produção ele segue vazio e o proxy resolve no servidor.
  */
 function syncServersFromRow(row: SettingsRow | null) {
-  const servers = row?.servers
-  if (Array.isArray(servers) && servers.length > 0) {
-    useAuthStore.getState().setServers(servers as ServerConfig[])
-  }
+  const incoming = row?.servers
+  if (!Array.isArray(incoming) || incoming.length === 0) return
+  const current = useAuthStore.getState().servers
+  const merged = (incoming as ServerConfig[]).map((s) => {
+    if (s.apiToken && s.apiToken.trim()) return s
+    const prev = current.find((c) => c.id === s.id)
+    return prev?.apiToken ? { ...s, apiToken: prev.apiToken } : s
+  })
+  useAuthStore.getState().setServers(merged)
 }
 
 const SETTINGS_LS_KEY = 'tenanthub_crm_settings'
@@ -327,19 +332,8 @@ export async function bootDb(): Promise<void> {
       settingsCache = hasData ? fromApi : lsReadSettings()
       if (hasData) lsWriteSettings(fromApi)
 
-      // Sync shared server configs to authStore
+      // Sync shared server configs to authStore (token mascarado pelo backend).
       syncServersFromRow(settingsRow)
-
-      // Se o backend ainda não tem servers mas temos uma config local com
-      // token (ex.: migrada de versão antiga), envia pro backend pra virar
-      // compartilhada. Só funciona pra admin (rota é admin-only); para os
-      // demais o PUT é ignorado silenciosamente.
-      const sharedServers = settingsRow?.servers
-      const localServers = useAuthStore.getState().servers
-      const localHasToken = localServers.some((s) => s.apiToken?.trim())
-      if ((!Array.isArray(sharedServers) || sharedServers.length === 0) && localHasToken) {
-        void api.put('/api/settings', settingsToRow(settingsCache)).catch(() => {})
-      }
 
       subscribeRealtime()
       booted = true

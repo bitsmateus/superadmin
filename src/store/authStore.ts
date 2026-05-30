@@ -8,6 +8,12 @@ export interface ServerConfig {
   apiToken: string
   loginUrl: string
   enabled: boolean
+  /**
+   * Apenas informativo no front: indica que existe um token salvo no backend
+   * (o valor real do token nunca é enviado ao navegador). Preenchido pelo
+   * GET /api/settings.
+   */
+  apiTokenSet?: boolean
 }
 
 // API tokens dos servidores externos não devem estar hardcoded no bundle JS.
@@ -110,25 +116,18 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'tenanthub-auth',
-      // v6: servers são compartilhados via backend (settings), MAS mantemos
-      // uma cópia local também — assim um deploy/migração nunca apaga um token
-      // de API já configurado. Na inicialização o backend vence quando tem
-      // dados; o localStorage serve de fallback e de semente.
-      version: 6,
-      migrate: (persisted, _fromVersion) => {
+      // v7: o token do servidor NÃO fica exposto no front. A config dos servers
+      // (incluindo o token) vive no backend; o GET devolve o token mascarado e
+      // o proxy resolve o token real no servidor. No localStorage guardamos só
+      // o servidor selecionado — nada de token.
+      version: 7,
+      migrate: (persisted) => {
         const old = persisted as Partial<AuthState> | undefined
-        const oldServers = old?.servers
         return {
-          servers:
-            Array.isArray(oldServers) && oldServers.length > 0
-              ? oldServers
-              : DEFAULT_SERVERS,
           selectedServerId: old?.selectedServerId ?? DEFAULT_SERVERS[0].id,
         } as AuthState
       },
-      // Persistimos servers (backup local) + servidor selecionado.
       partialize: (state) => ({
-        servers: state.servers,
         selectedServerId: state.selectedServerId,
       }),
     },

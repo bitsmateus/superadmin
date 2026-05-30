@@ -17,17 +17,18 @@ export interface BackupPayload {
   settings: AppSettings
 }
 
-export function buildBackup(): BackupPayload {
+export async function buildBackup(): Promise<BackupPayload> {
   return {
     version: 1,
     createdAt: new Date().toISOString(),
-    clients: db.getClients(),
+    // Lista COMPLETA (com contract_file etc.) — a cache do app é enxuta.
+    clients: await db.getClientsFull(),
     settings: db.getSettings(),
   }
 }
 
-export function downloadBackupFile(): BackupPayload {
-  const payload = buildBackup()
+export async function downloadBackupFile(): Promise<BackupPayload> {
+  const payload = await buildBackup()
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: 'application/json',
   })

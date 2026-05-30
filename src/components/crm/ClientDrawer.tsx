@@ -57,6 +57,11 @@ export interface ClientDrawerProps {
 
 export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
   const client = useClient(clientId ?? undefined)
+  // Carrega os campos pesados (ex.: contract_file) que a listagem em massa
+  // omite pra aliviar o boot.
+  React.useEffect(() => {
+    if (clientId) void db.loadFullClient(clientId)
+  }, [clientId])
   const [tab, setTab] = React.useState('overview')
   const [stageMenu, setStageMenu] = React.useState(false)
   const stageMenuRef = React.useRef<HTMLDivElement>(null)

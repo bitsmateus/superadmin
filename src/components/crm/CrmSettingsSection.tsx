@@ -180,7 +180,7 @@ function BackupBlock() {
 
   const onExport = async () => {
     const { downloadBackupFile } = await import('@/lib/backup')
-    downloadBackupFile()
+    await downloadBackupFile()
     toast.success('Backup gerado')
   }
 

@@ -10,10 +10,18 @@ const FINANCE_COLS = [
 ];
 
 export async function clientRoutes(app: FastifyInstance) {
-  // GET /api/clients
-  app.get('/api/clients', { onRequest: [app.authenticate] }, async () => {
-    return query('SELECT * FROM clients ORDER BY created_at DESC');
-  });
+  // GET /api/clients — lista. Por padrão remove contract_file (base64 pesado)
+  // pra aliviar o payload do boot; ?full=1 traz tudo (usado pelo backup).
+  app.get<{ Querystring: { full?: string } }>(
+    '/api/clients',
+    { onRequest: [app.authenticate] },
+    async (req) => {
+      const rows = await query('SELECT * FROM clients ORDER BY created_at DESC');
+      if (req.query.full) return rows;
+      for (const r of rows as Record<string, unknown>[]) delete r.contract_file;
+      return rows;
+    }
+  );
 
   // GET /api/clients/:id
   app.get<{ Params: { id: string } }>(

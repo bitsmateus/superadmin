@@ -402,6 +402,28 @@ export const db = {
   getClients(): Client[] { return clientsCache },
   getClient(id: string): Client | undefined { return clientsCache.find((c) => c.id === id) },
 
+  /**
+   * Busca o cliente COMPLETO (inclui contract_file, omitido na listagem em
+   * massa) e funde na cache. Chamado ao abrir o drawer.
+   */
+  async loadFullClient(id: string): Promise<void> {
+    try {
+      const row = await api.get<ClientRow>(`/api/clients/${id}`)
+      if (!row) return
+      const full = rowToClient(row)
+      const idx = clientsCache.findIndex((c) => c.id === id)
+      if (idx === -1) clientsCache = [full, ...clientsCache]
+      else { const copy = clientsCache.slice(); copy[idx] = full; clientsCache = copy }
+      notify()
+    } catch { /* mantém a versão da cache */ }
+  },
+
+  /** Lista COMPLETA (com campos pesados) — usada só pelo backup. */
+  async getClientsFull(): Promise<Client[]> {
+    const rows = await api.get<ClientRow[]>('/api/clients?full=1')
+    return (rows ?? []).map(rowToClient)
+  },
+
   createClient(data: CreateClientInput): Client {
     const now = new Date().toISOString()
     const client: Client = {

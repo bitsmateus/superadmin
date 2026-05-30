@@ -34,7 +34,8 @@
       "Bash(xargs grep -l \"BriefingUser\")",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\mateu\\\\Desktop\\\\superadmin\" -Force)",
       "Bash(Select-Object Name)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(git rm *)"
     ]
   }
 }

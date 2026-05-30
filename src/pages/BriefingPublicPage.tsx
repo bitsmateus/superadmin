@@ -205,6 +205,84 @@ interface PublicClient {
   briefing_status: BriefingStatus | null
   briefing_revision_note: string | null
   briefing_config: BriefingConfig | null
+  briefing_data?: BriefingData | null
+}
+
+// ── Rascunho automático (autosave) ────────────────────────────────────────────
+function draftKey(token: string): string {
+  return `briefing_draft_${token}`
+}
+function loadDraft(token: string): BriefingFormState | null {
+  try {
+    const raw = window.localStorage.getItem(draftKey(token))
+    return raw ? (JSON.parse(raw) as BriefingFormState) : null
+  } catch {
+    return null
+  }
+}
+function saveDraft(token: string, state: BriefingFormState): void {
+  try {
+    window.localStorage.setItem(draftKey(token), JSON.stringify(state))
+  } catch {
+    /* quota — ignora */
+  }
+}
+function clearDraft(token: string): void {
+  try {
+    window.localStorage.removeItem(draftKey(token))
+  } catch {
+    /* ignora */
+  }
+}
+
+/** Reconstrói o estado do formulário a partir de um briefing já enviado (revisão). */
+function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): BriefingFormState {
+  return {
+    ...base,
+    site: bd.site ?? base.site,
+    sectors: bd.departments ?? base.sectors,
+    users:
+      (bd.users ?? []).length > 0
+        ? bd.users.map((u) => ({
+            name: u.name,
+            email: u.email,
+            sectors: u.sectors ?? (u.sector ? [u.sector] : []),
+            role: u.role,
+          }))
+        : base.users,
+    schedule:
+      bd.schedule && bd.schedule.length > 0
+        ? bd.schedule.map((s) => ({ day: s.day, active: s.active, start: s.start, end: s.end }))
+        : base.schedule,
+    timezone: bd.timezone ?? base.timezone,
+    whatsappNumbers: (bd.whatsappNumbers ?? []).join('\n'),
+    facebookEmail: bd.facebookEmail ?? base.facebookEmail,
+    facebookPassword: bd.facebookPassword ?? base.facebookPassword,
+    wavoipInfo: bd.wavoipInfo ?? base.wavoipInfo,
+    emailConfig: bd.emailConfig ?? base.emailConfig,
+    channelAccess: bd.channelAccess ?? base.channelAccess,
+    greetingMessage: bd.greetingMessage || base.greetingMessage,
+    offHoursMessage: bd.offHoursMessage || base.offHoursMessage,
+    useAI: bd.useAI ?? base.useAI,
+    aiTone: bd.aiTone ?? base.aiTone,
+    aiAgentName: bd.aiAgentName ?? base.aiAgentName,
+    aiCompanyDescription: bd.aiCompanyDescription ?? base.aiCompanyDescription,
+    aiServices: bd.aiServices ?? base.aiServices,
+    aiHasPrices: bd.aiHasPrices ?? base.aiHasPrices,
+    aiPrices: bd.aiPrices ?? base.aiPrices,
+    aiLocation: bd.aiLocation ?? base.aiLocation,
+    aiSocialMedia: bd.aiSocialMedia ?? base.aiSocialMedia,
+    aiAttendanceFlow: bd.aiAttendanceFlow ?? base.aiAttendanceFlow,
+    aiTransferConditions: bd.aiTransferConditions ?? base.aiTransferConditions,
+    aiRestrictions: bd.aiRestrictions ?? base.aiRestrictions,
+    aiExternalSystem: bd.aiExternalSystem ?? base.aiExternalSystem,
+    aiExternalApiUrl: bd.aiExternalApiUrl ?? base.aiExternalApiUrl,
+    aiExternalWhatToQuery: bd.aiExternalWhatToQuery ?? base.aiExternalWhatToQuery,
+    aiExternalAuth: bd.aiExternalAuth ?? base.aiExternalAuth,
+    aiExternalExamples: bd.aiExternalExamples ?? base.aiExternalExamples,
+    externalAutomationInfo: bd.externalAutomationInfo ?? base.externalAutomationInfo,
+    extraNotes: bd.extraNotes ?? base.extraNotes,
+  }
 }
 
 export function BriefingPublicPage() {
@@ -216,9 +294,14 @@ export function BriefingPublicPage() {
   const [submitting, setSubmitting] = React.useState(false)
   const [chatbotConfirmOpen, setChatbotConfirmOpen] = React.useState(false)
 
+  // `ready` libera o autosave só depois que o estado inicial foi hidratado,
+  // pra não sobrescrever um rascunho salvo com o formulário em branco.
+  const [ready, setReady] = React.useState(false)
+
   React.useEffect(() => {
     if (!token) { setClient(null); return }
     let cancelled = false
+    setReady(false)
     ;(async () => {
       try {
         const row = await api.get<PublicClient>(`/api/public/briefing/${token}`)
@@ -231,7 +314,19 @@ export function BriefingPublicPage() {
           briefing_revision_note: row.briefing_revision_note ?? null,
           briefing_config: row.briefing_config ?? null,
         })
-        setState(initialFormState(row.company))
+        // 1) Rascunho local (autosave) tem prioridade — sobrevive a refresh/
+        //    fechar a aba. 2) Em revisão, pré-preenche com o que já foi enviado.
+        //    3) Senão, começa em branco.
+        const base = initialFormState(row.company)
+        const draft = loadDraft(token)
+        if (draft) {
+          setState({ ...base, ...draft })
+        } else if (row.briefing_status === 'revision' && row.briefing_data) {
+          setState(formStateFromBriefing(row.briefing_data, base))
+        } else {
+          setState(base)
+        }
+        setReady(true)
       } catch {
         if (cancelled) return
         setClient(null)
@@ -239,6 +334,12 @@ export function BriefingPublicPage() {
     })()
     return () => { cancelled = true }
   }, [token])
+
+  // Autosave do rascunho a cada mudança (depois de hidratado).
+  React.useEffect(() => {
+    if (!ready || !token) return
+    saveDraft(token, state)
+  }, [state, ready, token])
 
   // Regenerate greeting when sectors change (if not being edited)
   React.useEffect(() => {
@@ -333,6 +434,7 @@ export function BriefingPublicPage() {
     setSubmitting(true)
     try {
       await api.post(`/api/public/briefing/${token}`, { data })
+      if (token) clearDraft(token)
       setSubmittedData({
         greeting: state.greetingMessage,
         offHours: state.offHoursMessage,

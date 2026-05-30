@@ -697,9 +697,13 @@ function AutomationView({ client }: { client: Client }) {
     }
     setCreatingUsers(false)
 
-    if (success > 0) {
-      const next = setChecklistItem(tree, 'users_created', true, user)
+    if (success > 0 || queuesCreated > 0) {
+      let next = tree
+      if (success > 0) next = setChecklistItem(next, 'users_created', true, user)
+      if (queuesCreated > 0) next = setChecklistItem(next, 'queues_created', true, 'Sistema')
       db.updateClient(client.id, { deliveryChecklist: next })
+    }
+    if (success > 0) {
       db.addLog(
         client.id,
         'Usuários criados',

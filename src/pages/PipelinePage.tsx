@@ -21,7 +21,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
-import { ClientDrawer } from '@/components/crm/ClientDrawer'
+import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { StageBadge } from '@/components/crm/StageBadge'
 import { useClients } from '@/hooks/useClients'
 import { db } from '@/services/db'
@@ -30,6 +30,7 @@ import {
   PREV_STAGE,
   PIPELINE_STAGES,
   STAGE_COLORS,
+  STAGE_SLA_DAYS,
 } from '@/constants/stageColors'
 import { asText, cn, formatDateShort, initials } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
@@ -263,6 +264,7 @@ function ListGroup({
                   <th className="px-4 py-2 text-left font-medium">Cliente</th>
                   <th className="px-4 py-2 text-left font-medium">Empresa</th>
                   <th className="px-4 py-2 text-left font-medium">Entrada</th>
+                  <th className="px-4 py-2 text-left font-medium">Na etapa</th>
                   <th className="px-4 py-2 text-left font-medium">
                     Última atualização
                   </th>
@@ -312,6 +314,9 @@ function ListGroup({
                       </td>
                       <td className="px-4 py-3 text-foreground/55">
                         {formatDateShort(c.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} />
                       </td>
                       <td className="px-4 py-3 text-foreground/55">
                         <span className="inline-flex items-center gap-1">
@@ -382,6 +387,38 @@ function ListGroup({
         </div>
       )}
     </section>
+  )
+}
+
+/**
+ * Mostra há quantos dias o cliente está na etapa atual, com cor de acordo com
+ * o SLA da etapa (verde/neutro dentro do prazo, laranja no limite, vermelho
+ * estourado). Ajuda o time a não deixar cliente esquecido numa etapa.
+ */
+function StageAgeBadge({ stage, since }: { stage: PipelineStage; since: string }) {
+  const days = daysSince(since)
+  const sla = STAGE_SLA_DAYS[stage]
+  let cls = 'bg-elevate/[0.05] text-foreground/55 ring-line'
+  let title = `${days} dia(s) nesta etapa`
+  if (sla != null) {
+    if (days > sla) {
+      cls = 'bg-danger/15 text-danger ring-danger/30'
+      title = `${days} dia(s) — SLA de ${sla} dias estourado`
+    } else if (days >= sla) {
+      cls = 'bg-warning/15 text-warning ring-warning/30'
+      title = `${days} dia(s) — no limite do SLA (${sla} dias)`
+    }
+  }
+  return (
+    <span
+      title={title}
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums ring-1',
+        cls,
+      )}
+    >
+      {days}d
+    </span>
   )
 }
 

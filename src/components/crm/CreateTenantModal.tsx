@@ -154,6 +154,9 @@ export function CreateTenantModal({
       // autenticar as chamadas /v2/api/external/{apiId}/... (filas, usuários).
       let apiToken = ''
       const steps: string[] = []
+      // Flags para auto-marcar o checklist a partir do que foi provisionado.
+      let channelCreated = false
+      let queuesCreated = 0
 
       if (!officialOnly && tenantId != null && !isRecreate) {
         try {
@@ -165,6 +168,7 @@ export function CreateTenantModal({
             type: sessionType,
           })
           const sessionId = pick(session, 'id', 'sessionId', 'session_id')
+          channelCreated = true
           steps.push('canal')
 
           // 2) Criar API vinculada à sessão
@@ -197,6 +201,7 @@ export function CreateTenantModal({
                 /* fila duplicada / erro pontual — segue */
               }
             }
+            queuesCreated = queues
             if (queues > 0) steps.push(`${queues} fila(s)`)
           }
         } catch (err) {
@@ -212,7 +217,10 @@ export function CreateTenantModal({
         client.briefingData,
         client.briefingConfig,
       )
-      const checked = setChecklistItem(enriched, 'tenant_created', true, user)
+      // Auto-marca o checklist conforme o que foi realmente provisionado.
+      let checked = setChecklistItem(enriched, 'tenant_created', true, user)
+      if (channelCreated) checked = setChecklistItem(checked, 'channels_created', true, 'Sistema')
+      if (queuesCreated > 0) checked = setChecklistItem(checked, 'queues_created', true, 'Sistema')
 
       // Criar o tenant já avança o cliente para a etapa de Configuração
       // (a menos que ele já esteja em uma etapa posterior).

@@ -91,3 +91,15 @@ export const PREV_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
   delivery: 'setup',
   active: 'delivery',
 }
+
+/**
+ * SLA (em dias) esperado por etapa. Usado no pipeline pra destacar quem está
+ * parado tempo demais. Etapas sem SLA (lead, active, churned) não alertam.
+ */
+export const STAGE_SLA_DAYS: Partial<Record<PipelineStage, number>> = {
+  welcome: 2,
+  contract: 3,
+  briefing: 5,
+  setup: 3,
+  delivery: 3,
+}

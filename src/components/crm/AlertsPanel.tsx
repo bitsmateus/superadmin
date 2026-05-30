@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { ClientDrawer } from '@/components/crm/ClientDrawer'
+import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { useClients } from '@/hooks/useClients'
 import { computeAlerts, type AlertKind, type CrmAlert } from '@/lib/crmAlerts'
 import { db } from '@/services/db'
@@ -151,7 +151,7 @@ export function AlertsPanel() {
   )
 }
 
-function PanelCard({
+const PanelCard = React.memo(function PanelCard({
   panel,
   alerts,
   onOpen,
@@ -209,9 +209,9 @@ function PanelCard({
       )}
     </section>
   )
-}
+})
 
-function AlertRow({
+const AlertRow = React.memo(function AlertRow({
   alert,
   onOpen,
   showStage,
@@ -303,4 +303,4 @@ function AlertRow({
       </div>
     </li>
   )
-}
+})

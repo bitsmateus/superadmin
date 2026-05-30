@@ -15,12 +15,18 @@ export function useClients(): Client[] {
   )
 }
 
+/**
+ * Subscribe em UM cliente. Usa um selector com useSyncExternalStore — como a
+ * cache mantém referência estável dos clientes que não mudaram, este hook só
+ * re-renderiza quando ESTE cliente muda (não a cada alteração de qualquer
+ * outro cliente da lista). Importante pro ClientDrawer não re-renderizar à toa.
+ */
 export function useClient(id: string | undefined): Client | undefined {
-  const clients = useClients()
-  return React.useMemo(
-    () => (id ? clients.find((c) => c.id === id) : undefined),
-    [clients, id],
+  const getSnapshot = React.useCallback(
+    () => (id ? db.getClient(id) : undefined),
+    [id],
   )
+  return React.useSyncExternalStore(db.subscribe, getSnapshot, getSnapshot)
 }
 
 export function useCurrentUser(): [string, (v: string) => void] {

@@ -16,6 +16,7 @@ import { AlertsPanel } from '@/components/crm/AlertsPanel'
 import { GoalsCard } from '@/components/analytics/GoalsCard'
 import { ConversionFunnel } from '@/components/analytics/ConversionFunnel'
 import { StageDurations } from '@/components/analytics/StageDurations'
+import { StuckClients } from '@/components/analytics/StuckClients'
 import { canSeeFinancials } from '@/services/supabase'
 import { computeAgentPerformance, formatCurrencyBRL } from '@/lib/analytics'
 import { cn, initials } from '@/lib/utils'
@@ -64,6 +65,11 @@ export function CommandCenterPage() {
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           {booted ? <ConversionFunnel /> : <Skeleton className="h-64 w-full" />}
           {booted ? <StageDurations /> : <Skeleton className="h-64 w-full" />}
+        </section>
+
+        {/* Linha 2b: Aging — clientes parados acima do SLA */}
+        <section>
+          <StuckClients />
         </section>
 
         {/* Linha 3: Alertas + Fila de cobranças */}

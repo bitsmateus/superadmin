@@ -630,6 +630,13 @@ function AutomationView({ client }: { client: Client }) {
       toast.error('Servidor do tenant não encontrado.')
       return
     }
+    // Filas/usuários autenticam com o token da API do tenant. Tenants criados
+    // antes do provisionamento automático não têm esse token salvo.
+    if (!client.tenantApiToken) {
+      toast.warning(
+        'Sem token da API deste tenant — recrie o tenant para provisionar a API. Tentando com o token do servidor…',
+      )
+    }
     setCreatingUsers(true)
     const defaultPassword =
       db.getSettings().defaultTenantPassword || 'Nxim01@!'
@@ -649,10 +656,17 @@ function AutomationView({ client }: { client: Client }) {
         sectors.push(t)
       }
     }
+    // Token da API do tenant — autentica as chamadas /v2/api/external/{apiId}.
+    const apiToken = client.tenantApiToken || undefined
     let queuesCreated = 0
     for (const q of sectors) {
       try {
-        await queuesApi.create(server, client.tenantApiId, { queue: q, isActive: true })
+        await queuesApi.create(
+          server,
+          client.tenantApiId,
+          { queue: q, isActive: true },
+          apiToken,
+        )
         queuesCreated++
       } catch {
         /* fila já existe / erro pontual — segue */
@@ -663,14 +677,19 @@ function AutomationView({ client }: { client: Client }) {
     const failures: string[] = []
     for (const u of briefingUsers) {
       try {
-        await usersApi.create(server, client.tenantApiId, {
-          tenant_id: client.tenantId,
-          name: u.name,
-          email: u.email,
-          password: defaultPassword,
-          role: u.role || 'user',
-          permissions: [u.role || 'user'],
-        })
+        await usersApi.create(
+          server,
+          client.tenantApiId,
+          {
+            tenant_id: client.tenantId,
+            name: u.name,
+            email: u.email,
+            password: defaultPassword,
+            role: u.role || 'user',
+            permissions: [u.role || 'user'],
+          },
+          apiToken,
+        )
         success++
       } catch (err) {
         failures.push(`${u.name}: ${extractErrorMessage(err, 'falha')}`)

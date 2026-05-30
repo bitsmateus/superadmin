@@ -28,21 +28,28 @@ function maybeWarn401(server: ServerConfig) {
 export async function apiRequest<T = unknown>(
   server: ServerConfig,
   options: AxiosRequestConfig,
+  /**
+   * Token alternativo para autenticar a chamada externa. Use o token da API
+   * criada dentro do tenant para endpoints /v2/api/external/{apiId}/...
+   * (criar fila, criar usuário). Quando omitido, usa o token do servidor.
+   */
+  tokenOverride?: string,
 ): Promise<T> {
   const isProxy = !import.meta.env.DEV
+  const apiToken = tokenOverride || server.apiToken
 
   // When going through the backend proxy in production, we need:
   //   Authorization: our panel JWT (to pass Fastify's authenticate hook)
   //   X-Proxy-Target: the external server's base URL
-  //   X-Api-Token: the external server's API token
+  //   X-Api-Token: the token the proxy forwards as Bearer to the target
   const extraHeaders: Record<string, string> = isProxy
     ? {
         'X-Proxy-Target': server.baseUrl,
-        'X-Api-Token': server.apiToken,
+        'X-Api-Token': apiToken,
         Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}`,
       }
     : {
-        Authorization: `Bearer ${server.apiToken}`,
+        Authorization: `Bearer ${apiToken}`,
       }
 
   try {

@@ -205,6 +205,8 @@ export interface Client {
   tenantId?: string
   tenantServerId?: string
   tenantApiId?: string
+  /** Token da API criada dentro do tenant — autentica chamadas /v2/api/external. */
+  tenantApiToken?: string
   tenantName?: string
   supportEmail?: string
   supportPassword?: string

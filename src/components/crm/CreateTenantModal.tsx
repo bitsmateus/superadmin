@@ -37,9 +37,16 @@ function pick(obj: unknown, ...keys: string[]): unknown {
 }
 
 function genToken(): string {
+  try {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return crypto.randomUUID()
+    }
+  } catch {
+    /* sem crypto.randomUUID — usa fallback */
+  }
   return (
     Math.random().toString(36).slice(2, 10) +
-    Math.random().toString(36).slice(2, 6)
+    Math.random().toString(36).slice(2, 10)
   )
 }
 
@@ -143,6 +150,9 @@ export function CreateTenantModal({
       // apiId começa com o que a resposta do tenant trouxe (fallback p/ id do
       // tenant, mantendo o comportamento anterior quando não provisionamos).
       let apiId = t.apiId != null ? String(t.apiId) : String(t.id ?? '')
+      // Token da API do tenant — definido por nós ao criar a API e usado pra
+      // autenticar as chamadas /v2/api/external/{apiId}/... (filas, usuários).
+      let apiToken = ''
       const steps: string[] = []
 
       if (!officialOnly && tenantId != null && !isRecreate) {
@@ -158,13 +168,14 @@ export function CreateTenantModal({
           steps.push('canal')
 
           // 2) Criar API vinculada à sessão
+          apiToken = genToken()
           const apiResp = await tenantsApi.createApi(server, {
             name: `API ${client.company || client.name}`.slice(0, 60),
             sessionId: sessionId as string | number | undefined,
             urlServiceStatus: null,
             urlMessageStatus: null,
             userId: userId as string | number,
-            authToken: genToken(),
+            authToken: apiToken,
             tenant: tenantId,
           })
           const createdApiId = pick(apiResp, 'id', 'apiId', 'api_id')
@@ -173,13 +184,14 @@ export function CreateTenantModal({
             steps.push('API')
           }
 
-          // 3) Criar filas a partir dos setores do briefing
+          // 3) Criar filas a partir dos setores do briefing.
+          // Autentica com o token da API do tenant (apiToken), não o do servidor.
           if (apiId) {
             const sectors = collectSectors(client)
             let queues = 0
             for (const q of sectors) {
               try {
-                await queuesApi.create(server, apiId, { queue: q, isActive: true })
+                await queuesApi.create(server, apiId, { queue: q, isActive: true }, apiToken)
                 queues++
               } catch {
                 /* fila duplicada / erro pontual — segue */
@@ -211,6 +223,7 @@ export function CreateTenantModal({
         tenantId: tenantId !== undefined ? String(tenantId) : undefined,
         tenantServerId: server.id,
         tenantApiId: apiId || undefined,
+        tenantApiToken: apiToken || undefined,
         tenantName: typeof t.name === 'string' ? t.name : undefined,
         supportEmail: finalEmail,
         supportPassword: tenantPassword,

@@ -56,6 +56,7 @@ export function onDbChange(handler: NotifyHandler) {
 /** Idempotent schema migrations — safe to run on every startup. */
 export async function runMigrations() {
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tenant_api_token TEXT`);
   console.log('[db] migrations applied');
 }
 

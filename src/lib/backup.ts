@@ -148,6 +148,7 @@ function clientToRowForUpsert(c: Client): Record<string, unknown> {
     tenant_id: c.tenantId ?? null,
     tenant_server_id: c.tenantServerId ?? null,
     tenant_api_id: c.tenantApiId ?? null,
+    tenant_api_token: c.tenantApiToken ?? null,
     tenant_name: c.tenantName ?? null,
     support_email: c.supportEmail ?? null,
     support_password: c.supportPassword ?? null,

@@ -44,6 +44,7 @@ type ClientRow = {
   tenant_id: string | null
   tenant_server_id: string | null
   tenant_api_id: string | null
+  tenant_api_token: string | null
   tenant_name: string | null
   support_email: string | null
   support_password: string | null
@@ -102,6 +103,7 @@ function rowToClient(r: ClientRow): Client {
     tenantId: r.tenant_id ?? undefined,
     tenantServerId: r.tenant_server_id ?? undefined,
     tenantApiId: r.tenant_api_id ?? undefined,
+    tenantApiToken: r.tenant_api_token ?? undefined,
     tenantName: r.tenant_name ?? undefined,
     supportEmail: r.support_email ?? undefined,
     supportPassword: r.support_password ?? undefined,
@@ -158,6 +160,7 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('tenantId' in patch) out.tenant_id = patch.tenantId ?? null
   if ('tenantServerId' in patch) out.tenant_server_id = patch.tenantServerId ?? null
   if ('tenantApiId' in patch) out.tenant_api_id = patch.tenantApiId ?? null
+  if ('tenantApiToken' in patch) out.tenant_api_token = patch.tenantApiToken ?? null
   if ('tenantName' in patch) out.tenant_name = patch.tenantName ?? null
   if ('supportEmail' in patch) out.support_email = patch.supportEmail ?? null
   if ('supportPassword' in patch) out.support_password = patch.supportPassword ?? null

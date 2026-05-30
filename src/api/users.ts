@@ -40,12 +40,17 @@ export const usersApi = {
     server: ServerConfig,
     apiId: string,
     payload: CreateUserPayload,
+    apiToken?: string,
   ): Promise<AppUser> {
-    const data = await apiRequest(server, {
-      method: 'POST',
-      url: `/v2/api/external/${encodeURIComponent(apiId)}/createUser`,
-      data: payload,
-    })
+    const data = await apiRequest(
+      server,
+      {
+        method: 'POST',
+        url: `/v2/api/external/${encodeURIComponent(apiId)}/createUser`,
+        data: payload,
+      },
+      apiToken,
+    )
     return unwrap<AppUser>(data)
   },
 

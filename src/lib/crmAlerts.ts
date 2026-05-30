@@ -197,17 +197,21 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
 
     // ===== 6. Follow-ups pendentes =====
     // Clientes ativos com mensagens de follow-up não enviadas.
+    // Só entram no alerta os que já venceram (passaram os X dias) — os
+    // agendados para o futuro ficam só na aba de follow-up do cliente.
     if (c.followUpActive && c.stage === 'active') {
-      const pending = (c.followUps ?? []).filter((f) => !f.sentAt)
-      for (const f of pending) {
-        const isOverdue = new Date(f.scheduledFor).getTime() < Date.now()
+      const now = Date.now()
+      const due = (c.followUps ?? []).filter(
+        (f) => !f.sentAt && new Date(f.scheduledFor).getTime() <= now,
+      )
+      for (const f of due) {
         out.push({
           kind: 'followup_pending',
           client: c,
           followUp: f,
-          tone: isOverdue ? 'warning' : 'info',
+          tone: 'warning',
           title: `${c.company || c.name}`,
-          subtitle: `Follow-up dia ${f.dayNumber} · ${isOverdue ? 'atrasado' : 'agendado para'} ${formatDate(new Date(f.scheduledFor))}`,
+          subtitle: `Follow-up dia ${f.dayNumber} · para enviar desde ${formatDate(new Date(f.scheduledFor))}`,
           message: f.message,
           whenAt: f.scheduledFor,
         })

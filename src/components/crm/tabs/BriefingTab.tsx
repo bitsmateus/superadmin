@@ -27,6 +27,7 @@ import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { usersApi } from '@/api/users'
+import { queuesApi } from '@/api/queues'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
 import { getServerById } from '@/store/authStore'
@@ -632,6 +633,32 @@ function AutomationView({ client }: { client: Client }) {
     setCreatingUsers(true)
     const defaultPassword =
       db.getSettings().defaultTenantPassword || 'Nxim01@!'
+
+    // Garante as filas a partir dos setores do briefing (departamentos +
+    // setores dos usuários). Idempotente: fila já existente apenas falha e é
+    // ignorada. Cobre tenants criados antes do provisionamento automático.
+    const sectorSet = new Set<string>()
+    const sectors: string[] = []
+    for (const s of [
+      ...(client.briefingData?.departments ?? []),
+      ...briefingUsers.flatMap((u) => u.sectors ?? (u.sector ? [u.sector] : [])),
+    ]) {
+      const t = s.trim()
+      if (t && !sectorSet.has(t.toLowerCase())) {
+        sectorSet.add(t.toLowerCase())
+        sectors.push(t)
+      }
+    }
+    let queuesCreated = 0
+    for (const q of sectors) {
+      try {
+        await queuesApi.create(server, client.tenantApiId, { queue: q, isActive: true })
+        queuesCreated++
+      } catch {
+        /* fila já existe / erro pontual — segue */
+      }
+    }
+
     let success = 0
     const failures: string[] = []
     for (const u of briefingUsers) {
@@ -657,11 +684,15 @@ function AutomationView({ client }: { client: Client }) {
       db.addLog(
         client.id,
         'Usuários criados',
-        `${success} criado(s) em ${server.name}`,
+        `${success} criado(s) em ${server.name}` +
+          (queuesCreated > 0 ? ` · ${queuesCreated} fila(s)` : ''),
       )
     }
     if (failures.length === 0) {
-      toast.success(`${success} usuário(s) criado(s)`)
+      toast.success(
+        `${success} usuário(s) criado(s)` +
+          (queuesCreated > 0 ? ` · ${queuesCreated} fila(s)` : ''),
+      )
     } else {
       toast.error(
         `${success} criado(s), ${failures.length} falharam: ${failures[0]}`,

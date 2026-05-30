@@ -101,6 +101,17 @@ export function CreateTenantModal({
       toast.error('E-mail de suporte inválido')
       return
     }
+    // Se já existe tenant, "Recriar" gera um NOVO tenant — confirma e NÃO
+    // reprovisiona canal/API/filas pra não duplicar no sistema do cliente.
+    const isRecreate = Boolean(client.tenantId)
+    if (isRecreate) {
+      const ok = window.confirm(
+        'Este cliente já tem um tenant.\n\n' +
+          'Recriar vai gerar um NOVO tenant e NÃO refaz canal, API e filas ' +
+          'automaticamente (pra evitar duplicar). Deseja continuar?',
+      )
+      if (!ok) return
+    }
     setCreating(true)
     const tenantPassword =
       db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD
@@ -134,7 +145,7 @@ export function CreateTenantModal({
       let apiId = t.apiId != null ? String(t.apiId) : String(t.id ?? '')
       const steps: string[] = []
 
-      if (!officialOnly && tenantId != null) {
+      if (!officialOnly && tenantId != null && !isRecreate) {
         try {
           // 1) Criar canal (sessão WhatsApp)
           const session = await tenantsApi.createSession(server, {

@@ -1,8 +1,11 @@
 import * as React from 'react'
 import {
+  AlertCircle,
   CheckCircle2,
+  Circle,
   Loader2,
   Mail,
+  MinusCircle,
   Server as ServerIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -11,6 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { tenantsApi } from '@/api/tenants'
 import { queuesApi } from '@/api/queues'
+import { usersApi } from '@/api/users'
 import { extractErrorMessage } from '@/api/client'
 import { useAuthStore, type ServerConfig } from '@/store/authStore'
 import { useCurrentUser } from '@/hooks/useClients'
@@ -89,15 +93,26 @@ export function CreateTenantModal({
     [client.company, client.name],
   )
   const [email, setEmail] = React.useState(client.supportEmail || defaultEmail)
-  const [creating, setCreating] = React.useState(false)
+  const [running, setRunning] = React.useState(false)
+  const [steps, setSteps] = React.useState<ProvStep[]>([])
+  const [finished, setFinished] = React.useState(false)
+  // Estado intermediário compartilhado entre passos (sobrevive a retries).
+  const prov = React.useRef<ProvState>({})
 
   React.useEffect(() => {
     if (!open) return
     setServerId(client.tenantServerId ?? servers[0]?.id ?? '')
     setEmail(client.supportEmail || defaultEmail)
+    setSteps([])
+    setFinished(false)
+    setRunning(false)
+    prov.current = {}
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const create = async () => {
+  const patchStep = (key: string, patch: Partial<ProvStep>) =>
+    setSteps((cur) => cur.map((s) => (s.key === key ? { ...s, ...patch } : s)))
+
+  const provision = async () => {
     const server = servers.find((s) => s.id === serverId)
     if (!server) {
       toast.error('Selecione um servidor')
@@ -108,184 +123,100 @@ export function CreateTenantModal({
       toast.error('E-mail de suporte inválido')
       return
     }
-    // Se já existe tenant, "Recriar" gera um NOVO tenant — confirma e NÃO
-    // reprovisiona canal/API/filas pra não duplicar no sistema do cliente.
-    const isRecreate = Boolean(client.tenantId)
-    if (isRecreate) {
-      const ok = window.confirm(
-        'Este cliente já tem um tenant.\n\n' +
-          'Recriar vai gerar um NOVO tenant e NÃO refaz canal, API e filas ' +
-          'automaticamente (pra evitar duplicar). Deseja continuar?',
-      )
-      if (!ok) return
+
+    const connTypes = client.briefingConfig?.connectionTypes ?? []
+    const officialOnly =
+      connTypes.includes('api_oficial') && !connTypes.includes('api_comum')
+    const briefingUsers = client.briefingData?.users ?? []
+    const isRetry = steps.length > 0
+
+    // Primeira execução: confirma recriação e monta a lista de passos.
+    if (!isRetry) {
+      if (client.tenantId) {
+        const ok = window.confirm(
+          'Este cliente já tem um tenant.\n\n' +
+            'Provisionar de novo vai gerar um NOVO tenant (e novos canal/API/filas). ' +
+            'Pode duplicar no sistema do cliente. Deseja continuar?',
+        )
+        if (!ok) return
+      }
+      setSteps(buildSteps(officialOnly, briefingUsers.length > 0))
     }
-    setCreating(true)
+
     const tenantPassword =
       db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD
+    setRunning(true)
+
+    // Executa cada passo ainda não concluído, parando no primeiro erro.
+    const order = (isRetry ? steps : buildSteps(officialOnly, briefingUsers.length > 0)).map(
+      (s) => s.key,
+    )
     try {
-      const created = await tenantsApi.store(server, {
-        status: 'active',
-        name: client.company || client.name,
-        maxUsers: 10,
-        maxConnections: 10,
-        acceptTerms: true,
-        email: finalEmail,
-        password: tenantPassword,
-        userName: client.name || 'Suporte',
-        profile: 'admin',
-      })
-
-      const t = created as Tenant
-      const tenantId = t.id ?? undefined
-      const userId = pick(t, 'userId', 'user_id', 'ownerId', 'owner_id', 'adminUserId') ?? 1
-
-      // Tipo de conexão configurado no briefing. Canal + API são criados
-      // automaticamente apenas para API NÃO OFICIAL (a API só pode ser criada
-      // depois do canal). Para API Oficial, isso é feito pelo fluxo da Meta.
-      const connTypes = client.briefingConfig?.connectionTypes ?? []
-      const officialOnly =
-        connTypes.includes('api_oficial') && !connTypes.includes('api_comum')
-      const sessionType = String(client.briefingData?.whatsappType || 'baileys')
-
-      // apiId começa com o que a resposta do tenant trouxe (fallback p/ id do
-      // tenant, mantendo o comportamento anterior quando não provisionamos).
-      let apiId = t.apiId != null ? String(t.apiId) : String(t.id ?? '')
-      // Token da API do tenant — definido por nós ao criar a API e usado pra
-      // autenticar as chamadas /v2/api/external/{apiId}/... (filas, usuários).
-      let apiToken = ''
-      const steps: string[] = []
-      // Flags para auto-marcar o checklist a partir do que foi provisionado.
-      let channelCreated = false
-      let queuesCreated = 0
-
-      if (!officialOnly && tenantId != null && !isRecreate) {
+      for (const key of order) {
+        const st = (isRetry ? steps : []).find((s) => s.key === key)
+        if (st && (st.status === 'ok' || st.status === 'skip')) continue
+        patchStep(key, { status: 'running', detail: undefined })
         try {
-          // 1) Criar canal (sessão WhatsApp)
-          const session = await tenantsApi.createSession(server, {
-            tenant: tenantId,
-            name: `${client.company || client.name} WhatsApp`.slice(0, 60),
-            status: 'DISCONNECTED',
-            type: sessionType,
+          // eslint-disable-next-line no-await-in-loop
+          const detail = await runStep(key, {
+            client,
+            server,
+            finalEmail,
+            tenantPassword,
+            user,
+            officialOnly,
+            prov: prov.current,
           })
-          const sessionId = pick(session, 'id', 'sessionId', 'session_id')
-          channelCreated = true
-          steps.push('canal')
-
-          // 2) Criar API vinculada à sessão
-          apiToken = genToken()
-          const apiResp = await tenantsApi.createApi(server, {
-            name: `API ${client.company || client.name}`.slice(0, 60),
-            sessionId: sessionId as string | number | undefined,
-            urlServiceStatus: null,
-            urlMessageStatus: null,
-            userId: userId as string | number,
-            authToken: apiToken,
-            tenant: tenantId,
-          })
-          const createdApiId = pick(apiResp, 'id', 'apiId', 'api_id')
-          if (createdApiId != null) {
-            apiId = String(createdApiId)
-            steps.push('API')
-          }
-
-          // 3) Criar filas a partir dos setores do briefing.
-          // Autentica com o token da API do tenant (apiToken), não o do servidor.
-          if (apiId) {
-            const sectors = collectSectors(client)
-            let queues = 0
-            for (const q of sectors) {
-              try {
-                await queuesApi.create(server, apiId, { queue: q, isActive: true }, apiToken)
-                queues++
-              } catch {
-                /* fila duplicada / erro pontual — segue */
-              }
-            }
-            queuesCreated = queues
-            if (queues > 0) steps.push(`${queues} fila(s)`)
-          }
+          patchStep(key, { status: 'ok', detail })
         } catch (err) {
-          toast.error(
-            'Tenant criado, mas falhou ao provisionar canal/API: ' +
-              extractErrorMessage(err, 'erro'),
-          )
+          patchStep(key, { status: 'error', detail: extractErrorMessage(err, 'erro') })
+          toast.error(`Falha em "${LABELS[key]}": ${extractErrorMessage(err, 'erro')}`)
+          setRunning(false)
+          return
         }
       }
-
-      const enriched = enrichChecklistFromBriefing(
-        client.deliveryChecklist,
-        client.briefingData,
-        client.briefingConfig,
-      )
-      // Auto-marca o checklist conforme o que foi realmente provisionado.
-      let checked = setChecklistItem(enriched, 'tenant_created', true, user)
-      if (channelCreated) checked = setChecklistItem(checked, 'channels_created', true, 'Sistema')
-      if (queuesCreated > 0) checked = setChecklistItem(checked, 'queues_created', true, 'Sistema')
-
-      // Criar o tenant já avança o cliente para a etapa de Configuração
-      // (a menos que ele já esteja em uma etapa posterior).
+      // Tudo certo — avança etapa e finaliza.
       const preSetup = ['lead', 'welcome', 'contract', 'briefing']
       const advancedStage = preSetup.includes(client.stage) ? 'setup' : client.stage
-
-      db.updateClient(client.id, {
-        tenantId: tenantId !== undefined ? String(tenantId) : undefined,
-        tenantServerId: server.id,
-        tenantApiId: apiId || undefined,
-        tenantApiToken: apiToken || undefined,
-        tenantName: typeof t.name === 'string' ? t.name : undefined,
-        supportEmail: finalEmail,
-        supportPassword: tenantPassword,
-        deliveryChecklist: checked,
-        stage: advancedStage,
-      })
-      db.addLog(
-        client.id,
-        'Tenant criado',
-        `${server.name} · ${finalEmail}${steps.length ? ` · ${steps.join(', ')}` : ''}`,
-      )
       if (advancedStage !== client.stage) {
-        db.addLog(client.id, 'Etapa: Configuração', 'Avançado automaticamente após criar o tenant')
+        db.updateClient(client.id, { stage: advancedStage })
+        db.addLog(client.id, 'Etapa: Configuração', 'Avançado automaticamente após provisionar')
       }
-      toast.success(
-        steps.length
-          ? `Tenant provisionado em ${server.name} (${steps.join(', ')})`
-          : `Tenant criado em ${server.name}`,
-      )
-      onClose()
-    } catch (err) {
-      toast.error(extractErrorMessage(err, 'Falha ao criar tenant'))
+      setFinished(true)
+      toast.success('Provisionamento concluído')
     } finally {
-      setCreating(false)
+      setRunning(false)
     }
   }
 
-  const alreadyCreated = Boolean(client.tenantId)
+  const hasError = steps.some((s) => s.status === 'error')
+  const showSteps = steps.length > 0
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Criar tenant"
+      title="Provisionar tenant"
       description={
-        alreadyCreated
-          ? 'Este cliente já possui um tenant — criar novamente vai sobrescrever o vínculo.'
-          : 'Selecione o servidor e confirme o e-mail de suporte para criar o tenant.'
+        client.tenantId
+          ? 'Este cliente já possui um tenant — provisionar de novo cria um novo vínculo.'
+          : 'Cria o tenant, canal, API, filas e usuários a partir do briefing.'
       }
       size="md"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={creating}>
-            Cancelar
+          <Button variant="secondary" onClick={onClose} disabled={running}>
+            {finished ? 'Fechar' : 'Cancelar'}
           </Button>
-          <Button
-            onClick={create}
-            loading={creating}
-            leftIcon={
-              !creating ? <CheckCircle2 className="h-4 w-4" /> : undefined
-            }
-          >
-            Criar tenant
-          </Button>
+          {!finished && (
+            <Button
+              onClick={provision}
+              loading={running}
+              leftIcon={!running ? <CheckCircle2 className="h-4 w-4" /> : undefined}
+            >
+              {hasError ? 'Tentar novamente' : showSteps ? 'Continuar' : 'Provisionar tudo'}
+            </Button>
+          )}
         </>
       }
     >
@@ -320,15 +251,241 @@ export function CreateTenantModal({
           hint={`Senha padrão: ${db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD}`}
         />
 
-        {creating && (
-          <p className="inline-flex items-center gap-2 text-xs text-foreground/55">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Criando tenant no servidor selecionado…
-          </p>
+        {showSteps && (
+          <div className="rounded-xl border border-line bg-elevate/[0.02] p-3">
+            <div className="mb-2 text-[11px] uppercase tracking-wider text-foreground/45">
+              Progresso
+            </div>
+            <ul className="space-y-1.5">
+              {steps.map((s) => (
+                <li key={s.key} className="flex items-center gap-2.5 text-sm">
+                  <StepIcon status={s.status} />
+                  <span
+                    className={cn(
+                      'flex-1',
+                      s.status === 'ok'
+                        ? 'text-foreground/80'
+                        : s.status === 'error'
+                          ? 'text-danger'
+                          : s.status === 'skip'
+                            ? 'text-foreground/35 line-through'
+                            : 'text-foreground/65',
+                    )}
+                  >
+                    {s.label}
+                  </span>
+                  {s.detail && (
+                    <span
+                      className={cn(
+                        'truncate text-[11px]',
+                        s.status === 'error' ? 'text-danger/80' : 'text-foreground/40',
+                      )}
+                    >
+                      {s.detail}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
     </Modal>
   )
+}
+
+// ── Tipos + máquina de passos do provisionamento ──────────────────────────────
+
+type StepStatus = 'idle' | 'running' | 'ok' | 'skip' | 'error'
+interface ProvStep {
+  key: string
+  label: string
+  status: StepStatus
+  detail?: string
+}
+interface ProvState {
+  tenantId?: string | number
+  userId?: string | number
+  apiId?: string
+  apiToken?: string
+  channelCreated?: boolean
+}
+
+const LABELS: Record<string, string> = {
+  tenant: 'Criar tenant',
+  channel: 'Criar canal (WhatsApp)',
+  api: 'Criar API',
+  queues: 'Criar filas (setores)',
+  users: 'Criar usuários',
+}
+
+function buildSteps(officialOnly: boolean, hasUsers: boolean): ProvStep[] {
+  const list: ProvStep[] = [{ key: 'tenant', label: LABELS.tenant, status: 'idle' }]
+  if (!officialOnly) {
+    list.push({ key: 'channel', label: LABELS.channel, status: 'idle' })
+    list.push({ key: 'api', label: LABELS.api, status: 'idle' })
+    list.push({ key: 'queues', label: LABELS.queues, status: 'idle' })
+  }
+  if (hasUsers) list.push({ key: 'users', label: LABELS.users, status: 'idle' })
+  return list
+}
+
+interface StepCtx {
+  client: Client
+  server: ServerConfig
+  finalEmail: string
+  tenantPassword: string
+  user: string
+  officialOnly: boolean
+  prov: ProvState
+}
+
+/** Executa um passo do provisionamento, persistindo o que conseguiu no cliente. */
+async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
+  const { client, server, finalEmail, tenantPassword, user, prov } = ctx
+  // Sempre parte do checklist mais recente (passos anteriores já gravaram).
+  const currentChecklist = () => db.getClient(client.id)?.deliveryChecklist ?? client.deliveryChecklist
+
+  if (key === 'tenant') {
+    const created = await tenantsApi.store(server, {
+      status: 'active',
+      name: client.company || client.name,
+      maxUsers: 10,
+      maxConnections: 10,
+      acceptTerms: true,
+      email: finalEmail,
+      password: tenantPassword,
+      userName: client.name || 'Suporte',
+      profile: 'admin',
+    })
+    const t = created as Tenant
+    prov.tenantId = t.id ?? undefined
+    prov.userId =
+      (pick(t, 'userId', 'user_id', 'ownerId', 'owner_id', 'adminUserId') as
+        | string
+        | number
+        | undefined) ?? 1
+    prov.apiId = t.apiId != null ? String(t.apiId) : String(t.id ?? '')
+    const enriched = enrichChecklistFromBriefing(
+      client.deliveryChecklist,
+      client.briefingData,
+      client.briefingConfig,
+    )
+    db.updateClient(client.id, {
+      tenantId: prov.tenantId !== undefined ? String(prov.tenantId) : undefined,
+      tenantServerId: server.id,
+      tenantApiId: prov.apiId || undefined,
+      tenantName: typeof t.name === 'string' ? t.name : undefined,
+      supportEmail: finalEmail,
+      supportPassword: tenantPassword,
+      deliveryChecklist: setChecklistItem(enriched, 'tenant_created', true, user),
+    })
+    db.addLog(client.id, 'Tenant criado', `${server.name} · ${finalEmail}`)
+    return server.name
+  }
+
+  if (key === 'channel') {
+    const sessionType = String(client.briefingData?.whatsappType || 'baileys')
+    const session = await tenantsApi.createSession(server, {
+      tenant: prov.tenantId ?? 0,
+      name: `${client.company || client.name} WhatsApp`.slice(0, 60),
+      status: 'DISCONNECTED',
+      type: sessionType,
+    })
+    prov.channelCreated = true
+    ;(prov as Record<string, unknown>).sessionId = pick(session, 'id', 'sessionId', 'session_id')
+    db.updateClient(client.id, {
+      deliveryChecklist: setChecklistItem(currentChecklist(), 'channels_created', true, 'Sistema'),
+    })
+    return sessionType
+  }
+
+  if (key === 'api') {
+    prov.apiToken = genToken()
+    const apiResp = await tenantsApi.createApi(server, {
+      name: `API ${client.company || client.name}`.slice(0, 60),
+      sessionId: (prov as Record<string, unknown>).sessionId as string | number | undefined,
+      urlServiceStatus: null,
+      urlMessageStatus: null,
+      userId: prov.userId as string | number,
+      authToken: prov.apiToken,
+      tenant: prov.tenantId ?? 0,
+    })
+    const createdApiId = pick(apiResp, 'id', 'apiId', 'api_id')
+    if (createdApiId != null) prov.apiId = String(createdApiId)
+    db.updateClient(client.id, {
+      tenantApiId: prov.apiId || undefined,
+      tenantApiToken: prov.apiToken || undefined,
+    })
+    return undefined
+  }
+
+  if (key === 'queues') {
+    const sectors = collectSectors(client)
+    if (sectors.length === 0) return 'sem setores'
+    let queues = 0
+    for (const q of sectors) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await queuesApi.create(server, prov.apiId ?? '', { queue: q, isActive: true }, prov.apiToken)
+        queues++
+      } catch {
+        /* fila duplicada / erro pontual — segue */
+      }
+    }
+    db.updateClient(client.id, {
+      deliveryChecklist: setChecklistItem(currentChecklist(), 'queues_created', true, 'Sistema'),
+    })
+    return `${queues} fila(s)`
+  }
+
+  if (key === 'users') {
+    const briefingUsers = client.briefingData?.users ?? []
+    const defaultPassword = db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD
+    let success = 0
+    const failures: string[] = []
+    for (const u of briefingUsers) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await usersApi.create(
+          server,
+          prov.apiId ?? '',
+          {
+            tenant_id: prov.tenantId,
+            name: u.name,
+            email: u.email,
+            password: defaultPassword,
+            role: u.role || 'user',
+            permissions: [u.role || 'user'],
+          },
+          prov.apiToken,
+        )
+        success++
+      } catch (err) {
+        failures.push(`${u.name}: ${extractErrorMessage(err, 'falha')}`)
+      }
+    }
+    if (success > 0) {
+      db.updateClient(client.id, {
+        deliveryChecklist: setChecklistItem(currentChecklist(), 'users_created', true, user),
+      })
+      db.addLog(client.id, 'Usuários criados', `${success} criado(s) em ${server.name}`)
+    }
+    if (failures.length > 0) {
+      throw new Error(`${success} criado(s), ${failures.length} falharam: ${failures[0]}`)
+    }
+    return `${success} usuário(s)`
+  }
+
+  return undefined
+}
+
+function StepIcon({ status }: { status: StepStatus }) {
+  if (status === 'running') return <Loader2 className="h-4 w-4 animate-spin text-accent" />
+  if (status === 'ok') return <CheckCircle2 className="h-4 w-4 text-success" />
+  if (status === 'error') return <AlertCircle className="h-4 w-4 text-danger" />
+  if (status === 'skip') return <MinusCircle className="h-4 w-4 text-foreground/30" />
+  return <Circle className="h-4 w-4 text-foreground/25" />
 }
 
 function ServerCard({

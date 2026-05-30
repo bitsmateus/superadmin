@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { AlertsPanel } from '@/components/crm/AlertsPanel'
+import { TodayActions } from '@/components/crm/TodayActions'
 import { useTickets, useTicketsBooted } from '@/hooks/useTickets'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
@@ -87,6 +88,10 @@ export function DashboardPage() {
             tone="success"
           />
         </div>
+
+        <section className="mt-6">
+          <TodayActions />
+        </section>
 
         <section className="mt-6">
           <AlertsPanel />

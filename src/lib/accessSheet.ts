@@ -32,6 +32,59 @@ export function openAccessSheet({ client, server }: AccessSheetParams): boolean 
   return true
 }
 
+/** Monta assunto + corpo (texto) do e-mail de acessos pro cliente. */
+export function buildAccessEmail({ client, server, password }: AccessSheetParams): {
+  subject: string
+  body: string
+} {
+  const company = client.company || client.name || ''
+  const loginUrl = server?.loginUrl || ''
+  const settings = db.getSettings()
+  const effectivePassword = password ?? settings.defaultAccessPassword ?? DEFAULT_CLIENT_PASSWORD
+  const login = client.supportEmail || ''
+  const supportPhone = settings.supportPhone ?? SUPPORT_PHONE
+  const accesses = (client.accesses ?? []).filter((a) => a.name?.trim())
+
+  const lines: string[] = []
+  lines.push(`Olá! Seguem os acessos do sistema de atendimento da ${company}.`)
+  lines.push('')
+  lines.push('— Sistema de atendimento —')
+  if (loginUrl) lines.push(`Endereço: ${loginUrl}`)
+  if (login) lines.push(`E-mail / login: ${login}`)
+  lines.push(`Senha: ${effectivePassword}`)
+  lines.push('')
+  lines.push('⚠️ Por segurança, troque a senha no primeiro acesso (Perfil > Alterar senha).')
+  if (accesses.length > 0) {
+    lines.push('')
+    lines.push('— Acessos adicionais —')
+    for (const a of accesses) {
+      lines.push(`• ${a.name}`)
+      if (a.url) lines.push(`  Endereço: ${a.url}`)
+      if (a.emailOrPhone) lines.push(`  E-mail/Telefone: ${a.emailOrPhone}`)
+      if (a.password) lines.push(`  Senha: ${a.password}`)
+    }
+  }
+  lines.push('')
+  lines.push(`Qualquer dúvida, fale com o suporte: ${supportPhone}`)
+  lines.push('NX Digital')
+
+  return { subject: `Acessos do sistema — ${company}`, body: lines.join('\n') }
+}
+
+/** Abre o cliente de e-mail (mailto) com os acessos prontos para enviar. */
+export function openAccessEmail(params: AccessSheetParams): void {
+  const { subject, body } = buildAccessEmail(params)
+  const to = params.client.email || ''
+  const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(
+    subject,
+  )}&body=${encodeURIComponent(body)}`
+  const a = document.createElement('a')
+  a.href = url
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')

@@ -4,6 +4,7 @@ import {
   Download,
   Handshake,
   ListChecks,
+  Mail,
   PartyPopper,
   UserCircle2,
 } from 'lucide-react'
@@ -20,7 +21,7 @@ import {
   toggleChecklistItem,
 } from '@/constants/checklist'
 import { buildFollowUps, DEFAULT_FOLLOWUP_TEMPLATES } from '@/constants/followup'
-import { openAccessSheet } from '@/lib/accessSheet'
+import { openAccessSheet, openAccessEmail } from '@/lib/accessSheet'
 import { asText, cn, formatDate } from '@/lib/utils'
 import type { Client, ChecklistItem } from '@/types/client'
 
@@ -67,6 +68,20 @@ export function DeliveryTab({ client }: { client: Client }) {
       db.addLog(client.id, 'Acessos enviados', 'Folha de acessos gerada para impressão/PDF')
     }
     toast.success('Folha de acessos aberta — salve como PDF')
+  }
+
+  const emailAccess = () => {
+    if (!client.email?.trim()) {
+      toast.error('Cliente sem e-mail cadastrado (Visão Geral).')
+      return
+    }
+    openAccessEmail({ client, server: tenantServer })
+    if (!handoff.find((i) => i.id === 'handoff_access_sent')?.checked) {
+      const next = setChecklistItem(handoff, 'handoff_access_sent', true, user)
+      db.updateClient(client.id, { deliveryHandoffChecklist: next })
+      db.addLog(client.id, 'Acessos enviados', `E-mail de acessos aberto para ${client.email}`)
+    }
+    toast.success('E-mail de acessos pronto no seu cliente de e-mail')
   }
 
   const saveMeeting = () => {
@@ -161,14 +176,24 @@ export function DeliveryTab({ client }: { client: Client }) {
           </span>
         }
         action={
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={downloadAccess}
-            leftIcon={<Download className="h-3.5 w-3.5" />}
-          >
-            Baixar acessos
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={emailAccess}
+              leftIcon={<Mail className="h-3.5 w-3.5" />}
+            >
+              Enviar por e-mail
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={downloadAccess}
+              leftIcon={<Download className="h-3.5 w-3.5" />}
+            >
+              Baixar acessos
+            </Button>
+          </div>
         }
       >
         <ul className="space-y-1.5">

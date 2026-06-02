@@ -25,6 +25,7 @@ import { useAllReminders } from '@/hooks/useTickets'
 import { useClients } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useTeam, teamMemberLabel } from '@/hooks/useTeam'
+import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { ticketsService } from '@/services/tickets'
 import { computeAlerts } from '@/lib/crmAlerts'
 import { cn, formatDateShort } from '@/lib/utils'
@@ -601,6 +602,10 @@ function TaskModal({
       toast.error('Dê um título para a tarefa')
       return
     }
+    if (!clientId) {
+      toast.error('Selecione a empresa')
+      return
+    }
     if (!assignee) {
       toast.error('Selecione um responsável')
       return
@@ -657,15 +662,8 @@ function TaskModal({
         <Input label="Título *" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Retornar erro de envio para o cliente" />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Empresa (opcional)">
-            <Select value={clientId} onChange={setClientId}>
-              <option value="">— Nenhuma —</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.company || c.name}
-                </option>
-              ))}
-            </Select>
+          <Field label="Empresa *">
+            <ClientCombobox clients={clients} value={clientId} onChange={setClientId} />
           </Field>
           <Field label="Responsável *">
             <Select value={assignee} onChange={setAssignee}>
@@ -792,6 +790,86 @@ function IconBtn({
     >
       {children}
     </button>
+  )
+}
+
+function ClientCombobox({
+  clients,
+  value,
+  onChange,
+}: {
+  clients: ReturnType<typeof useClients>
+  value: string
+  onChange: (id: string) => void
+}) {
+  const labelFor = React.useCallback(
+    (id: string) => {
+      const c = clients.find((x) => x.id === id)
+      return c ? c.company || c.name : ''
+    },
+    [clients],
+  )
+  const [query, setQuery] = React.useState(() => labelFor(value))
+  const [open, setOpen] = React.useState(false)
+  const boxRef = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(boxRef, open, () => setOpen(false))
+
+  // Sincroniza o texto quando a empresa muda de fora (ex.: editar / virar tarefa).
+  React.useEffect(() => {
+    setQuery(labelFor(value))
+  }, [value, labelFor])
+
+  const matches = React.useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const list = q
+      ? clients.filter((c) => `${c.company ?? ''} ${c.name ?? ''}`.toLowerCase().includes(q))
+      : clients
+    return list.slice(0, 8)
+  }, [clients, query])
+
+  return (
+    <div ref={boxRef} className="relative">
+      <input
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          onChange('') // limpa a seleção até escolher uma da lista
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Digite o nome da empresa…"
+        className={cn(
+          'h-9 w-full rounded-lg border bg-elevate/[0.04] px-2.5 text-sm text-foreground outline-none focus:border-accent/40',
+          value ? 'border-line' : 'border-warning/40',
+        )}
+      />
+      {open && matches.length > 0 && (
+        <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-line bg-card shadow-lg">
+          {matches.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  onChange(c.id)
+                  setQuery(c.company || c.name)
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground/85 hover:bg-elevate/[0.05]"
+              >
+                <Building2 className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+                <span className="truncate">{c.company || c.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && query.trim() && matches.length === 0 && (
+        <div className="absolute z-20 mt-1 w-full rounded-lg border border-line bg-card px-3 py-2 text-xs text-foreground/45 shadow-lg">
+          Nenhuma empresa encontrada
+        </div>
+      )}
+    </div>
   )
 }
 

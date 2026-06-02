@@ -12,6 +12,7 @@ import {
   PlusCircle,
   Search,
   Server as ServerIcon,
+  Trash2,
   User as UserIcon,
   UserCircle2,
 } from 'lucide-react'
@@ -31,7 +32,7 @@ import { useClients } from '@/hooks/useClients'
 import { useAllTenants } from '@/hooks/useTenants'
 import { useAuth } from '@/hooks/useAuth'
 import { db } from '@/services/db'
-import { canSeeFinancials } from '@/services/supabase'
+import { canSeeFinancials, canDeleteClient } from '@/services/supabase'
 import { matchTenantsToClients } from '@/services/tenantImport'
 import { asText, initials } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
@@ -51,6 +52,17 @@ export function ClientsPage() {
   const { data: allTenants } = useAllTenants()
   const { profile } = useAuth()
   const seeFinancials = canSeeFinancials(profile?.role)
+  const canDelete = canDeleteClient(profile?.role)
+
+  const onDelete = (id: string, label: string) => {
+    const ok = window.confirm(
+      `Excluir permanentemente "${label}"?\n\n` +
+        'Esta ação é irreversível e apaga o cliente, briefing, histórico e ' +
+        'financeiro. Para apenas arquivar, mova para "Cancelado".',
+    )
+    if (!ok) return
+    void db.removeClient(id).then(() => toast.success('Cliente excluído'))
+  }
   const [search, setSearch] = React.useState('')
   const [stageFilter, setStageFilter] = React.useState<PipelineStage | 'all'>(
     'all',
@@ -294,16 +306,31 @@ export function ClientsPage() {
                       {summarizeNextAction(c)}
                     </TD>
                     <TD className="text-right">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setOpenClientId(c.id)
-                        }}
-                      >
-                        Abrir
-                      </Button>
+                      <div className="inline-flex items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setOpenClientId(c.id)
+                          }}
+                        >
+                          Abrir
+                        </Button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            title="Excluir permanentemente"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onDelete(c.id, c.company || c.name)
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     </TD>
                   </TR>
                 )

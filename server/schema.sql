@@ -326,9 +326,12 @@ CREATE TABLE IF NOT EXISTS reminders (
   client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   notes TEXT,
-  due_at TIMESTAMPTZ NOT NULL,
+  due_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  kind TEXT,
+  status TEXT,
+  priority TEXT
 );
 
 -- ---------- stage_history ----------

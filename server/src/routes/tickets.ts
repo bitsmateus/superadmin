@@ -271,11 +271,9 @@ export async function ticketRoutes(app: FastifyInstance) {
     }
   );
 
-  // GET /api/reminders
-  app.get('/api/reminders', { onRequest: [app.authenticate] }, async (req) => {
-    const { sub, role } = req.user as { sub: string; role: string };
-    if (role === 'admin') return query('SELECT * FROM reminders ORDER BY due_at');
-    return query('SELECT * FROM reminders WHERE user_id = $1 ORDER BY due_at', [sub]);
+  // GET /api/reminders — espaço de suporte compartilhado do time.
+  app.get('/api/reminders', { onRequest: [app.authenticate] }, async () => {
+    return query('SELECT * FROM reminders ORDER BY completed_at NULLS FIRST, due_at NULLS LAST, created_at DESC');
   });
 
   // POST /api/reminders
@@ -285,10 +283,21 @@ export async function ticketRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const { sub } = req.user as { sub: string };
       const b = req.body;
+      // user_id = responsável pela tarefa (pode ser outra pessoa do time).
+      const assignee = (b.user_id as string) || sub;
       const [rem] = await query(
-        `INSERT INTO reminders (user_id, client_id, title, notes, due_at)
-         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [sub, b.client_id ?? null, b.title, b.notes ?? null, b.due_at]
+        `INSERT INTO reminders (user_id, client_id, title, notes, due_at, kind, status, priority)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [
+          assignee,
+          b.client_id ?? null,
+          b.title,
+          b.notes ?? null,
+          b.due_at ?? null,
+          b.kind ?? 'task',
+          b.status ?? 'todo',
+          b.priority ?? 'normal',
+        ]
       );
       return reply.status(201).send(rem);
     }

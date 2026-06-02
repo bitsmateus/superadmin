@@ -65,6 +65,24 @@ export function useAllOpenReminders(): Reminder[] {
   return React.useMemo(() => all.filter((r) => !r.completedAt), [all])
 }
 
+/** Todas as tarefas do time (inclui concluídas) — usado no Espaço de Suporte. */
+export function useAllReminders(): Reminder[] {
+  return useSnapshot(ticketsService.getReminders)
+}
+
+/** Tarefas abertas atribuídas a mim, vencidas ou para hoje (badge do menu). */
+export function useMyOpenTaskCount(userId: string | undefined): number {
+  const all = useSnapshot(ticketsService.getReminders)
+  return React.useMemo(() => {
+    if (!userId) return 0
+    const end = new Date()
+    end.setHours(23, 59, 59, 999)
+    return all.filter(
+      (r) => r.userId === userId && !r.completedAt && r.dueAt && new Date(r.dueAt) <= end,
+    ).length
+  }, [all, userId])
+}
+
 /** Tickets que esperam ação do suporte (novo / em aberto / aguardando). */
 export function useActiveTickets(): Ticket[] {
   const tickets = useTickets()

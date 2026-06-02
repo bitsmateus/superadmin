@@ -38,9 +38,21 @@ function rowToTemplate(r: TemplateRow): MessageTemplate {
   return { id: r.id, name: r.name, content: r.content, scope: r.scope, category: r.category ?? undefined, shortcut: r.shortcut ?? undefined, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at }
 }
 
-type ReminderRow = { id: string; user_id: string; client_id: string | null; title: string; notes: string | null; due_at: string; completed_at: string | null; created_at: string }
+type ReminderRow = { id: string; user_id: string; client_id: string | null; title: string; notes: string | null; due_at: string | null; completed_at: string | null; created_at: string; kind: string | null; status: string | null; priority: string | null }
 function rowToReminder(r: ReminderRow): Reminder {
-  return { id: r.id, userId: r.user_id, clientId: r.client_id, title: r.title, notes: r.notes ?? undefined, dueAt: r.due_at, completedAt: r.completed_at ?? undefined, createdAt: r.created_at }
+  return {
+    id: r.id,
+    userId: r.user_id,
+    clientId: r.client_id,
+    title: r.title,
+    notes: r.notes ?? undefined,
+    dueAt: r.due_at ?? null,
+    completedAt: r.completed_at ?? undefined,
+    createdAt: r.created_at,
+    kind: (r.kind as Reminder['kind']) ?? 'task',
+    status: (r.status as Reminder['status']) ?? 'todo',
+    priority: (r.priority as Reminder['priority']) ?? 'normal',
+  }
 }
 
 type NpsRow = { id: string; client_id: string; public_token: string; score: number | null; comment: string | null; classification: NpsClassification | null; scheduled_for: string; sent_at: string | null; responded_at: string | null; created_at: string }
@@ -277,25 +289,54 @@ export const ticketsService = {
   getRemindersForUser(userId: string): Reminder[] { return reminders.filter((r) => r.userId === userId) },
   getOpenRemindersForUser(userId: string): Reminder[] { return reminders.filter((r) => r.userId === userId && !r.completedAt) },
 
-  async upsertReminder(input: Partial<Reminder> & { title: string; dueAt: string; userId: string }): Promise<void> {
+  async upsertReminder(input: Partial<Reminder> & { title: string; userId: string }): Promise<void> {
     try {
+      const body = {
+        user_id: input.userId,
+        client_id: input.clientId ?? null,
+        title: input.title,
+        notes: input.notes ?? null,
+        due_at: input.dueAt ?? null,
+        kind: input.kind ?? 'task',
+        status: input.status ?? 'todo',
+        priority: input.priority ?? 'normal',
+      }
       if (input.id) {
-        await api.patch(`/api/reminders/${input.id}`, { user_id: input.userId, client_id: input.clientId ?? null, title: input.title, notes: input.notes ?? null, due_at: input.dueAt })
+        await api.patch(`/api/reminders/${input.id}`, body)
       } else {
-        await api.post('/api/reminders', { user_id: input.userId, client_id: input.clientId ?? null, title: input.title, notes: input.notes ?? null, due_at: input.dueAt })
+        await api.post('/api/reminders', body)
       }
       await reloadReminders()
     } catch (err) {
-      toast.error('Falha ao salvar lembrete: ' + (err as Error).message)
+      toast.error('Falha ao salvar tarefa: ' + (err as Error).message)
+    }
+  },
+
+  /** Atualiza campos pontuais (status, due_at, etc.) sem reescrever tudo. */
+  async patchReminder(id: string, patch: Record<string, unknown>): Promise<void> {
+    try {
+      await api.patch(`/api/reminders/${id}`, patch)
+      await reloadReminders()
+    } catch (err) {
+      toast.error('Falha ao atualizar tarefa: ' + (err as Error).message)
     }
   },
 
   async completeReminder(id: string): Promise<void> {
     try {
-      await api.patch(`/api/reminders/${id}`, { completed_at: new Date().toISOString() })
+      await api.patch(`/api/reminders/${id}`, { completed_at: new Date().toISOString(), status: 'done' })
       await reloadReminders()
     } catch (err) {
       toast.error('Falha ao concluir: ' + (err as Error).message)
+    }
+  },
+
+  async reopenReminder(id: string): Promise<void> {
+    try {
+      await api.patch(`/api/reminders/${id}`, { completed_at: null, status: 'todo' })
+      await reloadReminders()
+    } catch (err) {
+      toast.error('Falha ao reabrir: ' + (err as Error).message)
     }
   },
 

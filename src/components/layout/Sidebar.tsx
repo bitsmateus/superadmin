@@ -5,6 +5,7 @@ import {
   Columns3,
   FileSearch,
   LayoutDashboard,
+  ListTodo,
   LogOut,
   MessageCircle,
   MessageSquare,
@@ -22,12 +23,13 @@ import {
 import { cn } from '@/lib/utils'
 import { signOut, useAuth } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
-import { useUnreadTicketsCount } from '@/hooks/useTickets'
+import { useUnreadTicketsCount, useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
 import { ServerSwitcher } from './ServerSwitcher'
 
 const primaryItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/tarefas', label: 'Suporte', icon: ListTodo, badgeKey: 'tasks' as const },
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
@@ -53,6 +55,7 @@ export function Sidebar() {
   const isAdmin = canManageUsers(profile?.role)
   const seeFinancials = canSeeFinancials(profile?.role)
   const unreadTickets = useUnreadTicketsCount()
+  const myTasks = useMyOpenTaskCount(profile?.id)
 
   const primary = [
     ...primaryItems,
@@ -102,7 +105,9 @@ export function Sidebar() {
           const badge =
             'badgeKey' in item && item.badgeKey === 'tickets' && unreadTickets > 0
               ? unreadTickets
-              : null
+              : 'badgeKey' in item && item.badgeKey === 'tasks' && myTasks > 0
+                ? myTasks
+                : null
           return (
             <NavLink
               key={item.to}

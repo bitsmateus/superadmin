@@ -54,6 +54,12 @@ export async function authRoutes(app: FastifyInstance) {
     return query<Profile>('SELECT id, email, name, role, created_at FROM profiles ORDER BY created_at');
   });
 
+  // GET /api/team — lista enxuta (id/name/email) para seletor de responsável.
+  // Disponível a qualquer usuário autenticado (ferramenta interna do time).
+  app.get('/api/team', { onRequest: [app.authenticate] }, async () => {
+    return query('SELECT id, name, email, role FROM profiles ORDER BY name NULLS LAST, email');
+  });
+
   // POST /api/users — admin only, creates a new user
   app.post<{ Body: { email: string; name: string; password: string; role: string } }>(
     '/api/users',

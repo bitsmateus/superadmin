@@ -57,6 +57,12 @@ export function onDbChange(handler: NotifyHandler) {
 export async function runMigrations() {
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tenant_api_token TEXT`);
+  // Espaço de Suporte: tarefas/pendências/reuniões/anotações.
+  await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS kind TEXT`);
+  await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS status TEXT`);
+  await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS priority TEXT`);
+  // due_at passa a ser opcional (backlog / anotação sem data).
+  await pool.query(`ALTER TABLE reminders ALTER COLUMN due_at DROP NOT NULL`);
   console.log('[db] migrations applied');
 }
 

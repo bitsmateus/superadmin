@@ -132,15 +132,24 @@ export interface MessageTemplate {
   updatedAt: string
 }
 
+export type ReminderKind = 'task' | 'pending' | 'meeting' | 'note'
+export type ReminderStatus = 'todo' | 'doing' | 'waiting' | 'done'
+export type ReminderPriority = 'low' | 'normal' | 'high'
+
 export interface Reminder {
   id: string
+  /** Responsável pela tarefa (pode ser outra pessoa do time). */
   userId: string
   clientId?: string | null
   title: string
   notes?: string
-  dueAt: string
+  /** Opcional — backlog/anotação sem data. */
+  dueAt?: string | null
   completedAt?: string
   createdAt: string
+  kind?: ReminderKind
+  status?: ReminderStatus
+  priority?: ReminderPriority
 }
 
 export type NpsClassification = 'detractor' | 'neutral' | 'promoter'

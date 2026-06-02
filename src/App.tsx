@@ -49,6 +49,9 @@ const CommandCenterPage = React.lazy(() =>
 const TeamPerformancePage = React.lazy(() =>
   import('./pages/TeamPerformancePage').then((m) => ({ default: m.TeamPerformancePage })),
 )
+const SupportWorkspacePage = React.lazy(() =>
+  import('./pages/SupportWorkspacePage').then((m) => ({ default: m.SupportWorkspacePage })),
+)
 const AuditLogPage = React.lazy(() =>
   import('./pages/AuditLogPage').then((m) => ({ default: m.AuditLogPage })),
 )
@@ -95,6 +98,7 @@ export default function App() {
         >
           <Route index element={<DashboardPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
+          <Route path="/tarefas" element={<SupportWorkspacePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
           <Route path="/tenants/:serverId/:id" element={<TenantDetailPage />} />

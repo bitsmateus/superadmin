@@ -6,11 +6,11 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
+  ExternalLink,
   KanbanSquare,
   ListTodo,
   Pencil,
   Plus,
-  RotateCcw,
   StickyNote,
   Trash2,
   Users2,
@@ -28,7 +28,7 @@ import { useTeam, teamMemberLabel } from '@/hooks/useTeam'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { ticketsService } from '@/services/tickets'
 import { computeAlerts } from '@/lib/crmAlerts'
-import { cn, formatDateShort } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import type {
   Reminder,
   ReminderKind,
@@ -50,23 +50,50 @@ const STATUS_META: Record<ReminderStatus, { label: string }> = {
   done: { label: 'Concluído' },
 }
 const STATUS_ORDER: ReminderStatus[] = ['todo', 'doing', 'waiting', 'done']
-const PRIORITY_META: Record<ReminderPriority, { label: string; cls: string }> = {
-  low: { label: 'Baixa', cls: 'text-foreground/40' },
-  normal: { label: 'Normal', cls: 'text-accent' },
-  high: { label: 'Alta', cls: 'text-danger' },
+const PRIORITY_META: Record<
+  ReminderPriority,
+  { label: string; chip: string; dot: string; header: string }
+> = {
+  high: {
+    label: 'Alta',
+    chip: 'bg-danger/10 text-danger ring-danger/30',
+    dot: 'bg-danger',
+    header: 'text-danger',
+  },
+  normal: {
+    label: 'Média',
+    chip: 'bg-warning/10 text-warning ring-warning/30',
+    dot: 'bg-warning',
+    header: 'text-warning',
+  },
+  low: {
+    label: 'Baixa',
+    chip: 'bg-elevate/[0.06] text-foreground/50 ring-line',
+    dot: 'bg-foreground/30',
+    header: 'text-foreground/45',
+  },
+}
+const PRIORITY_ORDER: ReminderPriority[] = ['high', 'normal', 'low']
+
+/** Data "até fazer" formatada curta (DD/MM e hora se houver). */
+function fmtDue(iso: string): string {
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const date = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return time === '00:00' ? date : `${date} ${time}`
+}
+
+/** Cor/realce do prazo conforme atraso. */
+function dueChipCls(dueAt?: string | null): string {
+  const b = bucketOf(dueAt)
+  if (b === 'overdue') return 'bg-danger/15 text-danger ring-danger/30'
+  if (b === 'today') return 'bg-warning/15 text-warning ring-warning/30'
+  return 'bg-accent/10 text-accent ring-accent/20'
 }
 
 // ── Helpers de data ───────────────────────────────────────────────────────────
 type Bucket = 'overdue' | 'today' | 'week' | 'month' | 'later' | 'none'
-const BUCKET_LABEL: Record<Bucket, string> = {
-  overdue: 'Atrasadas',
-  today: 'Hoje',
-  week: 'Esta semana',
-  month: 'Este mês',
-  later: 'Depois',
-  none: 'Sem data / Backlog',
-}
-const BUCKET_ORDER: Bucket[] = ['overdue', 'today', 'week', 'month', 'later', 'none']
 
 function bucketOf(dueAt?: string | null): Bucket {
   if (!dueAt) return 'none'
@@ -130,18 +157,19 @@ export function SupportWorkspacePage() {
 
   const openTasks = React.useMemo(() => filtered.filter((r) => !r.completedAt), [filtered])
 
-  const grouped = React.useMemo(() => {
-    const map: Record<Bucket, Reminder[]> = {
-      overdue: [], today: [], week: [], month: [], later: [], none: [],
-    }
-    for (const r of openTasks) map[bucketOf(r.dueAt)].push(r)
-    for (const b of BUCKET_ORDER) {
-      map[b].sort((a, c) => {
-        const da = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER
-        const dc = c.dueAt ? new Date(c.dueAt).getTime() : Number.MAX_SAFE_INTEGER
-        return da - dc
-      })
-    }
+  // Mapa id->nome do responsável (pra exibir no card).
+  const teamMap = React.useMemo(() => {
+    const m = new Map<string, string>()
+    for (const t of team) m.set(t.id, teamMemberLabel(t))
+    return m
+  }, [team])
+
+  // Agrupado por prioridade (Alta / Média / Baixa), cada grupo por prazo.
+  const byPriority = React.useMemo(() => {
+    const map: Record<ReminderPriority, Reminder[]> = { high: [], normal: [], low: [] }
+    for (const r of openTasks) map[r.priority ?? 'normal'].push(r)
+    const dueTime = (r: Reminder) => (r.dueAt ? new Date(r.dueAt).getTime() : Number.MAX_SAFE_INTEGER)
+    for (const p of PRIORITY_ORDER) map[p].sort((a, c) => dueTime(a) - dueTime(c))
     return map
   }, [openTasks])
 
@@ -150,8 +178,14 @@ export function SupportWorkspacePage() {
     [filtered],
   )
 
-  const overdueCount = grouped.overdue.length
-  const todayCount = grouped.today.length
+  const overdueCount = React.useMemo(
+    () => openTasks.filter((r) => bucketOf(r.dueAt) === 'overdue').length,
+    [openTasks],
+  )
+  const todayCount = React.useMemo(
+    () => openTasks.filter((r) => bucketOf(r.dueAt) === 'today').length,
+    [openTasks],
+  )
 
   return (
     <>
@@ -217,9 +251,10 @@ export function SupportWorkspacePage() {
           <div>
             {view === 'list' ? (
               <ListView
-                grouped={grouped}
+                byPriority={byPriority}
                 doneTasks={doneTasks}
                 companyOf={companyOf}
+                teamMap={teamMap}
                 onEdit={setEditing}
                 onOpenClient={(id) => navigate(`/clients?open=${id}`)}
               />
@@ -227,6 +262,7 @@ export function SupportWorkspacePage() {
               <KanbanView
                 tasks={filtered}
                 companyOf={companyOf}
+                teamMap={teamMap}
                 onEdit={setEditing}
                 onOpenClient={(id) => navigate(`/clients?open=${id}`)}
               />
@@ -250,21 +286,23 @@ export function SupportWorkspacePage() {
   )
 }
 
-// ── Lista por prazo ───────────────────────────────────────────────────────────
+// ── Lista agrupada por prioridade ─────────────────────────────────────────────
 function ListView({
-  grouped,
+  byPriority,
   doneTasks,
   companyOf,
+  teamMap,
   onEdit,
   onOpenClient,
 }: {
-  grouped: Record<Bucket, Reminder[]>
+  byPriority: Record<ReminderPriority, Reminder[]>
   doneTasks: Reminder[]
   companyOf: (id?: string | null) => string | undefined
+  teamMap: Map<string, string>
   onEdit: (r: Reminder) => void
   onOpenClient: (id: string) => void
 }) {
-  const hasAny = BUCKET_ORDER.some((b) => grouped[b].length > 0)
+  const hasAny = PRIORITY_ORDER.some((p) => byPriority[p].length > 0)
   return (
     <div className="space-y-5">
       {!hasAny && (
@@ -272,26 +310,23 @@ function ListView({
           Nenhuma tarefa aberta. Crie a primeira em “Nova tarefa”. 🎯
         </div>
       )}
-      {BUCKET_ORDER.map((b) =>
-        grouped[b].length === 0 ? null : (
-          <section key={b}>
-            <h3
-              className={cn(
-                'mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider',
-                b === 'overdue' ? 'text-danger' : b === 'today' ? 'text-warning' : 'text-foreground/45',
-              )}
-            >
-              {BUCKET_LABEL[b]}
+      {PRIORITY_ORDER.map((p) =>
+        byPriority[p].length === 0 ? null : (
+          <section key={p}>
+            <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+              <span className={cn('h-2 w-2 rounded-full', PRIORITY_META[p].dot)} />
+              <span className={PRIORITY_META[p].header}>Prioridade {PRIORITY_META[p].label}</span>
               <span className="rounded-full bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] text-foreground/50">
-                {grouped[b].length}
+                {byPriority[p].length}
               </span>
             </h3>
             <ul className="space-y-2">
-              {grouped[b].map((r) => (
+              {byPriority[p].map((r) => (
                 <TaskRow
                   key={r.id}
                   r={r}
                   company={companyOf(r.clientId)}
+                  assignee={teamMap.get(r.userId)}
                   onEdit={() => onEdit(r)}
                   onOpenClient={onOpenClient}
                 />
@@ -306,12 +341,13 @@ function ListView({
           <summary className="cursor-pointer px-4 py-2.5 text-xs font-medium text-foreground/55">
             Concluídas recentemente ({doneTasks.length})
           </summary>
-          <ul className="divide-y divide-line">
+          <ul className="divide-y divide-line p-2">
             {doneTasks.map((r) => (
               <TaskRow
                 key={r.id}
                 r={r}
                 company={companyOf(r.clientId)}
+                assignee={teamMap.get(r.userId)}
                 onEdit={() => onEdit(r)}
                 onOpenClient={onOpenClient}
                 done
@@ -327,12 +363,14 @@ function ListView({
 function TaskRow({
   r,
   company,
+  assignee,
   onEdit,
   onOpenClient,
   done,
 }: {
   r: Reminder
   company?: string
+  assignee?: string
   onEdit: () => void
   onOpenClient: (id: string) => void
   done?: boolean
@@ -340,7 +378,7 @@ function TaskRow({
   const kind = KIND_META[r.kind ?? 'task']
   const prio = PRIORITY_META[r.priority ?? 'normal']
   return (
-    <li className="flex items-start gap-3 rounded-xl border border-line bg-card px-3.5 py-2.5">
+    <li className="flex items-start gap-3 rounded-xl border border-line bg-card px-3.5 py-3">
       <button
         type="button"
         title={done ? 'Reabrir' : 'Concluir'}
@@ -356,40 +394,55 @@ function TaskRow({
       </button>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        {/* Empresa em destaque + botão de abrir (igual abrir um cliente) */}
+        {company && (
+          <button
+            type="button"
+            onClick={() => r.clientId && onOpenClient(r.clientId)}
+            title="Abrir cliente"
+            className="mb-1 inline-flex max-w-full items-center gap-1.5 rounded-lg bg-accent/10 px-2 py-1 text-xs font-semibold text-accent ring-1 ring-accent/20 transition-colors hover:bg-accent/15"
+          >
+            <Building2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{company}</span>
+            <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
+          </button>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1 rounded bg-elevate/[0.05] px-1.5 py-0.5 text-[10px] text-foreground/55">
             {kind.icon}
             {kind.label}
           </span>
-          <span className={cn('truncate text-sm', done ? 'text-foreground/40 line-through' : 'font-medium text-foreground')}>
-            {r.title}
-          </span>
-          {r.priority === 'high' && !done && (
-            <span className={cn('text-[10px] font-semibold', prio.cls)}>● Alta</span>
-          )}
-        </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-foreground/45">
-          {r.dueAt && (
-            <span className="inline-flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {formatDateShort(r.dueAt)}
+          {!done && (
+            <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1', prio.chip)}>
+              {prio.label}
             </span>
           )}
-          {company && (
-            <button
-              onClick={() => r.clientId && onOpenClient(r.clientId)}
-              className="inline-flex items-center gap-1 hover:text-accent"
-            >
-              <Building2 className="h-3 w-3" />
-              {company}
-            </button>
-          )}
-          <span className="inline-flex items-center gap-1">
-            <Users2 className="h-3 w-3" />
-            {STATUS_META[r.status ?? 'todo'].label}
+          <span className={cn('text-sm', done ? 'text-foreground/40 line-through' : 'font-medium text-foreground')}>
+            {r.title}
           </span>
         </div>
-        {r.notes && <p className="mt-1 line-clamp-2 text-[11px] text-foreground/50">{r.notes}</p>}
+
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
+          {r.dueAt && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium ring-1',
+                dueChipCls(r.dueAt),
+              )}
+            >
+              <Clock className="h-3 w-3" />
+              Até {fmtDue(r.dueAt)}
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1 text-foreground/45">
+            <Users2 className="h-3 w-3" />
+            {assignee ?? '—'}
+          </span>
+          <span className="text-foreground/35">· {STATUS_META[r.status ?? 'todo'].label}</span>
+        </div>
+
+        {r.notes && <p className="mt-1.5 line-clamp-2 text-[11px] text-foreground/50">{r.notes}</p>}
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
@@ -408,11 +461,13 @@ function TaskRow({
 function KanbanView({
   tasks,
   companyOf,
+  teamMap,
   onEdit,
   onOpenClient,
 }: {
   tasks: Reminder[]
   companyOf: (id?: string | null) => string | undefined
+  teamMap: Map<string, string>
   onEdit: (r: Reminder) => void
   onOpenClient: (id: string) => void
 }) {
@@ -451,6 +506,19 @@ function KanbanView({
             )}
             {byStatus[st].map((r) => (
               <li key={r.id} className="rounded-lg border border-line bg-elevate/[0.02] p-2.5">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <span className={cn('h-1.5 w-1.5 rounded-full', PRIORITY_META[r.priority ?? 'normal'].dot)} />
+                  {companyOf(r.clientId) && (
+                    <button
+                      onClick={() => r.clientId && onOpenClient(r.clientId)}
+                      title="Abrir cliente"
+                      className="inline-flex max-w-full items-center gap-1 truncate rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent ring-1 ring-accent/20 hover:bg-accent/15"
+                    >
+                      <Building2 className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{companyOf(r.clientId)}</span>
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-start gap-1.5">
                   <span className="mt-0.5 text-foreground/45">{KIND_META[r.kind ?? 'task'].icon}</span>
                   <span className={cn('flex-1 text-xs', st === 'done' ? 'text-foreground/40 line-through' : 'text-foreground/85')}>
@@ -458,15 +526,15 @@ function KanbanView({
                   </span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-foreground/40">
-                  {r.dueAt && <span>{formatDateShort(r.dueAt)}</span>}
-                  {companyOf(r.clientId) && (
-                    <button
-                      onClick={() => r.clientId && onOpenClient(r.clientId)}
-                      className="hover:text-accent"
-                    >
-                      {companyOf(r.clientId)}
-                    </button>
+                  {r.dueAt && (
+                    <span className={cn('rounded px-1 py-0.5 ring-1', dueChipCls(r.dueAt))}>
+                      Até {fmtDue(r.dueAt)}
+                    </span>
                   )}
+                  <span className="inline-flex items-center gap-1">
+                    <Users2 className="h-2.5 w-2.5" />
+                    {teamMap.get(r.userId) ?? '—'}
+                  </span>
                 </div>
                 <div className="mt-1.5 flex items-center justify-between">
                   <div className="flex items-center gap-1">

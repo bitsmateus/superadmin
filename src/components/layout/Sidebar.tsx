@@ -26,7 +26,7 @@ import {
 import { cn } from '@/lib/utils'
 import { signOut, useAuth } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
-import { useUnreadTicketsCount, useMyOpenTaskCount } from '@/hooks/useTickets'
+import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
 import { ServerSwitcher } from './ServerSwitcher'
 
@@ -56,7 +56,6 @@ export function Sidebar() {
 
   const isAdmin = canManageUsers(profile?.role)
   const seeFinancials = canSeeFinancials(profile?.role)
-  const unreadTickets = useUnreadTicketsCount()
   const myTasks = useMyOpenTaskCount(profile?.id)
 
   const [archivedOpen, setArchivedOpen] = React.useState(false)
@@ -110,11 +109,9 @@ export function Sidebar() {
         {primary.map((item) => {
           const Icon = item.icon
           const badge =
-            'badgeKey' in item && item.badgeKey === 'tickets' && unreadTickets > 0
-              ? unreadTickets
-              : 'badgeKey' in item && item.badgeKey === 'tasks' && myTasks > 0
-                ? myTasks
-                : null
+            'badgeKey' in item && item.badgeKey === 'tasks' && myTasks > 0
+              ? myTasks
+              : null
           return (
             <NavLink
               key={item.to}

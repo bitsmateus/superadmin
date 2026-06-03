@@ -40,7 +40,9 @@
       "Bash(sed -i '50,160d' src/components/crm/CrmSettingsSection.tsx)",
       "Bash(sed -n '47,53p' src/components/crm/CrmSettingsSection.tsx)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
-      "Bash(node -e \"const p=require\\('./server/package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")"
+      "Bash(node -e \"const p=require\\('./server/package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
+      "Bash(node -e \"try{console.log\\(require\\('./node_modules/typescript/package.json'\\).version\\)}catch\\(e\\){console.log\\('root ts:',e.message\\)}\")",
+      "Bash(node -e \"try{console.log\\('server ts:',require\\('./server/node_modules/typescript/package.json'\\).version\\)}catch\\(e\\){console.log\\('server ts: \\(usa root\\)'\\)}\")"
     ]
   }
 }

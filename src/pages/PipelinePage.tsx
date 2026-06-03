@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Link as LinkIcon,
   ListChecks,
   Phone,
   PlusCircle,
@@ -120,12 +121,27 @@ export function PipelinePage() {
         title="Pipeline"
         subtitle={`${clients.length} cliente(s) no funil`}
         rightSlot={
-          <Button
-            onClick={() => setOpenNew(true)}
-            leftIcon={<PlusCircle className="h-4 w-4" />}
-          >
-            Novo cliente
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const url = `${window.location.origin}/ficha`
+                navigator.clipboard
+                  .writeText(url)
+                  .then(() => toast.success('Link de cadastro copiado'))
+                  .catch(() => toast.error('Não foi possível copiar'))
+              }}
+              leftIcon={<LinkIcon className="h-4 w-4" />}
+            >
+              Link de cadastro
+            </Button>
+            <Button
+              onClick={() => setOpenNew(true)}
+              leftIcon={<PlusCircle className="h-4 w-4" />}
+            >
+              Novo cliente
+            </Button>
+          </div>
         }
       />
 

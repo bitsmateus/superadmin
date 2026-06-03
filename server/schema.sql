@@ -106,6 +106,8 @@ CREATE TABLE IF NOT EXISTS clients (
   tenant_api_id TEXT,
   tenant_api_token TEXT,
   tenant_name TEXT,
+  ficha_cadastro JSONB,
+  briefing_number TEXT,
   support_email TEXT,
   support_password TEXT,
 

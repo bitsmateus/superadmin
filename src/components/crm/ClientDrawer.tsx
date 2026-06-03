@@ -2,6 +2,7 @@ import * as React from 'react'
 import {
   Activity,
   ChevronDown,
+  ClipboardList,
   ExternalLink,
   FileText,
   ListChecks,
@@ -24,6 +25,7 @@ import { FinanceTab } from './tabs/FinanceTab'
 import { BriefingTab } from './tabs/BriefingTab'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
+import { FichaTab } from './tabs/FichaTab'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
@@ -48,6 +50,7 @@ const TAB_DEFS: TabDef[] = [
   { value: 'followup', label: 'Follow-up', icon: <Send className="h-3.5 w-3.5" /> },
   { value: 'contract', label: 'Contrato', icon: <FileText className="h-3.5 w-3.5" /> },
   { value: 'finance', label: 'Financeiro', icon: <Wallet className="h-3.5 w-3.5" /> },
+  { value: 'ficha', label: 'Ficha de cadastro', icon: <ClipboardList className="h-3.5 w-3.5" /> },
 ]
 
 export interface ClientDrawerProps {
@@ -269,6 +272,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
           {tab === 'briefing' && <BriefingTab client={client} />}
           {tab === 'delivery' && <DeliveryTab client={client} />}
           {tab === 'followup' && <FollowUpTab client={client} />}
+          {tab === 'ficha' && <FichaTab client={client} />}
         </div>
       </Drawer>
 

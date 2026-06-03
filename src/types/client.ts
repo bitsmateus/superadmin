@@ -153,6 +153,22 @@ export interface BriefingConfig {
   externalAutomationNotes?: string
 }
 
+/** Ficha de cadastro preenchida pelo cliente no formulário público. */
+export interface FichaCadastro {
+  cnpj?: string
+  cpfResponsavel?: string
+  /** Melhor dia de pagamento (ex.: '10' | '20'). */
+  paymentDay?: string
+  needsNF?: boolean
+  /** Número para envio de NF+Boleto. */
+  nfNumber?: string
+  /** E-mail para envio de NF+Boleto. */
+  nfEmail?: string
+  /** Endereço completo (rua, número, bairro, cidade, estado). */
+  address?: string
+  submittedAt?: string
+}
+
 export type ContractStatus = 'not_sent' | 'sent' | 'signed'
 export type BriefingStatus =
   | 'not_sent'
@@ -244,6 +260,11 @@ export interface Client {
   payments?: Payment[]
   extraLinks?: ExtraLink[]
   financeNotes?: string
+
+  // Ficha de cadastro (formulário público de boas-vindas)
+  fichaCadastro?: FichaCadastro
+  /** Número pessoal do cliente p/ envio do briefing e cobranças (55+DDD+número). */
+  briefingNumber?: string
 
   // Etapa 3 — Briefing
   briefingToken?: string

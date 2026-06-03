@@ -63,6 +63,9 @@ const BriefingPublicPage = React.lazy(() =>
     default: m.BriefingPublicPage,
   })),
 )
+const FichaPublicPage = React.lazy(() =>
+  import('./pages/FichaPublicPage').then((m) => ({ default: m.FichaPublicPage })),
+)
 const SupportPublicPage = React.lazy(() =>
   import('./pages/SupportPublicPage').then((m) => ({
     default: m.SupportPublicPage,
@@ -86,6 +89,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/briefing/:token" element={<BriefingPublicPage />} />
+        <Route path="/ficha" element={<FichaPublicPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />
         <Route path="/nps/:token" element={<NpsPublicPage />} />
 

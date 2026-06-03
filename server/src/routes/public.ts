@@ -3,6 +3,47 @@ import { query, queryOne } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function publicRoutes(app: FastifyInstance) {
+  // POST /api/public/ficha — formulário público de cadastro. Cria um cliente
+  // novo na etapa "Boas-vindas" (welcome) do pipeline.
+  app.post<{ Body: Record<string, unknown> }>(
+    '/api/public/ficha',
+    async (req, reply) => {
+      const b = req.body ?? {};
+      const company = String(b.company ?? '').trim();
+      if (!company) return reply.status(400).send({ message: 'Nome da empresa é obrigatório' });
+
+      const ficha = {
+        cnpj: b.cnpj ?? null,
+        cpfResponsavel: b.cpfResponsavel ?? null,
+        paymentDay: b.paymentDay ?? null,
+        needsNF: typeof b.needsNF === 'boolean' ? b.needsNF : b.needsNF === 'Sim' ? true : b.needsNF === 'Não' ? false : null,
+        nfNumber: b.nfNumber ?? null,
+        nfEmail: b.nfEmail ?? null,
+        address: b.address ?? null,
+        submittedAt: new Date().toISOString(),
+      };
+      const dayNum = b.paymentDay ? parseInt(String(b.paymentDay), 10) : NaN;
+      const dueDay = Number.isFinite(dayNum) && dayNum >= 1 && dayNum <= 31 ? dayNum : null;
+      const log = { id: uuidv4(), action: 'Ficha de cadastro preenchida', createdAt: new Date().toISOString() };
+
+      const [row] = await query<{ id: string }>(
+        `INSERT INTO clients (name, email, phone, company, stage, due_day, ficha_cadastro, logs)
+         VALUES ($1, $2, $3, $4, 'welcome', $5, $6, $7)
+         RETURNING id`,
+        [
+          company,
+          String(b.nfEmail ?? ''),
+          String(b.nfNumber ?? ''),
+          company,
+          dueDay,
+          JSON.stringify(ficha),
+          JSON.stringify([log]),
+        ]
+      );
+      return reply.status(201).send({ ok: true, id: row.id });
+    }
+  );
+
   // POST /api/public/briefing/:token — get briefing data
   app.get<{ Params: { token: string } }>(
     '/api/public/briefing/:token',

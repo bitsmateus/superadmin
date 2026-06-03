@@ -65,6 +65,9 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE reminders ALTER COLUMN due_at DROP NOT NULL`);
   // Grupo do WhatsApp para alertas do suporte (apiId/token/groupId/baseUrl).
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS support_group JSONB`);
+  // Ficha de cadastro (formulário público) + número pessoal do cliente.
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS ficha_cadastro JSONB`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS briefing_number TEXT`);
   console.log('[db] migrations applied');
 }
 

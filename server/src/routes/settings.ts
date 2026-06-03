@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { queryOne, query } from '../db.js';
-import { sendSupportGroupMessage } from '../lib/supportGroup.js';
+import { sendSupportGroupMessage, sendWhatsAppToNumber } from '../lib/supportGroup.js';
 
 export async function settingsRoutes(app: FastifyInstance) {
   // GET /api/settings — token dos servers é mascarado (nunca vai pro front).
@@ -138,6 +138,25 @@ export async function settingsRoutes(app: FastifyInstance) {
       if (res.reason === 'empty') return reply.status(400).send({ message: 'Mensagem vazia' });
       if (res.reason === 'not_configured')
         return reply.status(400).send({ message: 'Grupo do WhatsApp não configurado' });
+      return reply
+        .status(502)
+        .send({ message: `Falha ao enviar${res.status ? ` (NX ${res.status})` : ''}`, detail: res.detail });
+    }
+  );
+
+  // POST /api/whatsapp/send — envia mensagem a um número pessoal (com 55+DDD).
+  app.post<{ Body: { number?: string; text?: string } }>(
+    '/api/whatsapp/send',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const number = (req.body?.number ?? '').toString();
+      const text = (req.body?.text ?? '').toString();
+      if (!number.trim()) return reply.status(400).send({ message: 'Número não informado' });
+      const res = await sendWhatsAppToNumber(number, text);
+      if (res.ok) return { ok: true };
+      if (res.reason === 'empty') return reply.status(400).send({ message: 'Mensagem vazia' });
+      if (res.reason === 'not_configured')
+        return reply.status(400).send({ message: 'Grupo/credenciais não configurados ou número inválido' });
       return reply
         .status(502)
         .send({ message: `Falha ao enviar${res.status ? ` (NX ${res.status})` : ''}`, detail: res.detail });

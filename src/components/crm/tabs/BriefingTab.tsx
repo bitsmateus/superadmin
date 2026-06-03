@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
+import { api } from '@/services/api'
 import { usersApi } from '@/api/users'
 import { queuesApi } from '@/api/queues'
 import { extractErrorMessage } from '@/api/client'
@@ -90,6 +91,29 @@ export function BriefingTab({ client }: { client: Client }) {
   const [config, setConfig] = React.useState<BriefingConfig>(
     client.briefingConfig ?? emptyConfig,
   )
+  const [signOpen, setSignOpen] = React.useState(false)
+  const [signNumber, setSignNumber] = React.useState(client.briefingNumber ?? '')
+
+  // Fluxo da ficha: enquanto não houver contrato assinado, o briefing fica
+  // bloqueado e mostramos o passo "marcar contrato assinado".
+  const needsContractSign = Boolean(client.fichaCadastro) && !client.contractSignedAt
+
+  const markSigned = () => {
+    const num = signNumber.replace(/\D/g, '')
+    if (num.length < 10) {
+      toast.error('Informe o WhatsApp do cliente com DDD')
+      return
+    }
+    const normalized = num.startsWith('55') ? num : `55${num}`
+    db.updateClient(client.id, {
+      contractSignedAt: new Date().toISOString(),
+      briefingNumber: normalized,
+      stage: client.stage === 'welcome' || client.stage === 'lead' ? 'contract' : client.stage,
+    })
+    db.addLog(client.id, 'Contrato assinado', `WhatsApp do cliente: ${normalized}`)
+    setSignOpen(false)
+    toast.success('Contrato assinado · preencha a configuração do briefing abaixo')
+  }
 
   React.useEffect(() => {
     setConfig(client.briefingConfig ?? emptyConfig)
@@ -121,7 +145,7 @@ export function BriefingTab({ client }: { client: Client }) {
     config.channels.length > 0 &&
     config.maxUsers > 0
 
-  const generate = () => {
+  const generate = async () => {
     if (!configComplete) {
       toast.error('Preencha a configuração antes de gerar o briefing')
       return
@@ -135,7 +159,23 @@ export function BriefingTab({ client }: { client: Client }) {
       ...(PRE_BRIEFING_STAGES.includes(client.stage) ? { stage: 'briefing' } : {}),
     })
     db.addLog(client.id, 'Briefing enviado', 'Link gerado e etapa avançada para Briefing')
-    toast.success('Link do briefing gerado · etapa avançada para Briefing')
+
+    // Envia o link por WhatsApp para o número pessoal do cliente (se houver).
+    const newLink = buildBriefingLink(token)
+    if (client.briefingNumber && newLink) {
+      try {
+        await api.post('/api/whatsapp/send', {
+          number: client.briefingNumber,
+          text: buildWhatsAppMessage(client.name || 'cliente', newLink),
+        })
+        db.addLog(client.id, 'Briefing enviado no WhatsApp', client.briefingNumber)
+        toast.success('Briefing enviado no WhatsApp do cliente')
+      } catch (err) {
+        toast.error('Link gerado, mas falhou o envio no WhatsApp: ' + extractErrorMessage(err, 'erro'))
+      }
+    } else {
+      toast.success('Link do briefing gerado · envie pelo link/mensagem abaixo')
+    }
   }
 
   const copy = async () => {
@@ -183,6 +223,30 @@ export function BriefingTab({ client }: { client: Client }) {
 
   return (
     <div className="space-y-5">
+      {needsContractSign && (
+        <Section
+          title={
+            <span className="flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5 text-accent" />
+              Contrato
+            </span>
+          }
+          action={<Badge tone="warning">Aguardando assinatura</Badge>}
+        >
+          <p className="text-sm text-foreground/65">
+            Pegue os dados na aba <strong>Ficha de cadastro</strong>, monte o contrato e
+            envie ao cliente. Assim que ele assinar, marque aqui para liberar o briefing.
+          </p>
+          <div className="mt-3 flex justify-end">
+            <Button onClick={() => setSignOpen(true)} leftIcon={<CheckCircle2 className="h-4 w-4" />}>
+              Marcar contrato assinado
+            </Button>
+          </div>
+        </Section>
+      )}
+
+      {!needsContractSign && (
+      <>
       {/* ── Configuração do briefing ── */}
       <Section
         title={
@@ -424,6 +488,39 @@ export function BriefingTab({ client }: { client: Client }) {
           )}
         </>
       )}
+      </>
+      )}
+
+      <Modal
+        open={signOpen}
+        onClose={() => setSignOpen(false)}
+        title="Contrato assinado"
+        description="Informe o WhatsApp pessoal do cliente — usaremos para enviar o briefing e as cobranças."
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setSignOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={markSigned}>Confirmar</Button>
+          </>
+        }
+      >
+        <label className="block">
+          <span className="mb-1.5 block text-[11px] uppercase tracking-wider text-foreground/45">
+            WhatsApp do cliente (com DDD)
+          </span>
+          <input
+            value={signNumber}
+            onChange={(e) => setSignNumber(e.target.value)}
+            placeholder="Ex.: 48 99999-9999"
+            className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+          />
+          <span className="mt-1 block text-[11px] text-foreground/40">
+            Enviaremos com 55 + DDD automaticamente.
+          </span>
+        </label>
+      </Modal>
 
       <Modal
         open={revisionOpen}

@@ -12,6 +12,11 @@ export async function settingsRoutes(app: FastifyInstance) {
         apiTokenSet: Boolean(s.apiToken),
       }));
     }
+    // Mascara o token do grupo do WhatsApp também.
+    if (row && row.support_group && typeof row.support_group === 'object') {
+      const sg = row.support_group as Record<string, unknown>;
+      row.support_group = { ...sg, token: '', tokenSet: Boolean(sg.token) };
+    }
     return row ?? {};
   });
 
@@ -49,6 +54,21 @@ export async function settingsRoutes(app: FastifyInstance) {
         serversParam = JSON.stringify(merged);
       }
 
+      // Merge do grupo de WhatsApp preservando o token quando vier vazio.
+      let supportGroupParam: string | null = null;
+      if (b.support_group && typeof b.support_group === 'object') {
+        const sg = b.support_group as Record<string, unknown>;
+        const existing = await queryOne<{ support_group: Record<string, unknown> | null }>(
+          'SELECT support_group FROM settings WHERE id = true'
+        );
+        const prev = (existing?.support_group ?? {}) as Record<string, unknown>;
+        const rest: Record<string, unknown> = { ...sg };
+        delete rest.tokenSet;
+        const token = typeof sg.token === 'string' ? sg.token.trim() : '';
+        rest.token = token || (prev.token as string) || '';
+        supportGroupParam = JSON.stringify(rest);
+      }
+
       const [row] = await query(
         `INSERT INTO settings (
           id, asaas_api_key, asaas_environment, asaas_sync_interval_min,
@@ -56,9 +76,9 @@ export async function settingsRoutes(app: FastifyInstance) {
           followups_enabled, followup_templates,
           nps_delay_days, nps_enabled, notify_edge_function_url, notify_enabled,
           goal_new_clients_monthly, goal_mrr_monthly, goal_nps_monthly, goals_enabled,
-          last_backup_at, backup_remind_days, servers, updated_at
+          last_backup_at, backup_remind_days, servers, support_group, updated_at
         ) VALUES (
-          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()
+          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           asaas_api_key = EXCLUDED.asaas_api_key,
@@ -80,6 +100,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           last_backup_at = EXCLUDED.last_backup_at,
           backup_remind_days = EXCLUDED.backup_remind_days,
           servers = COALESCE(EXCLUDED.servers, settings.servers),
+          support_group = COALESCE(EXCLUDED.support_group, settings.support_group),
           updated_at = NOW()
         RETURNING *`,
         [
@@ -95,9 +116,53 @@ export async function settingsRoutes(app: FastifyInstance) {
           b.goal_nps_monthly ?? null, b.goals_enabled ?? false,
           b.last_backup_at ?? null, b.backup_remind_days ?? 7,
           serversParam,
+          supportGroupParam,
         ]
       );
       return row;
+    }
+  );
+
+  // POST /api/support-group/send — envia uma mensagem ao grupo de WhatsApp
+  // configurado. O token fica só no servidor (lido aqui de settings).
+  app.post<{ Body: { text?: string } }>(
+    '/api/support-group/send',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const text = (req.body?.text ?? '').toString().trim();
+      if (!text) return reply.status(400).send({ message: 'Mensagem vazia' });
+
+      const row = await queryOne<{ support_group: Record<string, unknown> | null }>(
+        'SELECT support_group FROM settings WHERE id = true'
+      );
+      const g = (row?.support_group ?? {}) as Record<string, unknown>;
+      const apiId = (g.apiId as string) || '';
+      const token = (g.token as string) || '';
+      const groupId = (g.groupId as string) || '';
+      const base = ((g.baseUrl as string) || 'https://appapi.nxsystems.com.br').replace(/\/$/, '');
+      if (!apiId || !token || !groupId) {
+        return reply.status(400).send({ message: 'Grupo do WhatsApp não configurado' });
+      }
+
+      try {
+        const resp = await fetch(`${base}/v2/api/external/${encodeURIComponent(apiId)}/group`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            body: text,
+            number: groupId,
+            externalKey: 'support-alert',
+            isClosed: false,
+          }),
+        });
+        if (!resp.ok) {
+          const t = await resp.text().catch(() => '');
+          return reply.status(502).send({ message: `Falha ao enviar (NX ${resp.status})`, detail: t.slice(0, 300) });
+        }
+        return { ok: true };
+      } catch (err) {
+        return reply.status(502).send({ message: 'Erro de rede ao enviar', detail: String(err).slice(0, 300) });
+      }
     }
   );
 }

@@ -314,6 +314,21 @@ export interface AppSettings {
   lastBackupAt?: string
   /** Quantos dias sem backup antes de mostrar aviso. Default 7. */
   backupRemindDays?: number
+  /** Grupo de WhatsApp para alertas do suporte (token fica só no backend). */
+  supportGroup?: SupportGroupConfig
+}
+
+export interface SupportGroupConfig {
+  /** Base da API (default https://appapi.nxsystems.com.br). */
+  baseUrl?: string
+  /** ApiID que vai na URL /v2/api/external/{apiId}/group. */
+  apiId?: string
+  /** Token Bearer — só vai pro backend; no front vem vazio. */
+  token?: string
+  /** ID/number do grupo de WhatsApp. */
+  groupId?: string
+  /** Indica que há token salvo (preenchido pelo GET). */
+  tokenSet?: boolean
 }
 
 export interface StageHistoryEntry {

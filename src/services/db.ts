@@ -226,6 +226,7 @@ type SettingsRow = {
   last_backup_at: string | null
   backup_remind_days: number | null
   servers: ServerConfig[] | null
+  support_group: AppSettings['supportGroup'] | null
 }
 
 function rowToSettings(r: SettingsRow | null): AppSettings {
@@ -249,6 +250,7 @@ function rowToSettings(r: SettingsRow | null): AppSettings {
     goalsEnabled: r.goals_enabled ?? undefined,
     lastBackupAt: r.last_backup_at ?? undefined,
     backupRemindDays: r.backup_remind_days ?? undefined,
+    supportGroup: r.support_group ?? undefined,
   }
 }
 
@@ -273,6 +275,7 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
     last_backup_at: s.lastBackupAt ?? null,
     backup_remind_days: s.backupRemindDays ?? null,
     servers: useAuthStore.getState().servers,
+    support_group: s.supportGroup ?? null,
   }
 }
 

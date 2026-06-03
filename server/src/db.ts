@@ -63,6 +63,8 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS priority TEXT`);
   // due_at passa a ser opcional (backlog / anotação sem data).
   await pool.query(`ALTER TABLE reminders ALTER COLUMN due_at DROP NOT NULL`);
+  // Grupo do WhatsApp para alertas do suporte (apiId/token/groupId/baseUrl).
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS support_group JSONB`);
   console.log('[db] migrations applied');
 }
 

@@ -9,8 +9,11 @@ import {
   ExternalLink,
   KanbanSquare,
   ListTodo,
+  MessageCircle,
   Pencil,
   Plus,
+  Send,
+  Settings2,
   StickyNote,
   Trash2,
   Users2,
@@ -22,11 +25,14 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { useAllReminders } from '@/hooks/useTickets'
-import { useClients } from '@/hooks/useClients'
+import { useClients, useSettings } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useTeam, teamMemberLabel } from '@/hooks/useTeam'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { ticketsService } from '@/services/tickets'
+import { db } from '@/services/db'
+import { api } from '@/services/api'
+import { canManageUsers } from '@/services/supabase'
 import { computeAlerts } from '@/lib/crmAlerts'
 import { cn } from '@/lib/utils'
 import type {
@@ -129,8 +135,10 @@ export function SupportWorkspacePage() {
   const clients = useClients()
   const team = useTeam()
   const { profile } = useAuth()
+  const settings = useSettings()
   const navigate = useNavigate()
   const myId = profile?.id
+  const isAdmin = canManageUsers(profile?.role)
 
   const [view, setView] = React.useState<'list' | 'kanban'>('list')
   const [filterKind, setFilterKind] = React.useState<ReminderKind | 'all'>('all')
@@ -186,6 +194,34 @@ export function SupportWorkspacePage() {
     () => openTasks.filter((r) => bucketOf(r.dueAt) === 'today').length,
     [openTasks],
   )
+
+  // Reuniões abertas (futuras + atrasadas), ordenadas pela data.
+  const meetings = React.useMemo(
+    () =>
+      reminders
+        .filter((r) => (r.kind ?? 'task') === 'meeting' && !r.completedAt && r.dueAt)
+        .sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime()),
+    [reminders],
+  )
+
+  // Pop-up limpo, uma vez por dia: resumo do que precisa de atenção.
+  React.useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    const KEY = 'support_daily_alert'
+    if (localStorage.getItem(KEY) === today) return
+    const parts: string[] = []
+    if (overdueCount > 0) parts.push(`${overdueCount} vencida(s)`)
+    if (todayCount > 0) parts.push(`${todayCount} para hoje`)
+    const nextMeetingToday = meetings.find((m) => bucketOf(m.dueAt) === 'today')
+    if (parts.length === 0 && !nextMeetingToday) return // nada a avisar (ou ainda carregando)
+    localStorage.setItem(KEY, today)
+    toast(`📋 Suporte de hoje`, {
+      description:
+        (parts.join(' · ') || 'Sem tarefas para hoje') +
+        (nextMeetingToday ? ` · Reunião ${fmtDue(nextMeetingToday.dueAt!)}` : ''),
+      duration: 8000,
+    })
+  }, [overdueCount, todayCount, meetings])
 
   return (
     <>
@@ -269,7 +305,22 @@ export function SupportWorkspacePage() {
             )}
           </div>
 
-          <PipelinePanel clients={clients} onConvert={(r) => setEditing(r)} />
+          <div className="space-y-5">
+            <WhatsAppGroupCard
+              settings={settings}
+              isAdmin={isAdmin}
+              openTasks={openTasks}
+              meetings={meetings}
+              teamMap={teamMap}
+              companyOf={companyOf}
+            />
+            <MeetingsPanel
+              meetings={meetings}
+              companyOf={companyOf}
+              onOpenClient={(id) => navigate(`/clients?open=${id}`)}
+            />
+            <PipelinePanel clients={clients} onConvert={(r) => setEditing(r)} />
+          </div>
         </div>
       </div>
 
@@ -783,6 +834,308 @@ function TaskModal({
             className="w-full rounded-lg border border-line bg-elevate/[0.04] px-3 py-2 text-sm text-foreground outline-none focus:border-accent/40"
           />
         </Field>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Painel de Reuniões (lateral direita) ──────────────────────────────────────
+function MeetingsPanel({
+  meetings,
+  companyOf,
+  onOpenClient,
+}: {
+  meetings: Reminder[]
+  companyOf: (id?: string | null) => string | undefined
+  onOpenClient: (id: string) => void
+}) {
+  return (
+    <section className="rounded-2xl border border-line bg-card">
+      <header className="flex items-center gap-2 border-b border-line px-4 py-3">
+        <Calendar className="h-4 w-4 text-accent" />
+        <div className="flex-1">
+          <h3 className="text-sm font-medium text-foreground">Reuniões</h3>
+          <p className="text-[11px] text-foreground/45">Agendadas, por data</p>
+        </div>
+        <Badge tone={meetings.length === 0 ? 'neutral' : 'info'} dot={meetings.length > 0}>
+          {meetings.length}
+        </Badge>
+      </header>
+      {meetings.length === 0 ? (
+        <p className="px-4 py-6 text-center text-xs text-foreground/40">Nenhuma reunião agendada.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {meetings.slice(0, 10).map((m) => {
+            const overdue = bucketOf(m.dueAt) === 'overdue'
+            return (
+              <li key={m.id} className="flex items-start gap-3 px-4 py-2.5">
+                <span
+                  className={cn(
+                    'mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1',
+                    dueChipCls(m.dueAt),
+                  )}
+                >
+                  {fmtDue(m.dueAt!)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-foreground">{m.title}</p>
+                  {companyOf(m.clientId) && (
+                    <button
+                      onClick={() => m.clientId && onOpenClient(m.clientId)}
+                      className="inline-flex items-center gap-1 text-[11px] text-accent hover:underline"
+                    >
+                      <Building2 className="h-3 w-3" />
+                      {companyOf(m.clientId)}
+                    </button>
+                  )}
+                  {overdue && <span className="ml-1 text-[10px] text-danger">· atrasada</span>}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+// ── Grupo de WhatsApp (alertas) ───────────────────────────────────────────────
+function buildDemandsMessage(
+  openTasks: Reminder[],
+  meetings: Reminder[],
+  teamMap: Map<string, string>,
+  companyOf: (id?: string | null) => string | undefined,
+): string {
+  const overdue = openTasks.filter((r) => bucketOf(r.dueAt) === 'overdue')
+  const today = openTasks.filter((r) => bucketOf(r.dueAt) === 'today')
+  const todayMeetings = meetings.filter((m) => bucketOf(m.dueAt) === 'today')
+  const line = (r: Reminder) => {
+    const co = companyOf(r.clientId)
+    const resp = teamMap.get(r.userId)
+    return `• ${r.title}${co ? ` — ${co}` : ''}${resp ? ` (${resp})` : ''}`
+  }
+  const d = new Date()
+  const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+  const out: string[] = [`📋 *Demandas do suporte — ${dateStr}*`]
+  if (overdue.length) out.push('', `🔴 *Vencidas (${overdue.length})*`, ...overdue.map(line))
+  if (today.length) out.push('', `⭐ *Para hoje (${today.length})*`, ...today.map(line))
+  if (todayMeetings.length)
+    out.push(
+      '',
+      `📅 *Reuniões de hoje*`,
+      ...todayMeetings.map(
+        (m) => `• ${fmtDue(m.dueAt!)} — ${m.title}${companyOf(m.clientId) ? ` (${companyOf(m.clientId)})` : ''}`,
+      ),
+    )
+  if (!overdue.length && !today.length && !todayMeetings.length) out.push('', 'Nenhuma demanda pendente para hoje. ✅')
+  return out.join('\n')
+}
+
+async function sendToGroup(text: string): Promise<boolean> {
+  try {
+    await api.post('/api/support-group/send', { text })
+    toast.success('Mensagem enviada ao grupo')
+    return true
+  } catch (err) {
+    toast.error('Falha ao enviar: ' + ((err as Error)?.message ?? 'erro'))
+    return false
+  }
+}
+
+function WhatsAppGroupCard({
+  settings,
+  isAdmin,
+  openTasks,
+  meetings,
+  teamMap,
+  companyOf,
+}: {
+  settings: ReturnType<typeof useSettings>
+  isAdmin: boolean
+  openTasks: Reminder[]
+  meetings: Reminder[]
+  teamMap: Map<string, string>
+  companyOf: (id?: string | null) => string | undefined
+}) {
+  const sg = settings.supportGroup
+  const configured = Boolean(sg?.groupId && sg?.apiId && (sg?.tokenSet || sg?.token))
+  const [msgOpen, setMsgOpen] = React.useState(false)
+  const [configOpen, setConfigOpen] = React.useState(false)
+  const [sending, setSending] = React.useState(false)
+
+  const sendDemands = async () => {
+    setSending(true)
+    await sendToGroup(buildDemandsMessage(openTasks, meetings, teamMap, companyOf))
+    setSending(false)
+  }
+
+  return (
+    <section className="rounded-2xl border border-line bg-card">
+      <header className="flex items-center gap-2 border-b border-line px-4 py-3">
+        <MessageCircle className="h-4 w-4 text-success" />
+        <div className="flex-1">
+          <h3 className="text-sm font-medium text-foreground">Grupo do WhatsApp</h3>
+          <p className="text-[11px] text-foreground/45">
+            {configured ? 'Alertas do suporte' : 'Não configurado'}
+          </p>
+        </div>
+        {isAdmin && (
+          <button
+            type="button"
+            title="Configurar grupo"
+            onClick={() => setConfigOpen(true)}
+            className="grid h-7 w-7 place-items-center rounded-lg text-foreground/45 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground/80"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </header>
+
+      <div className="space-y-2 p-3">
+        {!configured ? (
+          <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
+            {isAdmin
+              ? 'Configure o grupo (engrenagem) para enviar alertas.'
+              : 'Grupo ainda não configurado por um admin.'}
+          </p>
+        ) : (
+          <>
+            <Button
+              onClick={sendDemands}
+              loading={sending}
+              leftIcon={<Send className="h-4 w-4" />}
+              className="w-full"
+            >
+              Enviar demandas do dia
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setMsgOpen(true)}
+              leftIcon={<MessageCircle className="h-4 w-4" />}
+              className="w-full"
+            >
+              Enviar mensagem manual
+            </Button>
+          </>
+        )}
+      </div>
+
+      {msgOpen && <SendMessageModal onClose={() => setMsgOpen(false)} />}
+      {configOpen && <GroupConfigModal settings={settings} onClose={() => setConfigOpen(false)} />}
+    </section>
+  )
+}
+
+function SendMessageModal({ onClose }: { onClose: () => void }) {
+  const [text, setText] = React.useState('')
+  const [sending, setSending] = React.useState(false)
+  const send = async () => {
+    if (!text.trim()) {
+      toast.error('Digite a mensagem')
+      return
+    }
+    setSending(true)
+    const ok = await sendToGroup(text.trim())
+    setSending(false)
+    if (ok) onClose()
+  }
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Enviar mensagem ao grupo"
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={sending}>
+            Cancelar
+          </Button>
+          <Button onClick={send} loading={sending} leftIcon={<Send className="h-4 w-4" />}>
+            Enviar
+          </Button>
+        </>
+      }
+    >
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={5}
+        placeholder="Digite a mensagem para o grupo do WhatsApp…"
+        className="w-full rounded-lg border border-line bg-elevate/[0.04] px-3 py-2 text-sm text-foreground outline-none focus:border-accent/40"
+      />
+    </Modal>
+  )
+}
+
+function GroupConfigModal({
+  settings,
+  onClose,
+}: {
+  settings: ReturnType<typeof useSettings>
+  onClose: () => void
+}) {
+  const sg = settings.supportGroup
+  const [baseUrl, setBaseUrl] = React.useState(sg?.baseUrl || 'https://appapi.nxsystems.com.br')
+  const [apiId, setApiId] = React.useState(sg?.apiId || '')
+  const [groupId, setGroupId] = React.useState(sg?.groupId || '')
+  const [token, setToken] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+
+  const save = async () => {
+    if (!apiId.trim() || !groupId.trim()) {
+      toast.error('Informe o ApiID e o ID do grupo')
+      return
+    }
+    setSaving(true)
+    db.saveSettings({
+      ...db.getSettings(),
+      supportGroup: {
+        baseUrl: baseUrl.trim() || undefined,
+        apiId: apiId.trim(),
+        groupId: groupId.trim(),
+        token: token.trim(), // vazio = mantém o atual (merge no backend)
+      },
+    })
+    setSaving(false)
+    toast.success('Grupo configurado')
+    onClose()
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Configurar grupo do WhatsApp"
+      description="Token fica só no servidor — deixe em branco para manter o atual."
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button onClick={save} loading={saving}>
+            Salvar
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <Input label="URL base" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+        <Input label="ApiID" value={apiId} onChange={(e) => setApiId(e.target.value)} placeholder="bed9539f-..." />
+        <Input
+          label="Token"
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder={sg?.tokenSet ? '•••••••• (configurado)' : 'Cole o token'}
+        />
+        <Input
+          label="ID do grupo"
+          value={groupId}
+          onChange={(e) => setGroupId(e.target.value)}
+          placeholder="number do grupo (ex.: 12356...@g.us)"
+        />
       </div>
     </Modal>
   )

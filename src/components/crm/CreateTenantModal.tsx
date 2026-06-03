@@ -39,6 +39,26 @@ function pick(obj: unknown, ...keys: string[]): unknown {
   return undefined
 }
 
+/**
+ * Extrai um id de respostas da NX em formatos variados: o objeto direto, ou
+ * aninhado em wrappers comuns ({ session }, { whatsapp }, { data }...), e com
+ * nomes de campo variados (id, sessionId, whatsappId...).
+ */
+function extractId(resp: unknown): string | number | undefined {
+  const idKeys = ['id', 'sessionId', 'session_id', 'whatsappId', 'whatsapp_id', 'channelId', 'apiId', 'api_id']
+  const wrappers = ['session', 'whatsapp', 'channel', 'data', 'result', 'connection', 'api', 'tenant']
+  // 1) direto no objeto
+  const direct = pick(resp, ...idKeys)
+  if (direct != null) return direct as string | number
+  // 2) dentro de um wrapper conhecido
+  for (const w of wrappers) {
+    const inner = pick(resp, w)
+    const v = pick(inner, ...idKeys)
+    if (v != null) return v as string | number
+  }
+  return undefined
+}
+
 function genToken(): string {
   try {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -413,8 +433,15 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       type: sessionType,
     })
     prov.channelCreated = true
-    const sObj = (pick(session, 'session', 'data') as Record<string, unknown> | undefined) ?? session
-    ;(prov as Record<string, unknown>).sessionId = pick(sObj, 'id', 'sessionId', 'session_id')
+    const sessionId = extractId(session)
+    ;(prov as Record<string, unknown>).sessionId = sessionId
+    if (sessionId == null) {
+      // Não achamos o id da sessão na resposta — mostra um trecho pra diagnóstico.
+      throw new Error(
+        'Canal criado, mas não encontrei o sessionId na resposta. Retorno: ' +
+          JSON.stringify(session).slice(0, 200),
+      )
+    }
     db.updateClient(client.id, {
       deliveryChecklist: setChecklistItem(currentChecklist(), 'channels_created', true, 'Sistema'),
     })
@@ -436,8 +463,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       authToken: prov.apiToken,
       tenant: tenantId,
     })
-    const aObj = (pick(apiResp, 'api', 'data') as Record<string, unknown> | undefined) ?? apiResp
-    const createdApiId = pick(aObj, 'id', 'apiId', 'api_id')
+    const createdApiId = extractId(apiResp)
     if (createdApiId != null) prov.apiId = String(createdApiId)
     db.updateClient(client.id, {
       tenantApiId: prov.apiId || undefined,

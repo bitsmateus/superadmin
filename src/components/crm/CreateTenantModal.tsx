@@ -433,27 +433,56 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       type: sessionType,
     })
     prov.channelCreated = true
-    const sessionId = extractId(session)
+
+    // A NX cria a API JUNTO com o canal e devolve tudo aqui:
+    //   sessionId  -> whatsapp.id
+    //   apiId      -> api.apiConfig.id
+    //   apiToken   -> api.plainToken (token real p/ /v2/api/external/{apiId})
+    const wa = pick(session, 'whatsapp') as Record<string, unknown> | undefined
+    const apiWrap = pick(session, 'api') as Record<string, unknown> | undefined
+    const apiConfig = pick(apiWrap, 'apiConfig') as Record<string, unknown> | undefined
+
+    const sessionId =
+      (pick(wa ?? session, 'id', 'sessionId') as string | number | undefined) ?? extractId(session)
     ;(prov as Record<string, unknown>).sessionId = sessionId
     if (sessionId == null) {
-      // Não achamos o id da sessão na resposta — mostra um trecho pra diagnóstico.
       throw new Error(
         'Canal criado, mas não encontrei o sessionId na resposta. Retorno: ' +
           JSON.stringify(session).slice(0, 200),
       )
     }
+    const apiId = pick(apiConfig, 'id', 'apiId') as string | undefined
+    if (apiId) prov.apiId = String(apiId)
+    const apiToken =
+      (pick(apiWrap, 'plainToken') as string | undefined) ??
+      (pick(apiConfig, 'token', 'authToken') as string | undefined)
+    if (apiToken) prov.apiToken = apiToken
+    if (prov.userId == null) prov.userId = pick(wa, 'userId') as string | number | undefined
+
     db.updateClient(client.id, {
+      tenantApiId: prov.apiId || undefined,
+      tenantApiToken: prov.apiToken || undefined,
       deliveryChecklist: setChecklistItem(currentChecklist(), 'channels_created', true, 'Sistema'),
     })
     return sessionType
   }
 
   if (key === 'api') {
+    // A API já é criada junto com o canal (vem na resposta do canal). Se já
+    // temos apiId + token, não criamos outra (evita duplicar).
+    if (prov.apiId && prov.apiToken) {
+      db.updateClient(client.id, {
+        tenantApiId: prov.apiId,
+        tenantApiToken: prov.apiToken,
+      })
+      return 'criada junto com o canal'
+    }
+    // Fallback: cria via /tenantCreateApi (se a sessão não tiver trazido a api).
     const tenantId = prov.tenantId ?? db.getClient(client.id)?.tenantId
     if (!tenantId) {
       throw new Error('Tenant id não disponível. Recarregue a página e provisione de novo.')
     }
-    prov.apiToken = genToken()
+    if (!prov.apiToken) prov.apiToken = genToken()
     const apiResp = await tenantsApi.createApi(server, {
       name: `API ${client.company || client.name}`.slice(0, 60),
       sessionId: (prov as Record<string, unknown>).sessionId as string | number | undefined,
@@ -463,8 +492,14 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       authToken: prov.apiToken,
       tenant: tenantId,
     })
-    const createdApiId = extractId(apiResp)
+    const respApi = pick(apiResp, 'api') as Record<string, unknown> | undefined
+    const respApiConfig = pick(respApi, 'apiConfig') as Record<string, unknown> | undefined
+    const createdApiId = (pick(respApiConfig, 'id') as string | undefined) ?? extractId(apiResp)
     if (createdApiId != null) prov.apiId = String(createdApiId)
+    const respToken =
+      (pick(respApi, 'plainToken') as string | undefined) ??
+      (pick(apiResp, 'plainToken') as string | undefined)
+    if (respToken) prov.apiToken = respToken
     db.updateClient(client.id, {
       tenantApiId: prov.apiId || undefined,
       tenantApiToken: prov.apiToken || undefined,

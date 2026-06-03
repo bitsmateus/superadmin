@@ -1,5 +1,8 @@
 import { query, queryOne } from '../db.js';
-import { sendSupportGroupMessage } from '../lib/supportGroup.js';
+import { sendSupportGroupMessage, sendWhatsAppToNumber } from '../lib/supportGroup.js';
+
+const APP_URL = (process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+const BRIEFING_REMINDER_HOURS = [9, 15]; // cobranças de preenchimento
 
 const TZ = 'America/Sao_Paulo';
 const SEND_HOUR = 7; // 07h
@@ -135,6 +138,51 @@ async function buildDigest(): Promise<string> {
   return out.join('\n');
 }
 
+type BriefPendingRow = { briefing_number: string | null; briefing_token: string | null; company: string | null; name: string };
+
+/** Cobra (9h/15h) o preenchimento do briefing no WhatsApp do cliente. */
+async function maybeRunBriefingReminders(now: Date): Promise<void> {
+  const { hour, minute } = spHourMin(now);
+  if (!BRIEFING_REMINDER_HOURS.includes(hour) || minute > WINDOW_MIN) return;
+
+  const todayStr = spDateStr(now);
+  const slotKey = `${todayStr}-${hour}`;
+  const row = await queryOne<{ support_group: Record<string, unknown> | null }>(
+    'SELECT support_group FROM settings WHERE id = true'
+  );
+  const g = (row?.support_group ?? {}) as Record<string, unknown>;
+  if (!g.apiId || !g.token) return; // sem credenciais
+  if ((g.briefRemind as string) === slotKey) return; // já cobrou neste slot
+
+  const pending = await query<BriefPendingRow>(
+    `SELECT briefing_number, briefing_token, company, name
+     FROM clients
+     WHERE briefing_status = 'sent'
+       AND briefing_number IS NOT NULL AND briefing_number <> ''`
+  );
+
+  let sent = 0;
+  for (const c of pending) {
+    if (!c.briefing_number) continue;
+    const link = APP_URL && c.briefing_token ? `${APP_URL}/briefing/${c.briefing_token}` : '';
+    const co = (c.company && c.company.trim()) || c.name;
+    const msg =
+      `Olá! 👋 Passando para lembrar que ainda falta preencher o briefing de onboarding da ${co}.` +
+      (link ? `\n\n👉 ${link}` : '') +
+      `\n\nAssim que preencher, seguimos com a configuração. Qualquer dúvida, é só chamar! 😊`;
+    const res = await sendWhatsAppToNumber(c.briefing_number, msg);
+    if (res.ok) sent++;
+  }
+
+  await query(
+    `UPDATE settings
+     SET support_group = jsonb_set(COALESCE(support_group, '{}'::jsonb), '{briefRemind}', to_jsonb($1::text))
+     WHERE id = true`,
+    [slotKey]
+  );
+  if (sent > 0) console.log(`[briefing] cobranças enviadas (${slotKey}):`, sent);
+}
+
 let ticking = false;
 
 /** Inicia o agendador do digest diário (checa a cada minuto). */
@@ -144,6 +192,10 @@ export function startDailyDigest(): void {
     ticking = true;
     try {
       const now = new Date();
+
+      // Cobranças de preenchimento do briefing (9h/15h).
+      await maybeRunBriefingReminders(now);
+
       const todayStr = spDateStr(now);
       const row = await queryOne<{ support_group: Record<string, unknown> | null }>(
         'SELECT support_group FROM settings WHERE id = true'

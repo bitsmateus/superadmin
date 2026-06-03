@@ -377,8 +377,13 @@ function subscribeRealtime() {
       }
       const next = rowToClient(data as ClientRow)
       const idx = clientsCache.findIndex((c) => c.id === next.id)
+      const prev = idx === -1 ? undefined : clientsCache[idx]
       if (idx === -1) { clientsCache = [next, ...clientsCache] }
       else { const copy = clientsCache.slice(); copy[idx] = next; clientsCache = copy }
+      // Alerta na tela (canto superior) quando um briefing acabou de ser preenchido.
+      if (prev && prev.briefingStatus !== 'filled' && next.briefingStatus === 'filled') {
+        toast.success(`📋 Briefing preenchido: ${next.company || next.name}`, { duration: 8000 })
+      }
       notify()
     } else if (table === 'settings') {
       if (type !== 'DELETE') {

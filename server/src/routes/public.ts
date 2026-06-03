@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
+import { sendSupportGroupMessage } from '../lib/supportGroup.js';
 
 export async function publicRoutes(app: FastifyInstance) {
   // POST /api/public/ficha — formulário público de cadastro. Cria um cliente
@@ -73,10 +74,24 @@ export async function publicRoutes(app: FastifyInstance) {
       const newLog = { id: uuidv4(), action: 'Briefing preenchido pelo cliente', createdAt: new Date().toISOString() };
       const logs = [...(existing.logs as unknown[] ?? []), newLog];
 
-      await query(
-        `UPDATE clients SET briefing_data = $1, briefing_status = 'filled', logs = $2 WHERE briefing_token = $3`,
+      // Ao preencher, move de "Briefing" para "Configuração" (setup).
+      const [updated] = await query<{ company: string | null; name: string }>(
+        `UPDATE clients
+         SET briefing_data = $1,
+             briefing_status = 'filled',
+             stage = CASE WHEN stage = 'briefing' THEN 'setup' ELSE stage END,
+             stage_updated_at = CASE WHEN stage = 'briefing' THEN NOW() ELSE stage_updated_at END,
+             logs = $2
+         WHERE briefing_token = $3
+         RETURNING company, name`,
         [JSON.stringify(data), JSON.stringify(logs), token]
       );
+
+      // Notifica o grupo do WhatsApp (não bloqueia a resposta).
+      if (updated) {
+        const co = (updated.company && updated.company.trim()) || updated.name;
+        void sendSupportGroupMessage(`✅ Briefing preenchido — ${co}. Movido para Configuração.`);
+      }
       return { ok: true };
     }
   );

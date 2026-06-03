@@ -398,9 +398,16 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
   }
 
   if (key === 'channel') {
+    // Resolve o id do tenant: do passo anterior (memória) OU do que ficou salvo
+    // no cliente (sobrevive a recarregar a página). Nunca envia 0.
+    const tenantId = prov.tenantId ?? db.getClient(client.id)?.tenantId
+    if (!tenantId) {
+      throw new Error('Tenant criado, mas o id não foi capturado. Recarregue a página e provisione de novo.')
+    }
+    prov.tenantId = tenantId
     const sessionType = String(client.briefingData?.whatsappType || 'baileys')
     const session = await tenantsApi.createSession(server, {
-      tenant: prov.tenantId ?? 0,
+      tenant: tenantId,
       name: `${client.company || client.name} WhatsApp`.slice(0, 60),
       status: 'DISCONNECTED',
       type: sessionType,
@@ -415,15 +422,19 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
   }
 
   if (key === 'api') {
+    const tenantId = prov.tenantId ?? db.getClient(client.id)?.tenantId
+    if (!tenantId) {
+      throw new Error('Tenant id não disponível. Recarregue a página e provisione de novo.')
+    }
     prov.apiToken = genToken()
     const apiResp = await tenantsApi.createApi(server, {
       name: `API ${client.company || client.name}`.slice(0, 60),
       sessionId: (prov as Record<string, unknown>).sessionId as string | number | undefined,
       urlServiceStatus: null,
       urlMessageStatus: null,
-      userId: prov.userId as string | number,
+      userId: (prov.userId ?? 1) as string | number,
       authToken: prov.apiToken,
-      tenant: prov.tenantId ?? 0,
+      tenant: tenantId,
     })
     const aObj = (pick(apiResp, 'api', 'data') as Record<string, unknown> | undefined) ?? apiResp
     const createdApiId = pick(aObj, 'id', 'apiId', 'api_id')

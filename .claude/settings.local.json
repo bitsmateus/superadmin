@@ -35,7 +35,10 @@
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\mateu\\\\Desktop\\\\superadmin\" -Force)",
       "Bash(Select-Object Name)",
       "Bash(git reset *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(grep -cE '\\\\b__TRACKED_VAR__\\\\b' src/pages/SettingsPage.tsx)",
+      "Bash(sed -i '50,160d' src/components/crm/CrmSettingsSection.tsx)",
+      "Bash(sed -n '47,53p' src/components/crm/CrmSettingsSection.tsx)"
     ]
   }
 }

@@ -1083,6 +1083,8 @@ function GroupConfigModal({
   const [apiId, setApiId] = React.useState(sg?.apiId || '')
   const [groupId, setGroupId] = React.useState(sg?.groupId || '')
   const [token, setToken] = React.useState('')
+  const [digestEnabled, setDigestEnabled] = React.useState(sg?.digestEnabled !== false)
+  const [digestHour, setDigestHour] = React.useState(String(sg?.digestHour ?? 7))
   const [saving, setSaving] = React.useState(false)
 
   const save = async () => {
@@ -1090,6 +1092,7 @@ function GroupConfigModal({
       toast.error('Informe o ApiID e o ID do grupo')
       return
     }
+    const hour = Math.min(23, Math.max(0, parseInt(digestHour, 10) || 7))
     setSaving(true)
     db.saveSettings({
       ...db.getSettings(),
@@ -1098,6 +1101,8 @@ function GroupConfigModal({
         apiId: apiId.trim(),
         groupId: groupId.trim(),
         token: token.trim(), // vazio = mantém o atual (merge no backend)
+        digestEnabled,
+        digestHour: hour,
       },
     })
     setSaving(false)
@@ -1139,6 +1144,30 @@ function GroupConfigModal({
           onChange={(e) => setGroupId(e.target.value)}
           placeholder="number do grupo (ex.: 12356...@g.us)"
         />
+
+        <div className="rounded-lg border border-line bg-elevate/[0.02] p-3">
+          <label className="flex items-center gap-2 text-sm text-foreground/80">
+            <input
+              type="checkbox"
+              checked={digestEnabled}
+              onChange={(e) => setDigestEnabled(e.target.checked)}
+              className="h-4 w-4 accent-[#4F8EF7]"
+            />
+            Enviar resumo diário automático
+          </label>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-foreground/55">Horário (0–23h, fuso de São Paulo):</span>
+            <input
+              type="number"
+              min={0}
+              max={23}
+              value={digestHour}
+              onChange={(e) => setDigestHour(e.target.value)}
+              disabled={!digestEnabled}
+              className="h-8 w-16 rounded-lg border border-line bg-elevate/[0.04] px-2 text-sm text-foreground outline-none focus:border-accent/40 disabled:opacity-50"
+            />
+          </div>
+        </div>
       </div>
     </Modal>
   )

@@ -329,6 +329,10 @@ export interface SupportGroupConfig {
   groupId?: string
   /** Indica que há token salvo (preenchido pelo GET). */
   tokenSet?: boolean
+  /** Hora (0–23, fuso São Paulo) do envio automático do resumo. Default 7. */
+  digestHour?: number
+  /** Liga/desliga o envio automático diário. Default ligado. */
+  digestEnabled?: boolean
 }
 
 export interface StageHistoryEntry {

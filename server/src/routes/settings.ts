@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { queryOne, query } from '../db.js';
+import { sendSupportGroupMessage } from '../lib/supportGroup.js';
 
 export async function settingsRoutes(app: FastifyInstance) {
   // GET /api/settings — token dos servers é mascarado (nunca vai pro front).
@@ -66,6 +67,8 @@ export async function settingsRoutes(app: FastifyInstance) {
         delete rest.tokenSet;
         const token = typeof sg.token === 'string' ? sg.token.trim() : '';
         rest.token = token || (prev.token as string) || '';
+        // Preserva o controle de envio do digest (gerido pelo job).
+        if (prev.lastDigestDate && !rest.lastDigestDate) rest.lastDigestDate = prev.lastDigestDate;
         supportGroupParam = JSON.stringify(rest);
       }
 
@@ -129,40 +132,15 @@ export async function settingsRoutes(app: FastifyInstance) {
     '/api/support-group/send',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const text = (req.body?.text ?? '').toString().trim();
-      if (!text) return reply.status(400).send({ message: 'Mensagem vazia' });
-
-      const row = await queryOne<{ support_group: Record<string, unknown> | null }>(
-        'SELECT support_group FROM settings WHERE id = true'
-      );
-      const g = (row?.support_group ?? {}) as Record<string, unknown>;
-      const apiId = (g.apiId as string) || '';
-      const token = (g.token as string) || '';
-      const groupId = (g.groupId as string) || '';
-      const base = ((g.baseUrl as string) || 'https://appapi.nxsystems.com.br').replace(/\/$/, '');
-      if (!apiId || !token || !groupId) {
+      const text = (req.body?.text ?? '').toString();
+      const res = await sendSupportGroupMessage(text);
+      if (res.ok) return { ok: true };
+      if (res.reason === 'empty') return reply.status(400).send({ message: 'Mensagem vazia' });
+      if (res.reason === 'not_configured')
         return reply.status(400).send({ message: 'Grupo do WhatsApp não configurado' });
-      }
-
-      try {
-        const resp = await fetch(`${base}/v2/api/external/${encodeURIComponent(apiId)}/group`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            body: text,
-            number: groupId,
-            externalKey: 'support-alert',
-            isClosed: false,
-          }),
-        });
-        if (!resp.ok) {
-          const t = await resp.text().catch(() => '');
-          return reply.status(502).send({ message: `Falha ao enviar (NX ${resp.status})`, detail: t.slice(0, 300) });
-        }
-        return { ok: true };
-      } catch (err) {
-        return reply.status(502).send({ message: 'Erro de rede ao enviar', detail: String(err).slice(0, 300) });
-      }
+      return reply
+        .status(502)
+        .send({ message: `Falha ao enviar${res.status ? ` (NX ${res.status})` : ''}`, detail: res.detail });
     }
   );
 }

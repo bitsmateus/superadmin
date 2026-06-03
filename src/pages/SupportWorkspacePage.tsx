@@ -710,7 +710,10 @@ function TaskModal({
   const [title, setTitle] = React.useState(initial?.title ?? '')
   const [clientId, setClientId] = React.useState(initial?.clientId ?? '')
   const [notes, setNotes] = React.useState(initial?.notes ?? '')
-  const [due, setDue] = React.useState(toLocalInput(initial?.dueAt))
+  // Nova tarefa já vem com a data de hoje como prazo (editável).
+  const [due, setDue] = React.useState(
+    initial?.dueAt ? toLocalInput(initial.dueAt) : toLocalInput(new Date().toISOString()),
+  )
   const [assignee, setAssignee] = React.useState(initial?.userId || defaultAssignee || '')
   const [priority, setPriority] = React.useState<ReminderPriority>(initial?.priority ?? 'normal')
   const [status, setStatus] = React.useState<ReminderStatus>(initial?.status ?? 'todo')
@@ -797,7 +800,7 @@ function TaskModal({
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Data e hora">
+          <Field label="Prazo de entrega">
             <input
               type="datetime-local"
               value={due}

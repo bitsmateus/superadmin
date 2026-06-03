@@ -11,6 +11,7 @@ import { analyticsRoutes } from './routes/analytics.js';
 import { publicRoutes } from './routes/public.js';
 import { sseRoutes } from './routes/sse.js';
 import { proxyRoutes } from './routes/proxy.js';
+import { startDailyDigest } from './jobs/dailyDigest.js';
 
 async function main() {
   const app = Fastify({ logger: true });
@@ -52,6 +53,7 @@ async function main() {
 
   await runMigrations();
   await startRealtimeListener();
+  startDailyDigest();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

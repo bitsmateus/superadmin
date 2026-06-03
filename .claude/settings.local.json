@@ -38,7 +38,9 @@
       "Bash(git rm *)",
       "Bash(grep -cE '\\\\b__TRACKED_VAR__\\\\b' src/pages/SettingsPage.tsx)",
       "Bash(sed -i '50,160d' src/components/crm/CrmSettingsSection.tsx)",
-      "Bash(sed -n '47,53p' src/components/crm/CrmSettingsSection.tsx)"
+      "Bash(sed -n '47,53p' src/components/crm/CrmSettingsSection.tsx)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./server/package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")"
     ]
   }
 }

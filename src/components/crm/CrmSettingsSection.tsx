@@ -37,7 +37,6 @@ export function CrmSettingsSection() {
   return (
     <div className="space-y-6">
       <UserNameBlock />
-      <GoalsBlock />
       <NotificationsBlock />
       <NpsBlock />
       <AsaasBlock />
@@ -45,117 +44,6 @@ export function CrmSettingsSection() {
       <FollowUpBlock />
       <BackupBlock />
     </div>
-  )
-}
-
-function GoalsBlock() {
-  const settings = useSettings()
-  const [enabled, setEnabled] = React.useState(settings.goalsEnabled ?? false)
-  const [newClients, setNewClients] = React.useState(
-    settings.goalNewClientsMonthly?.toString() ?? '',
-  )
-  const [mrr, setMrr] = React.useState(
-    settings.goalMrrMonthly?.toString() ?? '',
-  )
-  const [nps, setNps] = React.useState(
-    settings.goalNpsMonthly?.toString() ?? '',
-  )
-
-  React.useEffect(() => {
-    setEnabled(settings.goalsEnabled ?? false)
-    setNewClients(settings.goalNewClientsMonthly?.toString() ?? '')
-    setMrr(settings.goalMrrMonthly?.toString() ?? '')
-    setNps(settings.goalNpsMonthly?.toString() ?? '')
-  }, [settings.goalsEnabled, settings.goalNewClientsMonthly, settings.goalMrrMonthly, settings.goalNpsMonthly])
-
-  const save = () => {
-    const nNew = newClients.trim() === '' ? undefined : Math.max(0, parseInt(newClients, 10))
-    const nMrr = mrr.trim() === '' ? undefined : Math.max(0, parseFloat(mrr.replace(',', '.')))
-    const nNps = nps.trim() === '' ? undefined : Math.max(-100, Math.min(100, parseInt(nps, 10)))
-    if (newClients.trim() && Number.isNaN(nNew!)) {
-      toast.error('Meta de novos clientes inválida.')
-      return
-    }
-    if (mrr.trim() && Number.isNaN(nMrr!)) {
-      toast.error('Meta de MRR inválida.')
-      return
-    }
-    if (nps.trim() && Number.isNaN(nNps!)) {
-      toast.error('Meta de NPS inválida.')
-      return
-    }
-    db.saveSettings({
-      goalsEnabled: enabled,
-      goalNewClientsMonthly: nNew,
-      goalMrrMonthly: nMrr,
-      goalNpsMonthly: nNps,
-    })
-    toast.success('Metas salvas')
-  }
-
-  return (
-    <section>
-      <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-success/10 text-success ring-1 ring-success/20">
-          <Trophy className="h-3.5 w-3.5" />
-        </span>
-        <div>
-          <h2 className="text-sm font-medium text-foreground">Metas do mês</h2>
-          <p className="text-xs text-foreground/45">
-            Aparecem no Dashboard e no Centro de Comando. Deixe em branco pra
-            esconder uma meta específica.
-          </p>
-        </div>
-      </header>
-      <div className="space-y-3 rounded-xl border border-line bg-card p-4">
-        <label className="inline-flex items-center gap-2 text-sm text-foreground/85 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-            className="h-4 w-4 accent-[#4F8EF7]"
-          />
-          Exibir metas
-        </label>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Input
-            label="Novos clientes / mês"
-            type="number"
-            min={0}
-            value={newClients}
-            onChange={(e) => setNewClients(e.target.value)}
-            placeholder="Ex.: 8"
-          />
-          <Input
-            label="MRR alvo (R$)"
-            type="number"
-            min={0}
-            step="0.01"
-            value={mrr}
-            onChange={(e) => setMrr(e.target.value)}
-            placeholder="Ex.: 15000"
-          />
-          <Input
-            label="NPS alvo (0-100)"
-            type="number"
-            min={-100}
-            max={100}
-            value={nps}
-            onChange={(e) => setNps(e.target.value)}
-            placeholder="Ex.: 70"
-          />
-        </div>
-        <div className="flex justify-end">
-          <Button
-            onClick={save}
-            size="sm"
-            leftIcon={<Save className="h-3.5 w-3.5" />}
-          >
-            Salvar metas
-          </Button>
-        </div>
-      </div>
-    </section>
   )
 }
 

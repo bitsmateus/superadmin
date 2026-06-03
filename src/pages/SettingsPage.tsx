@@ -16,8 +16,6 @@ import {
   RotateCcw,
   Save,
   Server as ServerIcon,
-  ShieldCheck,
-  Trash2,
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -31,7 +29,6 @@ import {
   ServerConfig,
   useAuthStore,
 } from '@/store/authStore'
-import { DEFAULT_SYSTEM_URL, useAccessStore } from '@/store/accessStore'
 import { tenantsApi } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { cn } from '@/lib/utils'
@@ -57,7 +54,7 @@ export function SettingsPage() {
     <>
       <TopBar
         title="Configurações"
-        subtitle="Servidores conectados e acesso ao sistema externo"
+        subtitle="Servidores e integrações do painel"
       />
 
       <div className="px-8 py-6 space-y-6">
@@ -110,8 +107,6 @@ export function SettingsPage() {
             ))}
           </div>
         </section>
-
-        <AccessSettings />
 
         <CrmSettingsSection />
       </div>
@@ -482,186 +477,5 @@ function ServerCard({
         </div>
       </div>
     </form>
-  )
-}
-
-const accessSchema = z.object({
-  masterkey: z.string().min(0).max(2048),
-  systemUrl: z
-    .string()
-    .min(8, 'URL inválida')
-    .url('URL inválida — use o formato https://…'),
-})
-type AccessFormValues = z.infer<typeof accessSchema>
-
-function AccessSettings() {
-  const {
-    masterkey,
-    systemUrl,
-    setMasterkey,
-    clearMasterkey,
-    setSystemUrl,
-    resetSystemUrl,
-  } = useAccessStore()
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isDirty, isValid },
-  } = useForm<AccessFormValues>({
-    resolver: zodResolver(accessSchema),
-    mode: 'onChange',
-    defaultValues: { masterkey: masterkey ?? '', systemUrl },
-  })
-
-  const [showKey, setShowKey] = React.useState(false)
-
-  const onSubmit = (values: AccessFormValues) => {
-    const url = values.systemUrl.trim()
-    setSystemUrl(url)
-    if (values.masterkey.trim()) setMasterkey(values.masterkey.trim())
-    else clearMasterkey()
-    reset({ masterkey: values.masterkey.trim(), systemUrl: url })
-    toast.success('Configurações de acesso salvas')
-  }
-
-  return (
-    <section>
-      <header className="mb-3">
-        <h2 className="text-sm font-medium text-foreground">Acesso ao sistema externo</h2>
-        <p className="text-xs text-foreground/45">
-          Masterkey lembrada e URL aberta pelo botão{' '}
-          <span className="text-foreground/70">Acessar</span> de cada tenant.
-        </p>
-      </header>
-
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        className="grid grid-cols-1 gap-6 lg:grid-cols-3"
-      >
-        <div className="lg:col-span-2 space-y-5">
-          <div className="rounded-xl border border-line bg-card p-5 space-y-4">
-            <Input
-              label="Masterkey"
-              type={showKey ? 'text' : 'password'}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="Cole aqui sua masterkey"
-              leftIcon={<KeyRound className="h-4 w-4" />}
-              rightIcon={
-                <button
-                  type="button"
-                  onClick={() => setShowKey((s) => !s)}
-                  aria-label={showKey ? 'Ocultar' : 'Mostrar'}
-                  className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
-                >
-                  {showKey ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              }
-              {...register('masterkey')}
-              error={errors.masterkey?.message}
-              hint={
-                masterkey
-                  ? 'Salva neste dispositivo (localStorage: tenanthub_masterkey).'
-                  : 'Deixe vazio para não salvar.'
-              }
-            />
-
-            <Input
-              label="URL do sistema"
-              placeholder={DEFAULT_SYSTEM_URL}
-              leftIcon={<ExternalLink className="h-4 w-4" />}
-              {...register('systemUrl')}
-              error={errors.systemUrl?.message}
-              hint="Aberta em nova aba ao clicar em Acessar."
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card px-5 py-4">
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={() => {
-                  clearMasterkey()
-                  reset({ masterkey: '', systemUrl })
-                  toast.success('Masterkey removida')
-                }}
-                disabled={!masterkey}
-                leftIcon={<Trash2 className="h-3.5 w-3.5" />}
-              >
-                Limpar masterkey salva
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  resetSystemUrl()
-                  reset({
-                    masterkey: masterkey ?? '',
-                    systemUrl: DEFAULT_SYSTEM_URL,
-                  })
-                  toast.success('URL do sistema restaurada')
-                }}
-                leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
-              >
-                URL padrão
-              </Button>
-            </div>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={!isDirty || !isValid}
-              leftIcon={<Save className="h-4 w-4" />}
-            >
-              Salvar acesso
-            </Button>
-          </div>
-        </div>
-
-        <aside className="space-y-4">
-          <div className="rounded-xl border border-line bg-card p-5">
-            <header className="mb-3 flex items-center gap-2">
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-elevate/[0.04] text-foreground/70 ring-1 ring-line">
-                <ShieldCheck className="h-4 w-4" />
-              </div>
-              <h3 className="text-sm font-medium text-foreground">Estado do acesso</h3>
-            </header>
-            <dl className="space-y-3 text-sm">
-              <div>
-                <dt className="text-[11px] uppercase tracking-wider text-foreground/40">
-                  Masterkey
-                </dt>
-                <dd className="mt-1 flex items-center gap-2">
-                  <Badge tone={masterkey ? 'success' : 'neutral'} dot>
-                    {masterkey ? 'Salva' : 'Não salva'}
-                  </Badge>
-                  {masterkey && (
-                    <span className="font-mono text-[11px] text-foreground/55">
-                      …{masterkey.slice(-4)}
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[11px] uppercase tracking-wider text-foreground/40">
-                  URL atual
-                </dt>
-                <dd className="mt-1 truncate text-foreground/85" title={systemUrl}>
-                  {systemUrl}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </aside>
-      </form>
-    </section>
   )
 }

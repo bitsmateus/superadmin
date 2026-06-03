@@ -1,7 +1,10 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import * as React from 'react'
 import {
+  Archive,
   BookOpen,
   Building2,
+  ChevronDown,
   Columns3,
   FileSearch,
   LayoutDashboard,
@@ -33,7 +36,6 @@ const primaryItems = [
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
-  { to: '/tickets', label: 'Tickets', icon: MessageCircle, badgeKey: 'tickets' as const },
 ]
 
 const ROLE_LABELS = {
@@ -57,24 +59,16 @@ export function Sidebar() {
   const unreadTickets = useUnreadTicketsCount()
   const myTasks = useMyOpenTaskCount(profile?.id)
 
+  const [archivedOpen, setArchivedOpen] = React.useState(false)
+
   const primary = [
     ...primaryItems,
-    ...(seeFinancials
-      ? [
-          { to: '/comando', label: 'Comando', icon: Zap },
-          { to: '/financeiro', label: 'Financeiro', icon: Wallet },
-          { to: '/nps', label: 'NPS', icon: Star },
-        ]
-      : []),
+    ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
   ]
 
   const secondaryItems = [
-    { to: '/templates', label: 'Templates', icon: MessageSquare },
     ...(isAdmin
       ? [{ to: '/kb', label: 'Conhecimento', icon: BookOpen }]
-      : []),
-    ...(isAdmin
-      ? [{ to: '/equipe', label: 'Performance', icon: Trophy }]
       : []),
     ...(isAdmin
       ? [{ to: '/users', label: 'Equipe', icon: ShieldCheck }]
@@ -83,6 +77,19 @@ export function Sidebar() {
       ? [{ to: '/auditoria', label: 'Auditoria', icon: FileSearch }]
       : []),
     { to: '/settings', label: 'Configurações', icon: Settings },
+  ]
+
+  // Movidos para "Arquivados" (acessíveis, fora do caminho do dia a dia).
+  const archivedItems = [
+    { to: '/tickets', label: 'Tickets', icon: MessageCircle },
+    ...(seeFinancials
+      ? [
+          { to: '/comando', label: 'Comando', icon: Zap },
+          { to: '/financeiro', label: 'Financeiro', icon: Wallet },
+        ]
+      : []),
+    { to: '/templates', label: 'Templates', icon: MessageSquare },
+    ...(isAdmin ? [{ to: '/equipe', label: 'Performance', icon: Trophy }] : []),
   ]
 
   return (
@@ -174,6 +181,54 @@ export function Sidebar() {
             )}
           </NavLink>
         ))}
+
+        {/* Arquivados — recolhido por padrão */}
+        {archivedItems.length > 0 && (
+          <>
+            <div className="my-2 h-px bg-elevate/[0.05]" />
+            <button
+              type="button"
+              onClick={() => setArchivedOpen((o) => !o)}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-wider text-foreground/40 transition-colors hover:bg-elevate/[0.03] hover:text-foreground/70"
+            >
+              <Archive className="h-3.5 w-3.5 shrink-0" />
+              <span>Arquivados</span>
+              <ChevronDown
+                className={cn(
+                  'ml-auto h-3.5 w-3.5 transition-transform',
+                  archivedOpen ? '' : '-rotate-90',
+                )}
+              />
+            </button>
+            {archivedOpen &&
+              archivedItems.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    cn(
+                      'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                      isActive
+                        ? 'bg-elevate/[0.05] text-foreground'
+                        : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon
+                        className={cn(
+                          'h-4 w-4 shrink-0',
+                          isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                        )}
+                      />
+                      <span>{label}</span>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+          </>
+        )}
       </nav>
 
       <div className="border-t border-line p-3 space-y-1">

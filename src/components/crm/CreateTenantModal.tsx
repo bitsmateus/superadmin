@@ -25,7 +25,6 @@ import {
 } from '@/constants/checklist'
 import { cn, deriveSupportEmail } from '@/lib/utils'
 import type { Client } from '@/types/client'
-import type { Tenant } from '@/types'
 
 const FALLBACK_TENANT_PASSWORD = 'Nxim01@!'
 
@@ -358,14 +357,28 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       userName: client.name || 'Suporte',
       profile: 'admin',
     })
-    const t = created as Tenant
-    prov.tenantId = t.id ?? undefined
+    // A NX devolve { tenant: {...}, user: {...} }. Aceita também formato plano.
+    const resp = (created ?? {}) as Record<string, unknown>
+    const tenantObj = (
+      resp.tenant && typeof resp.tenant === 'object' ? resp.tenant : resp
+    ) as Record<string, unknown>
+    const userObj = (
+      resp.user && typeof resp.user === 'object' ? resp.user : undefined
+    ) as Record<string, unknown> | undefined
+
+    prov.tenantId =
+      (pick(tenantObj, 'id', 'tenantId', 'tenant_id') as string | number | undefined) ?? undefined
     prov.userId =
-      (pick(t, 'userId', 'user_id', 'ownerId', 'owner_id', 'adminUserId') as
+      (pick(userObj ?? {}, 'id', 'userId', 'user_id') as string | number | undefined) ??
+      (pick(tenantObj, 'ownerId', 'owner_id', 'userId', 'adminUserId') as
         | string
         | number
-        | undefined) ?? 1
-    prov.apiId = t.apiId != null ? String(t.apiId) : String(t.id ?? '')
+        | undefined) ??
+      1
+    const createdApiId = pick(tenantObj, 'apiId', 'api_id')
+    prov.apiId = createdApiId != null ? String(createdApiId) : String(prov.tenantId ?? '')
+
+    const tName = pick(tenantObj, 'name')
     const enriched = enrichChecklistFromBriefing(
       client.deliveryChecklist,
       client.briefingData,
@@ -375,12 +388,12 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       tenantId: prov.tenantId !== undefined ? String(prov.tenantId) : undefined,
       tenantServerId: server.id,
       tenantApiId: prov.apiId || undefined,
-      tenantName: typeof t.name === 'string' ? t.name : undefined,
+      tenantName: typeof tName === 'string' ? tName : undefined,
       supportEmail: finalEmail,
       supportPassword: tenantPassword,
       deliveryChecklist: setChecklistItem(enriched, 'tenant_created', true, user),
     })
-    db.addLog(client.id, 'Tenant criado', `${server.name} · ${finalEmail}`)
+    db.addLog(client.id, 'Tenant criado', `${server.name} · ${finalEmail} · tenant #${prov.tenantId ?? '?'}`)
     return server.name
   }
 
@@ -393,7 +406,8 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       type: sessionType,
     })
     prov.channelCreated = true
-    ;(prov as Record<string, unknown>).sessionId = pick(session, 'id', 'sessionId', 'session_id')
+    const sObj = (pick(session, 'session', 'data') as Record<string, unknown> | undefined) ?? session
+    ;(prov as Record<string, unknown>).sessionId = pick(sObj, 'id', 'sessionId', 'session_id')
     db.updateClient(client.id, {
       deliveryChecklist: setChecklistItem(currentChecklist(), 'channels_created', true, 'Sistema'),
     })
@@ -411,7 +425,8 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       authToken: prov.apiToken,
       tenant: prov.tenantId ?? 0,
     })
-    const createdApiId = pick(apiResp, 'id', 'apiId', 'api_id')
+    const aObj = (pick(apiResp, 'api', 'data') as Record<string, unknown> | undefined) ?? apiResp
+    const createdApiId = pick(aObj, 'id', 'apiId', 'api_id')
     if (createdApiId != null) prov.apiId = String(createdApiId)
     db.updateClient(client.id, {
       tenantApiId: prov.apiId || undefined,

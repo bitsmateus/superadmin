@@ -379,6 +379,26 @@ export async function teardownDb(): Promise<void> {
   notify()
 }
 
+/**
+ * Busca a linha COMPLETA de um cliente no backend e funde na cache. Usado pelo
+ * SSE quando o payload vem truncado (limite do pg_notify) e ao abrir o drawer.
+ */
+async function loadFullClientById(id: string): Promise<void> {
+  try {
+    const row = await api.get<ClientRow>(`/api/clients/${id}`)
+    if (!row) return
+    const full = rowToClient(row)
+    const idx = clientsCache.findIndex((c) => c.id === id)
+    const prev = idx === -1 ? undefined : clientsCache[idx]
+    if (idx === -1) clientsCache = [full, ...clientsCache]
+    else { const copy = clientsCache.slice(); copy[idx] = full; clientsCache = copy }
+    if (prev && prev.briefingStatus !== 'filled' && full.briefingStatus === 'filled') {
+      toast.success(`📋 Briefing preenchido: ${full.company || full.name}`, { duration: 8000 })
+    }
+    notify()
+  } catch { /* mantém a versão da cache */ }
+}
+
 function subscribeRealtime() {
   if (unsubSse) return
   unsubSse = onSseEvent((table, type, data) => {
@@ -386,6 +406,17 @@ function subscribeRealtime() {
       if (type === 'DELETE') {
         const id = (data as { id?: string }).id
         if (id) { clientsCache = clientsCache.filter((c) => c.id !== id); notify() }
+        return
+      }
+      // O pg_notify tem limite de ~8 KB; o trigger trunca payloads grandes para
+      // apenas { id }. Reconstruir o cliente a partir disso geraria um registro
+      // vazio (sem name/stage/archived_at) que sobrescreveria a cache e zeraria
+      // a linha (ou faria um arquivado reaparecer). Quando vier truncado,
+      // buscamos a linha COMPLETA no backend em vez de reconstruir.
+      const raw = data as Partial<ClientRow>
+      const truncated = raw.id != null && (raw.name === undefined || raw.stage === undefined)
+      if (truncated) {
+        void loadFullClientById(raw.id as string)
         return
       }
       const next = rowToClient(data as ClientRow)
@@ -437,15 +468,7 @@ export const db = {
    * massa) e funde na cache. Chamado ao abrir o drawer.
    */
   async loadFullClient(id: string): Promise<void> {
-    try {
-      const row = await api.get<ClientRow>(`/api/clients/${id}`)
-      if (!row) return
-      const full = rowToClient(row)
-      const idx = clientsCache.findIndex((c) => c.id === id)
-      if (idx === -1) clientsCache = [full, ...clientsCache]
-      else { const copy = clientsCache.slice(); copy[idx] = full; clientsCache = copy }
-      notify()
-    } catch { /* mantém a versão da cache */ }
+    await loadFullClientById(id)
   },
 
   /** Lista COMPLETA (com campos pesados) — usada só pelo backup. */

@@ -3,7 +3,16 @@ import type { ServerConfig } from '@/store/authStore'
 import { db } from '@/services/db'
 
 export const DEFAULT_CLIENT_PASSWORD = '12345678'
+/** Senha padrão com que os usuários do briefing são criados no tenant. */
+export const DEFAULT_TENANT_PASSWORD = 'Nxim01@!'
 export const SUPPORT_PHONE = '48 93618-0186'
+
+/** E-mails dos usuários cadastrados no briefing (login do cliente, sem suporte). */
+function briefingUserEmails(client: Client): { name: string; email: string }[] {
+  return (client.briefingData?.users ?? [])
+    .filter((u) => u.email?.trim())
+    .map((u) => ({ name: u.name?.trim() || 'Usuário', email: u.email.trim() }))
+}
 
 export interface AccessSheetParams {
   client: Client
@@ -40,8 +49,9 @@ export function buildAccessEmail({ client, server, password }: AccessSheetParams
   const company = client.company || client.name || ''
   const loginUrl = server?.loginUrl || ''
   const settings = db.getSettings()
-  const effectivePassword = password ?? settings.defaultAccessPassword ?? DEFAULT_CLIENT_PASSWORD
-  const login = client.supportEmail || ''
+  // Senha padrão com que os usuários do briefing foram criados no tenant.
+  const effectivePassword = password || settings.defaultTenantPassword || DEFAULT_TENANT_PASSWORD
+  const users = briefingUserEmails(client)
   const supportPhone = settings.supportPhone ?? SUPPORT_PHONE
   const accesses = (client.accesses ?? []).filter((a) => a.name?.trim())
 
@@ -50,8 +60,13 @@ export function buildAccessEmail({ client, server, password }: AccessSheetParams
   lines.push('')
   lines.push('— Sistema de atendimento —')
   if (loginUrl) lines.push(`Endereço: ${loginUrl}`)
-  if (login) lines.push(`E-mail / login: ${login}`)
-  lines.push(`Senha: ${effectivePassword}`)
+  if (users.length > 0) {
+    lines.push('')
+    lines.push('Usuários (login = e-mail):')
+    for (const u of users) lines.push(`• ${u.name}: ${u.email}`)
+  }
+  lines.push('')
+  lines.push(`Senha inicial (todos): ${effectivePassword}`)
   lines.push('')
   lines.push('⚠️ Por segurança, troque a senha no primeiro acesso (Perfil > Alterar senha).')
   if (accesses.length > 0) {
@@ -110,8 +125,12 @@ function renderAccessSheetHtml({ client, server, password, supportPhone }: Acces
   const company = client.company || client.name || '—'
   const loginUrl = server?.loginUrl || '—'
   const settings = db.getSettings()
-  const effectivePassword = password ?? settings.defaultAccessPassword ?? DEFAULT_CLIENT_PASSWORD
+  // Senha padrão com que os usuários do briefing foram criados no tenant.
+  const effectivePassword = password || settings.defaultTenantPassword || DEFAULT_TENANT_PASSWORD
   const effectiveSupportPhone = supportPhone ?? settings.supportPhone ?? SUPPORT_PHONE
+  // Logins do cliente = e-mails do briefing (sem o acesso de suporte).
+  const users = briefingUserEmails(client)
+  const userRows = users.map((u) => row(u.name, u.email)).join('')
 
   // Extra accesses from client.accesses
   const accesses = (client.accesses ?? []).filter((a) => a.name?.trim())
@@ -124,8 +143,6 @@ function renderAccessSheetHtml({ client, server, password, supportPhone }: Acces
         ${a.password ? row('Senha', a.password, true) : ''}
       </div>
     </div>`).join('')
-
-  const hasEmail = Boolean(client.supportEmail)
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -330,16 +347,31 @@ function renderAccessSheetHtml({ client, server, password, supportPhone }: Acces
       <div class="card-header">Sistema de atendimento</div>
       <div class="card-body">
         ${row('Endereço', loginUrl)}
-        ${hasEmail ? row('E-mail', client.supportEmail!) : ''}
-        ${row('Senha inicial', effectivePassword, true)}
       </div>
     </div>
+
+    ${
+      users.length > 0
+        ? `<div class="section-label">Usuários do cliente</div>
+    <div class="card">
+      <div class="card-header">Login = e-mail · senha inicial igual para todos</div>
+      <div class="card-body">
+        ${userRows}
+        ${row('Senha inicial', effectivePassword, true)}
+      </div>
+    </div>`
+        : `<div class="card">
+      <div class="card-body">
+        ${row('Senha inicial', effectivePassword, true)}
+      </div>
+    </div>`
+    }
 
     <div class="notice">
       <div class="notice-icon">🔒</div>
       <div>
-        <strong>Segurança:</strong> Recomendamos alterar a senha inicial no primeiro acesso.
-        Após entrar, vá em <em>Perfil → Alterar senha</em> para definir uma senha pessoal.
+        <strong>Segurança:</strong> Cada usuário entra com o próprio e-mail e a senha inicial acima.
+        Recomendamos alterar a senha no primeiro acesso em <em>Perfil → Alterar senha</em>.
       </div>
     </div>
 

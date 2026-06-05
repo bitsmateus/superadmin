@@ -41,6 +41,22 @@ export async function publicRoutes(app: FastifyInstance) {
           JSON.stringify([log]),
         ]
       );
+
+      // Notifica o grupo do WhatsApp (não bloqueia a resposta).
+      const detalhes: string[] = [];
+      if (ficha.cnpj) detalhes.push(`CNPJ: ${ficha.cnpj}`);
+      if (ficha.cpfResponsavel) detalhes.push(`CPF resp.: ${ficha.cpfResponsavel}`);
+      if (ficha.paymentDay) detalhes.push(`Pagamento: dia ${ficha.paymentDay}`);
+      if (ficha.needsNF === true) detalhes.push('Emite NF: sim');
+      else if (ficha.needsNF === false) detalhes.push('Emite NF: não');
+      if (ficha.nfEmail) detalhes.push(`E-mail: ${ficha.nfEmail}`);
+      if (ficha.nfNumber) detalhes.push(`Telefone: ${ficha.nfNumber}`);
+      const msg =
+        `🆕 Nova ficha de cadastro — ${company}\n` +
+        `Entrou na etapa Boas-vindas.` +
+        (detalhes.length > 0 ? `\n\n${detalhes.join('\n')}` : '');
+      void sendSupportGroupMessage(msg);
+
       return reply.status(201).send({ ok: true, id: row.id });
     }
   );

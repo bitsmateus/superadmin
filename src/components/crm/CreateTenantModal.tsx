@@ -393,11 +393,16 @@ const LABELS: Record<string, string> = {
 
 function buildSteps(officialOnly: boolean, hasUsers: boolean): ProvStep[] {
   const list: ProvStep[] = [{ key: 'tenant', label: LABELS.tenant, status: 'idle' }]
+  // O canal WhatsApp (sessão baileys) só é criado na API Comum. Na API Oficial
+  // a conexão é via Meta, então pulamos o canal.
   if (!officialOnly) {
     list.push({ key: 'channel', label: LABELS.channel, status: 'idle' })
-    list.push({ key: 'api', label: LABELS.api, status: 'idle' })
-    list.push({ key: 'queues', label: LABELS.queues, status: 'idle' })
   }
+  // A API e as filas são necessárias em AMBOS os casos: é a API do tenant que
+  // hospeda usuários e filas e fornece o token de /v2/api/external/{apiId}.
+  // Sem ela, "Criar usuários" falha com "Invalid token".
+  list.push({ key: 'api', label: LABELS.api, status: 'idle' })
+  list.push({ key: 'queues', label: LABELS.queues, status: 'idle' })
   if (hasUsers) list.push({ key: 'users', label: LABELS.users, status: 'idle' })
   return list
 }

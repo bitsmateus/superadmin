@@ -54,14 +54,15 @@ export function ClientsPage() {
   const seeFinancials = canSeeFinancials(profile?.role)
   const canDelete = canDeleteClient(profile?.role)
 
-  const onDelete = (id: string, label: string) => {
+  const onArchive = (id: string, label: string) => {
     const ok = window.confirm(
-      `Excluir permanentemente "${label}"?\n\n` +
-        'Esta ação é irreversível e apaga o cliente, briefing, histórico e ' +
-        'financeiro. Para apenas arquivar, mova para "Cancelado".',
+      `Arquivar "${label}"?\n\n` +
+        'O cliente sai do pipeline e da lista, mas pode ser restaurado ou ' +
+        'excluído permanentemente na tela "Arquivados".',
     )
     if (!ok) return
-    void db.removeClient(id).then(() => toast.success('Cliente excluído'))
+    db.archiveClient(id)
+    toast.success('Cliente arquivado')
   }
   const [search, setSearch] = React.useState('')
   const [stageFilter, setStageFilter] = React.useState<PipelineStage | 'all'>(
@@ -320,10 +321,10 @@ export function ClientsPage() {
                         {canDelete && (
                           <button
                             type="button"
-                            title="Excluir permanentemente"
+                            title="Arquivar cliente"
                             onClick={(e) => {
                               e.stopPropagation()
-                              onDelete(c.id, c.company || c.name)
+                              onArchive(c.id, c.company || c.name)
                             }}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
                           >

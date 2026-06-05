@@ -69,7 +69,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
   const [stageMenu, setStageMenu] = React.useState(false)
   const stageMenuRef = React.useRef<HTMLDivElement>(null)
   useOutsideClose(stageMenuRef, stageMenu, () => setStageMenu(false))
-  const [confirmChurn, setConfirmChurn] = React.useState(false)
+  const [confirmArchive, setConfirmArchive] = React.useState(false)
   const [user] = useCurrentUser()
   const { profile } = useAuth()
   const seeFinancials = canSeeFinancials(profile?.role)
@@ -81,7 +81,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
   React.useEffect(() => {
     setTab('overview')
     setStageMenu(false)
-    setConfirmChurn(false)
+    setConfirmArchive(false)
   }, [clientId])
 
   if (!clientId || !client) {
@@ -107,11 +107,10 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
     setStageMenu(false)
   }
 
-  const churn = () => {
-    db.updateClient(client.id, { stage: 'churned' })
-    db.addLog(client.id, 'Cliente marcado como cancelado')
-    toast.success('Cliente marcado como cancelado')
-    setConfirmChurn(false)
+  const archive = () => {
+    db.archiveClient(client.id)
+    toast.success('Cliente arquivado · veja em "Arquivados"')
+    setConfirmArchive(false)
     onClose()
   }
 
@@ -208,8 +207,9 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
               {canDelete && (
                 <button
                   type="button"
-                  onClick={() => setConfirmChurn(true)}
-                  aria-label="Marcar como cancelado"
+                  onClick={() => setConfirmArchive(true)}
+                  aria-label="Arquivar cliente"
+                  title="Arquivar cliente"
                   className="ml-auto rounded-md p-2 text-foreground/40 hover:bg-danger/10 hover:text-danger transition-colors"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -277,27 +277,28 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
       </Drawer>
 
       <Modal
-        open={confirmChurn}
-        onClose={() => setConfirmChurn(false)}
-        title="Marcar como cancelado"
+        open={confirmArchive}
+        onClose={() => setConfirmArchive(false)}
+        title="Arquivar cliente"
         size="sm"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setConfirmChurn(false)}>
+            <Button variant="secondary" onClick={() => setConfirmArchive(false)}>
               Cancelar
             </Button>
-            <Button variant="danger" onClick={churn}>
-              Marcar como cancelado
+            <Button variant="danger" onClick={archive}>
+              Arquivar
             </Button>
           </>
         }
       >
         <p className="text-sm text-foreground/70">
-          Confirma marcar{' '}
+          Confirma arquivar{' '}
           <span className="font-semibold text-foreground">
             {asText(client.name)}
-          </span>{' '}
-          como cancelado? Ele sai do pipeline ativo (vai para "churned").
+          </span>
+          ? Ele sai do pipeline e da lista de clientes, mas você pode restaurá-lo
+          ou excluí-lo permanentemente na tela <strong>Arquivados</strong>.
         </p>
       </Modal>
     </>

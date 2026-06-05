@@ -68,6 +68,10 @@ export async function runMigrations() {
   // Ficha de cadastro (formulário público) + número pessoal do cliente.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS ficha_cadastro JSONB`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS briefing_number TEXT`);
+  // Arquivamento (soft-delete): card sai do pipeline mas pode ser restaurado
+  // ou excluído permanentemente na tela de Arquivados.
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS clients_archived_at_idx ON clients(archived_at)`);
   console.log('[db] migrations applied');
 }
 

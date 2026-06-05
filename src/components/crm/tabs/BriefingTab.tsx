@@ -139,9 +139,9 @@ export function BriefingTab({ client }: { client: Client }) {
     setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val])
   }
 
+  // Automação (chatbot/IA) é opcional — o briefing pode ser gerado sem ela.
   const configComplete =
     config.connectionTypes.length > 0 &&
-    config.automationTypes.length > 0 &&
     config.channels.length > 0 &&
     config.maxUsers > 0
 
@@ -280,7 +280,7 @@ export function BriefingTab({ client }: { client: Client }) {
             ))}
           </ConfigGroup>
 
-          <ConfigGroup label="Automação *">
+          <ConfigGroup label="Automação (opcional)">
             {AUTOMATION_OPTIONS.map((opt) => (
               <ChipBtn
                 key={opt.value}
@@ -1098,21 +1098,48 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
           ))}
       </Accordion>
 
-      {data.mainFlow && (
+      {(data.greetingMessage ||
+        data.offHoursMessage ||
+        data.mainFlow ||
+        data.departments.length > 0) && (
         <Accordion title="5. Chatbot" defaultOpen>
-          <Row k="Fluxo principal" v={data.mainFlow} />
+          {data.mainFlow && <Row k="Fluxo principal" v={data.mainFlow} />}
           <Row k="Saudação" v={data.greetingMessage} />
           <Row k="Fora do horário" v={data.offHoursMessage} />
-          <Row k="Departamentos" v={data.departments.join(', ')} />
+          {data.departments.length > 0 && (
+            <Row k="Departamentos" v={data.departments.join(', ')} />
+          )}
         </Accordion>
       )}
 
       {data.useAI && (
         <Accordion title="6. IA" defaultOpen>
           <Row k="Usar IA" v="Sim" />
+          <Row k="Nome da IA" v={data.aiAgentName} />
           <Row k="Tom" v={data.aiTone} />
-          <Row k="Instruções" v={data.aiInstructions} />
+          <Row k="Sobre a empresa" v={data.aiCompanyDescription} />
+          <Row k="Localização" v={data.aiLocation} />
+          <Row k="Redes sociais" v={data.aiSocialMedia} />
+          <Row k="Serviços / produtos" v={data.aiServices} />
+          <Row k="Informa preços" v={data.aiHasPrices ? 'Sim' : 'Não'} />
+          {data.aiHasPrices && <Row k="Tabela de preços" v={data.aiPrices} />}
+          <Row k="Fluxo de atendimento" v={data.aiAttendanceFlow} />
+          <Row k="Quando transferir" v={data.aiTransferConditions} />
           <Row k="Restrições" v={data.aiRestrictions} />
+          {data.aiInstructions && <Row k="Instruções" v={data.aiInstructions} />}
+          {(data.aiExternalSystem ||
+            data.aiExternalApiUrl ||
+            data.aiExternalWhatToQuery ||
+            data.aiExternalAuth ||
+            data.aiExternalExamples) && (
+            <>
+              <Row k="Sistema externo" v={data.aiExternalSystem} />
+              <Row k="URL da API" v={data.aiExternalApiUrl} />
+              <Row k="O que consultar" v={data.aiExternalWhatToQuery} />
+              <Row k="Autenticação" v={data.aiExternalAuth} />
+              <Row k="Exemplos de consulta" v={data.aiExternalExamples} />
+            </>
+          )}
         </Accordion>
       )}
 

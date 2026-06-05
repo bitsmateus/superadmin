@@ -154,13 +154,17 @@ CREATE TABLE IF NOT EXISTS clients (
   platform_web BOOLEAN NOT NULL DEFAULT FALSE,
   platform_chat BOOLEAN NOT NULL DEFAULT FALSE,
   contract_file TEXT,
-  contract_file_name TEXT
+  contract_file_name TEXT,
+
+  -- Arquivamento (soft-delete): card sai do pipeline mas pode ser restaurado.
+  archived_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS clients_stage_idx ON clients(stage);
 CREATE INDEX IF NOT EXISTS clients_created_at_idx ON clients(created_at DESC);
 CREATE INDEX IF NOT EXISTS clients_briefing_token_idx ON clients(briefing_token);
 CREATE INDEX IF NOT EXISTS clients_email_lower_idx ON clients(lower(email));
+CREATE INDEX IF NOT EXISTS clients_archived_at_idx ON clients(archived_at);
 
 -- Auto-touch updated_at
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS TRIGGER LANGUAGE plpgsql AS $$

@@ -292,6 +292,11 @@ export interface Client {
   followUpActive: boolean
   followUps: FollowUp[]
 
+  // Arquivamento (soft-delete). Quando preenchido, o cliente sai do pipeline e
+  // da lista ativa, indo para "Arquivados" — de onde pode ser restaurado ou
+  // excluído permanentemente.
+  archivedAt?: string
+
   // Geral
   notes: NoteEntry[]
   logs: LogEntry[]

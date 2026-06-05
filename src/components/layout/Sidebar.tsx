@@ -80,6 +80,7 @@ export function Sidebar() {
 
   // Movidos para "Arquivados" (acessíveis, fora do caminho do dia a dia).
   const archivedItems = [
+    { to: '/arquivados', label: 'Clientes arquivados', icon: Archive },
     { to: '/tickets', label: 'Tickets', icon: MessageCircle },
     ...(seeFinancials
       ? [

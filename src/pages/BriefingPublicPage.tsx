@@ -639,33 +639,16 @@ export function BriefingPublicPage() {
                         <div className="sm:col-span-3">
                           <Field label="Setor(es)">
                             {state.sectors.length > 0 ? (
-                              <div className="flex flex-wrap gap-1.5">
-                                {state.sectors.map((s) => {
-                                  const active = (u.sectors ?? []).includes(s)
-                                  return (
-                                    <button
-                                      key={s}
-                                      type="button"
-                                      onClick={() => {
-                                        const users = [...state.users]
-                                        const cur = users[i].sectors ?? []
-                                        const next = active
-                                          ? cur.filter((x) => x !== s)
-                                          : [...cur, s]
-                                        users[i] = { ...users[i], sectors: next }
-                                        setState({ ...state, users })
-                                      }}
-                                      className={
-                                        active
-                                          ? 'rounded-full border border-[#4F8EF7] bg-[#4F8EF7] px-2.5 py-1 text-xs font-medium text-white'
-                                          : 'rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-[#4F8EF7] hover:text-[#4F8EF7]'
-                                      }
-                                    >
-                                      {s}
-                                    </button>
-                                  )
-                                })}
-                              </div>
+                              <MultiSelectBar
+                                options={state.sectors}
+                                selected={u.sectors ?? []}
+                                onChange={(next) => {
+                                  const users = [...state.users]
+                                  users[i] = { ...users[i], sectors: next }
+                                  setState({ ...state, users })
+                                }}
+                                placeholder="Selecione os setores"
+                              />
                             ) : (
                               <PlainInput
                                 value={(u.sectors ?? []).join(', ')}
@@ -1675,6 +1658,123 @@ function PlainSelect({
         <option key={o.value} value={o.value}>{o.label}</option>
       ))}
     </select>
+  )
+}
+
+/**
+ * Barra de seleção múltipla (dropdown com checkboxes). Substitui a lista de
+ * botões empilhados — fica compacta mesmo com muitos setores.
+ */
+function MultiSelectBar({
+  selected,
+  options,
+  onChange,
+  placeholder = 'Selecione…',
+}: {
+  selected: string[]
+  options: string[]
+  onChange: (next: string[]) => void
+  placeholder?: string
+}) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const toggle = (opt: string) => {
+    onChange(
+      selected.includes(opt)
+        ? selected.filter((s) => s !== opt)
+        : [...selected, opt],
+    )
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setOpen((o) => !o)
+          }
+        }}
+        className={cn(
+          'flex min-h-[38px] w-full cursor-pointer items-center justify-between gap-2 rounded-lg border bg-white px-2.5 py-1.5 text-sm',
+          open
+            ? 'border-[#4F8EF7] ring-4 ring-[#4F8EF7]/15'
+            : 'border-slate-300',
+        )}
+      >
+        {selected.length > 0 ? (
+          <span className="flex flex-wrap gap-1">
+            {selected.map((s) => (
+              <span
+                key={s}
+                className="inline-flex items-center gap-1 rounded-full bg-[#4F8EF7]/10 px-2 py-0.5 text-xs font-medium text-[#4F8EF7]"
+              >
+                {s}
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggle(s)
+                  }}
+                  className="grid h-3.5 w-3.5 place-items-center rounded-full hover:bg-[#4F8EF7]/20"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </span>
+              </span>
+            ))}
+          </span>
+        ) : (
+          <span className="text-slate-400">{placeholder}</span>
+        )}
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 shrink-0 text-slate-400 transition-transform',
+            open && 'rotate-180',
+          )}
+        />
+      </div>
+
+      {open && (
+        <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-xl">
+          {options.map((opt) => {
+            const active = selected.includes(opt)
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => toggle(opt)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <span
+                  className={cn(
+                    'grid h-4 w-4 shrink-0 place-items-center rounded border',
+                    active
+                      ? 'border-[#4F8EF7] bg-[#4F8EF7] text-white'
+                      : 'border-slate-300',
+                  )}
+                >
+                  {active && <Check className="h-3 w-3" />}
+                </span>
+                <span className="truncate">{opt}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 

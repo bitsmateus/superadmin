@@ -89,6 +89,7 @@ type ClientRow = {
   platform_chat: boolean | null
   contract_file: string | null
   contract_file_name: string | null
+  archived_at: string | null
 }
 
 function rowToClient(r: ClientRow): Client {
@@ -150,6 +151,7 @@ function rowToClient(r: ClientRow): Client {
     platformChat: r.platform_chat ?? false,
     contractFile: r.contract_file ?? undefined,
     contractFileName: r.contract_file_name ?? undefined,
+    archivedAt: r.archived_at ?? undefined,
   }
 }
 
@@ -209,6 +211,7 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('platformChat' in patch) out.platform_chat = patch.platformChat ?? false
   if ('contractFile' in patch) out.contract_file = patch.contractFile ?? null
   if ('contractFileName' in patch) out.contract_file_name = patch.contractFileName ?? null
+  if ('archivedAt' in patch) out.archived_at = patch.archivedAt ?? null
   return out
 }
 
@@ -314,11 +317,21 @@ function lsWriteSettings(s: AppSettings): void {
 
 // ---------- State ----------
 let clientsCache: Client[] = []
+// Caches derivados: separam clientes ativos dos arquivados. Recalculados a cada
+// notify() para manter referência estável entre renders (exigência do
+// useSyncExternalStore — senão entra em loop de re-render).
+let activeClientsCache: Client[] = []
+let archivedClientsCache: Client[] = []
 let settingsCache: AppSettings = {}
 let currentProfile: Profile | null = null
 
+function recomputeDerived() {
+  activeClientsCache = clientsCache.filter((c) => !c.archivedAt)
+  archivedClientsCache = clientsCache.filter((c) => c.archivedAt)
+}
+
 const subscribers = new Set<() => void>()
-function notify() { for (const fn of subscribers) fn() }
+function notify() { recomputeDerived(); for (const fn of subscribers) fn() }
 
 let bootingPromise: Promise<void> | null = null
 let booted = false
@@ -413,7 +426,10 @@ export const db = {
     return () => { subscribers.delete(fn) }
   },
 
-  getClients(): Client[] { return clientsCache },
+  /** Clientes ATIVOS (não arquivados) — usado no pipeline, listas e dashboards. */
+  getClients(): Client[] { return activeClientsCache },
+  /** Clientes arquivados — usado só na tela de Arquivados. */
+  getArchivedClients(): Client[] { return archivedClientsCache },
   getClient(id: string): Client | undefined { return clientsCache.find((c) => c.id === id) },
 
   /**
@@ -493,6 +509,18 @@ export const db = {
     })()
 
     return next
+  },
+
+  /** Arquiva (soft-delete): sai do pipeline/listas mas continua no banco. */
+  archiveClient(id: string): void {
+    db.updateClient(id, { archivedAt: new Date().toISOString() })
+    db.addLog(id, 'Cliente arquivado')
+  },
+
+  /** Restaura um cliente arquivado de volta para a lista ativa. */
+  unarchiveClient(id: string): void {
+    db.updateClient(id, { archivedAt: undefined })
+    db.addLog(id, 'Cliente restaurado')
   },
 
   async removeClient(id: string): Promise<void> {

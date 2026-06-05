@@ -28,6 +28,9 @@ const ClientsPage = React.lazy(() =>
 const PipelinePage = React.lazy(() =>
   import('./pages/PipelinePage').then((m) => ({ default: m.PipelinePage })),
 )
+const ArchivedClientsPage = React.lazy(() =>
+  import('./pages/ArchivedClientsPage').then((m) => ({ default: m.ArchivedClientsPage })),
+)
 const FinancePage = React.lazy(() =>
   import('./pages/FinancePage').then((m) => ({ default: m.FinancePage })),
 )
@@ -104,6 +107,7 @@ export default function App() {
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/arquivados" element={<ArchivedClientsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
           <Route path="/tenants/:serverId/:id" element={<TenantDetailPage />} />
           <Route path="/financeiro" element={<FinancePage />} />

@@ -15,6 +15,15 @@ export function useClients(): Client[] {
   )
 }
 
+/** Clientes arquivados (soft-delete) — usado na tela de Arquivados. */
+export function useArchivedClients(): Client[] {
+  return React.useSyncExternalStore(
+    db.subscribe,
+    db.getArchivedClients,
+    db.getArchivedClients,
+  )
+}
+
 /**
  * Subscribe em UM cliente. Usa um selector com useSyncExternalStore — como a
  * cache mantém referência estável dos clientes que não mudaram, este hook só

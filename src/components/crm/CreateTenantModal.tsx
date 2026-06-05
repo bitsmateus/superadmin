@@ -147,9 +147,6 @@ export function CreateTenantModal({
       return
     }
 
-    const connTypes = client.briefingConfig?.connectionTypes ?? []
-    const officialOnly =
-      connTypes.includes('api_oficial') && !connTypes.includes('api_comum')
     const briefingUsers = client.briefingData?.users ?? []
     const isRetry = steps.length > 0
 
@@ -172,7 +169,7 @@ export function CreateTenantModal({
         )
         if (!ok) return
       }
-      working = buildSteps(officialOnly, briefingUsers.length > 0)
+      working = buildSteps(briefingUsers.length > 0)
       if (reuseTenant) {
         working = working.map((s) => {
           if (s.key === 'tenant') return { ...s, status: 'skip' as StepStatus, detail: 'tenant já existe' }
@@ -211,7 +208,6 @@ export function CreateTenantModal({
             finalEmail,
             tenantPassword,
             user,
-            officialOnly,
             prov: prov.current,
           })
           patchStep(step.key, { status: 'ok', detail })
@@ -391,18 +387,18 @@ const LABELS: Record<string, string> = {
   users: 'Criar usuários',
 }
 
-function buildSteps(officialOnly: boolean, hasUsers: boolean): ProvStep[] {
-  const list: ProvStep[] = [{ key: 'tenant', label: LABELS.tenant, status: 'idle' }]
-  // O canal WhatsApp (sessão baileys) só é criado na API Comum. Na API Oficial
-  // a conexão é via Meta, então pulamos o canal.
-  if (!officialOnly) {
-    list.push({ key: 'channel', label: LABELS.channel, status: 'idle' })
-  }
-  // A API e as filas são necessárias em AMBOS os casos: é a API do tenant que
-  // hospeda usuários e filas e fornece o token de /v2/api/external/{apiId}.
-  // Sem ela, "Criar usuários" falha com "Invalid token".
-  list.push({ key: 'api', label: LABELS.api, status: 'idle' })
-  list.push({ key: 'queues', label: LABELS.queues, status: 'idle' })
+function buildSteps(hasUsers: boolean): ProvStep[] {
+  // O canal/sessão é sempre criado: além de conectar o WhatsApp, é ele que gera
+  // a API do tenant + o token (a NX cria API junto com o canal). Sem sessionId,
+  // o endpoint de criar API falha ("sessionId is a required field"), e sem o
+  // token a criação de usuários/filas falha ("Invalid token"). Por isso, mesmo
+  // na API Oficial, o canal precisa existir para hospedar usuários e filas.
+  const list: ProvStep[] = [
+    { key: 'tenant', label: LABELS.tenant, status: 'idle' },
+    { key: 'channel', label: LABELS.channel, status: 'idle' },
+    { key: 'api', label: LABELS.api, status: 'idle' },
+    { key: 'queues', label: LABELS.queues, status: 'idle' },
+  ]
   if (hasUsers) list.push({ key: 'users', label: LABELS.users, status: 'idle' })
   return list
 }
@@ -413,7 +409,6 @@ interface StepCtx {
   finalEmail: string
   tenantPassword: string
   user: string
-  officialOnly: boolean
   prov: ProvState
 }
 
@@ -424,10 +419,17 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
   const currentChecklist = () => db.getClient(client.id)?.deliveryChecklist ?? client.deliveryChecklist
 
   if (key === 'tenant') {
+    // Limite de usuários do tenant = o configurado no briefing (ou o nº de
+    // usuários preenchidos, o que for maior) + 1 extra (admin/suporte). Sem
+    // config nem usuários, cai num padrão de 10.
+    const briefingMax = client.briefingConfig?.maxUsers ?? 0
+    const filledUsers = client.briefingData?.users?.length ?? 0
+    const baseUsers = Math.max(briefingMax, filledUsers)
+    const maxUsers = baseUsers > 0 ? baseUsers + 1 : 10
     const created = await tenantsApi.store(server, {
       status: 'active',
       name: client.company || client.name,
-      maxUsers: 10,
+      maxUsers,
       maxConnections: 10,
       acceptTerms: true,
       email: finalEmail,
@@ -471,8 +473,12 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       supportPassword: tenantPassword,
       deliveryChecklist: setChecklistItem(enriched, 'tenant_created', true, user),
     })
-    db.addLog(client.id, 'Tenant criado', `${server.name} · ${finalEmail} · tenant #${prov.tenantId ?? '?'}`)
-    return server.name
+    db.addLog(
+      client.id,
+      'Tenant criado',
+      `${server.name} · ${finalEmail} · tenant #${prov.tenantId ?? '?'} · limite ${maxUsers} usuário(s)`,
+    )
+    return `${server.name} · ${maxUsers} usuário(s)`
   }
 
   if (key === 'channel') {

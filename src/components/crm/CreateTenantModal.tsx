@@ -115,6 +115,9 @@ export function CreateTenantModal({
   const [running, setRunning] = React.useState(false)
   const [steps, setSteps] = React.useState<ProvStep[]>([])
   const [finished, setFinished] = React.useState(false)
+  // Quando o cliente já tem tenant, por padrão reaproveitamos ele e criamos só
+  // o que falta. Marcar isto força criar um tenant NOVO (novo vínculo).
+  const [recreate, setRecreate] = React.useState(false)
   // Estado intermediário compartilhado entre passos (sobrevive a retries).
   const prov = React.useRef<ProvState>({})
 
@@ -125,6 +128,7 @@ export function CreateTenantModal({
     setSteps([])
     setFinished(false)
     setRunning(false)
+    setRecreate(false)
     prov.current = {}
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -149,17 +153,45 @@ export function CreateTenantModal({
     const briefingUsers = client.briefingData?.users ?? []
     const isRetry = steps.length > 0
 
-    // Primeira execução: confirma recriação e monta a lista de passos.
-    if (!isRetry) {
-      if (client.tenantId) {
+    // Reuso: o cliente já tem tenant e NÃO pediu pra recriar do zero. Nesse
+    // caso pulamos "Criar tenant" (e o canal, se a API já existe) e criamos só
+    // o que falta. Sem reuso, ao reprovisionar a NX tentaria criar um tenant
+    // duplicado (mesmo e-mail) e devolve 500, travando filas/API/usuários.
+    const reuseTenant = Boolean(client.tenantId) && !recreate
+    const hasApi = Boolean(client.tenantApiId && client.tenantApiToken)
+
+    // Primeira execução: confirma recriação (se pedida) e monta os passos.
+    let working: ProvStep[]
+    if (isRetry) {
+      working = steps
+    } else {
+      if (recreate && client.tenantId) {
         const ok = window.confirm(
-          'Este cliente já tem um tenant.\n\n' +
-            'Provisionar de novo vai gerar um NOVO tenant (e novos canal/API/filas). ' +
+          'Recriar do zero vai gerar um NOVO tenant (e novos canal/API/filas). ' +
             'Pode duplicar no sistema do cliente. Deseja continuar?',
         )
         if (!ok) return
       }
-      setSteps(buildSteps(officialOnly, briefingUsers.length > 0))
+      working = buildSteps(officialOnly, briefingUsers.length > 0)
+      if (reuseTenant) {
+        working = working.map((s) => {
+          if (s.key === 'tenant') return { ...s, status: 'skip' as StepStatus, detail: 'tenant já existe' }
+          if (s.key === 'channel' && hasApi)
+            return { ...s, status: 'skip' as StepStatus, detail: 'API já existe' }
+          return s
+        })
+      }
+      setSteps(working)
+    }
+
+    // Semeia o estado com o tenant/API já salvos no cliente (modo reuso) para
+    // os passos seguintes (canal/API/filas/usuários) usarem o tenant existente.
+    if (reuseTenant) {
+      const c = db.getClient(client.id)
+      if (prov.current.tenantId == null && c?.tenantId) prov.current.tenantId = c.tenantId
+      if (prov.current.apiId == null && c?.tenantApiId) prov.current.apiId = c.tenantApiId
+      if (prov.current.apiToken == null && c?.tenantApiToken)
+        prov.current.apiToken = c.tenantApiToken
     }
 
     const tenantPassword =
@@ -167,17 +199,13 @@ export function CreateTenantModal({
     setRunning(true)
 
     // Executa cada passo ainda não concluído, parando no primeiro erro.
-    const order = (isRetry ? steps : buildSteps(officialOnly, briefingUsers.length > 0)).map(
-      (s) => s.key,
-    )
     try {
-      for (const key of order) {
-        const st = (isRetry ? steps : []).find((s) => s.key === key)
-        if (st && (st.status === 'ok' || st.status === 'skip')) continue
-        patchStep(key, { status: 'running', detail: undefined })
+      for (const step of working) {
+        if (step.status === 'ok' || step.status === 'skip') continue
+        patchStep(step.key, { status: 'running', detail: undefined })
         try {
           // eslint-disable-next-line no-await-in-loop
-          const detail = await runStep(key, {
+          const detail = await runStep(step.key, {
             client,
             server,
             finalEmail,
@@ -186,10 +214,10 @@ export function CreateTenantModal({
             officialOnly,
             prov: prov.current,
           })
-          patchStep(key, { status: 'ok', detail })
+          patchStep(step.key, { status: 'ok', detail })
         } catch (err) {
-          patchStep(key, { status: 'error', detail: extractErrorMessage(err, 'erro') })
-          toast.error(`Falha em "${LABELS[key]}": ${extractErrorMessage(err, 'erro')}`)
+          patchStep(step.key, { status: 'error', detail: extractErrorMessage(err, 'erro') })
+          toast.error(`Falha em "${LABELS[step.key]}": ${extractErrorMessage(err, 'erro')}`)
           setRunning(false)
           return
         }
@@ -218,7 +246,7 @@ export function CreateTenantModal({
       title="Provisionar tenant"
       description={
         client.tenantId
-          ? 'Este cliente já possui um tenant — provisionar de novo cria um novo vínculo.'
+          ? 'Este cliente já possui um tenant — por padrão reaproveitamos ele e criamos só o que falta (canal, API, filas, usuários).'
           : 'Cria o tenant, canal, API, filas e usuários a partir do briefing.'
       }
       size="md"
@@ -233,7 +261,13 @@ export function CreateTenantModal({
               loading={running}
               leftIcon={!running ? <CheckCircle2 className="h-4 w-4" /> : undefined}
             >
-              {hasError ? 'Tentar novamente' : showSteps ? 'Continuar' : 'Provisionar tudo'}
+              {hasError
+                ? 'Tentar novamente'
+                : showSteps
+                  ? 'Continuar'
+                  : client.tenantId && !recreate
+                    ? 'Criar o que falta'
+                    : 'Provisionar tudo'}
             </Button>
           )}
         </>
@@ -269,6 +303,25 @@ export function CreateTenantModal({
           onChange={(e) => setEmail(e.target.value)}
           hint={`Senha padrão: ${db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD}`}
         />
+
+        {client.tenantId && !showSteps && (
+          <label className="flex items-start gap-2 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2.5 text-sm text-foreground/75">
+            <input
+              type="checkbox"
+              checked={recreate}
+              onChange={(e) => setRecreate(e.target.checked)}
+              disabled={running}
+              className="mt-0.5 h-4 w-4 accent-[#4F8EF7]"
+            />
+            <span>
+              Recriar tenant do zero (gera um <strong>novo</strong> vínculo)
+              <span className="mt-0.5 block text-[11px] text-foreground/45">
+                Deixe desmarcado para reaproveitar o tenant atual e só criar canal, API,
+                filas e usuários que faltam.
+              </span>
+            </span>
+          </label>
+        )}
 
         {showSteps && (
           <div className="rounded-xl border border-line bg-elevate/[0.02] p-3">

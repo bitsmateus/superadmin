@@ -42,6 +42,10 @@ import type { Client, ClientAccess } from '@/types/client'
 // Default accesses always shown when the client has none
 const DEFAULT_ACCESS_NAMES = ['Facebook', 'Instagram']
 
+// Senha padrão do acesso de suporte do tenant (quando o cliente ainda não tem
+// uma senha própria salva).
+const DEFAULT_SUPPORT_PASSWORD = 'Nxim01@!'
+
 function getAccesses(client: Client): ClientAccess[] {
   if (client.accesses && client.accesses.length > 0) return client.accesses
   return DEFAULT_ACCESS_NAMES.map((name, i) => ({
@@ -118,30 +122,40 @@ export function OverviewTab({ client }: { client: Client }) {
             }
           />
 
-          {/* E-mail de suporte */}
+          {/* E-mail de suporte — editável manualmente */}
           <div className="sm:col-span-2">
-            <FieldLabel>E-mail de suporte</FieldLabel>
+            <InlineField
+              label="E-mail de suporte"
+              value={client.supportEmail ?? ''}
+              placeholder="Sem informação"
+              onSave={(v) =>
+                db.updateClient(client.id, { supportEmail: v.trim() || undefined }) &&
+                db.addLog(client.id, 'E-mail de suporte atualizado')
+              }
+            />
+          </div>
+
+          {/* Senha de suporte — mascarada, só copiar */}
+          <div className="sm:col-span-2">
+            <FieldLabel>Senha de suporte</FieldLabel>
             <div className="mt-1 flex items-center gap-2">
-              <Mail className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
-              <span className="text-sm text-foreground/85">
-                {client.supportEmail ?? (
-                  <span className="text-foreground/35">Sem informação</span>
-                )}
+              <KeyRound className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+              <span className="select-none text-sm tracking-[0.3em] text-foreground/70">
+                ••••••••
               </span>
-              {client.supportEmail && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const ok = await copyToClipboard(client.supportEmail!)
-                    if (ok) toast.success('E-mail copiado')
-                    else toast.error('Não foi possível copiar')
-                  }}
-                  className="rounded-md p-1 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
-                  aria-label="Copiar e-mail"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={async () => {
+                  const pwd = client.supportPassword || DEFAULT_SUPPORT_PASSWORD
+                  const ok = await copyToClipboard(pwd)
+                  if (ok) toast.success('Senha copiada')
+                  else toast.error('Não foi possível copiar')
+                }}
+                className="rounded-md p-1 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
+                aria-label="Copiar senha de suporte"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
 

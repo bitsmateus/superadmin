@@ -47,6 +47,10 @@ import type {
   AutomationType,
   BriefingChannel,
   ChecklistItem,
+  BriefingUser,
+  BriefingUserRole,
+  BriefingScheduleSlot,
+  AiTone,
 } from '@/types/client'
 
 type SubView = 'briefing' | 'automation'
@@ -93,6 +97,7 @@ export function BriefingTab({ client }: { client: Client }) {
   )
   const [signOpen, setSignOpen] = React.useState(false)
   const [signNumber, setSignNumber] = React.useState(client.briefingNumber ?? '')
+  const [editing, setEditing] = React.useState(false)
 
   // Fluxo da ficha: enquanto não houver contrato assinado, o briefing fica
   // bloqueado e mostramos o passo "marcar contrato assinado".
@@ -118,6 +123,7 @@ export function BriefingTab({ client }: { client: Client }) {
   React.useEffect(() => {
     setConfig(client.briefingConfig ?? emptyConfig)
     setRevisionNote(client.briefingRevisionNote ?? '')
+    setEditing(false)
   }, [client.id])
 
   const updateConfig = (patch: Partial<BriefingConfig>) => {
@@ -461,26 +467,49 @@ export function BriefingTab({ client }: { client: Client }) {
           <SubTabs value={subView} onChange={setSubView} />
 
           {subView === 'briefing' && client.briefingData && (
-            <>
-              <BriefingViewer data={client.briefingData} />
-              {status === 'filled' && (
-                <div className="flex flex-wrap items-center justify-end gap-2">
+            editing ? (
+              <BriefingEditor
+                data={client.briefingData}
+                onCancel={() => setEditing(false)}
+                onSave={(next) => {
+                  db.updateClient(client.id, { briefingData: next })
+                  db.addLog(client.id, 'Briefing editado manualmente')
+                  setEditing(false)
+                  toast.success('Briefing atualizado')
+                }}
+              />
+            ) : (
+              <>
+                <div className="flex justify-end">
                   <Button
                     variant="secondary"
-                    onClick={() => setRevisionOpen(true)}
+                    size="sm"
+                    onClick={() => setEditing(true)}
                     leftIcon={<PenLine className="h-3.5 w-3.5" />}
                   >
-                    Solicitar revisão
-                  </Button>
-                  <Button
-                    onClick={approve}
-                    leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
-                  >
-                    Aprovar briefing
+                    Editar informações
                   </Button>
                 </div>
-              )}
-            </>
+                <BriefingViewer data={client.briefingData} />
+                {status === 'filled' && (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setRevisionOpen(true)}
+                      leftIcon={<PenLine className="h-3.5 w-3.5" />}
+                    >
+                      Solicitar revisão
+                    </Button>
+                    <Button
+                      onClick={approve}
+                      leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
+                    >
+                      Aprovar briefing
+                    </Button>
+                  </div>
+                )}
+              </>
+            )
           )}
 
           {subView === 'automation' && (
@@ -1155,6 +1184,357 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
         </Accordion>
       )}
     </div>
+  )
+}
+
+// ── Briefing editor (edição manual pós-preenchimento) ─────────────────────────
+
+type BriefingDataT = NonNullable<Client['briefingData']>
+
+function BriefingEditor({
+  data,
+  onSave,
+  onCancel,
+}: {
+  data: BriefingDataT
+  onSave: (next: BriefingDataT) => void
+  onCancel: () => void
+}) {
+  // Cópia profunda (dado é JSON puro) pra editar sem mexer no original até salvar.
+  const [d, setD] = React.useState<BriefingDataT>(() => JSON.parse(JSON.stringify(data)))
+  const set = (patch: Partial<BriefingDataT>) => setD((cur) => ({ ...cur, ...patch }))
+
+  const setUser = (i: number, patch: Partial<BriefingUser>) =>
+    setD((cur) => ({
+      ...cur,
+      users: cur.users.map((u, idx) => (idx === i ? { ...u, ...patch } : u)),
+    }))
+  const addUser = () =>
+    setD((cur) => ({
+      ...cur,
+      users: [...cur.users, { name: '', email: '', sectors: [], role: 'atendente' }],
+    }))
+  const removeUser = (i: number) =>
+    setD((cur) => ({ ...cur, users: cur.users.filter((_, idx) => idx !== i) }))
+
+  const setSlot = (i: number, patch: Partial<BriefingScheduleSlot>) =>
+    setD((cur) => ({
+      ...cur,
+      schedule: cur.schedule.map((s, idx) => (idx === i ? { ...s, ...patch } : s)),
+    }))
+
+  const setChannel = (
+    key: string,
+    patch: { email?: string; password?: string; notes?: string },
+  ) =>
+    setD((cur) => ({
+      ...cur,
+      channelAccess: {
+        ...(cur.channelAccess ?? {}),
+        [key]: { ...((cur.channelAccess ?? {})[key] ?? {}), ...patch },
+      },
+    }))
+
+  const actions = (
+    <div className="flex justify-end gap-2">
+      <Button variant="secondary" onClick={onCancel}>
+        Cancelar
+      </Button>
+      <Button onClick={() => onSave(d)} leftIcon={<CheckCircle2 className="h-4 w-4" />}>
+        Salvar alterações
+      </Button>
+    </div>
+  )
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/[0.06] px-3 py-2">
+        <span className="text-xs text-foreground/70">
+          Editando o briefing — as mudanças só valem após salvar.
+        </span>
+      </div>
+
+      <Accordion title="1. Empresa" defaultOpen>
+        <EditField label="Razão social" value={d.razaoSocial} onChange={(v) => set({ razaoSocial: v })} />
+        <EditField label="Nome fantasia" value={d.nomeFantasia} onChange={(v) => set({ nomeFantasia: v })} />
+        <EditField label="CNPJ" value={d.cnpj} onChange={(v) => set({ cnpj: v })} />
+        <EditField label="Site" value={d.site ?? ''} onChange={(v) => set({ site: v })} />
+      </Accordion>
+
+      <Accordion title={`2. Usuários (${d.users.length})`} defaultOpen>
+        <div className="space-y-3">
+          {d.users.map((u, i) => (
+            <div key={i} className="space-y-2 rounded-lg border border-line bg-surface p-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <EditField label="Nome" value={u.name} onChange={(v) => setUser(i, { name: v })} />
+                <EditField
+                  label="E-mail"
+                  type="email"
+                  value={u.email}
+                  onChange={(v) => setUser(i, { email: v })}
+                />
+                <EditField
+                  label="Setores (separe por vírgula)"
+                  value={(u.sectors ?? (u.sector ? [u.sector] : [])).join(', ')}
+                  onChange={(v) =>
+                    setUser(i, { sectors: v.split(',').map((s) => s.trim()).filter(Boolean) })
+                  }
+                />
+                <EditSelect
+                  label="Perfil"
+                  value={u.role}
+                  onChange={(v) => setUser(i, { role: v as BriefingUserRole })}
+                  options={[
+                    { value: 'atendente', label: 'Atendente' },
+                    { value: 'supervisor', label: 'Supervisor' },
+                    { value: 'admin', label: 'Admin' },
+                  ]}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => removeUser(i)}
+                className="text-xs text-danger hover:underline"
+              >
+                Remover usuário
+              </button>
+            </div>
+          ))}
+          <Button size="sm" variant="secondary" onClick={addUser}>
+            Adicionar usuário
+          </Button>
+        </div>
+      </Accordion>
+
+      <Accordion title="3. Horários" defaultOpen>
+        <EditField label="Fuso horário" value={d.timezone} onChange={(v) => set({ timezone: v })} />
+        <div className="mt-2 space-y-1.5">
+          {d.schedule.map((s, i) => (
+            <div
+              key={i}
+              className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-surface px-2.5 py-1.5"
+            >
+              <label className="inline-flex w-28 items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={s.active}
+                  onChange={(e) => setSlot(i, { active: e.target.checked })}
+                  className="h-4 w-4 accent-[#4F8EF7]"
+                />
+                <span className="text-foreground/85">{asText(s.day)}</span>
+              </label>
+              {s.active ? (
+                <div className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="time"
+                    value={s.start}
+                    onChange={(e) => setSlot(i, { start: e.target.value })}
+                    className="rounded-md border border-line bg-surface px-2 py-1 text-foreground"
+                  />
+                  <span className="text-foreground/40">—</span>
+                  <input
+                    type="time"
+                    value={s.end}
+                    onChange={(e) => setSlot(i, { end: e.target.value })}
+                    className="rounded-md border border-line bg-surface px-2 py-1 text-foreground"
+                  />
+                </div>
+              ) : (
+                <span className="text-xs text-foreground/40">Fechado</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </Accordion>
+
+      <Accordion title="4. Integrações" defaultOpen>
+        <EditArea
+          label="Números de WhatsApp (um por linha)"
+          value={(d.whatsappNumbers ?? []).join('\n')}
+          onChange={(v) =>
+            set({ whatsappNumbers: v.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean) })
+          }
+          rows={3}
+        />
+        <EditField
+          label="Facebook/Meta — e-mail"
+          value={d.facebookEmail ?? ''}
+          onChange={(v) => set({ facebookEmail: v })}
+        />
+        <EditField
+          label="Facebook/Meta — senha"
+          value={d.facebookPassword ?? ''}
+          onChange={(v) => set({ facebookPassword: v })}
+        />
+        <EditArea label="WaVoip" value={d.wavoipInfo ?? ''} onChange={(v) => set({ wavoipInfo: v })} rows={2} />
+        <EditArea label="E-mail (config)" value={d.emailConfig ?? ''} onChange={(v) => set({ emailConfig: v })} rows={2} />
+        {d.channelAccess &&
+          Object.entries(d.channelAccess).map(([key, acc]) => (
+            <div key={key} className="mt-2 space-y-2 rounded-md border border-line bg-surface p-2.5">
+              <div className="text-[11px] uppercase tracking-wider text-foreground/45">
+                {CHANNEL_LABELS[key] ?? key}
+              </div>
+              <EditField label="Login" value={acc.email ?? ''} onChange={(v) => setChannel(key, { email: v })} />
+              <EditField label="Senha" value={acc.password ?? ''} onChange={(v) => setChannel(key, { password: v })} />
+              <EditField label="Observações" value={acc.notes ?? ''} onChange={(v) => setChannel(key, { notes: v })} />
+            </div>
+          ))}
+      </Accordion>
+
+      <Accordion title="5. Chatbot" defaultOpen>
+        <EditField
+          label="Departamentos (separe por vírgula)"
+          value={(d.departments ?? []).join(', ')}
+          onChange={(v) => set({ departments: v.split(',').map((s) => s.trim()).filter(Boolean) })}
+        />
+        <EditArea label="Saudação" value={d.greetingMessage ?? ''} onChange={(v) => set({ greetingMessage: v })} rows={6} />
+        <EditArea label="Fora do horário" value={d.offHoursMessage ?? ''} onChange={(v) => set({ offHoursMessage: v })} rows={5} />
+      </Accordion>
+
+      <Accordion title="6. IA" defaultOpen>
+        <label className="flex items-center gap-2 py-1 text-sm text-foreground/80">
+          <input
+            type="checkbox"
+            checked={d.useAI}
+            onChange={(e) => set({ useAI: e.target.checked })}
+            className="h-4 w-4 accent-[#4F8EF7]"
+          />
+          Usar IA
+        </label>
+        {d.useAI && (
+          <>
+            <EditField label="Nome da IA" value={d.aiAgentName ?? ''} onChange={(v) => set({ aiAgentName: v })} />
+            <EditSelect
+              label="Tom"
+              value={d.aiTone ?? 'casual'}
+              onChange={(v) => set({ aiTone: v as AiTone })}
+              options={[
+                { value: 'formal', label: 'Formal' },
+                { value: 'casual', label: 'Casual' },
+                { value: 'tecnico', label: 'Técnico' },
+              ]}
+            />
+            <EditArea label="Sobre a empresa" value={d.aiCompanyDescription ?? ''} onChange={(v) => set({ aiCompanyDescription: v })} rows={3} />
+            <EditField label="Localização" value={d.aiLocation ?? ''} onChange={(v) => set({ aiLocation: v })} />
+            <EditField label="Redes sociais" value={d.aiSocialMedia ?? ''} onChange={(v) => set({ aiSocialMedia: v })} />
+            <EditArea label="Serviços / produtos" value={d.aiServices ?? ''} onChange={(v) => set({ aiServices: v })} rows={3} />
+            <label className="flex items-center gap-2 py-1 text-sm text-foreground/80">
+              <input
+                type="checkbox"
+                checked={Boolean(d.aiHasPrices)}
+                onChange={(e) => set({ aiHasPrices: e.target.checked })}
+                className="h-4 w-4 accent-[#4F8EF7]"
+              />
+              Informa preços
+            </label>
+            {d.aiHasPrices && (
+              <EditArea label="Tabela de preços" value={d.aiPrices ?? ''} onChange={(v) => set({ aiPrices: v })} rows={3} />
+            )}
+            <EditArea label="Fluxo de atendimento" value={d.aiAttendanceFlow ?? ''} onChange={(v) => set({ aiAttendanceFlow: v })} rows={3} />
+            <EditArea label="Quando transferir" value={d.aiTransferConditions ?? ''} onChange={(v) => set({ aiTransferConditions: v })} rows={2} />
+            <EditArea label="Restrições" value={d.aiRestrictions ?? ''} onChange={(v) => set({ aiRestrictions: v })} rows={2} />
+            <EditArea label="Instruções" value={d.aiInstructions ?? ''} onChange={(v) => set({ aiInstructions: v })} rows={2} />
+            <EditField label="Sistema externo" value={d.aiExternalSystem ?? ''} onChange={(v) => set({ aiExternalSystem: v })} />
+            <EditField label="URL da API" value={d.aiExternalApiUrl ?? ''} onChange={(v) => set({ aiExternalApiUrl: v })} />
+            <EditArea label="O que consultar" value={d.aiExternalWhatToQuery ?? ''} onChange={(v) => set({ aiExternalWhatToQuery: v })} rows={2} />
+            <EditArea label="Autenticação" value={d.aiExternalAuth ?? ''} onChange={(v) => set({ aiExternalAuth: v })} rows={2} />
+            <EditArea label="Exemplos de consulta" value={d.aiExternalExamples ?? ''} onChange={(v) => set({ aiExternalExamples: v })} rows={2} />
+          </>
+        )}
+      </Accordion>
+
+      <Accordion title="7. Automação externa">
+        <EditArea label="Informações" value={d.externalAutomationInfo ?? ''} onChange={(v) => set({ externalAutomationInfo: v })} rows={4} />
+      </Accordion>
+
+      <Accordion title="Observações">
+        <EditArea label="Observações finais" value={d.extraNotes ?? ''} onChange={(v) => set({ extraNotes: v })} rows={4} />
+      </Accordion>
+
+      {actions}
+    </div>
+  )
+}
+
+function EditField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+  placeholder?: string
+}) {
+  return (
+    <label className="block py-1">
+      <span className="mb-1 block text-[11px] uppercase tracking-wider text-foreground/45">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+      />
+    </label>
+  )
+}
+
+function EditArea({
+  label,
+  value,
+  onChange,
+  rows = 3,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  rows?: number
+}) {
+  return (
+    <label className="block py-1">
+      {label && (
+        <span className="mb-1 block text-[11px] uppercase tracking-wider text-foreground/45">{label}</span>
+      )}
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+      />
+    </label>
+  )
+}
+
+function EditSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+}) {
+  return (
+    <label className="block py-1">
+      <span className="mb-1 block text-[11px] uppercase tracking-wider text-foreground/45">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 

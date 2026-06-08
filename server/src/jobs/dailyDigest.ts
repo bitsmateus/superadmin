@@ -107,7 +107,7 @@ async function buildDigest(): Promise<string> {
       pipeline.push(`• Aguardando preenchimento do briefing — ${co} (enviar mensagem)`);
     } else if (
       c.briefing_status === 'filled' &&
-      !['setup', 'delivery', 'active'].includes(c.stage)
+      !['setup', 'delivery', 'delivered', 'active'].includes(c.stage)
     ) {
       pipeline.push(`• Briefing preenchido — iniciar configuração — ${co}`);
     } else if (c.stage === 'setup') {
@@ -116,8 +116,13 @@ async function buildDigest(): Promise<string> {
       pipeline.push(`• Reunião de entrega hoje — ${co}`);
     }
 
-    // Follow-ups vencidos (cliente ativo com mensagem agendada não enviada).
-    if (c.followup_active && c.stage === 'active' && Array.isArray(c.followups)) {
+    // Follow-ups vencidos (cliente ativo ou em Entregas Recentes com mensagem
+    // agendada não enviada).
+    if (
+      c.followup_active &&
+      (c.stage === 'active' || c.stage === 'delivered') &&
+      Array.isArray(c.followups)
+    ) {
       for (const f of c.followups) {
         if (!f.sentAt && f.scheduledFor && new Date(f.scheduledFor).getTime() <= nowMs) {
           followLines.push(`• Follow-up dia ${f.dayNumber ?? '?'} pendente — ${co}`);

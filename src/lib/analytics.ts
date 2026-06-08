@@ -40,6 +40,7 @@ export function computeFunnel(
     briefing: new Set(),
     setup: new Set(),
     delivery: new Set(),
+    delivered: new Set(),
     active: new Set(),
     churned: new Set(),
   }
@@ -96,6 +97,7 @@ export function computeStageDurations(
     briefing: { total: 0, n: 0 },
     setup: { total: 0, n: 0 },
     delivery: { total: 0, n: 0 },
+    delivered: { total: 0, n: 0 },
     active: { total: 0, n: 0 },
     churned: { total: 0, n: 0 },
   }

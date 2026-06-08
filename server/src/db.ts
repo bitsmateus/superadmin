@@ -72,6 +72,11 @@ export async function runMigrations() {
   // ou excluído permanentemente na tela de Arquivados.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS clients_archived_at_idx ON clients(archived_at)`);
+  // Nova etapa "Entregas Recentes" (delivered) entre delivery e active.
+  // ALTER TYPE ... ADD VALUE não roda dentro de transação — pool.query roda solto.
+  await pool.query(
+    `ALTER TYPE pipeline_stage ADD VALUE IF NOT EXISTS 'delivered' AFTER 'delivery'`
+  );
   console.log('[db] migrations applied');
 }
 

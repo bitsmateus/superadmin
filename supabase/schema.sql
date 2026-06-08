@@ -31,7 +31,7 @@ do $$
 begin
   if not exists (select 1 from pg_type where typname = 'pipeline_stage') then
     create type public.pipeline_stage as enum (
-      'lead','welcome','contract','briefing','setup','delivery','active','churned'
+      'lead','welcome','contract','briefing','setup','delivery','delivered','active','churned'
     );
   end if;
 end $$;

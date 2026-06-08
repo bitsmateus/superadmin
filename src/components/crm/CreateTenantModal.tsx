@@ -434,7 +434,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       acceptTerms: true,
       email: finalEmail,
       password: tenantPassword,
-      userName: client.name || 'Suporte',
+      userName: 'SUPORTE NX',
       profile: 'admin',
     })
     // A NX devolve { tenant: {...}, user: {...} }. Aceita também formato plano.

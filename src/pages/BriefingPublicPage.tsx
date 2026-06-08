@@ -38,6 +38,12 @@ function numberEmoji(i: number): string {
   return NUMBER_EMOJIS[i] ?? `${i + 1}.`
 }
 
+/** Valida e-mail: um @, sem espaços, com domínio. */
+function isValidEmail(email: string): boolean {
+  const e = email.trim()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
+}
+
 /**
  * Canais que exigem credenciais de acesso (e-mail/usuário + senha) do cliente.
  * Só aparecem no briefing quando habilitados na config do cliente.
@@ -378,7 +384,26 @@ export function BriefingPublicPage() {
     />
   )
 
+  // Valida os e-mails dos usuários preenchidos. Retorna false e avisa no
+  // primeiro inválido. Linhas totalmente vazias são ignoradas.
+  const usersEmailsValid = (): boolean => {
+    for (const u of state.users) {
+      const name = u.name.trim()
+      const email = u.email.trim()
+      if (!name && !email) continue
+      if (!isValidEmail(email)) {
+        toast.error(
+          `E-mail inválido${name ? ` de "${name}"` : ''}: "${email || '(vazio)'}". ` +
+            'Use o formato nome@empresa.com, sem espaços.',
+        )
+        return false
+      }
+    }
+    return true
+  }
+
   const submit = async () => {
+    if (!usersEmailsValid()) return
     const data: BriefingData = {
       razaoSocial: client.company,
       nomeFantasia: client.company,
@@ -456,6 +481,8 @@ export function BriefingPublicPage() {
   }
 
   const next = () => {
+    // Não deixa sair da seção de usuários com e-mail inválido.
+    if (currentKey === 'usuarios' && !usersEmailsValid()) return
     // On chatbot section show confirmation before advancing
     if (currentKey === 'chatbot') {
       setChatbotConfirmOpen(true)
@@ -629,11 +656,17 @@ export function BriefingPublicPage() {
                               value={u.email}
                               onChange={(v) => {
                                 const users = [...state.users]
-                                users[i] = { ...users[i], email: v }
+                                // Sempre minúsculo e sem espaços nas pontas.
+                                users[i] = { ...users[i], email: v.toLowerCase().trimStart() }
                                 setState({ ...state, users })
                               }}
                               placeholder="joao@empresa.com"
                             />
+                            {u.email.trim() !== '' && !isValidEmail(u.email) && (
+                              <p className="mt-1 text-xs text-rose-500">
+                                E-mail inválido — use o formato nome@empresa.com (sem espaços).
+                              </p>
+                            )}
                           </Field>
                         </div>
                         <div className="sm:col-span-3">

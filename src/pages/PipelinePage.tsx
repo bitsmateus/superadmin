@@ -83,6 +83,7 @@ export function PipelinePage() {
       briefing: [],
       setup: [],
       delivery: [],
+      delivered: [],
       active: [],
       churned: [],
     }
@@ -480,6 +481,15 @@ function computeAlerts(c: Client): CardAlert[] {
   }
   if (c.paymentStatus === 'overdue') {
     alerts.push({ tone: 'red', title: 'Pagamento vencido' })
+  }
+  // Entregas Recentes: passados 30 dias, sinaliza para mover manualmente p/ Ativo.
+  if (c.stage === 'delivered') {
+    const days = daysSince(c.stageUpdatedAt ?? c.createdAt)
+    if (days >= 30)
+      alerts.push({
+        tone: 'orange',
+        title: `Entregue há ${days} dias — mover para Ativo`,
+      })
   }
   return alerts
 }

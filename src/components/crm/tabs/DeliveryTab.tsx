@@ -129,12 +129,16 @@ export function DeliveryTab({ client }: { client: Client }) {
     )
     db.updateClient(client.id, {
       deliveryCompletedAt: now.toISOString(),
-      stage: 'active',
+      stage: 'delivered',
       followUpActive: true,
       followUps,
     })
-    db.addLog(client.id, 'Entrega concluída', 'Follow-ups dia 3/7/15/30 agendados')
-    toast.success('Entrega concluída · cliente em acompanhamento')
+    db.addLog(
+      client.id,
+      'Entrega concluída',
+      'Movido para Entregas Recentes · follow-ups dia 3/7/15/30 agendados',
+    )
+    toast.success('Entrega concluída · em Entregas Recentes (mova p/ Ativo em ~30 dias)')
   }
 
   const checklist = client.deliveryChecklist ?? []

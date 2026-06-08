@@ -51,6 +51,13 @@ export const STAGE_COLORS: Record<PipelineStage, StageStyle> = {
     dot: '#FB923C',
     label: 'Entrega',
   },
+  delivered: {
+    bg: 'rgba(34,211,238,0.15)',
+    text: '#22D3EE',
+    ring: 'rgba(34,211,238,0.30)',
+    dot: '#22D3EE',
+    label: 'Entregas Recentes',
+  },
   active: {
     bg: 'rgba(34,197,94,0.15)',
     text: '#22C55E',
@@ -73,6 +80,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
   'briefing',
   'setup',
   'delivery',
+  'delivered',
   'active',
 ]
 
@@ -81,7 +89,8 @@ export const NEXT_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
   contract: 'briefing',
   briefing: 'setup',
   setup: 'delivery',
-  delivery: 'active',
+  delivery: 'delivered',
+  delivered: 'active',
 }
 
 export const PREV_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
@@ -89,12 +98,15 @@ export const PREV_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
   briefing: 'contract',
   setup: 'briefing',
   delivery: 'setup',
-  active: 'delivery',
+  delivered: 'delivery',
+  active: 'delivered',
 }
 
 /**
  * SLA (em dias) esperado por etapa. Usado no pipeline pra destacar quem está
  * parado tempo demais. Etapas sem SLA (lead, active, churned) não alertam.
+ * "Entregas Recentes" (delivered) usa 30 dias: passado esse prazo, é o sinal
+ * para mover manualmente o cliente para Ativo.
  */
 export const STAGE_SLA_DAYS: Partial<Record<PipelineStage, number>> = {
   welcome: 2,
@@ -102,4 +114,5 @@ export const STAGE_SLA_DAYS: Partial<Record<PipelineStage, number>> = {
   briefing: 5,
   setup: 3,
   delivery: 3,
+  delivered: 30,
 }

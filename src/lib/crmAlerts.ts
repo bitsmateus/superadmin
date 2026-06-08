@@ -199,7 +199,7 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
     // Clientes ativos com mensagens de follow-up não enviadas.
     // Só entram no alerta os que já venceram (passaram os X dias) — os
     // agendados para o futuro ficam só na aba de follow-up do cliente.
-    if (c.followUpActive && c.stage === 'active') {
+    if (c.followUpActive && (c.stage === 'active' || c.stage === 'delivered')) {
       const now = Date.now()
       const due = (c.followUps ?? []).filter(
         (f) => !f.sentAt && new Date(f.scheduledFor).getTime() <= now,

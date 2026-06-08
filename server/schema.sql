@@ -14,7 +14,7 @@ END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pipeline_stage') THEN
-    CREATE TYPE pipeline_stage AS ENUM ('lead','welcome','contract','briefing','setup','delivery','active','churned');
+    CREATE TYPE pipeline_stage AS ENUM ('lead','welcome','contract','briefing','setup','delivery','delivered','active','churned');
   END IF;
 END $$;
 

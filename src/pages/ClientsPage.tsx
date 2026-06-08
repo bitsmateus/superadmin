@@ -496,6 +496,13 @@ function summarizeNextAction(
       return 'Concluir configuração'
     case 'delivery':
       return 'Finalizar checklist e entregar'
+    case 'delivered': {
+      const next = c.followUps.find((f) => !f.sentAt)
+      const dias = daysSince(c.stageUpdatedAt ?? c.createdAt)
+      if (dias >= 30) return 'Mover para Ativo (entregue há 30+ dias)'
+      if (next) return `Acompanhamento · follow-up dia ${next.dayNumber}`
+      return 'Em acompanhamento (Entregas Recentes)'
+    }
     case 'active': {
       const next = c.followUps.find((f) => !f.sentAt)
       if (next) return `Follow-up dia ${next.dayNumber} · ${timeAgo(next.scheduledFor)}`

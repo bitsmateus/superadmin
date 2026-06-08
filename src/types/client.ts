@@ -5,6 +5,7 @@ export type PipelineStage =
   | 'briefing'
   | 'setup'
   | 'delivery'
+  | 'delivered'
   | 'active'
   | 'churned'
 

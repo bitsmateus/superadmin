@@ -7,6 +7,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Building2,
+  Calendar,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -194,6 +195,7 @@ export function PipelinePage() {
             <ListGroup
               key={stage}
               stage={stage}
+              defaultOpen={stage !== 'delivered' && stage !== 'active' && stage !== 'churned'}
               clients={byStage[stage]}
               onRowClick={(id) => setOpenClientId(id)}
               onAdvance={advanceStage}
@@ -260,6 +262,7 @@ export function PipelinePage() {
 function ListGroup({
   stage,
   clients,
+  defaultOpen = true,
   onRowClick,
   onAdvance,
   onRegress,
@@ -269,8 +272,9 @@ function ListGroup({
   onRowClick: (id: string) => void
   onAdvance: (c: Client) => void
   onRegress: (c: Client) => void
+  defaultOpen?: boolean
 }) {
-  const [open, setOpen] = React.useState(true)
+  const [open, setOpen] = React.useState(defaultOpen)
   const style = STAGE_COLORS[stage]
 
   return (
@@ -369,8 +373,9 @@ function ListGroup({
                             ) : null
                           })()}
                         {c.deliveryDate && (
-                          <div className="mt-0.5 text-[10.5px] text-foreground/40">
-                            Entrega: {formatDateShort(c.deliveryDate)}
+                          <div className="mt-1 inline-flex items-center gap-1 rounded-md border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent">
+                            <Calendar className="h-3 w-3 shrink-0" />
+                            {formatDateShort(c.deliveryDate)}
                           </div>
                         )}
                       </td>

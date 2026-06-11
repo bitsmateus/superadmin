@@ -47,7 +47,9 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
     if (
       c.briefingSentAt &&
       (c.briefingStatus === 'sent' || c.briefingStatus === 'revision') &&
+      c.stage !== 'setup_start' &&
       c.stage !== 'setup' &&
+      c.stage !== 'setup_done' &&
       c.stage !== 'delivery' &&
       c.stage !== 'active'
     ) {
@@ -75,7 +77,9 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
       !c.briefingSentAt &&
       c.briefingStatus !== 'filled' &&
       c.briefingStatus !== 'approved' &&
+      c.stage !== 'setup_start' &&
       c.stage !== 'setup' &&
+      c.stage !== 'setup_done' &&
       c.stage !== 'delivery' &&
       c.stage !== 'active'
     ) {
@@ -98,7 +102,9 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
     // movido pra etapa 'setup'.
     if (
       (c.briefingStatus === 'filled' || c.briefingStatus === 'approved') &&
+      c.stage !== 'setup_start' &&
       c.stage !== 'setup' &&
+      c.stage !== 'setup_done' &&
       c.stage !== 'delivery' &&
       c.stage !== 'active'
     ) {
@@ -119,9 +125,9 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
     }
 
     // ===== 3. Configuração em andamento =====
-    // Cliente em stage 'setup'. Mostra prazo limite (stage_updated_at + 3 dias)
-    // e qual etapa do checklist está pendente.
-    if (c.stage === 'setup') {
+    // Clientes em qualquer sub-etapa de configuração. Mostra prazo limite e
+    // qual etapa do checklist está pendente.
+    if (c.stage === 'setup_start' || c.stage === 'setup' || c.stage === 'setup_done') {
       const startedAt = c.stageUpdatedAt
         ? new Date(c.stageUpdatedAt).getTime()
         : now.getTime()

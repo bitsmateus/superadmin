@@ -105,7 +105,7 @@ export function DeliveryTab({ client }: { client: Client }) {
     // Agendar a reunião de entrega tira o cliente da Configuração e o leva
     // para a etapa de Entrega. Só avança quem está em Configuração (setup) —
     // não pula etapas anteriores nem regride quem já está adiante.
-    const willAdvance = Boolean(deliveryDate) && client.stage === 'setup'
+    const willAdvance = Boolean(deliveryDate) && (client.stage === 'setup' || client.stage === 'setup_done')
     if (willAdvance) patch.stage = 'delivery'
     db.updateClient(client.id, patch)
     db.addLog(client.id, 'Reunião de treinamento atualizada')

@@ -219,7 +219,7 @@ export function CreateTenantModal({
         }
       }
       // Tudo certo — avança etapa e finaliza.
-      const preSetup = ['lead', 'welcome', 'contract', 'briefing']
+      const preSetup = ['lead', 'welcome', 'contract', 'briefing', 'setup_start']
       const advancedStage = preSetup.includes(client.stage) ? 'setup' : client.stage
       if (advancedStage !== client.stage) {
         db.updateClient(client.id, { stage: advancedStage })

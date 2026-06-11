@@ -203,7 +203,7 @@ export function BriefingTab({ client }: { client: Client }) {
     db.updateClient(client.id, {
       briefingStatus: 'approved',
       briefingApprovedAt: new Date().toISOString(),
-      stage: client.stage === 'briefing' ? 'setup' : client.stage,
+      stage: client.stage === 'briefing' ? 'setup_start' : client.stage,
     })
     db.addLog(client.id, 'Briefing aprovado')
     toast.success('Briefing aprovado · etapa avançada para Configuração')
@@ -739,6 +739,12 @@ function AutomationView({ client }: { client: Client }) {
     }
     const next = toggleChecklistItem(tree, item.id, user)
     persist(next, `${item.label}: ${!item.checked ? 'concluído' : 'desmarcado'}`)
+    const allDone = next.length > 0 && next.every((i) => i.checked)
+    if (allDone && client.stage === 'setup') {
+      db.updateClient(client.id, { stage: 'setup_done' })
+      db.addLog(client.id, 'Etapa: Pronto para Entrega', 'Avançado automaticamente ao concluir todas as configurações')
+      toast.success('Todas as configurações concluídas → Pronto para Entrega')
+    }
   }
 
   const createUsers = async () => {

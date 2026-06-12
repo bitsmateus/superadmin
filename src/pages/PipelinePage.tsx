@@ -34,7 +34,7 @@ import {
   STAGE_COLORS,
   STAGE_SLA_DAYS,
 } from '@/constants/stageColors'
-import { asText, cn, formatDateShort, initials } from '@/lib/utils'
+import { asText, cn, formatDateShort, formatDateTimeShort, initials } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
 import type { Client, PipelineStage } from '@/types/client'
 
@@ -375,7 +375,7 @@ function ListGroup({
                         {c.deliveryDate && (
                           <div className="mt-1 inline-flex items-center gap-1 rounded-md border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent">
                             <Calendar className="h-3 w-3 shrink-0" />
-                            {formatDateShort(c.deliveryDate)}
+                            {formatDateTimeShort(c.deliveryDate)}
                           </div>
                         )}
                       </td>

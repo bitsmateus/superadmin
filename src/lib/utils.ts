@@ -28,6 +28,15 @@ export function formatDateShort(value?: string | number | Date | null): string {
   })
 }
 
+export function formatDateTimeShort(value?: string | number | Date | null): string {
+  if (!value) return '—'
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return '—'
+  const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return `${date} às ${time}`
+}
+
 export function isTenantActive(t: { status?: string; active?: boolean; is_active?: boolean }): boolean {
   if (typeof t.active === 'boolean') return t.active
   if (typeof t.is_active === 'boolean') return t.is_active

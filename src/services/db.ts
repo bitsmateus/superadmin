@@ -575,6 +575,22 @@ export const db = {
     return note
   },
 
+  updateNote(clientId: string, noteId: string, text: string): void {
+    const client = db.getClient(clientId)
+    if (!client) return
+    const notes = (client.notes ?? []).map((n) =>
+      n.id === noteId ? { ...n, text } : n,
+    )
+    db.updateClient(clientId, { notes })
+  },
+
+  deleteNote(clientId: string, noteId: string): void {
+    const client = db.getClient(clientId)
+    if (!client) return
+    const notes = (client.notes ?? []).filter((n) => n.id !== noteId)
+    db.updateClient(clientId, { notes })
+  },
+
   getSettings(): AppSettings { return settingsCache },
 
   saveSettings(s: AppSettings): void {

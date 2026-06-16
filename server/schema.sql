@@ -81,12 +81,14 @@ CREATE TABLE IF NOT EXISTS settings (
   backup_remind_days INT DEFAULT 7,
   servers JSONB,
   support_group JSONB,
+  evolution JSONB,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT settings_singleton CHECK (id = TRUE)
 );
 -- add column if running against existing DB
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS support_group JSONB;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS evolution JSONB;
 
 -- ---------- clients ----------
 CREATE TABLE IF NOT EXISTS clients (

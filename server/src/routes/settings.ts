@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { queryOne, query } from '../db.js';
 import { sendSupportGroupMessage, sendWhatsAppToNumber } from '../lib/supportGroup.js';
+import { createEvolutionInstance } from '../lib/evolution.js';
 
 export async function settingsRoutes(app: FastifyInstance) {
   // GET /api/settings — token dos servers é mascarado (nunca vai pro front).
@@ -17,6 +18,11 @@ export async function settingsRoutes(app: FastifyInstance) {
     if (row && row.support_group && typeof row.support_group === 'object') {
       const sg = row.support_group as Record<string, unknown>;
       row.support_group = { ...sg, token: '', tokenSet: Boolean(sg.token) };
+    }
+    // Mascara a apiKey da Evolution.
+    if (row && row.evolution && typeof row.evolution === 'object') {
+      const ev = row.evolution as Record<string, unknown>;
+      row.evolution = { ...ev, apiKey: '', apiKeySet: Boolean(ev.apiKey) };
     }
     return row ?? {};
   });
@@ -72,6 +78,21 @@ export async function settingsRoutes(app: FastifyInstance) {
         supportGroupParam = JSON.stringify(rest);
       }
 
+      // Merge da Evolution preservando a apiKey quando vier vazia (mascarada).
+      let evolutionParam: string | null = null;
+      if (b.evolution && typeof b.evolution === 'object') {
+        const ev = b.evolution as Record<string, unknown>;
+        const existing = await queryOne<{ evolution: Record<string, unknown> | null }>(
+          'SELECT evolution FROM settings WHERE id = true'
+        );
+        const prev = (existing?.evolution ?? {}) as Record<string, unknown>;
+        const rest: Record<string, unknown> = { ...ev };
+        delete rest.apiKeySet;
+        const apiKey = typeof ev.apiKey === 'string' ? ev.apiKey.trim() : '';
+        rest.apiKey = apiKey || (prev.apiKey as string) || '';
+        evolutionParam = JSON.stringify(rest);
+      }
+
       const [row] = await query(
         `INSERT INTO settings (
           id, asaas_api_key, asaas_environment, asaas_sync_interval_min,
@@ -79,9 +100,9 @@ export async function settingsRoutes(app: FastifyInstance) {
           followups_enabled, followup_templates,
           nps_delay_days, nps_enabled, notify_edge_function_url, notify_enabled,
           goal_new_clients_monthly, goal_mrr_monthly, goal_nps_monthly, goals_enabled,
-          last_backup_at, backup_remind_days, servers, support_group, updated_at
+          last_backup_at, backup_remind_days, servers, support_group, evolution, updated_at
         ) VALUES (
-          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
+          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           asaas_api_key = EXCLUDED.asaas_api_key,
@@ -104,6 +125,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           backup_remind_days = EXCLUDED.backup_remind_days,
           servers = COALESCE(EXCLUDED.servers, settings.servers),
           support_group = COALESCE(EXCLUDED.support_group, settings.support_group),
+          evolution = COALESCE(EXCLUDED.evolution, settings.evolution),
           updated_at = NOW()
         RETURNING *`,
         [
@@ -120,6 +142,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           b.last_backup_at ?? null, b.backup_remind_days ?? 7,
           serversParam,
           supportGroupParam,
+          evolutionParam,
         ]
       );
       return row;
@@ -141,6 +164,25 @@ export async function settingsRoutes(app: FastifyInstance) {
       return reply
         .status(502)
         .send({ message: `Falha ao enviar${res.status ? ` (NX ${res.status})` : ''}`, detail: res.detail });
+    }
+  );
+
+  // POST /api/evolution/instance — cria uma instância na Evolution API com o
+  // nome informado (mesmo nome usado na sessão do NX). apiKey fica só no servidor.
+  app.post<{ Body: { instanceName?: string } }>(
+    '/api/evolution/instance',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const instanceName = (req.body?.instanceName ?? '').toString();
+      if (!instanceName.trim())
+        return reply.status(400).send({ message: 'instanceName não informado' });
+      const res = await createEvolutionInstance(instanceName);
+      if (res.ok) return { ok: true, detail: res.detail };
+      if (res.reason === 'not_configured')
+        return reply.status(400).send({ message: 'Evolution não configurada em Configurações' });
+      return reply
+        .status(502)
+        .send({ message: `Falha ao criar instância${res.status ? ` (${res.status})` : ''}`, detail: res.detail });
     }
   );
 

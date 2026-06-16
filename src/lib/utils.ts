@@ -48,9 +48,27 @@ export function slugify(input: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
+/**
+ * Normaliza um número de WhatsApp para só dígitos com prefixo 55 (Brasil).
+ * Ex.: "(62) 99276-4210" → "5562992764210". Usado como nome da instância na
+ * Evolution e da sessão no NX (mesmo identificador nas duas pontas).
+ */
+export function normalizeWhatsappNumber(input: string): string {
+  let digits = (input ?? '').replace(/\D/g, '')
+  if (!digits) return ''
+  if (!digits.startsWith('55')) digits = '55' + digits
+  return digits
+}
+
 export function deriveSupportEmail(companyName: string): string {
-  const slug = slugify(companyName ?? '')
-  return slug ? `suportenx-${slug}@gmail.com` : ''
+  // Nome da empresa compactado: sem acento, minúsculo e SEM separadores
+  // (espaços/hífens removidos). Ex.: "RK Tendas" → "suportenx-rktendas@gmail.com".
+  const compact = (companyName ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+  return compact ? `suportenx-${compact}@gmail.com` : ''
 }
 
 export function isLikelyEmail(value: unknown): value is string {

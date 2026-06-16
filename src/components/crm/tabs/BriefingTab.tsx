@@ -11,6 +11,7 @@ import {
   ListChecks,
   Loader2,
   PenLine,
+  Plus,
   Send,
   SlidersHorizontal,
   Sparkles,
@@ -29,6 +30,8 @@ import { db } from '@/services/db'
 import { api } from '@/services/api'
 import { usersApi } from '@/api/users'
 import { queuesApi } from '@/api/queues'
+import { tenantsApi } from '@/api/tenants'
+import { createEvolutionInstance } from '@/api/evolution'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
 import { getServerById } from '@/store/authStore'
@@ -38,7 +41,7 @@ import {
   setChecklistItem,
   toggleChecklistItem,
 } from '@/constants/checklist'
-import { asText, cn, formatDate } from '@/lib/utils'
+import { asText, cn, formatDate, normalizeWhatsappNumber } from '@/lib/utils'
 import type {
   Client,
   BriefingStatus,
@@ -721,6 +724,7 @@ function AutomationView({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [tenantModalOpen, setTenantModalOpen] = React.useState(false)
   const [creatingUsers, setCreatingUsers] = React.useState(false)
+  const [creatingChannelId, setCreatingChannelId] = React.useState<string | null>(null)
 
   const tree = React.useMemo(
     () => enrichChecklistFromBriefing(client.deliveryChecklist, client.briefingData, client.briefingConfig),
@@ -739,6 +743,54 @@ function AutomationView({ client }: { client: Client }) {
     }
     const next = toggleChecklistItem(tree, item.id, user)
     persist(next, `${item.label}: ${!item.checked ? 'concluído' : 'desmarcado'}`)
+  }
+
+  // Cria o canal de UM número (botão "Criar canal" do checklist): cria a sessão
+  // no NX (tipo evo) E a instância na Evolution, com o mesmo nome (número
+  // normalizado 55+DDD). Marca o item ao concluir.
+  const createChannel = async (item: ChecklistItem) => {
+    const m = /^channels_phone_(\d+)$/.exec(item.id)
+    if (!m) return
+    const idx = parseInt(m[1], 10)
+    const number = client.briefingData?.whatsappNumbers?.[idx]
+    if (!number) {
+      toast.error('Número não encontrado no briefing.')
+      return
+    }
+    if (!client.tenantId || !client.tenantServerId) {
+      toast.error('Crie o tenant antes de criar os canais.')
+      return
+    }
+    const server = getServerById(client.tenantServerId)
+    if (!server) {
+      toast.error('Servidor do tenant não encontrado.')
+      return
+    }
+    const instanceName = normalizeWhatsappNumber(number) || number
+    setCreatingChannelId(item.id)
+    try {
+      await tenantsApi.createSession(server, {
+        tenant: client.tenantId,
+        name: instanceName.slice(0, 60),
+        status: 'DISCONNECTED',
+        type: 'evo',
+      })
+      let evoNote = ''
+      try {
+        await createEvolutionInstance(instanceName)
+      } catch (err) {
+        evoNote = ' (Evolution falhou: ' + extractErrorMessage(err, 'erro') + ')'
+        toast.warning('Canal criado no NX, mas a Evolution falhou: ' + extractErrorMessage(err, 'erro'))
+      }
+      const next = setChecklistItem(tree, item.id, true, user)
+      db.updateClient(client.id, { deliveryChecklist: next })
+      db.addLog(client.id, 'Canal criado', `${instanceName} · NX + Evolution${evoNote}`)
+      if (!evoNote) toast.success(`Canal ${instanceName} criado (NX + Evolution)`)
+    } catch (err) {
+      toast.error('Falha ao criar canal: ' + extractErrorMessage(err, 'erro'))
+    } finally {
+      setCreatingChannelId(null)
+    }
   }
 
   const createUsers = async () => {
@@ -938,6 +990,8 @@ function AutomationView({ client }: { client: Client }) {
               key={item.id}
               item={item}
               onToggle={toggleItem}
+              onCreateChannel={createChannel}
+              creatingChannelId={creatingChannelId}
             />
           ))}
         </ul>
@@ -955,14 +1009,21 @@ function AutomationView({ client }: { client: Client }) {
 function ChecklistRow({
   item,
   onToggle,
+  onCreateChannel,
+  creatingChannelId,
   depth = 0,
 }: {
   item: ChecklistItem
   onToggle: (it: ChecklistItem) => void
+  onCreateChannel?: (it: ChecklistItem) => void
+  creatingChannelId?: string | null
   depth?: number
 }) {
   const hasChildren = Boolean(item.children && item.children.length > 0)
   const [open, setOpen] = React.useState(true)
+  // Botão "Criar canal" só nos itens de número de WhatsApp ainda não criados.
+  const isPhoneChannel = /^channels_phone_\d+$/.test(item.id)
+  const canCreateChannel = isPhoneChannel && !item.checked && Boolean(onCreateChannel)
   return (
     <li className="space-y-1.5">
       <div
@@ -1011,6 +1072,20 @@ function ChecklistRow({
             </p>
           )}
         </div>
+        {canCreateChannel && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => onCreateChannel!(item)}
+            loading={creatingChannelId === item.id}
+            disabled={Boolean(creatingChannelId)}
+            leftIcon={
+              creatingChannelId === item.id ? undefined : <Plus className="h-3.5 w-3.5" />
+            }
+          >
+            Criar canal
+          </Button>
+        )}
       </div>
       {hasChildren && open && (
         <ul
@@ -1022,6 +1097,8 @@ function ChecklistRow({
               key={child.id}
               item={child}
               onToggle={onToggle}
+              onCreateChannel={onCreateChannel}
+              creatingChannelId={creatingChannelId}
               depth={depth + 1}
             />
           ))}

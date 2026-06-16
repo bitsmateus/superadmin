@@ -77,6 +77,8 @@ export async function runMigrations() {
   await pool.query(
     `ALTER TYPE pipeline_stage ADD VALUE IF NOT EXISTS 'delivered' AFTER 'delivery'`
   );
+  // Credenciais da Evolution API (baseUrl + apiKey) para criar instâncias.
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS evolution JSONB`);
   console.log('[db] migrations applied');
 }
 

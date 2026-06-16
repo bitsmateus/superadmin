@@ -343,6 +343,17 @@ export interface AppSettings {
   backupRemindDays?: number
   /** Grupo de WhatsApp para alertas do suporte (token fica só no backend). */
   supportGroup?: SupportGroupConfig
+  /** Credenciais da Evolution API para criar instâncias de canais. */
+  evolution?: EvolutionConfig
+}
+
+export interface EvolutionConfig {
+  /** Base da API (ex.: https://evo.controlemaisia.com.br). */
+  baseUrl?: string
+  /** apiKey — só vai pro backend; no front vem vazia. */
+  apiKey?: string
+  /** Indica que há apiKey salva (preenchido pelo GET). */
+  apiKeySet?: boolean
 }
 
 export interface SupportGroupConfig {

@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/Input'
 import { tenantsApi } from '@/api/tenants'
 import { queuesApi } from '@/api/queues'
 import { usersApi } from '@/api/users'
+import { createEvolutionInstance } from '@/api/evolution'
 import { extractErrorMessage } from '@/api/client'
 import { useAuthStore, type ServerConfig } from '@/store/authStore'
 import { useCurrentUser } from '@/hooks/useClients'
@@ -23,7 +24,7 @@ import {
   enrichChecklistFromBriefing,
   setChecklistItem,
 } from '@/constants/checklist'
-import { cn, deriveSupportEmail } from '@/lib/utils'
+import { cn, deriveSupportEmail, normalizeWhatsappNumber } from '@/lib/utils'
 import type { Client } from '@/types/client'
 
 const FALLBACK_TENANT_PASSWORD = 'Nxim01@!'
@@ -189,6 +190,13 @@ export function CreateTenantModal({
       if (prov.current.apiId == null && c?.tenantApiId) prov.current.apiId = c.tenantApiId
       if (prov.current.apiToken == null && c?.tenantApiToken)
         prov.current.apiToken = c.tenantApiToken
+      // Como o passo "Criar tenant" é pulado no reuso, preenche "Criado em"
+      // aqui também, conforme o servidor selecionado.
+      db.updateClient(client.id, {
+        platformApp: server.id === 'app',
+        platformWeb: server.id === 'web',
+        platformChat: server.id === 'chat',
+      })
     }
 
     const tenantPassword =
@@ -471,6 +479,10 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       tenantName: typeof tName === 'string' ? tName : undefined,
       supportEmail: finalEmail,
       supportPassword: tenantPassword,
+      // Preenche automaticamente "Criado em" conforme o servidor escolhido.
+      platformApp: server.id === 'app',
+      platformWeb: server.id === 'web',
+      platformChat: server.id === 'chat',
       deliveryChecklist: setChecklistItem(enriched, 'tenant_created', true, user),
     })
     db.addLog(
@@ -489,46 +501,92 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       throw new Error('Tenant criado, mas o id não foi capturado. Recarregue a página e provisione de novo.')
     }
     prov.tenantId = tenantId
-    const sessionType = String(client.briefingData?.whatsappType || 'baileys')
-    const session = await tenantsApi.createSession(server, {
-      tenant: tenantId,
-      name: `${client.company || client.name} WhatsApp`.slice(0, 60),
-      status: 'DISCONNECTED',
-      type: sessionType,
-    })
-    prov.channelCreated = true
 
-    // A NX cria a API JUNTO com o canal e devolve tudo aqui:
-    //   sessionId  -> whatsapp.id
-    //   apiId      -> api.apiConfig.id
-    //   apiToken   -> api.plainToken (token real p/ /v2/api/external/{apiId})
-    const wa = pick(session, 'whatsapp') as Record<string, unknown> | undefined
-    const apiWrap = pick(session, 'api') as Record<string, unknown> | undefined
-    const apiConfig = pick(apiWrap, 'apiConfig') as Record<string, unknown> | undefined
+    // Um canal por número de WhatsApp do briefing. O nome (NX) e a instância
+    // (Evolution) usam o número normalizado (55+DDD+número) — mesmo identificador
+    // nas duas pontas. Sem números, cria um canal padrão com o nome da empresa
+    // (sem instância na Evolution, pois não há número). Tipo sempre "evo".
+    const numbers = (client.briefingData?.whatsappNumbers ?? [])
+      .map((n) => String(n).trim())
+      .filter(Boolean)
+    const channels: { nxName: string; evoName: string | null }[] =
+      numbers.length > 0
+        ? numbers.map((n) => {
+            const norm = normalizeWhatsappNumber(n)
+            return { nxName: norm || n, evoName: norm || null }
+          })
+        : [{ nxName: `${client.company || client.name} WhatsApp`, evoName: null }]
 
-    const sessionId =
-      (pick(wa ?? session, 'id', 'sessionId') as string | number | undefined) ?? extractId(session)
-    ;(prov as Record<string, unknown>).sessionId = sessionId
-    if (sessionId == null) {
-      throw new Error(
-        'Canal criado, mas não encontrei o sessionId na resposta. Retorno: ' +
-          JSON.stringify(session).slice(0, 200),
-      )
+    // A NX cria a API JUNTO com o primeiro canal e devolve tudo aqui:
+    //   sessionId -> whatsapp.id · apiId -> api.apiConfig.id · apiToken -> api.plainToken
+    const captureFromSession = (session: unknown): string | number | undefined => {
+      const wa = pick(session, 'whatsapp') as Record<string, unknown> | undefined
+      const apiWrap = pick(session, 'api') as Record<string, unknown> | undefined
+      const apiConfig = pick(apiWrap, 'apiConfig') as Record<string, unknown> | undefined
+      const sessionId =
+        (pick(wa ?? session, 'id', 'sessionId') as string | number | undefined) ?? extractId(session)
+      if (sessionId != null && (prov as Record<string, unknown>).sessionId == null) {
+        ;(prov as Record<string, unknown>).sessionId = sessionId
+      }
+      const apiId = pick(apiConfig, 'id', 'apiId') as string | undefined
+      if (apiId && !prov.apiId) prov.apiId = String(apiId)
+      const apiToken =
+        (pick(apiWrap, 'plainToken') as string | undefined) ??
+        (pick(apiConfig, 'token', 'authToken') as string | undefined)
+      if (apiToken && !prov.apiToken) prov.apiToken = apiToken
+      if (prov.userId == null) prov.userId = pick(wa, 'userId') as string | number | undefined
+      return sessionId
     }
-    const apiId = pick(apiConfig, 'id', 'apiId') as string | undefined
-    if (apiId) prov.apiId = String(apiId)
-    const apiToken =
-      (pick(apiWrap, 'plainToken') as string | undefined) ??
-      (pick(apiConfig, 'token', 'authToken') as string | undefined)
-    if (apiToken) prov.apiToken = apiToken
-    if (prov.userId == null) prov.userId = pick(wa, 'userId') as string | number | undefined
+
+    let createdChannels = 0
+    let createdEvo = 0
+    const channelFailures: string[] = []
+    for (let idx = 0; idx < channels.length; idx++) {
+      const { nxName, evoName } = channels[idx]
+      const name = nxName.slice(0, 60)
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const session = await tenantsApi.createSession(server, {
+          tenant: tenantId,
+          name,
+          status: 'DISCONNECTED',
+          type: 'evo',
+        })
+        const sid = captureFromSession(session)
+        // O primeiro canal é crítico: é ele que gera a API + token.
+        if (idx === 0 && sid == null) {
+          throw new Error(
+            'Canal criado, mas não encontrei o sessionId na resposta. Retorno: ' +
+              JSON.stringify(session).slice(0, 200),
+          )
+        }
+        createdChannels++
+        // Cria também a instância na Evolution com o MESMO nome (número).
+        if (evoName) {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            await createEvolutionInstance(evoName)
+            createdEvo++
+          } catch (err) {
+            channelFailures.push(`Evolution ${evoName}: ${extractErrorMessage(err, 'falha')}`)
+          }
+        }
+      } catch (err) {
+        if (idx === 0) throw err // sem o primeiro canal não há API — aborta
+        channelFailures.push(`${name}: ${extractErrorMessage(err, 'falha')}`)
+      }
+    }
+    prov.channelCreated = true
 
     db.updateClient(client.id, {
       tenantApiId: prov.apiId || undefined,
       tenantApiToken: prov.apiToken || undefined,
       deliveryChecklist: setChecklistItem(currentChecklist(), 'channels_created', true, 'Sistema'),
     })
-    return sessionType
+    const base = `${createdChannels} canal(is) · ${createdEvo} na Evolution`
+    return channelFailures.length > 0
+      ? `${base} · ${channelFailures.length} falhou(ram)`
+      : base
   }
 
   if (key === 'api') {

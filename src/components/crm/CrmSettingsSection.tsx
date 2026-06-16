@@ -11,6 +11,7 @@ import {
   Mail,
   Phone,
   Save,
+  Smartphone,
   Star,
   Trophy,
   Upload,
@@ -41,6 +42,7 @@ export function CrmSettingsSection() {
       <NpsBlock />
       <AsaasBlock />
       <CredentialsBlock />
+      <EvolutionBlock />
       <FollowUpBlock />
       <BackupBlock />
     </div>
@@ -784,6 +786,89 @@ function CredentialsBlock() {
             leftIcon={<Save className="h-4 w-4" />}
           >
             Salvar credenciais
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function EvolutionBlock() {
+  const settings = useSettings()
+  const [baseUrl, setBaseUrl] = React.useState(settings.evolution?.baseUrl ?? '')
+  const [apiKey, setApiKey] = React.useState('')
+  const [showKey, setShowKey] = React.useState(false)
+  const keySet = Boolean(settings.evolution?.apiKeySet)
+
+  React.useEffect(() => {
+    setBaseUrl(settings.evolution?.baseUrl ?? '')
+    setApiKey('')
+  }, [settings.evolution?.baseUrl, settings.evolution?.apiKeySet])
+
+  const dirty =
+    baseUrl.trim() !== (settings.evolution?.baseUrl ?? '') || apiKey.trim() !== ''
+
+  const save = () => {
+    db.saveSettings({
+      ...db.getSettings(),
+      evolution: {
+        baseUrl: baseUrl.trim() || undefined,
+        // Vazio = mantém a apiKey atual no backend (merge preserva).
+        apiKey: apiKey.trim() || undefined,
+      },
+    })
+    setApiKey('')
+    toast.success('Evolution salva')
+  }
+
+  return (
+    <section>
+      <header className="mb-3 flex items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+          <Smartphone className="h-3.5 w-3.5" />
+        </span>
+        <div>
+          <h2 className="text-sm font-medium text-foreground">Evolution API</h2>
+          <p className="text-xs text-foreground/45">
+            Ao criar um canal, a instância também é criada na Evolution com o mesmo
+            nome (número). A apiKey fica só no servidor.
+          </p>
+        </div>
+      </header>
+
+      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+        <Input
+          label="URL da Evolution"
+          placeholder="https://evo.controlemaisia.com.br"
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          leftIcon={<Smartphone className="h-4 w-4" />}
+          hint="Sem a barra no final."
+        />
+        <Input
+          label="apiKey (Global API Key da Evolution)"
+          type={showKey ? 'text' : 'password'}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={keySet ? '•••••••• (salva — deixe vazio para manter)' : 'Cole a apiKey'}
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          leftIcon={<KeyRound className="h-4 w-4" />}
+          rightIcon={
+            <button
+              type="button"
+              onClick={() => setShowKey((s) => !s)}
+              className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
+              aria-label={showKey ? 'Ocultar' : 'Mostrar'}
+            >
+              {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          }
+          hint={keySet ? 'Já existe uma apiKey salva. Preencha só para trocar.' : 'Nunca é exibida depois de salva.'}
+        />
+        <div className="flex justify-end">
+          <Button onClick={save} disabled={!dirty} leftIcon={<Save className="h-4 w-4" />}>
+            Salvar Evolution
           </Button>
         </div>
       </div>

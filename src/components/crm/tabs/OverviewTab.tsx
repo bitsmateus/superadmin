@@ -58,6 +58,8 @@ export function OverviewTab({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [noteText, setNoteText] = React.useState('')
   const [noteInternal, setNoteInternal] = React.useState(false)
+  const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null)
+  const [editingNoteText, setEditingNoteText] = React.useState('')
   const tenantServer = useServerById(client.tenantServerId)
 
   const addNote = () => {
@@ -303,13 +305,80 @@ export function OverviewTab({ client }: { client: Client }) {
                             </span>
                           )}
                         </span>
-                        <span className="text-[10px] text-foreground/40">
-                          {timeAgo(n.createdAt)}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-foreground/40">
+                            {timeAgo(n.createdAt)}
+                          </span>
+                          {editingNoteId !== n.id && (
+                            <>
+                              <button
+                                type="button"
+                                title="Editar nota"
+                                onClick={() => {
+                                  setEditingNoteId(n.id)
+                                  setEditingNoteText(n.text)
+                                }}
+                                className="ml-1 grid h-5 w-5 place-items-center rounded text-foreground/35 hover:text-accent transition-colors"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                title="Excluir nota"
+                                onClick={() => {
+                                  db.deleteNote(client.id, n.id)
+                                  db.addLog(client.id, 'Nota excluída')
+                                  toast.success('Nota excluída')
+                                }}
+                                className="grid h-5 w-5 place-items-center rounded text-foreground/35 hover:text-danger transition-colors"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">
-                        {asText(n.text)}
-                      </p>
+
+                      {editingNoteId === n.id ? (
+                        <div className="mt-2 space-y-2">
+                          <textarea
+                            value={editingNoteText}
+                            onChange={(e) => setEditingNoteText(e.target.value)}
+                            rows={3}
+                            className="w-full resize-y rounded-lg border border-accent/40 bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+                            autoFocus
+                          />
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditingNoteId(null)}
+                              className="px-2 py-1 text-xs text-foreground/50 hover:text-foreground transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!editingNoteText.trim()}
+                              onClick={() => {
+                                const t = editingNoteText.trim()
+                                if (!t) return
+                                db.updateNote(client.id, n.id, t)
+                                db.addLog(client.id, 'Nota editada')
+                                toast.success('Nota atualizada')
+                                setEditingNoteId(null)
+                              }}
+                              className="inline-flex items-center gap-1 rounded-md bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/25 transition-colors disabled:opacity-40"
+                            >
+                              <Check className="h-3 w-3" />
+                              Salvar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">
+                          {asText(n.text)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </li>

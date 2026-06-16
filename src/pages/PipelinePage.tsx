@@ -7,6 +7,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Building2,
+  Calendar,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -33,7 +34,7 @@ import {
   STAGE_COLORS,
   STAGE_SLA_DAYS,
 } from '@/constants/stageColors'
-import { asText, cn, formatDateShort, initials } from '@/lib/utils'
+import { asText, cn, formatDateShort, formatDateTimeShort, initials } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
 import type { Client, PipelineStage } from '@/types/client'
 
@@ -49,6 +50,15 @@ export function PipelinePage() {
   const [search, setSearch] = React.useState('')
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
   const [openNew, setOpenNew] = React.useState(false)
+  const [filterResp, setFilterResp] = React.useState('')
+
+  const responsavelOptions = React.useMemo(() => {
+    const seen = new Set<string>()
+    for (const c of clients) {
+      if (c.responsavel) seen.add(c.responsavel)
+    }
+    return [...seen].sort()
+  }, [clients])
 
   const {
     register,
@@ -81,7 +91,9 @@ export function PipelinePage() {
       welcome: [],
       contract: [],
       briefing: [],
+      setup_start: [],
       setup: [],
+      setup_done: [],
       delivery: [],
       delivered: [],
       active: [],
@@ -95,10 +107,19 @@ export function PipelinePage() {
           asText(c.company).toLowerCase()
         if (!blob.includes(q)) continue
       }
+      if (filterResp && c.responsavel !== filterResp) continue
       buckets[c.stage].push(c)
     }
+    // Oldest entries first within each stage
+    for (const stage of Object.keys(buckets) as PipelineStage[]) {
+      buckets[stage].sort(
+        (a, b) =>
+          new Date(a.stageUpdatedAt ?? a.createdAt).getTime() -
+          new Date(b.stageUpdatedAt ?? b.createdAt).getTime(),
+      )
+    }
     return buckets
-  }, [clients, search])
+  }, [clients, search, filterResp])
 
   const advanceStage = (c: Client) => {
     const next = NEXT_STAGE[c.stage]
@@ -147,14 +168,26 @@ export function PipelinePage() {
       />
 
       <div className="px-8 py-6">
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <Input
             placeholder="Filtrar por nome ou empresa…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             leftIcon={<Search className="h-4 w-4" />}
-            containerClassName="sm:max-w-sm"
+            containerClassName="sm:max-w-xs"
           />
+          {responsavelOptions.length > 0 && (
+            <select
+              value={filterResp}
+              onChange={(e) => setFilterResp(e.target.value)}
+              className="h-9 rounded-lg border border-line bg-card px-3 text-sm text-foreground focus:border-accent focus:outline-none"
+            >
+              <option value="">Todos os responsáveis</option>
+              {responsavelOptions.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="space-y-3">
@@ -162,6 +195,7 @@ export function PipelinePage() {
             <ListGroup
               key={stage}
               stage={stage}
+              defaultOpen={stage !== 'delivered' && stage !== 'active' && stage !== 'churned'}
               clients={byStage[stage]}
               onRowClick={(id) => setOpenClientId(id)}
               onAdvance={advanceStage}
@@ -228,6 +262,7 @@ export function PipelinePage() {
 function ListGroup({
   stage,
   clients,
+  defaultOpen = true,
   onRowClick,
   onAdvance,
   onRegress,
@@ -237,8 +272,9 @@ function ListGroup({
   onRowClick: (id: string) => void
   onAdvance: (c: Client) => void
   onRegress: (c: Client) => void
+  defaultOpen?: boolean
 }) {
-  const [open, setOpen] = React.useState(true)
+  const [open, setOpen] = React.useState(defaultOpen)
   const style = STAGE_COLORS[stage]
 
   return (
@@ -311,6 +347,11 @@ function ListGroup({
                             <div className="font-medium text-foreground">
                               {asText(c.name, '—')}
                             </div>
+                            {c.responsavel && (
+                              <div className="mt-0.5 text-[10.5px] text-foreground/40">
+                                {c.responsavel}
+                              </div>
+                            )}
                             <div className="mt-0.5">
                               <StageBadge stage={c.stage} size="sm" />
                             </div>
@@ -319,7 +360,10 @@ function ListGroup({
                       </td>
                       <td className="px-4 py-3 text-foreground/70">
                         <div>{asText(c.company, '—')}</div>
-                        {c.stage === 'setup' &&
+                        {c.stage === 'briefing' && (
+                          <BriefingSubStatus briefingStatus={c.briefingStatus} />
+                        )}
+                        {(c.stage === 'setup_start' || c.stage === 'setup' || c.stage === 'setup_done') &&
                           (() => {
                             const hint = checklistHint(c)
                             return hint ? (
@@ -328,6 +372,12 @@ function ListGroup({
                               </div>
                             ) : null
                           })()}
+                        {c.deliveryDate && (
+                          <div className="mt-1 inline-flex items-center gap-1 rounded-md border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent">
+                            <Calendar className="h-3 w-3 shrink-0" />
+                            {formatDateTimeShort(c.deliveryDate)}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-foreground/55">
                         {formatDateShort(c.createdAt)}
@@ -451,6 +501,24 @@ function checklistHint(
     total: items.length,
     label: next ? next.label : 'Checklist concluído',
   }
+}
+
+function BriefingSubStatus({ briefingStatus }: { briefingStatus?: string }) {
+  if (!briefingStatus || briefingStatus === 'not_sent') {
+    return (
+      <div className="mt-0.5 text-[10.5px] text-foreground/40">
+        Briefing não gerado
+      </div>
+    )
+  }
+  if (briefingStatus === 'sent' || briefingStatus === 'revision') {
+    return (
+      <div className="mt-0.5 text-[10.5px] text-warning">
+        Aguardando preenchimento
+      </div>
+    )
+  }
+  return null
 }
 
 interface CardAlert {

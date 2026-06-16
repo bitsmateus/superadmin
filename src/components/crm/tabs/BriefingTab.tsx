@@ -17,6 +17,7 @@ import {
   Sparkles,
   UserPlus,
   Wand2,
+  X,
   Server as ServerIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -28,6 +29,7 @@ import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
+import { tenantsApi } from '@/api/tenants'
 import { usersApi } from '@/api/users'
 import { queuesApi } from '@/api/queues'
 import { tenantsApi } from '@/api/tenants'
@@ -206,7 +208,7 @@ export function BriefingTab({ client }: { client: Client }) {
     db.updateClient(client.id, {
       briefingStatus: 'approved',
       briefingApprovedAt: new Date().toISOString(),
-      stage: client.stage === 'briefing' ? 'setup' : client.stage,
+      stage: client.stage === 'briefing' ? 'setup_start' : client.stage,
     })
     db.addLog(client.id, 'Briefing aprovado')
     toast.success('Briefing aprovado · etapa avançada para Configuração')
@@ -720,11 +722,26 @@ function SubTabBtn({
 
 // ── Automation view ───────────────────────────────────────────────────────────
 
+const SESSION_TYPES = [
+  { value: 'baileys', label: 'Baileys' },
+  { value: 'meow', label: 'Meow' },
+  { value: 'evo', label: 'Evo' },
+  { value: 'uazapi', label: 'Uazapi' },
+  { value: 'zapi', label: 'Zapi' },
+  { value: 'whatsapp', label: 'WhatsApp (Oficial)' },
+]
+
 function AutomationView({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [tenantModalOpen, setTenantModalOpen] = React.useState(false)
   const [creatingUsers, setCreatingUsers] = React.useState(false)
+<<<<<<< HEAD
   const [creatingChannelId, setCreatingChannelId] = React.useState<string | null>(null)
+=======
+  const [channelCreating, setChannelCreating] = React.useState<string | null>(null)
+  const [channelTypeMap, setChannelTypeMap] = React.useState<Record<string, string>>({})
+  const [channelProgress, setChannelProgress] = React.useState<Record<string, boolean>>({})
+>>>>>>> 3b987ef8524f1671dc10304cd36f5b8a4bed5416
 
   const tree = React.useMemo(
     () => enrichChecklistFromBriefing(client.deliveryChecklist, client.briefingData, client.briefingConfig),
@@ -743,6 +760,95 @@ function AutomationView({ client }: { client: Client }) {
     }
     const next = toggleChecklistItem(tree, item.id, user)
     persist(next, `${item.label}: ${!item.checked ? 'concluído' : 'desmarcado'}`)
+    const allDone = next.length > 0 && next.every((i) => i.checked)
+    if (allDone && client.stage === 'setup') {
+      db.updateClient(client.id, { stage: 'setup_done' })
+      db.addLog(client.id, 'Etapa: Pronto para Entrega', 'Avançado automaticamente ao concluir todas as configurações')
+      toast.success('Todas as configurações concluídas → Pronto para Entrega')
+    }
+  }
+
+  const createChannel = async (itemId: string, phone: string) => {
+    if (!client.tenantId) {
+      toast.error('Crie o tenant primeiro.')
+      return
+    }
+    const server = getServerById(client.tenantServerId ?? '')
+    if (!server) {
+      toast.error('Servidor do tenant não encontrado.')
+      return
+    }
+    const type = channelTypeMap[itemId] ?? 'baileys'
+    setChannelProgress((p) => ({ ...p, [itemId]: true }))
+    try {
+      await tenantsApi.createSession(server, {
+        tenant: client.tenantId,
+        name: `${client.company || client.name} ${phone}`.slice(0, 60),
+        status: 'DISCONNECTED',
+        type,
+      })
+      const next = setChecklistItem(tree, itemId, true, 'Sistema')
+      persist(next, `Canal ${phone} criado (${type})`)
+      toast.success(`Canal criado para ${phone}`)
+      setChannelCreating(null)
+    } catch (err) {
+      toast.error(`Falha ao criar canal: ${extractErrorMessage(err, 'erro')}`)
+    } finally {
+      setChannelProgress((p) => ({ ...p, [itemId]: false }))
+    }
+  }
+
+  const renderChannelExtra = (item: ChecklistItem): React.ReactNode => {
+    if (!item.id.startsWith('channels_phone_') || item.checked) return null
+    const isOpen = channelCreating === item.id
+    const type = channelTypeMap[item.id] ?? 'baileys'
+    const loading = channelProgress[item.id] ?? false
+    const phoneMatch = item.label.match(/\(([^)]+)\)/)
+    const phone = phoneMatch?.[1] ?? ''
+    if (!isOpen) {
+      return (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setChannelCreating(item.id) }}
+          className="shrink-0 inline-flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-[11px] text-foreground/55 hover:border-accent/40 hover:text-accent transition-colors"
+        >
+          <Plus className="h-3 w-3" />
+          Criar canal
+        </button>
+      )
+    }
+    return (
+      <div
+        className="flex shrink-0 items-center gap-1.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <select
+          value={type}
+          onChange={(e) => setChannelTypeMap((m) => ({ ...m, [item.id]: e.target.value }))}
+          className="h-6 rounded border border-line bg-card px-1.5 text-[11px] text-foreground focus:border-accent focus:outline-none"
+        >
+          {SESSION_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={(e) => { e.stopPropagation(); createChannel(item.id, phone) }}
+          className="inline-flex items-center gap-1 rounded-md bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent hover:bg-accent/25 transition-colors disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+          Criar
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setChannelCreating(null) }}
+          className="grid h-5 w-5 place-items-center rounded text-foreground/40 hover:text-foreground/70 transition-colors"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    )
   }
 
   // Cria o canal de UM número (botão "Criar canal" do checklist): cria a sessão
@@ -990,8 +1096,12 @@ function AutomationView({ client }: { client: Client }) {
               key={item.id}
               item={item}
               onToggle={toggleItem}
+<<<<<<< HEAD
               onCreateChannel={createChannel}
               creatingChannelId={creatingChannelId}
+=======
+              renderExtra={renderChannelExtra}
+>>>>>>> 3b987ef8524f1671dc10304cd36f5b8a4bed5416
             />
           ))}
         </ul>
@@ -1012,12 +1122,14 @@ function ChecklistRow({
   onCreateChannel,
   creatingChannelId,
   depth = 0,
+  renderExtra,
 }: {
   item: ChecklistItem
   onToggle: (it: ChecklistItem) => void
   onCreateChannel?: (it: ChecklistItem) => void
   creatingChannelId?: string | null
   depth?: number
+  renderExtra?: (item: ChecklistItem) => React.ReactNode
 }) {
   const hasChildren = Boolean(item.children && item.children.length > 0)
   const [open, setOpen] = React.useState(true)
@@ -1028,7 +1140,7 @@ function ChecklistRow({
     <li className="space-y-1.5">
       <div
         className={cn(
-          'flex items-start gap-3 rounded-lg border px-3 py-2 transition-colors',
+          'flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors',
           item.checked
             ? 'border-success/30 bg-success/[0.05]'
             : 'border-line bg-elevate/[0.02] hover:bg-elevate/[0.04]',
@@ -1038,7 +1150,7 @@ function ChecklistRow({
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="mt-0.5 grid h-4 w-4 place-items-center text-foreground/45 hover:text-foreground"
+            className="grid h-4 w-4 shrink-0 place-items-center text-foreground/45 hover:text-foreground"
             aria-label={open ? 'Recolher' : 'Expandir'}
           >
             {open ? (
@@ -1048,13 +1160,13 @@ function ChecklistRow({
             )}
           </button>
         ) : (
-          <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <span className="h-4 w-4 shrink-0" aria-hidden />
         )}
         <input
           type="checkbox"
           checked={item.checked}
           onChange={() => onToggle(item)}
-          className="mt-0.5 h-4 w-4 accent-[#4F8EF7]"
+          className="h-4 w-4 shrink-0 accent-[#4F8EF7]"
         />
         <div className="min-w-0 flex-1">
           <p
@@ -1072,6 +1184,7 @@ function ChecklistRow({
             </p>
           )}
         </div>
+<<<<<<< HEAD
         {canCreateChannel && (
           <Button
             size="sm"
@@ -1086,6 +1199,9 @@ function ChecklistRow({
             Criar canal
           </Button>
         )}
+=======
+        {renderExtra && renderExtra(item)}
+>>>>>>> 3b987ef8524f1671dc10304cd36f5b8a4bed5416
       </div>
       {hasChildren && open && (
         <ul
@@ -1100,6 +1216,7 @@ function ChecklistRow({
               onCreateChannel={onCreateChannel}
               creatingChannelId={creatingChannelId}
               depth={depth + 1}
+              renderExtra={renderExtra}
             />
           ))}
         </ul>

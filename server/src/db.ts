@@ -77,6 +77,14 @@ export async function runMigrations() {
   await pool.query(
     `ALTER TYPE pipeline_stage ADD VALUE IF NOT EXISTS 'delivered' AFTER 'delivery'`
   );
+  // Etapas "Iniciar Configuração" (setup_start) e "Pronto para Entrega"
+  // (setup_done), em volta de "setup".
+  await pool.query(
+    `ALTER TYPE pipeline_stage ADD VALUE IF NOT EXISTS 'setup_start' BEFORE 'setup'`
+  );
+  await pool.query(
+    `ALTER TYPE pipeline_stage ADD VALUE IF NOT EXISTS 'setup_done' AFTER 'setup'`
+  );
   // Credenciais da Evolution API (baseUrl + apiKey) para criar instâncias.
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS evolution JSONB`);
   console.log('[db] migrations applied');

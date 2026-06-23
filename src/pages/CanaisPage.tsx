@@ -517,33 +517,41 @@ function AlertConfigModal({ channel, onClose }: { channel: NxChannel | null; onC
   )
 }
 
+const ASSIGN_SERVERS: { value: string; label: string }[] = [
+  { value: 'all', label: 'Todos os servidores' },
+  { value: 'chat', label: 'Chat' },
+  { value: 'app', label: 'App' },
+  { value: 'web', label: 'Web' },
+]
+
 function AssignModal({ orphan, onClose }: { orphan: OrphanInstance | null; onClose: () => void }) {
   const clients = useClients()
   const assign = useAssignChannel()
   const [clientId, setClientId] = React.useState('')
   const [q, setQ] = React.useState('')
+  const [server, setServer] = React.useState('all')
 
   React.useEffect(() => {
     setClientId('')
     setQ('')
+    setServer('all')
   }, [orphan])
 
-  const options = React.useMemo(() => {
+  const matches = React.useMemo(() => {
     const ql = q.trim().toLowerCase()
     return clients
-      .filter((c) => !ql || (c.company || c.name).toLowerCase().includes(ql))
-      .slice(0, 50)
-      .map((c) => ({ value: c.id, label: c.company || c.name }))
-  }, [clients, q])
+      .filter((c) => {
+        if (server !== 'all' && (c.tenantServerId ?? '') !== server) return false
+        if (!ql) return true
+        return [c.company, c.name, c.email].some((x) => asText(x).toLowerCase().includes(ql))
+      })
+      .slice(0, 100)
+  }, [clients, q, server])
 
-  const save = () => {
-    if (!clientId) {
-      toast.error('Selecione um cliente.')
-      return
-    }
+  const doAssign = (id: string) => {
     if (!orphan) return
     assign.mutate(
-      { provider: orphan.provider, instance_key: orphan.instance_key, client_id: clientId },
+      { provider: orphan.provider, instance_key: orphan.instance_key, client_id: id },
       {
         onSuccess: () => {
           toast.success('Número vinculado ao cliente')
@@ -566,25 +574,54 @@ function AssignModal({ orphan, onClose }: { orphan: OrphanInstance | null; onClo
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={save} loading={assign.isPending}>
+          <Button onClick={() => doAssign(clientId)} loading={assign.isPending} disabled={!clientId}>
             Vincular
           </Button>
         </>
       }
     >
       <div className="space-y-3">
-        <Input
-          placeholder="Buscar cliente…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          leftIcon={<Search className="h-4 w-4" />}
-        />
-        <Select
-          label="Cliente"
-          value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
-          options={[{ value: '', label: '— Selecione —' }, ...options]}
-        />
+        <div className="flex gap-2">
+          <Input
+            placeholder="Digite o nome do cliente…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            leftIcon={<Search className="h-4 w-4" />}
+            containerClassName="flex-1"
+          />
+          <div className="w-40">
+            <Select value={server} onChange={(e) => setServer(e.target.value)} options={ASSIGN_SERVERS} />
+          </div>
+        </div>
+
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-line">
+          {matches.length === 0 ? (
+            <p className="px-3 py-4 text-center text-xs text-foreground/45">Nenhum cliente encontrado.</p>
+          ) : (
+            <ul className="divide-y divide-line/60">
+              {matches.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => setClientId(c.id)}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors',
+                      clientId === c.id ? 'bg-accent/10 text-accent' : 'hover:bg-elevate/[0.04] text-foreground/85',
+                    )}
+                  >
+                    <span className="min-w-0 truncate">{asText(c.company || c.name, '—')}</span>
+                    {c.tenantServerId && (
+                      <Badge tone="neutral" className="shrink-0">
+                        {c.tenantServerId}
+                      </Badge>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <p className="text-[11px] text-foreground/45">
           Apenas um vínculo local — não altera nada na NX/UAZAPI/Evolution. O número passa a
           aparecer sob este cliente.

@@ -33,7 +33,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
-import { useServerById } from '@/store/authStore'
+import { useAuthStore } from '@/store/authStore'
 import { copyToClipboard } from '@/lib/clipboard'
 import { asText, cn, formatDate, initials } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
@@ -60,7 +60,6 @@ export function OverviewTab({ client }: { client: Client }) {
   const [noteInternal, setNoteInternal] = React.useState(false)
   const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null)
   const [editingNoteText, setEditingNoteText] = React.useState('')
-  const tenantServer = useServerById(client.tenantServerId)
 
   const addNote = () => {
     const trimmed = noteText.trim()
@@ -201,39 +200,8 @@ export function OverviewTab({ client }: { client: Client }) {
       {/* Acessos */}
       <AccessesSection client={client} />
 
-      {/* Tenant vinculado */}
-      {(client.tenantId || client.supportEmail) && (
-        <Section
-          title={
-            <span className="flex items-center gap-2">
-              <ServerIcon className="h-3.5 w-3.5 text-accent" />
-              Tenant vinculado
-            </span>
-          }
-          action={
-            tenantServer ? (
-              <span className="rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent ring-1 ring-accent/20">
-                {tenantServer.name}
-              </span>
-            ) : null
-          }
-        >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <FieldLabel>Nome do tenant</FieldLabel>
-              <p className="mt-1 text-sm text-foreground/85">
-                {client.tenantName ?? client.tenantId ?? '—'}
-              </p>
-            </div>
-            <div>
-              <FieldLabel>ID</FieldLabel>
-              <p className="mt-1 text-sm text-foreground/85">
-                <code className="text-foreground/70">{client.tenantId ?? '—'}</code>
-              </p>
-            </div>
-          </div>
-        </Section>
-      )}
+      {/* Tenant vinculado — editável (permite vincular clientes antigos à mão) */}
+      <TenantLinkSection client={client} />
 
       {/* Notas */}
       <Section
@@ -427,6 +395,94 @@ export function OverviewTab({ client }: { client: Client }) {
         )}
       </Section>
     </div>
+  )
+}
+
+// ─── Tenant vinculado (editável) ──────────────────────────────────────────────
+
+function TenantLinkSection({ client }: { client: Client }) {
+  const servers = useAuthStore((s) => s.servers)
+  const serverName = servers.find((sv) => sv.id === client.tenantServerId)?.name
+
+  return (
+    <Section
+      title={
+        <span className="flex items-center gap-2">
+          <ServerIcon className="h-3.5 w-3.5 text-accent" />
+          Tenant vinculado
+        </span>
+      }
+      action={
+        serverName ? (
+          <span className="rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent ring-1 ring-accent/20">
+            {serverName}
+          </span>
+        ) : null
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <FieldLabel>Servidor</FieldLabel>
+          <select
+            value={client.tenantServerId ?? ''}
+            onChange={(e) => {
+              db.updateClient(client.id, { tenantServerId: e.target.value || undefined })
+              db.addLog(client.id, 'Servidor do tenant atualizado')
+            }}
+            className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+          >
+            <option value="">— Selecione —</option>
+            {servers.map((sv) => (
+              <option key={sv.id} value={sv.id}>
+                {sv.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <InlineField
+          label="Nome do tenant"
+          value={client.tenantName ?? ''}
+          placeholder="Sem informação"
+          onSave={(v) =>
+            db.updateClient(client.id, { tenantName: v.trim() || undefined }) &&
+            db.addLog(client.id, 'Nome do tenant atualizado')
+          }
+        />
+        <InlineField
+          label="Tenant ID"
+          value={client.tenantId ?? ''}
+          placeholder="Sem informação"
+          onSave={(v) =>
+            db.updateClient(client.id, { tenantId: v.trim() || undefined }) &&
+            db.addLog(client.id, 'Tenant ID atualizado')
+          }
+        />
+        <InlineField
+          label="API ID"
+          value={client.tenantApiId ?? ''}
+          placeholder="apiId do tenant"
+          onSave={(v) =>
+            db.updateClient(client.id, { tenantApiId: v.trim() || undefined }) &&
+            db.addLog(client.id, 'API ID do tenant atualizado')
+          }
+        />
+        <div className="sm:col-span-2">
+          <InlineField
+            label="API Token (do tenant)"
+            value={client.tenantApiToken ?? ''}
+            placeholder="Cole o token da API do tenant"
+            onSave={(v) =>
+              db.updateClient(client.id, { tenantApiToken: v.trim() || undefined }) &&
+              db.addLog(client.id, 'API Token do tenant atualizado')
+            }
+          />
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-foreground/45">
+        Necessário para listar os canais e reconciliar o status. Clientes antigos podem não ter o
+        token — cole aqui o <strong>API Token do tenant</strong> para vincular.
+      </p>
+    </Section>
   )
 }
 

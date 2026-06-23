@@ -15,7 +15,8 @@ export type NxChannelStatus = 'connected' | 'disconnected' | 'connecting' | 'unk
 
 export interface NxChannel {
   channel_key: string
-  client_id: string
+  source: 'nx' | 'provider'
+  client_id: string | null
   client_name: string
   client_company: string | null
   server_id: string | null
@@ -34,6 +35,15 @@ export interface NxChannel {
   alert_number: string | null
 }
 
+export interface OrphanInstance {
+  provider: 'uazapi' | 'evolution'
+  instance_key: string
+  name: string
+  number: string | null
+  status: NxChannelStatus
+  server: string | null
+}
+
 export interface NxChannelsSummary {
   total: number
   connected: number
@@ -41,12 +51,15 @@ export interface NxChannelsSummary {
   connecting: number
   unknown: number
   divergent: number
+  orphans: number
 }
 
 export interface NxChannelsResponse {
   channels: NxChannel[]
+  orphans: OrphanInstance[]
   summary: NxChannelsSummary
   errors: { client: string; error: string | null }[]
+  providerErrors: string[]
   updated_at: string
 }
 
@@ -66,5 +79,8 @@ export const channelsApi = {
   },
   async sendAlertTest(number: string): Promise<void> {
     await http.post('/channels/alert-test', { number })
+  },
+  async assign(provider: string, instance_key: string, client_id: string | null): Promise<void> {
+    await http.post('/channels/assign', { provider, instance_key, client_id })
   },
 }

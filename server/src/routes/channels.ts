@@ -3,11 +3,12 @@ import { query, queryOne } from '../db.js';
 import { sendWhatsAppToNumber } from '../lib/supportGroup.js';
 
 /**
- * Lista os canais de TODOS os tenants (via NX listChannels por API) e reconcilia
- * o status que a NX reporta com o status real do provedor (Evolution / UAZAPI).
- * Tudo no superadmin — a NX é consultada com o token da API de cada tenant
- * (clients.tenant_api_token); Evolution/UAZAPI com credenciais das settings.
- * SOMENTE LEITURA: nada é criado, alterado ou apagado nos provedores.
+ * Lista os canais de TODOS os tenants (via NX listChannels) E todas as
+ * instâncias dos provedores (UAZAPI/Evolution), reconciliando o status que a NX
+ * reporta com o real do provedor. Instâncias que existem no provedor mas não
+ * batem com nenhum tenant da NX ficam como "avulsas" (orphans) — e podem ser
+ * vinculadas manualmente a um cliente (channel_assignments).
+ * SOMENTE LEITURA nos provedores: nada é criado, alterado ou apagado.
  */
 
 const SERVER_BASEURL_DEFAULTS: Record<string, string> = {
@@ -28,11 +29,12 @@ function normStatus(s: unknown): ChannelStatus {
 
 export interface ReconciledChannel {
   channel_key: string;
-  client_id: string;
-  client_name: string;
+  source: 'nx' | 'provider';
+  client_id: string | null;
+  client_name: string | null;
   client_company: string | null;
   server_id: string | null;
-  nx_channel_id: number | string;
+  nx_channel_id: number | string | null;
   name: string;
   type: string;
   number: string | null;
@@ -42,8 +44,16 @@ export interface ReconciledChannel {
   nx_status: ChannelStatus;
   real_status: ChannelStatus | null;
   divergent: boolean;
-  /** Status que vale para alerta: o do provedor quando há, senão o da NX. */
   effective_status: ChannelStatus;
+}
+
+export interface OrphanInstance {
+  provider: 'uazapi' | 'evolution';
+  instance_key: string;
+  name: string;
+  number: string | null;
+  status: ChannelStatus;
+  server: string | null;
 }
 
 interface ReconcileError {
@@ -82,11 +92,34 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise
   return out;
 }
 
-/** Busca canais na NX e reconcilia com os provedores. Reusado pela rota e pelo job. */
+function pickStr(o: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === 'string' && v.trim()) return v;
+    if (typeof v === 'number') return String(v);
+  }
+  return null;
+}
+
+/** Extrai um array de instâncias de respostas em formatos variados. */
+function asInstanceArray(body: unknown): Record<string, unknown>[] {
+  if (Array.isArray(body)) return body as Record<string, unknown>[];
+  if (body && typeof body === 'object') {
+    const o = body as Record<string, unknown>;
+    for (const k of ['instances', 'data', 'result', 'items']) {
+      if (Array.isArray(o[k])) return o[k] as Record<string, unknown>[];
+    }
+  }
+  return [];
+}
+
 export async function reconcileChannels(): Promise<{
   channels: ReconciledChannel[];
+  orphans: OrphanInstance[];
   errors: ReconcileError[];
+  providerErrors: string[];
 }> {
+  const providerErrors: string[] = [];
   const settings = await queryOne<{
     servers: Array<{ id?: string; baseUrl?: string }> | null;
     evolution: { baseUrl?: string; apiKey?: string } | null;
@@ -100,6 +133,7 @@ export async function reconcileChannels(): Promise<{
   const evoBase = (settings?.evolution?.baseUrl ?? '').replace(/\/$/, '');
   const evoKey = settings?.evolution?.apiKey ?? '';
   const evoOn = Boolean(evoBase && evoKey);
+  const uazapiServers = (settings?.uazapi ?? []).filter((u) => u.url && u.token);
 
   const clients = await query<{
     id: string;
@@ -115,40 +149,58 @@ export async function reconcileChannels(): Promise<{
        AND archived_at IS NULL`,
   );
 
+  // Vínculos manuais de avulsos → cliente, e mapa de clientes (p/ nome/empresa).
+  const assignmentRows = await query<{ provider: string; instance_key: string; client_id: string }>(
+    'SELECT provider, instance_key, client_id FROM channel_assignments',
+  );
+  const assignments = new Map(assignmentRows.map((a) => [`${a.provider}:${a.instance_key}`, a.client_id]));
+  const allClients = await query<{ id: string; name: string; company: string | null }>(
+    'SELECT id, name, company FROM clients',
+  );
+  const clientById = new Map(allClients.map((c) => [c.id, c]));
+
+  // 1) Canais da NX por tenant.
   const perClient = await mapPool(clients, 6, async (c) => {
     const base = (c.tenant_server_id && serverBase[c.tenant_server_id]) || '';
     if (!base) return { client: c, channels: [] as Record<string, unknown>[], error: 'servidor sem baseUrl' };
     const url = `${base}/v2/api/external/${encodeURIComponent(c.tenant_api_id!)}/listChannels`;
     try {
-      const r = await fetchJson(url, {
-        Accept: 'application/json',
-        Authorization: `Bearer ${c.tenant_api_token}`,
-      });
+      const r = await fetchJson(url, { Accept: 'application/json', Authorization: `Bearer ${c.tenant_api_token}` });
       if (!r.ok) return { client: c, channels: [], error: `NX ${r.status}` };
       const data = (r.body as { data?: unknown })?.data;
-      const list = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
-      return { client: c, channels: list, error: null };
+      return { client: c, channels: Array.isArray(data) ? (data as Record<string, unknown>[]) : [], error: null };
     } catch (err) {
       return { client: c, channels: [], error: String(err).slice(0, 120) };
     }
   });
 
   const channels: ReconciledChannel[] = [];
+  // Identidades já representadas por canais da NX (p/ detectar avulsos).
+  const claimedUazapi = new Set<string>();
+  const claimedEvo = new Set<string>();
+
   for (const { client: c, channels: list } of perClient) {
     for (const ch of list) {
       const nxStatus = normStatus(ch.status);
+      const type = String(ch.type ?? '');
+      const tokenApi = (ch.tokenAPI as string | null) ?? null;
+      const wabaId = (ch.wabaId as string | null) ?? null;
+      const name = String(ch.name ?? '');
+      if (type === 'uazapi' && tokenApi) claimedUazapi.add(tokenApi);
+      if (type === 'evo' && (wabaId || name)) claimedEvo.add(wabaId || name);
       channels.push({
         channel_key: `${c.tenant_server_id ?? ''}:${(ch.id as number | string) ?? ''}`,
+        source: 'nx',
         client_id: c.id,
         client_name: c.name,
         client_company: c.company,
         server_id: c.tenant_server_id,
-        nx_channel_id: (ch.id as number | string) ?? '',
-        name: String(ch.name ?? ''),
-        type: String(ch.type ?? ''),
+        nx_channel_id: (ch.id as number | string) ?? null,
+        name,
+        type,
         number: (ch.number as string | null) ?? null,
-        token_api: (ch.tokenAPI as string | null) ?? null,
-        waba_id: (ch.wabaId as string | null) ?? null,
+        token_api: tokenApi,
+        waba_id: wabaId,
         is_active: Boolean(ch.isActive),
         nx_status: nxStatus,
         real_status: null,
@@ -158,103 +210,153 @@ export async function reconcileChannels(): Promise<{
     }
   }
 
-  // Reconcilia Evolution (type 'evo').
-  if (evoOn) {
-    const evoChannels = channels.filter((c) => c.type === 'evo');
-    await mapPool(evoChannels, 6, async (c) => {
-      const instance = c.waba_id || c.name;
-      if (!instance) return;
+  // 2) Instâncias dos provedores (todas) — p/ status real e p/ achar avulsos.
+  const uazapiInstances: { server: string; token: string; name: string; number: string | null; status: ChannelStatus }[] = [];
+  if (uazapiServers.length > 0) {
+    await mapPool(uazapiServers, 4, async (sv) => {
+      const base = (sv.url ?? '').replace(/\/$/, '');
       try {
-        const r = await fetchJson(
-          `${evoBase}/instance/connectionState/${encodeURIComponent(instance)}`,
-          { Accept: 'application/json', apikey: evoKey },
-        );
-        if (!r.ok) return;
-        const body = r.body as { instance?: { state?: string }; state?: string } | undefined;
-        const state = body?.instance?.state ?? body?.state;
-        if (state == null) return;
-        c.real_status = normStatus(state);
-        c.divergent = c.real_status !== c.nx_status;
-        c.effective_status = c.real_status;
-      } catch {
-        /* provedor indisponível */
+        const r = await fetchJson(`${base}/instance/all`, { Accept: 'application/json', admintoken: sv.token ?? '' });
+        if (!r.ok) {
+          providerErrors.push(`UAZAPI ${base}: HTTP ${r.status}`);
+          return;
+        }
+        const arr = asInstanceArray(r.body);
+        for (const inst of arr) {
+          const token = (inst.token as string) || '';
+          if (!token) continue;
+          uazapiInstances.push({
+            server: base,
+            token,
+            name: pickStr(inst, 'name', 'profileName', 'instanceName') ?? token,
+            number: pickStr(inst, 'number', 'phone', 'owner', 'wid'),
+            status: normStatus(inst.status ?? inst.state),
+          });
+        }
+      } catch (err) {
+        providerErrors.push(`UAZAPI ${base}: ${String(err).slice(0, 80)}`);
       }
     });
   }
 
-  // Reconcilia UAZAPI (type 'uazapi') via /instance/all (admintoken) batendo pelo token.
-  const uazapiServers = (settings?.uazapi ?? []).filter((u) => u.url && u.token);
-  if (uazapiServers.length > 0 && channels.some((c) => c.type === 'uazapi')) {
-    const statusByToken = new Map<string, ChannelStatus>();
-    await mapPool(uazapiServers, 4, async (sv) => {
-      const base = (sv.url ?? '').replace(/\/$/, '');
-      try {
-        const r = await fetchJson(`${base}/instance/all`, {
-          Accept: 'application/json',
-          admintoken: sv.token ?? '',
-        });
-        if (!r.ok) return;
-        const arr = Array.isArray(r.body)
-          ? (r.body as Record<string, unknown>[])
-          : ((r.body as { instances?: unknown })?.instances as Record<string, unknown>[]) ?? [];
-        for (const inst of arr) {
-          const tok = (inst.token as string) || '';
-          if (tok) statusByToken.set(tok, normStatus(inst.status ?? inst.state));
+  const evoInstances: { name: string; number: string | null; status: ChannelStatus }[] = [];
+  if (evoOn) {
+    try {
+      const r = await fetchJson(`${evoBase}/instance/fetchInstances`, { Accept: 'application/json', apikey: evoKey });
+      if (!r.ok) {
+        providerErrors.push(`Evolution: HTTP ${r.status}`);
+      } else {
+        for (const raw of asInstanceArray(r.body)) {
+          const inner = (raw.instance && typeof raw.instance === 'object' ? raw.instance : raw) as Record<string, unknown>;
+          const name = pickStr(inner, 'instanceName', 'name');
+          if (!name) continue;
+          evoInstances.push({
+            name,
+            number: pickStr(inner, 'number', 'owner', 'ownerJid')?.split('@')[0] ?? null,
+            status: normStatus(inner.connectionStatus ?? inner.state ?? inner.status),
+          });
         }
-      } catch {
-        /* servidor indisponível */
       }
-    });
-    for (const c of channels) {
-      if (c.type !== 'uazapi' || !c.token_api) continue;
-      const real = statusByToken.get(c.token_api);
-      if (real == null) continue;
-      c.real_status = real;
-      c.divergent = real !== c.nx_status;
-      c.effective_status = real;
+    } catch (err) {
+      providerErrors.push(`Evolution: ${String(err).slice(0, 80)}`);
     }
   }
+
+  // 3) Reconcilia o status real nos canais da NX.
+  const uazapiStatusByToken = new Map(uazapiInstances.map((i) => [i.token, i.status]));
+  const evoStatusByName = new Map(evoInstances.map((i) => [i.name, i.status]));
+  for (const c of channels) {
+    if (c.type === 'uazapi' && c.token_api && uazapiStatusByToken.has(c.token_api)) {
+      c.real_status = uazapiStatusByToken.get(c.token_api)!;
+      c.divergent = c.real_status !== c.nx_status;
+      c.effective_status = c.real_status;
+    } else if (c.type === 'evo') {
+      const key = c.waba_id || c.name;
+      if (key && evoStatusByName.has(key)) {
+        c.real_status = evoStatusByName.get(key)!;
+        c.divergent = c.real_status !== c.nx_status;
+        c.effective_status = c.real_status;
+      }
+    }
+  }
+
+  // 4) Avulsos: instâncias do provedor não representadas por canais da NX.
+  // Se houver vínculo manual, viram "channel" sob o cliente; senão, orphan.
+  const orphans: OrphanInstance[] = [];
+  const addProviderInstance = (
+    provider: 'uazapi' | 'evolution',
+    key: string,
+    name: string,
+    number: string | null,
+    status: ChannelStatus,
+    server: string | null,
+  ) => {
+    const claimed = provider === 'uazapi' ? claimedUazapi.has(key) : claimedEvo.has(key);
+    if (claimed) return; // já aparece como canal da NX
+    const assignedClient = assignments.get(`${provider}:${key}`);
+    if (assignedClient && clientById.has(assignedClient)) {
+      const cl = clientById.get(assignedClient)!;
+      channels.push({
+        channel_key: `${provider}:${key}`,
+        source: 'provider',
+        client_id: cl.id,
+        client_name: cl.name,
+        client_company: cl.company,
+        server_id: null,
+        nx_channel_id: null,
+        name,
+        type: provider,
+        number,
+        token_api: provider === 'uazapi' ? key : null,
+        waba_id: provider === 'evolution' ? key : null,
+        is_active: true,
+        nx_status: 'unknown',
+        real_status: status,
+        divergent: false,
+        effective_status: status,
+      });
+    } else {
+      orphans.push({ provider, instance_key: key, name, number, status, server });
+    }
+  };
+
+  for (const i of uazapiInstances) addProviderInstance('uazapi', i.token, i.name, i.number, i.status, i.server);
+  for (const i of evoInstances) addProviderInstance('evolution', i.name, i.name, i.number, i.status, null);
 
   const errors = perClient
     .filter((p) => p.error)
     .map((p) => ({ client: p.client.company || p.client.name, error: p.error }));
 
-  return { channels, errors };
+  return { channels, orphans, errors, providerErrors };
 }
 
 export async function channelsRoutes(app: FastifyInstance) {
   app.get('/api/channels', { onRequest: [app.authenticate] }, async () => {
-    const { channels, errors } = await reconcileChannels();
+    const { channels, orphans, errors, providerErrors } = await reconcileChannels();
 
-    // Funde a config de aviso por canal (liga/desliga + número).
-    const cfgRows = await query<{
-      channel_key: string;
-      alerts_enabled: boolean;
-      alert_number: string | null;
-    }>('SELECT channel_key, alerts_enabled, alert_number FROM channel_alerts');
+    const cfgRows = await query<{ channel_key: string; alerts_enabled: boolean; alert_number: string | null }>(
+      'SELECT channel_key, alerts_enabled, alert_number FROM channel_alerts',
+    );
     const cfgByKey = new Map(cfgRows.map((r) => [r.channel_key, r]));
 
     const out = channels.map((c) => {
       const cfg = cfgByKey.get(c.channel_key);
-      return {
-        ...c,
-        alerts_enabled: cfg?.alerts_enabled ?? false,
-        alert_number: cfg?.alert_number ?? null,
-      };
+      return { ...c, alerts_enabled: cfg?.alerts_enabled ?? false, alert_number: cfg?.alert_number ?? null };
     });
 
     const summary = {
       total: out.length,
-      connected: out.filter((c) => c.nx_status === 'connected').length,
-      disconnected: out.filter((c) => c.nx_status === 'disconnected').length,
-      connecting: out.filter((c) => c.nx_status === 'connecting').length,
-      unknown: out.filter((c) => c.nx_status === 'unknown').length,
+      connected: out.filter((c) => c.effective_status === 'connected').length,
+      disconnected: out.filter((c) => c.effective_status === 'disconnected').length,
+      connecting: out.filter((c) => c.effective_status === 'connecting').length,
+      unknown: out.filter((c) => c.effective_status === 'unknown').length,
       divergent: out.filter((c) => c.divergent).length,
+      orphans: orphans.length,
     };
-    return { channels: out, summary, errors, updated_at: new Date().toISOString() };
+    return { channels: out, orphans, summary, errors, providerErrors, updated_at: new Date().toISOString() };
   });
 
-  // Salva a config de aviso de UM canal. Só preferência — não envia nada.
+  // Salva a config de aviso de UM canal (só preferência — não envia nada).
   app.post<{ Body: { channel_key?: string; alerts_enabled?: boolean; alert_number?: string } }>(
     '/api/channels/alert-config',
     { onRequest: [app.authenticate] },
@@ -267,17 +369,37 @@ export async function channelsRoutes(app: FastifyInstance) {
         `INSERT INTO channel_alerts (channel_key, alerts_enabled, alert_number, updated_at)
          VALUES ($1, $2, $3, NOW())
          ON CONFLICT (channel_key) DO UPDATE SET
-           alerts_enabled = EXCLUDED.alerts_enabled,
-           alert_number = EXCLUDED.alert_number,
-           updated_at = NOW()`,
+           alerts_enabled = EXCLUDED.alerts_enabled, alert_number = EXCLUDED.alert_number, updated_at = NOW()`,
         [key, enabled, number],
       );
       return { ok: true };
     },
   );
 
-  // Envia uma mensagem de TESTE ao número informado (valida o número/credencial
-  // antes de confiar no job). Vai pela credencial de suporte — nunca pro cliente.
+  // Vincula (ou desvincula com client_id null) uma instância avulsa a um cliente.
+  app.post<{ Body: { provider?: string; instance_key?: string; client_id?: string | null } }>(
+    '/api/channels/assign',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const provider = (req.body?.provider ?? '').toString().trim();
+      const instanceKey = (req.body?.instance_key ?? '').toString().trim();
+      const clientId = req.body?.client_id ? String(req.body.client_id) : null;
+      if (!provider || !instanceKey) return reply.status(400).send({ error: 'provider e instance_key obrigatórios' });
+      if (clientId) {
+        await query(
+          `INSERT INTO channel_assignments (provider, instance_key, client_id, updated_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (provider, instance_key) DO UPDATE SET client_id = EXCLUDED.client_id, updated_at = NOW()`,
+          [provider, instanceKey, clientId],
+        );
+      } else {
+        await query('DELETE FROM channel_assignments WHERE provider = $1 AND instance_key = $2', [provider, instanceKey]);
+      }
+      return { ok: true };
+    },
+  );
+
+  // Envia uma mensagem de TESTE ao número informado (valida número/credencial).
   app.post<{ Body: { number?: string } }>(
     '/api/channels/alert-test',
     { onRequest: [app.authenticate] },
@@ -291,9 +413,7 @@ export async function channelsRoutes(app: FastifyInstance) {
       if (res.ok) return { ok: true };
       if (res.reason === 'not_configured')
         return reply.status(400).send({ error: 'Credencial de suporte (grupo de WhatsApp) não configurada.' });
-      return reply
-        .status(502)
-        .send({ error: `Falha ao enviar${res.status ? ` (${res.status})` : ''}`, detail: res.detail });
+      return reply.status(502).send({ error: `Falha ao enviar${res.status ? ` (${res.status})` : ''}`, detail: res.detail });
     },
   );
 }

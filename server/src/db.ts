@@ -100,6 +100,15 @@ export async function runMigrations() {
     last_alert_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  // Vínculo manual de instância avulsa (UAZAPI/Evolution sem tenant na NX) a um
+  // cliente. Só vínculo local — não mexe em NX/provedor.
+  await pool.query(`CREATE TABLE IF NOT EXISTS channel_assignments (
+    provider TEXT NOT NULL,
+    instance_key TEXT NOT NULL,
+    client_id UUID NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (provider, instance_key)
+  )`);
   console.log('[db] migrations applied');
 }
 

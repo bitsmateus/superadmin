@@ -16,3 +16,19 @@ export function useSetChannelAlert() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['nx-channels'] }),
   })
 }
+
+export function useAssignChannel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      provider,
+      instance_key,
+      client_id,
+    }: {
+      provider: string
+      instance_key: string
+      client_id: string | null
+    }) => channelsApi.assign(provider, instance_key, client_id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['nx-channels'] }),
+  })
+}

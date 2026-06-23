@@ -404,6 +404,7 @@ function TenantTokenModal({ clientId, onClose }: { clientId: string | null; onCl
   const [apiId, setApiId] = React.useState('')
   const [token, setToken] = React.useState('')
   const [saving, setSaving] = React.useState(false)
+  const [testing, setTesting] = React.useState(false)
 
   React.useEffect(() => {
     setServerId(client?.tenantServerId ?? '')
@@ -412,6 +413,30 @@ function TenantTokenModal({ clientId, onClose }: { clientId: string | null; onCl
     setToken(client?.tenantApiToken ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId])
+
+  const test = async () => {
+    if (!apiId.trim() || !token.trim()) {
+      toast.error('Preencha API ID e token para testar.')
+      return
+    }
+    setTesting(true)
+    try {
+      const r = await channelsApi.testTenant({ server_id: serverId, api_id: apiId.trim(), token: token.trim() })
+      if (r.ok) {
+        toast.success(
+          r.count > 0
+            ? `OK — ${r.count} canal(is): ${(r.names ?? []).filter(Boolean).join(', ')}`
+            : 'Token válido, mas a NX retornou 0 canais para este tenant.',
+        )
+      } else {
+        toast.error(`Falhou${r.status ? ` (HTTP ${r.status})` : ''} — verifique servidor/API ID/token.${r.error ? ' ' + r.error : ''}`)
+      }
+    } catch (e) {
+      toast.error('Falha no teste: ' + extractErrorMessage(e, 'erro'))
+    } finally {
+      setTesting(false)
+    }
+  }
 
   const save = async () => {
     if (!clientId) return
@@ -451,6 +476,9 @@ function TenantTokenModal({ clientId, onClose }: { clientId: string | null; onCl
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancelar
+          </Button>
+          <Button variant="secondary" onClick={test} loading={testing} leftIcon={<KeyRound className="h-4 w-4" />}>
+            Testar
           </Button>
           <Button onClick={save} loading={saving}>
             Salvar

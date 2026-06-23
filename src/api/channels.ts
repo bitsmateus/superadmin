@@ -93,4 +93,14 @@ export const channelsApi = {
   async assign(provider: string, instance_key: string, client_id: string | null): Promise<void> {
     await http.post('/channels/assign', { provider, instance_key, client_id })
   },
+  async testTenant(input: { server_id: string; api_id: string; token: string }): Promise<{
+    ok: boolean
+    count: number
+    status?: number
+    names?: string[]
+    error?: string
+  }> {
+    const { data } = await http.post('/channels/test-tenant', input)
+    return data
+  },
 }

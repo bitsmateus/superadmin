@@ -435,6 +435,41 @@ export async function channelsRoutes(app: FastifyInstance) {
     },
   );
 
+  // Testa o token/apiId de um tenant: chama listChannels e devolve a contagem
+  // (ou o erro). Ajuda a entender por que um tenant não lista canais.
+  app.post<{ Body: { server_id?: string; api_id?: string; token?: string } }>(
+    '/api/channels/test-tenant',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const serverId = (req.body?.server_id ?? '').toString().trim();
+      const apiId = (req.body?.api_id ?? '').toString().trim();
+      const token = (req.body?.token ?? '').toString().trim();
+      if (!apiId || !token) return reply.status(400).send({ error: 'API ID e token são obrigatórios' });
+
+      const settings = await queryOne<{ servers: Array<{ id?: string; baseUrl?: string }> | null }>(
+        'SELECT servers FROM settings WHERE id = true',
+      );
+      const base =
+        (settings?.servers ?? []).find((s) => s.id === serverId)?.baseUrl?.replace(/\/$/, '') ||
+        SERVER_BASEURL_DEFAULTS[serverId] ||
+        '';
+      if (!base) return reply.status(400).send({ error: 'Servidor inválido / sem URL' });
+
+      try {
+        const r = await fetchJson(`${base}/v2/api/external/${encodeURIComponent(apiId)}/listChannels`, {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        });
+        if (!r.ok) return reply.send({ ok: false, status: r.status, count: 0 });
+        const data = (r.body as { data?: unknown })?.data;
+        const list = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+        return reply.send({ ok: true, count: list.length, names: list.slice(0, 10).map((c) => String(c.name ?? '')) });
+      } catch (err) {
+        return reply.send({ ok: false, error: String(err).slice(0, 200), count: 0 });
+      }
+    },
+  );
+
   // Envia uma mensagem de TESTE ao número informado (valida número/credencial).
   app.post<{ Body: { number?: string } }>(
     '/api/channels/alert-test',

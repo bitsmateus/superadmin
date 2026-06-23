@@ -32,6 +32,7 @@ import { channelsApi } from '@/api/channels'
 import type { NxChannel, NxChannelStatus, OrphanInstance } from '@/api/channels'
 import { extractErrorMessage } from '@/api/client'
 import { db } from '@/services/db'
+import { api } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { asText, cn } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
@@ -402,6 +403,7 @@ function TenantTokenModal({ clientId, onClose }: { clientId: string | null; onCl
   const [tenantId, setTenantId] = React.useState('')
   const [apiId, setApiId] = React.useState('')
   const [token, setToken] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     setServerId(client?.tenantServerId ?? '')
@@ -411,18 +413,31 @@ function TenantTokenModal({ clientId, onClose }: { clientId: string | null; onCl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId])
 
-  const save = () => {
+  const save = async () => {
     if (!clientId) return
-    db.updateClient(clientId, {
-      tenantServerId: serverId || undefined,
-      tenantId: tenantId.trim() || undefined,
-      tenantApiId: apiId.trim() || undefined,
-      tenantApiToken: token.trim() || undefined,
-    })
-    db.addLog(clientId, 'Tenant/token vinculado (via Canais)')
-    toast.success('Token vinculado — atualizando canais…')
-    qc.invalidateQueries({ queryKey: ['nx-channels'] })
-    onClose()
+    setSaving(true)
+    try {
+      // Persiste no banco e AGUARDA — só então reconcilia, senão o list rodaria
+      // antes do token gravar (corrida) e não listaria/moveria os avulsos.
+      await api.patch(`/api/clients/${clientId}`, {
+        tenant_server_id: serverId || null,
+        tenant_id: tenantId.trim() || null,
+        tenant_api_id: apiId.trim() || null,
+        tenant_api_token: token.trim() || null,
+      })
+      // Sincroniza a cache do CRM (perfil do cliente) com o servidor.
+      await db.loadFullClient(clientId)
+      db.addLog(clientId, 'Tenant/token vinculado (via Canais)')
+      toast.success('Token vinculado — listando canais e movendo avulsos…')
+      // Token já persistido → reconcile lista os canais do tenant e os avulsos
+      // que casam (por token/nome) deixam de ser avulsos e entram no tenant.
+      await qc.invalidateQueries({ queryKey: ['nx-channels'] })
+      onClose()
+    } catch (e) {
+      toast.error('Falha ao vincular: ' + extractErrorMessage(e, 'erro'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -437,7 +452,9 @@ function TenantTokenModal({ clientId, onClose }: { clientId: string | null; onCl
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={save}>Salvar</Button>
+          <Button onClick={save} loading={saving}>
+            Salvar
+          </Button>
         </>
       }
     >

@@ -15,7 +15,6 @@ import { Input } from '@/components/ui/Input'
 import { tenantsApi } from '@/api/tenants'
 import { queuesApi } from '@/api/queues'
 import { usersApi } from '@/api/users'
-import { createEvolutionInstance } from '@/api/evolution'
 import { extractErrorMessage } from '@/api/client'
 import { useAuthStore, type ServerConfig } from '@/store/authStore'
 import { useCurrentUser } from '@/hooks/useClients'
@@ -502,20 +501,16 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
     }
     prov.tenantId = tenantId
 
-    // Um canal por número de WhatsApp do briefing. O nome (NX) e a instância
-    // (Evolution) usam o número normalizado (55+DDD+número) — mesmo identificador
-    // nas duas pontas. Sem números, cria um canal padrão com o nome da empresa
-    // (sem instância na Evolution, pois não há número). Tipo sempre "evo".
+    // Um canal por número de WhatsApp do briefing, nomeado com o número
+    // normalizado (55+DDD+número). Sem números, cria um canal padrão com o nome
+    // da empresa. Tipo sempre "baileys" — é o que cria a API do tenant no NX.
     const numbers = (client.briefingData?.whatsappNumbers ?? [])
       .map((n) => String(n).trim())
       .filter(Boolean)
-    const channels: { nxName: string; evoName: string | null }[] =
+    const channelNames =
       numbers.length > 0
-        ? numbers.map((n) => {
-            const norm = normalizeWhatsappNumber(n)
-            return { nxName: norm || n, evoName: norm || null }
-          })
-        : [{ nxName: `${client.company || client.name} WhatsApp`, evoName: null }]
+        ? numbers.map((n) => normalizeWhatsappNumber(n) || n)
+        : [`${client.company || client.name} WhatsApp`]
 
     // A NX cria a API JUNTO com o primeiro canal e devolve tudo aqui:
     //   sessionId -> whatsapp.id · apiId -> api.apiConfig.id · apiToken -> api.plainToken
@@ -539,18 +534,16 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
     }
 
     let createdChannels = 0
-    let createdEvo = 0
     const channelFailures: string[] = []
-    for (let idx = 0; idx < channels.length; idx++) {
-      const { nxName, evoName } = channels[idx]
-      const name = nxName.slice(0, 60)
+    for (let idx = 0; idx < channelNames.length; idx++) {
+      const name = channelNames[idx].slice(0, 60)
       try {
         // eslint-disable-next-line no-await-in-loop
         const session = await tenantsApi.createSession(server, {
           tenant: tenantId,
           name,
           status: 'DISCONNECTED',
-          type: 'evo',
+          type: 'baileys',
         })
         const sid = captureFromSession(session)
         // O primeiro canal é crítico: é ele que gera a API + token.
@@ -561,16 +554,6 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
           )
         }
         createdChannels++
-        // Cria também a instância na Evolution com o MESMO nome (número).
-        if (evoName) {
-          try {
-            // eslint-disable-next-line no-await-in-loop
-            await createEvolutionInstance(evoName)
-            createdEvo++
-          } catch (err) {
-            channelFailures.push(`Evolution ${evoName}: ${extractErrorMessage(err, 'falha')}`)
-          }
-        }
       } catch (err) {
         if (idx === 0) throw err // sem o primeiro canal não há API — aborta
         channelFailures.push(`${name}: ${extractErrorMessage(err, 'falha')}`)
@@ -583,7 +566,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       tenantApiToken: prov.apiToken || undefined,
       deliveryChecklist: setChecklistItem(currentChecklist(), 'channels_created', true, 'Sistema'),
     })
-    const base = `${createdChannels} canal(is) · ${createdEvo} na Evolution`
+    const base = `${createdChannels} canal(is) · baileys`
     return channelFailures.length > 0
       ? `${base} · ${channelFailures.length} falhou(ram)`
       : base

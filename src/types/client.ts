@@ -347,6 +347,8 @@ export interface AppSettings {
   supportGroup?: SupportGroupConfig
   /** Credenciais da Evolution API para criar instâncias de canais. */
   evolution?: EvolutionConfig
+  /** Servidores UAZAPI para reconciliar o status real dos canais. */
+  uazapi?: UazapiServer[]
 }
 
 export interface EvolutionConfig {
@@ -356,6 +358,15 @@ export interface EvolutionConfig {
   apiKey?: string
   /** Indica que há apiKey salva (preenchido pelo GET). */
   apiKeySet?: boolean
+}
+
+export interface UazapiServer {
+  /** Base da API (ex.: https://nxdigital.uazapi.com). */
+  url: string
+  /** admintoken — só vai pro backend; no front vem vazio. */
+  token?: string
+  /** Indica que há token salvo (preenchido pelo GET). */
+  tokenSet?: boolean
 }
 
 export interface SupportGroupConfig {

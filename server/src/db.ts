@@ -87,6 +87,19 @@ export async function runMigrations() {
   );
   // Credenciais da Evolution API (baseUrl + apiKey) para criar instâncias.
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS evolution JSONB`);
+  // Servidores UAZAPI ([{url, token}]) para reconciliar status real dos canais.
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS uazapi JSONB`);
+  // Config de aviso por canal (liga/desliga + número que recebe). O aviso NUNCA
+  // vai pro cliente — só pro alert_number configurado. last_status/last_alert_at
+  // controlam o "1x por queda".
+  await pool.query(`CREATE TABLE IF NOT EXISTS channel_alerts (
+    channel_key TEXT PRIMARY KEY,
+    alerts_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    alert_number TEXT,
+    last_status TEXT,
+    last_alert_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
   console.log('[db] migrations applied');
 }
 

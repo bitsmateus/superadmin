@@ -43,6 +43,7 @@ export function CrmSettingsSection() {
       <AsaasBlock />
       <CredentialsBlock />
       <EvolutionBlock />
+      <UazapiBlock />
       <FollowUpBlock />
       <BackupBlock />
     </div>
@@ -869,6 +870,80 @@ function EvolutionBlock() {
         <div className="flex justify-end">
           <Button onClick={save} disabled={!dirty} leftIcon={<Save className="h-4 w-4" />}>
             Salvar Evolution
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function UazapiBlock() {
+  const settings = useSettings()
+  const [rows, setRows] = React.useState<{ url: string; token: string; tokenSet?: boolean }[]>([])
+
+  React.useEffect(() => {
+    setRows((settings.uazapi ?? []).map((u) => ({ url: u.url, token: '', tokenSet: u.tokenSet })))
+  }, [settings.uazapi])
+
+  const setRow = (i: number, patch: Partial<{ url: string; token: string }>) =>
+    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row)))
+  const addRow = () => setRows((r) => [...r, { url: '', token: '' }])
+  const removeRow = (i: number) => setRows((r) => r.filter((_, idx) => idx !== i))
+
+  const save = () => {
+    const uazapi = rows
+      .map((r) => ({ url: r.url.trim().replace(/\/$/, ''), token: r.token.trim() }))
+      .filter((r) => r.url)
+    db.saveSettings({ ...db.getSettings(), uazapi })
+    toast.success('Servidores UAZAPI salvos')
+  }
+
+  return (
+    <section>
+      <header className="mb-3 flex items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+          <Smartphone className="h-3.5 w-3.5" />
+        </span>
+        <div>
+          <h2 className="text-sm font-medium text-foreground">Servidores UAZAPI</h2>
+          <p className="text-xs text-foreground/45">
+            Usados para conferir o status real dos canais UAZAPI e detectar divergências com a NX.
+            O admintoken fica só no servidor.
+          </p>
+        </div>
+      </header>
+
+      <div className="space-y-3 rounded-xl border border-line bg-card p-5">
+        {rows.length === 0 && (
+          <p className="text-xs text-foreground/45">Nenhum servidor UAZAPI cadastrado.</p>
+        )}
+        {rows.map((row, i) => (
+          <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <Input
+              label={i === 0 ? 'URL' : undefined}
+              placeholder="https://nxdigital.uazapi.com"
+              value={row.url}
+              onChange={(e) => setRow(i, { url: e.target.value })}
+            />
+            <Input
+              label={i === 0 ? 'admintoken' : undefined}
+              type="password"
+              autoComplete="off"
+              placeholder={row.tokenSet ? '•••••••• (salvo — vazio mantém)' : 'admintoken'}
+              value={row.token}
+              onChange={(e) => setRow(i, { token: e.target.value })}
+            />
+            <Button variant="ghost" onClick={() => removeRow(i)} aria-label="Remover">
+              <XCircle className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+        <div className="flex items-center justify-between">
+          <Button variant="secondary" size="sm" onClick={addRow}>
+            Adicionar servidor
+          </Button>
+          <Button onClick={save} leftIcon={<Save className="h-4 w-4" />}>
+            Salvar UAZAPI
           </Button>
         </div>
       </div>

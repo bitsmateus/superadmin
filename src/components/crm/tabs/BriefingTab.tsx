@@ -32,7 +32,6 @@ import { api } from '@/services/api'
 import { usersApi } from '@/api/users'
 import { queuesApi } from '@/api/queues'
 import { tenantsApi } from '@/api/tenants'
-import { createEvolutionInstance } from '@/api/evolution'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
 import { getServerById } from '@/store/authStore'
@@ -773,26 +772,20 @@ function AutomationView({ client }: { client: Client }) {
       toast.error('Servidor do tenant não encontrado.')
       return
     }
-    const instanceName = normalizeWhatsappNumber(number) || number
+    const channelName = normalizeWhatsappNumber(number) || number
     setCreatingChannelId(item.id)
     try {
+      // Sempre baileys: é o que cria a API do tenant de forma confiável no NX.
       await tenantsApi.createSession(server, {
         tenant: client.tenantId,
-        name: instanceName.slice(0, 60),
+        name: channelName.slice(0, 60),
         status: 'DISCONNECTED',
-        type: 'evo',
+        type: 'baileys',
       })
-      let evoNote = ''
-      try {
-        await createEvolutionInstance(instanceName)
-      } catch (err) {
-        evoNote = ' (Evolution falhou: ' + extractErrorMessage(err, 'erro') + ')'
-        toast.warning('Canal criado no NX, mas a Evolution falhou: ' + extractErrorMessage(err, 'erro'))
-      }
       const next = setChecklistItem(tree, item.id, true, user)
       db.updateClient(client.id, { deliveryChecklist: next })
-      db.addLog(client.id, 'Canal criado', `${instanceName} · NX + Evolution${evoNote}`)
-      if (!evoNote) toast.success(`Canal ${instanceName} criado (NX + Evolution)`)
+      db.addLog(client.id, 'Canal criado', `${channelName} · baileys`)
+      toast.success(`Canal ${channelName} criado`)
     } catch (err) {
       toast.error('Falha ao criar canal: ' + extractErrorMessage(err, 'erro'))
     } finally {

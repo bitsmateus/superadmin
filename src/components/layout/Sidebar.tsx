@@ -13,6 +13,7 @@ import {
   MessageCircle,
   MessageSquare,
   Moon,
+  Radio,
   Settings,
   ShieldCheck,
   Star,
@@ -35,6 +36,7 @@ const primaryItems = [
   { to: '/tarefas', label: 'Suporte', icon: ListTodo, badgeKey: 'tasks' as const },
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
+  { to: '/canais', label: 'Canais', icon: Radio },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
 ]
 

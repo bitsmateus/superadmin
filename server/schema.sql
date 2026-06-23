@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS settings (
   servers JSONB,
   support_group JSONB,
   evolution JSONB,
+  uazapi JSONB,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT settings_singleton CHECK (id = TRUE)
 );
@@ -89,6 +90,17 @@ CREATE TABLE IF NOT EXISTS settings (
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS support_group JSONB;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS evolution JSONB;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS uazapi JSONB;
+
+-- ---------- channel_alerts (config de aviso por canal) ----------
+CREATE TABLE IF NOT EXISTS channel_alerts (
+  channel_key TEXT PRIMARY KEY,
+  alerts_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  alert_number TEXT,
+  last_status TEXT,
+  last_alert_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- ---------- clients ----------
 CREATE TABLE IF NOT EXISTS clients (

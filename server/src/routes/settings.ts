@@ -24,6 +24,14 @@ export async function settingsRoutes(app: FastifyInstance) {
       const ev = row.evolution as Record<string, unknown>;
       row.evolution = { ...ev, apiKey: '', apiKeySet: Boolean(ev.apiKey) };
     }
+    // Mascara os tokens dos servidores UAZAPI.
+    if (row && Array.isArray(row.uazapi)) {
+      row.uazapi = (row.uazapi as Array<Record<string, unknown>>).map((u) => ({
+        url: u.url,
+        token: '',
+        tokenSet: Boolean(u.token),
+      }));
+    }
     return row ?? {};
   });
 
@@ -93,6 +101,24 @@ export async function settingsRoutes(app: FastifyInstance) {
         evolutionParam = JSON.stringify(rest);
       }
 
+      // Merge dos servidores UAZAPI preservando o token (por url) quando vazio.
+      let uazapiParam: string | null = null;
+      if (Array.isArray(b.uazapi)) {
+        const existing = await queryOne<{ uazapi: Array<Record<string, unknown>> | null }>(
+          'SELECT uazapi FROM settings WHERE id = true'
+        );
+        const prev = Array.isArray(existing?.uazapi) ? existing!.uazapi : [];
+        const merged = (b.uazapi as Array<Record<string, unknown>>)
+          .map((u) => {
+            const url = typeof u.url === 'string' ? u.url.trim().replace(/\/$/, '') : '';
+            const token = typeof u.token === 'string' ? u.token.trim() : '';
+            const prevToken = (prev.find((p) => p.url === url)?.token as string) || '';
+            return { url, token: token || prevToken };
+          })
+          .filter((u) => u.url);
+        uazapiParam = JSON.stringify(merged);
+      }
+
       const [row] = await query(
         `INSERT INTO settings (
           id, asaas_api_key, asaas_environment, asaas_sync_interval_min,
@@ -100,9 +126,9 @@ export async function settingsRoutes(app: FastifyInstance) {
           followups_enabled, followup_templates,
           nps_delay_days, nps_enabled, notify_edge_function_url, notify_enabled,
           goal_new_clients_monthly, goal_mrr_monthly, goal_nps_monthly, goals_enabled,
-          last_backup_at, backup_remind_days, servers, support_group, evolution, updated_at
+          last_backup_at, backup_remind_days, servers, support_group, evolution, uazapi, updated_at
         ) VALUES (
-          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW()
+          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           asaas_api_key = EXCLUDED.asaas_api_key,
@@ -126,6 +152,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           servers = COALESCE(EXCLUDED.servers, settings.servers),
           support_group = COALESCE(EXCLUDED.support_group, settings.support_group),
           evolution = COALESCE(EXCLUDED.evolution, settings.evolution),
+          uazapi = COALESCE(EXCLUDED.uazapi, settings.uazapi),
           updated_at = NOW()
         RETURNING *`,
         [
@@ -143,6 +170,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           serversParam,
           supportGroupParam,
           evolutionParam,
+          uazapiParam,
         ]
       );
       return row;

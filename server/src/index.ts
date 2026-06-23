@@ -11,7 +11,10 @@ import { analyticsRoutes } from './routes/analytics.js';
 import { publicRoutes } from './routes/public.js';
 import { sseRoutes } from './routes/sse.js';
 import { proxyRoutes } from './routes/proxy.js';
+import { canaisRoutes } from './routes/canais.js';
+import { channelsRoutes } from './routes/channels.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
+import { startChannelAlerts } from './jobs/channelAlerts.js';
 
 async function main() {
   const app = Fastify({ logger: true });
@@ -42,6 +45,8 @@ async function main() {
   await app.register(publicRoutes);
   await app.register(sseRoutes);
   await app.register(proxyRoutes);
+  await app.register(canaisRoutes);
+  await app.register(channelsRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -54,6 +59,7 @@ async function main() {
   await runMigrations();
   await startRealtimeListener();
   startDailyDigest();
+  startChannelAlerts();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

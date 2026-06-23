@@ -4,6 +4,8 @@ import {
   Bell,
   BellOff,
   Building2,
+  ChevronDown,
+  ChevronRight,
   Link2,
   Radio,
   RefreshCw,
@@ -57,7 +59,16 @@ export function CanaisPage() {
   const [onlyDivergent, setOnlyDivergent] = React.useState(false)
   const [alertEditing, setAlertEditing] = React.useState<NxChannel | null>(null)
   const [assigning, setAssigning] = React.useState<OrphanInstance | null>(null)
+  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set())
   const assign = useAssignChannel()
+
+  const toggleCollapsed = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   const channels = data?.channels ?? []
   const orphans = data?.orphans ?? []
@@ -148,6 +159,19 @@ export function CanaisPage() {
             containerClassName="sm:max-w-sm"
           />
           <div className="flex flex-wrap items-center gap-2">
+            {groups.length > 1 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const allKeys = groups.map((g) => g.key)
+                  const allCollapsed = allKeys.every((k) => collapsed.has(k))
+                  setCollapsed(allCollapsed ? new Set() : new Set(allKeys))
+                }}
+              >
+                {groups.every((g) => collapsed.has(g.key)) ? 'Expandir todos' : 'Recolher todos'}
+              </Button>
+            )}
             <label className="inline-flex items-center gap-2 text-xs text-foreground/70">
               <input
                 type="checkbox"
@@ -210,24 +234,48 @@ export function CanaisPage() {
         ) : (
           <div className="space-y-5">
             {/* Por tenant */}
-            {groups.map((g) => (
-              <section key={g.key} className="overflow-hidden rounded-xl border border-line bg-card">
-                <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-                  <Building2 className="h-4 w-4 text-accent" />
-                  <span className="text-sm font-semibold text-foreground">{g.label}</span>
-                  <span className="text-xs text-foreground/45">{g.channels.length} canal(is)</span>
-                </header>
-                <ChannelTable channels={g.channels} onConfigAlert={setAlertEditing} onUnassign={(c) =>
-                  assign.mutate(
-                    { provider: c.type, instance_key: c.token_api || c.waba_id || '', client_id: null },
-                    {
-                      onSuccess: () => toast.success('Vínculo removido (voltou para avulsos)'),
-                      onError: (e) => toast.error('Falha: ' + extractErrorMessage(e, 'erro')),
-                    },
-                  )
-                } />
-              </section>
-            ))}
+            {groups.map((g) => {
+              const isCollapsed = collapsed.has(g.key)
+              const down = g.channels.filter((c) => c.effective_status === 'disconnected').length
+              return (
+                <section key={g.key} className="overflow-hidden rounded-xl border border-line bg-card">
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapsed(g.key)}
+                    className="flex w-full items-center gap-2 border-b border-line px-4 py-2.5 text-left hover:bg-elevate/[0.02]"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="h-4 w-4 text-foreground/45" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-foreground/45" />
+                    )}
+                    <Building2 className="h-4 w-4 text-accent" />
+                    <span className="text-sm font-semibold text-foreground">{g.label}</span>
+                    <span className="text-xs text-foreground/45">{g.channels.length} canal(is)</span>
+                    {down > 0 && (
+                      <Badge tone="danger" className="ml-1">
+                        {down} desconectado(s)
+                      </Badge>
+                    )}
+                  </button>
+                  {!isCollapsed && (
+                    <ChannelTable
+                      channels={g.channels}
+                      onConfigAlert={setAlertEditing}
+                      onUnassign={(c) =>
+                        assign.mutate(
+                          { provider: c.type, instance_key: c.token_api || c.waba_id || '', client_id: null },
+                          {
+                            onSuccess: () => toast.success('Vínculo removido (voltou para avulsos)'),
+                            onError: (e) => toast.error('Falha: ' + extractErrorMessage(e, 'erro')),
+                          },
+                        )
+                      }
+                    />
+                  )}
+                </section>
+              )
+            })}
 
             {/* Avulsos */}
             {filteredOrphans.length > 0 && (

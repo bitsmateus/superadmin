@@ -67,7 +67,7 @@ export interface NxChannelsResponse {
   channels: NxChannel[]
   orphans: OrphanInstance[]
   summary: NxChannelsSummary
-  errors: { client: string; error: string | null }[]
+  errors: { client_id: string; client: string; server_id: string | null; error: string | null }[]
   providerErrors: string[]
   unlinkedTenants: UnlinkedTenant[]
   updated_at: string

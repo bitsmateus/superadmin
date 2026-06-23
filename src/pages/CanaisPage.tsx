@@ -209,10 +209,27 @@ export function CanaisPage() {
           </div>
         )}
         {data?.errors && data.errors.length > 0 && (
-          <div className="mb-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
-            {data.errors.length} tenant(s) não responderam (token/servidor):{' '}
-            {data.errors.slice(0, 3).map((e) => e.client).join(', ')}
-            {data.errors.length > 3 ? '…' : ''}
+          <div className="mb-3 overflow-hidden rounded-lg border border-danger/30 bg-danger/5">
+            <div className="px-3 py-2 text-xs font-medium text-danger">
+              {data.errors.length} tenant(s) já vinculado(s) com erro ao listar canais (token/servidor):
+            </div>
+            <ul className="divide-y divide-line/60">
+              {data.errors.map((e) => (
+                <li key={e.client_id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs">
+                  <span className="min-w-0 truncate text-foreground/80">
+                    {e.client} <span className="text-danger/70">· {e.error}</span>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setTokenEditingId(e.client_id)}
+                    leftIcon={<KeyRound className="h-3.5 w-3.5" />}
+                  >
+                    Editar / Testar token
+                  </Button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -268,11 +285,12 @@ export function CanaisPage() {
                     {g.channels[0]?.client_id && (
                       <button
                         type="button"
-                        title="Editar token / tenant"
+                        title="Editar / testar token do tenant"
                         onClick={() => setTokenEditingId(g.channels[0].client_id!)}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-foreground/45 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium text-foreground/55 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground"
                       >
-                        <KeyRound className="h-4 w-4" />
+                        <KeyRound className="h-3.5 w-3.5" />
+                        Token
                       </button>
                     )}
                   </div>

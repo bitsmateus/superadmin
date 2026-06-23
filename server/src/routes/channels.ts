@@ -66,7 +66,9 @@ export interface UnlinkedTenant {
 }
 
 interface ReconcileError {
+  client_id: string;
   client: string;
+  server_id: string | null;
   error: string | null;
 }
 
@@ -333,9 +335,14 @@ export async function reconcileChannels(): Promise<{
   for (const i of uazapiInstances) addProviderInstance('uazapi', i.token, i.name, i.number, i.status, i.server);
   for (const i of evoInstances) addProviderInstance('evolution', i.name, i.name, i.number, i.status, null);
 
-  const errors = perClient
+  const errors: ReconcileError[] = perClient
     .filter((p) => p.error)
-    .map((p) => ({ client: p.client.company || p.client.name, error: p.error }));
+    .map((p) => ({
+      client_id: p.client.id,
+      client: p.client.company || p.client.name,
+      server_id: p.client.tenant_server_id,
+      error: p.error,
+    }));
 
   // Tenants antigos: têm contexto de tenant (id/apiId) mas sem token salvo —
   // não dá pra listar os canais até vincular o token.

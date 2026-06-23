@@ -56,6 +56,15 @@ export interface OrphanInstance {
   server: string | null;
 }
 
+export interface UnlinkedTenant {
+  client_id: string;
+  name: string;
+  company: string | null;
+  tenant_id: string | null;
+  tenant_api_id: string | null;
+  server_id: string | null;
+}
+
 interface ReconcileError {
   client: string;
   error: string | null;
@@ -118,6 +127,7 @@ export async function reconcileChannels(): Promise<{
   orphans: OrphanInstance[];
   errors: ReconcileError[];
   providerErrors: string[];
+  unlinkedTenants: UnlinkedTenant[];
 }> {
   const providerErrors: string[] = [];
   const settings = await queryOne<{
@@ -327,12 +337,38 @@ export async function reconcileChannels(): Promise<{
     .filter((p) => p.error)
     .map((p) => ({ client: p.client.company || p.client.name, error: p.error }));
 
-  return { channels, orphans, errors, providerErrors };
+  // Tenants antigos: têm contexto de tenant (id/apiId) mas sem token salvo —
+  // não dá pra listar os canais até vincular o token.
+  const unlinkedRows = await query<{
+    id: string;
+    name: string;
+    company: string | null;
+    tenant_id: string | null;
+    tenant_api_id: string | null;
+    tenant_server_id: string | null;
+  }>(
+    `SELECT id, name, company, tenant_id, tenant_api_id, tenant_server_id
+     FROM clients
+     WHERE archived_at IS NULL
+       AND (tenant_id IS NOT NULL OR tenant_api_id IS NOT NULL)
+       AND (tenant_api_token IS NULL OR tenant_api_token = '')
+     ORDER BY company, name`,
+  );
+  const unlinkedTenants: UnlinkedTenant[] = unlinkedRows.map((r) => ({
+    client_id: r.id,
+    name: r.name,
+    company: r.company,
+    tenant_id: r.tenant_id,
+    tenant_api_id: r.tenant_api_id,
+    server_id: r.tenant_server_id,
+  }));
+
+  return { channels, orphans, errors, providerErrors, unlinkedTenants };
 }
 
 export async function channelsRoutes(app: FastifyInstance) {
   app.get('/api/channels', { onRequest: [app.authenticate] }, async () => {
-    const { channels, orphans, errors, providerErrors } = await reconcileChannels();
+    const { channels, orphans, errors, providerErrors, unlinkedTenants } = await reconcileChannels();
 
     const cfgRows = await query<{ channel_key: string; alerts_enabled: boolean; alert_number: string | null }>(
       'SELECT channel_key, alerts_enabled, alert_number FROM channel_alerts',
@@ -353,7 +389,7 @@ export async function channelsRoutes(app: FastifyInstance) {
       divergent: out.filter((c) => c.divergent).length,
       orphans: orphans.length,
     };
-    return { channels: out, orphans, summary, errors, providerErrors, updated_at: new Date().toISOString() };
+    return { channels: out, orphans, summary, errors, providerErrors, unlinkedTenants, updated_at: new Date().toISOString() };
   });
 
   // Salva a config de aviso de UM canal (só preferência — não envia nada).

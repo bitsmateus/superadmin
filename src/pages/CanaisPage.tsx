@@ -6,6 +6,7 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  KeyRound,
   Link2,
   Radio,
   RefreshCw,
@@ -15,6 +16,7 @@ import {
   WifiOff,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useQueryClient } from '@tanstack/react-query'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -29,6 +31,8 @@ import { useClients } from '@/hooks/useClients'
 import { channelsApi } from '@/api/channels'
 import type { NxChannel, NxChannelStatus, OrphanInstance } from '@/api/channels'
 import { extractErrorMessage } from '@/api/client'
+import { db } from '@/services/db'
+import { useAuthStore } from '@/store/authStore'
 import { asText, cn } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
 
@@ -60,6 +64,7 @@ export function CanaisPage() {
   const [alertEditing, setAlertEditing] = React.useState<NxChannel | null>(null)
   const [assigning, setAssigning] = React.useState<OrphanInstance | null>(null)
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set())
+  const [tokenEditingId, setTokenEditingId] = React.useState<string | null>(null)
   const assign = useAssignChannel()
 
   const toggleCollapsed = (key: string) =>
@@ -239,25 +244,37 @@ export function CanaisPage() {
               const down = g.channels.filter((c) => c.effective_status === 'disconnected').length
               return (
                 <section key={g.key} className="overflow-hidden rounded-xl border border-line bg-card">
-                  <button
-                    type="button"
-                    onClick={() => toggleCollapsed(g.key)}
-                    className="flex w-full items-center gap-2 border-b border-line px-4 py-2.5 text-left hover:bg-elevate/[0.02]"
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="h-4 w-4 text-foreground/45" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-foreground/45" />
+                  <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapsed(g.key)}
+                      className="flex flex-1 items-center gap-2 text-left"
+                    >
+                      {isCollapsed ? (
+                        <ChevronRight className="h-4 w-4 text-foreground/45" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-foreground/45" />
+                      )}
+                      <Building2 className="h-4 w-4 text-accent" />
+                      <span className="text-sm font-semibold text-foreground">{g.label}</span>
+                      <span className="text-xs text-foreground/45">{g.channels.length} canal(is)</span>
+                      {down > 0 && (
+                        <Badge tone="danger" className="ml-1">
+                          {down} desconectado(s)
+                        </Badge>
+                      )}
+                    </button>
+                    {g.channels[0]?.client_id && (
+                      <button
+                        type="button"
+                        title="Editar token / tenant"
+                        onClick={() => setTokenEditingId(g.channels[0].client_id!)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-foreground/45 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </button>
                     )}
-                    <Building2 className="h-4 w-4 text-accent" />
-                    <span className="text-sm font-semibold text-foreground">{g.label}</span>
-                    <span className="text-xs text-foreground/45">{g.channels.length} canal(is)</span>
-                    {down > 0 && (
-                      <Badge tone="danger" className="ml-1">
-                        {down} desconectado(s)
-                      </Badge>
-                    )}
-                  </button>
+                  </div>
                   {!isCollapsed && (
                     <ChannelTable
                       channels={g.channels}
@@ -322,13 +339,128 @@ export function CanaisPage() {
                 </Table>
               </section>
             )}
+
+            {/* Tenants sem token vinculado */}
+            {(data?.unlinkedTenants?.length ?? 0) > 0 && (
+              <section className="overflow-hidden rounded-xl border border-warning/30 bg-card">
+                <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                  <KeyRound className="h-4 w-4 text-warning" />
+                  <span className="text-sm font-semibold text-foreground">Tenants sem token vinculado</span>
+                  <span className="text-xs text-foreground/45">
+                    {data!.unlinkedTenants.length} cliente(s) — vincule o token para listar os canais
+                  </span>
+                </header>
+                <Table>
+                  <THead>
+                    <tr>
+                      <TH>Cliente</TH>
+                      <TH>Servidor</TH>
+                      <TH>Tenant ID</TH>
+                      <TH>API ID</TH>
+                      <TH className="text-right">Ação</TH>
+                    </tr>
+                  </THead>
+                  <TBody>
+                    {data!.unlinkedTenants.map((t) => (
+                      <TR key={t.client_id}>
+                        <TD className="font-medium text-foreground">{asText(t.company || t.name, '—')}</TD>
+                        <TD className="text-foreground/60">{asText(t.server_id, '—')}</TD>
+                        <TD className="text-foreground/60">{asText(t.tenant_id, '—')}</TD>
+                        <TD className="text-foreground/60">{asText(t.tenant_api_id, '—')}</TD>
+                        <TD className="text-right">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setTokenEditingId(t.client_id)}
+                            leftIcon={<KeyRound className="h-3.5 w-3.5" />}
+                          >
+                            Vincular token
+                          </Button>
+                        </TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </section>
+            )}
           </div>
         )}
       </div>
 
       <AlertConfigModal channel={alertEditing} onClose={() => setAlertEditing(null)} />
       <AssignModal orphan={assigning} onClose={() => setAssigning(null)} />
+      <TenantTokenModal clientId={tokenEditingId} onClose={() => setTokenEditingId(null)} />
     </>
+  )
+}
+
+function TenantTokenModal({ clientId, onClose }: { clientId: string | null; onClose: () => void }) {
+  const servers = useAuthStore((s) => s.servers)
+  const qc = useQueryClient()
+  const client = clientId ? db.getClient(clientId) : undefined
+  const [serverId, setServerId] = React.useState('')
+  const [tenantId, setTenantId] = React.useState('')
+  const [apiId, setApiId] = React.useState('')
+  const [token, setToken] = React.useState('')
+
+  React.useEffect(() => {
+    setServerId(client?.tenantServerId ?? '')
+    setTenantId(client?.tenantId ?? '')
+    setApiId(client?.tenantApiId ?? '')
+    setToken(client?.tenantApiToken ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId])
+
+  const save = () => {
+    if (!clientId) return
+    db.updateClient(clientId, {
+      tenantServerId: serverId || undefined,
+      tenantId: tenantId.trim() || undefined,
+      tenantApiId: apiId.trim() || undefined,
+      tenantApiToken: token.trim() || undefined,
+    })
+    db.addLog(clientId, 'Tenant/token vinculado (via Canais)')
+    toast.success('Token vinculado — atualizando canais…')
+    qc.invalidateQueries({ queryKey: ['nx-channels'] })
+    onClose()
+  }
+
+  return (
+    <Modal
+      open={Boolean(clientId)}
+      onClose={onClose}
+      title="Vincular tenant / token"
+      description={client ? client.company || client.name : undefined}
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={save}>Salvar</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <Select
+          label="Servidor"
+          value={serverId}
+          onChange={(e) => setServerId(e.target.value)}
+          options={[{ value: '', label: '— Selecione —' }, ...servers.map((sv) => ({ value: sv.id, label: sv.name }))]}
+        />
+        <Input label="Tenant ID" value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="ID do tenant" />
+        <Input label="API ID" value={apiId} onChange={(e) => setApiId(e.target.value)} placeholder="apiId do tenant" />
+        <Input
+          label="API Token (do tenant)"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder="Cole o token da API do tenant"
+        />
+        <p className="text-[11px] text-foreground/45">
+          Necessário para listar os canais do tenant. Salvar atualiza o cliente e recarrega os canais.
+        </p>
+      </div>
+    </Modal>
   )
 }
 

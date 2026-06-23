@@ -54,12 +54,22 @@ export interface NxChannelsSummary {
   orphans: number
 }
 
+export interface UnlinkedTenant {
+  client_id: string
+  name: string
+  company: string | null
+  tenant_id: string | null
+  tenant_api_id: string | null
+  server_id: string | null
+}
+
 export interface NxChannelsResponse {
   channels: NxChannel[]
   orphans: OrphanInstance[]
   summary: NxChannelsSummary
   errors: { client: string; error: string | null }[]
   providerErrors: string[]
+  unlinkedTenants: UnlinkedTenant[]
   updated_at: string
 }
 

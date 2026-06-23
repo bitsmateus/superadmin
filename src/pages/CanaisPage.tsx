@@ -8,6 +8,7 @@ import {
   ChevronRight,
   KeyRound,
   Link2,
+  Loader2,
   Radio,
   RefreshCw,
   Search,
@@ -30,6 +31,8 @@ import { useNxChannels, useSetChannelAlert, useAssignChannel } from '@/hooks/use
 import { useClients } from '@/hooks/useClients'
 import { channelsApi } from '@/api/channels'
 import type { NxChannel, NxChannelStatus, OrphanInstance } from '@/api/channels'
+import { tenantsApi } from '@/api/tenants'
+import type { Tenant } from '@/types'
 import { extractErrorMessage } from '@/api/client'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
@@ -66,6 +69,7 @@ export function CanaisPage() {
   const [assigning, setAssigning] = React.useState<OrphanInstance | null>(null)
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set())
   const [tokenEditingId, setTokenEditingId] = React.useState<string | null>(null)
+  const [serverTenantsOpen, setServerTenantsOpen] = React.useState(false)
   const assign = useAssignChannel()
 
   const toggleCollapsed = (key: string) =>
@@ -165,6 +169,14 @@ export function CanaisPage() {
             containerClassName="sm:max-w-sm"
           />
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setServerTenantsOpen(true)}
+              leftIcon={<Building2 className="h-3.5 w-3.5" />}
+            >
+              Tenants do servidor
+            </Button>
             {groups.length > 1 && (
               <Button
                 size="sm"
@@ -409,6 +421,7 @@ export function CanaisPage() {
       <AlertConfigModal channel={alertEditing} onClose={() => setAlertEditing(null)} />
       <AssignModal orphan={assigning} onClose={() => setAssigning(null)} />
       <TenantTokenModal clientId={tokenEditingId} onClose={() => setTokenEditingId(null)} />
+      <ServerTenantsModal open={serverTenantsOpen} onClose={() => setServerTenantsOpen(false)} />
     </>
   )
 }
@@ -522,6 +535,234 @@ function TenantTokenModal({ clientId, onClose }: { clientId: string | null; onCl
         <p className="text-[11px] text-foreground/45">
           Necessário para listar os canais do tenant. Salvar atualiza o cliente e recarrega os canais.
         </p>
+      </div>
+    </Modal>
+  )
+}
+
+function ServerTenantsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const allServers = useAuthStore((s) => s.servers)
+  const servers = React.useMemo(() => allServers.filter((s) => s.enabled), [allServers])
+  const clients = useClients()
+  const qc = useQueryClient()
+
+  const [serverId, setServerId] = React.useState(() => servers[0]?.id ?? '')
+  const [tenantList, setTenantList] = React.useState<Tenant[]>([])
+  const [loading, setLoading] = React.useState(false)
+  const [tenantSearch, setTenantSearch] = React.useState('')
+  const [linkingId, setLinkingId] = React.useState<string | null>(null)
+  const [linkApiId, setLinkApiId] = React.useState('')
+  const [linkToken, setLinkToken] = React.useState('')
+  const [clientSearch, setClientSearch] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+
+  const loadTenants = async () => {
+    const server = servers.find((s) => s.id === serverId) ?? servers[0]
+    if (!server) { toast.error('Selecione um servidor'); return }
+    setLoading(true)
+    setTenantList([])
+    setLinkingId(null)
+    try {
+      const list = await tenantsApi.list(server)
+      setTenantList(list)
+      if (list.length === 0) toast.info('Nenhum tenant encontrado neste servidor')
+    } catch (err) {
+      toast.error('Erro ao listar tenants: ' + extractErrorMessage(err, 'erro'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const doLink = async (tenant: Tenant, clientId: string) => {
+    const apiId = linkApiId.trim() || String(tenant.apiId ?? tenant.id)
+    const token = linkToken.trim()
+    setSaving(true)
+    try {
+      await api.patch(`/api/clients/${clientId}`, {
+        tenant_server_id: serverId,
+        tenant_id: String(tenant.id),
+        tenant_api_id: apiId || null,
+        tenant_api_token: token || null,
+      })
+      await db.loadFullClient(clientId)
+      db.addLog(clientId, 'Tenant vinculado (via Canais)', `${tenant.name} · ID ${tenant.id}`)
+      toast.success(`Tenant "${tenant.name}" vinculado`)
+      await qc.invalidateQueries({ queryKey: ['nx-channels'] })
+      setLinkingId(null)
+    } catch (err) {
+      toast.error('Falha ao vincular: ' + extractErrorMessage(err, 'erro'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const filteredTenants = React.useMemo(() => {
+    if (!tenantSearch) return tenantList
+    const q = tenantSearch.toLowerCase()
+    return tenantList.filter(
+      (t) => t.name.toLowerCase().includes(q) || String(t.id).includes(q),
+    )
+  }, [tenantList, tenantSearch])
+
+  const filteredClients = React.useMemo(() => {
+    if (!clientSearch) return clients.slice(0, 60)
+    const q = clientSearch.toLowerCase()
+    return clients
+      .filter((c) => [c.company, c.name, c.email].some((x) => asText(x).toLowerCase().includes(q)))
+      .slice(0, 60)
+  }, [clients, clientSearch])
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Tenants do servidor"
+      size="lg"
+      footer={<Button variant="secondary" onClick={onClose}>Fechar</Button>}
+    >
+      <div className="space-y-4">
+        {/* Servidor + carregar */}
+        <div className="flex gap-2">
+          {servers.length > 1 && (
+            <Select
+              value={serverId}
+              onChange={(e) => { setServerId(e.target.value); setTenantList([]); setLinkingId(null) }}
+              options={servers.map((s) => ({ value: s.id, label: s.name }))}
+              containerClassName="flex-1"
+            />
+          )}
+          <Button
+            onClick={loadTenants}
+            loading={loading}
+            leftIcon={loading ? undefined : <RefreshCw className="h-4 w-4" />}
+          >
+            {tenantList.length > 0 ? 'Recarregar' : 'Carregar tenants'}
+          </Button>
+        </div>
+
+        {/* Busca */}
+        {tenantList.length > 0 && (
+          <Input
+            placeholder="Buscar tenant por nome ou ID…"
+            value={tenantSearch}
+            onChange={(e) => setTenantSearch(e.target.value)}
+            leftIcon={<Search className="h-4 w-4" />}
+          />
+        )}
+
+        {loading && (
+          <div className="flex items-center justify-center gap-2 py-6 text-sm text-foreground/45">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Carregando tenants…
+          </div>
+        )}
+
+        {/* Lista de tenants */}
+        {!loading && filteredTenants.length > 0 && (
+          <ul className="max-h-[55vh] overflow-y-auto divide-y divide-line rounded-xl border border-line">
+            {filteredTenants.map((t) => (
+              <li key={t.id} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-foreground">{t.name}</p>
+                    <p className="text-[11px] text-foreground/45">
+                      ID: {t.id}
+                      {t.email ? ` · ${t.email}` : ''}
+                    </p>
+                  </div>
+                  {linkingId !== String(t.id) ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setLinkingId(String(t.id))
+                        setLinkApiId(String(t.apiId ?? t.id))
+                        setLinkToken(
+                          (t.api_token as string | undefined) ??
+                          (t.api_key as string | undefined) ??
+                          '',
+                        )
+                        setClientSearch('')
+                      }}
+                      leftIcon={<Link2 className="h-3.5 w-3.5" />}
+                    >
+                      Vincular
+                    </Button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setLinkingId(null)}
+                      className="text-xs text-foreground/40 hover:text-foreground/70"
+                    >
+                      ✕ Cancelar
+                    </button>
+                  )}
+                </div>
+
+                {/* Painel inline de vínculo */}
+                {linkingId === String(t.id) && (
+                  <div className="mt-3 space-y-3 rounded-lg border border-line/60 bg-elevate/[0.02] p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        label="API ID"
+                        value={linkApiId}
+                        onChange={(e) => setLinkApiId(e.target.value)}
+                        placeholder={String(t.id)}
+                      />
+                      <Input
+                        label="Token"
+                        value={linkToken}
+                        onChange={(e) => setLinkToken(e.target.value)}
+                        placeholder="(opcional)"
+                      />
+                    </div>
+
+                    <div>
+                      <p className="mb-1.5 text-xs font-medium text-foreground/55">
+                        Vincular ao cliente:
+                      </p>
+                      <Input
+                        placeholder="Buscar cliente…"
+                        value={clientSearch}
+                        onChange={(e) => setClientSearch(e.target.value)}
+                        leftIcon={<Search className="h-4 w-4" />}
+                      />
+                      <ul className="mt-1.5 max-h-44 overflow-y-auto rounded-lg border border-line divide-y divide-line/50">
+                        {filteredClients.length === 0 ? (
+                          <li className="px-3 py-3 text-center text-xs text-foreground/40">
+                            Nenhum cliente encontrado
+                          </li>
+                        ) : (
+                          filteredClients.map((c) => (
+                            <li key={c.id}>
+                              <button
+                                type="button"
+                                onClick={() => doLink(t, c.id)}
+                                disabled={saving}
+                                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-elevate/[0.04] disabled:opacity-50"
+                              >
+                                <span className="min-w-0 truncate text-foreground/85">
+                                  {asText(c.company || c.name, '—')}
+                                </span>
+                                {saving ? (
+                                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-foreground/40" />
+                                ) : c.tenantId ? (
+                                  <Badge tone="neutral" className="shrink-0 text-[10px]">
+                                    vinculado
+                                  </Badge>
+                                ) : null}
+                              </button>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </Modal>
   )

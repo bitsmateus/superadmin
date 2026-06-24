@@ -624,12 +624,13 @@ function ServerTenantsModal({ open, onClose }: { open: boolean; onClose: () => v
         {/* Servidor + carregar */}
         <div className="flex gap-2">
           {servers.length > 1 && (
-            <Select
-              value={serverId}
-              onChange={(e) => { setServerId(e.target.value); setTenantList([]); setLinkingId(null) }}
-              options={servers.map((s) => ({ value: s.id, label: s.name }))}
-              containerClassName="flex-1"
-            />
+            <div className="flex-1">
+              <Select
+                value={serverId}
+                onChange={(e) => { setServerId(e.target.value); setTenantList([]); setLinkingId(null) }}
+                options={servers.map((s) => ({ value: s.id, label: s.name }))}
+              />
+            </div>
           )}
           <Button
             onClick={loadTenants}

@@ -59,6 +59,29 @@ function extractId(resp: unknown): string | number | undefined {
   return undefined
 }
 
+/** Heurística de UUID (o apiId externo da NX é um UUID, não o id numérico). */
+function looksUuid(v: unknown): v is string {
+  return typeof v === 'string' && /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}/i.test(v)
+}
+
+/**
+ * Escolhe o apiId EXTERNO (UUID) usado em /v2/api/external/{apiId}/... entre os
+ * vários campos possíveis da resposta. Prefere um valor em formato UUID; só cai
+ * no id numérico se não houver UUID (que provavelmente não serve, mas evita
+ * vazio). Importante porque a URL externa NÃO aceita o id numérico da apiConfig.
+ */
+function pickExternalApiId(...objs: (Record<string, unknown> | undefined)[]): string | undefined {
+  const cands: unknown[] = []
+  for (const o of objs) {
+    if (!o) continue
+    cands.push(o.apiId, o.api_id, o.apiID, o.uuid, o.externalId, o.external_id, o.id)
+  }
+  const uuid = cands.find(looksUuid)
+  if (uuid) return String(uuid)
+  const any = cands.find((v) => v != null && v !== '')
+  return any != null ? String(any) : undefined
+}
+
 function genToken(): string {
   try {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -462,8 +485,10 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
         | number
         | undefined) ??
       1
-    const createdApiId = pick(tenantObj, 'apiId', 'api_id')
-    prov.apiId = createdApiId != null ? String(createdApiId) : String(prov.tenantId ?? '')
+    // Só usa apiId em UUID (externo). Se o tenant não devolver, o passo do
+    // canal/API captura. Não cai no tenantId numérico (não serve na URL externa).
+    const tenantApiId = pickExternalApiId(tenantObj)
+    if (tenantApiId) prov.apiId = tenantApiId
 
     const tName = pick(tenantObj, 'name')
     const enriched = enrichChecklistFromBriefing(
@@ -523,8 +548,12 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       if (sessionId != null && (prov as Record<string, unknown>).sessionId == null) {
         ;(prov as Record<string, unknown>).sessionId = sessionId
       }
-      const apiId = pick(apiConfig, 'id', 'apiId') as string | undefined
-      if (apiId && !prov.apiId) prov.apiId = String(apiId)
+      // apiId EXTERNO (UUID). Não sobrescreve um UUID já capturado por um valor
+      // não-UUID (ex.: id numérico de um canal seguinte).
+      const apiId = pickExternalApiId(apiConfig, apiWrap, session as Record<string, unknown>)
+      if (apiId && (!prov.apiId || looksUuid(apiId) || !looksUuid(prov.apiId))) {
+        prov.apiId = apiId
+      }
       const apiToken =
         (pick(apiWrap, 'plainToken') as string | undefined) ??
         (pick(apiConfig, 'token', 'authToken') as string | undefined)
@@ -599,7 +628,9 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
     })
     const respApi = pick(apiResp, 'api') as Record<string, unknown> | undefined
     const respApiConfig = pick(respApi, 'apiConfig') as Record<string, unknown> | undefined
-    const createdApiId = (pick(respApiConfig, 'id') as string | undefined) ?? extractId(apiResp)
+    const createdApiId =
+      pickExternalApiId(respApiConfig, respApi, apiResp as Record<string, unknown>) ??
+      (extractId(apiResp) != null ? String(extractId(apiResp)) : undefined)
     if (createdApiId != null) prov.apiId = String(createdApiId)
     const respToken =
       (pick(respApi, 'plainToken') as string | undefined) ??

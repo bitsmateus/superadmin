@@ -118,9 +118,8 @@ export interface CreateUserPayload {
   name: string
   email: string
   password?: string
-  role?: string
-  tenant_id?: string | number
-  permissions?: string[]
+  /** Perfil aceito pela NX: 'admin' | 'user'. */
+  profile?: string
   [key: string]: unknown
 }
 

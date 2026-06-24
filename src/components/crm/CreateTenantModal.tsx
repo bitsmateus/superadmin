@@ -643,12 +643,11 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
           server,
           prov.apiId ?? '',
           {
-            tenant_id: prov.tenantId,
             name: u.name,
             email: u.email,
             password: defaultPassword,
-            role: u.role || 'user',
-            permissions: [u.role || 'user'],
+            // NX aceita 'admin' | 'user'. Só admin do briefing vira admin.
+            profile: u.role === 'admin' ? 'admin' : 'user',
           },
           prov.apiToken,
         )

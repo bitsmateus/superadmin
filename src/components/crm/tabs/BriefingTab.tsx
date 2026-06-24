@@ -859,12 +859,11 @@ function AutomationView({ client }: { client: Client }) {
           server,
           client.tenantApiId,
           {
-            tenant_id: client.tenantId,
             name: u.name,
             email: u.email,
             password: defaultPassword,
-            role: u.role || 'user',
-            permissions: [u.role || 'user'],
+            // NX aceita 'admin' | 'user'. Só admin do briefing vira admin.
+            profile: u.role === 'admin' ? 'admin' : 'user',
           },
           apiToken,
         )

@@ -8,10 +8,13 @@ import {
   Copy,
   Eye,
   FileText,
+  Link2,
   ListChecks,
   Loader2,
   PenLine,
   Plus,
+  RefreshCw,
+  Search,
   Send,
   SlidersHorizontal,
   Sparkles,
@@ -34,7 +37,8 @@ import { queuesApi } from '@/api/queues'
 import { tenantsApi } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
-import { getServerById } from '@/store/authStore'
+import { getServerById, useAuthStore } from '@/store/authStore'
+import type { Tenant } from '@/types'
 import {
   checklistProgress,
   enrichChecklistFromBriefing,
@@ -726,6 +730,61 @@ function AutomationView({ client }: { client: Client }) {
   const [creatingUsers, setCreatingUsers] = React.useState(false)
   const [creatingChannelId, setCreatingChannelId] = React.useState<string | null>(null)
 
+  const allServers = useAuthStore((s) => s.servers)
+  const servers = React.useMemo(() => allServers.filter((x) => x.enabled), [allServers])
+  const [linkOpen, setLinkOpen] = React.useState(false)
+  const [linkServerId, setLinkServerId] = React.useState(
+    () => client.tenantServerId ?? '',
+  )
+  const [tenantList, setTenantList] = React.useState<Tenant[]>([])
+  const [tenantListLoading, setTenantListLoading] = React.useState(false)
+  const [linkingId, setLinkingId] = React.useState<string | null>(null)
+  const [linkApiId, setLinkApiId] = React.useState('')
+  const [linkToken, setLinkToken] = React.useState('')
+  const [tenantSearch, setTenantSearch] = React.useState('')
+
+  React.useEffect(() => {
+    if (!linkServerId && servers.length > 0) {
+      setLinkServerId(client.tenantServerId ?? servers[0].id)
+    }
+  }, [servers]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadTenants = async () => {
+    const sid = linkServerId || servers[0]?.id
+    const server = servers.find((s) => s.id === sid)
+    if (!server) { toast.error('Selecione um servidor'); return }
+    setTenantListLoading(true)
+    setTenantList([])
+    setLinkingId(null)
+    try {
+      const list = await tenantsApi.list(server)
+      setTenantList(list)
+      if (list.length === 0) toast.info('Nenhum tenant encontrado neste servidor')
+    } catch (err) {
+      toast.error(`Erro ao listar tenants: ${extractErrorMessage(err, 'erro')}`)
+    } finally {
+      setTenantListLoading(false)
+    }
+  }
+
+  const doLinkTenant = (tenant: Tenant) => {
+    const sid = linkServerId || servers[0]?.id
+    const apiId = linkApiId.trim() || String(tenant.apiId ?? tenant.id)
+    db.updateClient(client.id, {
+      tenantId: String(tenant.id),
+      tenantName: tenant.name,
+      tenantServerId: sid || undefined,
+      tenantApiId: apiId || undefined,
+      tenantApiToken: linkToken.trim() || undefined,
+      supportEmail: (tenant.email as string | undefined) ?? client.supportEmail,
+    })
+    db.addLog(client.id, 'Tenant vinculado manualmente', `${tenant.name} · ID ${tenant.id}`)
+    toast.success(`Tenant "${tenant.name}" vinculado`)
+    setLinkOpen(false)
+    setLinkingId(null)
+    setTenantList([])
+  }
+
   const tree = React.useMemo(
     () => enrichChecklistFromBriefing(client.deliveryChecklist, client.briefingData, client.briefingConfig),
     [client.deliveryChecklist, client.briefingData, client.briefingConfig],
@@ -962,6 +1021,151 @@ function AutomationView({ client }: { client: Client }) {
             {briefingUsers.length} usuário(s) do briefing.
           </p>
         )}
+
+        {/* Vincular tenant existente */}
+        <div className="mt-4 border-t border-line/60 pt-3">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !linkOpen
+              setLinkOpen(next)
+              if (next && tenantList.length === 0) loadTenants()
+            }}
+            className="inline-flex items-center gap-1.5 text-xs text-foreground/50 hover:text-accent transition-colors"
+          >
+            <Link2 className="h-3.5 w-3.5" />
+            Vincular tenant existente do servidor
+          </button>
+
+          {linkOpen && (
+            <div className="mt-3 rounded-xl border border-line bg-elevate/[0.02] p-3 space-y-3">
+              {/* Server + reload */}
+              <div className="flex items-center gap-2">
+                {servers.length > 1 && (
+                  <select
+                    value={linkServerId}
+                    onChange={(e) => { setLinkServerId(e.target.value); setTenantList([]); setLinkingId(null) }}
+                    className="h-7 flex-1 rounded border border-line bg-card px-2 text-xs text-foreground focus:border-accent focus:outline-none"
+                  >
+                    {servers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={loadTenants}
+                  disabled={tenantListLoading}
+                  title="Recarregar lista"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-line bg-card text-foreground/50 hover:text-accent hover:border-accent/40 transition-colors disabled:opacity-40"
+                >
+                  {tenantListLoading
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <RefreshCw className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+
+              {/* Search */}
+              {tenantList.length > 0 && (
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/35 pointer-events-none" />
+                  <input
+                    value={tenantSearch}
+                    onChange={(e) => setTenantSearch(e.target.value)}
+                    placeholder="Buscar tenant…"
+                    className="h-7 w-full rounded border border-line bg-card pl-7 pr-3 text-xs text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none"
+                  />
+                </div>
+              )}
+
+              {/* List */}
+              {tenantListLoading && (
+                <p className="text-center text-xs text-foreground/40 py-2">Carregando…</p>
+              )}
+              {!tenantListLoading && tenantList.length > 0 && (
+                <ul className="max-h-56 overflow-y-auto space-y-1.5 pr-0.5">
+                  {tenantList
+                    .filter((t) =>
+                      !tenantSearch ||
+                      t.name.toLowerCase().includes(tenantSearch.toLowerCase()) ||
+                      String(t.id).includes(tenantSearch),
+                    )
+                    .map((t) => (
+                      <li
+                        key={t.id}
+                        className="rounded-lg border border-line bg-card px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">{t.name}</p>
+                            <p className="text-[10px] text-foreground/40">
+                              ID: {t.id}
+                              {t.email ? ` · ${t.email}` : ''}
+                            </p>
+                          </div>
+                          {linkingId !== String(t.id) ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLinkingId(String(t.id))
+                                setLinkApiId(String(t.apiId ?? t.id))
+                                setLinkToken((t.api_token as string | undefined) ?? (t.api_key as string | undefined) ?? '')
+                              }}
+                              className="shrink-0 inline-flex items-center gap-1 rounded-md bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent hover:bg-accent/20 transition-colors"
+                            >
+                              <Link2 className="h-3 w-3" />
+                              Vincular
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setLinkingId(null)}
+                              className="shrink-0 text-[10px] text-foreground/40 hover:text-foreground/70"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Inline form */}
+                        {linkingId === String(t.id) && (
+                          <div className="mt-2 space-y-1.5">
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <div>
+                                <p className="mb-0.5 text-[10px] text-foreground/45">API ID</p>
+                                <input
+                                  value={linkApiId}
+                                  onChange={(e) => setLinkApiId(e.target.value)}
+                                  placeholder={String(t.id)}
+                                  className="h-7 w-full rounded border border-line bg-surface px-2 text-xs text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none"
+                                />
+                              </div>
+                              <div>
+                                <p className="mb-0.5 text-[10px] text-foreground/45">Token</p>
+                                <input
+                                  value={linkToken}
+                                  onChange={(e) => setLinkToken(e.target.value)}
+                                  placeholder="(opcional)"
+                                  className="h-7 w-full rounded border border-line bg-surface px-2 text-xs text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => doLinkTenant(t)}
+                              className="w-full rounded-md bg-accent/15 py-1 text-xs font-medium text-accent hover:bg-accent/25 transition-colors"
+                            >
+                              Confirmar vínculo
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       </Section>
 
       <Section

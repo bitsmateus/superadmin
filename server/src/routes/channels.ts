@@ -72,11 +72,11 @@ interface ReconcileError {
   error: string | null;
 }
 
-async function fetchJson(url: string, headers: Record<string, string>, timeoutMs = 12_000) {
+async function fetchJson(url: string, headers: Record<string, string>, timeoutMs = 12_000, method = 'GET') {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const resp = await fetch(url, { headers, signal: ctrl.signal });
+    const resp = await fetch(url, { method, headers, signal: ctrl.signal });
     const text = await resp.text();
     let body: unknown;
     try {
@@ -473,6 +473,62 @@ export async function channelsRoutes(app: FastifyInstance) {
         return reply.send({ ok: true, count: list.length, names: list.slice(0, 10).map((c) => String(c.name ?? '')) });
       } catch (err) {
         return reply.send({ ok: false, error: String(err).slice(0, 200), count: 0 });
+      }
+    },
+  );
+
+  // DESTRUTIVO: exclui a instância no provedor (UAZAPI/Evolution). Usado só nos
+  // "números avulsos". Confirme na UI antes de chamar.
+  app.post<{ Body: { provider?: string; instance_key?: string; server?: string } }>(
+    '/api/channels/delete-instance',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const provider = (req.body?.provider ?? '').toString().trim();
+      const instanceKey = (req.body?.instance_key ?? '').toString().trim();
+      const serverUrl = (req.body?.server ?? '').toString().trim();
+      if (!provider || !instanceKey) return reply.status(400).send({ error: 'provider e instance_key obrigatórios' });
+
+      const settings = await queryOne<{
+        evolution: { baseUrl?: string; apiKey?: string } | null;
+        uazapi: Array<{ url?: string; token?: string }> | null;
+      }>('SELECT evolution, uazapi FROM settings WHERE id = true');
+
+      try {
+        if (provider === 'evolution') {
+          const base = (settings?.evolution?.baseUrl ?? '').replace(/\/$/, '');
+          const key = settings?.evolution?.apiKey ?? '';
+          if (!base || !key) return reply.status(400).send({ error: 'Evolution não configurada' });
+          const r = await fetchJson(
+            `${base}/instance/delete/${encodeURIComponent(instanceKey)}`,
+            { Accept: 'application/json', apikey: key },
+            12_000,
+            'DELETE',
+          );
+          if (!r.ok) return reply.status(502).send({ error: `Evolution: HTTP ${r.status}` });
+          return { ok: true };
+        }
+        if (provider === 'uazapi') {
+          const base = (serverUrl || (settings?.uazapi ?? [])[0]?.url || '').replace(/\/$/, '');
+          if (!base) return reply.status(400).send({ error: 'Servidor UAZAPI não informado' });
+          const admin = (settings?.uazapi ?? []).find((u) => (u.url ?? '').replace(/\/$/, '') === base)?.token;
+          // UAZAPI: DELETE /instance autentica com o token da instância (e, se
+          // houver, o admintoken do servidor).
+          const r = await fetchJson(
+            `${base}/instance`,
+            {
+              Accept: 'application/json',
+              token: instanceKey,
+              ...(admin ? { admintoken: admin } : {}),
+            },
+            12_000,
+            'DELETE',
+          );
+          if (!r.ok) return reply.status(502).send({ error: `UAZAPI: HTTP ${r.status}` });
+          return { ok: true };
+        }
+        return reply.status(400).send({ error: 'provider inválido' });
+      } catch (err) {
+        return reply.status(502).send({ error: String(err).slice(0, 200) });
       }
     },
   );

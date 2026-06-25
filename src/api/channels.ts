@@ -93,6 +93,9 @@ export const channelsApi = {
   async assign(provider: string, instance_key: string, client_id: string | null): Promise<void> {
     await http.post('/channels/assign', { provider, instance_key, client_id })
   },
+  async deleteInstance(provider: string, instance_key: string, server: string | null): Promise<void> {
+    await http.post('/channels/delete-instance', { provider, instance_key, server })
+  },
   async testTenant(input: { server_id: string; api_id: string; token: string }): Promise<{
     ok: boolean
     count: number

@@ -32,3 +32,19 @@ export function useAssignChannel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['nx-channels'] }),
   })
 }
+
+export function useDeleteInstance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      provider,
+      instance_key,
+      server,
+    }: {
+      provider: string
+      instance_key: string
+      server: string | null
+    }) => channelsApi.deleteInstance(provider, instance_key, server),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['nx-channels'] }),
+  })
+}

@@ -13,6 +13,7 @@ import {
   Radio,
   RefreshCw,
   Search,
+  Trash2,
   Unlink,
   Wifi,
   WifiOff,
@@ -28,7 +29,7 @@ import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { useNxChannels, useSetChannelAlert, useAssignChannel } from '@/hooks/useNxChannels'
+import { useNxChannels, useSetChannelAlert, useAssignChannel, useDeleteInstance } from '@/hooks/useNxChannels'
 import { useClients } from '@/hooks/useClients'
 import { channelsApi } from '@/api/channels'
 import type { NxChannel, NxChannelStatus, OrphanInstance } from '@/api/channels'
@@ -72,6 +73,24 @@ export function CanaisPage() {
   const [tokenEditingId, setTokenEditingId] = React.useState<string | null>(null)
   const [serverTenantsOpen, setServerTenantsOpen] = React.useState(false)
   const assign = useAssignChannel()
+  const deleteInstance = useDeleteInstance()
+
+  const removeOrphan = (o: OrphanInstance) => {
+    if (
+      !window.confirm(
+        `Excluir a instância "${o.name}" no ${o.provider}?\n\n` +
+          'Esta ação é IRREVERSÍVEL e apaga a instância no servidor (UAZAPI/Evolution).',
+      )
+    )
+      return
+    deleteInstance.mutate(
+      { provider: o.provider, instance_key: o.instance_key, server: o.server },
+      {
+        onSuccess: () => toast.success('Instância excluída no provedor'),
+        onError: (e) => toast.error('Falha ao excluir: ' + extractErrorMessage(e, 'erro')),
+      },
+    )
+  }
 
   // Arquivar o tenant = arquivar o CLIENTE (mesmo archivedAt do pipeline/lista).
   // Sai do pipeline, da lista de clientes e dos canais; pode restaurar em Arquivados.
@@ -387,9 +406,19 @@ export function CanaisPage() {
                           <StatusBadge status={o.status} />
                         </TD>
                         <TD className="text-right">
-                          <Button size="sm" variant="secondary" onClick={() => setAssigning(o)} leftIcon={<Link2 className="h-3.5 w-3.5" />}>
-                            Atribuir
-                          </Button>
+                          <div className="inline-flex items-center gap-1.5">
+                            <Button size="sm" variant="secondary" onClick={() => setAssigning(o)} leftIcon={<Link2 className="h-3.5 w-3.5" />}>
+                              Atribuir
+                            </Button>
+                            <button
+                              type="button"
+                              title="Excluir instância no provedor (irreversível)"
+                              onClick={() => removeOrphan(o)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </TD>
                       </TR>
                     ))}

@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
+import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
 import { db } from '@/services/db'
 import { useAuthStore } from '@/store/authStore'
 import { copyToClipboard } from '@/lib/clipboard'
@@ -113,14 +114,21 @@ export function OverviewTab({ client }: { client: Client }) {
               db.addLog(client.id, 'Empresa atualizada')
             }
           />
-          <InlineField
-            label="Responsável"
-            value={client.responsavel ?? ''}
-            placeholder="Sem responsável"
-            onSave={(v) =>
-              db.updateClient(client.id, { responsavel: v }) &&
-              db.addLog(client.id, 'Responsável atualizado')
-            }
+          <ResponsavelSelect
+            label="Responsável comercial"
+            value={client.responsavelComercial ?? client.responsavel ?? ''}
+            onChange={(v) => {
+              db.updateClient(client.id, { responsavelComercial: v || undefined })
+              db.addLog(client.id, 'Responsável comercial atualizado')
+            }}
+          />
+          <ResponsavelSelect
+            label="Responsável de entrega"
+            value={client.responsavelEntrega ?? ''}
+            onChange={(v) => {
+              db.updateClient(client.id, { responsavelEntrega: v || undefined })
+              db.addLog(client.id, 'Responsável de entrega atualizado')
+            }}
           />
 
           {/* E-mail de suporte — editável manualmente */}
@@ -840,6 +848,39 @@ function iconForAction(action: string): React.ReactNode {
   if (a.includes('etapa')) return <ArrowRight className="h-3 w-3" />
   if (a.includes('nota')) return <StickyNote className="h-3 w-3" />
   return <Check className="h-3 w-3" />
+}
+
+function ResponsavelSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  const { data: profiles } = useTeamProfiles()
+  const options = profileOptions(profiles)
+  // Garante que um valor antigo (texto livre) que não está na lista ainda apareça.
+  const hasValue = value && options.some((o) => o.value === value)
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+      >
+        <option value="">— Sem responsável —</option>
+        {!hasValue && value && <option value={value}>{value}</option>}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
 }
 
 function InlineField({

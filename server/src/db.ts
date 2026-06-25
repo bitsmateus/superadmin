@@ -71,6 +71,9 @@ export async function runMigrations() {
   // Arquivamento (soft-delete): card sai do pipeline mas pode ser restaurado
   // ou excluído permanentemente na tela de Arquivados.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  // Responsáveis separados: comercial e de entrega (selecionados da equipe).
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS responsavel_comercial TEXT`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS responsavel_entrega TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS clients_archived_at_idx ON clients(archived_at)`);
   // Nova etapa "Entregas Recentes" (delivered) entre delivery e active.
   // ALTER TYPE ... ADD VALUE não roda dentro de transação — pool.query roda solto.

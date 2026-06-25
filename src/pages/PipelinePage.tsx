@@ -26,6 +26,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { StageBadge } from '@/components/crm/StageBadge'
 import { useClients } from '@/hooks/useClients'
+import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
 import { db } from '@/services/db'
 import {
   NEXT_STAGE,
@@ -52,13 +53,19 @@ export function PipelinePage() {
   const [openNew, setOpenNew] = React.useState(false)
   const [filterResp, setFilterResp] = React.useState('')
 
+  const { data: teamProfiles } = useTeamProfiles()
   const responsavelOptions = React.useMemo(() => {
+    // Usuários cadastrados (equipe) + qualquer responsável já gravado nos
+    // clientes que não esteja na equipe (não perde filtros antigos).
     const seen = new Set<string>()
+    for (const o of profileOptions(teamProfiles)) seen.add(o.value)
     for (const c of clients) {
+      if (c.responsavelComercial) seen.add(c.responsavelComercial)
+      if (c.responsavelEntrega) seen.add(c.responsavelEntrega)
       if (c.responsavel) seen.add(c.responsavel)
     }
     return [...seen].sort()
-  }, [clients])
+  }, [clients, teamProfiles])
 
   const {
     register,
@@ -107,7 +114,13 @@ export function PipelinePage() {
           asText(c.company).toLowerCase()
         if (!blob.includes(q)) continue
       }
-      if (filterResp && c.responsavel !== filterResp) continue
+      if (
+        filterResp &&
+        c.responsavelComercial !== filterResp &&
+        c.responsavelEntrega !== filterResp &&
+        c.responsavel !== filterResp
+      )
+        continue
       buckets[c.stage].push(c)
     }
     // Oldest entries first within each stage
@@ -347,9 +360,14 @@ function ListGroup({
                             <div className="font-medium text-foreground">
                               {asText(c.name, '—')}
                             </div>
-                            {c.responsavel && (
+                            {(c.responsavelComercial || c.responsavelEntrega || c.responsavel) && (
                               <div className="mt-0.5 text-[10.5px] text-foreground/40">
-                                {c.responsavel}
+                                {[
+                                  c.responsavelComercial && `Com.: ${c.responsavelComercial}`,
+                                  c.responsavelEntrega && `Ent.: ${c.responsavelEntrega}`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ') || c.responsavel}
                               </div>
                             )}
                             <div className="mt-0.5">

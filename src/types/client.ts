@@ -230,7 +230,12 @@ export interface Client {
   supportEmail?: string
   supportPassword?: string
   stage: PipelineStage
+  /** @deprecated mantido para dados antigos — use responsavelComercial/Entrega. */
   responsavel?: string
+  /** Responsável comercial (nome/e-mail de um usuário da equipe). */
+  responsavelComercial?: string
+  /** Responsável pela entrega (nome/e-mail de um usuário da equipe). */
+  responsavelEntrega?: string
   createdAt: string
   stageUpdatedAt?: string
 

@@ -38,6 +38,8 @@ type ClientRow = {
   phone: string
   company: string
   responsavel: string | null
+  responsavel_comercial: string | null
+  responsavel_entrega: string | null
   stage: PipelineStage
   created_at: string
   stage_updated_at: string
@@ -100,6 +102,8 @@ function rowToClient(r: ClientRow): Client {
     phone: r.phone,
     company: r.company,
     responsavel: r.responsavel ?? undefined,
+    responsavelComercial: r.responsavel_comercial ?? undefined,
+    responsavelEntrega: r.responsavel_entrega ?? undefined,
     stage: r.stage,
     createdAt: r.created_at,
     stageUpdatedAt: r.stage_updated_at,
@@ -162,6 +166,8 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('phone' in patch) out.phone = patch.phone
   if ('company' in patch) out.company = patch.company
   if ('responsavel' in patch) out.responsavel = patch.responsavel ?? null
+  if ('responsavelComercial' in patch) out.responsavel_comercial = patch.responsavelComercial ?? null
+  if ('responsavelEntrega' in patch) out.responsavel_entrega = patch.responsavelEntrega ?? null
   if ('stage' in patch) out.stage = patch.stage
   if ('tenantId' in patch) out.tenant_id = patch.tenantId ?? null
   if ('tenantServerId' in patch) out.tenant_server_id = patch.tenantServerId ?? null

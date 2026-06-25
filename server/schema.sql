@@ -119,6 +119,8 @@ CREATE TABLE IF NOT EXISTS clients (
   phone TEXT NOT NULL,
   company TEXT NOT NULL,
   responsavel TEXT,
+  responsavel_comercial TEXT,
+  responsavel_entrega TEXT,
   stage pipeline_stage NOT NULL DEFAULT 'welcome',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   stage_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

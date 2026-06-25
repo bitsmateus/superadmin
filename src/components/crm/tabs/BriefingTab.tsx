@@ -1383,10 +1383,15 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
       <Accordion title="4. Integrações" defaultOpen>
         <Row k="WhatsApp" v={data.whatsappNumbers.join(', ')} />
         <Row k="Tipo" v={data.whatsappType} />
-        <Row k="Facebook/Instagram" v={data.useFacebook ? 'Sim' : 'Não'} />
-        {data.useFacebook && (
-          <Row k="Token" v={data.facebookToken ? '••••••••' : '—'} />
+        {data.facebookEmail || data.facebookPassword ? (
+          <>
+            <Row k="Facebook/Meta · e-mail" v={data.facebookEmail} />
+            <Row k="Facebook/Meta · senha" v={data.facebookPassword} />
+          </>
+        ) : (
+          <Row k="Facebook/Meta" v={data.useFacebook ? 'Sim' : 'Não'} />
         )}
+        {data.facebookToken && <Row k="Token" v="••••••••" />}
         {hasExtraChannels && (
           <>
             {data.wavoipInfo && <Row k="WaVoip" v={data.wavoipInfo} />}

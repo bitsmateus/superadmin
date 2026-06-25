@@ -29,7 +29,13 @@ import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { useNxChannels, useSetChannelAlert, useAssignChannel, useDeleteInstance } from '@/hooks/useNxChannels'
+import {
+  useNxChannels,
+  useSetChannelAlert,
+  useAssignChannel,
+  useDeleteInstance,
+  useArchiveOrphans,
+} from '@/hooks/useNxChannels'
 import { useClients } from '@/hooks/useClients'
 import { channelsApi } from '@/api/channels'
 import type { NxChannel, NxChannelStatus, OrphanInstance } from '@/api/channels'
@@ -74,6 +80,45 @@ export function CanaisPage() {
   const [serverTenantsOpen, setServerTenantsOpen] = React.useState(false)
   const assign = useAssignChannel()
   const deleteInstance = useDeleteInstance()
+  const archiveOrphans = useArchiveOrphans()
+  const [selectedOrphans, setSelectedOrphans] = React.useState<Set<string>>(new Set())
+
+  const orphanKey = (o: OrphanInstance) => `${o.provider}:${o.instance_key}`
+  const toggleOrphan = (o: OrphanInstance) =>
+    setSelectedOrphans((prev) => {
+      const next = new Set(prev)
+      const k = orphanKey(o)
+      if (next.has(k)) next.delete(k)
+      else next.add(k)
+      return next
+    })
+
+  const archiveSelected = () => {
+    const items = (data?.orphans ?? [])
+      .filter((o) => selectedOrphans.has(orphanKey(o)))
+      .map((o) => ({ provider: o.provider, instance_key: o.instance_key }))
+    if (items.length === 0) return
+    archiveOrphans.mutate(
+      { items, archived: true },
+      {
+        onSuccess: () => {
+          toast.success(`${items.length} avulso(s) arquivado(s)`)
+          setSelectedOrphans(new Set())
+        },
+        onError: (e) => toast.error('Falha ao arquivar: ' + extractErrorMessage(e, 'erro')),
+      },
+    )
+  }
+
+  const restoreOrphan = (o: OrphanInstance) => {
+    archiveOrphans.mutate(
+      { items: [{ provider: o.provider, instance_key: o.instance_key }], archived: false },
+      {
+        onSuccess: () => toast.success('Avulso restaurado'),
+        onError: (e) => toast.error('Falha ao restaurar: ' + extractErrorMessage(e, 'erro')),
+      },
+    )
+  }
 
   const removeOrphan = (o: OrphanInstance) => {
     if (
@@ -142,6 +187,17 @@ export function CanaisPage() {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orphans, search, statusFilter, onlyDivergent])
+
+  const visibleOrphanKeys = filteredOrphans.map(orphanKey)
+  const allOrphansSelected =
+    visibleOrphanKeys.length > 0 && visibleOrphanKeys.every((k) => selectedOrphans.has(k))
+  const toggleAllOrphans = () =>
+    setSelectedOrphans((prev) => {
+      const next = new Set(prev)
+      if (allOrphansSelected) visibleOrphanKeys.forEach((k) => next.delete(k))
+      else visibleOrphanKeys.forEach((k) => next.add(k))
+      return next
+    })
 
   // Agrupa os canais por tenant (cliente).
   const groups = React.useMemo(() => {
@@ -374,16 +430,42 @@ export function CanaisPage() {
             {/* Avulsos */}
             {filteredOrphans.length > 0 && (
               <section className="overflow-hidden rounded-xl border border-warning/30 bg-card">
-                <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
                   <Link2 className="h-4 w-4 text-warning" />
                   <span className="text-sm font-semibold text-foreground">Números avulsos</span>
                   <span className="text-xs text-foreground/45">
                     {filteredOrphans.length} sem tenant atribuído
                   </span>
+                  {selectedOrphans.size > 0 && (
+                    <div className="ml-auto flex items-center gap-2">
+                      <span className="text-xs text-foreground/70">{selectedOrphans.size} selecionado(s)</span>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        loading={archiveOrphans.isPending}
+                        onClick={archiveSelected}
+                        leftIcon={<Archive className="h-3.5 w-3.5" />}
+                      >
+                        Arquivar selecionados
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setSelectedOrphans(new Set())}>
+                        Limpar
+                      </Button>
+                    </div>
+                  )}
                 </header>
                 <Table>
                   <THead>
                     <tr>
+                      <TH className="w-px">
+                        <input
+                          type="checkbox"
+                          checked={allOrphansSelected}
+                          onChange={toggleAllOrphans}
+                          className="h-4 w-4 accent-[#4F8EF7]"
+                          aria-label="Selecionar todos"
+                        />
+                      </TH>
                       <TH>Instância</TH>
                       <TH>Provedor</TH>
                       <TH>Número</TH>
@@ -394,6 +476,15 @@ export function CanaisPage() {
                   <TBody>
                     {filteredOrphans.map((o) => (
                       <TR key={`${o.provider}:${o.instance_key}`}>
+                        <TD>
+                          <input
+                            type="checkbox"
+                            checked={selectedOrphans.has(orphanKey(o))}
+                            onChange={() => toggleOrphan(o)}
+                            className="h-4 w-4 accent-[#4F8EF7]"
+                            aria-label={`Selecionar ${o.name}`}
+                          />
+                        </TD>
                         <TD>
                           <div className="font-medium text-foreground">{asText(o.name, '—')}</div>
                           {o.server && <div className="text-[11px] text-foreground/40">{o.server}</div>}
@@ -409,6 +500,76 @@ export function CanaisPage() {
                           <div className="inline-flex items-center gap-1.5">
                             <Button size="sm" variant="secondary" onClick={() => setAssigning(o)} leftIcon={<Link2 className="h-3.5 w-3.5" />}>
                               Atribuir
+                            </Button>
+                            <button
+                              type="button"
+                              title="Arquivar (esconder sem excluir no provedor)"
+                              onClick={() =>
+                                archiveOrphans.mutate(
+                                  { items: [{ provider: o.provider, instance_key: o.instance_key }], archived: true },
+                                  {
+                                    onSuccess: () => toast.success('Avulso arquivado'),
+                                    onError: (e) => toast.error('Falha: ' + extractErrorMessage(e, 'erro')),
+                                  },
+                                )
+                              }
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground"
+                            >
+                              <Archive className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Excluir instância no provedor (irreversível)"
+                              onClick={() => removeOrphan(o)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </section>
+            )}
+
+            {/* Avulsos arquivados */}
+            {(data?.archivedOrphans?.length ?? 0) > 0 && (
+              <section className="overflow-hidden rounded-xl border border-line bg-card">
+                <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                  <Archive className="h-4 w-4 text-foreground/45" />
+                  <span className="text-sm font-semibold text-foreground">Avulsos arquivados</span>
+                  <span className="text-xs text-foreground/45">{data!.archivedOrphans.length}</span>
+                </header>
+                <Table>
+                  <THead>
+                    <tr>
+                      <TH>Instância</TH>
+                      <TH>Provedor</TH>
+                      <TH>Número</TH>
+                      <TH>Status</TH>
+                      <TH className="text-right">Ação</TH>
+                    </tr>
+                  </THead>
+                  <TBody>
+                    {data!.archivedOrphans.map((o) => (
+                      <TR key={`arch:${o.provider}:${o.instance_key}`} className="opacity-70">
+                        <TD>
+                          <div className="font-medium text-foreground">{asText(o.name, '—')}</div>
+                          {o.server && <div className="text-[11px] text-foreground/40">{o.server}</div>}
+                        </TD>
+                        <TD>
+                          <Badge tone="neutral">{o.provider}</Badge>
+                        </TD>
+                        <TD className="text-foreground/60">{asText(o.number, '—')}</TD>
+                        <TD>
+                          <StatusBadge status={o.status} />
+                        </TD>
+                        <TD className="text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <Button size="sm" variant="secondary" onClick={() => restoreOrphan(o)}>
+                              Restaurar
                             </Button>
                             <button
                               type="button"

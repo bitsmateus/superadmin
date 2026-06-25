@@ -111,6 +111,14 @@ CREATE TABLE IF NOT EXISTS channel_assignments (
   PRIMARY KEY (provider, instance_key)
 );
 
+-- ---------- archived_orphans (avulsos arquivados, sem excluir no provedor) ----------
+CREATE TABLE IF NOT EXISTS archived_orphans (
+  provider TEXT NOT NULL,
+  instance_key TEXT NOT NULL,
+  archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (provider, instance_key)
+);
+
 -- ---------- clients ----------
 CREATE TABLE IF NOT EXISTS clients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

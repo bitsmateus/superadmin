@@ -112,6 +112,14 @@ export async function runMigrations() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (provider, instance_key)
   )`);
+  // Avulsos arquivados (escondidos da lista principal, sem excluir no provedor).
+  // Útil para canais quebrados que não dá pra apagar na UAZAPI/Evolution.
+  await pool.query(`CREATE TABLE IF NOT EXISTS archived_orphans (
+    provider TEXT NOT NULL,
+    instance_key TEXT NOT NULL,
+    archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (provider, instance_key)
+  )`);
   console.log('[db] migrations applied');
 }
 

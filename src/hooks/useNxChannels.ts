@@ -33,6 +33,20 @@ export function useAssignChannel() {
   })
 }
 
+export function useArchiveOrphans() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      items,
+      archived,
+    }: {
+      items: { provider: string; instance_key: string }[]
+      archived: boolean
+    }) => channelsApi.archiveOrphans(items, archived),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['nx-channels'] }),
+  })
+}
+
 export function useDeleteInstance() {
   const qc = useQueryClient()
   return useMutation({

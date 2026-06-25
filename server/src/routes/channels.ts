@@ -127,6 +127,7 @@ function asInstanceArray(body: unknown): Record<string, unknown>[] {
 export async function reconcileChannels(): Promise<{
   channels: ReconciledChannel[];
   orphans: OrphanInstance[];
+  archivedOrphans: OrphanInstance[];
   errors: ReconcileError[];
   providerErrors: string[];
   unlinkedTenants: UnlinkedTenant[];
@@ -166,6 +167,10 @@ export async function reconcileChannels(): Promise<{
     'SELECT provider, instance_key, client_id FROM channel_assignments',
   );
   const assignments = new Map(assignmentRows.map((a) => [`${a.provider}:${a.instance_key}`, a.client_id]));
+  const archivedRows = await query<{ provider: string; instance_key: string }>(
+    'SELECT provider, instance_key FROM archived_orphans',
+  );
+  const archivedSet = new Set(archivedRows.map((a) => `${a.provider}:${a.instance_key}`));
   const allClients = await query<{ id: string; name: string; company: string | null }>(
     'SELECT id, name, company FROM clients',
   );
@@ -295,6 +300,7 @@ export async function reconcileChannels(): Promise<{
   // 4) Avulsos: instâncias do provedor não representadas por canais da NX.
   // Se houver vínculo manual, viram "channel" sob o cliente; senão, orphan.
   const orphans: OrphanInstance[] = [];
+  const archivedOrphans: OrphanInstance[] = [];
   const addProviderInstance = (
     provider: 'uazapi' | 'evolution',
     key: string,
@@ -305,6 +311,11 @@ export async function reconcileChannels(): Promise<{
   ) => {
     const claimed = provider === 'uazapi' ? claimedUazapi.has(key) : claimedEvo.has(key);
     if (claimed) return; // já aparece como canal da NX
+    // Avulso arquivado → vai para a lista de arquivados (não some, mas sai da principal).
+    if (archivedSet.has(`${provider}:${key}`)) {
+      archivedOrphans.push({ provider, instance_key: key, name, number, status, server });
+      return;
+    }
     const assignedClient = assignments.get(`${provider}:${key}`);
     if (assignedClient && clientById.has(assignedClient)) {
       const cl = clientById.get(assignedClient)!;
@@ -370,12 +381,13 @@ export async function reconcileChannels(): Promise<{
     server_id: r.tenant_server_id,
   }));
 
-  return { channels, orphans, errors, providerErrors, unlinkedTenants };
+  return { channels, orphans, archivedOrphans, errors, providerErrors, unlinkedTenants };
 }
 
 export async function channelsRoutes(app: FastifyInstance) {
   app.get('/api/channels', { onRequest: [app.authenticate] }, async () => {
-    const { channels, orphans, errors, providerErrors, unlinkedTenants } = await reconcileChannels();
+    const { channels, orphans, archivedOrphans, errors, providerErrors, unlinkedTenants } =
+      await reconcileChannels();
 
     const cfgRows = await query<{ channel_key: string; alerts_enabled: boolean; alert_number: string | null }>(
       'SELECT channel_key, alerts_enabled, alert_number FROM channel_alerts',
@@ -396,7 +408,16 @@ export async function channelsRoutes(app: FastifyInstance) {
       divergent: out.filter((c) => c.divergent).length,
       orphans: orphans.length,
     };
-    return { channels: out, orphans, summary, errors, providerErrors, unlinkedTenants, updated_at: new Date().toISOString() };
+    return {
+      channels: out,
+      orphans,
+      archivedOrphans,
+      summary,
+      errors,
+      providerErrors,
+      unlinkedTenants,
+      updated_at: new Date().toISOString(),
+    };
   });
 
   // Salva a config de aviso de UM canal (só preferência — não envia nada).
@@ -474,6 +495,36 @@ export async function channelsRoutes(app: FastifyInstance) {
       } catch (err) {
         return reply.send({ ok: false, error: String(err).slice(0, 200), count: 0 });
       }
+    },
+  );
+
+  // Arquiva/restaura avulsos (em lote). Não mexe no provedor — só esconde da
+  // lista principal e mostra na seção "Arquivados". Para canais quebrados que
+  // não dá pra excluir na UAZAPI/Evolution.
+  app.post<{ Body: { items?: { provider?: string; instance_key?: string }[]; archived?: boolean } }>(
+    '/api/channels/archive-orphans',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const items = Array.isArray(req.body?.items) ? req.body!.items : [];
+      const archived = req.body?.archived !== false; // default true
+      const clean = items
+        .map((i) => ({ provider: (i.provider ?? '').toString().trim(), key: (i.instance_key ?? '').toString().trim() }))
+        .filter((i) => i.provider && i.key);
+      if (clean.length === 0) return reply.status(400).send({ error: 'Nenhum item válido' });
+      for (const i of clean) {
+        if (archived) {
+          // eslint-disable-next-line no-await-in-loop
+          await query(
+            `INSERT INTO archived_orphans (provider, instance_key, archived_at)
+             VALUES ($1, $2, NOW()) ON CONFLICT (provider, instance_key) DO NOTHING`,
+            [i.provider, i.key],
+          );
+        } else {
+          // eslint-disable-next-line no-await-in-loop
+          await query('DELETE FROM archived_orphans WHERE provider = $1 AND instance_key = $2', [i.provider, i.key]);
+        }
+      }
+      return { ok: true, count: clean.length };
     },
   );
 

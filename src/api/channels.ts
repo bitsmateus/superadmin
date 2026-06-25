@@ -66,6 +66,7 @@ export interface UnlinkedTenant {
 export interface NxChannelsResponse {
   channels: NxChannel[]
   orphans: OrphanInstance[]
+  archivedOrphans: OrphanInstance[]
   summary: NxChannelsSummary
   errors: { client_id: string; client: string; server_id: string | null; error: string | null }[]
   providerErrors: string[]
@@ -95,6 +96,12 @@ export const channelsApi = {
   },
   async deleteInstance(provider: string, instance_key: string, server: string | null): Promise<void> {
     await http.post('/channels/delete-instance', { provider, instance_key, server })
+  },
+  async archiveOrphans(
+    items: { provider: string; instance_key: string }[],
+    archived: boolean,
+  ): Promise<void> {
+    await http.post('/channels/archive-orphans', { items, archived })
   },
   async testTenant(input: { server_id: string; api_id: string; token: string }): Promise<{
     ok: boolean

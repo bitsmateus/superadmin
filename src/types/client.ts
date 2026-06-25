@@ -236,6 +236,10 @@ export interface Client {
   responsavelComercial?: string
   /** Responsável pela entrega (nome/e-mail de um usuário da equipe). */
   responsavelEntrega?: string
+  /** Liga/desliga aviso de queda de canais para este tenant. */
+  channelNotifyEnabled?: boolean
+  /** Número que recebe o aviso de canais (default: telefone do cliente). */
+  channelNotifyNumber?: string
   createdAt: string
   stageUpdatedAt?: string
 

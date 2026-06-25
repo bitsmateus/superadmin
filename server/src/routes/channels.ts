@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
-import { sendWhatsAppToNumber } from '../lib/supportGroup.js';
+import { sendOfficialTemplate } from '../lib/officialApi.js';
 
 /**
  * Lista os canais de TODOS os tenants (via NX listChannels) E todas as
@@ -195,6 +195,8 @@ export async function reconcileChannels(): Promise<{
   // Identidades já representadas por canais da NX (p/ detectar avulsos).
   const claimedUazapi = new Set<string>();
   const claimedEvo = new Set<string>();
+  // Dedup: nunca lista o mesmo canal da NX duas vezes (mesmo servidor+id).
+  const seenChannelKeys = new Set<string>();
 
   for (const { client: c, channels: list } of perClient) {
     for (const ch of list) {
@@ -205,8 +207,11 @@ export async function reconcileChannels(): Promise<{
       const name = String(ch.name ?? '');
       if (type === 'uazapi' && tokenApi) claimedUazapi.add(tokenApi);
       if (type === 'evo' && (wabaId || name)) claimedEvo.add(wabaId || name);
+      const channelKey = `${c.tenant_server_id ?? ''}:${(ch.id as number | string) ?? ''}`;
+      if (seenChannelKeys.has(channelKey)) continue;
+      seenChannelKeys.add(channelKey);
       channels.push({
-        channel_key: `${c.tenant_server_id ?? ''}:${(ch.id as number | string) ?? ''}`,
+        channel_key: channelKey,
         source: 'nx',
         client_id: c.id,
         client_name: c.name,
@@ -301,6 +306,9 @@ export async function reconcileChannels(): Promise<{
   // Se houver vínculo manual, viram "channel" sob o cliente; senão, orphan.
   const orphans: OrphanInstance[] = [];
   const archivedOrphans: OrphanInstance[] = [];
+  // Dedup: a mesma instância (provider+key) nunca entra duas vezes, mesmo que
+  // venha repetida de mais de um servidor / chamada.
+  const seenProvider = new Set<string>();
   const addProviderInstance = (
     provider: 'uazapi' | 'evolution',
     key: string,
@@ -309,6 +317,9 @@ export async function reconcileChannels(): Promise<{
     status: ChannelStatus,
     server: string | null,
   ) => {
+    const dedupId = `${provider}:${key}`;
+    if (seenProvider.has(dedupId)) return;
+    seenProvider.add(dedupId);
     const claimed = provider === 'uazapi' ? claimedUazapi.has(key) : claimedEvo.has(key);
     if (claimed) return; // já aparece como canal da NX
     // Avulso arquivado → vai para a lista de arquivados (não some, mas sai da principal).
@@ -396,7 +407,8 @@ export async function channelsRoutes(app: FastifyInstance) {
 
     const out = channels.map((c) => {
       const cfg = cfgByKey.get(c.channel_key);
-      return { ...c, alerts_enabled: cfg?.alerts_enabled ?? false, alert_number: cfg?.alert_number ?? null };
+      // Default por canal = "sim" (avisa), salvo se houver config explícita "não".
+      return { ...c, alerts_enabled: cfg ? cfg.alerts_enabled : true, alert_number: cfg?.alert_number ?? null };
     });
 
     const summary = {
@@ -584,20 +596,17 @@ export async function channelsRoutes(app: FastifyInstance) {
     },
   );
 
-  // Envia uma mensagem de TESTE ao número informado (valida número/credencial).
+  // Envia o template de TESTE (teste_envio) ao número informado, pela API Oficial.
   app.post<{ Body: { number?: string } }>(
     '/api/channels/alert-test',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const number = (req.body?.number ?? '').toString().trim();
       if (!number) return reply.status(400).send({ error: 'Número obrigatório' });
-      const res = await sendWhatsAppToNumber(
-        number,
-        '✅ Teste de aviso de canais — NX. Se você recebeu esta mensagem, o número está OK.',
-      );
+      const res = await sendOfficialTemplate(number, 'teste_envio', []);
       if (res.ok) return { ok: true };
       if (res.reason === 'not_configured')
-        return reply.status(400).send({ error: 'Credencial de suporte (grupo de WhatsApp) não configurada.' });
+        return reply.status(400).send({ error: 'API Oficial não configurada (OFFICIAL_API_URL / OFFICIAL_API_TOKEN).' });
       return reply.status(502).send({ error: `Falha ao enviar${res.status ? ` (${res.status})` : ''}`, detail: res.detail });
     },
   );

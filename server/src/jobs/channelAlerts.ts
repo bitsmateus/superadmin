@@ -1,12 +1,12 @@
 import { query } from '../db.js';
 import { reconcileChannels, type ReconciledChannel } from '../routes/channels.js';
-import { sendWhatsAppToNumber } from '../lib/supportGroup.js';
+import { sendOfficialTemplate, spDateTimeShort, TUTORIAL_URL } from '../lib/officialApi.js';
 
 /**
- * Job de aviso de queda de canal. Roda periodicamente, reconcilia os canais e,
- * APENAS para os canais com aviso ligado E número configurado, envia uma
- * mensagem ao NÚMERO DE ALERTA (nunca ao cliente) quando o canal cai —
- * 1x por queda (controlado por last_status). Nada é enviado se ninguém ativou.
+ * Aviso de queda de canal POR TENANT. Para cada cliente com a notificação
+ * ligada (channel_notify_enabled), verifica seus canais e, quando um canal
+ * (marcado como "sim") cai, envia ao NÚMERO do tenant (channel_notify_number,
+ * ou o telefone do cliente da Visão Geral) — 1x por queda.
  */
 const INTERVAL_MS = 3 * 60 * 1000; // 3 min
 
@@ -18,62 +18,78 @@ export function startChannelAlerts() {
   const tick = () => {
     runOnce().catch((err) => console.error('[channelAlerts] erro:', err));
   };
-  // Primeira rodada ~30s após o boot, depois a cada INTERVAL_MS.
   setTimeout(tick, 30_000);
   setInterval(tick, INTERVAL_MS);
-  console.log('[channelAlerts] job iniciado (a cada 5 min)');
+  console.log('[channelAlerts] job iniciado (a cada 3 min, por tenant)');
 }
 
-function buildMessage(ch: ReconciledChannel): string {
-  const who = ch.client_company || ch.client_name || '—';
-  const lines = [
-    '⚠️ Canal desconectado',
-    `${ch.name}${ch.number ? ` (${ch.number})` : ''}`,
-    `Cliente: ${who}`,
-    `Tipo: ${ch.type}`,
-  ];
-  if (ch.divergent) {
-    lines.push(`(NX mostrava "${ch.nx_status}", provedor real "${ch.real_status}")`);
-  }
-  return lines.join('\n');
+async function setLastStatus(channelKey: string, status: string, alerted: boolean) {
+  await query(
+    `INSERT INTO channel_alerts (channel_key, alerts_enabled, last_status, last_alert_at, updated_at)
+     VALUES ($1, true, $2, ${alerted ? 'NOW()' : 'NULL'}, NOW())
+     ON CONFLICT (channel_key) DO UPDATE SET
+       last_status = EXCLUDED.last_status${alerted ? ', last_alert_at = NOW()' : ''}, updated_at = NOW()`,
+    [channelKey, status],
+  );
 }
 
 async function runOnce() {
-  // Só os canais que o operador ligou o aviso e definiu número.
-  const cfgRows = await query<{
-    channel_key: string;
-    alert_number: string | null;
-    last_status: string | null;
+  // Tenants (clientes) com a notificação de canais ligada.
+  const clients = await query<{
+    id: string;
+    phone: string | null;
+    channel_notify_number: string | null;
   }>(
-    `SELECT channel_key, alert_number, last_status
-     FROM channel_alerts
-     WHERE alerts_enabled = true AND alert_number IS NOT NULL AND alert_number <> ''`,
+    `SELECT id, phone, channel_notify_number
+     FROM clients
+     WHERE channel_notify_enabled = true AND archived_at IS NULL`,
   );
-  if (cfgRows.length === 0) return; // ninguém ativou — não reconcilia nem envia
+  if (clients.length === 0) return; // ninguém ligou — não reconcilia nem envia
+
+  const numberByClient = new Map<string, string>();
+  for (const c of clients) {
+    const num = (c.channel_notify_number ?? '').trim() || (c.phone ?? '').trim();
+    if (num) numberByClient.set(c.id, num);
+  }
+  if (numberByClient.size === 0) return;
+
+  // Config por canal (sim/não) + último status (para "1x por queda").
+  const cfgRows = await query<{ channel_key: string; alerts_enabled: boolean; last_status: string | null }>(
+    'SELECT channel_key, alerts_enabled, last_status FROM channel_alerts',
+  );
+  const cfgByKey = new Map(cfgRows.map((r) => [r.channel_key, r]));
 
   const { channels } = await reconcileChannels();
-  const byKey = new Map(channels.map((c) => [c.channel_key, c]));
 
-  for (const cfg of cfgRows) {
-    const ch = byKey.get(cfg.channel_key);
-    if (!ch) continue;
+  for (const ch of channels) {
+    if (!ch.client_id || !numberByClient.has(ch.client_id)) continue;
+    const cfg = cfgByKey.get(ch.channel_key);
+    // Default = "sim": só não notifica se o canal estiver explicitamente como não.
+    if (cfg && cfg.alerts_enabled === false) continue;
+    const number = numberByClient.get(ch.client_id)!;
     const eff = ch.effective_status;
-    const prev = cfg.last_status;
+    const prev = cfg?.last_status ?? null;
+    const cliente = ch.client_company || ch.client_name || '—';
+    const horario = spDateTimeShort();
 
     if (eff === 'disconnected' && prev !== 'disconnected') {
-      // Transição para desconectado → avisa o número de alerta (não o cliente).
-      const res = await sendWhatsAppToNumber(cfg.alert_number as string, buildMessage(ch));
-      await query(
-        `UPDATE channel_alerts SET last_status = $1, last_alert_at = NOW() WHERE channel_key = $2`,
-        ['disconnected', cfg.channel_key],
-      );
-      if (!res.ok) console.warn('[channelAlerts] envio falhou', cfg.channel_key, res.reason ?? res.status);
-    } else if (eff !== prev) {
-      // Voltou / mudou de estado → atualiza para permitir novo aviso numa próxima queda.
-      await query(`UPDATE channel_alerts SET last_status = $1 WHERE channel_key = $2`, [
-        eff,
-        cfg.channel_key,
+      // Template canal_desconectado: {{1}} Canal {{2}} Numero {{3}} Cliente {{4}} Horario {{5}} tutorial
+      const res = await sendOfficialTemplate(number, 'canal_desconectado', [
+        ch.name || '—',
+        ch.number || ch.name || '—',
+        cliente,
+        horario,
+        TUTORIAL_URL,
       ]);
+      await setLastStatus(ch.channel_key, 'disconnected', true);
+      if (!res.ok) console.warn('[channelAlerts] desconectado falhou', ch.channel_key, res.reason ?? res.status);
+    } else if (eff === 'connected' && prev === 'disconnected') {
+      // Template canal_reconectado: {{1}} Canal {{2}} Horario
+      const res = await sendOfficialTemplate(number, 'canal_reconectado', [ch.name || '—', horario]);
+      await setLastStatus(ch.channel_key, 'connected', true);
+      if (!res.ok) console.warn('[channelAlerts] reconectado falhou', ch.channel_key, res.reason ?? res.status);
+    } else if (eff !== prev) {
+      await setLastStatus(ch.channel_key, eff, false);
     }
   }
 }

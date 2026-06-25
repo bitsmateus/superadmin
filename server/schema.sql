@@ -129,6 +129,8 @@ CREATE TABLE IF NOT EXISTS clients (
   responsavel TEXT,
   responsavel_comercial TEXT,
   responsavel_entrega TEXT,
+  channel_notify_enabled BOOLEAN DEFAULT FALSE,
+  channel_notify_number TEXT,
   stage pipeline_stage NOT NULL DEFAULT 'welcome',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   stage_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

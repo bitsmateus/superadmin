@@ -74,6 +74,10 @@ export async function runMigrations() {
   // Responsáveis separados: comercial e de entrega (selecionados da equipe).
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS responsavel_comercial TEXT`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS responsavel_entrega TEXT`);
+  // Notificação de canais POR TENANT: liga/desliga + número que recebe o aviso
+  // (default = telefone do cliente da Visão Geral).
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS channel_notify_enabled BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS channel_notify_number TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS clients_archived_at_idx ON clients(archived_at)`);
   // Nova etapa "Entregas Recentes" (delivered) entre delivery e active.
   // ALTER TYPE ... ADD VALUE não roda dentro de transação — pool.query roda solto.

@@ -73,15 +73,26 @@ export function CanaisPage() {
   const [search, setSearch] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<NxChannelStatus | 'all'>('all')
   const [onlyDivergent, setOnlyDivergent] = React.useState(false)
-  const [alertEditing, setAlertEditing] = React.useState<NxChannel | null>(null)
   const [assigning, setAssigning] = React.useState<OrphanInstance | null>(null)
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set())
   const [tokenEditingId, setTokenEditingId] = React.useState<string | null>(null)
+  const [notifyEditingId, setNotifyEditingId] = React.useState<string | null>(null)
   const [serverTenantsOpen, setServerTenantsOpen] = React.useState(false)
   const assign = useAssignChannel()
   const deleteInstance = useDeleteInstance()
   const archiveOrphans = useArchiveOrphans()
+  const setChannelAlert = useSetChannelAlert()
+  const clients = useClients()
+  const clientsById = React.useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
   const [selectedOrphans, setSelectedOrphans] = React.useState<Set<string>>(new Set())
+  const [archivedOpen, setArchivedOpen] = React.useState(false)
+
+  const toggleChannelAlert = (c: NxChannel, enabled: boolean) => {
+    setChannelAlert.mutate(
+      { channel_key: c.channel_key, alerts_enabled: enabled },
+      { onError: (e) => toast.error('Falha: ' + extractErrorMessage(e, 'erro')) },
+    )
+  }
 
   const orphanKey = (o: OrphanInstance) => `${o.provider}:${o.instance_key}`
   const toggleOrphan = (o: OrphanInstance) =>
@@ -387,6 +398,25 @@ export function CanaisPage() {
                     </button>
                     {g.channels[0]?.client_id && (
                       <>
+                        {(() => {
+                          const on = clientsById.get(g.channels[0].client_id!)?.channelNotifyEnabled
+                          return (
+                            <button
+                              type="button"
+                              title="Notificação de queda do tenant"
+                              onClick={() => setNotifyEditingId(g.channels[0].client_id!)}
+                              className={cn(
+                                'inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium ring-1 transition-colors',
+                                on
+                                  ? 'bg-success/10 text-success ring-success/30'
+                                  : 'text-foreground/55 ring-line hover:bg-elevate/[0.06] hover:text-foreground',
+                              )}
+                            >
+                              {on ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
+                              Notificar
+                            </button>
+                          )
+                        })()}
                         <button
                           type="button"
                           title="Editar / testar token do tenant"
@@ -411,7 +441,7 @@ export function CanaisPage() {
                   {!isCollapsed && (
                     <ChannelTable
                       channels={g.channels}
-                      onConfigAlert={setAlertEditing}
+                      onToggleAlert={toggleChannelAlert}
                       onUnassign={(c) =>
                         assign.mutate(
                           { provider: c.type, instance_key: c.token_api || c.waba_id || '', client_id: null },
@@ -534,14 +564,24 @@ export function CanaisPage() {
               </section>
             )}
 
-            {/* Avulsos arquivados */}
+            {/* Avulsos arquivados — minimizado por padrão */}
             {(data?.archivedOrphans?.length ?? 0) > 0 && (
               <section className="overflow-hidden rounded-xl border border-line bg-card">
-                <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                <button
+                  type="button"
+                  onClick={() => setArchivedOpen((o) => !o)}
+                  className="flex w-full items-center gap-2 border-b border-line px-4 py-2.5 text-left hover:bg-elevate/[0.02]"
+                >
+                  {archivedOpen ? (
+                    <ChevronDown className="h-4 w-4 text-foreground/45" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-foreground/45" />
+                  )}
                   <Archive className="h-4 w-4 text-foreground/45" />
                   <span className="text-sm font-semibold text-foreground">Avulsos arquivados</span>
                   <span className="text-xs text-foreground/45">{data!.archivedOrphans.length}</span>
-                </header>
+                </button>
+                {archivedOpen && (
                 <Table>
                   <THead>
                     <tr>
@@ -585,6 +625,7 @@ export function CanaisPage() {
                     ))}
                   </TBody>
                 </Table>
+                )}
               </section>
             )}
 
@@ -645,7 +686,7 @@ export function CanaisPage() {
         )}
       </div>
 
-      <AlertConfigModal channel={alertEditing} onClose={() => setAlertEditing(null)} />
+      <TenantNotifyModal clientId={notifyEditingId} onClose={() => setNotifyEditingId(null)} />
       <AssignModal orphan={assigning} onClose={() => setAssigning(null)} />
       <TenantTokenModal clientId={tokenEditingId} onClose={() => setTokenEditingId(null)} />
       <ServerTenantsModal open={serverTenantsOpen} onClose={() => setServerTenantsOpen(false)} />
@@ -998,11 +1039,11 @@ function ServerTenantsModal({ open, onClose }: { open: boolean; onClose: () => v
 
 function ChannelTable({
   channels,
-  onConfigAlert,
+  onToggleAlert,
   onUnassign,
 }: {
   channels: NxChannel[]
-  onConfigAlert: (c: NxChannel) => void
+  onToggleAlert: (c: NxChannel, enabled: boolean) => void
   onUnassign: (c: NxChannel) => void
 }) {
   return (
@@ -1058,8 +1099,8 @@ function ChannelTable({
             <TD>
               <button
                 type="button"
-                onClick={() => onConfigAlert(c)}
-                title="Configurar aviso de queda"
+                onClick={() => onToggleAlert(c, !c.alerts_enabled)}
+                title={c.alerts_enabled ? 'Avisar se cair (clique para desligar)' : 'Não avisar (clique para ligar)'}
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors',
                   c.alerts_enabled
@@ -1069,13 +1110,11 @@ function ChannelTable({
               >
                 {c.alerts_enabled ? (
                   <>
-                    <Bell className="h-3 w-3" />
-                    {asText(c.alert_number, 'ligado')}
+                    <Bell className="h-3 w-3" /> Sim
                   </>
                 ) : (
                   <>
-                    <BellOff className="h-3 w-3" />
-                    Desligado
+                    <BellOff className="h-3 w-3" /> Não
                   </>
                 )}
               </button>
@@ -1087,18 +1126,18 @@ function ChannelTable({
   )
 }
 
-function AlertConfigModal({ channel, onClose }: { channel: NxChannel | null; onClose: () => void }) {
-  const setAlert = useSetChannelAlert()
+function TenantNotifyModal({ clientId, onClose }: { clientId: string | null; onClose: () => void }) {
+  const client = clientId ? db.getClient(clientId) : undefined
   const [enabled, setEnabled] = React.useState(false)
   const [number, setNumber] = React.useState('')
   const [testing, setTesting] = React.useState(false)
 
   React.useEffect(() => {
-    if (channel) {
-      setEnabled(channel.alerts_enabled)
-      setNumber(channel.alert_number ?? '')
-    }
-  }, [channel])
+    setEnabled(Boolean(client?.channelNotifyEnabled))
+    // Default = telefone do cliente (Visão Geral).
+    setNumber(client?.channelNotifyNumber ?? client?.phone ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId])
 
   const sendTest = async () => {
     if (!number.trim()) {
@@ -1117,29 +1156,26 @@ function AlertConfigModal({ channel, onClose }: { channel: NxChannel | null; onC
   }
 
   const save = () => {
+    if (!clientId) return
     if (enabled && !number.trim()) {
-      toast.error('Informe o número que vai receber o alerta.')
+      toast.error('Informe o número que vai receber os avisos.')
       return
     }
-    if (!channel) return
-    setAlert.mutate(
-      { channel_key: channel.channel_key, alerts_enabled: enabled, alert_number: number.trim() || undefined },
-      {
-        onSuccess: () => {
-          toast.success('Aviso atualizado')
-          onClose()
-        },
-        onError: (e) => toast.error('Falha ao salvar: ' + extractErrorMessage(e, 'erro')),
-      },
-    )
+    db.updateClient(clientId, {
+      channelNotifyEnabled: enabled,
+      channelNotifyNumber: number.trim() || undefined,
+    })
+    db.addLog(clientId, enabled ? 'Notificação de canais ligada' : 'Notificação de canais desligada')
+    toast.success('Notificação atualizada')
+    onClose()
   }
 
   return (
     <Modal
-      open={Boolean(channel)}
+      open={Boolean(clientId)}
       onClose={onClose}
-      title="Aviso de queda do canal"
-      description={channel ? `${channel.name} · ${channel.client_company || channel.client_name || '—'}` : undefined}
+      title="Notificação de queda — tenant"
+      description={client ? client.company || client.name : undefined}
       size="sm"
       footer={
         <>
@@ -1149,9 +1185,7 @@ function AlertConfigModal({ channel, onClose }: { channel: NxChannel | null; onC
           <Button variant="secondary" onClick={sendTest} loading={testing} leftIcon={<Bell className="h-4 w-4" />}>
             Enviar teste
           </Button>
-          <Button onClick={save} loading={setAlert.isPending}>
-            Salvar
-          </Button>
+          <Button onClick={save}>Salvar</Button>
         </>
       }
     >
@@ -1163,18 +1197,19 @@ function AlertConfigModal({ channel, onClose }: { channel: NxChannel | null; onC
             onChange={(e) => setEnabled(e.target.checked)}
             className="h-4 w-4 accent-[#4F8EF7]"
           />
-          Enviar aviso quando este canal cair
+          Avisar quando um canal deste tenant cair
         </label>
         <Input
-          label="Número que recebe o alerta"
+          label="Número que recebe o aviso"
           value={number}
           onChange={(e) => setNumber(e.target.value)}
           placeholder="55 62 99999-9999"
+          hint="Padrão: telefone do cliente (Visão Geral). Pode editar aqui."
         />
         <p className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-[11px] text-foreground/55">
-          🔒 O alerta vai <strong>somente</strong> para este número (envio pela credencial de
-          suporte). Nunca é enviado para o cliente. Avisa 1× por queda, por um job a cada 3 min.
-          Use <strong>Enviar teste</strong> para validar o número agora.
+          Quando ligado, o job (a cada 3 min) avisa este número se algum canal marcado como
+          <strong> "Sim"</strong> cair — 1× por queda. Marque/desmarque os canais na coluna
+          <strong> Aviso</strong> da tabela.
         </p>
       </div>
     </Modal>

@@ -867,26 +867,31 @@ export function BriefingPublicPage() {
               {/* Facebook — obrigatório para API Oficial */}
               {cfg?.connectionTypes.includes('api_oficial') && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-slate-800">Facebook (Meta)</h3>
+                  <div className="mb-2 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-800">
+                      Acesso ao Facebook (Meta) — para conectar a API Oficial
+                    </h3>
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
-                      API Oficial — obrigatório
+                      Obrigatório
                     </span>
                   </div>
-                  <p className="mb-3 text-xs text-slate-500">
-                    A API Oficial do WhatsApp exige uma conta Meta Business vinculada. Informe o
-                    login da conta que administra o número de WhatsApp.
+                  <p className="mb-3 text-xs text-slate-600">
+                    Seu atendimento será conectado pela <strong>API Oficial do WhatsApp</strong>, que
+                    funciona vinculada à sua conta do <strong>Facebook / Meta Business</strong>. Para
+                    fazer essa conexão, <strong>precisamos do acesso ao seu Facebook</strong>. Por
+                    favor, preencha abaixo o <strong>e-mail e a senha</strong> da conta que administra
+                    a página/WhatsApp da empresa.
                   </p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Field label="E-mail da conta Facebook/Meta *">
+                    <Field label="E-mail do Facebook / Meta *">
                       <PlainInput
                         type="email"
                         value={state.facebookEmail}
                         onChange={(v) => setState({ ...state, facebookEmail: v })}
-                        placeholder="seuemail@exemplo.com"
+                        placeholder="email@dofacebook.com"
                       />
                     </Field>
-                    <Field label="Senha da conta Facebook/Meta *">
+                    <Field label="Senha do Facebook / Meta *">
                       <PlainInput
                         type="password"
                         value={state.facebookPassword}
@@ -896,7 +901,8 @@ export function BriefingPublicPage() {
                     </Field>
                   </div>
                   <p className="mt-2 text-[11px] text-slate-400">
-                    🔒 Suas credenciais são transmitidas de forma segura e usadas somente para configurar a integração.
+                    🔒 Seus dados são transmitidos com segurança e usados <strong>somente</strong> para
+                    conectar a API Oficial. Você pode trocar a senha depois que a conexão estiver pronta.
                   </p>
                 </div>
               )}

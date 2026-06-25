@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { channelsApi, type AlertConfigInput } from '@/api/channels'
+import { channelsApi, type AlertConfigInput, type NxChannelsResponse } from '@/api/channels'
 
 export function useNxChannels() {
   return useQuery({
@@ -43,7 +43,36 @@ export function useArchiveOrphans() {
       items: { provider: string; instance_key: string }[]
       archived: boolean
     }) => channelsApi.archiveOrphans(items, archived),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['nx-channels'] }),
+    // Otimista: move os avulsos entre "avulsos" e "arquivados" na hora, sem
+    // esperar o refetch (que é lento pois reconcilia todos os tenants).
+    onMutate: async ({ items, archived }) => {
+      await qc.cancelQueries({ queryKey: ['nx-channels'] })
+      const prev = qc.getQueryData<NxChannelsResponse>(['nx-channels'])
+      const keys = new Set(items.map((i) => `${i.provider}:${i.instance_key}`))
+      qc.setQueryData<NxChannelsResponse>(['nx-channels'], (old) => {
+        if (!old) return old
+        const k = (o: { provider: string; instance_key: string }) => `${o.provider}:${o.instance_key}`
+        if (archived) {
+          const moved = (old.orphans ?? []).filter((o) => keys.has(k(o)))
+          return {
+            ...old,
+            orphans: (old.orphans ?? []).filter((o) => !keys.has(k(o))),
+            archivedOrphans: [...moved, ...(old.archivedOrphans ?? [])],
+          }
+        }
+        const moved = (old.archivedOrphans ?? []).filter((o) => keys.has(k(o)))
+        return {
+          ...old,
+          archivedOrphans: (old.archivedOrphans ?? []).filter((o) => !keys.has(k(o))),
+          orphans: [...moved, ...(old.orphans ?? [])],
+        }
+      })
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['nx-channels'], ctx.prev)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['nx-channels'] }),
   })
 }
 

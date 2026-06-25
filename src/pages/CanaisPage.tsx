@@ -1,6 +1,7 @@
 import * as React from 'react'
 import {
   AlertTriangle,
+  Archive,
   Bell,
   BellOff,
   Building2,
@@ -71,6 +72,21 @@ export function CanaisPage() {
   const [tokenEditingId, setTokenEditingId] = React.useState<string | null>(null)
   const [serverTenantsOpen, setServerTenantsOpen] = React.useState(false)
   const assign = useAssignChannel()
+
+  // Arquivar o tenant = arquivar o CLIENTE (mesmo archivedAt do pipeline/lista).
+  // Sai do pipeline, da lista de clientes e dos canais; pode restaurar em Arquivados.
+  const archiveTenant = (clientId: string, label: string) => {
+    if (
+      !window.confirm(
+        `Arquivar "${label}"?\n\nO cliente sai do pipeline, da lista de clientes e dos canais. ` +
+          'Você pode restaurá-lo depois em Arquivados.',
+      )
+    )
+      return
+    db.archiveClient(clientId)
+    toast.success('Cliente arquivado')
+    refetch()
+  }
 
   const toggleCollapsed = (key: string) =>
     setCollapsed((prev) => {
@@ -295,15 +311,26 @@ export function CanaisPage() {
                       )}
                     </button>
                     {g.channels[0]?.client_id && (
-                      <button
-                        type="button"
-                        title="Editar / testar token do tenant"
-                        onClick={() => setTokenEditingId(g.channels[0].client_id!)}
-                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium text-foreground/55 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground"
-                      >
-                        <KeyRound className="h-3.5 w-3.5" />
-                        Token
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          title="Editar / testar token do tenant"
+                          onClick={() => setTokenEditingId(g.channels[0].client_id!)}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium text-foreground/55 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground"
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
+                          Token
+                        </button>
+                        <button
+                          type="button"
+                          title="Arquivar cliente (sai do pipeline, clientes e canais)"
+                          onClick={() => archiveTenant(g.channels[0].client_id!, g.label)}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium text-foreground/55 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                          Arquivar
+                        </button>
+                      </>
                     )}
                   </div>
                   {!isCollapsed && (
@@ -399,14 +426,24 @@ export function CanaisPage() {
                         <TD className="text-foreground/60">{asText(t.tenant_id, '—')}</TD>
                         <TD className="text-foreground/60">{asText(t.tenant_api_id, '—')}</TD>
                         <TD className="text-right">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => setTokenEditingId(t.client_id)}
-                            leftIcon={<KeyRound className="h-3.5 w-3.5" />}
-                          >
-                            Vincular token
-                          </Button>
+                          <div className="inline-flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => setTokenEditingId(t.client_id)}
+                              leftIcon={<KeyRound className="h-3.5 w-3.5" />}
+                            >
+                              Vincular token
+                            </Button>
+                            <button
+                              type="button"
+                              title="Arquivar cliente"
+                              onClick={() => archiveTenant(t.client_id, t.company || t.name)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                            >
+                              <Archive className="h-4 w-4" />
+                            </button>
+                          </div>
                         </TD>
                       </TR>
                     ))}

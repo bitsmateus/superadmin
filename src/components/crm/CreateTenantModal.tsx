@@ -65,6 +65,36 @@ function looksUuid(v: unknown): v is string {
 }
 
 /**
+ * Busca recursiva pelo primeiro UUID na resposta. O apiId externo é um UUID
+ * (com hifens); o token (plainToken) é hex SEM hifens, então não é confundido.
+ * Prefere valores em chaves que mencionam "api".
+ */
+function deepFindUuid(obj: unknown, depth = 0): string | undefined {
+  if (obj == null || depth > 5) return undefined
+  if (typeof obj === 'string') return looksUuid(obj) ? obj : undefined
+  if (Array.isArray(obj)) {
+    for (const it of obj) {
+      const f = deepFindUuid(it, depth + 1)
+      if (f) return f
+    }
+    return undefined
+  }
+  if (typeof obj === 'object') {
+    const entries = Object.entries(obj as Record<string, unknown>)
+    // 1ª passada: chave com "api" e valor UUID (mais provável de ser o apiId).
+    for (const [k, v] of entries) {
+      if (/api/i.test(k) && looksUuid(v)) return v
+    }
+    // 2ª passada: qualquer UUID no objeto.
+    for (const [, v] of entries) {
+      const f = deepFindUuid(v, depth + 1)
+      if (f) return f
+    }
+  }
+  return undefined
+}
+
+/**
  * Escolhe o apiId EXTERNO (UUID) usado em /v2/api/external/{apiId}/... entre os
  * vários campos possíveis da resposta. Prefere um valor em formato UUID; só cai
  * no id numérico se não houver UUID (que provavelmente não serve, mas evita
@@ -76,8 +106,15 @@ function pickExternalApiId(...objs: (Record<string, unknown> | undefined)[]): st
     if (!o) continue
     cands.push(o.apiId, o.api_id, o.apiID, o.uuid, o.externalId, o.external_id, o.id)
   }
+  // 1) UUID direto nos campos conhecidos.
   const uuid = cands.find(looksUuid)
   if (uuid) return String(uuid)
+  // 2) UUID em qualquer lugar da resposta (deep search) — o apiId externo é UUID.
+  for (const o of objs) {
+    const deep = deepFindUuid(o)
+    if (deep) return deep
+  }
+  // 3) Fallback: primeiro valor não vazio (provavelmente id numérico — não ideal).
   const any = cands.find((v) => v != null && v !== '')
   return any != null ? String(any) : undefined
 }
@@ -540,6 +577,10 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
     // A NX cria a API JUNTO com o primeiro canal e devolve tudo aqui:
     //   sessionId -> whatsapp.id · apiId -> api.apiConfig.id · apiToken -> api.plainToken
     const captureFromSession = (session: unknown): string | number | undefined => {
+      // Debug: ajuda a confirmar onde vem o apiId (UUID) e o token na resposta.
+      try {
+        console.log('[provision] createSession resp:', JSON.stringify(session).slice(0, 2500))
+      } catch { /* ignore */ }
       const wa = pick(session, 'whatsapp') as Record<string, unknown> | undefined
       const apiWrap = pick(session, 'api') as Record<string, unknown> | undefined
       const apiConfig = pick(apiWrap, 'apiConfig') as Record<string, unknown> | undefined

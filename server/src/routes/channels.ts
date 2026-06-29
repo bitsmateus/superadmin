@@ -647,9 +647,11 @@ export async function channelsRoutes(app: FastifyInstance) {
       }))
       // Mais tempo fora primeiro (since mais antigo). Sem registro de "desde" vai pro fim.
       .sort((a, b) => {
-        if (!a.since) return 1;
-        if (!b.since) return -1;
-        return a.since.localeCompare(b.since);
+        const ta = a.since ? new Date(a.since).getTime() : NaN;
+        const tb = b.since ? new Date(b.since).getTime() : NaN;
+        if (Number.isNaN(ta)) return 1;
+        if (Number.isNaN(tb)) return -1;
+        return ta - tb;
       });
 
     const events = await query<{

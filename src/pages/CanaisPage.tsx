@@ -46,7 +46,7 @@ import { extractErrorMessage } from '@/api/client'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
-import { asText, cn } from '@/lib/utils'
+import { asText, cn, normalizeWhatsappNumber } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
 
 const STATUS_META: Record<
@@ -1191,13 +1191,15 @@ function TenantNotifyModal({ clientId, onClose }: { clientId: string | null; onC
   }, [clientId])
 
   const sendTest = async () => {
-    if (!number.trim()) {
+    const num = normalizeWhatsappNumber(number)
+    if (!num) {
       toast.error('Informe o número para enviar o teste.')
       return
     }
+    setNumber(num)
     setTesting(true)
     try {
-      await channelsApi.sendAlertTest(number.trim())
+      await channelsApi.sendAlertTest(num)
       toast.success('Teste enviado — confira o WhatsApp do número.')
     } catch (e) {
       toast.error('Falha no teste: ' + extractErrorMessage(e, 'erro'))
@@ -1208,13 +1210,16 @@ function TenantNotifyModal({ clientId, onClose }: { clientId: string | null; onC
 
   const save = () => {
     if (!clientId) return
-    if (enabled && !number.trim()) {
+    // Sempre salva no padrão 55(ddd)(numero), ex.: 5548991764454.
+    const num = normalizeWhatsappNumber(number)
+    if (enabled && !num) {
       toast.error('Informe o número que vai receber os avisos.')
       return
     }
+    setNumber(num)
     db.updateClient(clientId, {
       channelNotifyEnabled: enabled,
-      channelNotifyNumber: number.trim() || undefined,
+      channelNotifyNumber: num || undefined,
     })
     db.addLog(clientId, enabled ? 'Notificação de canais ligada' : 'Notificação de canais desligada')
     toast.success('Notificação atualizada')
@@ -1254,8 +1259,9 @@ function TenantNotifyModal({ clientId, onClose }: { clientId: string | null; onC
           label="Número que recebe o aviso"
           value={number}
           onChange={(e) => setNumber(e.target.value)}
-          placeholder="55 62 99999-9999"
-          hint="Padrão: telefone do cliente (Visão Geral). Pode editar aqui."
+          onBlur={() => setNumber((n) => normalizeWhatsappNumber(n))}
+          placeholder="5548991764454"
+          hint="Salvo sempre no padrão 55(DDD)(número), ex.: 5548991764454. Pode colar com espaços/traços."
         />
         <p className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-[11px] text-foreground/55">
           Quando ligado, o job (a cada 3 min) avisa este número se algum canal marcado como

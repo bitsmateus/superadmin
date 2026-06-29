@@ -22,7 +22,26 @@ export function useSetChannelAlert() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: AlertConfigInput) => channelsApi.setAlertConfig(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['nx-channels'] }),
+    // Otimista: muda o "Sim/Não" do canal na hora, sem esperar o refetch lento
+    // (que reconcilia todos os tenants).
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: ['nx-channels'] })
+      const prev = qc.getQueryData<NxChannelsResponse>(['nx-channels'])
+      qc.setQueryData<NxChannelsResponse>(['nx-channels'], (old) => {
+        if (!old) return old
+        return {
+          ...old,
+          channels: (old.channels ?? []).map((c) =>
+            c.channel_key === input.channel_key ? { ...c, alerts_enabled: input.alerts_enabled } : c,
+          ),
+        }
+      })
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['nx-channels'], ctx.prev)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['nx-channels'] }),
   })
 }
 

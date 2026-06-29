@@ -37,11 +37,14 @@ export async function sendToSupportGroupId(groupId: string, text: string): Promi
   const base = ((g.baseUrl as string) || 'https://appapi.nxsystems.com.br').replace(/\/$/, '');
   if (!apiId || !token || !target) return { ok: false, reason: 'not_configured' };
 
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15_000);
   try {
     const resp = await fetch(`${base}/v2/api/external/${encodeURIComponent(apiId)}/group`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ body: t, number: target, externalKey: 'support-alert', isClosed: false }),
+      signal: ctrl.signal,
     });
     if (!resp.ok) {
       const d = await resp.text().catch(() => '');
@@ -49,7 +52,10 @@ export async function sendToSupportGroupId(groupId: string, text: string): Promi
     }
     return { ok: true };
   } catch (err) {
-    return { ok: false, detail: String(err).slice(0, 300) };
+    const aborted = err instanceof Error && err.name === 'AbortError';
+    return { ok: false, detail: aborted ? 'timeout (15s)' : String(err).slice(0, 300) };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

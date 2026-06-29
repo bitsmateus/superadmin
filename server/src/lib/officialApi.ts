@@ -73,11 +73,14 @@ export async function sendOfficialTemplate(
     },
   };
 
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15_000);
   try {
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
+      signal: ctrl.signal,
     });
     if (!resp.ok) {
       const d = await resp.text().catch(() => '');
@@ -85,6 +88,9 @@ export async function sendOfficialTemplate(
     }
     return { ok: true };
   } catch (err) {
-    return { ok: false, detail: String(err).slice(0, 300) };
+    const aborted = err instanceof Error && err.name === 'AbortError';
+    return { ok: false, detail: aborted ? 'timeout (15s) — URL da API Oficial inacessível pelo servidor' : String(err).slice(0, 300) };
+  } finally {
+    clearTimeout(timer);
   }
 }

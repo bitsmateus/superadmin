@@ -110,7 +110,7 @@ export function CanaisPage() {
   const archiveSelected = () => {
     const items = (data?.orphans ?? [])
       .filter((o) => selectedOrphans.has(orphanKey(o)))
-      .map((o) => ({ provider: o.provider, instance_key: o.instance_key }))
+      .map((o) => ({ provider: o.provider, instance_key: o.instance_key, name: o.name, number: o.number }))
     if (items.length === 0) return
     archiveOrphans.mutate(
       { items, archived: true },
@@ -126,7 +126,7 @@ export function CanaisPage() {
 
   const restoreOrphan = (o: OrphanInstance) => {
     archiveOrphans.mutate(
-      { items: [{ provider: o.provider, instance_key: o.instance_key }], archived: false },
+      { items: [{ provider: o.provider, instance_key: o.instance_key, name: o.name, number: o.number }], archived: false },
       {
         onSuccess: () => toast.success('Avulso restaurado'),
         onError: (e) => toast.error('Falha ao restaurar: ' + extractErrorMessage(e, 'erro')),
@@ -585,7 +585,7 @@ export function CanaisPage() {
                               title="Arquivar (esconder sem excluir no provedor)"
                               onClick={() =>
                                 archiveOrphans.mutate(
-                                  { items: [{ provider: o.provider, instance_key: o.instance_key }], archived: true },
+                                  { items: [{ provider: o.provider, instance_key: o.instance_key, name: o.name, number: o.number }], archived: true },
                                   {
                                     onSuccess: () => toast.success('Avulso arquivado'),
                                     onError: (e) => toast.error('Falha: ' + extractErrorMessage(e, 'erro')),

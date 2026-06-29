@@ -131,9 +131,13 @@ CREATE TABLE IF NOT EXISTS channel_assignments (
 CREATE TABLE IF NOT EXISTS archived_orphans (
   provider TEXT NOT NULL,
   instance_key TEXT NOT NULL,
+  name TEXT,
+  number TEXT,
   archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (provider, instance_key)
 );
+ALTER TABLE archived_orphans ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE archived_orphans ADD COLUMN IF NOT EXISTS number TEXT;
 
 -- ---------- clients ----------
 CREATE TABLE IF NOT EXISTS clients (

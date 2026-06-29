@@ -68,7 +68,7 @@ export function useArchiveOrphans() {
       items,
       archived,
     }: {
-      items: { provider: string; instance_key: string }[]
+      items: { provider: string; instance_key: string; name?: string | null; number?: string | null }[]
       archived: boolean
     }) => channelsApi.archiveOrphans(items, archived),
     // Otimista: move os avulsos entre "avulsos" e "arquivados" na hora, sem

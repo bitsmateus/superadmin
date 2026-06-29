@@ -133,7 +133,7 @@ export const channelsApi = {
     await http.post('/channels/delete-instance', { provider, instance_key, server })
   },
   async archiveOrphans(
-    items: { provider: string; instance_key: string }[],
+    items: { provider: string; instance_key: string; name?: string | null; number?: string | null }[],
     archived: boolean,
   ): Promise<void> {
     await http.post('/channels/archive-orphans', { items, archived })

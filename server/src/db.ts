@@ -141,6 +141,10 @@ export async function runMigrations() {
     archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (provider, instance_key)
   )`);
+  // Identidade estável p/ manter arquivado mesmo se o token da UAZAPI girar
+  // (instâncias quebradas regeneram token a cada /instance/all).
+  await pool.query(`ALTER TABLE archived_orphans ADD COLUMN IF NOT EXISTS name TEXT`);
+  await pool.query(`ALTER TABLE archived_orphans ADD COLUMN IF NOT EXISTS number TEXT`);
   console.log('[db] migrations applied');
 }
 

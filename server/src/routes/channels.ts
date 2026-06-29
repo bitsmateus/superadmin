@@ -170,10 +170,26 @@ export async function reconcileChannels(): Promise<{
     'SELECT provider, instance_key, client_id FROM channel_assignments',
   );
   const assignments = new Map(assignmentRows.map((a) => [`${a.provider}:${a.instance_key}`, a.client_id]));
-  const archivedRows = await query<{ provider: string; instance_key: string }>(
-    'SELECT provider, instance_key FROM archived_orphans',
-  );
-  const archivedSet = new Set(archivedRows.map((a) => `${a.provider}:${a.instance_key}`));
+  const archivedRows = await query<{
+    provider: string;
+    instance_key: string;
+    name: string | null;
+    number: string | null;
+  }>('SELECT provider, instance_key, name, number FROM archived_orphans');
+  // Casa por TOKEN, NOME ou NÚMERO — assim a instância continua arquivada mesmo
+  // que a UAZAPI gire o token (comum em canais quebrados).
+  const archTok = new Set<string>();
+  const archName = new Set<string>();
+  const archNum = new Set<string>();
+  for (const a of archivedRows) {
+    archTok.add(`${a.provider}:${a.instance_key}`);
+    if (a.name) archName.add(`${a.provider}:${a.name.trim().toLowerCase()}`);
+    if (a.number) archNum.add(`${a.provider}:${a.number.trim()}`);
+  }
+  const isArchived = (provider: string, key: string, name: string, number: string | null) =>
+    archTok.has(`${provider}:${key}`) ||
+    (!!name && archName.has(`${provider}:${name.trim().toLowerCase()}`)) ||
+    (!!number && archNum.has(`${provider}:${number.trim()}`));
   const allClients = await query<{ id: string; name: string; company: string | null }>(
     'SELECT id, name, company FROM clients',
   );
@@ -326,7 +342,7 @@ export async function reconcileChannels(): Promise<{
     const claimed = provider === 'uazapi' ? claimedUazapi.has(key) : claimedEvo.has(key);
     if (claimed) return; // já aparece como canal da NX
     // Avulso arquivado → vai para a lista de arquivados (não some, mas sai da principal).
-    if (archivedSet.has(`${provider}:${key}`)) {
+    if (isArchived(provider, key, name, number)) {
       archivedOrphans.push({ provider, instance_key: key, name, number, status, server });
       return;
     }
@@ -516,27 +532,52 @@ export async function channelsRoutes(app: FastifyInstance) {
   // Arquiva/restaura avulsos (em lote). Não mexe no provedor — só esconde da
   // lista principal e mostra na seção "Arquivados". Para canais quebrados que
   // não dá pra excluir na UAZAPI/Evolution.
-  app.post<{ Body: { items?: { provider?: string; instance_key?: string }[]; archived?: boolean } }>(
+  app.post<{
+    Body: {
+      items?: { provider?: string; instance_key?: string; name?: string; number?: string }[];
+      archived?: boolean;
+    };
+  }>(
     '/api/channels/archive-orphans',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const items = Array.isArray(req.body?.items) ? req.body!.items : [];
       const archived = req.body?.archived !== false; // default true
       const clean = items
-        .map((i) => ({ provider: (i.provider ?? '').toString().trim(), key: (i.instance_key ?? '').toString().trim() }))
+        .map((i) => ({
+          provider: (i.provider ?? '').toString().trim(),
+          key: (i.instance_key ?? '').toString().trim(),
+          name: (i.name ?? '').toString().trim() || null,
+          number: (i.number ?? '').toString().trim() || null,
+        }))
         .filter((i) => i.provider && i.key);
       if (clean.length === 0) return reply.status(400).send({ error: 'Nenhum item válido' });
       for (const i of clean) {
         if (archived) {
+          // Colapsa duplicatas de token girado: remove arquivos antigos do mesmo
+          // nome antes de inserir o atual.
+          if (i.name) {
+            // eslint-disable-next-line no-await-in-loop
+            await query(
+              'DELETE FROM archived_orphans WHERE provider = $1 AND name IS NOT NULL AND lower(name) = lower($2)',
+              [i.provider, i.name],
+            );
+          }
           // eslint-disable-next-line no-await-in-loop
           await query(
-            `INSERT INTO archived_orphans (provider, instance_key, archived_at)
-             VALUES ($1, $2, NOW()) ON CONFLICT (provider, instance_key) DO NOTHING`,
-            [i.provider, i.key],
+            `INSERT INTO archived_orphans (provider, instance_key, name, number, archived_at)
+             VALUES ($1, $2, $3, $4, NOW())
+             ON CONFLICT (provider, instance_key) DO UPDATE SET name = EXCLUDED.name, number = EXCLUDED.number`,
+            [i.provider, i.key, i.name, i.number],
           );
         } else {
+          // Restaura casando por token OU nome (token pode ter girado desde o arquivamento).
           // eslint-disable-next-line no-await-in-loop
-          await query('DELETE FROM archived_orphans WHERE provider = $1 AND instance_key = $2', [i.provider, i.key]);
+          await query(
+            `DELETE FROM archived_orphans
+             WHERE provider = $1 AND (instance_key = $2 OR (name IS NOT NULL AND lower(name) = lower($3)))`,
+            [i.provider, i.key, i.name ?? ''],
+          );
         }
       }
       return { ok: true, count: clean.length };

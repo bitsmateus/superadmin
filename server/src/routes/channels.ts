@@ -1,6 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { sendOfficialTemplate } from '../lib/officialApi.js';
+import { sendToSupportGroupId } from '../lib/supportGroup.js';
+
+const ALERT_GROUP_ID = (process.env.ALERT_GROUP_ID || '120363409254876877').trim();
 
 /**
  * Lista os canais de TODOS os tenants (via NX listChannels) E todas as
@@ -604,6 +607,12 @@ export async function channelsRoutes(app: FastifyInstance) {
       const number = (req.body?.number ?? '').toString().trim();
       if (!number) return reply.status(400).send({ error: 'Número obrigatório' });
       const res = await sendOfficialTemplate(number, 'teste_envio', []);
+      if (ALERT_GROUP_ID) {
+        await sendToSupportGroupId(
+          ALERT_GROUP_ID,
+          `🧪 *Teste de aviso de canal*\nEnviado para: ${number}\nSe você está vendo isto, a cópia no grupo está funcionando.`,
+        ).catch(() => {});
+      }
       if (res.ok) return { ok: true };
       if (res.reason === 'not_configured')
         return reply.status(400).send({ error: 'API Oficial não configurada (OFFICIAL_API_URL / OFFICIAL_API_TOKEN).' });

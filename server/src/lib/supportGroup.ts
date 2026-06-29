@@ -12,6 +12,18 @@ export interface GroupSendResult {
  * O token fica só no servidor (lido aqui), nunca trafega pelo front.
  */
 export async function sendSupportGroupMessage(text: string): Promise<GroupSendResult> {
+  return sendToSupportGroupId('', text);
+}
+
+/**
+ * Envia uma mensagem de texto a um grupo de WhatsApp usando a credencial do
+ * grupo de SUPORTE (mesmo apiId/token/baseUrl). Se `groupId` vier vazio, usa o
+ * grupo configurado em settings.support_group.groupId.
+ *
+ * Útil para mandar uma cópia dos avisos para um grupo extra pelo mesmo número
+ * que envia os avisos de suporte.
+ */
+export async function sendToSupportGroupId(groupId: string, text: string): Promise<GroupSendResult> {
   const t = (text ?? '').trim();
   if (!t) return { ok: false, reason: 'empty' };
 
@@ -21,15 +33,15 @@ export async function sendSupportGroupMessage(text: string): Promise<GroupSendRe
   const g = (row?.support_group ?? {}) as Record<string, unknown>;
   const apiId = (g.apiId as string) || '';
   const token = (g.token as string) || '';
-  const groupId = (g.groupId as string) || '';
+  const target = (groupId || '').trim() || (g.groupId as string) || '';
   const base = ((g.baseUrl as string) || 'https://appapi.nxsystems.com.br').replace(/\/$/, '');
-  if (!apiId || !token || !groupId) return { ok: false, reason: 'not_configured' };
+  if (!apiId || !token || !target) return { ok: false, reason: 'not_configured' };
 
   try {
     const resp = await fetch(`${base}/v2/api/external/${encodeURIComponent(apiId)}/group`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ body: t, number: groupId, externalKey: 'support-alert', isClosed: false }),
+      body: JSON.stringify({ body: t, number: target, externalKey: 'support-alert', isClosed: false }),
     });
     if (!resp.ok) {
       const d = await resp.text().catch(() => '');

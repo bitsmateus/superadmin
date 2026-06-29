@@ -1,6 +1,20 @@
 import { query } from '../db.js';
 import { reconcileChannels, type ReconciledChannel } from '../routes/channels.js';
 import { sendOfficialTemplate, spDateTimeShort, TUTORIAL_URL } from '../lib/officialApi.js';
+import { sendToSupportGroupId } from '../lib/supportGroup.js';
+
+/**
+ * Grupo de WhatsApp que recebe uma CÓPIA de todos os avisos de canal (enviado
+ * pela MESMA credencial do grupo de suporte, não pela API Oficial). Configurável
+ * por env ALERT_GROUP_ID; default no grupo informado.
+ */
+const ALERT_GROUP_ID = (process.env.ALERT_GROUP_ID || '120363409254876877').trim();
+
+async function copyToAlertGroup(text: string) {
+  if (!ALERT_GROUP_ID) return;
+  const res = await sendToSupportGroupId(ALERT_GROUP_ID, text);
+  if (!res.ok) console.warn('[channelAlerts] cópia p/ grupo falhou', res.reason ?? res.status);
+}
 
 /**
  * Aviso de queda de canal POR TENANT. Para cada cliente com a notificação
@@ -83,11 +97,24 @@ async function runOnce() {
       ]);
       await setLastStatus(ch.channel_key, 'disconnected', true);
       if (!res.ok) console.warn('[channelAlerts] desconectado falhou', ch.channel_key, res.reason ?? res.status);
+      await copyToAlertGroup(
+        `🔴 *Canal desconectado*\n` +
+          `Canal: ${ch.name || '—'}\n` +
+          `Número: ${ch.number || ch.name || '—'}\n` +
+          `Cliente: ${cliente}\n` +
+          `Horário: ${horario}`,
+      );
     } else if (eff === 'connected' && prev === 'disconnected') {
       // Template canal_reconectado: {{1}} Canal {{2}} Horario
       const res = await sendOfficialTemplate(number, 'canal_reconectado', [ch.name || '—', horario]);
       await setLastStatus(ch.channel_key, 'connected', true);
       if (!res.ok) console.warn('[channelAlerts] reconectado falhou', ch.channel_key, res.reason ?? res.status);
+      await copyToAlertGroup(
+        `🟢 *Canal reconectado*\n` +
+          `Canal: ${ch.name || '—'}\n` +
+          `Cliente: ${cliente}\n` +
+          `Horário: ${horario}`,
+      );
     } else if (eff !== prev) {
       await setLastStatus(ch.channel_key, eff, false);
     }

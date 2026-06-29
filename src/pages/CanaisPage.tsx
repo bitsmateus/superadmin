@@ -31,6 +31,7 @@ import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table'
 import { Skeleton } from '@/components/ui/Skeleton'
 import {
   useNxChannels,
+  useChannelReport,
   useSetChannelAlert,
   useAssignChannel,
   useDeleteInstance,
@@ -70,8 +71,10 @@ function StatusBadge({ status }: { status: NxChannelStatus | null }) {
 
 export function CanaisPage() {
   const { data, isLoading, isError, error, isFetching, refetch } = useNxChannels()
+  const [view, setView] = React.useState<'canais' | 'relatorios'>('canais')
   const [search, setSearch] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<NxChannelStatus | 'all'>('all')
+  const [notifyFilter, setNotifyFilter] = React.useState<'all' | 'on' | 'off'>('all')
   const [onlyDivergent, setOnlyDivergent] = React.useState(false)
   const [assigning, setAssigning] = React.useState<OrphanInstance | null>(null)
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set())
@@ -219,8 +222,16 @@ export function CanaisPage() {
       if (!map.has(key)) map.set(key, { key, label, channels: [] })
       map.get(key)!.channels.push(c)
     }
-    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label))
-  }, [filteredChannels])
+    let arr = [...map.values()].sort((a, b) => a.label.localeCompare(b.label))
+    if (notifyFilter !== 'all') {
+      arr = arr.filter((g) => {
+        const cid = g.channels[0]?.client_id
+        const on = cid ? Boolean(clientsById.get(cid)?.channelNotifyEnabled) : false
+        return notifyFilter === 'on' ? on : !on
+      })
+    }
+    return arr
+  }, [filteredChannels, notifyFilter, clientsById])
 
   const nothing = !isLoading && groups.length === 0 && filteredOrphans.length === 0
 
@@ -246,6 +257,33 @@ export function CanaisPage() {
       />
 
       <div className="px-8 py-6">
+        <div className="mb-5 inline-flex rounded-xl border border-line bg-card p-1">
+          <button
+            type="button"
+            onClick={() => setView('canais')}
+            className={cn(
+              'rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
+              view === 'canais' ? 'bg-accent text-white' : 'text-foreground/60 hover:text-foreground',
+            )}
+          >
+            Canais
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('relatorios')}
+            className={cn(
+              'rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
+              view === 'relatorios' ? 'bg-accent text-white' : 'text-foreground/60 hover:text-foreground',
+            )}
+          >
+            Relatórios
+          </button>
+        </div>
+
+        {view === 'relatorios' ? (
+          <ChannelReportPanel />
+        ) : (
+        <>
         <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
           <SummaryCard label="Total" value={s?.total} tone="neutral" icon={<Radio className="h-4 w-4" />} />
           <SummaryCard label="Conectados" value={s?.connected} tone="success" icon={<Wifi className="h-4 w-4" />} />
@@ -301,6 +339,17 @@ export function CanaisPage() {
               />
               Só divergências
             </label>
+            <div className="w-44">
+              <Select
+                value={notifyFilter}
+                onChange={(e) => setNotifyFilter(e.target.value as 'all' | 'on' | 'off')}
+                options={[
+                  { value: 'all', label: 'Notificação: todas' },
+                  { value: 'on', label: 'Com notificação ativa' },
+                  { value: 'off', label: 'Sem notificação ativa' },
+                ]}
+              />
+            </div>
             <div className="w-40">
               <Select
                 value={statusFilter}
@@ -683,6 +732,8 @@ export function CanaisPage() {
               </section>
             )}
           </div>
+        )}
+        </>
         )}
       </div>
 
@@ -1368,5 +1419,173 @@ function SummaryCard({
       </div>
       <div className="mt-2 text-2xl font-semibold tabular-nums text-foreground">{value ?? '—'}</div>
     </button>
+  )
+}
+
+function fmtDateTime(iso?: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function ChannelReportPanel() {
+  const { data, isLoading, isError, error, isFetching, refetch } = useChannelReport()
+  const s = data?.summary
+  const down = data?.disconnected ?? []
+  const events = data?.events ?? []
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-foreground/50">
+          {data?.updated_at ? `Atualizado ${timeAgo(data.updated_at)}` : ''}
+        </span>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => refetch()}
+          loading={isFetching}
+          leftIcon={<RefreshCw className="h-4 w-4" />}
+        >
+          Atualizar
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <SummaryCard
+          label="Desconectados agora"
+          value={s?.disconnected_now}
+          tone={(s?.disconnected_now ?? 0) > 0 ? 'danger' : 'success'}
+          icon={<WifiOff className="h-4 w-4" />}
+        />
+        <SummaryCard
+          label="Quedas (24h)"
+          value={s?.disconnects_24h}
+          tone={(s?.disconnects_24h ?? 0) > 0 ? 'warning' : 'neutral'}
+          icon={<WifiOff className="h-4 w-4" />}
+        />
+        <SummaryCard
+          label="Divergências"
+          value={s?.divergent_now}
+          tone={(s?.divergent_now ?? 0) > 0 ? 'danger' : 'neutral'}
+          icon={<AlertTriangle className="h-4 w-4" />}
+        />
+        <SummaryCard label="Total de canais" value={s?.total} tone="neutral" icon={<Radio className="h-4 w-4" />} />
+      </div>
+
+      {isError ? (
+        <EmptyState
+          icon={<WifiOff className="h-5 w-5" />}
+          title="Não foi possível carregar o relatório"
+          description={extractErrorMessage(error, 'Tente novamente.')}
+        />
+      ) : isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      ) : (
+        <>
+          {/* Desconectados agora — ordenados por mais tempo fora */}
+          <section className="overflow-hidden rounded-xl border border-line bg-card">
+            <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+              <WifiOff className="h-4 w-4 text-danger" />
+              <span className="text-sm font-semibold text-foreground">Desconectados agora</span>
+              <span className="text-xs text-foreground/45">{down.length} canal(is)</span>
+            </header>
+            {down.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-foreground/50">
+                Nenhum canal desconectado no momento. 🎉
+              </div>
+            ) : (
+              <Table>
+                <THead>
+                  <tr>
+                    <TH>Canal</TH>
+                    <TH>Cliente</TH>
+                    <TH>Número</TH>
+                    <TH>Desde</TH>
+                    <TH>Tempo fora</TH>
+                  </tr>
+                </THead>
+                <TBody>
+                  {down.map((c) => (
+                    <TR key={c.channel_key}>
+                      <TD className="font-medium text-foreground">
+                        {asText(c.name, '—')}
+                        {c.divergent && (
+                          <Badge tone="danger" className="ml-2">
+                            divergente
+                          </Badge>
+                        )}
+                      </TD>
+                      <TD className="text-foreground/70">{asText(c.client_name, '(sem cliente)')}</TD>
+                      <TD className="text-foreground/60">{asText(c.number, '—')}</TD>
+                      <TD className="text-foreground/60">{fmtDateTime(c.since)}</TD>
+                      <TD className="text-foreground/80">{c.since ? timeAgo(c.since) : '—'}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            )}
+          </section>
+
+          {/* Histórico recente de quedas e retornos */}
+          <section className="overflow-hidden rounded-xl border border-line bg-card">
+            <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+              <RefreshCw className="h-4 w-4 text-accent" />
+              <span className="text-sm font-semibold text-foreground">Histórico recente</span>
+              <span className="text-xs text-foreground/45">últimas {events.length} mudanças</span>
+            </header>
+            {events.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-foreground/50">
+                Sem histórico ainda. As quedas e retornos aparecem aqui conforme o monitoramento roda (a cada 3 min).
+              </div>
+            ) : (
+              <Table>
+                <THead>
+                  <tr>
+                    <TH>Quando</TH>
+                    <TH>Evento</TH>
+                    <TH>Canal</TH>
+                    <TH>Cliente</TH>
+                    <TH>Número</TH>
+                  </tr>
+                </THead>
+                <TBody>
+                  {events.map((e, i) => (
+                    <TR key={`${e.channel_key}-${e.changed_at}-${i}`}>
+                      <TD className="text-foreground/60" title={fmtDateTime(e.changed_at)}>
+                        {timeAgo(e.changed_at)}
+                      </TD>
+                      <TD>
+                        {e.status === 'disconnected' ? (
+                          <Badge tone="danger" dot>
+                            Caiu
+                          </Badge>
+                        ) : (
+                          <Badge tone="success" dot>
+                            Voltou
+                          </Badge>
+                        )}
+                      </TD>
+                      <TD className="font-medium text-foreground">{asText(e.channel_name, '—')}</TD>
+                      <TD className="text-foreground/70">{asText(e.client_name, '(sem cliente)')}</TD>
+                      <TD className="text-foreground/60">{asText(e.channel_number, '—')}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            )}
+          </section>
+        </>
+      )}
+    </div>
   )
 }

@@ -9,6 +9,15 @@ export function useNxChannels() {
   })
 }
 
+export function useChannelReport(enabled = true) {
+  return useQuery({
+    queryKey: ['nx-channels-report'],
+    queryFn: () => channelsApi.report(),
+    refetchInterval: 30_000,
+    enabled,
+  })
+}
+
 export function useSetChannelAlert() {
   const qc = useQueryClient()
   return useMutation({

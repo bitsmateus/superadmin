@@ -80,9 +80,44 @@ export interface AlertConfigInput {
   alert_number?: string
 }
 
+export interface ChannelReportDown {
+  channel_key: string
+  name: string
+  number: string | null
+  client_id: string | null
+  client_name: string | null
+  divergent: boolean
+  since: string | null
+}
+
+export interface ChannelReportEvent {
+  channel_key: string
+  channel_name: string | null
+  channel_number: string | null
+  client_name: string | null
+  status: string
+  changed_at: string
+}
+
+export interface ChannelReport {
+  disconnected: ChannelReportDown[]
+  events: ChannelReportEvent[]
+  summary: {
+    disconnected_now: number
+    divergent_now: number
+    disconnects_24h: number
+    total: number
+  }
+  updated_at: string
+}
+
 export const channelsApi = {
   async list(): Promise<NxChannelsResponse> {
     const { data } = await http.get<NxChannelsResponse>('/channels')
+    return data
+  },
+  async report(): Promise<ChannelReport> {
+    const { data } = await http.get<ChannelReport>('/channels/report')
     return data
   },
   async setAlertConfig(input: AlertConfigInput): Promise<void> {

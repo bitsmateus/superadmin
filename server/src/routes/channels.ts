@@ -619,4 +619,66 @@ export async function channelsRoutes(app: FastifyInstance) {
       return reply.status(502).send({ error: `Falha ao enviar${res.status ? ` (${res.status})` : ''}`, detail: res.detail });
     },
   );
+
+  // Relatório de monitoramento: canais desconectados AGORA (com "desde quando")
+  // e o histórico recente de quedas/retornos (channel_events, alimentado pelo job).
+  app.get('/api/channels/report', { onRequest: [app.authenticate] }, async () => {
+    const { channels } = await reconcileChannels();
+    const disconnected = channels.filter((c) => c.effective_status === 'disconnected');
+    const keys = disconnected.map((c) => c.channel_key);
+
+    const sinceRows = keys.length
+      ? await query<{ channel_key: string; status_since: string | null }>(
+          'SELECT channel_key, status_since FROM channel_alerts WHERE channel_key = ANY($1)',
+          [keys],
+        )
+      : [];
+    const sinceByKey = new Map(sinceRows.map((r) => [r.channel_key, r.status_since]));
+
+    const down = disconnected
+      .map((c) => ({
+        channel_key: c.channel_key,
+        name: c.name,
+        number: c.number,
+        client_id: c.client_id,
+        client_name: c.client_company || c.client_name,
+        divergent: c.divergent,
+        since: sinceByKey.get(c.channel_key) ?? null,
+      }))
+      // Mais tempo fora primeiro (since mais antigo). Sem registro de "desde" vai pro fim.
+      .sort((a, b) => {
+        if (!a.since) return 1;
+        if (!b.since) return -1;
+        return a.since.localeCompare(b.since);
+      });
+
+    const events = await query<{
+      channel_key: string;
+      channel_name: string | null;
+      channel_number: string | null;
+      client_name: string | null;
+      status: string;
+      changed_at: string;
+    }>(
+      `SELECT channel_key, channel_name, channel_number, client_name, status, changed_at
+       FROM channel_events ORDER BY changed_at DESC LIMIT 100`,
+    );
+
+    const c24 = await queryOne<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM channel_events
+       WHERE status = 'disconnected' AND changed_at > NOW() - INTERVAL '24 hours'`,
+    );
+
+    return {
+      disconnected: down,
+      events,
+      summary: {
+        disconnected_now: down.length,
+        divergent_now: channels.filter((c) => c.divergent).length,
+        disconnects_24h: c24?.n ?? 0,
+        total: channels.length,
+      },
+      updated_at: new Date().toISOString(),
+    };
+  });
 }

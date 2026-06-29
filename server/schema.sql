@@ -99,8 +99,24 @@ CREATE TABLE IF NOT EXISTS channel_alerts (
   alert_number TEXT,
   last_status TEXT,
   last_alert_at TIMESTAMPTZ,
+  status_since TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE channel_alerts ADD COLUMN IF NOT EXISTS status_since TIMESTAMPTZ;
+
+-- ---------- channel_events (histórico de quedas/retornos p/ relatórios) ----------
+CREATE TABLE IF NOT EXISTS channel_events (
+  id BIGSERIAL PRIMARY KEY,
+  channel_key TEXT NOT NULL,
+  channel_name TEXT,
+  channel_number TEXT,
+  client_id UUID,
+  client_name TEXT,
+  status TEXT NOT NULL,
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS channel_events_changed_idx ON channel_events (changed_at DESC);
+CREATE INDEX IF NOT EXISTS channel_events_key_idx ON channel_events (channel_key);
 
 -- ---------- channel_assignments (vínculo de instância avulsa a cliente) ----------
 CREATE TABLE IF NOT EXISTS channel_assignments (

@@ -107,6 +107,23 @@ export async function runMigrations() {
     last_alert_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  // Desde quando o canal está no last_status atual (para "há quanto tempo
+  // desconectado"). Atualizado pelo job a cada transição.
+  await pool.query(`ALTER TABLE channel_alerts ADD COLUMN IF NOT EXISTS status_since TIMESTAMPTZ`);
+  // Histórico de transições de status dos canais (quedas/retornos), para os
+  // relatórios. Registrado pelo job a cada 3 min ao detectar mudança.
+  await pool.query(`CREATE TABLE IF NOT EXISTS channel_events (
+    id BIGSERIAL PRIMARY KEY,
+    channel_key TEXT NOT NULL,
+    channel_name TEXT,
+    channel_number TEXT,
+    client_id UUID,
+    client_name TEXT,
+    status TEXT NOT NULL,
+    changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS channel_events_changed_idx ON channel_events (changed_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS channel_events_key_idx ON channel_events (channel_key)`);
   // Vínculo manual de instância avulsa (UAZAPI/Evolution sem tenant na NX) a um
   // cliente. Só vínculo local — não mexe em NX/provedor.
   await pool.query(`CREATE TABLE IF NOT EXISTS channel_assignments (

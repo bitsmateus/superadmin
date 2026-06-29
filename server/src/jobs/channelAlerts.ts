@@ -37,35 +37,60 @@ export function startChannelAlerts() {
   console.log('[channelAlerts] job iniciado (a cada 3 min, por tenant)');
 }
 
-async function setLastStatus(channelKey: string, status: string, alerted: boolean) {
+/**
+ * Registra a transição de status do canal (todos os canais, com ou sem aviso):
+ * atualiza last_status + status_since e, quando envolve queda/retorno, grava um
+ * evento no histórico (channel_events) para os relatórios. Insere com
+ * alerts_enabled = true para preservar o default "sim" do aviso.
+ */
+async function recordTransition(ch: ReconciledChannel, status: string) {
   await query(
-    `INSERT INTO channel_alerts (channel_key, alerts_enabled, last_status, last_alert_at, updated_at)
-     VALUES ($1, true, $2, ${alerted ? 'NOW()' : 'NULL'}, NOW())
+    `INSERT INTO channel_alerts (channel_key, alerts_enabled, last_status, status_since, updated_at)
+     VALUES ($1, true, $2, NOW(), NOW())
      ON CONFLICT (channel_key) DO UPDATE SET
-       last_status = EXCLUDED.last_status${alerted ? ', last_alert_at = NOW()' : ''}, updated_at = NOW()`,
-    [channelKey, status],
+       last_status = EXCLUDED.last_status, status_since = NOW(), updated_at = NOW()`,
+    [ch.channel_key, status],
   );
 }
 
+async function logEvent(ch: ReconciledChannel, status: string) {
+  await query(
+    `INSERT INTO channel_events (channel_key, channel_name, channel_number, client_id, client_name, status)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      ch.channel_key,
+      ch.name || null,
+      ch.number || null,
+      ch.client_id,
+      ch.client_company || ch.client_name || null,
+      status,
+    ],
+  );
+}
+
+async function markAlerted(channelKey: string) {
+  await query('UPDATE channel_alerts SET last_alert_at = NOW(), updated_at = NOW() WHERE channel_key = $1', [
+    channelKey,
+  ]);
+}
+
 async function runOnce() {
-  // Tenants (clientes) com a notificação de canais ligada.
-  const clients = await query<{
-    id: string;
-    phone: string | null;
-    channel_notify_number: string | null;
-  }>(
+  // Reconcilia SEMPRE (mesmo sem ninguém com aviso ligado) — o histórico de
+  // quedas/retornos dos relatórios precisa rastrear todos os canais.
+  const { channels } = await reconcileChannels();
+  if (channels.length === 0) return;
+
+  // Tenants (clientes) com a notificação de canais ligada → número que recebe.
+  const clients = await query<{ id: string; phone: string | null; channel_notify_number: string | null }>(
     `SELECT id, phone, channel_notify_number
      FROM clients
      WHERE channel_notify_enabled = true AND archived_at IS NULL`,
   );
-  if (clients.length === 0) return; // ninguém ligou — não reconcilia nem envia
-
   const numberByClient = new Map<string, string>();
   for (const c of clients) {
     const num = (c.channel_notify_number ?? '').trim() || (c.phone ?? '').trim();
     if (num) numberByClient.set(c.id, num);
   }
-  if (numberByClient.size === 0) return;
 
   // Config por canal (sim/não) + último status (para "1x por queda").
   const cfgRows = await query<{ channel_key: string; alerts_enabled: boolean; last_status: string | null }>(
@@ -73,16 +98,23 @@ async function runOnce() {
   );
   const cfgByKey = new Map(cfgRows.map((r) => [r.channel_key, r]));
 
-  const { channels } = await reconcileChannels();
-
   for (const ch of channels) {
-    if (!ch.client_id || !numberByClient.has(ch.client_id)) continue;
     const cfg = cfgByKey.get(ch.channel_key);
-    // Default = "sim": só não notifica se o canal estiver explicitamente como não.
-    if (cfg && cfg.alerts_enabled === false) continue;
-    const number = numberByClient.get(ch.client_id)!;
     const eff = ch.effective_status;
     const prev = cfg?.last_status ?? null;
+
+    // 1) Rastreio (TODOS os canais): grava transição + histórico de queda/retorno.
+    if (eff !== prev) {
+      await recordTransition(ch, eff);
+      if (eff === 'disconnected') await logEvent(ch, 'disconnected');
+      else if (prev === 'disconnected') await logEvent(ch, 'connected');
+    }
+
+    // 2) Aviso ao cliente (só tenants com notificação ligada e canal não "não").
+    const number = ch.client_id ? numberByClient.get(ch.client_id) : undefined;
+    const channelMuted = cfg && cfg.alerts_enabled === false;
+    if (!number || channelMuted) continue;
+
     const cliente = ch.client_company || ch.client_name || '—';
     const horario = spDateTimeShort();
 
@@ -95,7 +127,7 @@ async function runOnce() {
         horario,
         TUTORIAL_URL,
       ]);
-      await setLastStatus(ch.channel_key, 'disconnected', true);
+      await markAlerted(ch.channel_key);
       if (!res.ok) console.warn('[channelAlerts] desconectado falhou', ch.channel_key, res.reason ?? res.status);
       await copyToAlertGroup(
         `🔴 *Canal desconectado*\n` +
@@ -107,7 +139,7 @@ async function runOnce() {
     } else if (eff === 'connected' && prev === 'disconnected') {
       // Template canal_reconectado: {{1}} Canal {{2}} Horario
       const res = await sendOfficialTemplate(number, 'canal_reconectado', [ch.name || '—', horario]);
-      await setLastStatus(ch.channel_key, 'connected', true);
+      await markAlerted(ch.channel_key);
       if (!res.ok) console.warn('[channelAlerts] reconectado falhou', ch.channel_key, res.reason ?? res.status);
       await copyToAlertGroup(
         `🟢 *Canal reconectado*\n` +
@@ -115,8 +147,6 @@ async function runOnce() {
           `Cliente: ${cliente}\n` +
           `Horário: ${horario}`,
       );
-    } else if (eff !== prev) {
-      await setLastStatus(ch.channel_key, eff, false);
     }
   }
 }

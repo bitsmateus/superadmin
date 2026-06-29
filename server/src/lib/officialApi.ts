@@ -45,9 +45,14 @@ export async function sendOfficialTemplate(
   params: string[] = [],
   langCode = 'pt_BR',
 ): Promise<OfficialResult> {
-  const url = (process.env.OFFICIAL_API_URL || '').trim();
+  const rawUrl = (process.env.OFFICIAL_API_URL || '').trim();
   const token = (process.env.OFFICIAL_API_TOKEN || '').trim();
-  if (!url || !token) return { ok: false, reason: 'not_configured' };
+  if (!rawUrl || !token) return { ok: false, reason: 'not_configured' };
+
+  // O endpoint correto é .../external/{ApiID}/templateBody. Aceita a env com ou
+  // sem o sufixo: se vier só a base, anexa /templateBody.
+  const base = rawUrl.replace(/\/+$/, '');
+  const url = /\/templateBody$/.test(base) ? base : `${base}/templateBody`;
 
   const to = normalizeNumber(number);
   if (!to) return { ok: false, reason: 'empty' };

@@ -69,7 +69,9 @@ export async function sendOfficialTemplate(
 
   const body = {
     number: to,
-    isClosed: false,
+    // Fecha o atendimento automaticamente após enviar o aviso (não deixa em
+    // "pendentes"). Os avisos de canal são notificações de mão única.
+    isClosed: true,
     templateData: {
       messaging_product: 'whatsapp',
       to,

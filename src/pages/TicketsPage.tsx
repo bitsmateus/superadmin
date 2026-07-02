@@ -137,7 +137,7 @@ export function TicketsPage() {
         }
       />
 
-      <div className="px-8 py-6 space-y-4">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <Input
             placeholder="Buscar por assunto, cliente, e-mail, #número…"
@@ -342,7 +342,7 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
             { label: '…' },
           ]}
         />
-        <div className="px-8 py-6">
+        <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
           <EmptyState
             icon={<AlertCircle className="h-5 w-5" />}
             title="Ticket não encontrado"
@@ -422,7 +422,7 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
         }
       />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
           {/* Thread */}
           <div className="space-y-4">

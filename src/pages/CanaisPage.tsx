@@ -256,7 +256,7 @@ export function CanaisPage() {
         }
       />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="mb-5 inline-flex rounded-xl border border-line bg-card p-1">
           <button
             type="button"

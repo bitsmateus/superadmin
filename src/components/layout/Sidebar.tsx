@@ -13,6 +13,7 @@ import {
   MessageCircle,
   MessageSquare,
   Moon,
+  PanelLeftClose,
   Radio,
   Settings,
   ShieldCheck,
@@ -46,10 +47,23 @@ const ROLE_LABELS = {
   suporte: 'Suporte',
 } as const
 
-export function Sidebar() {
+export interface SidebarProps {
+  open: boolean
+  onClose: () => void
+  onToggle: () => void
+}
+
+export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const [theme, setTheme] = useTheme()
+
+  // No mobile/tablet, ao navegar fechamos o menu. No desktop mantemos aberto.
+  const closeOnMobile = React.useCallback(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      onClose()
+    }
+  }, [onClose])
 
   const onLogout = async () => {
     await signOut()
@@ -95,7 +109,12 @@ export function Sidebar() {
   ]
 
   return (
-    <aside className="fixed left-0 top-0 z-30 flex h-screen w-[220px] flex-col border-r border-line bg-sidebar">
+    <aside
+      className={cn(
+        'fixed left-0 top-0 z-40 flex h-screen w-[220px] flex-col border-r border-line bg-sidebar transition-transform duration-200 ease-out',
+        open ? 'translate-x-0' : '-translate-x-full',
+      )}
+    >
       <div className="flex items-center gap-2 px-5 py-5">
         <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent/15 ring-1 ring-accent/30">
           <span className="text-accent font-bold leading-none">T</span>
@@ -106,6 +125,14 @@ export function Sidebar() {
             Painel interno
           </span>
         </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label="Recolher menu"
+          className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-lg text-foreground/45 transition-colors hover:bg-elevate/[0.05] hover:text-foreground/80"
+        >
+          <PanelLeftClose className="h-4 w-4" />
+        </button>
       </div>
 
       <nav className="mt-2 flex flex-1 flex-col gap-0.5 px-3">
@@ -120,6 +147,7 @@ export function Sidebar() {
               key={item.to}
               to={item.to}
               end={'end' in item ? item.end : undefined}
+              onClick={closeOnMobile}
               className={({ isActive }) =>
                 cn(
                   'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
@@ -157,6 +185,7 @@ export function Sidebar() {
           <NavLink
             key={to}
             to={to}
+            onClick={closeOnMobile}
             className={({ isActive }) =>
               cn(
                 'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
@@ -205,6 +234,7 @@ export function Sidebar() {
                 <NavLink
                   key={to}
                   to={to}
+                  onClick={closeOnMobile}
                   className={({ isActive }) =>
                     cn(
                       'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',

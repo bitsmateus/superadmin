@@ -115,7 +115,7 @@ export function UsersPage() {
         }
       />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-foreground/55">
             <Loader2 className="h-4 w-4 animate-spin" />

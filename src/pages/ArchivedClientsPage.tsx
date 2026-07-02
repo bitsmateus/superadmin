@@ -57,7 +57,7 @@ export function ArchivedClientsPage() {
         subtitle={`${archived.length} cliente(s) arquivado(s)`}
       />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="mb-4">
           <Input
             placeholder="Buscar por nome, empresa, e-mail…"

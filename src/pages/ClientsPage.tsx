@@ -162,7 +162,7 @@ export function ClientsPage() {
         }
       />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <Input
             placeholder="Buscar por nome, empresa, e-mail…"

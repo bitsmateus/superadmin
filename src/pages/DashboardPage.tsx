@@ -62,7 +62,7 @@ export function DashboardPage() {
         subtitle="Painel do suporte — alertas e follow-ups do dia"
       />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <MetricCard
             icon={<MessageCircle className="h-4 w-4" />}

@@ -76,7 +76,7 @@ export function TeamPerformancePage() {
         subtitle={`Visão consolidada · ${monthName}`}
       />
 
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-6">
         {/* Resumo */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <SummaryCard

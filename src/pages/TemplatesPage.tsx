@@ -63,7 +63,7 @@ export function TemplatesPage() {
         }
       />
 
-      <div className="px-8 py-6 space-y-4">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <Input
             placeholder="Buscar por nome, conteúdo, atalho…"

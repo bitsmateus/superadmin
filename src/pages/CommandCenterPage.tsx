@@ -48,7 +48,7 @@ export function CommandCenterPage() {
         subtitle={`${greeting}${profile?.name ? `, ${profile.name.split(' ')[0]}` : ''}. Sua visão consolidada do dia.`}
       />
 
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-6">
         {/* Linha 1: Metas + Performance resumida */}
         <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
           <GoalsCard />

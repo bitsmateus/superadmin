@@ -52,7 +52,7 @@ export function KnowledgeBasePage() {
         subtitle="Categorias, artigos, vídeos e triagem do portal de suporte"
       />
 
-      <div className="px-8 py-6 space-y-5">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-5">
         <Tabs
           value={tab}
           onChange={(v) => setTab(v as typeof tab)}

@@ -180,7 +180,7 @@ export function PipelinePage() {
         }
       />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <Input
             placeholder="Filtrar por nome ou empresa…"

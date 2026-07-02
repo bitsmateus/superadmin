@@ -142,7 +142,7 @@ export function FinancePage() {
   }
   if (!isBooted()) {
     return (
-      <div className="px-8 py-6 space-y-3">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-3">
         <Skeleton className="h-9 w-64" />
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -205,7 +205,7 @@ export function FinancePage() {
         onClose={() => setImportOpen(false)}
       />
 
-      <div className="px-8 py-6 space-y-5">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-5">
         {/* Filtro de período */}
         <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-line bg-card p-3">
           <div className="flex flex-wrap items-center gap-2">

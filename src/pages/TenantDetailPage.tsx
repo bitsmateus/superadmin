@@ -147,7 +147,7 @@ export function TenantDetailPage() {
     return (
       <>
         <TopBar />
-        <div className="px-8 py-6">
+        <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
           <Skeleton className="h-9 w-72" />
           <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -163,7 +163,7 @@ export function TenantDetailPage() {
     return (
       <>
         <TopBar />
-        <div className="px-8 py-12">
+        <div className="px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
           <EmptyState
             icon={<Building2 className="h-5 w-5" />}
             title="Tenant não encontrado"
@@ -216,7 +216,7 @@ export function TenantDetailPage() {
         }
       />
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="flex flex-wrap items-center gap-3">
           <div className="grid h-12 w-12 place-items-center rounded-xl bg-accent/10 text-sm font-semibold text-accent ring-1 ring-accent/20">
             {initials(asText(tenant.name))}

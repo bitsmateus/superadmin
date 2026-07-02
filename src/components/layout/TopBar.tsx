@@ -47,7 +47,7 @@ export function TopBar({ rightSlot, title, subtitle, breadcrumbs }: TopBarProps)
 
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-bg/85 backdrop-blur-md">
-      <div className="flex h-14 items-center justify-between gap-4 px-8">
+      <div className="flex h-14 items-center justify-between gap-3 pl-16 pr-4 sm:gap-4 lg:px-8">
         <div className="min-w-0 flex-1">
           <nav className="flex items-center gap-1 text-xs text-foreground/40">
             {computedCrumbs.map((c, i) => (

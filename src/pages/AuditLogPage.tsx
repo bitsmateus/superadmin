@@ -121,7 +121,7 @@ export function AuditLogPage() {
         }
       />
 
-      <div className="px-8 py-6 space-y-4">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-4">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
           <Input
             placeholder="Buscar por usuário, resumo, id…"

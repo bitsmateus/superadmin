@@ -103,7 +103,7 @@ export function NpsPage() {
         subtitle={`${total} resposta(s) · ${pending.length} pendente(s)`}
       />
 
-      <div className="px-8 py-6 space-y-5">
+      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-5">
         {/* Header de métricas */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <NpsScoreCard nps={nps} avgScore={avgScore} total={total} />

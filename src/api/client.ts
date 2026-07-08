@@ -67,7 +67,23 @@ export async function apiRequest<T = unknown>(
     return response.data
   } catch (err) {
     if (axios.isAxiosError(err) && err.response?.status === 401) {
-      maybeWarn401(server)
+      // Um 401 no proxy vem de dois lugares distintos:
+      //  1) nosso backend recusou o JWT do painel (sessão expirou) — a mensagem
+      //     é "Token inválido ou expirado". Nesse caso, força re-login.
+      //  2) o servidor externo (NX) recusou o token da API — aí sim é problema
+      //     do token do servidor; avisa pra atualizar em Configurações.
+      const data = err.response?.data as { message?: string } | undefined
+      const msg = typeof data?.message === 'string' ? data.message : ''
+      if (isProxy && /token inv[aá]lido ou expirado/i.test(msg)) {
+        if (localStorage.getItem('auth_token')) {
+          localStorage.removeItem('auth_token')
+          if (!window.location.pathname.startsWith('/login')) {
+            window.location.href = '/login?expired=1'
+          }
+        }
+      } else {
+        maybeWarn401(server)
+      }
     }
     throw err
   }

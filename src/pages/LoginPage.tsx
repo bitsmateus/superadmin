@@ -24,6 +24,11 @@ export function LoginPage() {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
+  // Sessão expirada (?expired=1): mostra aviso pra explicar o redirecionamento.
+  const [expired] = React.useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('expired'),
+  )
+
   if (!authLoading && profile) {
     return <Navigate to={location.state?.from || '/'} replace />
   }
@@ -91,6 +96,12 @@ export function LoginPage() {
               Acesse com seu e-mail e senha
             </p>
           </div>
+
+          {expired && (
+            <div className="mt-4 rounded-lg border border-warning/30 bg-warning/[0.07] px-3 py-2 text-xs text-foreground/80">
+              Sua sessão expirou. Faça login novamente para continuar.
+            </div>
+          )}
 
           <div className="mt-5 space-y-3">
             <Input

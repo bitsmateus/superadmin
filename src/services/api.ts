@@ -12,6 +12,22 @@ export function clearToken() {
   localStorage.removeItem('auth_token')
 }
 
+/**
+ * Sessão expirada: o JWT do painel (7 dias) caiu no meio do uso. Limpa o token
+ * e manda pro login em vez de deixar o operador preso vendo "Token inválido ou
+ * expirado" em toda ação. Evita loop na própria tela de login e não dispara no
+ * 401 de credenciais erradas do próprio /api/auth/login.
+ */
+function handleSessionExpired(path: string): boolean {
+  if (path.includes('/api/auth/login')) return false
+  if (!getToken()) return false
+  clearToken()
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login?expired=1'
+  }
+  return true
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -22,6 +38,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...(options.headers as Record<string, string> ?? {}),
     },
   })
+
+  if (res.status === 401 && handleSessionExpired(path)) {
+    throw new Error('Sessão expirada — faça login novamente.')
+  }
 
   if (res.status === 204) return undefined as unknown as T
 

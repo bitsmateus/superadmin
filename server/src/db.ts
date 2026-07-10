@@ -145,6 +145,19 @@ export async function runMigrations() {
   // (instâncias quebradas regeneram token a cada /instance/all).
   await pool.query(`ALTER TABLE archived_orphans ADD COLUMN IF NOT EXISTS name TEXT`);
   await pool.query(`ALTER TABLE archived_orphans ADD COLUMN IF NOT EXISTS number TEXT`);
+  // Índice email -> tenant + nível, alimentado pelo job de sincronização
+  // (varre listUsers de cada tenant). Usado pelo agente de suporte para
+  // identificar de qual cliente é um funcionário a partir do e-mail, mesmo que
+  // o número de WhatsApp dele não esteja cadastrado.
+  await pool.query(`CREATE TABLE IF NOT EXISTS tenant_users (
+    client_id UUID NOT NULL,
+    email TEXT NOT NULL,
+    name TEXT,
+    role TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (client_id, email)
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS tenant_users_email_idx ON tenant_users (email)`);
   console.log('[db] migrations applied');
 }
 

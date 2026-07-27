@@ -7,11 +7,13 @@ export const DEFAULT_CLIENT_PASSWORD = '12345678'
 export const DEFAULT_TENANT_PASSWORD = 'Nxim01@!'
 export const SUPPORT_PHONE = '48 93618-0186'
 
-/** E-mails dos usuários cadastrados no briefing (login do cliente, sem suporte). */
+/** E-mails dos usuários cadastrados no briefing (login do cliente, sem suporte).
+ *  Em ordem alfabética por nome — casa com a listagem da plataforma NX. */
 function briefingUserEmails(client: Client): { name: string; email: string }[] {
   return (client.briefingData?.users ?? [])
     .filter((u) => u.email?.trim())
     .map((u) => ({ name: u.name?.trim() || 'Usuário', email: u.email.trim() }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
 }
 
 export interface AccessSheetParams {

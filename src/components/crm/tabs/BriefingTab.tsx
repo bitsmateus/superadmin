@@ -912,7 +912,8 @@ function AutomationView({ client }: { client: Client }) {
 
     let success = 0
     const failures: string[] = []
-    for (const u of briefingUsers) {
+    // Cria em ordem alfabética — casa com a listagem da plataforma NX.
+    for (const u of sortUsersByName(briefingUsers)) {
       try {
         await usersApi.create(
           server,
@@ -1319,6 +1320,15 @@ function buildBriefingLink(token?: string): string | null {
   return `${window.location.origin}/briefing/${token}`
 }
 
+// Ordena os usuários do briefing por nome (alfabético, pt-BR, ignora acento/caixa).
+// A plataforma NX lista os usuários em ordem alfabética — manter a mesma ordem
+// aqui agiliza conferir/criar os usuários na hora de configurar.
+function sortUsersByName<T extends { name?: string }>(users: T[]): T[] {
+  return [...users].sort((a, b) =>
+    (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' }),
+  )
+}
+
 // ── Briefing viewer ───────────────────────────────────────────────────────────
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -1348,7 +1358,7 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
 
       <Accordion title={`2. Usuários (${data.users.length})`} defaultOpen>
         <ul className="space-y-1">
-          {data.users.map((u, i) => (
+          {sortUsersByName(data.users).map((u, i) => (
             <li
               key={i}
               className="rounded-md border border-line bg-elevate/[0.02] px-3 py-1.5 text-xs"

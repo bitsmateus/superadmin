@@ -704,7 +704,10 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
   }
 
   if (key === 'users') {
-    const briefingUsers = client.briefingData?.users ?? []
+    // Ordem alfabética por nome — casa com a listagem da plataforma NX.
+    const briefingUsers = [...(client.briefingData?.users ?? [])].sort((a, b) =>
+      (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' }),
+    )
     const defaultPassword = db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD
     let success = 0
     const failures: string[] = []

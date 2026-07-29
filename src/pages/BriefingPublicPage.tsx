@@ -404,6 +404,11 @@ export function BriefingPublicPage() {
 
   const submit = async () => {
     if (!usersEmailsValid()) return
+    // A seção de IA só entra em `sections` quando o cliente contratou IA
+    // (básica ou avançada). Se ela foi exibida, as respostas de IA valem —
+    // não existe toggle "usar IA" no formulário público.
+    const aiEnabled = sections.includes('ia')
+    const isAdvancedAI = Boolean(cfg?.automationTypes.includes('ia_avancada'))
     const data: BriefingData = {
       razaoSocial: client.company,
       nomeFantasia: client.company,
@@ -431,23 +436,28 @@ export function BriefingPublicPage() {
       greetingMessage: state.greetingMessage.trim(),
       offHoursMessage: state.offHoursMessage.trim(),
       departments: state.sectors,
-      useAI: state.useAI,
-      aiTone: state.useAI ? state.aiTone : undefined,
-      aiAgentName: state.useAI ? state.aiAgentName.trim() || undefined : undefined,
-      aiCompanyDescription: state.useAI ? state.aiCompanyDescription.trim() || undefined : undefined,
-      aiServices: state.useAI ? state.aiServices.trim() || undefined : undefined,
-      aiHasPrices: state.useAI ? state.aiHasPrices : undefined,
-      aiPrices: state.useAI && state.aiHasPrices ? state.aiPrices.trim() || undefined : undefined,
-      aiLocation: state.useAI ? state.aiLocation.trim() || undefined : undefined,
-      aiSocialMedia: state.useAI ? state.aiSocialMedia.trim() || undefined : undefined,
-      aiAttendanceFlow: state.useAI ? state.aiAttendanceFlow.trim() || undefined : undefined,
-      aiTransferConditions: state.useAI ? state.aiTransferConditions.trim() || undefined : undefined,
-      aiRestrictions: state.useAI ? state.aiRestrictions.trim() || undefined : undefined,
-      aiExternalSystem: state.useAI ? state.aiExternalSystem.trim() || undefined : undefined,
-      aiExternalApiUrl: state.useAI ? state.aiExternalApiUrl.trim() || undefined : undefined,
-      aiExternalWhatToQuery: state.useAI ? state.aiExternalWhatToQuery.trim() || undefined : undefined,
-      aiExternalAuth: state.useAI ? state.aiExternalAuth.trim() || undefined : undefined,
-      aiExternalExamples: state.useAI ? state.aiExternalExamples.trim() || undefined : undefined,
+      useAI: aiEnabled,
+      aiTone: aiEnabled ? state.aiTone : undefined,
+      aiAgentName: aiEnabled ? state.aiAgentName.trim() || undefined : undefined,
+      aiCompanyDescription: aiEnabled ? state.aiCompanyDescription.trim() || undefined : undefined,
+      aiServices: aiEnabled ? state.aiServices.trim() || undefined : undefined,
+      aiHasPrices: aiEnabled ? state.aiHasPrices : undefined,
+      aiPrices: aiEnabled && state.aiHasPrices ? state.aiPrices.trim() || undefined : undefined,
+      aiLocation: aiEnabled ? state.aiLocation.trim() || undefined : undefined,
+      aiSocialMedia: aiEnabled ? state.aiSocialMedia.trim() || undefined : undefined,
+      aiAttendanceFlow: aiEnabled ? state.aiAttendanceFlow.trim() || undefined : undefined,
+      aiTransferConditions: aiEnabled ? state.aiTransferConditions.trim() || undefined : undefined,
+      aiRestrictions: aiEnabled ? state.aiRestrictions.trim() || undefined : undefined,
+      aiExternalSystem:
+        aiEnabled && isAdvancedAI ? state.aiExternalSystem.trim() || undefined : undefined,
+      aiExternalApiUrl:
+        aiEnabled && isAdvancedAI ? state.aiExternalApiUrl.trim() || undefined : undefined,
+      aiExternalWhatToQuery:
+        aiEnabled && isAdvancedAI ? state.aiExternalWhatToQuery.trim() || undefined : undefined,
+      aiExternalAuth:
+        aiEnabled && isAdvancedAI ? state.aiExternalAuth.trim() || undefined : undefined,
+      aiExternalExamples:
+        aiEnabled && isAdvancedAI ? state.aiExternalExamples.trim() || undefined : undefined,
       aiInstructions: undefined,
       wavoipInfo: state.wavoipInfo.trim() || undefined,
       emailConfig: state.emailConfig.trim() || undefined,
@@ -480,9 +490,28 @@ export function BriefingPublicPage() {
     }
   }
 
+  // Não deixa sair da seção de IA sem os campos marcados com * — sem eles
+  // não há como montar o prompt do agente.
+  const iaRequiredValid = (): boolean => {
+    const missing: string[] = []
+    if (!state.aiCompanyDescription.trim()) missing.push('o que a empresa faz')
+    if (!state.aiServices.trim()) missing.push('principais serviços/produtos')
+    if (!state.aiAttendanceFlow.trim()) missing.push('como a IA deve conduzir a conversa')
+    if (
+      cfg?.automationTypes.includes('ia_avancada') &&
+      !state.aiExternalWhatToQuery.trim()
+    ) {
+      missing.push('o que a IA precisa consultar no sistema externo')
+    }
+    if (missing.length === 0) return true
+    toast.error(`Preencha: ${missing.join(', ')}.`)
+    return false
+  }
+
   const next = () => {
     // Não deixa sair da seção de usuários com e-mail inválido.
     if (currentKey === 'usuarios' && !usersEmailsValid()) return
+    if (currentKey === 'ia' && !iaRequiredValid()) return
     // On chatbot section show confirmation before advancing
     if (currentKey === 'chatbot') {
       setChatbotConfirmOpen(true)

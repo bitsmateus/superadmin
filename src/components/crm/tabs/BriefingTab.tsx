@@ -497,7 +497,10 @@ export function BriefingTab({ client }: { client: Client }) {
                     Editar informações
                   </Button>
                 </div>
-                <BriefingViewer data={client.briefingData} />
+                <BriefingViewer
+                  data={client.briefingData}
+                  config={client.briefingConfig ?? null}
+                />
                 {status === 'filled' && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <Button
@@ -1340,7 +1343,13 @@ const CHANNEL_LABELS: Record<string, string> = {
   email: 'E-mail',
 }
 
-function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> }) {
+function BriefingViewer({
+  data,
+  config,
+}: {
+  data: NonNullable<Client['briefingData']>
+  config?: BriefingConfig | null
+}) {
   const hasExtraChannels =
     data.wavoipInfo ||
     data.olxInfo ||
@@ -1436,35 +1445,10 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
         </Accordion>
       )}
 
-      {data.useAI && (
-        <Accordion title="6. IA" defaultOpen>
-          <Row k="Usar IA" v="Sim" />
-          <Row k="Nome da IA" v={data.aiAgentName} />
-          <Row k="Tom" v={data.aiTone} />
-          <Row k="Sobre a empresa" v={data.aiCompanyDescription} />
-          <Row k="Localização" v={data.aiLocation} />
-          <Row k="Redes sociais" v={data.aiSocialMedia} />
-          <Row k="Serviços / produtos" v={data.aiServices} />
-          <Row k="Informa preços" v={data.aiHasPrices ? 'Sim' : 'Não'} />
-          {data.aiHasPrices && <Row k="Tabela de preços" v={data.aiPrices} />}
-          <Row k="Fluxo de atendimento" v={data.aiAttendanceFlow} />
-          <Row k="Quando transferir" v={data.aiTransferConditions} />
-          <Row k="Restrições" v={data.aiRestrictions} />
-          {data.aiInstructions && <Row k="Instruções" v={data.aiInstructions} />}
-          {(data.aiExternalSystem ||
-            data.aiExternalApiUrl ||
-            data.aiExternalWhatToQuery ||
-            data.aiExternalAuth ||
-            data.aiExternalExamples) && (
-            <>
-              <Row k="Sistema externo" v={data.aiExternalSystem} />
-              <Row k="URL da API" v={data.aiExternalApiUrl} />
-              <Row k="O que consultar" v={data.aiExternalWhatToQuery} />
-              <Row k="Autenticação" v={data.aiExternalAuth} />
-              <Row k="Exemplos de consulta" v={data.aiExternalExamples} />
-            </>
-          )}
-        </Accordion>
+      {(hasAnyAiData(data) ||
+        data.useAI ||
+        config?.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada')) && (
+        <AiAccordion data={data} config={config} />
       )}
 
       {data.externalAutomationInfo && (
@@ -1477,6 +1461,256 @@ function BriefingViewer({ data }: { data: NonNullable<Client['briefingData']> })
         <Accordion title="Observações">
           <Row k="" v={data.extraNotes} />
         </Accordion>
+      )}
+    </div>
+  )
+}
+
+// ── Visualização das respostas de IA ─────────────────────────────────────────
+
+const AI_TONE_LABELS: Record<string, string> = {
+  formal: 'Formal — linguagem profissional e respeitosa',
+  casual: 'Casual — amigável e descontraído',
+  tecnico: 'Técnico — objetivo e preciso',
+}
+
+/** Campos exclusivos da IA Avançada (integração com sistema externo). */
+function hasAdvancedAiData(d: NonNullable<Client['briefingData']>): boolean {
+  return Boolean(
+    d.aiExternalSystem ||
+      d.aiExternalApiUrl ||
+      d.aiExternalWhatToQuery ||
+      d.aiExternalAuth ||
+      d.aiExternalExamples,
+  )
+}
+
+function hasAnyAiData(d: NonNullable<Client['briefingData']>): boolean {
+  return Boolean(
+    d.aiAgentName ||
+      d.aiCompanyDescription ||
+      d.aiServices ||
+      d.aiPrices ||
+      d.aiLocation ||
+      d.aiSocialMedia ||
+      d.aiAttendanceFlow ||
+      d.aiTransferConditions ||
+      d.aiRestrictions ||
+      d.aiInstructions ||
+      hasAdvancedAiData(d),
+  )
+}
+
+/** Texto plano das respostas de IA — usado no botão "copiar". */
+function buildAiSummaryText(d: NonNullable<Client['briefingData']>): string {
+  const lines: string[] = []
+  const put = (label: string, value?: string | null) => {
+    if (value && value.trim()) lines.push(`${label}:\n${value.trim()}\n`)
+  }
+  put('Nome da IA', d.aiAgentName)
+  put('Tom de comunicação', d.aiTone ? AI_TONE_LABELS[d.aiTone] ?? d.aiTone : undefined)
+  put('Sobre a empresa', d.aiCompanyDescription)
+  put('Localização', d.aiLocation)
+  put('Redes sociais', d.aiSocialMedia)
+  put('Serviços / produtos', d.aiServices)
+  put('Informa preços', d.aiHasPrices ? 'Sim' : 'Não — encaminhar para atendente')
+  put('Tabela de preços', d.aiHasPrices ? d.aiPrices : undefined)
+  put('Fluxo de atendimento', d.aiAttendanceFlow)
+  put('Quando transferir para humano', d.aiTransferConditions)
+  put('O que a IA não deve fazer', d.aiRestrictions)
+  put('Instruções extras', d.aiInstructions)
+  put('Sistema externo', d.aiExternalSystem)
+  put('O que consultar no sistema', d.aiExternalWhatToQuery)
+  put('URL da API / webhook', d.aiExternalApiUrl)
+  put('Autenticação', d.aiExternalAuth)
+  put('Exemplos de consulta', d.aiExternalExamples)
+  return lines.join('\n')
+}
+
+function AiAccordion({
+  data,
+  config,
+}: {
+  data: NonNullable<Client['briefingData']>
+  config?: BriefingConfig | null
+}) {
+  const advanced =
+    Boolean(config?.automationTypes.includes('ia_avancada')) || hasAdvancedAiData(data)
+  const filled = hasAnyAiData(data)
+
+  const copyAll = async () => {
+    const ok = await copyToClipboard(buildAiSummaryText(data))
+    if (ok) toast.success('Informações da IA copiadas')
+    else toast.error('Não foi possível copiar')
+  }
+
+  return (
+    <Accordion
+      defaultOpen
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <Sparkles className="h-3.5 w-3.5 text-accent" />
+          <span>6. {advanced ? 'IA Avançada' : 'IA'}</span>
+          {!filled && <Badge tone="warning">não preenchido</Badge>}
+        </span>
+      }
+    >
+      {!filled ? (
+        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-warning">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            O cliente contratou {advanced ? 'IA Avançada' : 'IA'}, mas não há respostas de
+            IA salvas neste briefing. Use <strong>Solicitar revisão</strong> para que ele
+            preencha a etapa de IA novamente.
+          </span>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={copyAll}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[11px] text-foreground/60 hover:bg-elevate/[0.04] hover:text-foreground/85"
+            >
+              <Copy className="h-3 w-3" />
+              Copiar informações da IA
+            </button>
+          </div>
+
+          <AiGroup title="Identidade da IA">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <AiInline label="Nome da IA" value={data.aiAgentName} />
+              <AiInline
+                label="Tom de comunicação"
+                value={data.aiTone ? AI_TONE_LABELS[data.aiTone] ?? data.aiTone : undefined}
+              />
+            </div>
+          </AiGroup>
+
+          <AiGroup title="Sobre a empresa">
+            <AiText label="O que a empresa faz e para quem atende" value={data.aiCompanyDescription} />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <AiInline label="Localização" value={data.aiLocation} />
+              <AiInline label="Redes sociais" value={data.aiSocialMedia} />
+            </div>
+          </AiGroup>
+
+          <AiGroup title="Serviços e valores">
+            <AiText label="Principais serviços / produtos" value={data.aiServices} />
+            <AiInline
+              label="A IA pode informar preços?"
+              value={data.aiHasPrices ? 'Sim, pode informar' : 'Não — encaminhar para atendente'}
+            />
+            {data.aiHasPrices && <AiText label="Tabela de preços" value={data.aiPrices} />}
+          </AiGroup>
+
+          <AiGroup title="Fluxo de atendimento">
+            <AiText label="Como a IA deve conduzir a conversa" value={data.aiAttendanceFlow} />
+            <AiText label="Quando transferir para um atendente" value={data.aiTransferConditions} />
+            <AiText label="O que a IA NÃO deve fazer ou dizer" value={data.aiRestrictions} />
+            {data.aiInstructions && (
+              <AiText label="Instruções extras" value={data.aiInstructions} />
+            )}
+          </AiGroup>
+
+          {advanced && (
+            <AiGroup
+              title="Integração com sistema externo"
+              tone="accent"
+              hint="A IA avançada consulta o sistema do cliente em tempo real."
+            >
+              {hasAdvancedAiData(data) ? (
+                <>
+                  <AiInline label="Sistema" value={data.aiExternalSystem} />
+                  <AiText label="O que a IA precisa consultar" value={data.aiExternalWhatToQuery} />
+                  <AiInline label="URL da API / webhook" value={data.aiExternalApiUrl} mono />
+                  <AiText label="Autenticação" value={data.aiExternalAuth} />
+                  <AiText label="Exemplos de consulta" value={data.aiExternalExamples} />
+                </>
+              ) : (
+                <p className="text-xs text-foreground/45">
+                  O cliente não informou dados da integração externa.
+                </p>
+              )}
+            </AiGroup>
+          )}
+        </div>
+      )}
+    </Accordion>
+  )
+}
+
+function AiGroup({
+  title,
+  hint,
+  tone = 'neutral',
+  children,
+}: {
+  title: string
+  hint?: string
+  tone?: 'neutral' | 'accent'
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-lg border p-3',
+        tone === 'accent'
+          ? 'border-accent/30 bg-accent/[0.06]'
+          : 'border-line bg-elevate/[0.02]',
+      )}
+    >
+      <h4
+        className={cn(
+          'text-[11px] font-semibold uppercase tracking-wider',
+          tone === 'accent' ? 'text-accent' : 'text-foreground/45',
+        )}
+      >
+        {title}
+      </h4>
+      {hint && <p className="mt-0.5 text-[11px] text-foreground/45">{hint}</p>}
+      <div className="mt-2 space-y-2">{children}</div>
+    </div>
+  )
+}
+
+/** Valor curto — label e valor na mesma linha. */
+function AiInline({
+  label,
+  value,
+  mono,
+}: {
+  label: string
+  value?: string | null
+  mono?: boolean
+}) {
+  return (
+    <div className="min-w-0">
+      <span className="block text-[11px] text-foreground/40">{label}</span>
+      <span
+        className={cn(
+          'block break-words text-xs',
+          mono && 'font-mono',
+          value ? 'text-foreground/85' : 'text-foreground/30',
+        )}
+      >
+        {value ? asText(value) : '—'}
+      </span>
+    </div>
+  )
+}
+
+/** Texto longo — label acima, conteúdo em bloco preservando quebras de linha. */
+function AiText({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <span className="block text-[11px] text-foreground/40">{label}</span>
+      {value ? (
+        <p className="mt-1 whitespace-pre-wrap break-words rounded-md border border-line bg-surface px-2.5 py-2 text-xs leading-relaxed text-foreground/85">
+          {asText(value)}
+        </p>
+      ) : (
+        <span className="block text-xs text-foreground/30">—</span>
       )}
     </div>
   )
@@ -1853,7 +2087,7 @@ function Accordion({
   children,
   defaultOpen,
 }: {
-  title: string
+  title: React.ReactNode
   children: React.ReactNode
   defaultOpen?: boolean
 }) {

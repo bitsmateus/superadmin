@@ -137,9 +137,11 @@ export interface AgentPerformance {
 }
 
 /**
- * Performance individual por responsável. Como `responsavel` é um texto livre
- * em clients, agrupamos por esse texto (case-insensitive). Tickets são
- * casados via assignee_id → profile.name/email (passado em agentMap).
+ * Performance individual por responsável. Os responsáveis são texto livre em
+ * clients, então agrupamos por esse texto (case-insensitive): conversões pelo
+ * responsável COMERCIAL e clientes ativos pelo responsável de ENTREGA, ambos
+ * com fallback para o campo legado `responsavel`. Tickets são casados via
+ * assignee_id → profile.name/email (passado em agentMap).
  */
 export function computeAgentPerformance(
   clients: Client[],
@@ -164,22 +166,32 @@ export function computeAgentPerformance(
     acc[key][field] += 1
   }
 
-  // Clientes ativos por responsável
+  // Dono de entrega/onboarding e dono comercial, com fallback para o campo
+  // legado `responsavel` (dados antigos, antes da separação comercial/entrega).
+  const deliveryOwner = (c: Client) =>
+    c.responsavelEntrega?.trim() || c.responsavel?.trim() || ''
+  const commercialOwner = (c: Client) =>
+    c.responsavelComercial?.trim() || c.responsavel?.trim() || ''
+
+  // Clientes ativos por responsável de ENTREGA (carga de onboarding/gestão).
   for (const c of clients) {
-    if (!c.responsavel) continue
     if (c.stage === 'churned') continue
-    bumpKey(c.responsavel, 'active')
+    const owner = deliveryOwner(c)
+    if (!owner) continue
+    bumpKey(owner, 'active')
   }
 
-  // Conversões do mês: transição → 'active' dentro do mês corrente
-  // Atribuído ao `responsavel` atual do cliente.
+  // Conversões do mês: transição → 'active' dentro do mês corrente.
+  // Crédito comercial → responsável COMERCIAL do cliente.
   const clientById = new Map(clients.map((c) => [c.id, c]))
   for (const h of history) {
     if (h.toStage !== 'active') continue
     if (new Date(h.at).getTime() < monthStart) continue
     const client = clientById.get(h.clientId)
-    if (!client?.responsavel) continue
-    bumpKey(client.responsavel, 'conversions')
+    if (!client) continue
+    const owner = commercialOwner(client)
+    if (!owner) continue
+    bumpKey(owner, 'conversions')
   }
 
   // Tickets resolvidos no mês por assignee

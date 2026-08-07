@@ -40,6 +40,27 @@ function norm(v: string | undefined): string {
   return (v ?? '').trim().toLowerCase()
 }
 
+/**
+ * Donos do cliente: responsável comercial e de entrega. Se ambos vazios, cai
+ * para o campo legado `responsavel` (dados antigos). Um cliente pode ter dois
+ * donos (comercial ≠ entrega) — ambos contam como "meu" no filtro.
+ */
+function clientOwners(c: {
+  responsavel?: string
+  responsavelComercial?: string
+  responsavelEntrega?: string
+}): string[] {
+  const out: string[] = []
+  const push = (v?: string) => {
+    const t = v?.trim()
+    if (t && !out.includes(t)) out.push(t)
+  }
+  push(c.responsavelComercial)
+  push(c.responsavelEntrega)
+  if (out.length === 0) push(c.responsavel)
+  return out
+}
+
 export function TodayActions() {
   const clients = useClients()
   const [currentUser] = useCurrentUser()
@@ -48,11 +69,11 @@ export function TodayActions() {
 
   const alerts = React.useMemo(() => computeAlerts(clients), [clients])
 
-  // Responsáveis distintos (pra montar o filtro).
+  // Responsáveis distintos (comercial + entrega) pra montar o filtro.
   const responsaveis = React.useMemo(() => {
     const set = new Set<string>()
     for (const c of clients) {
-      if (c.responsavel?.trim()) set.add(c.responsavel.trim())
+      for (const o of clientOwners(c)) set.add(o)
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [clients])
@@ -61,8 +82,9 @@ export function TodayActions() {
     const list = alerts.filter((a) => ACTIONABLE.includes(a.kind))
     const filtered = list.filter((a) => {
       if (filter === 'all') return true
-      if (filter === 'mine') return norm(a.client.responsavel) === norm(currentUser)
-      return norm(a.client.responsavel) === norm(filter)
+      const owners = clientOwners(a.client).map(norm)
+      if (filter === 'mine') return owners.includes(norm(currentUser))
+      return owners.includes(norm(filter))
     })
     return filtered.sort((a, b) => {
       const t = TONE_ORDER[a.tone] - TONE_ORDER[b.tone]
@@ -177,7 +199,9 @@ function ActionRow({ alert, onOpen }: { alert: CrmAlert; onOpen: () => void }) {
         </div>
         <p className="truncate text-[11px] text-foreground/50">
           {alert.subtitle}
-          {alert.client.responsavel ? ` · ${alert.client.responsavel}` : ''}
+          {clientOwners(alert.client).length > 0
+            ? ` · ${clientOwners(alert.client).join(' / ')}`
+            : ''}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">

@@ -98,6 +98,97 @@ function buildSections(cfg: BriefingConfig | null): SectionKey[] {
   return sections
 }
 
+/** Um campo obrigatório faltando/ inválido: em qual seção, a chave do campo e a mensagem. */
+interface BriefingFieldError {
+  section: SectionKey
+  key: string
+  message: string
+}
+
+/**
+ * Valida o briefing inteiro respeitando as seções condicionais da config.
+ * Retorna os erros na ordem das seções (o primeiro é o mais "acima" no fluxo).
+ * Só exige campos de seções que se aplicam àquele cliente.
+ */
+function validateBriefing(
+  state: BriefingFormState,
+  cfg: BriefingConfig | null,
+  sections: SectionKey[],
+): BriefingFieldError[] {
+  const errs: BriefingFieldError[] = []
+  const isIA = sections.includes('ia')
+  const isAdvancedAI = Boolean(cfg?.automationTypes.includes('ia_avancada'))
+  const isApiOficial = Boolean(cfg?.connectionTypes.includes('api_oficial'))
+
+  // ── Sempre: usuários ──
+  // Qualquer linha com algum dado preenchido precisa de e-mail válido.
+  const badEmail = state.users.find(
+    (u) => (u.name.trim() || u.email.trim()) && !isValidEmail(u.email),
+  )
+  // Pelo menos 1 usuário completo: nome + e-mail válido + ao menos 1 setor.
+  const completeUsers = state.users.filter(
+    (u) => u.name.trim() && isValidEmail(u.email) && (u.sectors?.length ?? 0) > 0,
+  )
+  if (badEmail) {
+    errs.push({
+      section: 'usuarios',
+      key: 'users',
+      message: 'Há um e-mail de usuário inválido — use o formato nome@empresa.com (sem espaços).',
+    })
+  } else if (completeUsers.length === 0) {
+    errs.push({
+      section: 'usuarios',
+      key: 'users',
+      message: 'Cadastre ao menos 1 usuário com nome, e-mail válido e setor.',
+    })
+  }
+
+  // ── Sempre: horários ──
+  if (!state.schedule.some((s) => s.active)) {
+    errs.push({
+      section: 'horarios',
+      key: 'schedule',
+      message: 'Marque ao menos um dia de atendimento.',
+    })
+  }
+
+  // ── Condicional: API Oficial exige acesso ao Facebook/Meta ──
+  if (isApiOficial) {
+    if (!state.facebookEmail.trim())
+      errs.push({ section: 'integracoes', key: 'facebookEmail', message: 'Informe o e-mail do Facebook/Meta.' })
+    if (!state.facebookPassword.trim())
+      errs.push({ section: 'integracoes', key: 'facebookPassword', message: 'Informe a senha do Facebook/Meta.' })
+  }
+
+  // ── Condicional: IA (básica ou avançada) ──
+  if (isIA) {
+    if (!state.aiAgentName.trim())
+      errs.push({ section: 'ia', key: 'aiAgentName', message: 'Dê um nome ao agente de IA.' })
+    if (!state.aiCompanyDescription.trim())
+      errs.push({ section: 'ia', key: 'aiCompanyDescription', message: 'Descreva o que a empresa faz.' })
+    if (!state.aiServices.trim())
+      errs.push({ section: 'ia', key: 'aiServices', message: 'Liste os principais serviços/produtos.' })
+    if (!state.aiAttendanceFlow.trim())
+      errs.push({ section: 'ia', key: 'aiAttendanceFlow', message: 'Explique como a IA deve conduzir a conversa.' })
+    if (!state.aiTransferConditions.trim())
+      errs.push({ section: 'ia', key: 'aiTransferConditions', message: 'Diga quando a IA deve transferir para um humano.' })
+    // IA avançada consulta um sistema externo — precisa saber o que consultar.
+    if (isAdvancedAI && !state.aiExternalWhatToQuery.trim())
+      errs.push({ section: 'ia', key: 'aiExternalWhatToQuery', message: 'Informe o que a IA precisa consultar no sistema externo.' })
+  }
+
+  // ── Condicional: automação externa ──
+  if (sections.includes('automacao_externa') && !state.externalAutomationInfo.trim()) {
+    errs.push({
+      section: 'automacao_externa',
+      key: 'externalAutomationInfo',
+      message: 'Descreva as informações necessárias para a automação externa.',
+    })
+  }
+
+  return errs
+}
+
 function buildGreeting(company: string, sectors: string[]): string {
   const menuItems = sectors.length > 0
     ? sectors.map((s, i) => `${numberEmoji(i)} ${s}`).join('\n')
@@ -299,6 +390,16 @@ export function BriefingPublicPage() {
   const [submittedData, setSubmittedData] = React.useState<{ greeting: string; offHours: string } | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const [chatbotConfirmOpen, setChatbotConfirmOpen] = React.useState(false)
+  // Erros de validação por campo (chave -> mensagem). Preenchido ao avançar/enviar.
+  const [errors, setErrors] = React.useState<Record<string, string>>({})
+  const clearError = React.useCallback((key: string) => {
+    setErrors((e) => {
+      if (!(key in e)) return e
+      const next = { ...e }
+      delete next[key]
+      return next
+    })
+  }, [])
 
   // `ready` libera o autosave só depois que o estado inicial foi hidratado,
   // pra não sobrescrever um rascunho salvo com o formulário em branco.
@@ -384,26 +485,29 @@ export function BriefingPublicPage() {
     />
   )
 
-  // Valida os e-mails dos usuários preenchidos. Retorna false e avisa no
-  // primeiro inválido. Linhas totalmente vazias são ignoradas.
-  const usersEmailsValid = (): boolean => {
-    for (const u of state.users) {
-      const name = u.name.trim()
-      const email = u.email.trim()
-      if (!name && !email) continue
-      if (!isValidEmail(email)) {
-        toast.error(
-          `E-mail inválido${name ? ` de "${name}"` : ''}: "${email || '(vazio)'}". ` +
-            'Use o formato nome@empresa.com, sem espaços.',
-        )
-        return false
-      }
-    }
-    return true
+  // Leva o usuário até a seção do primeiro erro, marca os campos e avisa.
+  const focusErrors = (problems: BriefingFieldError[]) => {
+    const map: Record<string, string> = {}
+    for (const p of problems) map[p.key] = p.message
+    setErrors(map)
+    const firstIdx = sections.indexOf(problems[0].section)
+    if (firstIdx >= 0 && firstIdx !== section) setSection(firstIdx)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    toast.error(
+      problems.length === 1
+        ? problems[0].message
+        : `Faltam ${problems.length} campos obrigatórios — veja o resumo no topo.`,
+    )
   }
 
   const submit = async () => {
-    if (!usersEmailsValid()) return
+    // Trava final: valida o briefing inteiro (respeitando as seções da config).
+    const problems = validateBriefing(state, cfg, sections)
+    if (problems.length > 0) {
+      focusErrors(problems)
+      return
+    }
+    setErrors({})
     // A seção de IA só entra em `sections` quando o cliente contratou IA
     // (básica ou avançada). Se ela foi exibida, as respostas de IA valem —
     // não existe toggle "usar IA" no formulário público.
@@ -490,28 +594,16 @@ export function BriefingPublicPage() {
     }
   }
 
-  // Não deixa sair da seção de IA sem os campos marcados com * — sem eles
-  // não há como montar o prompt do agente.
-  const iaRequiredValid = (): boolean => {
-    const missing: string[] = []
-    if (!state.aiCompanyDescription.trim()) missing.push('o que a empresa faz')
-    if (!state.aiServices.trim()) missing.push('principais serviços/produtos')
-    if (!state.aiAttendanceFlow.trim()) missing.push('como a IA deve conduzir a conversa')
-    if (
-      cfg?.automationTypes.includes('ia_avancada') &&
-      !state.aiExternalWhatToQuery.trim()
-    ) {
-      missing.push('o que a IA precisa consultar no sistema externo')
-    }
-    if (missing.length === 0) return true
-    toast.error(`Preencha: ${missing.join(', ')}.`)
-    return false
-  }
-
   const next = () => {
-    // Não deixa sair da seção de usuários com e-mail inválido.
-    if (currentKey === 'usuarios' && !usersEmailsValid()) return
-    if (currentKey === 'ia' && !iaRequiredValid()) return
+    // Ao avançar, valida os obrigatórios da seção atual (mesma regra do envio),
+    // para o cliente corrigir na hora em vez de só barrar no fim.
+    const sectionErrs = validateBriefing(state, cfg, sections).filter(
+      (e) => e.section === currentKey,
+    )
+    if (sectionErrs.length > 0) {
+      focusErrors(sectionErrs)
+      return
+    }
     // On chatbot section show confirmation before advancing
     if (currentKey === 'chatbot') {
       setChatbotConfirmOpen(true)
@@ -556,6 +648,20 @@ export function BriefingPublicPage() {
           <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <strong>Solicitação de revisão:</strong>{' '}
             {client.briefing_revision_note}
+          </div>
+        )}
+
+        {/* Resumo dos campos obrigatórios que faltam (barra no topo). */}
+        {Object.keys(errors).length > 0 && (
+          <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <strong>
+              Faltam {Object.keys(errors).length} campo(s) obrigatório(s):
+            </strong>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {Object.values(errors).map((msg, i) => (
+                <li key={i}>{msg}</li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -673,6 +779,7 @@ export function BriefingPublicPage() {
                                 const users = [...state.users]
                                 users[i] = { ...users[i], name: v }
                                 setState({ ...state, users })
+                                clearError('users')
                               }}
                               placeholder="João Silva"
                             />
@@ -688,6 +795,7 @@ export function BriefingPublicPage() {
                                 // Sempre minúsculo e sem espaços nas pontas.
                                 users[i] = { ...users[i], email: v.toLowerCase().trimStart() }
                                 setState({ ...state, users })
+                                clearError('users')
                               }}
                               placeholder="joao@empresa.com"
                             />
@@ -708,6 +816,7 @@ export function BriefingPublicPage() {
                                   const users = [...state.users]
                                   users[i] = { ...users[i], sectors: next }
                                   setState({ ...state, users })
+                                  clearError('users')
                                 }}
                                 placeholder="Selecione os setores"
                               />
@@ -724,6 +833,7 @@ export function BriefingPublicPage() {
                                       .filter(Boolean),
                                   }
                                   setState({ ...state, users })
+                                  clearError('users')
                                 }}
                                 placeholder="Crie setores acima ou separe por vírgula"
                               />
@@ -787,6 +897,9 @@ export function BriefingPublicPage() {
                       Limite de {maxUsers} usuário(s) atingido.
                     </p>
                   )}
+                  {errors.users && (
+                    <p className="mt-1 text-xs font-medium text-rose-600">{errors.users}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -815,6 +928,7 @@ export function BriefingPublicPage() {
                         const sched = [...state.schedule]
                         sched[i] = { ...sched[i], active: e.target.checked }
                         setState({ ...state, schedule: sched })
+                        clearError('schedule')
                       }}
                       className="h-4 w-4 accent-[#4F8EF7]"
                     />
@@ -849,6 +963,9 @@ export function BriefingPublicPage() {
                   )}
                 </div>
               ))}
+              {errors.schedule && (
+                <p className="mt-1 text-xs font-medium text-rose-600">{errors.schedule}</p>
+              )}
               <div className="mt-2">
                 <Field label="Fuso horário">
                   <PlainSelect
@@ -916,17 +1033,23 @@ export function BriefingPublicPage() {
                       <PlainInput
                         type="email"
                         value={state.facebookEmail}
-                        onChange={(v) => setState({ ...state, facebookEmail: v })}
+                        onChange={(v) => { setState({ ...state, facebookEmail: v }); clearError('facebookEmail') }}
                         placeholder="email@dofacebook.com"
                       />
+                      {errors.facebookEmail && (
+                        <p className="mt-1 text-xs font-medium text-rose-600">{errors.facebookEmail}</p>
+                      )}
                     </Field>
                     <Field label="Senha do Facebook / Meta *">
                       <PlainInput
                         type="password"
                         value={state.facebookPassword}
-                        onChange={(v) => setState({ ...state, facebookPassword: v })}
+                        onChange={(v) => { setState({ ...state, facebookPassword: v }); clearError('facebookPassword') }}
                         placeholder="••••••••"
                       />
+                      {errors.facebookPassword && (
+                        <p className="mt-1 text-xs font-medium text-rose-600">{errors.facebookPassword}</p>
+                      )}
                     </Field>
                   </div>
                   <p className="mt-2 text-[11px] text-slate-400">
@@ -1141,12 +1264,15 @@ export function BriefingPublicPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h3 className="mb-3 text-sm font-semibold text-slate-800">Identidade da IA</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Nome da IA (ex: Ana, Max, Bia)">
+                  <Field label="Nome da IA (ex: Ana, Max, Bia) *">
                     <PlainInput
                       value={state.aiAgentName}
-                      onChange={(v) => setState({ ...state, aiAgentName: v })}
+                      onChange={(v) => { setState({ ...state, aiAgentName: v }); clearError('aiAgentName') }}
                       placeholder="Ex: Ana"
                     />
+                    {errors.aiAgentName && (
+                      <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiAgentName}</p>
+                    )}
                   </Field>
                   <Field label="Tom de comunicação">
                     <PlainSelect
@@ -1169,10 +1295,13 @@ export function BriefingPublicPage() {
                   <Field label="Descreva o que a empresa faz e para quem atende *">
                     <PlainTextarea
                       value={state.aiCompanyDescription}
-                      onChange={(v) => setState({ ...state, aiCompanyDescription: v })}
+                      onChange={(v) => { setState({ ...state, aiCompanyDescription: v }); clearError('aiCompanyDescription') }}
                       rows={3}
                       placeholder="Ex: Somos uma clínica de estética que atende mulheres entre 25 e 50 anos, oferecendo tratamentos faciais e corporais…"
                     />
+                    {errors.aiCompanyDescription && (
+                      <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiCompanyDescription}</p>
+                    )}
                   </Field>
                   <Field label="Localização (cidade, estado ou região de atendimento)">
                     <PlainInput
@@ -1198,10 +1327,13 @@ export function BriefingPublicPage() {
                   <Field label="Liste os principais serviços/produtos *">
                     <PlainTextarea
                       value={state.aiServices}
-                      onChange={(v) => setState({ ...state, aiServices: v })}
+                      onChange={(v) => { setState({ ...state, aiServices: v }); clearError('aiServices') }}
                       rows={4}
                       placeholder={'Ex:\n- Limpeza de pele: procedimento de 1h\n- Botox: tratamento para rugas\n- Depilação a laser: pacotes de 6 sessões'}
                     />
+                    {errors.aiServices && (
+                      <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiServices}</p>
+                    )}
                   </Field>
                   <div>
                     <span className="mb-1.5 block text-xs font-medium text-slate-600">
@@ -1241,18 +1373,24 @@ export function BriefingPublicPage() {
                   <Field label="Como a IA deve conduzir a conversa? *">
                     <PlainTextarea
                       value={state.aiAttendanceFlow}
-                      onChange={(v) => setState({ ...state, aiAttendanceFlow: v })}
+                      onChange={(v) => { setState({ ...state, aiAttendanceFlow: v }); clearError('aiAttendanceFlow') }}
                       rows={4}
                       placeholder={'Ex: 1. Saudar o cliente pelo nome\n2. Perguntar o que está procurando\n3. Apresentar os serviços relacionados\n4. Oferecer agendamento\n5. Se o cliente tiver dúvidas complexas, transferir para atendente'}
                     />
+                    {errors.aiAttendanceFlow && (
+                      <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiAttendanceFlow}</p>
+                    )}
                   </Field>
-                  <Field label="Quando a IA deve transferir para um atendente humano?">
+                  <Field label="Quando a IA deve transferir para um atendente humano? *">
                     <PlainTextarea
                       value={state.aiTransferConditions}
-                      onChange={(v) => setState({ ...state, aiTransferConditions: v })}
+                      onChange={(v) => { setState({ ...state, aiTransferConditions: v }); clearError('aiTransferConditions') }}
                       rows={3}
                       placeholder={'Ex:\n- Quando o cliente reclamar de um serviço\n- Quando pedir falar com um responsável\n- Quando a pergunta não tiver resposta clara\n- Fora do horário comercial'}
                     />
+                    {errors.aiTransferConditions && (
+                      <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiTransferConditions}</p>
+                    )}
                   </Field>
                   <Field label="O que a IA NÃO deve fazer ou dizer?">
                     <PlainTextarea
@@ -1285,10 +1423,13 @@ export function BriefingPublicPage() {
                     <Field label="O que a IA precisa consultar neste sistema? *">
                       <PlainTextarea
                         value={state.aiExternalWhatToQuery}
-                        onChange={(v) => setState({ ...state, aiExternalWhatToQuery: v })}
+                        onChange={(v) => { setState({ ...state, aiExternalWhatToQuery: v }); clearError('aiExternalWhatToQuery') }}
                         rows={3}
                         placeholder={'Ex:\n- Verificar status de pedido pelo CPF\n- Consultar estoque de produto\n- Ver histórico de compras do cliente\n- Confirmar agendamento'}
                       />
+                      {errors.aiExternalWhatToQuery && (
+                        <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiExternalWhatToQuery}</p>
+                      )}
                     </Field>
                     <Field label="URL da API ou webhook (se já tiver)">
                       <PlainInput
@@ -1332,13 +1473,16 @@ export function BriefingPublicPage() {
               'Precisamos de algumas informações sobre a automação externa que será integrada.'
             }
           >
-            <Field label="Informações necessárias para a automação">
+            <Field label="Informações necessárias para a automação *">
               <PlainTextarea
                 value={state.externalAutomationInfo}
-                onChange={(v) => setState({ ...state, externalAutomationInfo: v })}
+                onChange={(v) => { setState({ ...state, externalAutomationInfo: v }); clearError('externalAutomationInfo') }}
                 rows={6}
                 placeholder="Descreva as integrações, credenciais ou dados que serão necessários…"
               />
+              {errors.externalAutomationInfo && (
+                <p className="mt-1 text-xs font-medium text-rose-600">{errors.externalAutomationInfo}</p>
+              )}
             </Field>
           </SectionBlock>
         )}

@@ -34,6 +34,7 @@ import { db } from '@/services/db'
 import { api } from '@/services/api'
 import { canManageUsers } from '@/services/supabase'
 import { computeAlerts } from '@/lib/crmAlerts'
+import { STAGE_SLA_DAYS } from '@/constants/stageColors'
 import { cn } from '@/lib/utils'
 import type {
   Reminder,
@@ -41,6 +42,7 @@ import type {
   ReminderStatus,
   ReminderPriority,
 } from '@/types/ticket'
+import type { TeamMember } from '@/hooks/useTeam'
 
 // ── Labels / metadados ────────────────────────────────────────────────────────
 const KIND_META: Record<ReminderKind, { label: string; icon: React.ReactNode }> = {
@@ -129,6 +131,26 @@ function fromLocalInput(v: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
+/** Casa o texto livre do responsável (ex.: responsavelEntrega) com um membro
+ *  do time, por nome ou e-mail (case-insensitive). Retorna o id do perfil. */
+function resolveTeamId(team: TeamMember[], name?: string | null): string | undefined {
+  const n = (name ?? '').trim().toLowerCase()
+  if (!n) return undefined
+  const hit = team.find(
+    (m) => (m.name ?? '').trim().toLowerCase() === n || m.email.trim().toLowerCase() === n,
+  )
+  return hit?.id
+}
+
+/** Prazo (ISO) a partir do SLA da etapa: hoje + STAGE_SLA_DAYS[stage] dias. */
+function slaDueFromStage(stage: string): string | null {
+  const days = (STAGE_SLA_DAYS as Record<string, number | undefined>)[stage]
+  if (!days) return null
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString()
+}
+
 // ── Página ────────────────────────────────────────────────────────────────────
 export function SupportWorkspacePage() {
   const reminders = useAllReminders()
@@ -142,7 +164,9 @@ export function SupportWorkspacePage() {
 
   const [view, setView] = React.useState<'list' | 'kanban'>('list')
   const [filterKind, setFilterKind] = React.useState<ReminderKind | 'all'>('all')
-  const [filterAssignee, setFilterAssignee] = React.useState<string>('all') // all | mine | <id>
+  // Filtros rápidos (uma dimensão) + seletor de pessoa específica (outra).
+  const [quick, setQuick] = React.useState<'all' | 'mine' | 'unassigned' | 'overdue' | 'today'>('all')
+  const [filterPerson, setFilterPerson] = React.useState<string>('') // '' = qualquer pessoa
   const [editing, setEditing] = React.useState<Reminder | null | undefined>(undefined) // undefined = closed
 
   const companyOf = React.useCallback(
@@ -154,14 +178,21 @@ export function SupportWorkspacePage() {
     [clients],
   )
 
+  // Ids de donos válidos (membros atuais do time) — usado por "Sem dono" para
+  // pegar também tarefas cujo dono saiu do time (órfãs).
+  const knownOwnerIds = React.useMemo(() => new Set(team.map((m) => m.id)), [team])
+
   const filtered = React.useMemo(() => {
     return reminders.filter((r) => {
       if (filterKind !== 'all' && (r.kind ?? 'task') !== filterKind) return false
-      if (filterAssignee === 'mine' && r.userId !== myId) return false
-      if (filterAssignee !== 'all' && filterAssignee !== 'mine' && r.userId !== filterAssignee) return false
+      if (filterPerson && r.userId !== filterPerson) return false
+      if (quick === 'mine' && r.userId !== myId) return false
+      if (quick === 'unassigned' && r.userId && knownOwnerIds.has(r.userId)) return false
+      if (quick === 'overdue' && bucketOf(r.dueAt) !== 'overdue') return false
+      if (quick === 'today' && bucketOf(r.dueAt) !== 'today') return false
       return true
     })
-  }, [reminders, filterKind, filterAssignee, myId])
+  }, [reminders, filterKind, filterPerson, quick, myId, knownOwnerIds])
 
   const openTasks = React.useMemo(() => filtered.filter((r) => !r.completedAt), [filtered])
 
@@ -186,13 +217,25 @@ export function SupportWorkspacePage() {
     [filtered],
   )
 
+  // Base p/ as contagens dos chips: abertas, filtradas só por tipo/pessoa (não
+  // pelo filtro rápido) — assim "Atrasadas (N)" não zera ao escolher "Hoje".
+  const scopedOpen = React.useMemo(
+    () =>
+      reminders.filter(
+        (r) =>
+          !r.completedAt &&
+          (filterKind === 'all' || (r.kind ?? 'task') === filterKind) &&
+          (!filterPerson || r.userId === filterPerson),
+      ),
+    [reminders, filterKind, filterPerson],
+  )
   const overdueCount = React.useMemo(
-    () => openTasks.filter((r) => bucketOf(r.dueAt) === 'overdue').length,
-    [openTasks],
+    () => scopedOpen.filter((r) => bucketOf(r.dueAt) === 'overdue').length,
+    [scopedOpen],
   )
   const todayCount = React.useMemo(
-    () => openTasks.filter((r) => bucketOf(r.dueAt) === 'today').length,
-    [openTasks],
+    () => scopedOpen.filter((r) => bucketOf(r.dueAt) === 'today').length,
+    [scopedOpen],
   )
 
   // Reuniões abertas (futuras + atrasadas), ordenadas pela data.
@@ -251,16 +294,25 @@ export function SupportWorkspacePage() {
               </Chip>
             ))}
             <span className="mx-1 h-4 w-px bg-line" />
-            <Chip active={filterAssignee === 'all'} onClick={() => setFilterAssignee('all')}>
-              Todos
+            <Chip active={quick === 'all'} onClick={() => setQuick('all')}>
+              Todas
             </Chip>
-            <Chip active={filterAssignee === 'mine'} onClick={() => setFilterAssignee('mine')}>
-              Meus
+            <Chip active={quick === 'mine'} onClick={() => setQuick('mine')}>
+              Minhas
+            </Chip>
+            <Chip active={quick === 'unassigned'} onClick={() => setQuick('unassigned')}>
+              Sem dono
+            </Chip>
+            <Chip active={quick === 'overdue'} onClick={() => setQuick('overdue')}>
+              Atrasadas{overdueCount > 0 ? ` (${overdueCount})` : ''}
+            </Chip>
+            <Chip active={quick === 'today'} onClick={() => setQuick('today')}>
+              Hoje{todayCount > 0 ? ` (${todayCount})` : ''}
             </Chip>
             {team.length > 0 && (
               <select
-                value={filterAssignee === 'all' || filterAssignee === 'mine' ? '' : filterAssignee}
-                onChange={(e) => setFilterAssignee(e.target.value || 'all')}
+                value={filterPerson}
+                onChange={(e) => setFilterPerson(e.target.value)}
                 className="h-7 rounded-lg border border-line bg-elevate/[0.04] px-2 text-xs text-foreground/70 outline-none focus:border-accent/40"
               >
                 <option value="">Responsável…</option>
@@ -319,7 +371,13 @@ export function SupportWorkspacePage() {
               companyOf={companyOf}
               onOpenClient={(id) => navigate(`/clients?open=${id}`)}
             />
-            <PipelinePanel clients={clients} onConvert={(r) => setEditing(r)} />
+            <PipelinePanel
+              clients={clients}
+              team={team}
+              reminders={reminders}
+              myId={myId}
+              onConvert={(r) => setEditing(r)}
+            />
           </div>
         </div>
       </div>
@@ -626,15 +684,36 @@ const ACTIONABLE = new Set([
 
 function PipelinePanel({
   clients,
+  team,
+  reminders,
+  myId,
   onConvert,
 }: {
   clients: ReturnType<typeof useClients>
+  team: TeamMember[]
+  reminders: Reminder[]
+  myId?: string
   onConvert: (r: Reminder) => void
 }) {
   const navigate = useNavigate()
+  // Tarefas abertas já existentes, indexadas por cliente+título — pra não
+  // oferecer virar tarefa um alerta que já virou (evita duplicar).
+  const openTaskKeys = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const r of reminders) {
+      if (r.completedAt) continue
+      if (r.clientId) set.add(`${r.clientId}::${r.title.trim().toLowerCase()}`)
+    }
+    return set
+  }, [reminders])
+
   const alerts = React.useMemo(
-    () => computeAlerts(clients).filter((a) => ACTIONABLE.has(a.kind)).slice(0, 12),
-    [clients],
+    () =>
+      computeAlerts(clients)
+        .filter((a) => ACTIONABLE.has(a.kind))
+        .filter((a) => !openTaskKeys.has(`${a.client.id}::${a.title.trim().toLowerCase()}`))
+        .slice(0, 12),
+    [clients, openTaskKeys],
   )
   return (
     <section className="rounded-2xl border border-line bg-card">
@@ -667,15 +746,22 @@ function PipelinePanel({
                   onClick={() =>
                     onConvert({
                       id: '',
-                      userId: '',
+                      // Dono = responsável de ENTREGA do cliente (casado com o
+                      // time). Sem correspondência, cai para quem está clicando.
+                      userId:
+                        resolveTeamId(team, a.client.responsavelEntrega) ??
+                        resolveTeamId(team, a.client.responsavel) ??
+                        myId ??
+                        '',
                       clientId: a.client.id,
                       title: a.title,
                       notes: a.subtitle,
-                      dueAt: a.whenAt ?? null,
+                      // Prazo pelo SLA da etapa; sem SLA, usa o "quando" do alerta.
+                      dueAt: slaDueFromStage(a.client.stage) ?? a.whenAt ?? null,
                       createdAt: '',
                       kind: 'pending',
                       status: 'todo',
-                      priority: 'normal',
+                      priority: a.tone === 'danger' ? 'high' : 'normal',
                     })
                   }
                   className="text-[11px] text-foreground/55 hover:text-accent hover:underline"
@@ -730,6 +816,12 @@ function TaskModal({
     }
     if (!assignee) {
       toast.error('Selecione um responsável')
+      return
+    }
+    // Prazo obrigatório para tarefas de verdade. Anotação (note) é backlog sem
+    // data por definição, então fica isenta.
+    if (kind !== 'note' && !fromLocalInput(due)) {
+      toast.error('Defina um prazo para a tarefa')
       return
     }
     setSaving(true)

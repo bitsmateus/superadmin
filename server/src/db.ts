@@ -158,6 +158,51 @@ export async function runMigrations() {
     PRIMARY KEY (client_id, email)
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS tenant_users_email_idx ON tenant_users (email)`);
+
+  // ── Histórico de etapas (stage_history) ──────────────────────────────────
+  // Já existe no schema.sql, mas garantimos aqui de forma idempotente para
+  // ambientes que não rodaram o schema completo. A GRAVAÇÃO é feita por trigger
+  // no banco (record_stage_change) — o app NÃO insere (evita duplicar).
+  await pool.query(`CREATE TABLE IF NOT EXISTS stage_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    from_stage pipeline_stage,
+    to_stage pipeline_stage NOT NULL,
+    at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS stage_history_client_idx ON stage_history(client_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS stage_history_at_idx ON stage_history(at DESC)`);
+  // Trigger que registra a transição em toda mudança de stage (e na criação).
+  await pool.query(`CREATE OR REPLACE FUNCTION record_stage_change() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO stage_history (client_id, from_stage, to_stage, at) VALUES (NEW.id, NULL, NEW.stage, COALESCE(NEW.created_at, NOW()));
+    RETURN NEW;
+  END IF;
+  IF NEW.stage IS DISTINCT FROM OLD.stage THEN
+    INSERT INTO stage_history (client_id, from_stage, to_stage, at) VALUES (NEW.id, OLD.stage, NEW.stage, NOW());
+  END IF;
+  RETURN NEW;
+END; $$`);
+  await pool.query(`DROP TRIGGER IF EXISTS clients_record_stage_history ON clients`);
+  await pool.query(`CREATE TRIGGER clients_record_stage_history AFTER INSERT OR UPDATE OF stage ON clients
+    FOR EACH ROW EXECUTE FUNCTION record_stage_change()`);
+  // Trigger de realtime (LISTEN/NOTIFY) — só cria se a função já existir.
+  await pool.query(`DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+    DROP TRIGGER IF EXISTS notify_stage_history ON stage_history;
+    CREATE TRIGGER notify_stage_history AFTER INSERT ON stage_history
+      FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+  END IF;
+END $$`);
+  // Backfill conservador: para clientes SEM nenhum histórico (criados antes do
+  // trigger existir), cria a linha de entrada a partir de created_at. Não
+  // fabrica transições intermediárias — só garante que o cliente apareça.
+  await pool.query(`INSERT INTO stage_history (client_id, from_stage, to_stage, at)
+    SELECT c.id, NULL, c.stage, c.created_at
+    FROM clients c
+    WHERE NOT EXISTS (SELECT 1 FROM stage_history sh WHERE sh.client_id = c.id)`);
+
   console.log('[db] migrations applied');
 }
 

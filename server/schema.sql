@@ -205,6 +205,8 @@ CREATE TABLE IF NOT EXISTS clients (
 
   briefing_config JSONB,
   accesses JSONB,
+  -- Progresso da config de API Oficial e de IA (checklist com estado).
+  config_progress JSONB,
   platform_app BOOLEAN NOT NULL DEFAULT FALSE,
   platform_web BOOLEAN NOT NULL DEFAULT FALSE,
   platform_chat BOOLEAN NOT NULL DEFAULT FALSE,

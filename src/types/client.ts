@@ -140,7 +140,23 @@ export interface BriefingData {
    */
   channelAccess?: Record<string, { email?: string; password?: string; notes?: string }>
 
+  /** Acesso estruturado da API Oficial (Meta). Coletado quando a config inclui
+   *  'api_oficial'. Preferimos partner access (compartilhar BM) a senha/AnyDesk. */
+  officialApi?: OfficialApiAccess
+
   submittedAt: string
+}
+
+export type MetaVerificationStatus = 'nao_iniciada' | 'em_analise' | 'aprovada'
+export type PartnerAccessStatus = 'pendente' | 'concedido'
+
+/** Dados estruturados de acesso à API Oficial do WhatsApp (Meta/Cloud API). */
+export interface OfficialApiAccess {
+  businessManagerId?: string
+  numeroDedicado?: string
+  displayNamePretendido?: string
+  verificacaoNegocioStatus?: MetaVerificationStatus
+  partnerAccessStatus?: PartnerAccessStatus
 }
 
 export type ConnectionType = 'api_oficial' | 'api_comum'
@@ -300,6 +316,10 @@ export interface Client {
   hasIa?: boolean
   hasAutomacaoExterna?: boolean
 
+  // Estado da configuração de API Oficial e de IA (checklist com estado, não
+  // binário). Cada passo tem feito/pendente + timestamp de quando foi marcado.
+  configProgress?: ConfigProgress
+
   // Etapa 6 — Follow-up
   followUpActive: boolean
   followUps: FollowUp[]
@@ -312,6 +332,18 @@ export interface Client {
   // Geral
   notes: NoteEntry[]
   logs: LogEntry[]
+}
+
+/** Estado de um passo de configuração: feito/pendente + quando foi marcado. */
+export interface ConfigStepState {
+  done: boolean
+  at?: string | null
+}
+
+/** Progresso de configuração por área (chaves em src/constants/configProgress). */
+export interface ConfigProgress {
+  api?: Record<string, ConfigStepState>
+  ia?: Record<string, ConfigStepState>
 }
 
 export interface AppSettings {

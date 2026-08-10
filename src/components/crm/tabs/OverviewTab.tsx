@@ -39,6 +39,13 @@ import { copyToClipboard } from '@/lib/clipboard'
 import { asText, cn, formatDate, initials } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
 import type { Client, ClientAccess } from '@/types/client'
+import {
+  API_CONFIG_STEPS,
+  IA_CONFIG_STEPS,
+  META_VERIFICATION_LABELS,
+  PARTNER_ACCESS_LABELS,
+  type ConfigStepDef,
+} from '@/constants/configProgress'
 
 // Default accesses always shown when the client has none
 const DEFAULT_ACCESS_NAMES = ['Facebook', 'Instagram']
@@ -210,6 +217,9 @@ export function OverviewTab({ client }: { client: Client }) {
 
       {/* Tenant vinculado — editável (permite vincular clientes antigos à mão) */}
       <TenantLinkSection client={client} />
+
+      {/* Progresso da config de API Oficial e de IA */}
+      <ConfigProgressSection client={client} />
 
       {/* Notas */}
       <Section
@@ -402,6 +412,134 @@ export function OverviewTab({ client }: { client: Client }) {
           </ol>
         )}
       </Section>
+    </div>
+  )
+}
+
+// ─── Progresso de configuração (API Oficial + IA) ─────────────────────────────
+
+function ConfigProgressSection({ client }: { client: Client }) {
+  const cfg = client.briefingConfig
+  const isApiOficial =
+    Boolean(client.hasApiOficial) || Boolean(cfg?.connectionTypes.includes('api_oficial'))
+  const isIa =
+    Boolean(client.hasIa) ||
+    Boolean(cfg?.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada'))
+
+  // Nada a mostrar se o cliente não tem API Oficial nem IA.
+  if (!isApiOficial && !isIa) return null
+
+  const oa = client.briefingData?.officialApi
+
+  const toggleStep = (area: 'api' | 'ia', step: ConfigStepDef) => {
+    const cp = client.configProgress ?? {}
+    const areaObj = { ...(cp[area] ?? {}) }
+    const done = !(areaObj[step.key]?.done ?? false)
+    areaObj[step.key] = { done, at: done ? new Date().toISOString() : null }
+    db.updateClient(client.id, { configProgress: { ...cp, [area]: areaObj } })
+    db.addLog(
+      client.id,
+      `Config ${area === 'api' ? 'API Oficial' : 'IA'}: ${step.label} ${done ? 'concluído' : 'reaberto'}`,
+    )
+  }
+
+  const Steps = ({ area, steps }: { area: 'api' | 'ia'; steps: ConfigStepDef[] }) => {
+    const state = client.configProgress?.[area] ?? {}
+    const doneCount = steps.filter((s) => state[s.key]?.done).length
+    return (
+      <div>
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="text-xs font-medium text-foreground/70">
+            {area === 'api' ? 'Config API Oficial' : 'Config IA'}
+          </span>
+          <span className="text-[10px] text-foreground/45">
+            {doneCount}/{steps.length}
+          </span>
+        </div>
+        <div className="space-y-1">
+          {steps.map((s) => {
+            const st = state[s.key]
+            const done = Boolean(st?.done)
+            return (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => toggleStep(area, s)}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-elevate/[0.04]"
+              >
+                <span
+                  className={cn(
+                    'grid h-4 w-4 shrink-0 place-items-center rounded border',
+                    done ? 'border-success bg-success/20 text-success' : 'border-line text-transparent',
+                  )}
+                >
+                  <Check className="h-3 w-3" />
+                </span>
+                <span className={cn(done ? 'text-foreground/60 line-through' : 'text-foreground/85')}>
+                  {s.label}
+                </span>
+                {done && st?.at && (
+                  <span className="ml-auto text-[10px] text-foreground/40">{formatDate(st.at)}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Section
+      title={
+        <span className="flex items-center gap-2">
+          <ListChecks className="h-3.5 w-3.5 text-accent" />
+          Progresso da configuração
+        </span>
+      }
+    >
+      <div className="space-y-4">
+        {isApiOficial && (
+          <>
+            {/* Acesso da API Oficial coletado no briefing */}
+            {oa ? (
+              <div className="rounded-lg border border-line bg-elevate/[0.02] p-3 text-xs">
+                <div className="mb-2 font-medium text-foreground/70">Acesso API Oficial (Meta)</div>
+                <dl className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  <OaRow label="Business Manager" value={oa.businessManagerId} />
+                  <OaRow label="Número dedicado" value={oa.numeroDedicado} />
+                  <OaRow label="Display name" value={oa.displayNamePretendido} />
+                  <OaRow
+                    label="Verificação do negócio"
+                    value={oa.verificacaoNegocioStatus ? META_VERIFICATION_LABELS[oa.verificacaoNegocioStatus] : undefined}
+                  />
+                  <OaRow
+                    label="Partner access"
+                    value={oa.partnerAccessStatus ? PARTNER_ACCESS_LABELS[oa.partnerAccessStatus] : undefined}
+                  />
+                </dl>
+              </div>
+            ) : (
+              <p className="text-xs text-foreground/45">
+                Dados de acesso da API Oficial ainda não coletados no briefing.
+              </p>
+            )}
+            <Steps area="api" steps={API_CONFIG_STEPS} />
+          </>
+        )}
+        {isIa && <Steps area="ia" steps={IA_CONFIG_STEPS} />}
+      </div>
+    </Section>
+  )
+}
+
+function OaRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 sm:block">
+      <dt className="text-foreground/45">{label}</dt>
+      <dd className={cn('font-medium', value ? 'text-foreground/85' : 'text-foreground/35')}>
+        {value || '—'}
+      </dd>
     </div>
   )
 }

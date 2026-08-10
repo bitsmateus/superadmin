@@ -87,6 +87,7 @@ type ClientRow = {
   has_api_oficial: boolean | null
   has_ia: boolean | null
   has_automacao_externa: boolean | null
+  config_progress: Client['configProgress'] | null
   accesses: Client['accesses'] | null
   platform_app: boolean | null
   platform_web: boolean | null
@@ -153,6 +154,7 @@ function rowToClient(r: ClientRow): Client {
     hasApiOficial: r.has_api_oficial ?? false,
     hasIa: r.has_ia ?? false,
     hasAutomacaoExterna: r.has_automacao_externa ?? false,
+    configProgress: r.config_progress ?? undefined,
     accesses: r.accesses ?? undefined,
     platformApp: r.platform_app ?? false,
     platformWeb: r.platform_web ?? false,
@@ -217,6 +219,7 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('hasIa' in patch) out.has_ia = patch.hasIa ?? false
   if ('hasAutomacaoExterna' in patch) out.has_automacao_externa = patch.hasAutomacaoExterna ?? false
   if ('briefingConfig' in patch) out.briefing_config = patch.briefingConfig ?? null
+  if ('configProgress' in patch) out.config_progress = patch.configProgress ?? null
   if ('accesses' in patch) out.accesses = patch.accesses ?? null
   if ('platformApp' in patch) out.platform_app = patch.platformApp ?? false
   if ('platformWeb' in patch) out.platform_web = patch.platformWeb ?? false

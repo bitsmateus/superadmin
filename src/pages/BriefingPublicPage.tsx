@@ -164,12 +164,11 @@ function validateBriefing(
       errs.push({ section: 'integracoes', key: 'facebookEmail', message: 'Informe o e-mail do Facebook/Meta.' })
     if (!state.facebookPassword.trim())
       errs.push({ section: 'integracoes', key: 'facebookPassword', message: 'Informe a senha do Facebook/Meta.' })
-    if (!state.officialApi.businessManagerId.trim())
-      errs.push({ section: 'integracoes', key: 'oaBusinessManagerId', message: 'Informe o ID do Business Manager (Meta).' })
+    // Nome do portfólio empresarial é OPCIONAL (o cliente pode não saber).
     if (!state.officialApi.numeroDedicado.trim())
       errs.push({ section: 'integracoes', key: 'oaNumeroDedicado', message: 'Informe o número dedicado à API Oficial.' })
     if (!state.officialApi.displayNamePretendido.trim())
-      errs.push({ section: 'integracoes', key: 'oaDisplayName', message: 'Informe o nome de exibição (display name) pretendido.' })
+      errs.push({ section: 'integracoes', key: 'oaDisplayName', message: 'Informe o nome que aparecerá no WhatsApp para os clientes.' })
   }
 
   // ── Condicional: IA (básica ou avançada) ──
@@ -234,7 +233,7 @@ interface BriefingFormState {
   facebookEmail: string
   facebookPassword: string
   officialApi: {
-    businessManagerId: string
+    businessPortfolioName: string
     numeroDedicado: string
     displayNamePretendido: string
     verificacaoNegocioStatus: MetaVerificationStatus
@@ -286,7 +285,7 @@ function initialFormState(company: string): BriefingFormState {
     facebookEmail: '',
     facebookPassword: '',
     officialApi: {
-      businessManagerId: '',
+      businessPortfolioName: '',
       numeroDedicado: '',
       displayNamePretendido: '',
       verificacaoNegocioStatus: 'nao_iniciada',
@@ -382,7 +381,7 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     facebookEmail: bd.facebookEmail ?? base.facebookEmail,
     facebookPassword: bd.facebookPassword ?? base.facebookPassword,
     officialApi: {
-      businessManagerId: bd.officialApi?.businessManagerId ?? base.officialApi.businessManagerId,
+      businessPortfolioName: bd.officialApi?.businessPortfolioName ?? base.officialApi.businessPortfolioName,
       numeroDedicado: bd.officialApi?.numeroDedicado ?? base.officialApi.numeroDedicado,
       displayNamePretendido:
         bd.officialApi?.displayNamePretendido ?? base.officialApi.displayNamePretendido,
@@ -574,7 +573,7 @@ export function BriefingPublicPage() {
       facebookPassword: state.facebookPassword.trim() || undefined,
       officialApi: cfg?.connectionTypes.includes('api_oficial')
         ? {
-            businessManagerId: state.officialApi.businessManagerId.trim() || undefined,
+            businessPortfolioName: state.officialApi.businessPortfolioName.trim() || undefined,
             numeroDedicado: state.officialApi.numeroDedicado.trim() || undefined,
             displayNamePretendido: state.officialApi.displayNamePretendido.trim() || undefined,
             verificacaoNegocioStatus: state.officialApi.verificacaoNegocioStatus,
@@ -1110,18 +1109,14 @@ export function BriefingPublicPage() {
                       controle. Basta adicionar nossa agência como parceira nas configurações do BM.
                     </p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <Field label="ID do Business Manager (Meta) *">
+                      <Field label="Nome do portfólio empresarial (Meta) — opcional">
                         <PlainInput
-                          value={state.officialApi.businessManagerId}
-                          onChange={(v) => {
-                            setState({ ...state, officialApi: { ...state.officialApi, businessManagerId: v } })
-                            clearError('oaBusinessManagerId')
-                          }}
-                          placeholder="Ex: 123456789012345"
+                          value={state.officialApi.businessPortfolioName}
+                          onChange={(v) =>
+                            setState({ ...state, officialApi: { ...state.officialApi, businessPortfolioName: v } })
+                          }
+                          placeholder="Nome do portfólio/negócio no Meta Business (se souber)"
                         />
-                        {errors.oaBusinessManagerId && (
-                          <p className="mt-1 text-xs font-medium text-rose-600">{errors.oaBusinessManagerId}</p>
-                        )}
                       </Field>
                       <Field label="Número dedicado à API Oficial *">
                         <PlainInput
@@ -1136,7 +1131,7 @@ export function BriefingPublicPage() {
                           <p className="mt-1 text-xs font-medium text-rose-600">{errors.oaNumeroDedicado}</p>
                         )}
                       </Field>
-                      <Field label="Nome de exibição pretendido (display name) *">
+                      <Field label="Nome que aparecerá no WhatsApp (para os clientes verem) *">
                         <PlainInput
                           value={state.officialApi.displayNamePretendido}
                           onChange={(v) => {

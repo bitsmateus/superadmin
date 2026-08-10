@@ -152,8 +152,10 @@ export type PartnerAccessStatus = 'pendente' | 'concedido'
 
 /** Dados estruturados de acesso à API Oficial do WhatsApp (Meta/Cloud API). */
 export interface OfficialApiAccess {
-  businessManagerId?: string
+  /** Nome do portfólio empresarial (Meta) — opcional; o cliente pode não saber. */
+  businessPortfolioName?: string
   numeroDedicado?: string
+  /** Nome que aparecerá para os clientes no WhatsApp (display name). */
   displayNamePretendido?: string
   verificacaoNegocioStatus?: MetaVerificationStatus
   partnerAccessStatus?: PartnerAccessStatus

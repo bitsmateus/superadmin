@@ -506,9 +506,9 @@ function ConfigProgressSection({ client }: { client: Client }) {
               <div className="rounded-lg border border-line bg-elevate/[0.02] p-3 text-xs">
                 <div className="mb-2 font-medium text-foreground/70">Acesso API Oficial (Meta)</div>
                 <dl className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                  <OaRow label="Business Manager" value={oa.businessManagerId} />
+                  <OaRow label="Portfólio empresarial" value={oa.businessPortfolioName} />
                   <OaRow label="Número dedicado" value={oa.numeroDedicado} />
-                  <OaRow label="Display name" value={oa.displayNamePretendido} />
+                  <OaRow label="Nome no WhatsApp (display)" value={oa.displayNamePretendido} />
                   <OaRow
                     label="Verificação do negócio"
                     value={oa.verificacaoNegocioStatus ? META_VERIFICATION_LABELS[oa.verificacaoNegocioStatus] : undefined}

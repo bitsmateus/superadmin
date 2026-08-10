@@ -4,13 +4,11 @@ import {
   ChevronDown,
   ClipboardList,
   ExternalLink,
-  FileText,
   ListChecks,
   Loader2,
   MessageSquare,
   Send,
   Trash2,
-  Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Drawer } from '@/components/ui/Drawer'
@@ -20,8 +18,6 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { StageBadge } from './StageBadge'
 import { OverviewTab } from './tabs/OverviewTab'
-import { ContractTab } from './tabs/ContractTab'
-import { FinanceTab } from './tabs/FinanceTab'
 import { BriefingTab } from './tabs/BriefingTab'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
@@ -29,7 +25,7 @@ import { FichaTab } from './tabs/FichaTab'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
-import { canDeleteClient, canSeeFinancials } from '@/services/supabase'
+import { canDeleteClient } from '@/services/supabase'
 import { db } from '@/services/db'
 import { useServerById } from '@/store/authStore'
 import { useAccessStore } from '@/store/accessStore'
@@ -48,8 +44,6 @@ const TAB_DEFS: TabDef[] = [
   { value: 'briefing', label: 'Briefing', icon: <MessageSquare className="h-3.5 w-3.5" /> },
   { value: 'delivery', label: 'Entrega', icon: <ListChecks className="h-3.5 w-3.5" /> },
   { value: 'followup', label: 'Follow-up', icon: <Send className="h-3.5 w-3.5" /> },
-  { value: 'contract', label: 'Contrato', icon: <FileText className="h-3.5 w-3.5" /> },
-  { value: 'finance', label: 'Financeiro', icon: <Wallet className="h-3.5 w-3.5" /> },
   { value: 'ficha', label: 'Ficha de cadastro', icon: <ClipboardList className="h-3.5 w-3.5" /> },
 ]
 
@@ -72,7 +66,6 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
   const [confirmArchive, setConfirmArchive] = React.useState(false)
   const [user] = useCurrentUser()
   const { profile } = useAuth()
-  const seeFinancials = canSeeFinancials(profile?.role)
   const canDelete = canDeleteClient(profile?.role)
   const { systemUrl } = useAccessStore()
   const tenantServer = useServerById(client?.tenantServerId)
@@ -219,19 +212,13 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
           </div>
         }
       >
-        {(() => {
-          const contractFinalized = Boolean(
-            client.contractSignedAt && client.asaasPaymentId,
-          )
-          const finalizedValues = new Set<string>()
-          if (contractFinalized) finalizedValues.add('contract')
-
-          // Suporte não vê Contrato nem Financeiro.
-          const visibleDefs = seeFinancials
-            ? TAB_DEFS
-            : TAB_DEFS.filter((t) => t.value !== 'contract' && t.value !== 'finance')
-
-          const toTabItem = (t: TabDef) => ({
+        <Tabs
+          value={tab}
+          onChange={(v) => {
+            setTab(v)
+            setStageMenu(false)
+          }}
+          items={TAB_DEFS.map((t) => ({
             value: t.value,
             label: (
               <span className="inline-flex items-center gap-1.5">
@@ -239,36 +226,11 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
                 {t.label}
               </span>
             ),
-          })
-
-          const activeItems = visibleDefs
-            .filter((t) => !finalizedValues.has(t.value))
-            .map(toTabItem)
-          const rightItems = visibleDefs
-            .filter((t) => finalizedValues.has(t.value))
-            .map(toTabItem)
-
-          return (
-            <Tabs
-              value={tab}
-              onChange={(v) => {
-                setTab(v)
-                setStageMenu(false)
-              }}
-              items={activeItems}
-              rightItems={rightItems}
-            />
-          )
-        })()}
+          }))}
+        />
 
         <div className="p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
-          {tab === 'contract' && seeFinancials && (
-            <ContractTab client={client} />
-          )}
-          {tab === 'finance' && seeFinancials && (
-            <FinanceTab client={client} />
-          )}
           {tab === 'briefing' && <BriefingTab client={client} />}
           {tab === 'delivery' && <DeliveryTab client={client} />}
           {tab === 'followup' && <FollowUpTab client={client} />}

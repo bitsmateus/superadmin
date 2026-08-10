@@ -138,3 +138,29 @@ export const STAGE_SLA_DAYS: Partial<Record<PipelineStage, number>> = {
   delivery: 3,
   delivered: 30,
 }
+
+/** Etapas que têm SLA configurável (as demais — lead/active/churned — não). */
+export const SLA_STAGES: PipelineStage[] = [
+  'welcome',
+  'contract',
+  'briefing',
+  'setup_start',
+  'setup',
+  'setup_done',
+  'delivery',
+  'delivered',
+]
+
+/**
+ * SLA (em dias) da etapa: usa o override das configurações quando presente
+ * (número > 0); senão cai para o default de STAGE_SLA_DAYS. Retorna undefined
+ * para etapas sem SLA (lead/active/churned).
+ */
+export function resolveStageSla(
+  stage: PipelineStage,
+  overrides?: Partial<Record<PipelineStage, number>>,
+): number | undefined {
+  const o = overrides?.[stage]
+  if (typeof o === 'number' && o > 0) return o
+  return STAGE_SLA_DAYS[stage]
+}

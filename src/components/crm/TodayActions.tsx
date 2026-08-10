@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
-import { useClients, useCurrentUser } from '@/hooks/useClients'
+import { useClients, useCurrentUser, useSettings } from '@/hooks/useClients'
 import { computeAlerts, type AlertKind, type CrmAlert } from '@/lib/crmAlerts'
 import { db } from '@/services/db'
 import { cn } from '@/lib/utils'
@@ -64,10 +64,14 @@ function clientOwners(c: {
 export function TodayActions() {
   const clients = useClients()
   const [currentUser] = useCurrentUser()
+  const settings = useSettings()
   const [openId, setOpenId] = React.useState<string | null>(null)
   const [filter, setFilter] = React.useState<string>('all') // 'all' | 'mine' | <nome>
 
-  const alerts = React.useMemo(() => computeAlerts(clients), [clients])
+  const alerts = React.useMemo(
+    () => computeAlerts(clients, settings.slaByStage),
+    [clients, settings.slaByStage],
+  )
 
   // Responsáveis distintos (comercial + entrega) pra montar o filtro.
   const responsaveis = React.useMemo(() => {

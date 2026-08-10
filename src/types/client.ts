@@ -390,6 +390,9 @@ export interface AppSettings {
   evolution?: EvolutionConfig
   /** Servidores UAZAPI para reconciliar o status real dos canais. */
   uazapi?: UazapiServer[]
+  /** SLA (em dias) por etapa do pipeline. Sobrescreve os defaults de
+   *  STAGE_SLA_DAYS. Etapas ausentes usam o default. */
+  slaByStage?: Partial<Record<PipelineStage, number>>
 }
 
 export interface EvolutionConfig {

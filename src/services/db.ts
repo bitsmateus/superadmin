@@ -253,6 +253,7 @@ type SettingsRow = {
   support_group: AppSettings['supportGroup'] | null
   evolution: AppSettings['evolution'] | null
   uazapi: AppSettings['uazapi'] | null
+  sla_by_stage: AppSettings['slaByStage'] | null
 }
 
 function rowToSettings(r: SettingsRow | null): AppSettings {
@@ -279,6 +280,7 @@ function rowToSettings(r: SettingsRow | null): AppSettings {
     supportGroup: r.support_group ?? undefined,
     evolution: r.evolution ?? undefined,
     uazapi: r.uazapi ?? undefined,
+    slaByStage: r.sla_by_stage ?? undefined,
   }
 }
 
@@ -306,6 +308,7 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
     support_group: s.supportGroup ?? null,
     evolution: s.evolution ?? null,
     uazapi: s.uazapi ?? null,
+    sla_by_stage: s.slaByStage ?? null,
   }
 }
 

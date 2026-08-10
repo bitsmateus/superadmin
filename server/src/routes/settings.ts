@@ -126,9 +126,9 @@ export async function settingsRoutes(app: FastifyInstance) {
           followups_enabled, followup_templates,
           nps_delay_days, nps_enabled, notify_edge_function_url, notify_enabled,
           goal_new_clients_monthly, goal_mrr_monthly, goal_nps_monthly, goals_enabled,
-          last_backup_at, backup_remind_days, servers, support_group, evolution, uazapi, updated_at
+          last_backup_at, backup_remind_days, servers, support_group, evolution, uazapi, sla_by_stage, updated_at
         ) VALUES (
-          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW()
+          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           asaas_api_key = EXCLUDED.asaas_api_key,
@@ -153,6 +153,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           support_group = COALESCE(EXCLUDED.support_group, settings.support_group),
           evolution = COALESCE(EXCLUDED.evolution, settings.evolution),
           uazapi = COALESCE(EXCLUDED.uazapi, settings.uazapi),
+          sla_by_stage = COALESCE(EXCLUDED.sla_by_stage, settings.sla_by_stage),
           updated_at = NOW()
         RETURNING *`,
         [
@@ -171,6 +172,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           supportGroupParam,
           evolutionParam,
           uazapiParam,
+          b.sla_by_stage ? JSON.stringify(b.sla_by_stage) : null,
         ]
       );
       return row;

@@ -98,6 +98,8 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS evolution JSONB`);
   // Servidores UAZAPI ([{url, token}]) para reconciliar status real dos canais.
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS uazapi JSONB`);
+  // SLA (dias) por etapa do pipeline — configurável nas Configurações.
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS sla_by_stage JSONB`);
   // Config de aviso por canal (liga/desliga + número que recebe). O aviso NUNCA
   // vai pro cliente — só pro alert_number configurado. last_status/last_alert_at
   // controlam o "1x por queda".

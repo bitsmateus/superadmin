@@ -19,6 +19,7 @@ import {
   Volume2,
   XCircle,
 } from 'lucide-react'
+import { Timer } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
@@ -29,6 +30,8 @@ import {
   DEFAULT_FOLLOWUP_TEMPLATES,
   FOLLOWUP_DAYS,
 } from '@/constants/followup'
+import { STAGE_COLORS, SLA_STAGES, STAGE_SLA_DAYS } from '@/constants/stageColors'
+import type { PipelineStage } from '@/types/client'
 import { asaasApi } from '@/services/asaas'
 import { useCurrentUser, useSettings } from '@/hooks/useClients'
 import { extractErrorMessage } from '@/api/client'
@@ -39,6 +42,7 @@ export function CrmSettingsSection() {
     <div className="space-y-6">
       <UserNameBlock />
       <NotificationsBlock />
+      <StageSlaBlock />
       <NpsBlock />
       <AsaasBlock />
       <CredentialsBlock />
@@ -426,6 +430,83 @@ function NotificationsBlock() {
             leftIcon={<Save className="h-4 w-4" />}
           >
             Salvar notificações
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function StageSlaBlock() {
+  const settings = useSettings()
+  // Estado local: dias por etapa (string pros inputs). Vazio = usar default.
+  const [vals, setVals] = React.useState<Record<string, string>>({})
+
+  React.useEffect(() => {
+    const next: Record<string, string> = {}
+    for (const st of SLA_STAGES) {
+      const override = settings.slaByStage?.[st]
+      next[st] = override != null ? String(override) : ''
+    }
+    setVals(next)
+  }, [settings.slaByStage])
+
+  const currentOverride = (st: PipelineStage) => settings.slaByStage?.[st]
+  const dirty = SLA_STAGES.some((st) => {
+    const raw = (vals[st] ?? '').trim()
+    const parsed = raw === '' ? undefined : Math.max(1, Number(raw) || 0) || undefined
+    return parsed !== currentOverride(st)
+  })
+
+  const save = () => {
+    const slaByStage: Partial<Record<PipelineStage, number>> = {}
+    for (const st of SLA_STAGES) {
+      const raw = (vals[st] ?? '').trim()
+      if (raw === '') continue // vazio = usar o default
+      const n = Math.max(1, Math.round(Number(raw)))
+      if (Number.isFinite(n) && n > 0) slaByStage[st] = n
+    }
+    db.saveSettings({
+      ...db.getSettings(),
+      slaByStage: Object.keys(slaByStage).length > 0 ? slaByStage : undefined,
+    })
+    toast.success('SLA por etapa salvo')
+  }
+
+  return (
+    <section>
+      <header className="mb-3 flex items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+          <Timer className="h-3.5 w-3.5" />
+        </span>
+        <div>
+          <h2 className="text-sm font-medium text-foreground">SLA por etapa</h2>
+          <p className="text-xs text-foreground/45">
+            Prazo (em dias) esperado em cada etapa. Alimenta o aging do pipeline,
+            os "clientes parados" e os alertas. Deixe em branco para usar o padrão.
+          </p>
+        </div>
+      </header>
+
+      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {SLA_STAGES.map((st) => (
+            <div key={st}>
+              <Input
+                label={STAGE_COLORS[st].label}
+                type="number"
+                min={1}
+                max={365}
+                value={vals[st] ?? ''}
+                onChange={(e) => setVals((v) => ({ ...v, [st]: e.target.value }))}
+                placeholder={`Padrão: ${STAGE_SLA_DAYS[st] ?? '—'}`}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={save} disabled={!dirty} leftIcon={<Save className="h-4 w-4" />}>
+            Salvar SLA
           </Button>
         </div>
       </div>

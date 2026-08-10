@@ -25,7 +25,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { StageBadge } from '@/components/crm/StageBadge'
-import { useClients } from '@/hooks/useClients'
+import { useClients, useSettings } from '@/hooks/useClients'
 import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
 import { db } from '@/services/db'
 import {
@@ -33,7 +33,7 @@ import {
   PREV_STAGE,
   PIPELINE_STAGES,
   STAGE_COLORS,
-  STAGE_SLA_DAYS,
+  resolveStageSla,
 } from '@/constants/stageColors'
 import { asText, cn, formatDateShort, formatDateTimeShort, initials } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
@@ -481,8 +481,9 @@ function ListGroup({
  * estourado). Ajuda o time a não deixar cliente esquecido numa etapa.
  */
 function StageAgeBadge({ stage, since }: { stage: PipelineStage; since: string }) {
+  const settings = useSettings()
   const days = daysSince(since)
-  const sla = STAGE_SLA_DAYS[stage]
+  const sla = resolveStageSla(stage, settings.slaByStage)
   let cls = 'bg-elevate/[0.05] text-foreground/55 ring-line'
   let title = `${days} dia(s) nesta etapa`
   if (sla != null) {

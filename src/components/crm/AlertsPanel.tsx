@@ -15,7 +15,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
-import { useClients } from '@/hooks/useClients'
+import { useClients, useSettings } from '@/hooks/useClients'
 import { computeAlerts, type AlertKind, type CrmAlert } from '@/lib/crmAlerts'
 import { db } from '@/services/db'
 import { STAGE_COLORS } from '@/constants/stageColors'
@@ -107,7 +107,11 @@ const PANELS: PanelDef[] = [
 
 export function AlertsPanel() {
   const clients = useClients()
-  const alerts = React.useMemo(() => computeAlerts(clients), [clients])
+  const settings = useSettings()
+  const alerts = React.useMemo(
+    () => computeAlerts(clients, settings.slaByStage),
+    [clients, settings.slaByStage],
+  )
   const [openId, setOpenId] = React.useState<string | null>(null)
 
   const grouped = React.useMemo(() => {

@@ -43,6 +43,7 @@ import type {
   ReminderPriority,
 } from '@/types/ticket'
 import type { TeamMember } from '@/hooks/useTeam'
+import type { PipelineStage } from '@/types/client'
 
 // ── Labels / metadados ────────────────────────────────────────────────────────
 const KIND_META: Record<ReminderKind, { label: string; icon: React.ReactNode }> = {
@@ -376,6 +377,7 @@ export function SupportWorkspacePage() {
               team={team}
               reminders={reminders}
               myId={myId}
+              slaByStage={settings.slaByStage}
               onConvert={(r) => setEditing(r)}
             />
           </div>
@@ -687,12 +689,14 @@ function PipelinePanel({
   team,
   reminders,
   myId,
+  slaByStage,
   onConvert,
 }: {
   clients: ReturnType<typeof useClients>
   team: TeamMember[]
   reminders: Reminder[]
   myId?: string
+  slaByStage?: Partial<Record<PipelineStage, number>>
   onConvert: (r: Reminder) => void
 }) {
   const navigate = useNavigate()
@@ -709,11 +713,11 @@ function PipelinePanel({
 
   const alerts = React.useMemo(
     () =>
-      computeAlerts(clients)
+      computeAlerts(clients, slaByStage)
         .filter((a) => ACTIONABLE.has(a.kind))
         .filter((a) => !openTaskKeys.has(`${a.client.id}::${a.title.trim().toLowerCase()}`))
         .slice(0, 12),
-    [clients, openTaskKeys],
+    [clients, openTaskKeys, slaByStage],
   )
   return (
     <section className="rounded-2xl border border-line bg-card">

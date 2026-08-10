@@ -1,5 +1,6 @@
 import { daysSince, isSameDay } from './time'
-import type { Client, FollowUp } from '@/types/client'
+import { resolveStageSla } from '@/constants/stageColors'
+import type { Client, FollowUp, PipelineStage } from '@/types/client'
 
 /**
  * Alertas exibidos no Dashboard principal. Focados no fluxo de
@@ -33,8 +34,13 @@ export interface CrmAlert {
 const SETUP_DEADLINE_DAYS = 3
 const DAY_MS = 24 * 60 * 60 * 1000
 
-export function computeAlerts(clients: Client[]): CrmAlert[] {
+export function computeAlerts(
+  clients: Client[],
+  slaByStage?: Partial<Record<PipelineStage, number>>,
+): CrmAlert[] {
   const out: CrmAlert[] = []
+  // Prazo de configuração = SLA da etapa "setup" (configurável), com fallback.
+  const setupDeadlineDays = resolveStageSla('setup', slaByStage) ?? SETUP_DEADLINE_DAYS
   const now = new Date()
   const todayStart = startOfDay(now)
   const weekAgo = todayStart - 7 * DAY_MS
@@ -131,7 +137,7 @@ export function computeAlerts(clients: Client[]): CrmAlert[] {
       const startedAt = c.stageUpdatedAt
         ? new Date(c.stageUpdatedAt).getTime()
         : now.getTime()
-      const deadlineMs = startedAt + SETUP_DEADLINE_DAYS * DAY_MS
+      const deadlineMs = startedAt + setupDeadlineDays * DAY_MS
       const deadlineDate = new Date(deadlineMs)
       const daysToDeadline = Math.ceil(
         (deadlineMs - now.getTime()) / DAY_MS,

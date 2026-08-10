@@ -1,8 +1,8 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowRight } from 'lucide-react'
-import { useClients } from '@/hooks/useClients'
-import { STAGE_COLORS, STAGE_SLA_DAYS } from '@/constants/stageColors'
+import { useClients, useSettings } from '@/hooks/useClients'
+import { STAGE_COLORS, resolveStageSla } from '@/constants/stageColors'
 import { daysSince } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import type { Client, PipelineStage } from '@/types/client'
@@ -20,18 +20,19 @@ interface StuckRow {
  */
 export function StuckClients() {
   const clients = useClients()
+  const settings = useSettings()
   const navigate = useNavigate()
 
   const stuck = React.useMemo<StuckRow[]>(() => {
     const out: StuckRow[] = []
     for (const c of clients) {
-      const sla = STAGE_SLA_DAYS[c.stage]
+      const sla = resolveStageSla(c.stage, settings.slaByStage)
       if (sla == null) continue // lead/active/churned não têm SLA
       const days = daysSince(c.stageUpdatedAt ?? c.createdAt)
       if (days > sla) out.push({ client: c, stage: c.stage, days, over: days - sla })
     }
     return out.sort((a, b) => b.over - a.over)
-  }, [clients])
+  }, [clients, settings.slaByStage])
 
   return (
     <section className="rounded-xl border border-line bg-card p-5">

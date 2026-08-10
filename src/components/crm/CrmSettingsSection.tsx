@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  ListChecks,
   Mail,
   Phone,
   Save,
@@ -31,6 +32,7 @@ import {
   FOLLOWUP_DAYS,
 } from '@/constants/followup'
 import { STAGE_COLORS, SLA_STAGES, STAGE_SLA_DAYS } from '@/constants/stageColors'
+import { DEFAULT_SETUP_WIP_LIMIT } from '@/constants/setupQueue'
 import type { PipelineStage } from '@/types/client'
 import { asaasApi } from '@/services/asaas'
 import { useCurrentUser, useSettings } from '@/hooks/useClients'
@@ -43,6 +45,7 @@ export function CrmSettingsSection() {
       <UserNameBlock />
       <NotificationsBlock />
       <StageSlaBlock />
+      <SetupQueueBlock />
       <NpsBlock />
       <AsaasBlock />
       <CredentialsBlock />
@@ -507,6 +510,66 @@ function StageSlaBlock() {
         <div className="flex justify-end">
           <Button onClick={save} disabled={!dirty} leftIcon={<Save className="h-4 w-4" />}>
             Salvar SLA
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/** Limite de configurações simultâneas por responsável de entrega. */
+function SetupQueueBlock() {
+  const settings = useSettings()
+  const [value, setValue] = React.useState(
+    String(settings.setupWipLimit ?? DEFAULT_SETUP_WIP_LIMIT),
+  )
+
+  React.useEffect(() => {
+    setValue(String(settings.setupWipLimit ?? DEFAULT_SETUP_WIP_LIMIT))
+  }, [settings.setupWipLimit])
+
+  const parsed = Math.max(1, Math.round(Number(value) || 0))
+  const dirty =
+    Number.isFinite(parsed) &&
+    parsed > 0 &&
+    parsed !== (settings.setupWipLimit ?? DEFAULT_SETUP_WIP_LIMIT)
+
+  const save = () => {
+    db.saveSettings({ ...db.getSettings(), setupWipLimit: parsed })
+    toast.success(`Limite salvo: ${parsed} por responsável`)
+  }
+
+  return (
+    <section>
+      <header className="mb-3 flex items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+          <ListChecks className="h-3.5 w-3.5" />
+        </span>
+        <div>
+          <h2 className="text-sm font-medium text-foreground">Fila de configuração</h2>
+          <p className="text-xs text-foreground/45">
+            Quantas configurações cada responsável de entrega pode ter em
+            "fazendo agora" ao mesmo tempo. Ao estourar, o pipeline avisa antes
+            de puxar o próximo da fila.
+          </p>
+        </div>
+      </header>
+
+      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+        <div className="max-w-[220px]">
+          <Input
+            label="Configurações simultâneas por pessoa"
+            type="number"
+            min={1}
+            max={10}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={`Padrão: ${DEFAULT_SETUP_WIP_LIMIT}`}
+          />
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={save} disabled={!dirty} leftIcon={<Save className="h-4 w-4" />}>
+            Salvar limite
           </Button>
         </div>
       </div>

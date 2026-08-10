@@ -2,6 +2,7 @@ import * as React from 'react'
 import {
   AlertCircle,
   Bot,
+  CalendarClock,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -11,6 +12,7 @@ import {
   Link2,
   ListChecks,
   Loader2,
+  MessageSquare,
   PenLine,
   Plus,
   RefreshCw,
@@ -45,6 +47,15 @@ import {
   setChecklistItem,
   toggleChecklistItem,
 } from '@/constants/checklist'
+import { computeReadiness } from '@/constants/readiness'
+import {
+  SESSION_PHASE_LABELS,
+  buildPreSessionSteps,
+  buildSessionChecklist,
+  buildSessionInvite,
+  buildSessionSteps,
+  type SessionPhase,
+} from '@/constants/sessionScript'
 import { asText, cn, formatDate, normalizeWhatsappNumber } from '@/lib/utils'
 import type {
   Client,
@@ -60,7 +71,7 @@ import type {
   AiTone,
 } from '@/types/client'
 
-type SubView = 'briefing' | 'automation'
+type SubView = 'briefing' | 'automation' | 'sessao'
 
 const emptyConfig: BriefingConfig = {
   connectionTypes: [],
@@ -525,6 +536,8 @@ export function BriefingTab({ client }: { client: Client }) {
           {subView === 'automation' && (
             <AutomationView client={client} />
           )}
+
+          {subView === 'sessao' && <SessionView client={client} />}
         </>
       )}
       </>
@@ -664,6 +677,339 @@ function BriefingStatusBadge({ status }: { status: BriefingStatus }) {
   return <Badge tone={v.tone}>{v.label}</Badge>
 }
 
+// ── Sessão de ativação ────────────────────────────────────────────────────────
+
+/** `2026-08-10T14:30:00Z` → `2026-08-10T14:30` (formato do input local). */
+function toLocalInput(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/**
+ * Roteiro da sessão com o cliente. Separa o que a equipe faz sozinha (antes)
+ * do que exige o cliente presente — e coloca a API Oficial antes de chatbot/IA,
+ * que é a ordem real de dependência.
+ */
+function SessionView({ client }: { client: Client }) {
+  const [user] = useCurrentUser()
+  const [inviteOpen, setInviteOpen] = React.useState(false)
+  const [invite, setInvite] = React.useState('')
+  const [sending, setSending] = React.useState(false)
+
+  const cfg = client.briefingConfig ?? null
+  const bd = client.briefingData ?? null
+
+  const readiness = React.useMemo(() => computeReadiness(client), [client])
+
+  // Estado do trabalho assíncrono: lido do checklist de entrega já existente.
+  const deliveryTree = React.useMemo(
+    () => enrichChecklistFromBriefing(client.deliveryChecklist, bd ?? undefined, cfg),
+    [client.deliveryChecklist, bd, cfg],
+  )
+  const doneIds = React.useMemo(() => {
+    const set = new Set<string>()
+    const walk = (items: ChecklistItem[]) => {
+      for (const it of items) {
+        if (it.checked) set.add(it.id)
+        if (it.children) walk(it.children)
+      }
+    }
+    walk(deliveryTree)
+    return set
+  }, [deliveryTree])
+
+  const preSteps = React.useMemo(() => buildPreSessionSteps(cfg, bd), [cfg, bd])
+  const preDone = preSteps.filter((s) => doneIds.has(s.id)).length
+
+  const sessionSteps = React.useMemo(() => buildSessionSteps(cfg, bd), [cfg, bd])
+  const sessionItems = React.useMemo(
+    () => buildSessionChecklist(client.sessionChecklist, cfg, bd),
+    [client.sessionChecklist, cfg, bd],
+  )
+  const stepById = React.useMemo(
+    () => new Map(sessionSteps.map((s) => [s.id, s])),
+    [sessionSteps],
+  )
+  const sessionDone = sessionItems.filter((i) => i.checked).length
+
+  const toggle = (item: ChecklistItem) => {
+    if (!item.checked && !user) {
+      toast.error('Defina seu nome em Configurações antes de marcar itens.')
+      return
+    }
+    const next = toggleChecklistItem(sessionItems, item.id, user)
+    db.updateClient(client.id, { sessionChecklist: next })
+    db.addLog(
+      client.id,
+      'Roteiro da sessão',
+      `${item.label}: ${!item.checked ? 'concluído' : 'desmarcado'}`,
+    )
+  }
+
+  const saveDate = (v: string) => {
+    const iso = v ? new Date(v).toISOString() : undefined
+    db.updateClient(client.id, { deliveryDate: iso })
+    db.addLog(client.id, iso ? 'Sessão agendada' : 'Agendamento removido', iso ? formatDate(iso) : undefined)
+  }
+
+  const openInvite = () => {
+    setInvite(buildSessionInvite(client, client.deliveryDate))
+    setInviteOpen(true)
+  }
+
+  const sendInvite = async () => {
+    const number = normalizeWhatsappNumber(client.briefingNumber || client.phone)
+    if (!number) {
+      toast.error('Cliente sem número de WhatsApp cadastrado.')
+      return
+    }
+    setSending(true)
+    try {
+      await api.post('/api/whatsapp/send', { number, text: invite })
+      db.addLog(client.id, 'Convite da sessão enviado', client.deliveryDate ? formatDate(client.deliveryDate) : undefined)
+      toast.success('Convite enviado')
+      setInviteOpen(false)
+    } catch (err) {
+      toast.error('Falha ao enviar: ' + extractErrorMessage(err, 'erro'))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  // Agrupa o roteiro pelas fases, preservando a ordem definida no script.
+  const phases: SessionPhase[] = []
+  for (const s of sessionSteps) {
+    if (!phases.includes(s.phase)) phases.push(s.phase)
+  }
+
+  return (
+    <div className="space-y-4">
+      {!readiness.ready && (
+        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            O cliente ainda tem {readiness.blockers.length} pendência
+            {readiness.blockers.length === 1 ? '' : 's'}. Resolva antes de
+            agendar — a sessão trava no meio sem isso.
+          </span>
+        </div>
+      )}
+
+      {/* Agendamento */}
+      <Section
+        title={
+          <span className="flex items-center gap-2">
+            <CalendarClock className="h-3.5 w-3.5 text-accent" />
+            Reunião de ativação
+          </span>
+        }
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] uppercase tracking-wider text-foreground/45">
+              Data e hora
+            </span>
+            <input
+              type="datetime-local"
+              value={toLocalInput(client.deliveryDate)}
+              onChange={(e) => saveDate(e.target.value)}
+              className="h-10 rounded-lg border border-line bg-surface px-3 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+            />
+          </label>
+          <Button
+            variant="secondary"
+            onClick={openInvite}
+            leftIcon={<Send className="h-3.5 w-3.5" />}
+          >
+            Enviar pré-requisitos
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-foreground/45">
+          A configuração é feita antes, sem o cliente. Na reunião ficam só as
+          conexões, os testes e o treinamento — cerca de 1 hora.
+        </p>
+      </Section>
+
+      {/* Antes da reunião */}
+      <Section
+        title="Antes da reunião (sem o cliente)"
+        action={
+          <span
+            className={cn(
+              'text-[11px] font-medium',
+              preDone === preSteps.length ? 'text-success' : 'text-foreground/45',
+            )}
+          >
+            {preDone}/{preSteps.length}
+          </span>
+        }
+      >
+        <ul className="space-y-1.5">
+          {preSteps.map((s) => {
+            const done = doneIds.has(s.id)
+            return (
+              <li key={s.id} className="flex items-start gap-2 text-xs">
+                <span
+                  className={cn(
+                    'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border',
+                    done
+                      ? 'border-success bg-success/20 text-success'
+                      : 'border-line text-transparent',
+                  )}
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                </span>
+                <div className="min-w-0">
+                  <div className={cn(done ? 'text-foreground/50 line-through' : 'text-foreground/85')}>
+                    {s.label}
+                  </div>
+                  {s.detail && !done && (
+                    <div className="text-foreground/45">{s.detail}</div>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+        <p className="mt-2 text-[11px] text-foreground/40">
+          Marcado automaticamente pelo checklist da aba Automação.
+        </p>
+      </Section>
+
+      {/* Roteiro da reunião */}
+      <Section
+        title="Na reunião com o cliente"
+        action={
+          <span
+            className={cn(
+              'text-[11px] font-medium',
+              sessionDone === sessionItems.length && sessionItems.length > 0
+                ? 'text-success'
+                : 'text-foreground/45',
+            )}
+          >
+            {sessionDone}/{sessionItems.length}
+          </span>
+        }
+      >
+        <div className="space-y-3">
+          {phases.map((phase) => (
+            <div key={phase}>
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-foreground/45">
+                {SESSION_PHASE_LABELS[phase]}
+              </div>
+              <div className="space-y-1.5">
+                {sessionItems
+                  .filter((item) => stepById.get(item.id)?.phase === phase)
+                  .map((item) => {
+                    const step = stepById.get(item.id)
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-lg border border-line bg-elevate/[0.02] p-2.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggle(item)}
+                          className="flex w-full items-start gap-2 text-left"
+                        >
+                          <span
+                            className={cn(
+                              'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border',
+                              item.checked
+                                ? 'border-success bg-success/20 text-success'
+                                : 'border-line text-transparent',
+                            )}
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                          </span>
+                          <span className="min-w-0">
+                            <span
+                              className={cn(
+                                'block text-xs',
+                                item.checked
+                                  ? 'text-foreground/50 line-through'
+                                  : 'text-foreground/85',
+                              )}
+                            >
+                              {item.label}
+                            </span>
+                            {step?.detail && (
+                              <span className="mt-0.5 block text-[11px] text-foreground/45">
+                                {step.detail}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                        {step?.say && !item.checked && (
+                          <div className="mt-2 flex items-start gap-2 rounded-md border border-accent/20 bg-accent/[0.06] px-2.5 py-2">
+                            <MessageSquare className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
+                            <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-foreground/75">
+                              {step.say}
+                            </p>
+                            <button
+                              type="button"
+                              title="Copiar"
+                              onClick={() => {
+                                void copyToClipboard(step.say ?? '').then((ok) =>
+                                  ok
+                                    ? toast.success('Texto copiado')
+                                    : toast.error('Não foi possível copiar'),
+                                )
+                              }}
+                              className="shrink-0 text-foreground/40 hover:text-foreground/70"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Modal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        title="Pré-requisitos da sessão"
+        description="O cliente recebe o que precisa ter em mãos. Revise antes de enviar."
+        size="lg"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void copyToClipboard(invite).then((ok) =>
+                  ok ? toast.success('Mensagem copiada') : toast.error('Falhou'),
+                )
+              }}
+            >
+              Copiar
+            </Button>
+            <Button onClick={sendInvite} loading={sending}>
+              Enviar no WhatsApp
+            </Button>
+          </>
+        }
+      >
+        <textarea
+          value={invite}
+          onChange={(e) => setInvite(e.target.value)}
+          rows={14}
+          className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+        />
+      </Modal>
+    </div>
+  )
+}
+
 // ── Sub-tabs ──────────────────────────────────────────────────────────────────
 
 function SubTabs({
@@ -690,6 +1036,12 @@ function SubTabs({
         onClick={() => onChange('automation')}
         icon={<Wand2 className="h-3.5 w-3.5" />}
         label="Automação"
+      />
+      <SubTabBtn
+        active={value === 'sessao'}
+        onClick={() => onChange('sessao')}
+        icon={<CalendarClock className="h-3.5 w-3.5" />}
+        label="Sessão"
       />
     </div>
   )
@@ -807,7 +1159,8 @@ function AutomationView({ client }: { client: Client }) {
     persist(next, `${item.label}: ${!item.checked ? 'concluído' : 'desmarcado'}`)
     const allDone = next.length > 0 && next.every((i) => i.checked)
     if (allDone && client.stage === 'setup') {
-      db.updateClient(client.id, { stage: 'setup_done' })
+      // Concluir libera a vaga do responsável na fila de configuração.
+      db.updateClient(client.id, { stage: 'setup_done', setupStartedAt: undefined })
       db.addLog(client.id, 'Etapa: Pronto para Entrega', 'Avançado automaticamente ao concluir todas as configurações')
       toast.success('Todas as configurações concluídas → Pronto para Entrega')
     }

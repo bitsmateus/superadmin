@@ -133,13 +133,14 @@ export function enrichChecklistFromBriefing(
   result.push(carry('users_created', 'Usuários criados'))
   result.push(carry('queues_created', 'Filas criadas'))
 
-  // Channels — dynamic children
-  result.push(carry('channels_created', 'Canais criados', buildChannelChildren(briefing, cfg, existing)))
-
-  // API Oficial (conditional)
+  // API Oficial (conditional) — vem ANTES dos canais e da automação: sem o
+  // número aprovado na Meta não há canal onde ligar chatbot/IA.
   if (cfg?.connectionTypes.includes('api_oficial')) {
     result.push(carry('api_oficial', 'API Oficial configurada'))
   }
+
+  // Channels — dynamic children
+  result.push(carry('channels_created', 'Canais criados', buildChannelChildren(briefing, cfg, existing)))
 
   // Chatbot (always if no cfg, conditional if cfg)
   if (!cfg || cfg.automationTypes.includes('chatbot')) {

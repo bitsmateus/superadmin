@@ -112,6 +112,107 @@ export async function publicRoutes(app: FastifyInstance) {
     }
   );
 
+  // ── Portal de pendências ────────────────────────────────────────────────
+  // Mesma chave do briefing: o cliente completa só o que ficou faltando, sem
+  // refazer o formulário inteiro. O front calcula o que falta a partir de
+  // briefing_config × briefing_data.
+
+  // GET /api/public/pendencias/:token
+  app.get<{ Params: { token: string } }>(
+    '/api/public/pendencias/:token',
+    async (req, reply) => {
+      const row = await queryOne(
+        `SELECT id, name, company, briefing_status, briefing_data, briefing_config,
+                contract_signed_at, payment_status
+         FROM clients WHERE briefing_token = $1`,
+        [req.params.token]
+      );
+      if (!row) return reply.status(404).send({ message: 'Token inválido' });
+      return row;
+    }
+  );
+
+  /**
+   * Campos que o portal de pendências pode gravar dentro de briefing_data.
+   * Tudo fora dessa lista é ignorado — o portal completa lacunas, não
+   * reescreve o briefing.
+   */
+  const PENDING_FIELDS = new Set([
+    'whatsappNumbers',
+    'channelAccess',
+    'officialApi',
+    'facebookEmail',
+    'facebookPassword',
+    'aiCompanyDescription',
+    'aiServices',
+    'aiAttendanceFlow',
+    'aiExternalSystem',
+    'aiExternalApiUrl',
+    'aiExternalWhatToQuery',
+    'aiExternalAuth',
+    'aiExternalExamples',
+    'externalAutomationInfo',
+  ]);
+
+  // POST /api/public/pendencias/:token — merge parcial no briefing_data
+  app.post<{ Params: { token: string }; Body: { patch?: Record<string, unknown> } }>(
+    '/api/public/pendencias/:token',
+    async (req, reply) => {
+      const { token } = req.params;
+      const patch = req.body?.patch ?? {};
+      const existing = await queryOne(
+        'SELECT id, logs, briefing_data FROM clients WHERE briefing_token = $1',
+        [token]
+      ) as { id: string; logs: unknown[]; briefing_data: Record<string, unknown> | null } | null;
+      if (!existing) return reply.status(404).send({ message: 'Token inválido' });
+
+      const clean: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(patch)) {
+        if (!PENDING_FIELDS.has(k)) continue;
+        if (v === undefined || v === null || v === '') continue;
+        clean[k] = v;
+      }
+      if (Object.keys(clean).length === 0) {
+        return reply.status(400).send({ message: 'Nada para atualizar' });
+      }
+
+      const base = existing.briefing_data ?? {};
+      // Merge raso, exceto channelAccess/officialApi que são objetos por canal.
+      const merged: Record<string, unknown> = { ...base, ...clean };
+      for (const key of ['channelAccess', 'officialApi'] as const) {
+        if (clean[key] && typeof clean[key] === 'object') {
+          merged[key] = {
+            ...((base[key] as Record<string, unknown>) ?? {}),
+            ...(clean[key] as Record<string, unknown>),
+          };
+        }
+      }
+
+      const newLog = {
+        id: uuidv4(),
+        action: 'Pendências enviadas pelo cliente',
+        detail: Object.keys(clean).join(', '),
+        createdAt: new Date().toISOString(),
+      };
+      const logs = [...((existing.logs as unknown[]) ?? []), newLog];
+
+      const [updated] = await query<{ company: string | null; name: string }>(
+        `UPDATE clients SET briefing_data = $1, logs = $2
+         WHERE briefing_token = $3
+         RETURNING company, name`,
+        [JSON.stringify(merged), JSON.stringify(logs), token]
+      );
+
+      if (updated) {
+        const co = (updated.company && updated.company.trim()) || updated.name;
+        void sendSupportGroupMessage(
+          `📎 Pendências enviadas — ${co}: ${Object.keys(clean).join(', ')}`
+        );
+      }
+      return { ok: true };
+    }
+  );
+
   // GET /api/public/ticket-categories
   app.get('/api/public/ticket-categories', async () => {
     return query('SELECT * FROM ticket_categories WHERE active = true ORDER BY position');

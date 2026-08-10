@@ -76,6 +76,7 @@ type ClientRow = {
   briefing_revision_note: string | null
   briefing_config: Client['briefingConfig'] | null
   delivery_checklist: Client['deliveryChecklist']
+  session_checklist: Client['sessionChecklist'] | null
   delivery_handoff_checklist: Client['deliveryHandoffChecklist']
   delivery_date: string | null
   delivery_notes: string | null
@@ -95,6 +96,8 @@ type ClientRow = {
   contract_file: string | null
   contract_file_name: string | null
   archived_at: string | null
+  queue_priority: number | null
+  setup_started_at: string | null
 }
 
 function rowToClient(r: ClientRow): Client {
@@ -143,6 +146,7 @@ function rowToClient(r: ClientRow): Client {
     briefingRevisionNote: r.briefing_revision_note ?? undefined,
     briefingConfig: r.briefing_config ?? undefined,
     deliveryChecklist: r.delivery_checklist ?? [],
+    sessionChecklist: r.session_checklist ?? undefined,
     deliveryHandoffChecklist: r.delivery_handoff_checklist ?? [],
     deliveryDate: r.delivery_date ?? undefined,
     deliveryNotes: r.delivery_notes ?? undefined,
@@ -162,6 +166,8 @@ function rowToClient(r: ClientRow): Client {
     contractFile: r.contract_file ?? undefined,
     contractFileName: r.contract_file_name ?? undefined,
     archivedAt: r.archived_at ?? undefined,
+    queuePriority: r.queue_priority ?? undefined,
+    setupStartedAt: r.setup_started_at ?? undefined,
   }
 }
 
@@ -207,6 +213,7 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('briefingApprovedAt' in patch) out.briefing_approved_at = patch.briefingApprovedAt ?? null
   if ('briefingRevisionNote' in patch) out.briefing_revision_note = patch.briefingRevisionNote ?? null
   if ('deliveryChecklist' in patch) out.delivery_checklist = patch.deliveryChecklist ?? []
+  if ('sessionChecklist' in patch) out.session_checklist = patch.sessionChecklist ?? []
   if ('deliveryHandoffChecklist' in patch) out.delivery_handoff_checklist = patch.deliveryHandoffChecklist ?? []
   if ('deliveryDate' in patch) out.delivery_date = patch.deliveryDate ?? null
   if ('deliveryNotes' in patch) out.delivery_notes = patch.deliveryNotes ?? null
@@ -227,6 +234,8 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('contractFile' in patch) out.contract_file = patch.contractFile ?? null
   if ('contractFileName' in patch) out.contract_file_name = patch.contractFileName ?? null
   if ('archivedAt' in patch) out.archived_at = patch.archivedAt ?? null
+  if ('queuePriority' in patch) out.queue_priority = patch.queuePriority ?? null
+  if ('setupStartedAt' in patch) out.setup_started_at = patch.setupStartedAt ?? null
   return out
 }
 
@@ -254,6 +263,7 @@ type SettingsRow = {
   evolution: AppSettings['evolution'] | null
   uazapi: AppSettings['uazapi'] | null
   sla_by_stage: AppSettings['slaByStage'] | null
+  setup_wip_limit: number | null
 }
 
 function rowToSettings(r: SettingsRow | null): AppSettings {
@@ -281,6 +291,7 @@ function rowToSettings(r: SettingsRow | null): AppSettings {
     evolution: r.evolution ?? undefined,
     uazapi: r.uazapi ?? undefined,
     slaByStage: r.sla_by_stage ?? undefined,
+    setupWipLimit: r.setup_wip_limit ?? undefined,
   }
 }
 
@@ -309,6 +320,7 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
     evolution: s.evolution ?? null,
     uazapi: s.uazapi ?? null,
     sla_by_stage: s.slaByStage ?? null,
+    setup_wip_limit: s.setupWipLimit ?? null,
   }
 }
 

@@ -100,6 +100,14 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS uazapi JSONB`);
   // SLA (dias) por etapa do pipeline — configurável nas Configurações.
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS sla_by_stage JSONB`);
+  // Fila de configuração: prioridade manual (menor = passa na frente) e o
+  // momento em que a config começou de fato ("fazendo agora" x "aguardando vez").
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS queue_priority INT`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS setup_started_at TIMESTAMPTZ`);
+  // Roteiro da sessão de ativação (checklist do que é feito com o cliente).
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS session_checklist JSONB`);
+  // Quantas configurações simultâneas cada responsável de entrega pode ter.
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS setup_wip_limit INT`);
   // Config de aviso por canal (liga/desliga + número que recebe). O aviso NUNCA
   // vai pro cliente — só pro alert_number configurado. last_status/last_alert_at
   // controlam o "1x por queda".

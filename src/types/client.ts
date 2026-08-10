@@ -261,6 +261,20 @@ export interface Client {
   createdAt: string
   stageUpdatedAt?: string
 
+  // ── Fila de configuração ───────────────────────────────────────────────────
+  /**
+   * Prioridade manual na fila de configuração. Menor passa na frente; vazio =
+   * ordem de chegada (data de aprovação do briefing). Usado pra furar fila com
+   * justificativa, sem bagunçar a ordem natural.
+   */
+  queuePriority?: number
+  /**
+   * Quando a configuração começou de fato. Preenchido ao "puxar" o cliente da
+   * fila. Separa quem está *fazendo agora* de quem só está na etapa aguardando
+   * a vez — e é o que conta para o limite de simultâneos (WIP).
+   */
+  setupStartedAt?: string
+
   // Etapa 2 — Contrato & Financeiro
   contractUrl?: string
   contractSentAt?: string
@@ -307,6 +321,9 @@ export interface Client {
 
   // Etapa 4 — Entrega
   deliveryChecklist: ChecklistItem[]
+  /** Roteiro da sessão de ativação com o cliente (só o que exige a presença
+   *  dele: QR code, aprovações na Meta, treinamento). */
+  sessionChecklist?: ChecklistItem[]
   deliveryHandoffChecklist?: ChecklistItem[]
   deliveryDate?: string
   deliveryNotes?: string
@@ -395,6 +412,9 @@ export interface AppSettings {
   /** SLA (em dias) por etapa do pipeline. Sobrescreve os defaults de
    *  STAGE_SLA_DAYS. Etapas ausentes usam o default. */
   slaByStage?: Partial<Record<PipelineStage, number>>
+  /** Quantas configurações simultâneas cada responsável de entrega pode ter
+   *  em "fazendo agora". Default DEFAULT_SETUP_WIP_LIMIT (2). */
+  setupWipLimit?: number
 }
 
 export interface EvolutionConfig {

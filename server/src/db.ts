@@ -104,6 +104,9 @@ export async function runMigrations() {
   // momento em que a config começou de fato ("fazendo agora" x "aguardando vez").
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS queue_priority INT`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS setup_started_at TIMESTAMPTZ`);
+  // Área de atuação do usuário no funil: comercial, entrega ou ambos.
+  // Filtra quem aparece como responsável comercial x de entrega.
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS area TEXT`);
   // Roteiro da sessão de ativação (checklist do que é feito com o cliente).
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS session_checklist JSONB`);
   // Quantas configurações simultâneas cada responsável de entrega pode ter.

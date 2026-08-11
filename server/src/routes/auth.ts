@@ -7,6 +7,8 @@ interface Profile {
   email: string;
   name: string | null;
   role: string;
+  /** Área no funil: 'comercial' | 'entrega' | 'ambos'. Nulo = ambos. */
+  area: string | null;
   created_at: string;
 }
 
@@ -51,43 +53,45 @@ export async function authRoutes(app: FastifyInstance) {
   app.get('/api/users', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { role } = req.user as { role: string };
     if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
-    return query<Profile>('SELECT id, email, name, role, created_at FROM profiles ORDER BY created_at');
+    return query<Profile>(
+      'SELECT id, email, name, role, area, created_at FROM profiles ORDER BY created_at'
+    );
   });
 
   // GET /api/team — lista enxuta (id/name/email) para seletor de responsável.
   // Disponível a qualquer usuário autenticado (ferramenta interna do time).
   app.get('/api/team', { onRequest: [app.authenticate] }, async () => {
-    return query('SELECT id, name, email, role FROM profiles ORDER BY name NULLS LAST, email');
+    return query('SELECT id, name, email, role, area FROM profiles ORDER BY name NULLS LAST, email');
   });
 
   // POST /api/users — admin only, creates a new user
-  app.post<{ Body: { email: string; name: string; password: string; role: string } }>(
+  app.post<{ Body: { email: string; name: string; password: string; role: string; area?: string } }>(
     '/api/users',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { role: actorRole } = req.user as { role: string };
       if (actorRole !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
 
-      const { email, name, password, role } = req.body;
+      const { email, name, password, role, area } = req.body;
       const hash = await bcrypt.hash(password, 10);
       const [created] = await query<Profile>(
-        `INSERT INTO profiles (email, name, role, password_hash)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, email, name, role, created_at`,
-        [email.trim().toLowerCase(), name, role || 'suporte', hash]
+        `INSERT INTO profiles (email, name, role, area, password_hash)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, email, name, role, area, created_at`,
+        [email.trim().toLowerCase(), name, role || 'suporte', area || 'ambos', hash]
       );
       return reply.status(201).send(created);
     }
   );
 
   // PATCH /api/users/:id
-  app.patch<{ Params: { id: string }; Body: { name?: string; role?: string; password?: string } }>(
+  app.patch<{ Params: { id: string }; Body: { name?: string; role?: string; area?: string; password?: string } }>(
     '/api/users/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { sub, role: actorRole } = req.user as { sub: string; role: string };
       const { id } = req.params;
-      const { name, role, password } = req.body;
+      const { name, role, area, password } = req.body;
 
       // Only admin can change roles or edit other users
       if (id !== sub && actorRole !== 'admin') {
@@ -96,6 +100,10 @@ export async function authRoutes(app: FastifyInstance) {
       if (role && actorRole !== 'admin') {
         return reply.status(403).send({ message: 'Somente admin pode alterar roles' });
       }
+      // Área é atributo organizacional (quem entra em qual filtro) — só admin.
+      if (area && actorRole !== 'admin') {
+        return reply.status(403).send({ message: 'Somente admin pode alterar a área' });
+      }
 
       const sets: string[] = [];
       const params: unknown[] = [];
@@ -103,6 +111,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       if (name !== undefined) { sets.push(`name = $${i++}`); params.push(name); }
       if (role !== undefined) { sets.push(`role = $${i++}`); params.push(role); }
+      if (area !== undefined) { sets.push(`area = $${i++}`); params.push(area); }
       if (password !== undefined) {
         const hash = await bcrypt.hash(password, 10);
         sets.push(`password_hash = $${i++}`);
@@ -112,7 +121,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       params.push(id);
       const [updated] = await query<Profile>(
-        `UPDATE profiles SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, email, name, role, created_at`,
+        `UPDATE profiles SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, email, name, role, area, created_at`,
         params
       );
       if (!updated) return reply.status(404).send({ message: 'Usuário não encontrado' });

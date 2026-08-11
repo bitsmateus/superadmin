@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
+import type { TeamArea } from '@/services/supabase'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
@@ -125,6 +126,7 @@ export function OverviewTab({ client }: { client: Client }) {
           />
           <ResponsavelSelect
             label="Responsável comercial"
+            area="comercial"
             value={client.responsavelComercial ?? client.responsavel ?? ''}
             onChange={(v) => {
               db.updateClient(client.id, { responsavelComercial: v || undefined })
@@ -133,6 +135,7 @@ export function OverviewTab({ client }: { client: Client }) {
           />
           <ResponsavelSelect
             label="Responsável de entrega"
+            area="entrega"
             value={client.responsavelEntrega ?? ''}
             onChange={(v) => {
               db.updateClient(client.id, { responsavelEntrega: v || undefined })
@@ -1175,14 +1178,17 @@ function iconForAction(action: string): React.ReactNode {
 function ResponsavelSelect({
   label,
   value,
+  area,
   onChange,
 }: {
   label: string
   value: string
+  /** Só lista quem atua nessa área (ou nas duas). */
+  area: TeamArea
   onChange: (v: string) => void
 }) {
   const { data: profiles } = useTeamProfiles()
-  const options = profileOptions(profiles)
+  const options = profileOptions(profiles, area)
   // Garante que um valor antigo (texto livre) que não está na lista ainda apareça.
   const hasValue = value && options.some((o) => o.value === value)
   return (

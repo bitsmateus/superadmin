@@ -30,6 +30,7 @@ import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { StageBadge } from '@/components/crm/StageBadge'
 import { useClients, useCurrentUser, useSettings } from '@/hooks/useClients'
 import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
+import type { TeamArea } from '@/services/supabase'
 import { db } from '@/services/db'
 import {
   NEXT_STAGE,
@@ -93,18 +94,32 @@ export function PipelinePage() {
   const wipLimit = resolveWipLimit(settings)
 
   const { data: teamProfiles } = useTeamProfiles()
-  const responsavelOptions = React.useMemo(() => {
-    // Usuários cadastrados (equipe) + qualquer responsável já gravado nos
-    // clientes que não esteja na equipe (não perde filtros antigos).
-    const seen = new Set<string>()
-    for (const o of profileOptions(teamProfiles)) seen.add(o.value)
-    for (const c of clients) {
-      if (c.responsavelComercial) seen.add(c.responsavelComercial)
-      if (c.responsavelEntrega) seen.add(c.responsavelEntrega)
-      if (c.responsavel) seen.add(c.responsavel)
-    }
-    return [...seen].sort()
-  }, [clients, teamProfiles])
+
+  /**
+   * Opções do filtro: pessoas da equipe marcadas naquela área (ou em "ambos")
+   * + quem já está gravado nos clientes naquele papel — assim um responsável
+   * antigo, de fora da equipe, não some do filtro.
+   */
+  const buildOptions = React.useCallback(
+    (area: TeamArea, pick: (c: Client) => (string | undefined)[]) => {
+      const seen = new Set<string>()
+      for (const o of profileOptions(teamProfiles, area)) seen.add(o.value)
+      for (const c of clients) {
+        for (const v of pick(c)) if (v) seen.add(v)
+      }
+      return [...seen].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    },
+    [clients, teamProfiles],
+  )
+
+  const comercialOptions = React.useMemo(
+    () => buildOptions('comercial', (c) => [c.responsavelComercial, c.responsavel]),
+    [buildOptions],
+  )
+  const entregaOptions = React.useMemo(
+    () => buildOptions('entrega', (c) => [c.responsavelEntrega]),
+    [buildOptions],
+  )
 
   const {
     register,
@@ -350,28 +365,32 @@ export function PipelinePage() {
             leftIcon={<Search className="h-4 w-4" />}
             containerClassName="sm:max-w-xs"
           />
-          {responsavelOptions.length > 0 && (
+          {(comercialOptions.length > 0 || entregaOptions.length > 0) && (
             <>
-              <select
-                value={filterComercial}
-                onChange={(e) => setFilterComercial(e.target.value)}
-                className="h-9 rounded-lg border border-line bg-card px-3 text-sm text-foreground focus:border-accent focus:outline-none"
-              >
-                <option value="">Comercial: todos</option>
-                {responsavelOptions.map((r) => (
-                  <option key={r} value={r}>Comercial: {r}</option>
-                ))}
-              </select>
-              <select
-                value={filterEntrega}
-                onChange={(e) => setFilterEntrega(e.target.value)}
-                className="h-9 rounded-lg border border-line bg-card px-3 text-sm text-foreground focus:border-accent focus:outline-none"
-              >
-                <option value="">Entrega: todos</option>
-                {responsavelOptions.map((r) => (
-                  <option key={r} value={r}>Entrega: {r}</option>
-                ))}
-              </select>
+              {comercialOptions.length > 0 && (
+                <select
+                  value={filterComercial}
+                  onChange={(e) => setFilterComercial(e.target.value)}
+                  className="h-9 rounded-lg border border-line bg-card px-3 text-sm text-foreground focus:border-accent focus:outline-none"
+                >
+                  <option value="">Comercial: todos</option>
+                  {comercialOptions.map((r) => (
+                    <option key={r} value={r}>Comercial: {r}</option>
+                  ))}
+                </select>
+              )}
+              {entregaOptions.length > 0 && (
+                <select
+                  value={filterEntrega}
+                  onChange={(e) => setFilterEntrega(e.target.value)}
+                  className="h-9 rounded-lg border border-line bg-card px-3 text-sm text-foreground focus:border-accent focus:outline-none"
+                >
+                  <option value="">Entrega: todos</option>
+                  {entregaOptions.map((r) => (
+                    <option key={r} value={r}>Entrega: {r}</option>
+                  ))}
+                </select>
+              )}
               {currentUser && (
                 <Button
                   variant="secondary"

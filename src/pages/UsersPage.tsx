@@ -19,8 +19,11 @@ import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useAuth } from '@/hooks/useAuth'
 import {
+  TEAM_AREA_LABEL,
   canManageUsers,
+  resolveArea,
   type Profile,
+  type TeamArea,
   type UserRole,
 } from '@/services/supabase'
 import { api, onSseEvent } from '@/services/api'
@@ -48,6 +51,34 @@ const ROLE_LABEL: Record<UserRole, string> = {
   admin: 'Administrador',
   supervisor: 'Supervisor',
   suporte: 'Suporte',
+}
+
+/**
+ * Área no funil — define onde a pessoa aparece como responsável (filtros do
+ * pipeline e seletores do cliente). Não tem relação com permissão de acesso.
+ */
+const AREA_OPTIONS: { value: TeamArea; label: string; description: string }[] = [
+  {
+    value: 'comercial',
+    label: 'Comercial',
+    description: 'Aparece só como responsável comercial.',
+  },
+  {
+    value: 'entrega',
+    label: 'Entrega',
+    description: 'Aparece só como responsável de entrega e conta no limite da fila.',
+  },
+  {
+    value: 'ambos',
+    label: 'Ambos',
+    description: 'Aparece nos dois filtros.',
+  },
+]
+
+const AREA_TONE: Record<TeamArea, 'info' | 'success' | 'neutral'> = {
+  comercial: 'info',
+  entrega: 'success',
+  ambos: 'neutral',
 }
 
 const ROLE_TONE: Record<UserRole, 'info' | 'success' | 'warning'> = {
@@ -100,6 +131,16 @@ export function UsersPage() {
     }
   }
 
+  const changeArea = async (id: string, area: TeamArea) => {
+    try {
+      await api.patch(`/api/users/${id}`, { area })
+      toast.success('Área atualizada')
+      void reload()
+    } catch (err) {
+      toast.error('Falha ao alterar área: ' + (err instanceof Error ? err.message : 'Erro'))
+    }
+  }
+
   return (
     <>
       <TopBar
@@ -142,6 +183,7 @@ export function UsersPage() {
                 <TH>Usuário</TH>
                 <TH>E-mail</TH>
                 <TH>Papel</TH>
+                <TH>Área</TH>
                 <TH>Criado em</TH>
                 <TH className="text-right">Ações</TH>
               </tr>
@@ -153,6 +195,7 @@ export function UsersPage() {
                   profile={p}
                   isSelf={p.id === profile?.id}
                   onChangeRole={(role) => changeRole(p.id, role)}
+                  onChangeArea={(area) => changeArea(p.id, area)}
                   onDeleted={() => reload()}
                 />
               ))}
@@ -164,6 +207,9 @@ export function UsersPage() {
           <strong className="text-foreground/80">Como criar um novo usuário:</strong>{' '}
           clique em <em>"Novo usuário"</em> — você cria o e-mail e a senha; ele
           entra com role <em>suporte</em> por padrão e você pode promover aqui.
+          A <strong className="text-foreground/80">área</strong> é outra coisa:
+          define se a pessoa aparece como responsável comercial, de entrega ou
+          nos dois — é o que alimenta os filtros do pipeline.
         </p>
       </div>
 
@@ -183,11 +229,13 @@ function ProfileRow({
   profile,
   isSelf,
   onChangeRole,
+  onChangeArea,
   onDeleted,
 }: {
   profile: Profile
   isSelf: boolean
   onChangeRole: (role: UserRole) => void | Promise<void>
+  onChangeArea: (area: TeamArea) => void | Promise<void>
   onDeleted: () => void
 }) {
   const [confirmRemoveOpen, setConfirmRemoveOpen] = React.useState(false)
@@ -245,6 +293,19 @@ function ProfileRow({
               className="max-w-[160px]"
             />
           )}
+        </div>
+      </TD>
+      <TD>
+        <div className="flex items-center gap-2">
+          <Badge tone={AREA_TONE[resolveArea(profile.area)]}>
+            {TEAM_AREA_LABEL[resolveArea(profile.area)]}
+          </Badge>
+          <Select
+            value={resolveArea(profile.area)}
+            onChange={(e) => onChangeArea(e.target.value as TeamArea)}
+            options={AREA_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            className="max-w-[140px]"
+          />
         </div>
       </TD>
       <TD className="text-foreground/60">{formatDateShort(profile.created_at)}</TD>
@@ -305,6 +366,7 @@ function InviteUserModal({
   const [password, setPassword] = React.useState('')
   const [name, setName] = React.useState('')
   const [role, setRole] = React.useState<UserRole>('suporte')
+  const [area, setArea] = React.useState<TeamArea>('ambos')
   const [creating, setCreating] = React.useState(false)
 
   React.useEffect(() => {
@@ -313,6 +375,7 @@ function InviteUserModal({
       setPassword('')
       setName('')
       setRole('suporte')
+      setArea('ambos')
     }
   }, [open])
 
@@ -332,6 +395,7 @@ function InviteUserModal({
         name: name.trim() || undefined,
         password,
         role,
+        area,
       })
       toast.success('Usuário criado')
       onCreated()
@@ -389,6 +453,31 @@ function InviteUserModal({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+        <div>
+          <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">
+            Área no funil
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {AREA_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setArea(o.value)}
+                className={cn(
+                  'rounded-lg border px-3 py-2.5 text-left text-xs transition-colors',
+                  area === o.value
+                    ? 'border-accent/50 bg-accent/[0.08] ring-1 ring-accent/30'
+                    : 'border-line bg-elevate/[0.02] hover:border-elevate/15',
+                )}
+              >
+                <div className="text-sm font-medium text-foreground">{o.label}</div>
+                <div className="mt-0.5 text-[10.5px] leading-relaxed text-foreground/55">
+                  {o.description}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
         <div>
           <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">
             Papel

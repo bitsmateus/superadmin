@@ -34,6 +34,9 @@ interface PendingClient {
 
 /** Estado do formulário — só os campos que o portal sabe coletar. */
 interface FormState {
+  site: string
+  /** Cliente sem site — grava um marcador pra pendência não ficar eterna. */
+  noSite: boolean
   whatsappNumbers: string
   numeroDedicado: string
   displayName: string
@@ -48,6 +51,8 @@ interface FormState {
 }
 
 const emptyForm: FormState = {
+  site: '',
+  noSite: false,
   whatsappNumbers: '',
   numeroDedicado: '',
   displayName: '',
@@ -164,6 +169,11 @@ export function PendenciasPublicPage() {
   /** Monta só o que foi preenchido — o back ignora o resto. */
   const buildPatch = (): Record<string, unknown> => {
     const patch: Record<string, unknown> = {}
+
+    if (ids.has('site')) {
+      if (form.noSite) patch.site = 'Não possui site'
+      else if (form.site.trim()) patch.site = form.site.trim()
+    }
 
     if (ids.has('whatsapp_number')) {
       const nums = form.whatsappNumbers
@@ -290,6 +300,30 @@ export function PendenciasPublicPage() {
 
         {solvableHere.length > 0 && (
           <div className="space-y-4">
+            {ids.has('site') && (
+              <Card
+                title="Site da empresa"
+                hint="Usamos como referência do negócio — e a Meta pede na verificação da API Oficial."
+              >
+                <Input
+                  value={form.site}
+                  onChange={(v) => setForm({ ...form, site: v, noSite: false })}
+                  placeholder="https://www.suaempresa.com.br"
+                />
+                <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={form.noSite}
+                    onChange={(e) =>
+                      setForm({ ...form, noSite: e.target.checked, site: '' })
+                    }
+                    className="h-4 w-4 accent-[#4F8EF7]"
+                  />
+                  Não temos site
+                </label>
+              </Card>
+            )}
+
             {ids.has('whatsapp_number') && (
               <Card
                 title="Número de WhatsApp"

@@ -138,6 +138,7 @@ export async function publicRoutes(app: FastifyInstance) {
    * reescreve o briefing.
    */
   const PENDING_FIELDS = new Set([
+    'site',
     'whatsappNumbers',
     'channelAccess',
     'officialApi',

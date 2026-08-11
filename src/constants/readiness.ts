@@ -103,6 +103,21 @@ export function computeReadiness(c: ReadinessInput): Readiness {
     )
   }
 
+  // ── Site ──────────────────────────────────────────────────────────────────
+  // Só cobramos de quem o briefing perguntou: API Oficial (a Meta exige site
+  // na verificação) e IA (o site alimenta a base de conhecimento). No briefing
+  // o campo é opcional de propósito — a cobrança acontece aqui.
+  const needsSite =
+    Boolean(cfg?.connectionTypes.includes('api_oficial')) ||
+    Boolean(cfg?.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada'))
+  if (needsSite && !bd?.site?.trim()) {
+    add(
+      'site',
+      'Sem site informado',
+      'Informar o site da empresa — se não tiver, é só marcar a opção "não temos site".',
+    )
+  }
+
   // ── Usuários ──────────────────────────────────────────────────────────────
   if ((bd?.users ?? []).length === 0) {
     add(

@@ -396,6 +396,7 @@ export async function bootDb(): Promise<void> {
       subscribeRealtime()
       booted = true
       notify()
+      startPolling()
     } catch (err) {
       console.error('[db] boot crash', err)
       toast.error('Falha ao inicializar dados')
@@ -405,6 +406,7 @@ export async function bootDb(): Promise<void> {
 }
 
 export async function teardownDb(): Promise<void> {
+  stopPolling()
   unsubSse?.()
   unsubSse = null
   clientsCache = []
@@ -477,6 +479,64 @@ function subscribeRealtime() {
       if (currentProfile && row.id === currentProfile.id) { currentProfile = row; notify() }
     }
   })
+}
+
+// ── Fallback de polling ───────────────────────────────────────────────────────
+// O SSE dá atualização instantânea quando funciona, mas alguns proxies (nginx/
+// Traefik/Cloudflare) bufferizam text/event-stream e seguram os eventos. Para
+// não depender só do SSE, revalidamos a lista de clientes periodicamente e ao
+// voltar o foco/aba — mantendo referência estável dos que não mudaram, então só
+// re-renderiza quem de fato mudou.
+let pollTimer: ReturnType<typeof setInterval> | null = null
+const POLL_INTERVAL_MS = 20_000
+
+async function refreshClients(): Promise<void> {
+  if (!booted) return
+  try {
+    const rows = await api.get<ClientRow[]>('/api/clients')
+    if (!rows) return
+    const prevById = new Map(clientsCache.map((c) => [c.id, c]))
+    let changed = rows.length !== clientsCache.length
+    const next = rows.map((row) => {
+      const mapped = rowToClient(row)
+      const prev = prevById.get(mapped.id)
+      // Mantém a MESMA referência se nada mudou (evita re-render desnecessário,
+      // ex.: no ClientDrawer aberto). Comparação por JSON é suficiente aqui.
+      if (prev && JSON.stringify(prev) === JSON.stringify(mapped)) return prev
+      changed = true
+      return mapped
+    })
+    if (changed) { clientsCache = next; notify() }
+  } catch {
+    /* silencioso — mantém a cache atual */
+  }
+}
+
+function onVisibilityRefetch() {
+  if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+    void refreshClients()
+  }
+}
+
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(() => { void refreshClients() }, POLL_INTERVAL_MS)
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibilityRefetch)
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', onVisibilityRefetch)
+  }
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onVisibilityRefetch)
+  }
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('focus', onVisibilityRefetch)
+  }
 }
 
 export function setCurrentProfile(p: Profile | null): void { currentProfile = p; notify() }

@@ -258,6 +258,19 @@ interface BriefingFormState {
   aiAttendanceFlow: string
   aiTransferConditions: string
   aiRestrictions: string
+  // IA — perguntas complementares (todas opcionais)
+  aiAddress: string
+  aiSlogan: string
+  aiMostSought: string
+  aiPartnerships: string
+  aiPaymentMethods: string
+  aiPromotions: string
+  aiFirstMessage: string
+  aiSchedulingData: string
+  aiPostDataMessage: string
+  aiExistingClient: string
+  aiWhenUnknown: string
+  aiFaq: string
   // IA Avançada
   aiExternalSystem: string
   aiExternalApiUrl: string
@@ -310,6 +323,18 @@ function initialFormState(company: string): BriefingFormState {
     aiAttendanceFlow: '',
     aiTransferConditions: '',
     aiRestrictions: '',
+    aiAddress: '',
+    aiSlogan: '',
+    aiMostSought: '',
+    aiPartnerships: '',
+    aiPaymentMethods: '',
+    aiPromotions: '',
+    aiFirstMessage: '',
+    aiSchedulingData: '',
+    aiPostDataMessage: '',
+    aiExistingClient: '',
+    aiWhenUnknown: '',
+    aiFaq: '',
     aiExternalSystem: '',
     aiExternalApiUrl: '',
     aiExternalWhatToQuery: '',
@@ -407,6 +432,18 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     aiAttendanceFlow: bd.aiAttendanceFlow ?? base.aiAttendanceFlow,
     aiTransferConditions: bd.aiTransferConditions ?? base.aiTransferConditions,
     aiRestrictions: bd.aiRestrictions ?? base.aiRestrictions,
+    aiAddress: bd.aiAddress ?? base.aiAddress,
+    aiSlogan: bd.aiSlogan ?? base.aiSlogan,
+    aiMostSought: bd.aiMostSought ?? base.aiMostSought,
+    aiPartnerships: bd.aiPartnerships ?? base.aiPartnerships,
+    aiPaymentMethods: bd.aiPaymentMethods ?? base.aiPaymentMethods,
+    aiPromotions: bd.aiPromotions ?? base.aiPromotions,
+    aiFirstMessage: bd.aiFirstMessage ?? base.aiFirstMessage,
+    aiSchedulingData: bd.aiSchedulingData ?? base.aiSchedulingData,
+    aiPostDataMessage: bd.aiPostDataMessage ?? base.aiPostDataMessage,
+    aiExistingClient: bd.aiExistingClient ?? base.aiExistingClient,
+    aiWhenUnknown: bd.aiWhenUnknown ?? base.aiWhenUnknown,
+    aiFaq: bd.aiFaq ?? base.aiFaq,
     aiExternalSystem: bd.aiExternalSystem ?? base.aiExternalSystem,
     aiExternalApiUrl: bd.aiExternalApiUrl ?? base.aiExternalApiUrl,
     aiExternalWhatToQuery: bd.aiExternalWhatToQuery ?? base.aiExternalWhatToQuery,
@@ -596,6 +633,18 @@ export function BriefingPublicPage() {
       aiAttendanceFlow: aiEnabled ? state.aiAttendanceFlow.trim() || undefined : undefined,
       aiTransferConditions: aiEnabled ? state.aiTransferConditions.trim() || undefined : undefined,
       aiRestrictions: aiEnabled ? state.aiRestrictions.trim() || undefined : undefined,
+      aiAddress: aiEnabled ? state.aiAddress.trim() || undefined : undefined,
+      aiSlogan: aiEnabled ? state.aiSlogan.trim() || undefined : undefined,
+      aiMostSought: aiEnabled ? state.aiMostSought.trim() || undefined : undefined,
+      aiPartnerships: aiEnabled ? state.aiPartnerships.trim() || undefined : undefined,
+      aiPaymentMethods: aiEnabled ? state.aiPaymentMethods.trim() || undefined : undefined,
+      aiPromotions: aiEnabled ? state.aiPromotions.trim() || undefined : undefined,
+      aiFirstMessage: aiEnabled ? state.aiFirstMessage.trim() || undefined : undefined,
+      aiSchedulingData: aiEnabled ? state.aiSchedulingData.trim() || undefined : undefined,
+      aiPostDataMessage: aiEnabled ? state.aiPostDataMessage.trim() || undefined : undefined,
+      aiExistingClient: aiEnabled ? state.aiExistingClient.trim() || undefined : undefined,
+      aiWhenUnknown: aiEnabled ? state.aiWhenUnknown.trim() || undefined : undefined,
+      aiFaq: aiEnabled ? state.aiFaq.trim() || undefined : undefined,
       aiExternalSystem:
         aiEnabled && isAdvancedAI ? state.aiExternalSystem.trim() || undefined : undefined,
       aiExternalApiUrl:
@@ -1518,6 +1567,113 @@ export function BriefingPublicPage() {
                       onChange={(v) => setState({ ...state, aiRestrictions: v })}
                       rows={3}
                       placeholder={'Ex:\n- Não citar concorrentes\n- Não dar desconto sem autorização\n- Não confirmar agendamentos sem verificar disponibilidade'}
+                    />
+                  </Field>
+                  <Field label="O que a IA responde quando NÃO souber algo?">
+                    <PlainTextarea
+                      value={state.aiWhenUnknown}
+                      onChange={(v) => setState({ ...state, aiWhenUnknown: v })}
+                      rows={2}
+                      placeholder="Ex: “Não tenho essa informação agora, vou chamar um atendente pra te ajudar.”"
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Mais informações (opcional) — perguntas do briefing de IA */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-1 text-sm font-semibold text-slate-800">
+                  Mais sobre o atendimento
+                </h3>
+                <p className="mb-3 text-xs text-slate-500">
+                  Quanto mais completo, melhor a IA atende. Tudo aqui é opcional.
+                </p>
+                <div className="space-y-3">
+                  <Field label="Endereço de cada unidade (com ponto de referência)">
+                    <PlainTextarea
+                      value={state.aiAddress}
+                      onChange={(v) => setState({ ...state, aiAddress: v })}
+                      rows={2}
+                      placeholder="Ex: Rua X, 123 — ao lado do mercado Y (Centro)"
+                    />
+                  </Field>
+                  <Field label="Frase ou bordão da empresa que a IA deva usar">
+                    <PlainInput
+                      value={state.aiSlogan}
+                      onChange={(v) => setState({ ...state, aiSlogan: v })}
+                      placeholder="Ex: “Seu sorriso é a nossa marca!”"
+                    />
+                  </Field>
+                  <Field label="Serviços/produtos mais procurados">
+                    <PlainTextarea
+                      value={state.aiMostSought}
+                      onChange={(v) => setState({ ...state, aiMostSought: v })}
+                      rows={2}
+                      placeholder="Ex: Limpeza de pele, clareamento, botox"
+                    />
+                  </Field>
+                  <Field label="Convênios, planos ou parcerias (e o que cobrem)">
+                    <PlainTextarea
+                      value={state.aiPartnerships}
+                      onChange={(v) => setState({ ...state, aiPartnerships: v })}
+                      rows={2}
+                      placeholder="Ex: Convênio Z — cobre consultas e limpeza"
+                    />
+                  </Field>
+                  <Field label="Formas de pagamento (dinheiro, PIX, cartão, parcelamento)">
+                    <PlainTextarea
+                      value={state.aiPaymentMethods}
+                      onChange={(v) => setState({ ...state, aiPaymentMethods: v })}
+                      rows={2}
+                      placeholder="Ex: PIX, dinheiro, cartão em até 6x sem juros"
+                    />
+                  </Field>
+                  <Field label="Promoções ou condições especiais">
+                    <PlainTextarea
+                      value={state.aiPromotions}
+                      onChange={(v) => setState({ ...state, aiPromotions: v })}
+                      rows={2}
+                      placeholder="Ex: 1ª avaliação gratuita"
+                    />
+                  </Field>
+                  <Field label="Mensagem que a IA manda no PRIMEIRO contato">
+                    <PlainTextarea
+                      value={state.aiFirstMessage}
+                      onChange={(v) => setState({ ...state, aiFirstMessage: v })}
+                      rows={2}
+                      placeholder="Ex: “Olá! Seja bem-vindo(a) à Clínica X 😊 Como posso te ajudar?”"
+                    />
+                  </Field>
+                  <Field label="Quais dados a IA deve pedir para agendar?">
+                    <PlainTextarea
+                      value={state.aiSchedulingData}
+                      onChange={(v) => setState({ ...state, aiSchedulingData: v })}
+                      rows={2}
+                      placeholder="Ex: nome, telefone, unidade, dia e horário"
+                    />
+                  </Field>
+                  <Field label="Mensagem depois que o cliente passa os dados">
+                    <PlainTextarea
+                      value={state.aiPostDataMessage}
+                      onChange={(v) => setState({ ...state, aiPostDataMessage: v })}
+                      rows={2}
+                      placeholder="Ex: “Perfeito! Seu horário está reservado. Qualquer coisa, é só chamar.”"
+                    />
+                  </Field>
+                  <Field label="O que a IA faz quando é um cliente que já é atendido por vocês?">
+                    <PlainTextarea
+                      value={state.aiExistingClient}
+                      onChange={(v) => setState({ ...state, aiExistingClient: v })}
+                      rows={2}
+                      placeholder="Ex: Cumprimentar pelo nome, puxar histórico, oferecer retorno"
+                    />
+                  </Field>
+                  <Field label="Perguntas frequentes dos clientes (pergunta + resposta certa)">
+                    <PlainTextarea
+                      value={state.aiFaq}
+                      onChange={(v) => setState({ ...state, aiFaq: v })}
+                      rows={5}
+                      placeholder={'Ex:\nP: Vocês atendem no sábado?\nR: Sim, das 8h às 12h.\n\nP: Precisa de agendamento?\nR: Sim, pelo WhatsApp.'}
                     />
                   </Field>
                 </div>

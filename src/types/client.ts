@@ -117,6 +117,19 @@ export interface BriefingData {
   aiSocialMedia?: string
   aiAttendanceFlow?: string
   aiTransferConditions?: string
+  // IA — perguntas complementares do briefing de IA (todas opcionais)
+  aiAddress?: string          // endereço de cada unidade (com referência)
+  aiSlogan?: string           // frase/bordão da empresa
+  aiMostSought?: string       // serviços/produtos mais procurados
+  aiPartnerships?: string     // convênios, planos, parcerias e o que cobrem
+  aiPaymentMethods?: string   // formas de pagamento / parcelamento
+  aiPromotions?: string       // promoções / condições especiais
+  aiFirstMessage?: string     // mensagem no 1º contato
+  aiSchedulingData?: string   // dados que a IA pede para agendar
+  aiPostDataMessage?: string  // mensagem depois que o cliente passa os dados
+  aiExistingClient?: string   // o que fazer quando já é cliente
+  aiWhenUnknown?: string      // o que responde quando não sabe
+  aiFaq?: string              // perguntas frequentes + respostas certas
 
   // IA Avançada — integração com sistema externo
   aiExternalSystem?: string

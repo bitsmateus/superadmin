@@ -1850,6 +1850,18 @@ function hasAnyAiData(d: NonNullable<Client['briefingData']>): boolean {
       d.aiTransferConditions ||
       d.aiRestrictions ||
       d.aiInstructions ||
+      d.aiAddress ||
+      d.aiSlogan ||
+      d.aiMostSought ||
+      d.aiPartnerships ||
+      d.aiPaymentMethods ||
+      d.aiPromotions ||
+      d.aiFirstMessage ||
+      d.aiSchedulingData ||
+      d.aiPostDataMessage ||
+      d.aiExistingClient ||
+      d.aiWhenUnknown ||
+      d.aiFaq ||
       hasAdvancedAiData(d),
   )
 }
@@ -1868,9 +1880,21 @@ function buildAiSummaryText(d: NonNullable<Client['briefingData']>): string {
   put('Serviços / produtos', d.aiServices)
   put('Informa preços', d.aiHasPrices ? 'Sim' : 'Não — encaminhar para atendente')
   put('Tabela de preços', d.aiHasPrices ? d.aiPrices : undefined)
+  put('Endereço das unidades', d.aiAddress)
+  put('Frase / bordão', d.aiSlogan)
+  put('Mais procurados', d.aiMostSought)
+  put('Convênios / parcerias', d.aiPartnerships)
+  put('Formas de pagamento', d.aiPaymentMethods)
+  put('Promoções', d.aiPromotions)
   put('Fluxo de atendimento', d.aiAttendanceFlow)
+  put('Mensagem no 1º contato', d.aiFirstMessage)
+  put('Dados para agendar', d.aiSchedulingData)
+  put('Mensagem após os dados', d.aiPostDataMessage)
+  put('Quando já é cliente', d.aiExistingClient)
   put('Quando transferir para humano', d.aiTransferConditions)
+  put('Quando não souber algo', d.aiWhenUnknown)
   put('O que a IA não deve fazer', d.aiRestrictions)
+  put('Perguntas frequentes', d.aiFaq)
   put('Instruções extras', d.aiInstructions)
   put('Sistema externo', d.aiExternalSystem)
   put('O que consultar no sistema', d.aiExternalWhatToQuery)
@@ -1946,25 +1970,44 @@ function AiAccordion({
               <AiInline label="Localização" value={data.aiLocation} />
               <AiInline label="Redes sociais" value={data.aiSocialMedia} />
             </div>
+            {data.aiAddress && <AiText label="Endereço de cada unidade" value={data.aiAddress} />}
+            {data.aiSlogan && <AiInline label="Frase / bordão" value={data.aiSlogan} />}
           </AiGroup>
 
           <AiGroup title="Serviços e valores">
             <AiText label="Principais serviços / produtos" value={data.aiServices} />
+            {data.aiMostSought && <AiText label="Mais procurados" value={data.aiMostSought} />}
+            {data.aiPartnerships && <AiText label="Convênios, planos ou parcerias" value={data.aiPartnerships} />}
             <AiInline
               label="A IA pode informar preços?"
               value={data.aiHasPrices ? 'Sim, pode informar' : 'Não — encaminhar para atendente'}
             />
             {data.aiHasPrices && <AiText label="Tabela de preços" value={data.aiPrices} />}
+            {data.aiPaymentMethods && <AiText label="Formas de pagamento" value={data.aiPaymentMethods} />}
+            {data.aiPromotions && <AiText label="Promoções / condições especiais" value={data.aiPromotions} />}
           </AiGroup>
 
           <AiGroup title="Fluxo de atendimento">
             <AiText label="Como a IA deve conduzir a conversa" value={data.aiAttendanceFlow} />
+            {data.aiFirstMessage && <AiText label="Mensagem no 1º contato" value={data.aiFirstMessage} />}
+            {data.aiSchedulingData && <AiText label="Dados que pede para agendar" value={data.aiSchedulingData} />}
+            {data.aiPostDataMessage && (
+              <AiText label="Mensagem depois que o cliente passa os dados" value={data.aiPostDataMessage} />
+            )}
+            {data.aiExistingClient && <AiText label="Quando já é cliente" value={data.aiExistingClient} />}
             <AiText label="Quando transferir para um atendente" value={data.aiTransferConditions} />
+            {data.aiWhenUnknown && <AiText label="Quando não souber algo" value={data.aiWhenUnknown} />}
             <AiText label="O que a IA NÃO deve fazer ou dizer" value={data.aiRestrictions} />
             {data.aiInstructions && (
               <AiText label="Instruções extras" value={data.aiInstructions} />
             )}
           </AiGroup>
+
+          {data.aiFaq && (
+            <AiGroup title="Dúvidas dos clientes">
+              <AiText label="Perguntas frequentes (pergunta + resposta)" value={data.aiFaq} />
+            </AiGroup>
+          )}
 
           {advanced && (
             <AiGroup

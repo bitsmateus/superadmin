@@ -48,7 +48,7 @@ import {
   wipCountFor,
   wipOwner,
 } from '@/constants/setupQueue'
-import { asText, cn, formatDateShort, formatDateTimeShort, initials } from '@/lib/utils'
+import { asText, cn, formatDateShort, formatDateTimeShort, initials, normalizeText } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
 import type { Client, PipelineStage } from '@/types/client'
 
@@ -146,7 +146,8 @@ export function PipelinePage() {
   }
 
   const byStage = React.useMemo(() => {
-    const q = search.trim().toLowerCase()
+    // Busca insensível a acento e maiúsculas.
+    const q = normalizeText(search)
     const buckets: Record<PipelineStage, Client[]> = {
       lead: [],
       welcome: [],
@@ -162,10 +163,7 @@ export function PipelinePage() {
     }
     for (const c of clients) {
       if (q) {
-        const blob =
-          asText(c.name).toLowerCase() +
-          ' ' +
-          asText(c.company).toLowerCase()
+        const blob = normalizeText(`${asText(c.name)} ${asText(c.company)}`)
         if (!blob.includes(q)) continue
       }
       // Comercial casa também com o campo legado `responsavel`.

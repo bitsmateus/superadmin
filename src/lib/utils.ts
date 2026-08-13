@@ -47,6 +47,18 @@ export function isTenantActive(t: { status?: string; active?: boolean; is_active
   return false
 }
 
+/**
+ * Normaliza texto para busca: minúsculo, sem acentos e sem espaços nas pontas.
+ * Assim "João" e "joao" batem na pesquisa.
+ */
+export function normalizeText(input: unknown): string {
+  return String(input ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
 export function slugify(input: string): string {
   return input
     .normalize('NFD')

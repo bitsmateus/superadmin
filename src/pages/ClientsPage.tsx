@@ -34,7 +34,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { db } from '@/services/db'
 import { canSeeFinancials, canDeleteClient } from '@/services/supabase'
 import { matchTenantsToClients } from '@/services/tenantImport'
-import { asText, initials } from '@/lib/utils'
+import { asText, initials, normalizeText } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
 import type { PipelineStage } from '@/types/client'
 import { cn } from '@/lib/utils'
@@ -91,18 +91,23 @@ export function ClientsPage() {
   }, [allTenants, clients])
 
   const filtered = React.useMemo(() => {
-    const q = search.trim().toLowerCase()
+    // Busca insensível a acento e maiúsculas ("João" == "joao").
+    const q = normalizeText(search)
     return clients.filter((c) => {
       if (stageFilter !== 'all' && c.stage !== stageFilter) return false
       if (!q) return true
-      const blob =
-        asText(c.name).toLowerCase() +
-        ' ' +
-        asText(c.company).toLowerCase() +
-        ' ' +
-        asText(c.email).toLowerCase() +
-        ' ' +
-        asText(c.responsavel).toLowerCase()
+      const blob = normalizeText(
+        [
+          c.name,
+          c.company,
+          c.email,
+          c.responsavel,
+          c.responsavelComercial,
+          c.responsavelEntrega,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      )
       return blob.includes(q)
     })
   }, [clients, search, stageFilter])

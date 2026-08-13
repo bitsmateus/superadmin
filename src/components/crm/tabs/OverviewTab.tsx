@@ -101,6 +101,19 @@ export function OverviewTab({ client }: { client: Client }) {
       <Section title="Dados do cliente">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <InlineField
+            label="Nome (título)"
+            value={client.name}
+            onSave={(v) => {
+              const t = v.trim()
+              if (!t) {
+                toast.error('O nome não pode ficar vazio.')
+                return
+              }
+              db.updateClient(client.id, { name: t })
+              db.addLog(client.id, 'Nome atualizado')
+            }}
+          />
+          <InlineField
             label="E-mail"
             value={client.email}
             onSave={(v) =>
@@ -143,9 +156,9 @@ export function OverviewTab({ client }: { client: Client }) {
             }}
           />
 
-          {/* E-mail de suporte — editável manualmente */}
+          {/* E-mail de suporte — clicar copia; lápis edita */}
           <div className="sm:col-span-2">
-            <InlineField
+            <CopyEditField
               label="E-mail de suporte"
               value={client.supportEmail ?? ''}
               placeholder="Sem informação"
@@ -1267,6 +1280,86 @@ function InlineField({
           </span>
           <Pencil className="h-3 w-3 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Campo em que clicar no valor COPIA (útil para e-mail), com um botão de lápis
+ * ao lado para editar.
+ */
+function CopyEditField({
+  label,
+  value,
+  placeholder,
+  onSave,
+}: {
+  label: string
+  value: string
+  placeholder?: string
+  onSave: (v: string) => void
+}) {
+  const [editing, setEditing] = React.useState(false)
+  const [draft, setDraft] = React.useState(value)
+  React.useEffect(() => {
+    if (!editing) setDraft(value)
+  }, [value, editing])
+
+  const commit = () => {
+    const trimmed = draft.trim()
+    if (trimmed !== value) onSave(trimmed)
+    setEditing(false)
+  }
+
+  const copy = async () => {
+    if (!value) return
+    const ok = await copyToClipboard(value)
+    if (ok) toast.success('E-mail copiado')
+    else toast.error('Não foi possível copiar')
+  }
+
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      {editing ? (
+        <div className="mt-1">
+          <Input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit()
+              if (e.key === 'Escape') {
+                setDraft(value)
+                setEditing(false)
+              }
+            }}
+          />
+        </div>
+      ) : (
+        <div className="mt-1 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={copy}
+            title="Clique para copiar"
+            className="group flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border border-transparent px-2 py-1.5 text-left text-sm transition-colors hover:border-line hover:bg-elevate/[0.02]"
+          >
+            <span className={cn('truncate', value ? 'text-foreground/90' : 'text-foreground/40')}>
+              {value || placeholder || '—'}
+            </span>
+            <Copy className="h-3 w-3 shrink-0 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            title="Editar"
+            className="shrink-0 rounded-md border border-transparent p-1.5 text-foreground/40 transition-colors hover:border-line hover:bg-elevate/[0.04] hover:text-foreground/80"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        </div>
       )}
     </div>
   )

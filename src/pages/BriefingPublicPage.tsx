@@ -135,11 +135,24 @@ function validateBriefing(
   const completeUsers = state.users.filter(
     (u) => u.name.trim() && isValidEmail(u.email) && (u.sectors?.length ?? 0) > 0,
   )
+  // E-mail não pode se repetir entre usuários (cada usuário = um login único).
+  const emailCounts = new Map<string, number>()
+  for (const u of state.users) {
+    const e = u.email.trim().toLowerCase()
+    if (e) emailCounts.set(e, (emailCounts.get(e) ?? 0) + 1)
+  }
+  const dupEmail = [...emailCounts.entries()].find(([, n]) => n > 1)?.[0]
   if (badEmail) {
     errs.push({
       section: 'usuarios',
       key: 'users',
       message: 'Há um e-mail de usuário inválido — use o formato nome@empresa.com (sem espaços).',
+    })
+  } else if (dupEmail) {
+    errs.push({
+      section: 'usuarios',
+      key: 'users',
+      message: `O e-mail "${dupEmail}" está repetido em mais de um usuário. Cada usuário precisa de um e-mail diferente.`,
     })
   } else if (completeUsers.length === 0) {
     errs.push({
@@ -897,6 +910,15 @@ export function BriefingPublicPage() {
                                 E-mail inválido — use o formato nome@empresa.com (sem espaços).
                               </p>
                             )}
+                            {u.email.trim() !== '' &&
+                              isValidEmail(u.email) &&
+                              state.users.filter(
+                                (x) => x.email.trim().toLowerCase() === u.email.trim().toLowerCase(),
+                              ).length > 1 && (
+                                <p className="mt-1 text-xs text-rose-500">
+                                  Este e-mail já está sendo usado por outro usuário.
+                                </p>
+                              )}
                           </Field>
                         </div>
                         <div className="sm:col-span-3">

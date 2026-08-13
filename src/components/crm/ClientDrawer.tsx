@@ -11,6 +11,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { copyToClipboard } from '@/lib/clipboard'
 import { Drawer } from '@/components/ui/Drawer'
 import { Tabs } from '@/components/ui/Tabs'
 import { Badge } from '@/components/ui/Badge'
@@ -70,6 +71,19 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
   const { systemUrl } = useAccessStore()
   const tenantServer = useServerById(client?.tenantServerId)
   const accessUrl = tenantServer?.loginUrl ?? systemUrl
+
+  // "Acessar sistema": abre o login e já copia o e-mail de suporte (evita ter
+  // que voltar aqui só para copiá-lo antes de logar).
+  const accessSystem = async () => {
+    // Copia ANTES de abrir a aba — abrir primeiro tira o foco do documento e o
+    // clipboard falharia.
+    const email = client?.supportEmail?.trim()
+    if (email) {
+      const ok = await copyToClipboard(email)
+      if (ok) toast.success('E-mail de suporte copiado')
+    }
+    window.open(accessUrl, '_blank', 'noopener,noreferrer')
+  }
 
   React.useEffect(() => {
     setTab('overview')
@@ -192,7 +206,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => window.open(accessUrl, '_blank', 'noopener,noreferrer')}
+                onClick={accessSystem}
                 leftIcon={<ExternalLink className="h-3.5 w-3.5" />}
               >
                 Acessar sistema

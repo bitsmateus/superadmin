@@ -209,6 +209,12 @@ CREATE TABLE IF NOT EXISTS clients (
   accesses JSONB,
   -- Progresso da config de API Oficial e de IA (checklist com estado).
   config_progress JSONB,
+  -- Fluxo do chatbot: roteiro (spec) revisável, JSON final importável, avisos.
+  chatbot_flow_spec JSONB,
+  chatbot_flow_json JSONB,
+  chatbot_flow_warnings JSONB,
+  chatbot_flow_generated_at TIMESTAMPTZ,
+  chatbot_flow_published_at TIMESTAMPTZ,
   platform_app BOOLEAN NOT NULL DEFAULT FALSE,
   platform_web BOOLEAN NOT NULL DEFAULT FALSE,
   platform_chat BOOLEAN NOT NULL DEFAULT FALSE,

@@ -70,6 +70,12 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS briefing_number TEXT`);
   // Progresso da config de API Oficial e de IA (checklist com estado).
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS config_progress JSONB`);
+  // Fluxo do chatbot gerado a partir do briefing (spec revisável + JSON final).
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS chatbot_flow_spec JSONB`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS chatbot_flow_json JSONB`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS chatbot_flow_warnings JSONB`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS chatbot_flow_generated_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS chatbot_flow_published_at TIMESTAMPTZ`);
   // Arquivamento (soft-delete): card sai do pipeline mas pode ser restaurado
   // ou excluído permanentemente na tela de Arquivados.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);

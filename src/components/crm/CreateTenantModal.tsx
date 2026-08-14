@@ -589,16 +589,22 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       if (sessionId != null && (prov as Record<string, unknown>).sessionId == null) {
         ;(prov as Record<string, unknown>).sessionId = sessionId
       }
-      // apiId EXTERNO (UUID). Não sobrescreve um UUID já capturado por um valor
-      // não-UUID (ex.: id numérico de um canal seguinte).
+      // apiId + token EXTERNOS. É CRÍTICO capturar os dois do MESMO canal: a NX
+      // pode criar uma API por canal, e casar o apiId de um canal com o token de
+      // outro faz o NX recusar com ERR_SESSION_NOT_AUTH_TOKEN (ex.: ao criar
+      // usuários). Por isso, no primeiro canal que trouxer o token, fixamos o par
+      // (apiId + token) e não sobrescrevemos mais.
       const apiId = pickExternalApiId(apiConfig, apiWrap, session as Record<string, unknown>)
-      if (apiId && (!prov.apiId || looksUuid(apiId) || !looksUuid(prov.apiId))) {
-        prov.apiId = apiId
-      }
       const apiToken =
         (pick(apiWrap, 'plainToken') as string | undefined) ??
         (pick(apiConfig, 'token', 'authToken') as string | undefined)
-      if (apiToken && !prov.apiToken) prov.apiToken = apiToken
+      if (apiToken && !prov.apiToken) {
+        prov.apiToken = apiToken
+        if (apiId) prov.apiId = apiId // fixa o par, do mesmo canal
+      } else if (apiId && !prov.apiId) {
+        // Ainda sem token: guarda o apiId só como fallback (ex.: /tenantCreateApi).
+        prov.apiId = apiId
+      }
       if (prov.userId == null) prov.userId = pick(wa, 'userId') as string | number | undefined
       return sessionId
     }

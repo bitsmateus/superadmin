@@ -210,6 +210,17 @@ function validateBriefing(
     })
   }
 
+  // ── Condicional: chatbot (roteiro) ──
+  if (sections.includes('chatbot')) {
+    if (!state.chatbotDescription.trim())
+      errs.push({ section: 'chatbot', key: 'chatbotDescription', message: 'Descreva como o atendimento do chatbot deve funcionar.' })
+    const hasMenu = state.chatbotMenus.some(
+      (m) => m.question.trim() && m.options.split('\n').some((o) => o.trim()),
+    )
+    if (!hasMenu)
+      errs.push({ section: 'chatbot', key: 'chatbotMenus', message: 'Adicione ao menos 1 menu com pergunta e opções.' })
+  }
+
   return errs
 }
 
@@ -259,6 +270,12 @@ interface BriefingFormState {
   offHoursMessage: string
   greetingEditing: boolean
   offHoursEditing: boolean
+  // Roteiro do chatbot (base da geração automática do fluxo)
+  chatbotDescription: string
+  chatbotMenus: { question: string; options: string }[] // options: uma por linha
+  chatbotCollect: string // uma por linha
+  chatbotTransfers: { option: string; department: string }[]
+  chatbotClosing: string
   useAI: boolean
   aiTone: AiTone
   aiAgentName: string
@@ -324,6 +341,11 @@ function initialFormState(company: string): BriefingFormState {
     offHoursMessage: buildOffHours(company),
     greetingEditing: false,
     offHoursEditing: false,
+    chatbotDescription: '',
+    chatbotMenus: [{ question: '', options: '' }],
+    chatbotCollect: '',
+    chatbotTransfers: [],
+    chatbotClosing: '',
     useAI: false,
     aiTone: 'casual',
     aiAgentName: '',
@@ -433,6 +455,17 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     channelAccess: bd.channelAccess ?? base.channelAccess,
     greetingMessage: bd.greetingMessage || base.greetingMessage,
     offHoursMessage: bd.offHoursMessage || base.offHoursMessage,
+    chatbotDescription: bd.chatbotFlow?.description ?? base.chatbotDescription,
+    chatbotMenus:
+      bd.chatbotFlow?.menus && bd.chatbotFlow.menus.length > 0
+        ? bd.chatbotFlow.menus.map((m) => ({
+            question: m.question,
+            options: (m.options ?? []).join('\n'),
+          }))
+        : base.chatbotMenus,
+    chatbotCollect: (bd.chatbotFlow?.collectFields ?? []).join('\n') || base.chatbotCollect,
+    chatbotTransfers: bd.chatbotFlow?.transfers ?? base.chatbotTransfers,
+    chatbotClosing: bd.chatbotFlow?.closingMessage ?? base.chatbotClosing,
     useAI: bd.useAI ?? base.useAI,
     aiTone: bd.aiTone ?? base.aiTone,
     aiAgentName: bd.aiAgentName ?? base.aiAgentName,
@@ -631,6 +664,28 @@ export function BriefingPublicPage() {
           }
         : undefined,
       mainFlow: '',
+      chatbotFlow: sections.includes('chatbot')
+        ? {
+            description: state.chatbotDescription.trim(),
+            menus: state.chatbotMenus
+              .map((m) => ({
+                question: m.question.trim(),
+                options: m.options
+                  .split('\n')
+                  .map((o) => o.trim())
+                  .filter(Boolean),
+              }))
+              .filter((m) => m.question || m.options.length > 0),
+            collectFields: state.chatbotCollect
+              .split('\n')
+              .map((s) => s.trim())
+              .filter(Boolean),
+            transfers: state.chatbotTransfers
+              .map((t) => ({ option: t.option.trim(), department: t.department.trim() }))
+              .filter((t) => t.option && t.department),
+            closingMessage: state.chatbotClosing.trim(),
+          }
+        : undefined,
       greetingMessage: state.greetingMessage.trim(),
       offHoursMessage: state.offHoursMessage.trim(),
       departments: state.sectors,
@@ -1341,6 +1396,160 @@ export function BriefingPublicPage() {
             description="Configuração das mensagens automáticas do chatbot."
           >
             <div className="space-y-6">
+              {/* Roteiro do chatbot (base da geração automática) */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-1 text-sm font-semibold text-slate-800">Como o atendimento deve funcionar</h3>
+                <p className="mb-3 text-xs text-slate-500">
+                  Descreva o roteiro do seu chatbot. Nosso time usa isto para montar o fluxo automático.
+                </p>
+                <div className="space-y-4">
+                  <Field label="Descrição geral do atendimento *">
+                    <PlainTextarea
+                      value={state.chatbotDescription}
+                      onChange={(v) => {
+                        setState({ ...state, chatbotDescription: v })
+                        clearError('chatbotDescription')
+                      }}
+                      rows={3}
+                      placeholder="Ex: O cliente escolhe se quer comprar ou tirar dúvida; coletamos CNPJ e o que ele procura; transferimos para o vendedor."
+                    />
+                    {errors.chatbotDescription && (
+                      <p className="mt-1 text-xs font-medium text-rose-600">{errors.chatbotDescription}</p>
+                    )}
+                  </Field>
+
+                  {/* Menus dinâmicos */}
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600">
+                      Menus (pergunta + opções, uma por linha) *
+                    </label>
+                    <div className="space-y-3">
+                      {state.chatbotMenus.map((m, i) => (
+                        <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <PlainInput
+                            value={m.question}
+                            onChange={(v) => {
+                              const menus = [...state.chatbotMenus]
+                              menus[i] = { ...menus[i], question: v }
+                              setState({ ...state, chatbotMenus: menus })
+                              clearError('chatbotMenus')
+                            }}
+                            placeholder="Pergunta do menu (ex: O que você procura?)"
+                          />
+                          <div className="mt-2">
+                            <PlainTextarea
+                              value={m.options}
+                              onChange={(v) => {
+                                const menus = [...state.chatbotMenus]
+                                menus[i] = { ...menus[i], options: v }
+                                setState({ ...state, chatbotMenus: menus })
+                                clearError('chatbotMenus')
+                              }}
+                              rows={3}
+                              placeholder={'Uma opção por linha\nEx: Ímãs\nAlto-Falante\nFalar com atendente'}
+                            />
+                          </div>
+                          {state.chatbotMenus.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setState({ ...state, chatbotMenus: state.chatbotMenus.filter((_, x) => x !== i) })
+                              }
+                              className="mt-2 inline-flex items-center gap-1 text-xs text-rose-500 hover:underline"
+                            >
+                              <Trash2 className="h-3 w-3" /> Remover menu
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setState({ ...state, chatbotMenus: [...state.chatbotMenus, { question: '', options: '' }] })
+                      }
+                      className="mt-2 inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
+                    >
+                      <Plus className="h-4 w-4" /> Adicionar menu
+                    </button>
+                    {errors.chatbotMenus && (
+                      <p className="mt-1 text-xs font-medium text-rose-600">{errors.chatbotMenus}</p>
+                    )}
+                  </div>
+
+                  <Field label="Dados que o bot deve coletar antes de transferir (um por linha)">
+                    <PlainTextarea
+                      value={state.chatbotCollect}
+                      onChange={(v) => setState({ ...state, chatbotCollect: v })}
+                      rows={3}
+                      placeholder={'Ex: Nome\nCNPJ/CPF\nProduto e quantidade'}
+                    />
+                  </Field>
+
+                  {/* Transferências dinâmicas */}
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600">
+                      Transferências (opção → setor que atende)
+                    </label>
+                    <div className="space-y-2">
+                      {state.chatbotTransfers.map((t, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <PlainInput
+                            value={t.option}
+                            onChange={(v) => {
+                              const arr = [...state.chatbotTransfers]
+                              arr[i] = { ...arr[i], option: v }
+                              setState({ ...state, chatbotTransfers: arr })
+                            }}
+                            placeholder="Opção (ex: Falar com atendente)"
+                            className="flex-1"
+                          />
+                          <span className="text-slate-400">→</span>
+                          <PlainInput
+                            value={t.department}
+                            onChange={(v) => {
+                              const arr = [...state.chatbotTransfers]
+                              arr[i] = { ...arr[i], department: v }
+                              setState({ ...state, chatbotTransfers: arr })
+                            }}
+                            placeholder="Setor (ex: Comercial)"
+                            className="flex-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setState({ ...state, chatbotTransfers: state.chatbotTransfers.filter((_, x) => x !== i) })
+                            }
+                            className="rounded p-1 text-rose-500 hover:bg-rose-50"
+                            aria-label="Remover"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setState({ ...state, chatbotTransfers: [...state.chatbotTransfers, { option: '', department: '' }] })
+                      }
+                      className="mt-2 inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
+                    >
+                      <Plus className="h-4 w-4" /> Adicionar transferência
+                    </button>
+                  </div>
+
+                  <Field label="Mensagem de encerramento">
+                    <PlainTextarea
+                      value={state.chatbotClosing}
+                      onChange={(v) => setState({ ...state, chatbotClosing: v })}
+                      rows={2}
+                      placeholder="Ex: Obrigado! Em instantes um atendente falará com você."
+                    />
+                  </Field>
+                </div>
+              </div>
+
               {/* Mensagem de saudação */}
               <div>
                 <div className="mb-2 flex items-center justify-between">

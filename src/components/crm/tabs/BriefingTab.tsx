@@ -1787,8 +1787,29 @@ function BriefingViewer({
       {(data.greetingMessage ||
         data.offHoursMessage ||
         data.mainFlow ||
+        data.chatbotFlow ||
         data.departments.length > 0) && (
         <Accordion title="5. Chatbot" defaultOpen>
+          {data.chatbotFlow && (
+            <div className="mb-2 space-y-1.5 rounded-lg border border-line bg-elevate/[0.02] p-3">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-foreground/40">
+                Roteiro do chatbot
+              </div>
+              <Row k="Como funciona" v={data.chatbotFlow.description} />
+              {(data.chatbotFlow.menus ?? []).map((m, i) => (
+                <Row key={i} k={`Menu ${i + 1}`} v={`${m.question} — ${(m.options ?? []).join(', ')}`} />
+              ))}
+              {(data.chatbotFlow.collectFields ?? []).length > 0 && (
+                <Row k="Coletar" v={data.chatbotFlow.collectFields.join(', ')} />
+              )}
+              {(data.chatbotFlow.transfers ?? []).map((t, i) => (
+                <Row key={`t${i}`} k="Transferir" v={`${t.option} → ${t.department}`} />
+              ))}
+              {data.chatbotFlow.closingMessage && (
+                <Row k="Encerramento" v={data.chatbotFlow.closingMessage} />
+              )}
+            </div>
+          )}
           {data.mainFlow && <Row k="Fluxo principal" v={data.mainFlow} />}
           <Row k="Saudação" v={data.greetingMessage} />
           <Row k="Fora do horário" v={data.offHoursMessage} />

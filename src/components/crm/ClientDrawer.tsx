@@ -1,6 +1,7 @@
 import * as React from 'react'
 import {
   Activity,
+  Bot,
   ChevronDown,
   ClipboardList,
   ExternalLink,
@@ -20,6 +21,7 @@ import { Modal } from '@/components/ui/Modal'
 import { StageBadge } from './StageBadge'
 import { OverviewTab } from './tabs/OverviewTab'
 import { BriefingTab } from './tabs/BriefingTab'
+import { ChatbotTab } from './tabs/ChatbotTab'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
 import { FichaTab } from './tabs/FichaTab'
@@ -43,6 +45,7 @@ interface TabDef {
 const TAB_DEFS: TabDef[] = [
   { value: 'overview', label: 'Visão Geral', icon: <Activity className="h-3.5 w-3.5" /> },
   { value: 'briefing', label: 'Briefing', icon: <MessageSquare className="h-3.5 w-3.5" /> },
+  { value: 'chatbot', label: 'Chatbot', icon: <Bot className="h-3.5 w-3.5" /> },
   { value: 'delivery', label: 'Entrega', icon: <ListChecks className="h-3.5 w-3.5" /> },
   { value: 'followup', label: 'Follow-up', icon: <Send className="h-3.5 w-3.5" /> },
   { value: 'ficha', label: 'Ficha de cadastro', icon: <ClipboardList className="h-3.5 w-3.5" /> },
@@ -246,6 +249,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
         <div className="p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
           {tab === 'briefing' && <BriefingTab client={client} />}
+          {tab === 'chatbot' && <ChatbotTab client={client} />}
           {tab === 'delivery' && <DeliveryTab client={client} />}
           {tab === 'followup' && <FollowUpTab client={client} />}
           {tab === 'ficha' && <FichaTab client={client} />}

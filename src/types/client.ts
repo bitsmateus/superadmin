@@ -97,7 +97,10 @@ export interface BriefingData {
   facebookEmail?: string
   facebookPassword?: string
 
+  /** @deprecated legado — use chatbotFlow. Mantido p/ briefings antigos. */
   mainFlow: string
+  /** Roteiro do chatbot preenchido pelo cliente (base p/ geração do fluxo). */
+  chatbotFlow?: ChatbotFlowBriefing
   greetingMessage: string
   offHoursMessage: string
   departments: string[]
@@ -172,6 +175,21 @@ export interface OfficialApiAccess {
   displayNamePretendido?: string
   verificacaoNegocioStatus?: MetaVerificationStatus
   partnerAccessStatus?: PartnerAccessStatus
+}
+
+/** Roteiro do chatbot que o cliente descreve no briefing. Vira base para a
+ *  geração automática do fluxo (FlowSpec → JSON) no painel. */
+export interface ChatbotFlowBriefing {
+  /** Descrição livre de como o atendimento deve funcionar. */
+  description: string
+  /** Menus principais: pergunta + opções que o cliente quer oferecer. */
+  menus: { question: string; options: string[] }[]
+  /** Dados que o bot deve coletar antes de passar pro time. */
+  collectFields: string[]
+  /** Opção → setor que recebe (nome do setor; a fila é resolvida depois). */
+  transfers: { option: string; department: string }[]
+  /** Mensagem de encerramento desejada. */
+  closingMessage: string
 }
 
 export type ConnectionType = 'api_oficial' | 'api_comum'

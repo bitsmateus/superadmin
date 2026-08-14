@@ -14,6 +14,7 @@ import { proxyRoutes } from './routes/proxy.js';
 import { canaisRoutes } from './routes/canais.js';
 import { channelsRoutes } from './routes/channels.js';
 import { automationRoutes } from './routes/automation.js';
+import { chatbotFlowRoutes } from './routes/chatbotFlow.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
@@ -50,6 +51,7 @@ async function main() {
   await app.register(canaisRoutes);
   await app.register(channelsRoutes);
   await app.register(automationRoutes);
+  await app.register(chatbotFlowRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

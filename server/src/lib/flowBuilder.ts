@@ -10,9 +10,21 @@ import type {
   FlowInteraction,
 } from './flowSpec.js';
 
+/** Normaliza um nome de setor/fila para casar (minúsculo, sem acento). */
+export function normalizeQueueName(s: string): string {
+  return (s ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 export interface BuildOpts {
   /** Nome do fluxo no JSON final (default: spec.name). */
   flowName?: string;
+  /** Mapa nome-do-setor (normalizado) -> queueId. Quando um transferToQueue casa,
+   *  o builder troca o nome pelo id real; senão mantém o nome (e o chamador avisa). */
+  queueMap?: Record<string, string>;
   /** Mensagem de boas-vindas e de fora do horário vindas do briefing.
    *  DECISÃO DE CONTRATO: mantemos a boas-vindas no PRIMEIRO nó (é a mensagem do
    *  passo `start` da spec) e deixamos `configurations` com os defaults do doc.
@@ -73,6 +85,10 @@ export function buildFlowJson(
   }
   const resolve = (stepId: string | undefined): string =>
     (stepId && nodeIdOf.get(stepId)) || '';
+  // Troca o nome do setor pelo queueId real quando houver mapa; senão mantém o
+  // nome (o chamador avisa que precisa resolver a fila antes de importar).
+  const resolveQueue = (name: string): string =>
+    opts.queueMap?.[normalizeQueueName(name)] ?? name;
 
   const byId = new Map(spec.steps.map((s) => [s.id, s]));
 
@@ -197,7 +213,7 @@ export function buildFlowJson(
           id: newCondId(),
           action: 1,
           nextStepId: '',
-          queueId: step.transferToQueue,
+          queueId: resolveQueue(step.transferToQueue),
           type: 'US',
           comparisonType: '',
           condition: [],
@@ -224,7 +240,7 @@ export function buildFlowJson(
           id: newCondId(),
           action: 1 as const,
           nextStepId: '',
-          queueId: g.queueId,
+          queueId: resolveQueue(g.queueId),
           type: 'R' as const,
           comparisonType: 'equals' as const,
           condition: g.labels,

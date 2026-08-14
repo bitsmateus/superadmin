@@ -99,6 +99,32 @@ test('menu de 3 vira botões; 4 vira lista; 11 é erro de validação', () => {
   assert.ok(eleven.errors.some((e) => /máx\. 10|quebre em submenus/i.test(e)));
 });
 
+test('queueMap resolve o nome do setor para o queueId real', () => {
+  const spec: FlowSpec = {
+    name: 'x',
+    start: 'm',
+    steps: [
+      {
+        id: 'm',
+        name: 'M',
+        type: 'menu',
+        message: 'Escolha',
+        options: [
+          { label: 'Comprar', next: 'fim' },
+          { label: 'Atendente', transferToQueue: 'Comercial' },
+        ],
+      },
+      { id: 'fim', name: 'Fim', type: 'end', message: 'ok' },
+    ],
+  }
+  const { json } = buildFlowJson(spec, { queueMap: { comercial: '312' } })
+  const transfer = nodeByName(json.nodeList, 'M').conditions!.find((c) => c.action === 1)!
+  assert.equal(transfer.queueId, '312')
+  // Sem mapa, mantém o nome (o operador ajusta depois).
+  const { json: noMap } = buildFlowJson(spec)
+  assert.equal(nodeByName(noMap.nodeList, 'M').conditions!.find((c) => c.action === 1)!.queueId, 'Comercial')
+})
+
 test('determinismo: buildar duas vezes gera JSON idêntico', () => {
   const a = JSON.stringify(buildFlowJson(fixture).json);
   const b = JSON.stringify(buildFlowJson(fixture).json);

@@ -121,12 +121,12 @@ export function ChatbotTab({ client }: { client: Client }) {
       s ? { ...s, steps: s.steps.map((st, x) => (x === i ? ({ ...st, ...patch } as FlowStep) : st)) } : s,
     )
   }
-  const patchOptionLabel = (si: number, oi: number, label: string) => {
+  const patchOption = (si: number, oi: number, patch: { label?: string; transferToQueue?: string }) => {
     setEdited((s) => {
       if (!s) return s
       const steps = s.steps.map((st, x) => {
         if (x !== si || st.type !== 'menu') return st
-        return { ...st, options: st.options.map((o, y) => (y === oi ? { ...o, label } : o)) }
+        return { ...st, options: st.options.map((o, y) => (y === oi ? { ...o, ...patch } : o)) }
       })
       return { ...s, steps }
     })
@@ -257,12 +257,22 @@ export function ChatbotTab({ client }: { client: Client }) {
                       <li key={oi} className="flex items-center gap-2 text-xs">
                         <input
                           value={o.label}
-                          onChange={(e) => patchOptionLabel(i, oi, e.target.value)}
+                          onChange={(e) => patchOption(i, oi, { label: e.target.value })}
                           className="flex-1 rounded border border-line bg-card px-2 py-1 text-foreground/90 focus:border-accent/40 focus:outline-none"
                         />
-                        <span className="shrink-0 text-foreground/40">
-                          → {o.transferToQueue ? `fila: ${o.transferToQueue}` : nameOf(o.next)}
-                        </span>
+                        {o.transferToQueue !== undefined ? (
+                          <span className="flex shrink-0 items-center gap-1 text-foreground/40">
+                            → fila:
+                            <input
+                              value={o.transferToQueue}
+                              onChange={(e) => patchOption(i, oi, { transferToQueue: e.target.value })}
+                              title="Nome do setor ou id da fila"
+                              className="w-28 rounded border border-line bg-card px-1.5 py-0.5 text-foreground/90 focus:border-accent/40 focus:outline-none"
+                            />
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-foreground/40">→ {nameOf(o.next)}</span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -270,8 +280,16 @@ export function ChatbotTab({ client }: { client: Client }) {
                 {step.type === 'ask' && (
                   <p className="mt-1 text-[11px] text-foreground/45">→ {nameOf(step.next)}</p>
                 )}
-                {step.type === 'end' && step.transferToQueue && (
-                  <p className="mt-1 text-[11px] text-foreground/45">→ transfere para fila: {step.transferToQueue}</p>
+                {step.type === 'end' && step.transferToQueue !== undefined && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-foreground/45">
+                    → transfere para fila:
+                    <input
+                      value={step.transferToQueue}
+                      onChange={(e) => patchStep(i, { transferToQueue: e.target.value } as Partial<FlowStep>)}
+                      title="Nome do setor ou id da fila"
+                      className="w-28 rounded border border-line bg-card px-1.5 py-0.5 text-foreground/90 focus:border-accent/40 focus:outline-none"
+                    />
+                  </p>
                 )}
               </div>
             ))}

@@ -1797,7 +1797,11 @@ function BriefingViewer({
               </div>
               <Row k="Como funciona" v={data.chatbotFlow.description} />
               {(data.chatbotFlow.menus ?? []).map((m, i) => (
-                <Row key={i} k={`Menu ${i + 1}`} v={`${m.question} — ${(m.options ?? []).join(', ')}`} />
+                <Row
+                  key={i}
+                  k={i === 0 ? 'Menu principal' : `Submenu ${i}`}
+                  v={`${m.parentOption ? `Após escolher “${m.parentOption}” — ` : ''}${m.question} — ${(m.options ?? []).join(', ')}`}
+                />
               ))}
               {(data.chatbotFlow.collectFields ?? []).length > 0 && (
                 <Row k="Coletar" v={data.chatbotFlow.collectFields.join(', ')} />

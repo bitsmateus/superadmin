@@ -272,7 +272,7 @@ interface BriefingFormState {
   offHoursEditing: boolean
   // Roteiro do chatbot (base da geração automática do fluxo)
   chatbotDescription: string
-  chatbotMenus: { question: string; options: string }[] // options: uma por linha
+  chatbotMenus: { question: string; options: string; parentOption?: string }[] // options: uma por linha
   chatbotCollect: string // uma por linha
   chatbotTransfers: { option: string; department: string }[]
   chatbotClosing: string
@@ -461,6 +461,7 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
         ? bd.chatbotFlow.menus.map((m) => ({
             question: m.question,
             options: (m.options ?? []).join('\n'),
+            parentOption: m.parentOption,
           }))
         : base.chatbotMenus,
     chatbotCollect: (bd.chatbotFlow?.collectFields ?? []).join('\n') || base.chatbotCollect,
@@ -670,6 +671,7 @@ export function BriefingPublicPage() {
             menus: state.chatbotMenus
               .map((m) => ({
                 question: m.question.trim(),
+                parentOption: m.parentOption?.trim() || undefined,
                 options: m.options
                   .split('\n')
                   .map((o) => o.trim())
@@ -1398,12 +1400,12 @@ export function BriefingPublicPage() {
             <div className="space-y-6">
               {/* Roteiro do chatbot (base da geração automática) */}
               <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <h3 className="mb-1 text-sm font-semibold text-slate-800">Como o atendimento deve funcionar</h3>
+                <h3 className="mb-1 text-sm font-semibold text-slate-800">Monte o fluxo do chatbot</h3>
                 <p className="mb-3 text-xs text-slate-500">
-                  Descreva o roteiro do seu chatbot. Nosso time usa isto para montar o fluxo automático.
+                  Comece pelo menu principal. Se uma opção precisar abrir novas escolhas, adicione um submenu.
                 </p>
                 <div className="space-y-4">
-                  <Field label="Descrição geral do atendimento *">
+                  <Field label="Resumo do atendimento *">
                     <PlainTextarea
                       value={state.chatbotDescription}
                       onChange={(v) => {
@@ -1411,7 +1413,7 @@ export function BriefingPublicPage() {
                         clearError('chatbotDescription')
                       }}
                       rows={3}
-                      placeholder="Ex: O cliente escolhe se quer comprar ou tirar dúvida; coletamos CNPJ e o que ele procura; transferimos para o vendedor."
+                      placeholder="Ex: Um único número para Comercial, Suporte e Financeiro. Depois da escolha, o cliente é direcionado ao setor responsável."
                     />
                     {errors.chatbotDescription && (
                       <p className="mt-1 text-xs font-medium text-rose-600">{errors.chatbotDescription}</p>
@@ -1421,11 +1423,56 @@ export function BriefingPublicPage() {
                   {/* Menus dinâmicos */}
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-600">
-                      Menus (pergunta + opções, uma por linha) *
+                      Menu de atendimento *
                     </label>
+                    <p className="mb-2 text-xs text-slate-500">
+                      Escreva a mensagem que o cliente verá e coloque uma opção em cada linha. Os números serão adicionados no fluxo.
+                    </p>
                     <div className="space-y-3">
                       {state.chatbotMenus.map((m, i) => (
                         <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <div className="mb-3 flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">
+                                {i === 0 ? 'Menu principal' : `Submenu ${i}`}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {i === 0
+                                  ? 'É a primeira lista de opções apresentada ao cliente.'
+                                  : 'Aparece somente depois que o cliente escolhe uma opção específica.'}
+                              </p>
+                            </div>
+                            {i > 0 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setState({ ...state, chatbotMenus: state.chatbotMenus.filter((_, x) => x !== i) })
+                                }
+                                className="inline-flex shrink-0 items-center gap-1 text-xs text-rose-500 hover:underline"
+                              >
+                                <Trash2 className="h-3 w-3" /> Remover
+                              </button>
+                            )}
+                          </div>
+                          {i > 0 && (
+                            <div className="mb-2">
+                              <label className="mb-1 block text-xs font-medium text-slate-600">
+                                Qual opção abre este submenu?
+                              </label>
+                              <PlainInput
+                                value={m.parentOption ?? ''}
+                                onChange={(v) => {
+                                  const menus = [...state.chatbotMenus]
+                                  menus[i] = { ...menus[i], parentOption: v }
+                                  setState({ ...state, chatbotMenus: menus })
+                                }}
+                                placeholder="Ex: Suporte"
+                              />
+                            </div>
+                          )}
+                          <label className="mb-1 block text-xs font-medium text-slate-600">
+                            Mensagem exibida
+                          </label>
                           <PlainInput
                             value={m.question}
                             onChange={(v) => {
@@ -1434,9 +1481,12 @@ export function BriefingPublicPage() {
                               setState({ ...state, chatbotMenus: menus })
                               clearError('chatbotMenus')
                             }}
-                            placeholder="Pergunta do menu (ex: O que você procura?)"
+                            placeholder={i === 0 ? 'Ex: Olá! Como podemos ajudar?' : 'Ex: Sobre qual assunto você precisa de suporte?'}
                           />
                           <div className="mt-2">
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Opções (uma por linha)
+                            </label>
                             <PlainTextarea
                               value={m.options}
                               onChange={(v) => {
@@ -1446,31 +1496,20 @@ export function BriefingPublicPage() {
                                 clearError('chatbotMenus')
                               }}
                               rows={3}
-                              placeholder={'Uma opção por linha\nEx: Ímãs\nAlto-Falante\nFalar com atendente'}
+                              placeholder={i === 0 ? 'Comercial\nSuporte\nFinanceiro' : 'Problema técnico\nDúvida sobre acesso\nFalar com atendente'}
                             />
                           </div>
-                          {state.chatbotMenus.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setState({ ...state, chatbotMenus: state.chatbotMenus.filter((_, x) => x !== i) })
-                              }
-                              className="mt-2 inline-flex items-center gap-1 text-xs text-rose-500 hover:underline"
-                            >
-                              <Trash2 className="h-3 w-3" /> Remover menu
-                            </button>
-                          )}
                         </div>
                       ))}
                     </div>
                     <button
                       type="button"
                       onClick={() =>
-                        setState({ ...state, chatbotMenus: [...state.chatbotMenus, { question: '', options: '' }] })
+                        setState({ ...state, chatbotMenus: [...state.chatbotMenus, { question: '', options: '', parentOption: '' }] })
                       }
                       className="mt-2 inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
                     >
-                      <Plus className="h-4 w-4" /> Adicionar menu
+                      <Plus className="h-4 w-4" /> Adicionar submenu
                     </button>
                     {errors.chatbotMenus && (
                       <p className="mt-1 text-xs font-medium text-rose-600">{errors.chatbotMenus}</p>

@@ -121,13 +121,16 @@ export function buildBriefingSummary(
 
   // Bloco estruturado do fluxo (quando o briefing público já coleta — Bloco 3).
   const cf = b.chatbotFlow as
-    | { description?: string; menus?: { question?: string; options?: string[] }[]; collectFields?: string[]; transfers?: { option?: string; department?: string }[]; closingMessage?: string }
+    | { description?: string; menus?: { question?: string; options?: string[]; parentOption?: string }[]; collectFields?: string[]; transfers?: { option?: string; department?: string }[]; closingMessage?: string }
     | undefined;
   if (cf) {
     put('Como o atendimento deve funcionar', cf.description);
     if (Array.isArray(cf.menus))
       cf.menus.forEach((m, i) =>
-        put(`Menu ${i + 1}`, `${m.question ?? ''} — opções: ${(m.options ?? []).join(', ')}`),
+        put(
+          i === 0 ? 'Menu principal' : `Submenu ${i}`,
+          `${m.parentOption ? `aberto pela opção "${m.parentOption}" — ` : ''}${m.question ?? ''} — opções: ${(m.options ?? []).join(', ')}`,
+        ),
       );
     put('Dados a coletar antes de transferir', cf.collectFields);
     if (Array.isArray(cf.transfers))

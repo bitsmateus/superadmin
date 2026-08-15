@@ -182,8 +182,8 @@ export interface OfficialApiAccess {
 export interface ChatbotFlowBriefing {
   /** Descrição livre de como o atendimento deve funcionar. */
   description: string
-  /** Menus principais: pergunta + opções que o cliente quer oferecer. */
-  menus: { question: string; options: string[] }[]
+  /** Menu principal e submenus. `parentOption` informa qual opção abre o submenu. */
+  menus: { question: string; options: string[]; parentOption?: string }[]
   /** Dados que o bot deve coletar antes de passar pro time. */
   collectFields: string[]
   /** Opção → setor que recebe (nome do setor; a fila é resolvida depois). */

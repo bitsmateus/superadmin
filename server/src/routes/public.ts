@@ -103,6 +103,11 @@ export async function publicRoutes(app: FastifyInstance) {
       return { message };
     } catch (error) {
       req.log.error(error, 'Falha ao gerar mensagem de boas-vindas');
+      if (error instanceof Error && error.message.includes('ANTHROPIC_API_KEY não configurada')) {
+        return reply.status(503).send({
+          message: 'A geração com IA ainda não foi configurada no servidor. Contate o responsável pelo sistema.',
+        });
+      }
       return reply.status(502).send({ message: 'Não foi possível gerar a mensagem com IA. Tente novamente.' });
     }
   });

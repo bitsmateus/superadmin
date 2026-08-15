@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { sendSupportGroupMessage } from '../lib/supportGroup.js';
+import { generateWelcomeMessage } from '../lib/flowAi.js';
 
 export async function publicRoutes(app: FastifyInstance) {
   // POST /api/public/ficha — formulário público de cadastro. Cria um cliente
@@ -74,6 +75,37 @@ export async function publicRoutes(app: FastifyInstance) {
       return row;
     }
   );
+
+  // Gera a abertura do menu sem expor a chave da Anthropic no navegador.
+  app.post<{
+    Params: { token: string };
+    Body: { description?: string; sectors?: string[] };
+  }>('/api/public/briefing/:token/generate-welcome', async (req, reply) => {
+    const row = await queryOne<{ company: string | null; name: string }>(
+      'SELECT company, name FROM clients WHERE briefing_token = $1',
+      [req.params.token],
+    );
+    if (!row) return reply.status(404).send({ message: 'Token inválido' });
+
+    const description = String(req.body?.description ?? '').trim().slice(0, 2000);
+    const sectors = Array.isArray(req.body?.sectors)
+      ? req.body.sectors.map((sector) => String(sector).trim()).filter(Boolean).slice(0, 20)
+      : [];
+    if (!description) return reply.status(400).send({ message: 'Preencha o resumo do atendimento primeiro.' });
+    if (sectors.length === 0) return reply.status(400).send({ message: 'Cadastre ao menos um setor primeiro.' });
+
+    try {
+      const message = await generateWelcomeMessage({
+        company: row.company?.trim() || row.name,
+        description,
+        sectors,
+      });
+      return { message };
+    } catch (error) {
+      req.log.error(error, 'Falha ao gerar mensagem de boas-vindas');
+      return reply.status(502).send({ message: 'Não foi possível gerar a mensagem com IA. Tente novamente.' });
+    }
+  });
 
   // POST /api/public/briefing/:token — submit briefing
   app.post<{ Params: { token: string }; Body: { data: Record<string, unknown> } }>(

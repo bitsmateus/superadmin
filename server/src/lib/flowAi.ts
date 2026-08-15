@@ -155,6 +155,47 @@ interface AnthropicBlock {
   text?: string;
 }
 
+/** Gera somente a frase curta de boas-vindas usada no menu do briefing público. */
+export async function generateWelcomeMessage(input: {
+  company: string;
+  description: string;
+  sectors: string[];
+}): Promise<string> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY não configurada no servidor.');
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 120,
+      system:
+        'Crie uma mensagem curta de boas-vindas para um chatbot de WhatsApp. Responda somente com a mensagem, em português do Brasil, com no máximo 2 frases. Seja cordial e direto. Não liste setores, opções ou números, pois eles serão adicionados depois. Use no máximo um emoji.',
+      messages: [
+        {
+          role: 'user',
+          content: `Empresa: ${input.company}\nResumo informado pelo cliente: ${input.description}\nSetores disponíveis: ${input.sectors.join(', ')}`,
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Claude API ${res.status}: ${detail.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as { content?: AnthropicBlock[]; stop_reason?: string };
+  if (data.stop_reason === 'refusal') throw new Error('A IA recusou o pedido.');
+  const message = (data.content ?? []).find((block) => block.type === 'text')?.text?.trim();
+  if (!message) throw new Error('A IA não retornou uma mensagem.');
+  return message.replace(/^['“”]|['“”]$/g, '').slice(0, 400);
+}
+
 async function callClaude(messages: unknown[]): Promise<FlowSpec> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY não configurada no servidor.');

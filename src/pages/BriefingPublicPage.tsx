@@ -238,6 +238,11 @@ ${menuItems}
 Clique em uma opção ou digite o número correspondente para continuar.`
 }
 
+function buildChatbotPreview(message: string, sectors: string[]): string {
+  const options = sectors.map((sector, index) => `${numberEmoji(index)} ${sector}`).join('\n')
+  return `${message.trim()}\n\n${options}\n\nClique em uma opção ou digite o número correspondente para continuar.`
+}
+
 function buildOffHours(company: string): string {
   return `Olá! Obrigado por entrar em contato com a ${company || 'nossa empresa'}! ✨
 
@@ -269,6 +274,7 @@ interface BriefingFormState {
   greetingMessage: string
   offHoursMessage: string
   greetingEditing: boolean
+  greetingGenerated: boolean
   offHoursEditing: boolean
   // Roteiro do chatbot (base da geração automática do fluxo)
   chatbotDescription: string
@@ -340,6 +346,7 @@ function initialFormState(company: string): BriefingFormState {
     greetingMessage: buildGreeting(company, []),
     offHoursMessage: buildOffHours(company),
     greetingEditing: false,
+    greetingGenerated: false,
     offHoursEditing: false,
     chatbotDescription: '',
     chatbotMenus: [{ question: '', options: '' }],
@@ -508,6 +515,7 @@ export function BriefingPublicPage() {
   const [section, setSection] = React.useState(0)
   const [submittedData, setSubmittedData] = React.useState<{ greeting: string; offHours: string } | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
+  const [generatingWelcome, setGeneratingWelcome] = React.useState(false)
   const [chatbotConfirmOpen, setChatbotConfirmOpen] = React.useState(false)
   // Erros de validação por campo (chave -> mensagem). Preenchido ao avançar/enviar.
   const [errors, setErrors] = React.useState<Record<string, string>>({})
@@ -569,13 +577,13 @@ export function BriefingPublicPage() {
 
   // Regenerate greeting when sectors change (if not being edited)
   React.useEffect(() => {
-    if (!state.greetingEditing && client?.company) {
+    if (!state.greetingEditing && !state.greetingGenerated && client?.company) {
       setState((s) => ({
         ...s,
         greetingMessage: buildGreeting(client.company, s.sectors),
       }))
     }
-  }, [state.sectors, state.greetingEditing, client?.company])
+  }, [state.sectors, state.greetingEditing, state.greetingGenerated, client?.company])
 
   const cfg = client?.briefing_config ?? null
   const sections = React.useMemo(() => buildSections(cfg), [cfg])
@@ -586,6 +594,45 @@ export function BriefingPublicPage() {
     !cfg ||
     cfg.connectionTypes.includes('api_oficial') ||
     cfg.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada')
+
+  const generateWelcomeWithAI = async () => {
+    if (!state.chatbotDescription.trim()) {
+      toast.error('Preencha o resumo do atendimento primeiro.')
+      return
+    }
+    if (state.sectors.length === 0) {
+      toast.error('Cadastre ao menos um setor no início do briefing.')
+      return
+    }
+    setGeneratingWelcome(true)
+    try {
+      const result = await api.post<{ message: string }>(
+        `/api/public/briefing/${token}/generate-welcome`,
+        { description: state.chatbotDescription, sectors: state.sectors },
+      )
+      setState((current) => {
+        const menus = [...current.chatbotMenus]
+        menus[0] = {
+          ...(menus[0] ?? { parentOption: undefined }),
+          question: result.message,
+          options: current.sectors.join('\n'),
+        }
+        return {
+          ...current,
+          chatbotMenus: menus,
+          greetingMessage: buildChatbotPreview(result.message, current.sectors),
+          greetingEditing: false,
+          greetingGenerated: true,
+        }
+      })
+      clearError('chatbotMenus')
+      toast.success('Mensagem e setores adicionados ao menu principal.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível gerar a mensagem.')
+    } finally {
+      setGeneratingWelcome(false)
+    }
+  }
 
   if (client === undefined) {
     return (
@@ -1438,10 +1485,21 @@ export function BriefingPublicPage() {
                               </p>
                               <p className="text-xs text-slate-500">
                                 {i === 0
-                                  ? 'É a primeira lista de opções apresentada ao cliente.'
+                                  ? 'A IA usa o resumo acima e adiciona automaticamente os setores cadastrados.'
                                   : 'Aparece somente depois que o cliente escolhe uma opção específica.'}
                               </p>
                             </div>
+                            {i === 0 && (
+                              <button
+                                type="button"
+                                onClick={() => void generateWelcomeWithAI()}
+                                disabled={generatingWelcome}
+                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-violet-700 disabled:cursor-wait disabled:opacity-60"
+                              >
+                                <Sparkles className={cn('h-3.5 w-3.5', generatingWelcome && 'animate-pulse')} />
+                                {generatingWelcome ? 'Gerando…' : 'Gerar com IA'}
+                              </button>
+                            )}
                             {i > 0 && (
                               <button
                                 type="button"
@@ -1596,7 +1654,7 @@ export function BriefingPublicPage() {
                     Mensagem de saudação
                   </label>
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                    Demonstrativo — será configurado pelo nosso time
+                    {state.greetingGenerated ? 'Versão final gerada' : 'Demonstrativo — será configurado pelo nosso time'}
                   </span>
                 </div>
 
@@ -1626,6 +1684,7 @@ export function BriefingPublicPage() {
                         setState({
                           ...state,
                           greetingEditing: false,
+                          greetingGenerated: false,
                           greetingMessage: buildGreeting(client.company, state.sectors),
                         })
                       }}

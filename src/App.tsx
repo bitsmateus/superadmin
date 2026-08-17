@@ -34,8 +34,14 @@ const ArchivedClientsPage = React.lazy(() =>
 const CanaisPage = React.lazy(() =>
   import('./pages/CanaisPage').then((m) => ({ default: m.CanaisPage })),
 )
-const ComercialPage = React.lazy(() =>
-  import('./pages/ComercialPage').then((m) => ({ default: m.ComercialPage })),
+const NovosLeadsPage = React.lazy(() =>
+  import('./pages/NovosLeadsPage').then((m) => ({ default: m.NovosLeadsPage })),
+)
+const CrmNxLuisPage = React.lazy(() =>
+  import('./pages/CrmNxLuisPage').then((m) => ({ default: m.CrmNxLuisPage })),
+)
+const CrmNxArthurPage = React.lazy(() =>
+  import('./pages/CrmNxArthurPage').then((m) => ({ default: m.CrmNxArthurPage })),
 )
 const FinancePage = React.lazy(() =>
   import('./pages/FinancePage').then((m) => ({ default: m.FinancePage })),
@@ -118,7 +124,10 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/canais" element={<CanaisPage />} />
-          <Route path="/comercial" element={<ComercialPage />} />
+          <Route path="/comercial" element={<Navigate to="/comercial/novos-leads" replace />} />
+          <Route path="/comercial/novos-leads" element={<NovosLeadsPage />} />
+          <Route path="/comercial/crm-nx-luis" element={<CrmNxLuisPage />} />
+          <Route path="/comercial/crm-nx-arthur" element={<CrmNxArthurPage />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/arquivados" element={<ArchivedClientsPage />} />

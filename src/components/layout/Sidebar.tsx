@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import * as React from 'react'
 import {
   Archive,
@@ -7,6 +7,7 @@ import {
   Building2,
   ChevronDown,
   Columns3,
+  Contact,
   FileSearch,
   LayoutDashboard,
   ListTodo,
@@ -22,6 +23,7 @@ import {
   Sun,
   Trophy,
   UserCircle2,
+  UserPlus,
   Users,
   Wallet,
   Zap,
@@ -40,7 +42,12 @@ const primaryItems = [
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/canais', label: 'Canais', icon: Radio },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
-  { to: '/comercial', label: 'Comercial', icon: Briefcase },
+]
+
+const comercialItems = [
+  { to: '/comercial/novos-leads', label: 'Novos Leads', icon: UserPlus },
+  { to: '/comercial/crm-nx-luis', label: 'CRM NX Luis', icon: Contact },
+  { to: '/comercial/crm-nx-arthur', label: 'CRM NX Arthur', icon: Contact },
 ]
 
 const ROLE_LABELS = {
@@ -57,6 +64,7 @@ export interface SidebarProps {
 
 export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { profile } = useAuth()
   const [theme, setTheme] = useTheme()
 
@@ -77,6 +85,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const myTasks = useMyOpenTaskCount(profile?.id)
 
   const [archivedOpen, setArchivedOpen] = React.useState(false)
+  const [comercialOpen, setComercialOpen] = React.useState(() =>
+    location.pathname.startsWith('/comercial'),
+  )
 
   const primary = [
     ...primaryItems,
@@ -180,6 +191,62 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             </NavLink>
           )
         })}
+
+        {/* Comercial — grupo expansível com subpáginas */}
+        <button
+          type="button"
+          onClick={() => setComercialOpen((o) => !o)}
+          className={cn(
+            'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+            location.pathname.startsWith('/comercial')
+              ? 'text-foreground'
+              : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
+          )}
+        >
+          <Briefcase
+            className={cn(
+              'h-4 w-4 shrink-0',
+              location.pathname.startsWith('/comercial')
+                ? 'text-accent'
+                : 'text-foreground/50 group-hover:text-foreground/75',
+            )}
+          />
+          <span>Comercial</span>
+          <ChevronDown
+            className={cn(
+              'ml-auto h-3.5 w-3.5 transition-transform',
+              comercialOpen ? '' : '-rotate-90',
+            )}
+          />
+        </button>
+        {comercialOpen &&
+          comercialItems.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={closeOnMobile}
+              className={({ isActive }) =>
+                cn(
+                  'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                  isActive
+                    ? 'bg-elevate/[0.05] text-foreground'
+                    : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    className={cn(
+                      'h-4 w-4 shrink-0',
+                      isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                    )}
+                  />
+                  <span>{label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
 
         <div className="my-2 h-px bg-elevate/[0.05]" />
 

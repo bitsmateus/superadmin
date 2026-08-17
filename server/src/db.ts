@@ -224,6 +224,53 @@ END $$`);
     FROM clients c
     WHERE NOT EXISTS (SELECT 1 FROM stage_history sh WHERE sh.client_id = c.id)`);
 
+  // ── Comercial > Novos Leads (quadros estilo Monday) ──────────────────────
+  await pool.query(`CREATE TABLE IF NOT EXISTS lead_boards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#4F8EF7',
+    position INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS lead_rows (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT '',
+    empresa TEXT NOT NULL DEFAULT '',
+    telefone TEXT NOT NULL DEFAULT '',
+    dia_contato TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    retornar TEXT NOT NULL DEFAULT '',
+    ligacao TEXT NOT NULL DEFAULT '',
+    responsavel TEXT NOT NULL DEFAULT '',
+    numero TEXT NOT NULL DEFAULT '',
+    position INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id)`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'touch_updated_at') THEN
+      DROP TRIGGER IF EXISTS lead_rows_touch_updated_at ON lead_rows;
+      CREATE TRIGGER lead_rows_touch_updated_at BEFORE UPDATE ON lead_rows
+        FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+    END IF;
+  END $$`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_lead_boards ON lead_boards;
+      CREATE TRIGGER notify_lead_boards AFTER INSERT OR UPDATE OR DELETE ON lead_boards
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_lead_rows ON lead_rows;
+      CREATE TRIGGER notify_lead_rows AFTER INSERT OR UPDATE OR DELETE ON lead_rows
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+  await pool.query(`INSERT INTO lead_boards (name, color, position)
+    SELECT 'Leads Novos', '#4F8EF7', 0
+    WHERE NOT EXISTS (SELECT 1 FROM lead_boards)`);
+
   console.log('[db] migrations applied');
 }
 

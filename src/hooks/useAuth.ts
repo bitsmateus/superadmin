@@ -5,6 +5,7 @@ import type { Profile, UserRole } from '@/services/supabase'
 import { bootDb, setCurrentProfile, teardownDb } from '@/services/db'
 import { bootTickets, teardownTickets } from '@/services/tickets'
 import { bootAnalytics, teardownAnalytics } from '@/services/analytics'
+import { bootLeadBoards, teardownLeadBoards } from '@/services/leadBoards'
 
 interface AuthState {
   profile: Profile | null
@@ -39,6 +40,7 @@ async function init() {
     void bootDb()
     void bootTickets()
     void bootAnalytics()
+    void bootLeadBoards()
   } catch {
     clearToken()
     setState({ loading: false })
@@ -81,6 +83,7 @@ export async function signIn(email: string, password: string) {
   void bootDb()
   void bootTickets()
   void bootAnalytics()
+  void bootLeadBoards()
   return { data: { user }, error: null }
 }
 
@@ -88,6 +91,7 @@ export async function signOut() {
   await teardownDb()
   await teardownTickets()
   await teardownAnalytics()
+  await teardownLeadBoards()
   stopSse()
   clearToken()
   setCurrentProfile(null)

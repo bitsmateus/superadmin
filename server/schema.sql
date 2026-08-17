@@ -277,6 +277,39 @@ CREATE TABLE IF NOT EXISTS ticket_triage_steps (
 
 CREATE INDEX IF NOT EXISTS triage_category_idx ON ticket_triage_steps(category_id);
 
+-- ---------- lead_boards / lead_rows (Comercial > Novos Leads) ----------
+CREATE TABLE IF NOT EXISTS lead_boards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#4F8EF7',
+  position INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lead_rows (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL DEFAULT '',
+  tipo TEXT NOT NULL DEFAULT '',
+  empresa TEXT NOT NULL DEFAULT '',
+  telefone TEXT NOT NULL DEFAULT '',
+  dia_contato TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT '',
+  retornar TEXT NOT NULL DEFAULT '',
+  ligacao TEXT NOT NULL DEFAULT '',
+  responsavel TEXT NOT NULL DEFAULT '',
+  numero TEXT NOT NULL DEFAULT '',
+  position INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);
+
+DROP TRIGGER IF EXISTS lead_rows_touch_updated_at ON lead_rows;
+CREATE TRIGGER lead_rows_touch_updated_at BEFORE UPDATE ON lead_rows
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
 -- ---------- kb_articles ----------
 CREATE TABLE IF NOT EXISTS kb_articles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -519,6 +552,14 @@ DROP TRIGGER IF EXISTS notify_audit_log ON audit_log;
 CREATE TRIGGER notify_audit_log AFTER INSERT ON audit_log
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+DROP TRIGGER IF EXISTS notify_lead_boards ON lead_boards;
+CREATE TRIGGER notify_lead_boards AFTER INSERT OR UPDATE OR DELETE ON lead_boards
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_lead_rows ON lead_rows;
+CREATE TRIGGER notify_lead_rows AFTER INSERT OR UPDATE OR DELETE ON lead_rows
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 -- ---------- Seed de categorias ----------
 INSERT INTO ticket_categories (name, description, icon, color, position, default_sla_hours, default_priority)
 SELECT * FROM (VALUES
@@ -530,6 +571,11 @@ SELECT * FROM (VALUES
   ('Outro',                  'Não encontrei minha categoria',                  'HelpCircle',    'neutral', 99, 24, 'low'::ticket_priority)
 ) AS v(name, description, icon, color, position, default_sla_hours, default_priority)
 WHERE NOT EXISTS (SELECT 1 FROM ticket_categories);
+
+-- ---------- Seed do quadro padrão de leads ----------
+INSERT INTO lead_boards (name, color, position)
+SELECT 'Leads Novos', '#4F8EF7', 0
+WHERE NOT EXISTS (SELECT 1 FROM lead_boards);
 
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:

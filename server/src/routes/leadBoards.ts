@@ -1,0 +1,140 @@
+import { FastifyInstance } from 'fastify';
+import { v4 as uuidv4 } from 'uuid';
+import { query } from '../db.js';
+
+export async function leadBoardRoutes(app: FastifyInstance) {
+  // GET /api/lead-boards
+  app.get('/api/lead-boards', { onRequest: [app.authenticate] }, async () => {
+    return query('SELECT * FROM lead_boards ORDER BY position, created_at');
+  });
+
+  // POST /api/lead-boards
+  app.post<{ Body: Record<string, unknown> }>(
+    '/api/lead-boards',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const b = req.body;
+      const id = (b.id as string) || uuidv4();
+      let position = b.position as number | undefined;
+      if (position === undefined) {
+        const [row] = await query<{ max: number | null }>(
+          'SELECT MAX(position) as max FROM lead_boards'
+        );
+        position = (row?.max ?? -1) + 1;
+      }
+      const [board] = await query(
+        `INSERT INTO lead_boards (id, name, color, position) VALUES ($1,$2,$3,$4) RETURNING *`,
+        [id, b.name, b.color ?? '#4F8EF7', position]
+      );
+      return reply.status(201).send(board);
+    }
+  );
+
+  // PATCH /api/lead-boards/:id
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/api/lead-boards/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const patch = req.body;
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      let i = 1;
+      for (const [key, val] of Object.entries(patch)) {
+        sets.push(`${key} = $${i++}`);
+        params.push(val);
+      }
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+      params.push(req.params.id);
+      const [board] = await query(
+        `UPDATE lead_boards SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+        params
+      );
+      if (!board) return reply.status(404).send({ message: 'Quadro não encontrado' });
+      return board;
+    }
+  );
+
+  // DELETE /api/lead-boards/:id — admin/supervisor only
+  app.delete<{ Params: { id: string } }>(
+    '/api/lead-boards/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { role } = req.user as { role: string };
+      if (!['admin', 'supervisor'].includes(role)) {
+        return reply.status(403).send({ message: 'Acesso negado' });
+      }
+      await query('DELETE FROM lead_boards WHERE id = $1', [req.params.id]);
+      return reply.status(204).send();
+    }
+  );
+
+  // GET /api/lead-rows
+  app.get('/api/lead-rows', { onRequest: [app.authenticate] }, async () => {
+    return query('SELECT * FROM lead_rows ORDER BY position, created_at');
+  });
+
+  // POST /api/lead-rows
+  app.post<{ Body: Record<string, unknown> }>(
+    '/api/lead-rows',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const b = req.body;
+      if (!b.board_id) return reply.status(400).send({ message: 'board_id é obrigatório' });
+      const id = (b.id as string) || uuidv4();
+      let position = b.position as number | undefined;
+      if (position === undefined) {
+        const [row] = await query<{ max: number | null }>(
+          'SELECT MAX(position) as max FROM lead_rows WHERE board_id = $1',
+          [b.board_id]
+        );
+        position = (row?.max ?? -1) + 1;
+      }
+      const [leadRow] = await query(
+        `INSERT INTO lead_rows (
+          id, board_id, nome, tipo, empresa, telefone, dia_contato, status,
+          retornar, ligacao, responsavel, numero, position
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [
+          id, b.board_id, b.nome ?? '', b.tipo ?? '', b.empresa ?? '', b.telefone ?? '',
+          b.dia_contato ?? '', b.status ?? '', b.retornar ?? '', b.ligacao ?? '',
+          b.responsavel ?? '', b.numero ?? '', position,
+        ]
+      );
+      return reply.status(201).send(leadRow);
+    }
+  );
+
+  // PATCH /api/lead-rows/:id
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/api/lead-rows/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const patch = req.body;
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      let i = 1;
+      for (const [key, val] of Object.entries(patch)) {
+        sets.push(`${key} = $${i++}`);
+        params.push(val);
+      }
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+      params.push(req.params.id);
+      const [leadRow] = await query(
+        `UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+        params
+      );
+      if (!leadRow) return reply.status(404).send({ message: 'Linha não encontrada' });
+      return leadRow;
+    }
+  );
+
+  // DELETE /api/lead-rows/:id
+  app.delete<{ Params: { id: string } }>(
+    '/api/lead-rows/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      await query('DELETE FROM lead_rows WHERE id = $1', [req.params.id]);
+      return reply.status(204).send();
+    }
+  );
+}

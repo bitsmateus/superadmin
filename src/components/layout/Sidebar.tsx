@@ -10,6 +10,7 @@ import {
   Contact,
   FileSearch,
   LayoutDashboard,
+  LifeBuoy,
   ListTodo,
   LogOut,
   MessageCircle,
@@ -35,7 +36,7 @@ import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
 import { ServerSwitcher } from './ServerSwitcher'
 
-const primaryItems = [
+const suporteItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/tarefas', label: 'Suporte', icon: ListTodo, badgeKey: 'tasks' as const },
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
@@ -43,6 +44,8 @@ const primaryItems = [
   { to: '/canais', label: 'Canais', icon: Radio },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
 ]
+
+const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/canais', '/tenants', '/nps']
 
 const comercialItems = [
   { to: '/comercial/novos-leads', label: 'Novos Leads', icon: UserPlus },
@@ -88,11 +91,17 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const [comercialOpen, setComercialOpen] = React.useState(() =>
     location.pathname.startsWith('/comercial'),
   )
+  const [suporteOpen, setSuporteOpen] = React.useState(() =>
+    SUPORTE_ROUTES.some((r) => (r === '/' ? location.pathname === '/' : location.pathname.startsWith(r))),
+  )
 
-  const primary = [
-    ...primaryItems,
+  const suporte = [
+    ...suporteItems,
     ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
   ]
+  const suporteActive = SUPORTE_ROUTES.some((r) =>
+    r === '/' ? location.pathname === '/' : location.pathname.startsWith(r),
+  )
 
   const secondaryItems = [
     ...(isAdmin
@@ -149,48 +158,78 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       </div>
 
       <nav className="mt-2 flex flex-1 flex-col gap-0.5 px-3">
-        {primary.map((item) => {
-          const Icon = item.icon
-          const badge =
-            'badgeKey' in item && item.badgeKey === 'tasks' && myTasks > 0
-              ? myTasks
-              : null
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={'end' in item ? item.end : undefined}
-              onClick={closeOnMobile}
-              className={({ isActive }) =>
-                cn(
-                  'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
-                  isActive
-                    ? 'bg-elevate/[0.05] text-foreground'
-                    : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon
-                    className={cn(
-                      'h-4 w-4 shrink-0',
-                      isActive
-                        ? 'text-accent'
-                        : 'text-foreground/50 group-hover:text-foreground/75',
+        {/* Suporte — grupo expansível com subpáginas */}
+        <button
+          type="button"
+          onClick={() => setSuporteOpen((o) => !o)}
+          className={cn(
+            'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+            suporteActive
+              ? 'text-foreground'
+              : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
+          )}
+        >
+          <LifeBuoy
+            className={cn(
+              'h-4 w-4 shrink-0',
+              suporteActive ? 'text-accent' : 'text-foreground/50 group-hover:text-foreground/75',
+            )}
+          />
+          <span>Suporte</span>
+          {myTasks > 0 && (
+            <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-semibold text-white">
+              {myTasks > 99 ? '99+' : myTasks}
+            </span>
+          )}
+          <ChevronDown
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 transition-transform',
+              suporteOpen ? '' : '-rotate-90',
+              myTasks > 0 ? '' : 'ml-auto',
+            )}
+          />
+        </button>
+        {suporteOpen &&
+          suporte.map((item) => {
+            const Icon = item.icon
+            const badge =
+              'badgeKey' in item && item.badgeKey === 'tasks' && myTasks > 0
+                ? myTasks
+                : null
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={'end' in item ? item.end : undefined}
+                onClick={closeOnMobile}
+                className={({ isActive }) =>
+                  cn(
+                    'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                    isActive
+                      ? 'bg-elevate/[0.05] text-foreground'
+                      : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon
+                      className={cn(
+                        'h-4 w-4 shrink-0',
+                        isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                      )}
+                    />
+                    <span>{item.label}</span>
+                    {badge !== null && (
+                      <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-semibold text-white">
+                        {badge > 99 ? '99+' : badge}
+                      </span>
                     )}
-                  />
-                  <span>{item.label}</span>
-                  {badge !== null && (
-                    <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-semibold text-white">
-                      {badge > 99 ? '99+' : badge}
-                    </span>
-                  )}
-                </>
-              )}
-            </NavLink>
-          )
-        })}
+                  </>
+                )}
+              </NavLink>
+            )
+          })}
 
         {/* Comercial — grupo expansível com subpáginas */}
         <button

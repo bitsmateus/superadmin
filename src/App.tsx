@@ -34,6 +34,9 @@ const ArchivedClientsPage = React.lazy(() =>
 const CanaisPage = React.lazy(() =>
   import('./pages/CanaisPage').then((m) => ({ default: m.CanaisPage })),
 )
+const ComercialPage = React.lazy(() =>
+  import('./pages/ComercialPage').then((m) => ({ default: m.ComercialPage })),
+)
 const FinancePage = React.lazy(() =>
   import('./pages/FinancePage').then((m) => ({ default: m.FinancePage })),
 )
@@ -115,6 +118,7 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/canais" element={<CanaisPage />} />
+          <Route path="/comercial" element={<ComercialPage />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/arquivados" element={<ArchivedClientsPage />} />

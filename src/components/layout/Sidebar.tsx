@@ -3,6 +3,7 @@ import * as React from 'react'
 import {
   Archive,
   BookOpen,
+  Briefcase,
   Building2,
   ChevronDown,
   Columns3,
@@ -39,6 +40,7 @@ const primaryItems = [
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/canais', label: 'Canais', icon: Radio },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
+  { to: '/comercial', label: 'Comercial', icon: Briefcase },
 ]
 
 const ROLE_LABELS = {

@@ -136,4 +136,36 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       return reply.status(204).send();
     }
   );
+
+  // GET /api/lead-notes?lead_row_id=xxx — bloco de anotações/atualizações do lead
+  app.get<{ Querystring: { lead_row_id?: string } }>(
+    '/api/lead-notes',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      if (!req.query.lead_row_id) return reply.status(400).send({ message: 'lead_row_id é obrigatório' });
+      return query(
+        'SELECT * FROM lead_notes WHERE lead_row_id = $1 ORDER BY created_at DESC',
+        [req.query.lead_row_id]
+      );
+    }
+  );
+
+  // POST /api/lead-notes
+  app.post<{ Body: Record<string, unknown> }>(
+    '/api/lead-notes',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const b = req.body;
+      if (!b.lead_row_id || !b.content) {
+        return reply.status(400).send({ message: 'lead_row_id e content são obrigatórios' });
+      }
+      const { sub: authorId } = req.user as { sub: string };
+      const [note] = await query(
+        `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content)
+         VALUES ($1,$2,$3,$4) RETURNING *`,
+        [b.lead_row_id, authorId ?? null, b.author_name ?? 'Alguém', b.content]
+      );
+      return reply.status(201).send(note);
+    }
+  );
 }

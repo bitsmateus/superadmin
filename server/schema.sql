@@ -303,6 +303,7 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   numero_atendentes TEXT NOT NULL DEFAULT '',
   valor_previsto TEXT NOT NULL DEFAULT '',
   valor_fechado TEXT NOT NULL DEFAULT '',
+  notes_count INT NOT NULL DEFAULT 0,
   position INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -313,6 +314,29 @@ CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);
 DROP TRIGGER IF EXISTS lead_rows_touch_updated_at ON lead_rows;
 CREATE TRIGGER lead_rows_touch_updated_at BEFORE UPDATE ON lead_rows
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+-- ---------- lead_notes (bloco de anotações/atualizações por lead) ----------
+CREATE TABLE IF NOT EXISTS lead_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_row_id UUID NOT NULL REFERENCES lead_rows(id) ON DELETE CASCADE,
+  author_id UUID,
+  author_name TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS lead_notes_lead_row_idx ON lead_notes(lead_row_id);
+
+-- Mantém lead_rows.notes_count em sincronia sem precisar contar em toda leitura.
+CREATE OR REPLACE FUNCTION increment_lead_notes_count() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE lead_rows SET notes_count = notes_count + 1 WHERE id = NEW.lead_row_id;
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS lead_notes_count_trigger ON lead_notes;
+CREATE TRIGGER lead_notes_count_trigger AFTER INSERT ON lead_notes
+  FOR EACH ROW EXECUTE FUNCTION increment_lead_notes_count();
 
 -- ---------- kb_articles ----------
 CREATE TABLE IF NOT EXISTS kb_articles (
@@ -562,6 +586,10 @@ CREATE TRIGGER notify_lead_boards AFTER INSERT OR UPDATE OR DELETE ON lead_board
 
 DROP TRIGGER IF EXISTS notify_lead_rows ON lead_rows;
 CREATE TRIGGER notify_lead_rows AFTER INSERT OR UPDATE OR DELETE ON lead_rows
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_lead_notes ON lead_notes;
+CREATE TRIGGER notify_lead_notes AFTER INSERT ON lead_notes
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 -- ---------- Seed de categorias ----------

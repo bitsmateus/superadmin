@@ -30,6 +30,7 @@ export interface LeadRow {
   numeroAtendentes: string
   valorPrevisto: string
   valorFechado: string
+  notesCount: number
   position: number
   createdAt: string
   updatedAt: string
@@ -37,5 +38,15 @@ export interface LeadRow {
 
 export type LeadRowField = Exclude<
   keyof LeadRow,
-  'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt'
+  'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount'
 >
+
+/** Anotação/atualização do bloco lateral de um lead (estilo "Updates" do Monday). */
+export interface LeadNote {
+  id: string
+  leadRowId: string
+  authorId: string | null
+  authorName: string
+  content: string
+  createdAt: string
+}

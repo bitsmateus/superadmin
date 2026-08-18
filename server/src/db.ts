@@ -255,6 +255,7 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS numero_atendentes TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_previsto TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_fechado TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS notes_count INT NOT NULL DEFAULT 0`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'touch_updated_at') THEN
       DROP TRIGGER IF EXISTS lead_rows_touch_updated_at ON lead_rows;
@@ -262,6 +263,24 @@ END $$`);
         FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
     END IF;
   END $$`);
+  // Bloco de anotações/atualizações por lead (painel lateral, estilo Monday).
+  await pool.query(`CREATE TABLE IF NOT EXISTS lead_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_row_id UUID NOT NULL REFERENCES lead_rows(id) ON DELETE CASCADE,
+    author_id UUID,
+    author_name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_notes_lead_row_idx ON lead_notes(lead_row_id)`);
+  await pool.query(`CREATE OR REPLACE FUNCTION increment_lead_notes_count() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    BEGIN
+      UPDATE lead_rows SET notes_count = notes_count + 1 WHERE id = NEW.lead_row_id;
+      RETURN NEW;
+    END; $$`);
+  await pool.query(`DROP TRIGGER IF EXISTS lead_notes_count_trigger ON lead_notes`);
+  await pool.query(`CREATE TRIGGER lead_notes_count_trigger AFTER INSERT ON lead_notes
+    FOR EACH ROW EXECUTE FUNCTION increment_lead_notes_count()`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_lead_boards ON lead_boards;
@@ -269,6 +288,9 @@ END $$`);
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
       DROP TRIGGER IF EXISTS notify_lead_rows ON lead_rows;
       CREATE TRIGGER notify_lead_rows AFTER INSERT OR UPDATE OR DELETE ON lead_rows
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_lead_notes ON lead_notes;
+      CREATE TRIGGER notify_lead_notes AFTER INSERT ON lead_notes
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);

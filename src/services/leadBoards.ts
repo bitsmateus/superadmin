@@ -36,7 +36,7 @@ type LeadRowRow = {
   id: string; board_id: string; nome: string; tipo: string; empresa: string; telefone: string
   dia_contato: string; status: string; retornar: string; ligacao: string; responsavel: string
   numero: string; dor_cliente: string; numero_atendentes: string; valor_previsto: string
-  valor_fechado: string; position: number; created_at: string; updated_at: string
+  valor_fechado: string; notes_count: number; position: number; created_at: string; updated_at: string
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
@@ -44,7 +44,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     telefone: r.telefone, diaContato: r.dia_contato, status: r.status, retornar: r.retornar,
     ligacao: r.ligacao, responsavel: r.responsavel, numero: r.numero,
     dorCliente: r.dor_cliente, numeroAtendentes: r.numero_atendentes,
-    valorPrevisto: r.valor_previsto, valorFechado: r.valor_fechado,
+    valorPrevisto: r.valor_previsto, valorFechado: r.valor_fechado, notesCount: r.notes_count ?? 0,
     position: r.position, createdAt: r.created_at, updatedAt: r.updated_at,
   }
 }
@@ -220,7 +220,7 @@ export const leadBoardsService = {
     const row: LeadRow = {
       id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '',
       status: '', retornar: '', ligacao: '', responsavel: '', numero: '',
-      dorCliente: '', numeroAtendentes: '', valorPrevisto: '', valorFechado: '',
+      dorCliente: '', numeroAtendentes: '', valorPrevisto: '', valorFechado: '', notesCount: 0,
       position, createdAt: now, updatedAt: now, ...initial,
     }
     rows = [...rows, row]

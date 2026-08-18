@@ -6,6 +6,7 @@ import {
   EyeOff,
   Filter,
   Loader2,
+  MessageSquare,
   Plus,
   Rows3,
   Search,
@@ -17,6 +18,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { LeadNotesDrawer } from '@/components/comercial/LeadNotesDrawer'
 import { cn, formatDateTimeShort } from '@/lib/utils'
 import { useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
@@ -145,9 +147,10 @@ interface BoardGroupProps {
   focusRowId: string | null
   onFocused: () => void
   onCreateRow: (boardId: string) => void
+  onOpenNotes: (rowId: string, rowName: string) => void
 }
 
-function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow }: BoardGroupProps) {
+function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenNotes }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
   const allRows = useLeadRows(board.id)
   const rows = React.useMemo(() => allRows.filter((r) => matchesSearch(r, search)), [allRows, search])
@@ -217,11 +220,31 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow }: Board
                         <div className="truncate px-3 py-2.5 text-xs text-gray-400">
                           {formatDateTimeShort(row.createdAt)}
                         </div>
+                      ) : col.key === 'nome' ? (
+                        <div className="flex items-center">
+                          <EditableCell
+                            ref={row.id === focusRowId ? (el) => {
+                              if (el) { el.focus(); onFocused() }
+                            } : undefined}
+                            value={row.nome}
+                            onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => onOpenNotes(row.id, row.nome || 'Lead sem nome')}
+                            title="Anotações do lead"
+                            className="relative mr-2 grid h-6 w-6 shrink-0 place-items-center rounded text-gray-400 hover:bg-gray-100 hover:text-accent"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            {row.notesCount > 0 && (
+                              <span className="absolute -right-1 -top-1 grid h-3.5 min-w-[0.875rem] place-items-center rounded-full bg-accent px-0.5 text-[9px] font-semibold text-white">
+                                {row.notesCount > 9 ? '9+' : row.notesCount}
+                              </span>
+                            )}
+                          </button>
+                        </div>
                       ) : (
                         <EditableCell
-                          ref={col.key === 'nome' && row.id === focusRowId ? (el) => {
-                            if (el) { el.focus(); onFocused() }
-                          } : undefined}
                           value={row[col.key as LeadRowField]}
                           type={col.type}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
@@ -309,6 +332,7 @@ export function NovosLeadsPage() {
   const [search, setSearch] = React.useState('')
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
+  const [notesLead, setNotesLead] = React.useState<{ id: string; name: string } | null>(null)
 
   const handleCreateRow = (boardId: string) => {
     const row = leadBoardsService.createRow(boardId)
@@ -372,6 +396,7 @@ export function NovosLeadsPage() {
                     focusRowId={focusRowId}
                     onFocused={() => setFocusRowId(null)}
                     onCreateRow={handleCreateRow}
+                    onOpenNotes={(id, name) => setNotesLead({ id, name })}
                   />
                 ))}
                 <ToolbarButton icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setBoardModalOpen(true)}>
@@ -384,6 +409,11 @@ export function NovosLeadsPage() {
       </div>
 
       <CreateBoardModal open={boardModalOpen} onClose={() => setBoardModalOpen(false)} />
+      <LeadNotesDrawer
+        leadRowId={notesLead?.id ?? null}
+        leadName={notesLead?.name ?? ''}
+        onClose={() => setNotesLead(null)}
+      />
     </>
   )
 }

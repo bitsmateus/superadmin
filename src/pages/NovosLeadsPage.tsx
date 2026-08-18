@@ -186,8 +186,8 @@ function BoardGroup({ board, search, canManage, focusRowId, onFocused, onCreateR
                   {COLUMNS.map((col) => (
                     <td key={col.key} className={cn('border-l border-line/40 align-middle', col.width)}>
                       <EditableCell
-                        ref={col.key === 'nome' ? (el) => {
-                          if (el && row.id === focusRowId) { el.focus(); onFocused() }
+                        ref={col.key === 'nome' && row.id === focusRowId ? (el) => {
+                          if (el) { el.focus(); onFocused() }
                         } : undefined}
                         value={row[col.key]}
                         type={col.type}

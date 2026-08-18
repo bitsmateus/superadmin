@@ -84,7 +84,9 @@ export async function bootLeadBoards(): Promise<void> {
         api.get<BoardRow[]>('/api/lead-boards'),
         api.get<LeadRowRow[]>('/api/lead-rows'),
       ])
-      if (boardsRes.status === 'fulfilled') boards = boardsRes.value.map(rowToBoard)
+      if (boardsRes.status === 'fulfilled') {
+        boards = boardsRes.value.map(rowToBoard).sort((a, b) => a.position - b.position)
+      }
       if (rowsRes.status === 'fulfilled') rows = rowsRes.value.map(rowToLead)
 
       subscribeRealtime()
@@ -116,6 +118,7 @@ function subscribeRealtime() {
         const idx = boards.findIndex((b) => b.id === next.id)
         if (idx === -1) boards = [...boards, next]
         else { const copy = boards.slice(); copy[idx] = next; boards = copy }
+        boards = boards.slice().sort((a, b) => a.position - b.position)
       }
       notify()
     } else if (table === 'lead_rows') {
@@ -138,7 +141,7 @@ function subscribeRealtime() {
 export const leadBoardsService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
 
-  getBoards(): LeadBoard[] { return boards.slice().sort((a, b) => a.position - b.position) },
+  getBoards(): LeadBoard[] { return boards },
   getRows(): LeadRow[] { return rows },
   getRowsByBoard(boardId: string): LeadRow[] {
     return rows.filter((r) => r.boardId === boardId).sort((a, b) => a.position - b.position)
@@ -147,7 +150,7 @@ export const leadBoardsService = {
   createBoard(name: string, color = '#4F8EF7'): LeadBoard {
     const position = boards.length ? Math.max(...boards.map((b) => b.position)) + 1 : 0
     const board: LeadBoard = { id: uuid(), name, color, position, createdAt: new Date().toISOString() }
-    boards = [...boards, board]
+    boards = [...boards, board].sort((a, b) => a.position - b.position)
     notify()
 
     void (async () => {
@@ -168,7 +171,8 @@ export const leadBoardsService = {
     if (idx === -1) return
     const prev = boards[idx]
     const next = { ...prev, ...patch }
-    const copy = boards.slice(); copy[idx] = next; boards = copy
+    const copy = boards.slice(); copy[idx] = next
+    boards = copy.sort((a, b) => a.position - b.position)
     notify()
 
     void (async () => {

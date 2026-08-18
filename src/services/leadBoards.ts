@@ -35,14 +35,17 @@ function boardToRow(patch: Partial<LeadBoard>): Record<string, unknown> {
 type LeadRowRow = {
   id: string; board_id: string; nome: string; tipo: string; empresa: string; telefone: string
   dia_contato: string; status: string; retornar: string; ligacao: string; responsavel: string
-  numero: string; position: number; created_at: string; updated_at: string
+  numero: string; dor_cliente: string; numero_atendentes: string; valor_previsto: string
+  valor_fechado: string; position: number; created_at: string; updated_at: string
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
     id: r.id, boardId: r.board_id, nome: r.nome, tipo: r.tipo, empresa: r.empresa,
     telefone: r.telefone, diaContato: r.dia_contato, status: r.status, retornar: r.retornar,
-    ligacao: r.ligacao, responsavel: r.responsavel, numero: r.numero, position: r.position,
-    createdAt: r.created_at, updatedAt: r.updated_at,
+    ligacao: r.ligacao, responsavel: r.responsavel, numero: r.numero,
+    dorCliente: r.dor_cliente, numeroAtendentes: r.numero_atendentes,
+    valorPrevisto: r.valor_previsto, valorFechado: r.valor_fechado,
+    position: r.position, createdAt: r.created_at, updatedAt: r.updated_at,
   }
 }
 function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
@@ -57,6 +60,10 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('ligacao' in patch) row.ligacao = patch.ligacao
   if ('responsavel' in patch) row.responsavel = patch.responsavel
   if ('numero' in patch) row.numero = patch.numero
+  if ('dorCliente' in patch) row.dor_cliente = patch.dorCliente
+  if ('numeroAtendentes' in patch) row.numero_atendentes = patch.numeroAtendentes
+  if ('valorPrevisto' in patch) row.valor_previsto = patch.valorPrevisto
+  if ('valorFechado' in patch) row.valor_fechado = patch.valorFechado
   if ('boardId' in patch) row.board_id = patch.boardId
   if ('position' in patch) row.position = patch.position
   return row
@@ -213,6 +220,7 @@ export const leadBoardsService = {
     const row: LeadRow = {
       id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '',
       status: '', retornar: '', ligacao: '', responsavel: '', numero: '',
+      dorCliente: '', numeroAtendentes: '', valorPrevisto: '', valorFechado: '',
       position, createdAt: now, updatedAt: now, ...initial,
     }
     rows = [...rows, row]

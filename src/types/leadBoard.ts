@@ -26,6 +26,10 @@ export interface LeadRow {
   ligacao: string
   responsavel: string
   numero: string
+  dorCliente: string
+  numeroAtendentes: string
+  valorPrevisto: string
+  valorFechado: string
   position: number
   createdAt: string
   updatedAt: string

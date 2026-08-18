@@ -250,6 +250,11 @@ END $$`);
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id)`);
+  // Colunas extras adicionadas depois: dor do cliente, atendentes, valores.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS dor_cliente TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS numero_atendentes TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_previsto TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_fechado TEXT NOT NULL DEFAULT ''`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'touch_updated_at') THEN
       DROP TRIGGER IF EXISTS lead_rows_touch_updated_at ON lead_rows;

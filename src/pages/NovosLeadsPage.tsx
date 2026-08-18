@@ -17,18 +17,18 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { cn } from '@/lib/utils'
-import { useRole } from '@/hooks/useAuth'
+import { cn, formatDateTimeShort } from '@/lib/utils'
 import { useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { leadBoardsService } from '@/services/leadBoards'
 import type { LeadBoard, LeadRow, LeadRowField } from '@/types/leadBoard'
 
 interface ColumnDef {
-  key: LeadRowField
+  key: LeadRowField | 'createdAt'
   label: string
   type?: 'text' | 'date'
   width: string
+  readOnly?: boolean
 }
 
 const COLUMNS: ColumnDef[] = [
@@ -42,12 +42,44 @@ const COLUMNS: ColumnDef[] = [
   { key: 'ligacao', label: 'Ligação', width: 'min-w-[110px]' },
   { key: 'responsavel', label: 'Resp.', width: 'min-w-[110px]' },
   { key: 'numero', label: 'Número', width: 'min-w-[110px]' },
+  { key: 'dorCliente', label: 'Dor do cliente', width: 'min-w-[200px]' },
+  { key: 'numeroAtendentes', label: 'Número de atendentes', width: 'min-w-[170px]' },
+  { key: 'valorPrevisto', label: 'Valor Previsto', width: 'min-w-[140px]' },
+  { key: 'valorFechado', label: 'Valor Fechado', width: 'min-w-[140px]' },
+  { key: 'createdAt', label: 'Log de criação', width: 'min-w-[160px]', readOnly: true },
 ]
 
 function matchesSearch(row: LeadRow, term: string): boolean {
   if (!term) return true
   const haystack = `${row.nome} ${row.empresa} ${row.telefone} ${row.status} ${row.responsavel}`.toLowerCase()
   return haystack.includes(term.toLowerCase())
+}
+
+function ToolbarButton({
+  icon,
+  children,
+  onClick,
+  className,
+}: {
+  icon?: React.ReactNode
+  children?: React.ReactNode
+  onClick?: () => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-gray-500',
+        'transition-colors hover:bg-gray-100 hover:text-gray-800',
+        className,
+      )}
+    >
+      {icon}
+      {children}
+    </button>
+  )
 }
 
 const EditableCell = React.forwardRef<
@@ -81,8 +113,8 @@ const EditableCell = React.forwardRef<
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
       }}
       className={cn(
-        'h-full w-full bg-transparent px-3 py-2.5 text-sm text-foreground/85 outline-none',
-        'placeholder:text-foreground/25 focus:bg-accent/[0.06]',
+        'h-full w-full bg-transparent px-3 py-2.5 text-sm text-gray-800 outline-none',
+        'placeholder:text-gray-300 focus:bg-accent/[0.06]',
       )}
     />
   )
@@ -110,25 +142,23 @@ function BoardNameEditor({ board }: { board: LeadBoard }) {
 interface BoardGroupProps {
   board: LeadBoard
   search: string
-  canManage: boolean
   focusRowId: string | null
   onFocused: () => void
   onCreateRow: (boardId: string) => void
-  canDelete: boolean
 }
 
-function BoardGroup({ board, search, canManage, focusRowId, onFocused, onCreateRow, canDelete }: BoardGroupProps) {
+function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
   const allRows = useLeadRows(board.id)
   const rows = React.useMemo(() => allRows.filter((r) => matchesSearch(r, search)), [allRows, search])
 
   return (
-    <div className="mb-4 overflow-hidden rounded-xl border border-line">
-      <div className="flex items-center gap-2 border-b border-line bg-elevate/[0.02] px-3 py-2.5">
+    <div className="mb-4 overflow-hidden rounded-xl border border-gray-200">
+      <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2.5">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700"
         >
           <ChevronDown className={cn('h-4 w-4 transition-transform', open ? '' : '-rotate-90')} />
         </button>
@@ -137,7 +167,7 @@ function BoardGroup({ board, search, canManage, focusRowId, onFocused, onCreateR
           style={{ backgroundColor: board.color }}
         />
         <BoardNameEditor board={board} />
-        <span className="text-xs text-foreground/35">{rows.length}</span>
+        <span className="text-xs text-gray-400">{rows.length}</span>
         <input
           type="color"
           value={board.color}
@@ -145,29 +175,27 @@ function BoardGroup({ board, search, canManage, focusRowId, onFocused, onCreateR
           title="Cor do quadro"
           className="ml-auto h-6 w-6 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
         />
-        {canManage && canDelete && (
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm(`Excluir o quadro "${board.name}" e todos os leads dentro dele?`)) {
-                void leadBoardsService.deleteBoard(board.id)
-              }
-            }}
-            title="Excluir quadro"
-            className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/40 hover:bg-danger/10 hover:text-danger"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm(`Excluir o quadro "${board.name}" e todos os leads dentro dele?`)) {
+              void leadBoardsService.deleteBoard(board.id)
+            }
+          }}
+          title="Excluir quadro"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded text-gray-400 hover:bg-danger/10 hover:text-danger"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       {open && (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="border-b border-line bg-elevate/[0.015] text-left text-xs font-medium text-foreground/45">
+              <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-500">
                 <th className="w-10 px-3 py-2">
-                  <input type="checkbox" className="rounded border-line" />
+                  <input type="checkbox" className="rounded border-gray-300" />
                 </th>
                 {COLUMNS.map((col) => (
                   <th key={col.key} className={cn('px-1 py-2 font-medium', col.width)}>
@@ -179,20 +207,26 @@ function BoardGroup({ board, search, canManage, focusRowId, onFocused, onCreateR
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="group border-b border-line/60 last:border-b-0 hover:bg-elevate/[0.02]">
+                <tr key={row.id} className="group border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
                   <td className="px-3 py-2 align-middle">
-                    <input type="checkbox" className="rounded border-line" />
+                    <input type="checkbox" className="rounded border-gray-300" />
                   </td>
                   {COLUMNS.map((col) => (
-                    <td key={col.key} className={cn('border-l border-line/40 align-middle', col.width)}>
-                      <EditableCell
-                        ref={col.key === 'nome' && row.id === focusRowId ? (el) => {
-                          if (el) { el.focus(); onFocused() }
-                        } : undefined}
-                        value={row[col.key]}
-                        type={col.type}
-                        onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
-                      />
+                    <td key={col.key} className={cn('border-l border-gray-100 align-middle', col.width)}>
+                      {col.readOnly ? (
+                        <div className="truncate px-3 py-2.5 text-xs text-gray-400">
+                          {formatDateTimeShort(row.createdAt)}
+                        </div>
+                      ) : (
+                        <EditableCell
+                          ref={col.key === 'nome' && row.id === focusRowId ? (el) => {
+                            if (el) { el.focus(); onFocused() }
+                          } : undefined}
+                          value={row[col.key as LeadRowField]}
+                          type={col.type}
+                          onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
+                        />
+                      )}
                     </td>
                   ))}
                   <td className="px-1 text-center align-middle">
@@ -200,7 +234,7 @@ function BoardGroup({ board, search, canManage, focusRowId, onFocused, onCreateR
                       type="button"
                       onClick={() => void leadBoardsService.deleteRow(row.id)}
                       title="Remover lead"
-                      className="hidden h-7 w-7 place-items-center rounded text-foreground/30 hover:bg-danger/10 hover:text-danger group-hover:grid"
+                      className="grid h-7 w-7 place-items-center rounded text-gray-300 hover:bg-danger/10 hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -212,7 +246,7 @@ function BoardGroup({ board, search, canManage, focusRowId, onFocused, onCreateR
                   <button
                     type="button"
                     onClick={() => onCreateRow(board.id)}
-                    className="flex items-center gap-1.5 text-xs text-foreground/40 hover:text-foreground/70"
+                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Adicionar nome
@@ -270,8 +304,6 @@ function CreateBoardModal({ open, onClose }: { open: boolean; onClose: () => voi
 }
 
 export function NovosLeadsPage() {
-  const role = useRole()
-  const canManage = role === 'admin' || role === 'supervisor'
   const booted = useLeadBoardsBooted()
   const boards = useLeadBoards()
   const [search, setSearch] = React.useState('')
@@ -292,9 +324,9 @@ export function NovosLeadsPage() {
     <>
       <TopBar title="Novos Leads" subtitle="Comercial · quadros de captação de leads" />
 
-      <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="min-h-screen bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!booted ? (
-          <div className="grid min-h-[30vh] place-items-center text-sm text-foreground/55">
+          <div className="grid min-h-[30vh] place-items-center text-sm text-gray-500">
             <span className="inline-flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               Carregando…
@@ -307,20 +339,20 @@ export function NovosLeadsPage() {
                 Criar nome
               </Button>
               <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/35" />
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Pesquisar"
-                  className="h-8 w-40 rounded-md border border-line bg-transparent pl-8 pr-2 text-xs text-foreground placeholder:text-foreground/35 focus:border-accent/50 focus:outline-none"
+                  className="h-8 w-40 rounded-md border border-gray-200 bg-white pl-8 pr-2 text-xs text-gray-800 placeholder:text-gray-400 focus:border-accent/60 focus:outline-none"
                 />
               </div>
-              <Button variant="ghost" size="sm" leftIcon={<UserRound className="h-3.5 w-3.5" />}>Pessoa</Button>
-              <Button variant="ghost" size="sm" leftIcon={<Filter className="h-3.5 w-3.5" />}>Filtro</Button>
-              <Button variant="ghost" size="sm" leftIcon={<ArrowUpDown className="h-3.5 w-3.5" />}>Ordenar</Button>
-              <Button variant="ghost" size="sm" leftIcon={<EyeOff className="h-3.5 w-3.5" />}>Ocultar</Button>
-              <Button variant="ghost" size="sm" leftIcon={<Rows3 className="h-3.5 w-3.5" />}>Agrupar por</Button>
-              <Button variant="ghost" size="sm" className="px-2"><Ellipsis className="h-3.5 w-3.5" /></Button>
+              <ToolbarButton icon={<UserRound className="h-3.5 w-3.5" />}>Pessoa</ToolbarButton>
+              <ToolbarButton icon={<Filter className="h-3.5 w-3.5" />}>Filtro</ToolbarButton>
+              <ToolbarButton icon={<ArrowUpDown className="h-3.5 w-3.5" />}>Ordenar</ToolbarButton>
+              <ToolbarButton icon={<EyeOff className="h-3.5 w-3.5" />}>Ocultar</ToolbarButton>
+              <ToolbarButton icon={<Rows3 className="h-3.5 w-3.5" />}>Agrupar por</ToolbarButton>
+              <ToolbarButton icon={<Ellipsis className="h-3.5 w-3.5" />} className="px-2" />
             </div>
 
             {boards.length === 0 ? (
@@ -337,21 +369,14 @@ export function NovosLeadsPage() {
                     key={board.id}
                     board={board}
                     search={search}
-                    canManage={canManage}
-                    canDelete={boards.length > 1}
                     focusRowId={focusRowId}
                     onFocused={() => setFocusRowId(null)}
                     onCreateRow={handleCreateRow}
                   />
                 ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  leftIcon={<Plus className="h-3.5 w-3.5" />}
-                  onClick={() => setBoardModalOpen(true)}
-                >
+                <ToolbarButton icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setBoardModalOpen(true)}>
                   Novo quadro
-                </Button>
+                </ToolbarButton>
               </>
             )}
           </>

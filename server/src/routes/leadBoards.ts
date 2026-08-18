@@ -54,15 +54,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     }
   );
 
-  // DELETE /api/lead-boards/:id — admin/supervisor only
+  // DELETE /api/lead-boards/:id
   app.delete<{ Params: { id: string } }>(
     '/api/lead-boards/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const { role } = req.user as { role: string };
-      if (!['admin', 'supervisor'].includes(role)) {
-        return reply.status(403).send({ message: 'Acesso negado' });
-      }
       await query('DELETE FROM lead_boards WHERE id = $1', [req.params.id]);
       return reply.status(204).send();
     }
@@ -92,12 +88,15 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const [leadRow] = await query(
         `INSERT INTO lead_rows (
           id, board_id, nome, tipo, empresa, telefone, dia_contato, status,
-          retornar, ligacao, responsavel, numero, position
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+          retornar, ligacao, responsavel, numero,
+          dor_cliente, numero_atendentes, valor_previsto, valor_fechado, position
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
         [
           id, b.board_id, b.nome ?? '', b.tipo ?? '', b.empresa ?? '', b.telefone ?? '',
           b.dia_contato ?? '', b.status ?? '', b.retornar ?? '', b.ligacao ?? '',
-          b.responsavel ?? '', b.numero ?? '', position,
+          b.responsavel ?? '', b.numero ?? '',
+          b.dor_cliente ?? '', b.numero_atendentes ?? '', b.valor_previsto ?? '', b.valor_fechado ?? '',
+          position,
         ]
       );
       return reply.status(201).send(leadRow);

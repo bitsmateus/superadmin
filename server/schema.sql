@@ -581,6 +581,27 @@ INSERT INTO lead_boards (name, color, position)
 SELECT 'Leads Novos', '#4F8EF7', 0
 WHERE NOT EXISTS (SELECT 1 FROM lead_boards);
 
+-- ---------- Seed dos quadros do funil comercial ----------
+WITH next_pos AS (
+  SELECT COALESCE(MAX(position), -1) AS base FROM lead_boards
+),
+seed(name, color, ord) AS (
+  VALUES
+    ('Primeiro contato',              '#4F8EF7', 1),
+    ('Reunião agendada',              '#8B5CF6', 2),
+    ('Reunião não comparecida',       '#F97316', 3),
+    ('Proposta enviada',              '#FBBF24', 4),
+    ('Followup Propostas',            '#06B6D4', 5),
+    ('Vendido',                       '#34D399', 6),
+    ('Disparo em massa após 7 dias',  '#EC4899', 7),
+    ('Desqualificados',               '#9CA3AF', 8),
+    ('Perdidos',                      '#F87171', 9)
+)
+INSERT INTO lead_boards (name, color, position)
+SELECT s.name, s.color, next_pos.base + s.ord
+FROM seed s, next_pos
+WHERE NOT EXISTS (SELECT 1 FROM lead_boards lb WHERE lb.name = s.name);
+
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:
 -- Crie o primeiro usuário admin com:

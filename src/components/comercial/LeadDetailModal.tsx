@@ -270,7 +270,7 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Escreva uma atualização e mencione outros com @"
-                className="min-h-[70px] w-full resize-y bg-transparent text-sm text-foreground placeholder:text-foreground/30 focus:outline-none"
+                className="min-h-[70px] w-full resize-y bg-transparent text-sm text-[#323338] placeholder:text-foreground/30 focus:outline-none"
               />
               {pendingAttachments.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -366,15 +366,15 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                   {notes.map((n) => (
                     <li key={n.id} className="rounded-lg border border-line bg-elevate/[0.02] p-3">
                       <div className="flex items-start gap-3">
-                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[10px] font-medium text-foreground/85 ring-1 ring-line">
+                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[10px] font-medium text-[#323338] ring-1 ring-line">
                           {initials(n.authorName) || <UserCircle2 className="h-3.5 w-3.5" />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-medium text-foreground">{n.authorName}</span>
+                            <span className="text-xs font-medium text-[#323338]">{n.authorName}</span>
                             <span className="text-[10px] text-foreground/40">{timeAgo(n.createdAt)}</span>
                           </div>
-                          {n.content && <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">{n.content}</p>}
+                          {n.content && <p className="mt-1 whitespace-pre-wrap text-sm text-[#323338]">{n.content}</p>}
                           {n.attachments.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
                               {n.attachments.map((a) => (

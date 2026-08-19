@@ -84,7 +84,7 @@ function ToolbarButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-gray-500',
+        'inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-gray-500',
         'transition-colors hover:bg-gray-100 hover:text-gray-800',
         className,
       )}
@@ -108,7 +108,7 @@ function BoardNameEditor({ board }: { board: LeadBoard }) {
         else setValue(board.name)
       }}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      className="min-w-0 max-w-[280px] truncate bg-transparent text-sm font-semibold uppercase tracking-wide outline-none focus:underline"
+      className="min-w-0 max-w-[280px] truncate bg-transparent text-base font-bold uppercase tracking-wide outline-none focus:underline"
       style={{ color: board.color }}
     />
   )
@@ -144,7 +144,7 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
         </button>
         <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-4" style={{ backgroundColor: board.color, boxShadow: `0 0 0 4px ${board.color}1f` }} />
         <BoardNameEditor board={board} />
-        <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{rows.length}</span>
+        <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-medium text-gray-500">{rows.length}</span>
         <input
           type="color"
           value={board.color}
@@ -170,28 +170,28 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
         <div ref={(el) => registerScrollEl(board.id, el)} className="overflow-x-hidden">
           <table className="border-collapse table-fixed" style={{ width: TABLE_WIDTH }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                <th className={cn('px-3 py-2.5', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
-                  <input type="checkbox" className="rounded border-gray-300" />
+              <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-[13px] font-semibold uppercase tracking-wide text-gray-500">
+                <th className={cn('px-3 py-3', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
+                  <input type="checkbox" className="h-4 w-4 rounded border-gray-300" />
                 </th>
                 {COLUMNS.map((col) => (
-                  <th key={col.key} className={cn('truncate px-3 py-2.5 font-semibold', GRID_BORDER)} style={{ width: col.width }}>
+                  <th key={col.key} className={cn('truncate px-3 py-3 font-semibold', GRID_BORDER)} style={{ width: col.width }}>
                     {col.label}
                   </th>
                 ))}
-                <th className="px-1 py-2.5" style={{ width: ACTIONS_COL_WIDTH }} />
+                <th className="px-1 py-3" style={{ width: ACTIONS_COL_WIDTH }} />
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id} className="group border-b border-gray-200 transition-colors hover:bg-accent/[0.04]">
-                  <td className={cn('px-3 py-2 align-middle', GRID_BORDER)}>
-                    <input type="checkbox" className="rounded border-gray-300" />
+                  <td className={cn('px-3 py-2.5 align-middle', GRID_BORDER)}>
+                    <input type="checkbox" className="h-4 w-4 rounded border-gray-300" />
                   </td>
                   {COLUMNS.map((col) => (
                     <td key={col.key} className={cn('align-middle', GRID_BORDER)}>
                       {col.readOnly ? (
-                        <div className="truncate px-3 py-2.5 text-xs text-gray-400">
+                        <div className="truncate px-3 py-3 text-sm text-gray-400">
                           {formatDateTimeShort(row.createdAt)}
                         </div>
                       ) : col.key === 'nome' ? (
@@ -202,17 +202,17 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
                             } : undefined}
                             value={row.nome}
                             onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
-                            className="bg-transparent px-3 py-2.5 text-sm text-gray-800"
+                            className="bg-transparent px-3 py-3 text-[15px] font-medium text-gray-800"
                           />
                           <button
                             type="button"
                             onClick={() => onOpenLead(row.id)}
                             title="Abrir lead"
-                            className="relative mr-2 grid h-6 w-6 shrink-0 place-items-center rounded text-gray-400 hover:bg-gray-100 hover:text-accent"
+                            className="relative mr-2 grid h-7 w-7 shrink-0 place-items-center rounded text-gray-400 hover:bg-gray-100 hover:text-accent"
                           >
-                            <MessageSquare className="h-3.5 w-3.5" />
+                            <MessageSquare className="h-4 w-4" />
                             {row.notesCount > 0 && (
-                              <span className="absolute -right-1 -top-1 grid h-3.5 min-w-[0.875rem] place-items-center rounded-full bg-accent px-0.5 text-[9px] font-semibold text-white">
+                              <span className="absolute -right-1 -top-1 grid h-4 min-w-[1rem] place-items-center rounded-full bg-accent px-0.5 text-[10px] font-semibold text-white">
                                 {row.notesCount > 9 ? '9+' : row.notesCount}
                               </span>
                             )}
@@ -229,7 +229,7 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
                           value={row[col.key as LeadRowField]}
                           type={col.type}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
-                          className="bg-transparent px-3 py-2.5 text-sm text-gray-800"
+                          className="bg-transparent px-3 py-3 text-[15px] text-gray-800"
                         />
                       )}
                     </td>
@@ -239,21 +239,21 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
                       type="button"
                       onClick={() => void leadBoardsService.deleteRow(row.id)}
                       title="Remover lead"
-                      className="grid h-7 w-7 place-items-center rounded text-gray-300 hover:bg-danger/10 hover:text-danger"
+                      className="grid h-8 w-8 place-items-center rounded text-gray-300 hover:bg-danger/10 hover:text-danger"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
                 </tr>
               ))}
               <tr className="hover:bg-gray-50">
-                <td colSpan={COLUMNS.length + 2} className="px-3 py-2.5">
+                <td colSpan={COLUMNS.length + 2} className="px-3 py-3">
                   <button
                     type="button"
                     onClick={() => onCreateRow(board.id)}
-                    className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-accent"
+                    className="flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-accent"
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="h-4 w-4" />
                     Adicionar nome
                   </button>
                 </td>
@@ -351,16 +351,16 @@ export function NovosLeadsPage() {
         ) : (
           <>
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Button size="sm" rightIcon={<ChevronDown className="h-3.5 w-3.5" />} onClick={handleCreateNome}>
+              <Button rightIcon={<ChevronDown className="h-4 w-4" />} onClick={handleCreateNome}>
                 Criar nome
               </Button>
               <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Pesquisar"
-                  className="h-8 w-40 rounded-md border border-gray-200 bg-white pl-8 pr-2 text-xs text-gray-800 placeholder:text-gray-400 focus:border-accent/60 focus:outline-none"
+                  className="h-9 w-44 rounded-md border border-gray-200 bg-white pl-9 pr-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-accent/60 focus:outline-none"
                 />
               </div>
               <ToolbarButton icon={<UserRound className="h-3.5 w-3.5" />}>Pessoa</ToolbarButton>
@@ -396,9 +396,9 @@ export function NovosLeadsPage() {
                   <button
                     type="button"
                     onClick={() => setBoardModalOpen(true)}
-                    className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-gray-300 text-xs font-medium text-gray-400 transition-colors hover:border-accent/50 hover:bg-accent/[0.03] hover:text-accent"
+                    className="flex h-12 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-gray-300 text-sm font-medium text-gray-400 transition-colors hover:border-accent/50 hover:bg-accent/[0.03] hover:text-accent"
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="h-4 w-4" />
                     Novo quadro
                   </button>
                 </div>

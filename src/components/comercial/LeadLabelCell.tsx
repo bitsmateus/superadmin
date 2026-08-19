@@ -37,7 +37,7 @@ export function LeadLabelCell({ field, value, onChange }: LeadLabelCellProps) {
   const openPicker = () => {
     const rect = btnRef.current?.getBoundingClientRect()
     if (rect) {
-      setCoords({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 296) })
+      setCoords({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 328) })
     }
     setOpen(true)
   }
@@ -48,17 +48,17 @@ export function LeadLabelCell({ field, value, onChange }: LeadLabelCellProps) {
         ref={btnRef}
         type="button"
         onClick={openPicker}
-        className="flex h-full w-full items-center px-2 py-1.5 text-left"
+        className="flex h-full w-full items-center px-2 py-2 text-left"
       >
         {value ? (
           <span
-            className="truncate rounded px-2 py-1 text-xs font-medium text-white"
+            className="truncate rounded-md px-2.5 py-1.5 text-sm font-medium text-white"
             style={{ backgroundColor: current?.color ?? '#9CA3AF' }}
           >
             {value}
           </span>
         ) : (
-          <span className="text-xs text-gray-300">Selecionar…</span>
+          <span className="text-sm text-gray-300">Selecionar…</span>
         )}
       </button>
 
@@ -66,13 +66,13 @@ export function LeadLabelCell({ field, value, onChange }: LeadLabelCellProps) {
         <div
           ref={popRef}
           style={{ position: 'fixed', top: coords.top, left: coords.left }}
-          className="z-50 w-72 rounded-xl border border-gray-200 bg-white p-2.5 shadow-xl"
+          className="z-50 w-80 rounded-xl border border-gray-200 bg-white p-3 shadow-xl"
         >
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => { onChange(''); setOpen(false) }}
-              className="rounded-md border border-dashed border-gray-300 px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-50"
+              className="rounded-md border border-dashed border-gray-300 px-2.5 py-2 text-sm text-gray-400 hover:bg-gray-50"
             >
               Nenhum
             </button>
@@ -82,7 +82,7 @@ export function LeadLabelCell({ field, value, onChange }: LeadLabelCellProps) {
                 type="button"
                 onClick={() => { onChange(l.name); setOpen(false) }}
                 className={cn(
-                  'truncate rounded-md px-2 py-1.5 text-xs font-medium text-white hover:opacity-90',
+                  'truncate rounded-md px-2.5 py-2 text-sm font-medium text-white hover:opacity-90',
                   l.name === value && 'ring-2 ring-gray-400 ring-offset-1',
                 )}
                 style={{ backgroundColor: l.color }}
@@ -94,9 +94,9 @@ export function LeadLabelCell({ field, value, onChange }: LeadLabelCellProps) {
           <button
             type="button"
             onClick={() => { setOpen(false); setManageOpen(true) }}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-gray-500 hover:bg-gray-50"
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-sm text-gray-500 hover:bg-gray-50"
           >
-            <Pencil className="h-3 w-3" />
+            <Pencil className="h-3.5 w-3.5" />
             Editar etiquetas
           </button>
         </div>,

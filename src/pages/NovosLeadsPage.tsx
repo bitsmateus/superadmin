@@ -173,7 +173,7 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
         <div ref={(el) => registerScrollEl(board.id, el)} className="overflow-x-hidden">
           <table className="border-collapse table-fixed" style={{ width: TABLE_WIDTH }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-[13px] font-semibold uppercase tracking-wide text-gray-500">
+              <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-[13px] font-semibold uppercase tracking-wide text-[#323338]">
                 <th className={cn('px-3 py-3', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
                   <input type="checkbox" className="h-4 w-4 rounded border-gray-300" />
                 </th>

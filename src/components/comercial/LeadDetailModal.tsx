@@ -69,7 +69,7 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               value={row.nome}
               onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
               placeholder="Nome do lead"
-              className="w-full text-xl font-semibold text-foreground"
+              className="w-full text-xl font-semibold text-[#323338]"
             />
             <p className="mt-1 text-xs text-foreground/40">
               in → {board?.name ?? '—'} Board
@@ -91,7 +91,7 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               <select
                 value={row.boardId}
                 onChange={(e) => leadBoardsService.updateRow(row.id, { boardId: e.target.value })}
-                className="w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
+                className="w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338] outline-none"
               >
                 {boards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
@@ -157,8 +157,8 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
 function FieldRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 border-b border-line/60 py-1.5">
-      <span className="flex w-5 shrink-0 items-center justify-center text-foreground/35">{icon}</span>
-      <span className="w-[104px] shrink-0 text-xs text-foreground/50">{label}</span>
+      <span className="flex w-5 shrink-0 items-center justify-center text-[#323338]/60">{icon}</span>
+      <span className="w-[104px] shrink-0 text-xs font-medium text-[#323338]">{label}</span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
@@ -170,7 +170,7 @@ function BoxedField({ value, onSave, type }: { value: string; onSave: (v: string
       value={value}
       type={type}
       onSave={onSave}
-      className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
+      className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338]"
     />
   )
 }

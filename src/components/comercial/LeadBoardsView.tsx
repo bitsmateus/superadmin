@@ -10,6 +10,7 @@ import {
   Ellipsis,
   EyeOff,
   Filter,
+  GripVertical,
   Loader2,
   MessageSquare,
   Plus,
@@ -51,7 +52,7 @@ interface ColumnDef {
   tag?: boolean
 }
 
-const CHECKBOX_COL_WIDTH = 40
+const CHECKBOX_COL_WIDTH = 58
 const ACTIONS_COL_WIDTH = 36
 
 const COLUMNS: ColumnDef[] = [
@@ -379,11 +380,19 @@ interface BoardGroupProps {
   selectedIds: Set<string>
   onToggleRow: (id: string) => void
   onToggleAll: (ids: string[], select: boolean) => void
+  draggingRowId: string | null
+  isDragOver: boolean
+  onRowDragStart: (id: string) => void
+  onRowDragEnd: () => void
+  onBoardDragOver: (boardId: string) => void
+  onBoardDragLeave: () => void
+  onBoardDrop: (boardId: string) => void
 }
 
 function BoardGroup({
   board, search, sdrFilter, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
   selectedIds, onToggleRow, onToggleAll,
+  draggingRowId, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
   const allRows = useLeadRows(board.id)
@@ -395,13 +404,16 @@ function BoardGroup({
 
   return (
     <div
-      className="mb-5 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+      className={cn(
+        'mb-5 overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow hover:shadow-md',
+        isDragOver ? 'border-accent ring-2 ring-accent/40' : 'border-gray-200',
+      )}
       style={{ borderLeft: `4px solid ${board.color}` }}
+      onDragOver={(e) => { e.preventDefault(); onBoardDragOver(board.id) }}
+      onDragLeave={onBoardDragLeave}
+      onDrop={(e) => { e.preventDefault(); onBoardDrop(board.id) }}
     >
-      <div
-        className="flex items-center gap-2 border-b border-gray-200 px-3 py-2"
-        style={{ backgroundColor: `${board.color}12` }}
-      >
+      <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-3 py-2">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -462,16 +474,32 @@ function BoardGroup({
                   key={row.id}
                   className={cn(
                     'group border-b border-gray-200 transition-colors',
+                    draggingRowId === row.id ? 'opacity-40' : '',
                     selected ? 'bg-accent/10 hover:bg-accent/15' : 'hover:bg-accent/[0.04]',
                   )}
                 >
-                  <td className={cn('px-2.5 py-1.5 align-middle', GRID_BORDER)}>
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={() => onToggleRow(row.id)}
-                      className="h-3.5 w-3.5 rounded border-gray-300"
-                    />
+                  <td className={cn('px-1.5 py-1.5 align-middle', GRID_BORDER)}>
+                    <div className="flex items-center gap-0.5">
+                      <span
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', row.id)
+                          e.dataTransfer.effectAllowed = 'move'
+                          onRowDragStart(row.id)
+                        }}
+                        onDragEnd={onRowDragEnd}
+                        title="Arrastar para outro quadro"
+                        className="grid h-5 w-4 shrink-0 cursor-grab place-items-center text-gray-300 hover:text-gray-500 active:cursor-grabbing"
+                      >
+                        <GripVertical className="h-3.5 w-3.5" />
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => onToggleRow(row.id)}
+                        className="h-3.5 w-3.5 rounded border-gray-300"
+                      />
+                    </div>
                   </td>
                   {COLUMNS.map((col) => (
                     <td key={col.key} className={cn('align-middle', GRID_BORDER)}>
@@ -611,6 +639,23 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  const [draggingRowId, setDraggingRowId] = React.useState<string | null>(null)
+  const [dragOverBoardId, setDragOverBoardId] = React.useState<string | null>(null)
+
+  const handleRowDragStart = React.useCallback((id: string) => setDraggingRowId(id), [])
+  const handleRowDragEnd = React.useCallback(() => {
+    setDraggingRowId(null)
+    setDragOverBoardId(null)
+  }, [])
+  const handleBoardDragOver = React.useCallback((boardId: string) => setDragOverBoardId(boardId), [])
+  const handleBoardDragLeave = React.useCallback(() => setDragOverBoardId(null), [])
+  const handleBoardDrop = React.useCallback((boardId: string) => {
+    setDraggingRowId((current) => {
+      if (current) leadBoardsService.updateRow(current, { boardId })
+      return null
+    })
+    setDragOverBoardId(null)
+  }, [])
 
   const toggleRow = React.useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -708,6 +753,13 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                       selectedIds={selectedIds}
                       onToggleRow={toggleRow}
                       onToggleAll={toggleAll}
+                      draggingRowId={draggingRowId}
+                      isDragOver={dragOverBoardId === board.id}
+                      onRowDragStart={handleRowDragStart}
+                      onRowDragEnd={handleRowDragEnd}
+                      onBoardDragOver={handleBoardDragOver}
+                      onBoardDragLeave={handleBoardDragLeave}
+                      onBoardDrop={handleBoardDrop}
                     />
                   ))}
                   <button

@@ -18,40 +18,49 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { LeadNotesDrawer } from '@/components/comercial/LeadNotesDrawer'
+import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
+import { EditableField } from '@/components/comercial/EditableField'
 import { cn, formatDateTimeShort } from '@/lib/utils'
 import { useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
-import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { leadBoardsService } from '@/services/leadBoards'
 import type { LeadBoard, LeadLabelField, LeadRow, LeadRowField } from '@/types/leadBoard'
 
 interface ColumnDef {
   key: LeadRowField | 'createdAt'
   label: string
-  type?: 'text' | 'date'
-  width: string
+  type?: 'text' | 'date' | 'datetime-local'
+  width: number
   readOnly?: boolean
   tag?: boolean
 }
 
+const CHECKBOX_COL_WIDTH = 40
+const ACTIONS_COL_WIDTH = 36
+
 const COLUMNS: ColumnDef[] = [
-  { key: 'nome', label: 'Nome', width: 'min-w-[180px]' },
-  { key: 'tipo', label: 'Tipo', width: 'min-w-[110px]' },
-  { key: 'empresa', label: 'Empresa', width: 'min-w-[180px]' },
-  { key: 'telefone', label: 'Telefone', width: 'min-w-[140px]' },
-  { key: 'diaContato', label: 'Dia de contato', width: 'min-w-[170px]', tag: true },
-  { key: 'status', label: 'Status', width: 'min-w-[170px]', tag: true },
-  { key: 'retornar', label: 'Retornar', type: 'date', width: 'min-w-[130px]' },
-  { key: 'ligacao', label: 'Ligação', width: 'min-w-[110px]' },
-  { key: 'responsavel', label: 'Resp.', width: 'min-w-[110px]' },
-  { key: 'numero', label: 'Número', width: 'min-w-[110px]' },
-  { key: 'dorCliente', label: 'Dor do cliente', width: 'min-w-[200px]' },
-  { key: 'numeroAtendentes', label: 'Número de atendentes', width: 'min-w-[170px]' },
-  { key: 'valorPrevisto', label: 'Valor Previsto', width: 'min-w-[140px]' },
-  { key: 'valorFechado', label: 'Valor Fechado', width: 'min-w-[140px]' },
-  { key: 'createdAt', label: 'Log de criação', width: 'min-w-[160px]', readOnly: true },
+  { key: 'nome', label: 'Nome', width: 180 },
+  { key: 'empresa', label: 'Empresa', width: 170 },
+  { key: 'telefone', label: 'Telefone', width: 140 },
+  { key: 'tipo', label: 'Tipo', width: 130, tag: true },
+  { key: 'diaContato', label: 'Dia de contato', width: 170, tag: true },
+  { key: 'ligacao', label: 'Ligação', width: 100 },
+  { key: 'status', label: 'Status', width: 170, tag: true },
+  { key: 'sdr', label: 'SDR', width: 130 },
+  { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
+  { key: 'responsavel', label: 'Resp.', width: 130 },
+  { key: 'numero', label: 'Número', width: 110 },
+  { key: 'dorCliente', label: 'Dor do cliente', width: 200 },
+  { key: 'numeroAtendentes', label: 'Número de atendentes', width: 170 },
+  { key: 'valorPrevisto', label: 'Valor Previsto', width: 140 },
+  { key: 'valorFechado', label: 'Valor Fechado', width: 140 },
+  { key: 'createdAt', label: 'Log de criação', width: 160, readOnly: true },
 ]
+
+const TABLE_WIDTH =
+  CHECKBOX_COL_WIDTH + ACTIONS_COL_WIDTH + COLUMNS.reduce((sum, c) => sum + c.width, 0)
+
+const GRID_BORDER = 'border-r border-gray-200'
 
 function matchesSearch(row: LeadRow, term: string): boolean {
   if (!term) return true
@@ -86,44 +95,6 @@ function ToolbarButton({
   )
 }
 
-const EditableCell = React.forwardRef<
-  HTMLInputElement,
-  { value: string; type?: 'text' | 'date'; placeholder?: string; onSave: (next: string) => void }
->(function EditableCell({ value, type = 'text', placeholder, onSave }, ref) {
-  const [local, setLocal] = React.useState(value)
-  const focusedRef = React.useRef(false)
-  const debouncedSave = useDebouncedCallback((next: string) => onSave(next), 600)
-
-  React.useEffect(() => {
-    if (!focusedRef.current) setLocal(value)
-  }, [value])
-
-  return (
-    <input
-      ref={ref}
-      type={type}
-      value={local}
-      placeholder={placeholder}
-      onFocus={() => { focusedRef.current = true }}
-      onChange={(e) => {
-        setLocal(e.target.value)
-        debouncedSave(e.target.value)
-      }}
-      onBlur={() => {
-        focusedRef.current = false
-        if (local !== value) onSave(local)
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-      }}
-      className={cn(
-        'h-full w-full bg-transparent px-3 py-2.5 text-sm text-gray-800 outline-none',
-        'placeholder:text-gray-300 focus:bg-accent/[0.06]',
-      )}
-    />
-  )
-})
-
 function BoardNameEditor({ board }: { board: LeadBoard }) {
   const [value, setValue] = React.useState(board.name)
   React.useEffect(() => setValue(board.name), [board.name])
@@ -149,10 +120,11 @@ interface BoardGroupProps {
   focusRowId: string | null
   onFocused: () => void
   onCreateRow: (boardId: string) => void
-  onOpenNotes: (rowId: string, rowName: string) => void
+  onOpenLead: (rowId: string) => void
+  registerScrollEl: (boardId: string, el: HTMLDivElement | null) => void
 }
 
-function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenNotes }: BoardGroupProps) {
+function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
   const allRows = useLeadRows(board.id)
   const rows = React.useMemo(() => allRows.filter((r) => matchesSearch(r, search)), [allRows, search])
@@ -167,10 +139,7 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenN
         >
           <ChevronDown className={cn('h-4 w-4 transition-transform', open ? '' : '-rotate-90')} />
         </button>
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-sm"
-          style={{ backgroundColor: board.color }}
-        />
+        <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: board.color }} />
         <BoardNameEditor board={board} />
         <span className="text-xs text-gray-400">{rows.length}</span>
         <input
@@ -195,46 +164,47 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenN
       </div>
 
       {open && (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+        <div ref={(el) => registerScrollEl(board.id, el)} className="overflow-x-hidden">
+          <table className="border-collapse table-fixed" style={{ width: TABLE_WIDTH }}>
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-500">
-                <th className="w-10 px-3 py-2">
+                <th className={cn('px-3 py-2', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
                   <input type="checkbox" className="rounded border-gray-300" />
                 </th>
                 {COLUMNS.map((col) => (
-                  <th key={col.key} className={cn('px-1 py-2 font-medium', col.width)}>
+                  <th key={col.key} className={cn('truncate px-3 py-2 font-medium', GRID_BORDER)} style={{ width: col.width }}>
                     {col.label}
                   </th>
                 ))}
-                <th className="w-9 px-1 py-2" />
+                <th className="px-1 py-2" style={{ width: ACTIONS_COL_WIDTH }} />
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id} className="group border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
-                  <td className="px-3 py-2 align-middle">
+                  <td className={cn('px-3 py-2 align-middle', GRID_BORDER)}>
                     <input type="checkbox" className="rounded border-gray-300" />
                   </td>
                   {COLUMNS.map((col) => (
-                    <td key={col.key} className={cn('border-l border-gray-100 align-middle', col.width)}>
+                    <td key={col.key} className={cn('align-middle', GRID_BORDER)}>
                       {col.readOnly ? (
                         <div className="truncate px-3 py-2.5 text-xs text-gray-400">
                           {formatDateTimeShort(row.createdAt)}
                         </div>
                       ) : col.key === 'nome' ? (
                         <div className="flex items-center">
-                          <EditableCell
+                          <EditableField
                             ref={row.id === focusRowId ? (el) => {
                               if (el) { el.focus(); onFocused() }
                             } : undefined}
                             value={row.nome}
                             onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
+                            className="bg-transparent px-3 py-2.5 text-sm text-gray-800"
                           />
                           <button
                             type="button"
-                            onClick={() => onOpenNotes(row.id, row.nome || 'Lead sem nome')}
-                            title="Anotações do lead"
+                            onClick={() => onOpenLead(row.id)}
+                            title="Abrir lead"
                             className="relative mr-2 grid h-6 w-6 shrink-0 place-items-center rounded text-gray-400 hover:bg-gray-100 hover:text-accent"
                           >
                             <MessageSquare className="h-3.5 w-3.5" />
@@ -252,15 +222,16 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenN
                           onChange={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
                         />
                       ) : (
-                        <EditableCell
+                        <EditableField
                           value={row[col.key as LeadRowField]}
                           type={col.type}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
+                          className="bg-transparent px-3 py-2.5 text-sm text-gray-800"
                         />
                       )}
                     </td>
                   ))}
-                  <td className="px-1 text-center align-middle">
+                  <td className="text-center align-middle">
                     <button
                       type="button"
                       onClick={() => void leadBoardsService.deleteRow(row.id)}
@@ -340,7 +311,17 @@ export function NovosLeadsPage() {
   const [search, setSearch] = React.useState('')
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
-  const [notesLead, setNotesLead] = React.useState<{ id: string; name: string } | null>(null)
+  const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
+
+  const scrollEls = React.useRef<Map<string, HTMLDivElement>>(new Map())
+  const registerScrollEl = React.useCallback((boardId: string, el: HTMLDivElement | null) => {
+    if (el) scrollEls.current.set(boardId, el)
+    else scrollEls.current.delete(boardId)
+  }, [])
+  const handleSharedScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const left = e.currentTarget.scrollLeft
+    scrollEls.current.forEach((el) => { el.scrollLeft = left })
+  }
 
   const handleCreateRow = (boardId: string) => {
     const row = leadBoardsService.createRow(boardId)
@@ -356,7 +337,7 @@ export function NovosLeadsPage() {
     <>
       <TopBar title="Novos Leads" subtitle="Comercial · quadros de captação de leads" />
 
-      <div className="min-h-screen bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="flex min-h-screen flex-col bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!booted ? (
           <div className="grid min-h-[30vh] place-items-center text-sm text-gray-500">
             <span className="inline-flex items-center gap-2">
@@ -396,20 +377,32 @@ export function NovosLeadsPage() {
               />
             ) : (
               <>
-                {boards.map((board) => (
-                  <BoardGroup
-                    key={board.id}
-                    board={board}
-                    search={search}
-                    focusRowId={focusRowId}
-                    onFocused={() => setFocusRowId(null)}
-                    onCreateRow={handleCreateRow}
-                    onOpenNotes={(id, name) => setNotesLead({ id, name })}
-                  />
-                ))}
-                <ToolbarButton icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setBoardModalOpen(true)}>
-                  Novo quadro
-                </ToolbarButton>
+                <div className="flex-1">
+                  {boards.map((board) => (
+                    <BoardGroup
+                      key={board.id}
+                      board={board}
+                      search={search}
+                      focusRowId={focusRowId}
+                      onFocused={() => setFocusRowId(null)}
+                      onCreateRow={handleCreateRow}
+                      onOpenLead={setOpenLeadId}
+                      registerScrollEl={registerScrollEl}
+                    />
+                  ))}
+                  <ToolbarButton icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setBoardModalOpen(true)}>
+                    Novo quadro
+                  </ToolbarButton>
+                </div>
+
+                {/* Barra de rolagem horizontal única — arrasta todos os quadros juntos */}
+                <div
+                  className="sticky bottom-0 mt-3 overflow-x-auto overflow-y-hidden border-t border-gray-200 bg-white"
+                  style={{ height: 16 }}
+                  onScroll={handleSharedScroll}
+                >
+                  <div style={{ width: TABLE_WIDTH, height: 1 }} />
+                </div>
               </>
             )}
           </>
@@ -417,11 +410,7 @@ export function NovosLeadsPage() {
       </div>
 
       <CreateBoardModal open={boardModalOpen} onClose={() => setBoardModalOpen(false)} />
-      <LeadNotesDrawer
-        leadRowId={notesLead?.id ?? null}
-        leadName={notesLead?.name ?? ''}
-        onClose={() => setNotesLead(null)}
-      />
+      <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
     </>
   )
 }

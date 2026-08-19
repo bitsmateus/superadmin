@@ -1,15 +1,16 @@
 import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
-import type { LeadNote } from '@/types/leadBoard'
+import type { LeadNote, LeadNoteAttachment } from '@/types/leadBoard'
 
 type NoteRow = {
   id: string; lead_row_id: string; author_id: string | null; author_name: string
-  content: string; created_at: string
+  content: string; attachments: LeadNoteAttachment[] | null; created_at: string
 }
 function rowToNote(r: NoteRow): LeadNote {
   return {
     id: r.id, leadRowId: r.lead_row_id, authorId: r.author_id,
-    authorName: r.author_name, content: r.content, createdAt: r.created_at,
+    authorName: r.author_name, content: r.content, attachments: r.attachments ?? [],
+    createdAt: r.created_at,
   }
 }
 
@@ -29,12 +30,18 @@ function ensureRealtime() {
     if (type === 'DELETE') {
       const id = (data as { id?: string }).id
       if (id) notes = notes.filter((n) => n.id !== id)
-    } else {
-      const next = rowToNote(data as NoteRow)
-      const idx = notes.findIndex((n) => n.id === next.id)
-      if (idx === -1) notes = [next, ...notes]
-      else { const copy = notes.slice(); copy[idx] = next; notes = copy }
+      notify()
+      return
     }
+    // Payloads muito grandes (ex.: anexo pesado) chegam truncados só com
+    // {id} — ignora em vez de gravar uma nota incompleta no cache; quem
+    // enviou já recebeu a nota completa via retorno do POST.
+    const row = data as Partial<NoteRow>
+    if (typeof row.content !== 'string' || typeof row.author_name !== 'string') return
+    const next = rowToNote(row as NoteRow)
+    const idx = notes.findIndex((n) => n.id === next.id)
+    if (idx === -1) notes = [next, ...notes]
+    else { const copy = notes.slice(); copy[idx] = next; notes = copy }
     notify()
   })
 }
@@ -60,12 +67,17 @@ export const leadNotesService = {
     }
   },
 
-  async addNote(leadRowId: string, content: string, authorName: string): Promise<LeadNote | null> {
+  async addNote(
+    leadRowId: string,
+    content: string,
+    authorName: string,
+    attachments: LeadNoteAttachment[] = [],
+  ): Promise<LeadNote | null> {
     const trimmed = content.trim()
-    if (!trimmed) return null
+    if (!trimmed && attachments.length === 0) return null
     try {
       const row = await api.post<NoteRow>('/api/lead-notes', {
-        lead_row_id: leadRowId, content: trimmed, author_name: authorName,
+        lead_row_id: leadRowId, content: trimmed, author_name: authorName, attachments,
       })
       const note = rowToNote(row)
       notes = [note, ...notes]

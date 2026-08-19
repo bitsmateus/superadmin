@@ -25,3 +25,8 @@ export function useLeadRows(boardId: string): LeadRow[] {
     [all, boardId],
   )
 }
+
+export function useLeadRow(rowId: string | null): LeadRow | undefined {
+  const all = useSnapshot(leadBoardsService.getRows)
+  return React.useMemo(() => (rowId ? all.find((r) => r.id === rowId) : undefined), [all, rowId])
+}

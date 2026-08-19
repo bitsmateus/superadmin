@@ -298,6 +298,7 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   retornar TEXT NOT NULL DEFAULT '',
   ligacao TEXT NOT NULL DEFAULT '',
   responsavel TEXT NOT NULL DEFAULT '',
+  sdr TEXT NOT NULL DEFAULT '',
   numero TEXT NOT NULL DEFAULT '',
   dor_cliente TEXT NOT NULL DEFAULT '',
   numero_atendentes TEXT NOT NULL DEFAULT '',
@@ -322,6 +323,7 @@ CREATE TABLE IF NOT EXISTS lead_notes (
   author_id UUID,
   author_name TEXT NOT NULL,
   content TEXT NOT NULL,
+  attachments JSONB NOT NULL DEFAULT '[]',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -338,10 +340,10 @@ DROP TRIGGER IF EXISTS lead_notes_count_trigger ON lead_notes;
 CREATE TRIGGER lead_notes_count_trigger AFTER INSERT ON lead_notes
   FOR EACH ROW EXECUTE FUNCTION increment_lead_notes_count();
 
--- ---------- lead_labels (etiquetas coloridas de "Dia de contato" e "Status") ----------
+-- ---------- lead_labels (etiquetas coloridas de "Tipo", "Dia de contato" e "Status") ----------
 CREATE TABLE IF NOT EXISTS lead_labels (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  field TEXT NOT NULL CHECK (field IN ('dia_contato', 'status')),
+  field TEXT NOT NULL CHECK (field IN ('tipo', 'dia_contato', 'status')),
   name TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#9CA3AF',
   position INT NOT NULL DEFAULT 0,
@@ -646,9 +648,11 @@ SELECT s.name, s.color, next_pos.base + s.ord
 FROM seed s, next_pos
 WHERE NOT EXISTS (SELECT 1 FROM lead_boards lb WHERE lb.name = s.name);
 
--- ---------- Seed das etiquetas de Dia de contato e Status ----------
+-- ---------- Seed das etiquetas de Tipo, Dia de contato e Status ----------
 INSERT INTO lead_labels (field, name, color, position)
 SELECT * FROM (VALUES
+  ('tipo', 'IA',                        '#10B981', 1),
+  ('tipo', 'CHATBOT',                   '#F97316', 2),
   ('dia_contato', '1º Dia - ChatBot',   '#9CA3AF', 1),
   ('dia_contato', '2º Dia - ChatBot',   '#60A5FA', 2),
   ('dia_contato', '3º Dia - ChatBot',   '#3B82F6', 3),

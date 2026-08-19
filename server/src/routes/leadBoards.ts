@@ -88,13 +88,13 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const [leadRow] = await query(
         `INSERT INTO lead_rows (
           id, board_id, nome, tipo, empresa, telefone, dia_contato, status,
-          retornar, ligacao, responsavel, numero,
+          retornar, ligacao, responsavel, sdr, numero,
           dor_cliente, numero_atendentes, valor_previsto, valor_fechado, position
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
         [
           id, b.board_id, b.nome ?? '', b.tipo ?? '', b.empresa ?? '', b.telefone ?? '',
           b.dia_contato ?? '', b.status ?? '', b.retornar ?? '', b.ligacao ?? '',
-          b.responsavel ?? '', b.numero ?? '',
+          b.responsavel ?? '', b.sdr ?? '', b.numero ?? '',
           b.dor_cliente ?? '', b.numero_atendentes ?? '', b.valor_previsto ?? '', b.valor_fechado ?? '',
           position,
         ]
@@ -161,9 +161,12 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       }
       const { sub: authorId } = req.user as { sub: string };
       const [note] = await query(
-        `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content)
-         VALUES ($1,$2,$3,$4) RETURNING *`,
-        [b.lead_row_id, authorId ?? null, b.author_name ?? 'Alguém', b.content]
+        `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [
+          b.lead_row_id, authorId ?? null, b.author_name ?? 'Alguém', b.content,
+          JSON.stringify(b.attachments ?? []),
+        ]
       );
       return reply.status(201).send(note);
     }

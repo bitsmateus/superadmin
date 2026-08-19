@@ -256,6 +256,7 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_previsto TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_fechado TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS notes_count INT NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS sdr TEXT NOT NULL DEFAULT ''`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'touch_updated_at') THEN
       DROP TRIGGER IF EXISTS lead_rows_touch_updated_at ON lead_rows;
@@ -272,6 +273,7 @@ END $$`);
     content TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  await pool.query(`ALTER TABLE lead_notes ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_notes_lead_row_idx ON lead_notes(lead_row_id)`);
   await pool.query(`CREATE OR REPLACE FUNCTION increment_lead_notes_count() RETURNS TRIGGER LANGUAGE plpgsql AS $$
     BEGIN
@@ -330,6 +332,9 @@ END $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_labels_field_idx ON lead_labels(field)`);
+  // "Tipo" também virou etiqueta colorida — amplia o CHECK pra bancos já existentes.
+  await pool.query(`ALTER TABLE lead_labels DROP CONSTRAINT IF EXISTS lead_labels_field_check`);
+  await pool.query(`ALTER TABLE lead_labels ADD CONSTRAINT lead_labels_field_check CHECK (field IN ('tipo', 'dia_contato', 'status'))`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_lead_labels ON lead_labels;
@@ -339,6 +344,8 @@ END $$`);
   END $$`);
   await pool.query(`INSERT INTO lead_labels (field, name, color, position)
     SELECT * FROM (VALUES
+      ('tipo', 'IA',                        '#10B981', 1),
+      ('tipo', 'CHATBOT',                   '#F97316', 2),
       ('dia_contato', '1º Dia - ChatBot',   '#9CA3AF', 1),
       ('dia_contato', '2º Dia - ChatBot',   '#60A5FA', 2),
       ('dia_contato', '3º Dia - ChatBot',   '#3B82F6', 3),

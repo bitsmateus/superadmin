@@ -25,6 +25,7 @@ export interface LeadRow {
   retornar: string
   ligacao: string
   responsavel: string
+  sdr: string
   numero: string
   dorCliente: string
   numeroAtendentes: string
@@ -41,6 +42,15 @@ export type LeadRowField = Exclude<
   'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount'
 >
 
+/** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */
+export interface LeadNoteAttachment {
+  id: string
+  name: string
+  type: string
+  size: number
+  dataUrl: string
+}
+
 /** Anotação/atualização do bloco lateral de um lead (estilo "Updates" do Monday). */
 export interface LeadNote {
   id: string
@@ -48,11 +58,12 @@ export interface LeadNote {
   authorId: string | null
   authorName: string
   content: string
+  attachments: LeadNoteAttachment[]
   createdAt: string
 }
 
 /** Campos que usam etiqueta colorida selecionável (estilo Monday) em vez de texto livre. */
-export type LeadLabelField = 'diaContato' | 'status'
+export type LeadLabelField = 'tipo' | 'diaContato' | 'status'
 
 export interface LeadLabel {
   id: string

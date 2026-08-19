@@ -1,7 +1,10 @@
 import * as React from 'react'
 import {
+  ArrowRightLeft,
   ArrowUpDown,
   ChevronDown,
+  Copy,
+  Download,
   Ellipsis,
   EyeOff,
   Filter,
@@ -12,6 +15,7 @@ import {
   Search,
   Trash2,
   UserRound,
+  X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -23,7 +27,7 @@ import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn, formatDateTimeShort } from '@/lib/utils'
-import { useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
+import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
@@ -151,6 +155,150 @@ function SdrFilterButton({ value, onChange }: { value: string | null; onChange: 
   )
 }
 
+function csvEscape(value: string): string {
+  const s = value ?? ''
+  return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+function exportLeadsCsv(rows: LeadRow[]) {
+  const cols: { label: string; get: (r: LeadRow) => string }[] = [
+    ...COLUMNS.filter((c) => !c.readOnly).map((c) => ({
+      label: c.label,
+      get: (r: LeadRow) => r[c.key as LeadRowField] ?? '',
+    })),
+    { label: 'Log de criação', get: (r: LeadRow) => formatDateTimeShort(r.createdAt) },
+  ]
+  const lines = [
+    cols.map((c) => csvEscape(c.label)).join(';'),
+    ...rows.map((r) => cols.map((c) => csvEscape(c.get(r))).join(';')),
+  ]
+  const csv = '﻿' + lines.join('\r\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function BulkActionButton({
+  icon,
+  label,
+  onClick,
+  danger,
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  danger?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex flex-col items-center gap-0.5 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors',
+        danger ? 'text-gray-500 hover:bg-danger/10 hover:text-danger' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800',
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+function BulkActionBar({
+  selectedIds,
+  allRows,
+  boards,
+  onClear,
+}: {
+  selectedIds: Set<string>
+  allRows: LeadRow[]
+  boards: LeadBoard[]
+  onClear: () => void
+}) {
+  const [moveOpen, setMoveOpen] = React.useState(false)
+  const moveRef = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(moveRef, moveOpen, () => setMoveOpen(false))
+
+  if (selectedIds.size === 0) return null
+
+  const selectedRows = allRows.filter((r) => selectedIds.has(r.id))
+
+  const duplicate = () => {
+    for (const r of selectedRows) {
+      leadBoardsService.createRow(r.boardId, {
+        nome: r.nome, empresa: r.empresa, telefone: r.telefone, tipo: r.tipo,
+        diaContato: r.diaContato, status: r.status, sdr: r.sdr, retornar: r.retornar,
+        responsavel: r.responsavel, numero: r.numero, dorCliente: r.dorCliente,
+        numeroAtendentes: r.numeroAtendentes, valorMrr: r.valorMrr,
+        valorImplementacao: r.valorImplementacao,
+      })
+    }
+    onClear()
+  }
+
+  const bulkDelete = () => {
+    if (!window.confirm(`Excluir ${selectedRows.length} lead(s) selecionado(s)?`)) return
+    for (const r of selectedRows) void leadBoardsService.deleteRow(r.id)
+    onClear()
+  }
+
+  const moveTo = (boardId: string) => {
+    for (const r of selectedRows) leadBoardsService.updateRow(r.id, { boardId })
+    setMoveOpen(false)
+    onClear()
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-16 z-40 flex justify-center px-4">
+      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-1.5 shadow-xl">
+        <span className="mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-white">
+          {selectedRows.length}
+        </span>
+        <span className="mr-1.5 whitespace-nowrap text-xs font-medium text-gray-600">
+          {selectedRows.length === 1 ? 'Nome selecionado' : 'Nomes selecionados'}
+        </span>
+        <div className="mx-1 h-6 w-px bg-gray-200" />
+        <BulkActionButton icon={<Copy className="h-4 w-4" />} label="Duplicar" onClick={duplicate} />
+        <BulkActionButton icon={<Download className="h-4 w-4" />} label="Exportar" onClick={() => exportLeadsCsv(selectedRows)} />
+        <div className="relative" ref={moveRef}>
+          <BulkActionButton icon={<ArrowRightLeft className="h-4 w-4" />} label="Mover" onClick={() => setMoveOpen((o) => !o)} />
+          {moveOpen && (
+            <div className="absolute bottom-full left-1/2 mb-2 w-52 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+              {boards.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => moveTo(b.id)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
+                >
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
+                  <span className="truncate">{b.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <BulkActionButton icon={<Trash2 className="h-4 w-4" />} label="Excluir" onClick={bulkDelete} danger />
+        <div className="mx-1 h-6 w-px bg-gray-200" />
+        <button
+          type="button"
+          onClick={onClear}
+          title="Limpar seleção"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function BoardNameEditor({ board }: { board: LeadBoard }) {
   const [value, setValue] = React.useState(board.name)
   React.useEffect(() => setValue(board.name), [board.name])
@@ -179,15 +327,22 @@ interface BoardGroupProps {
   onCreateRow: (boardId: string) => void
   onOpenLead: (rowId: string) => void
   registerScrollEl: (boardId: string, el: HTMLDivElement | null) => void
+  selectedIds: Set<string>
+  onToggleRow: (id: string) => void
+  onToggleAll: (ids: string[], select: boolean) => void
 }
 
-function BoardGroup({ board, search, sdrFilter, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl }: BoardGroupProps) {
+function BoardGroup({
+  board, search, sdrFilter, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
+  selectedIds, onToggleRow, onToggleAll,
+}: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
   const allRows = useLeadRows(board.id)
   const rows = React.useMemo(
     () => allRows.filter((r) => matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter)),
     [allRows, search, sdrFilter],
   )
+  const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
 
   return (
     <div
@@ -235,7 +390,12 @@ function BoardGroup({ board, search, sdrFilter, focusRowId, onFocused, onCreateR
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-xs font-semibold text-[#323338]">
                 <th className={cn('px-2.5 py-2', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
-                  <input type="checkbox" className="h-3.5 w-3.5 rounded border-gray-300" />
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() => onToggleAll(rows.map((r) => r.id), !allSelected)}
+                    className="h-3.5 w-3.5 rounded border-gray-300"
+                  />
                 </th>
                 {COLUMNS.map((col) => (
                   <th key={col.key} className={cn('truncate px-2.5 py-2 font-semibold', GRID_BORDER)} style={{ width: col.width }}>
@@ -246,10 +406,23 @@ function BoardGroup({ board, search, sdrFilter, focusRowId, onFocused, onCreateR
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="group border-b border-gray-200 transition-colors hover:bg-accent/[0.04]">
+              {rows.map((row) => {
+                const selected = selectedIds.has(row.id)
+                return (
+                <tr
+                  key={row.id}
+                  className={cn(
+                    'group border-b border-gray-200 transition-colors',
+                    selected ? 'bg-accent/10 hover:bg-accent/15' : 'hover:bg-accent/[0.04]',
+                  )}
+                >
                   <td className={cn('px-2.5 py-1.5 align-middle', GRID_BORDER)}>
-                    <input type="checkbox" className="h-3.5 w-3.5 rounded border-gray-300" />
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => onToggleRow(row.id)}
+                      className="h-3.5 w-3.5 rounded border-gray-300"
+                    />
                   </td>
                   {COLUMNS.map((col) => (
                     <td key={col.key} className={cn('align-middle', GRID_BORDER)}>
@@ -308,7 +481,8 @@ function BoardGroup({ board, search, sdrFilter, focusRowId, onFocused, onCreateR
                     </button>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
               <tr className="hover:bg-gray-50">
                 <td colSpan={COLUMNS.length + 2} className="px-2.5 py-2">
                   <button
@@ -374,11 +548,30 @@ function CreateBoardModal({ open, onClose }: { open: boolean; onClose: () => voi
 export function NovosLeadsPage() {
   const booted = useLeadBoardsBooted()
   const boards = useLeadBoards()
+  const allRows = useAllLeadRows()
   const [search, setSearch] = React.useState('')
   const [sdrFilter, setSdrFilter] = React.useState<string | null>(null)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+
+  const toggleRow = React.useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleAll = React.useCallback((ids: string[], select: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) { if (select) next.add(id); else next.delete(id) }
+      return next
+    })
+  }, [])
 
   const scrollEls = React.useRef<Map<string, HTMLDivElement>>(new Map())
   const registerScrollEl = React.useCallback((boardId: string, el: HTMLDivElement | null) => {
@@ -456,6 +649,9 @@ export function NovosLeadsPage() {
                       onCreateRow={handleCreateRow}
                       onOpenLead={setOpenLeadId}
                       registerScrollEl={registerScrollEl}
+                      selectedIds={selectedIds}
+                      onToggleRow={toggleRow}
+                      onToggleAll={toggleAll}
                     />
                   ))}
                   <button
@@ -479,6 +675,13 @@ export function NovosLeadsPage() {
                     <div style={{ width: TABLE_WIDTH, height: 1 }} />
                   </div>
                 </div>
+
+                <BulkActionBar
+                  selectedIds={selectedIds}
+                  allRows={allRows}
+                  boards={boards}
+                  onClear={() => setSelectedIds(new Set())}
+                />
               </>
             )}
           </>

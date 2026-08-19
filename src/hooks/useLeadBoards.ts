@@ -30,3 +30,8 @@ export function useLeadRow(rowId: string | null): LeadRow | undefined {
   const all = useSnapshot(leadBoardsService.getRows)
   return React.useMemo(() => (rowId ? all.find((r) => r.id === rowId) : undefined), [all, rowId])
 }
+
+/** Todas as linhas, de todos os quadros — usado pela barra de seleção em massa. */
+export function useAllLeadRows(): LeadRow[] {
+  return useSnapshot(leadBoardsService.getRows)
+}

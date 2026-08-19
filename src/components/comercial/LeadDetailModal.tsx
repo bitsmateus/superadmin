@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { EditableField } from '@/components/comercial/EditableField'
+import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useAuth } from '@/hooks/useAuth'
@@ -120,9 +121,6 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Retornar">
               <BoxedField type="datetime-local" value={row.retornar} onSave={(v) => leadBoardsService.updateRow(row.id, { retornar: v })} />
             </FieldRow>
-            <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="Resp.">
-              <BoxedField value={row.responsavel} onSave={(v) => leadBoardsService.updateRow(row.id, { responsavel: v })} />
-            </FieldRow>
             <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Número">
               <BoxedField value={row.numero} onSave={(v) => leadBoardsService.updateRow(row.id, { numero: v })} />
             </FieldRow>
@@ -133,10 +131,10 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               <BoxedField value={row.numeroAtendentes} onSave={(v) => leadBoardsService.updateRow(row.id, { numeroAtendentes: v })} />
             </FieldRow>
             <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor MRR">
-              <BoxedField value={row.valorMrr} onSave={(v) => leadBoardsService.updateRow(row.id, { valorMrr: v })} />
+              <BoxedCurrencyField value={row.valorMrr} onSave={(v) => leadBoardsService.updateRow(row.id, { valorMrr: v })} />
             </FieldRow>
             <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor Implementação">
-              <BoxedField value={row.valorImplementacao} onSave={(v) => leadBoardsService.updateRow(row.id, { valorImplementacao: v })} />
+              <BoxedCurrencyField value={row.valorImplementacao} onSave={(v) => leadBoardsService.updateRow(row.id, { valorImplementacao: v })} />
             </FieldRow>
             <FieldRow icon={<Clock className="h-3.5 w-3.5" />} label="Log de criação">
               <div className="rounded-md bg-elevate/[0.03] px-2 py-1.5 text-xs text-foreground/40">
@@ -168,6 +166,16 @@ function BoxedField({ value, onSave, type }: { value: string; onSave: (v: string
     <EditableField
       value={value}
       type={type}
+      onSave={onSave}
+      className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338]"
+    />
+  )
+}
+
+function BoxedCurrencyField({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  return (
+    <CurrencyField
+      value={value}
       onSave={onSave}
       className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338]"
     />

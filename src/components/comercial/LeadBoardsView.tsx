@@ -28,6 +28,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
+import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn, formatDateTimeShort } from '@/lib/utils'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
@@ -50,6 +51,7 @@ interface ColumnDef {
   width: number
   readOnly?: boolean
   tag?: boolean
+  currency?: boolean
 }
 
 const CHECKBOX_COL_WIDTH = 58
@@ -64,12 +66,11 @@ const COLUMNS: ColumnDef[] = [
   { key: 'status', label: 'Status', width: 170, tag: true },
   { key: 'sdr', label: 'SDR', width: 140, tag: true },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
-  { key: 'responsavel', label: 'Resp.', width: 130 },
   { key: 'numero', label: 'Número', width: 110 },
   { key: 'dorCliente', label: 'Dor do cliente', width: 200 },
   { key: 'numeroAtendentes', label: 'Número de atendentes', width: 170 },
-  { key: 'valorMrr', label: 'Valor MRR', width: 140 },
-  { key: 'valorImplementacao', label: 'Valor de Implementação', width: 170 },
+  { key: 'valorMrr', label: 'Valor MRR', width: 140, currency: true },
+  { key: 'valorImplementacao', label: 'Valor de Implementação', width: 170, currency: true },
   { key: 'createdAt', label: 'Log de criação', width: 160, readOnly: true },
 ]
 
@@ -402,11 +403,26 @@ function BoardGroup({
   )
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
 
+  const startDrag = (e: React.DragEvent, id: string, label: string) => {
+    e.dataTransfer.setData('text/plain', id)
+    e.dataTransfer.effectAllowed = 'move'
+    const ghost = document.createElement('div')
+    ghost.textContent = label || 'Lead sem nome'
+    ghost.style.cssText =
+      'position:fixed;top:-1000px;left:-1000px;padding:6px 12px;background:#4F8EF7;color:#fff;' +
+      'font-size:12px;font-weight:600;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.25);' +
+      'white-space:nowrap;font-family:inherit;'
+    document.body.appendChild(ghost)
+    e.dataTransfer.setDragImage(ghost, 14, 14)
+    window.setTimeout(() => { document.body.removeChild(ghost) }, 0)
+    onRowDragStart(id)
+  }
+
   return (
     <div
       className={cn(
-        'mb-5 overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow hover:shadow-md',
-        isDragOver ? 'border-accent ring-2 ring-accent/40' : 'border-gray-200',
+        'mb-5 overflow-hidden rounded-2xl bg-white shadow-sm transition-all duration-150 hover:shadow-md',
+        isDragOver && 'bg-accent/[0.03] shadow-lg ring-2 ring-accent/50',
       )}
       style={{ borderLeft: `4px solid ${board.color}` }}
       onDragOver={(e) => { e.preventDefault(); onBoardDragOver(board.id) }}
@@ -449,7 +465,7 @@ function BoardGroup({
         <div ref={(el) => registerScrollEl(board.id, el)} className="overflow-x-hidden">
           <table className="border-collapse table-fixed" style={{ width: TABLE_WIDTH }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-xs font-semibold text-[#323338]">
+              <tr className="border-b border-gray-200 bg-white text-left text-xs font-semibold text-[#323338]">
                 <th className={cn('px-2.5 py-2', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
                   <input
                     type="checkbox"
@@ -472,6 +488,9 @@ function BoardGroup({
                 return (
                 <tr
                   key={row.id}
+                  draggable
+                  onDragStart={(e) => startDrag(e, row.id, row.nome)}
+                  onDragEnd={onRowDragEnd}
                   className={cn(
                     'group border-b border-gray-200 transition-colors',
                     draggingRowId === row.id ? 'opacity-40' : '',
@@ -482,11 +501,7 @@ function BoardGroup({
                     <div className="flex items-center gap-0.5">
                       <span
                         draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('text/plain', row.id)
-                          e.dataTransfer.effectAllowed = 'move'
-                          onRowDragStart(row.id)
-                        }}
+                        onDragStart={(e) => startDrag(e, row.id, row.nome)}
                         onDragEnd={onRowDragEnd}
                         title="Arrastar para outro quadro"
                         className="grid h-5 w-4 shrink-0 cursor-grab place-items-center text-gray-300 hover:text-gray-500 active:cursor-grabbing"
@@ -536,6 +551,12 @@ function BoardGroup({
                           field={col.key as LeadLabelField}
                           value={row[col.key as LeadRowField]}
                           onChange={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
+                        />
+                      ) : col.currency ? (
+                        <CurrencyField
+                          value={row[col.key as LeadRowField]}
+                          onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
+                          className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
                         />
                       ) : (
                         <EditableField

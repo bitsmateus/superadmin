@@ -10,7 +10,9 @@ import {
   Hash,
   Image as ImageIcon,
   Paperclip,
+  Pencil,
   Phone,
+  Trash2,
   Type,
   UserCircle2,
   X,
@@ -182,6 +184,8 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
   const [pendingAttachments, setPendingAttachments] = React.useState<LeadNoteAttachment[]>([])
   const [mentionOpen, setMentionOpen] = React.useState(false)
   const [mentionSearch, setMentionSearch] = React.useState('')
+  const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null)
+  const [editingText, setEditingText] = React.useState('')
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -364,7 +368,7 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
               ) : (
                 <ul className="space-y-3">
                   {notes.map((n) => (
-                    <li key={n.id} className="rounded-lg border border-line bg-elevate/[0.02] p-3">
+                    <li key={n.id} className="group rounded-lg border border-line bg-elevate/[0.02] p-3">
                       <div className="flex items-start gap-3">
                         <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[10px] font-medium text-[#323338] ring-1 ring-line">
                           {initials(n.authorName) || <UserCircle2 className="h-3.5 w-3.5" />}
@@ -372,9 +376,66 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-medium text-[#323338]">{n.authorName}</span>
-                            <span className="text-[10px] text-foreground/40">{timeAgo(n.createdAt)}</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-foreground/40" title={timeAgo(n.createdAt)}>
+                                {formatDateTimeShort(n.createdAt)}
+                              </span>
+                              {editingNoteId !== n.id && (
+                                <div className="hidden items-center gap-0.5 group-hover:flex">
+                                  <button
+                                    type="button"
+                                    title="Editar"
+                                    onClick={() => { setEditingNoteId(n.id); setEditingText(n.content) }}
+                                    className="grid h-5 w-5 place-items-center rounded text-foreground/35 transition-colors hover:text-accent"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Excluir"
+                                    onClick={() => {
+                                      if (window.confirm('Excluir esta atualização?')) void leadNotesService.deleteNote(n.id)
+                                    }}
+                                    className="grid h-5 w-5 place-items-center rounded text-foreground/35 transition-colors hover:text-danger"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          {n.content && <p className="mt-1 whitespace-pre-wrap text-sm text-[#323338]">{n.content}</p>}
+                          {editingNoteId === n.id ? (
+                            <div className="mt-2 space-y-2">
+                              <textarea
+                                value={editingText}
+                                onChange={(e) => setEditingText(e.target.value)}
+                                rows={3}
+                                autoFocus
+                                className="w-full resize-y rounded-lg border border-accent/40 bg-surface px-3 py-2 text-sm text-[#323338] focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+                              />
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingNoteId(null)}
+                                  className="px-2 py-1 text-xs text-foreground/50 transition-colors hover:text-foreground"
+                                >
+                                  Cancelar
+                                </button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    leadNotesService.updateNote(n.id, editingText)
+                                    setEditingNoteId(null)
+                                  }}
+                                  disabled={!editingText.trim()}
+                                >
+                                  Salvar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            n.content && <p className="mt-1 whitespace-pre-wrap text-sm text-[#323338]">{n.content}</p>
+                          )}
                           {n.attachments.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
                               {n.attachments.map((a) => (

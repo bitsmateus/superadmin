@@ -171,4 +171,30 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       return reply.status(201).send(note);
     }
   );
+
+  // PATCH /api/lead-notes/:id — edita o texto de uma atualização
+  app.patch<{ Params: { id: string }; Body: { content?: string } }>(
+    '/api/lead-notes/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const content = req.body.content?.trim();
+      if (!content) return reply.status(400).send({ message: 'content é obrigatório' });
+      const [note] = await query(
+        `UPDATE lead_notes SET content = $1 WHERE id = $2 RETURNING *`,
+        [content, req.params.id]
+      );
+      if (!note) return reply.status(404).send({ message: 'Anotação não encontrada' });
+      return note;
+    }
+  );
+
+  // DELETE /api/lead-notes/:id
+  app.delete<{ Params: { id: string } }>(
+    '/api/lead-notes/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      await query('DELETE FROM lead_notes WHERE id = $1', [req.params.id]);
+      return reply.status(204).send();
+    }
+  );
 }

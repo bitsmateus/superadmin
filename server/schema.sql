@@ -339,6 +339,16 @@ DROP TRIGGER IF EXISTS lead_notes_count_trigger ON lead_notes;
 CREATE TRIGGER lead_notes_count_trigger AFTER INSERT ON lead_notes
   FOR EACH ROW EXECUTE FUNCTION increment_lead_notes_count();
 
+CREATE OR REPLACE FUNCTION decrement_lead_notes_count() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE lead_rows SET notes_count = GREATEST(notes_count - 1, 0) WHERE id = OLD.lead_row_id;
+  RETURN OLD;
+END; $$;
+
+DROP TRIGGER IF EXISTS lead_notes_decrement_trigger ON lead_notes;
+CREATE TRIGGER lead_notes_decrement_trigger AFTER DELETE ON lead_notes
+  FOR EACH ROW EXECUTE FUNCTION decrement_lead_notes_count();
+
 -- ---------- lead_labels (etiquetas coloridas de "Tipo", "Dia de contato" e "Status") ----------
 CREATE TABLE IF NOT EXISTS lead_labels (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -602,7 +612,7 @@ CREATE TRIGGER notify_lead_rows AFTER INSERT OR UPDATE OR DELETE ON lead_rows
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 DROP TRIGGER IF EXISTS notify_lead_notes ON lead_notes;
-CREATE TRIGGER notify_lead_notes AFTER INSERT ON lead_notes
+CREATE TRIGGER notify_lead_notes AFTER INSERT OR UPDATE OR DELETE ON lead_notes
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 DROP TRIGGER IF EXISTS notify_lead_labels ON lead_labels;

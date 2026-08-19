@@ -88,4 +88,41 @@ export const leadNotesService = {
       return null
     }
   },
+
+  updateNote(id: string, content: string): void {
+    const trimmed = content.trim()
+    if (!trimmed) return
+    const idx = notes.findIndex((n) => n.id === id)
+    if (idx === -1) return
+    const prev = notes[idx]
+    const next = { ...prev, content: trimmed }
+    const copy = notes.slice(); copy[idx] = next; notes = copy
+    notify()
+
+    void (async () => {
+      try {
+        await api.patch(`/api/lead-notes/${id}`, { content: trimmed })
+      } catch (err) {
+        const rollback = notes.slice()
+        const ridx = rollback.findIndex((n) => n.id === id)
+        if (ridx !== -1) rollback[ridx] = prev
+        notes = rollback
+        notify()
+        toast.error('Falha ao editar atualização: ' + (err as Error).message)
+      }
+    })()
+  },
+
+  async deleteNote(id: string): Promise<void> {
+    const prev = notes
+    notes = notes.filter((n) => n.id !== id)
+    notify()
+    try {
+      await api.delete(`/api/lead-notes/${id}`)
+    } catch (err) {
+      notes = prev
+      notify()
+      toast.error('Falha ao excluir atualização: ' + (err as Error).message)
+    }
+  },
 }

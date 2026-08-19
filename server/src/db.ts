@@ -309,6 +309,14 @@ END $$`);
   await pool.query(`DROP TRIGGER IF EXISTS lead_notes_count_trigger ON lead_notes`);
   await pool.query(`CREATE TRIGGER lead_notes_count_trigger AFTER INSERT ON lead_notes
     FOR EACH ROW EXECUTE FUNCTION increment_lead_notes_count()`);
+  await pool.query(`CREATE OR REPLACE FUNCTION decrement_lead_notes_count() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    BEGIN
+      UPDATE lead_rows SET notes_count = GREATEST(notes_count - 1, 0) WHERE id = OLD.lead_row_id;
+      RETURN OLD;
+    END; $$`);
+  await pool.query(`DROP TRIGGER IF EXISTS lead_notes_decrement_trigger ON lead_notes`);
+  await pool.query(`CREATE TRIGGER lead_notes_decrement_trigger AFTER DELETE ON lead_notes
+    FOR EACH ROW EXECUTE FUNCTION decrement_lead_notes_count()`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_lead_boards ON lead_boards;
@@ -318,7 +326,7 @@ END $$`);
       CREATE TRIGGER notify_lead_rows AFTER INSERT OR UPDATE OR DELETE ON lead_rows
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
       DROP TRIGGER IF EXISTS notify_lead_notes ON lead_notes;
-      CREATE TRIGGER notify_lead_notes AFTER INSERT ON lead_notes
+      CREATE TRIGGER notify_lead_notes AFTER INSERT OR UPDATE OR DELETE ON lead_notes
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);

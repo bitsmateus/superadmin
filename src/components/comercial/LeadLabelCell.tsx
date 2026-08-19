@@ -49,18 +49,13 @@ export function LeadLabelCell({ field, value, onChange }: LeadLabelCellProps) {
         ref={btnRef}
         type="button"
         onClick={openPicker}
-        className="flex h-full w-full items-center px-1.5 py-1.5 text-left"
-      >
-        {value ? (
-          <span
-            className="truncate rounded px-2 py-1 text-xs font-medium text-white"
-            style={{ backgroundColor: current?.color ?? '#9CA3AF' }}
-          >
-            {value}
-          </span>
-        ) : (
-          <span className="text-xs text-gray-300">Selecionar…</span>
+        className={cn(
+          'flex h-full min-h-[34px] w-full items-center truncate px-2.5 py-1.5 text-left text-xs font-medium',
+          value ? 'text-white' : 'text-gray-300',
         )}
+        style={value ? { backgroundColor: current?.color ?? '#9CA3AF' } : undefined}
+      >
+        {value || 'Selecionar…'}
       </button>
 
       {open && coords && createPortal(

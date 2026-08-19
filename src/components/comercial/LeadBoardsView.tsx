@@ -7,8 +7,6 @@ import {
   ChevronRight,
   Copy,
   Download,
-  Ellipsis,
-  EyeOff,
   Filter,
   GripVertical,
   Loader2,
@@ -29,6 +27,7 @@ import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
+import { LeadFiltersModal, matchesLeadFilters, type FilterRule } from '@/components/comercial/LeadFiltersModal'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn, formatDateTimeShort } from '@/lib/utils'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
@@ -73,10 +72,21 @@ const COLUMNS: ColumnDef[] = [
   { key: 'createdAt', label: 'Log de criação', width: 160, readOnly: true },
 ]
 
-const TABLE_WIDTH =
-  CHECKBOX_COL_WIDTH + ACTIONS_COL_WIDTH + COLUMNS.reduce((sum, c) => sum + c.width, 0)
-
 const GRID_BORDER = 'border-r border-gray-200'
+const MIN_COL_WIDTH = 80
+
+function columnWidthsStorageKey(page: LeadBoardPage) {
+  return `leadColumnWidths:${page}`
+}
+
+function loadColumnWidths(page: LeadBoardPage): Record<string, number> {
+  try {
+    const raw = window.localStorage.getItem(columnWidthsStorageKey(page))
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
 
 function matchesSearch(row: LeadRow, term: string): boolean {
   if (!term) return true
@@ -89,16 +99,19 @@ function ToolbarButton({
   children,
   onClick,
   className,
+  title,
 }: {
   icon?: React.ReactNode
   children?: React.ReactNode
   onClick?: () => void
   className?: string
+  title?: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={title}
       className={cn(
         'inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-gray-500',
         'transition-colors hover:bg-gray-100 hover:text-gray-800',
@@ -370,8 +383,11 @@ function BoardNameEditor({ board }: { board: LeadBoard }) {
 
 interface BoardGroupProps {
   board: LeadBoard
+  allBoards: LeadBoard[]
   search: string
   sdrFilter: string | null
+  filterRules: FilterRule[]
+  sortDesc: boolean
   focusRowId: string | null
   onFocused: () => void
   onCreateRow: (boardId: string) => void
@@ -387,19 +403,43 @@ interface BoardGroupProps {
   onBoardDragOver: (boardId: string) => void
   onBoardDragLeave: () => void
   onBoardDrop: (boardId: string) => void
+  columnWidths: Record<string, number>
+  onResizeColumn: (key: string, width: number) => void
 }
 
 function BoardGroup({
-  board, search, sdrFilter, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
+  board, allBoards, search, sdrFilter, filterRules, sortDesc, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
   selectedIds, onToggleRow, onToggleAll,
   draggingRowId, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
+  columnWidths, onResizeColumn,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
+  const tableWidth = CHECKBOX_COL_WIDTH + ACTIONS_COL_WIDTH
+    + COLUMNS.reduce((sum, c) => sum + (columnWidths[c.key] ?? c.width), 0)
+
+  const startResize = React.useCallback((e: React.MouseEvent, key: string, startWidth: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const onMove = (ev: MouseEvent) => {
+      onResizeColumn(key, Math.max(MIN_COL_WIDTH, startWidth + (ev.clientX - startX)))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [onResizeColumn])
   const allRows = useLeadRows(board.id)
-  const rows = React.useMemo(
-    () => allRows.filter((r) => matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter)),
-    [allRows, search, sdrFilter],
-  )
+  const rows = React.useMemo(() => {
+    const filtered = allRows.filter((r) =>
+      matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter) && matchesLeadFilters(r, filterRules),
+    )
+    return [...filtered].sort((a, b) =>
+      sortDesc ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt),
+    )
+  }, [allRows, search, sdrFilter, filterRules, sortDesc])
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
 
   const startDrag = (e: React.DragEvent, id: string, label: string) => {
@@ -462,7 +502,7 @@ function BoardGroup({
 
       {open && (
         <div ref={(el) => registerScrollEl(board.id, el)} className="overflow-x-hidden">
-          <table className="border-collapse table-fixed" style={{ width: TABLE_WIDTH }}>
+          <table className="border-collapse table-fixed" style={{ width: tableWidth }}>
             <thead>
               <tr className="border-b border-gray-200 bg-white text-left text-xs font-semibold text-[#323338]">
                 <th className={cn('px-2.5 py-2', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
@@ -473,11 +513,23 @@ function BoardGroup({
                     className="h-3.5 w-3.5 rounded border-gray-300"
                   />
                 </th>
-                {COLUMNS.map((col) => (
-                  <th key={col.key} className={cn('truncate px-2.5 py-2 font-semibold', GRID_BORDER)} style={{ width: col.width }}>
-                    {col.label}
-                  </th>
-                ))}
+                {COLUMNS.map((col) => {
+                  const width = columnWidths[col.key] ?? col.width
+                  return (
+                    <th
+                      key={col.key}
+                      className={cn('relative truncate px-2.5 py-2 font-semibold', GRID_BORDER)}
+                      style={{ width }}
+                    >
+                      {col.label}
+                      <span
+                        onMouseDown={(e) => startResize(e, col.key, width)}
+                        title="Redimensionar coluna"
+                        className="absolute right-0 top-0 h-full w-2 cursor-col-resize select-none hover:bg-accent/30 active:bg-accent/40"
+                      />
+                    </th>
+                  )
+                })}
                 <th className="px-1 py-2" style={{ width: ACTIONS_COL_WIDTH }} />
               </tr>
             </thead>
@@ -549,7 +601,19 @@ function BoardGroup({
                         <LeadLabelCell
                           field={col.key as LeadLabelField}
                           value={row[col.key as LeadRowField]}
-                          onChange={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
+                          onChange={(next) => {
+                            if (col.key === 'status') {
+                              const target = allBoards.find(
+                                (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === next.trim().toLowerCase(),
+                              )
+                              leadBoardsService.updateRow(
+                                row.id,
+                                target ? { status: next, boardId: target.id } : { status: next },
+                              )
+                            } else {
+                              leadBoardsService.updateRow(row.id, { [col.key]: next })
+                            }
+                          }}
                         />
                       ) : col.currency ? (
                         <CurrencyField
@@ -653,14 +717,36 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
   const allBoards = useLeadBoards()
   const boards = React.useMemo(() => allBoards.filter((b) => b.page === page), [allBoards, page])
   const allRows = useAllLeadRows()
+  const pageRows = React.useMemo(() => {
+    const boardIds = new Set(boards.map((b) => b.id))
+    return allRows.filter((r) => boardIds.has(r.boardId))
+  }, [allRows, boards])
   const [search, setSearch] = React.useState('')
   const [sdrFilter, setSdrFilter] = React.useState<string | null>(null)
+  const [filterRules, setFilterRules] = React.useState<FilterRule[]>([])
+  const [filtersOpen, setFiltersOpen] = React.useState(false)
+  const [sortDesc, setSortDesc] = React.useState(false)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [draggingRowId, setDraggingRowId] = React.useState<string | null>(null)
   const [dragOverBoardId, setDragOverBoardId] = React.useState<string | null>(null)
+  const [columnWidths, setColumnWidths] = React.useState<Record<string, number>>(() => loadColumnWidths(page))
+
+  const handleResizeColumn = React.useCallback((key: string, width: number) => {
+    setColumnWidths((prev) => {
+      const next = { ...prev, [key]: width }
+      try { window.localStorage.setItem(columnWidthsStorageKey(page), JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }, [page])
+
+  const tableWidth = React.useMemo(
+    () => CHECKBOX_COL_WIDTH + ACTIONS_COL_WIDTH
+      + COLUMNS.reduce((sum, c) => sum + (columnWidths[c.key] ?? c.width), 0),
+    [columnWidths],
+  )
 
   const handleRowDragStart = React.useCallback((id: string) => setDraggingRowId(id), [])
   const handleRowDragEnd = React.useCallback(() => {
@@ -714,6 +800,13 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
     handleCreateRow(boards[0].id)
   }
 
+  const visibleCount = React.useMemo(
+    () => pageRows.filter((r) =>
+      matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter) && matchesLeadFilters(r, filterRules),
+    ).length,
+    [pageRows, search, sdrFilter, filterRules],
+  )
+
   return (
     <>
       <TopBar title={title} subtitle={subtitle} />
@@ -742,11 +835,22 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                 />
               </div>
               <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} />
-              <ToolbarButton icon={<Filter className="h-3.5 w-3.5" />}>Filtro</ToolbarButton>
-              <ToolbarButton icon={<ArrowUpDown className="h-3.5 w-3.5" />}>Ordenar</ToolbarButton>
-              <ToolbarButton icon={<EyeOff className="h-3.5 w-3.5" />}>Ocultar</ToolbarButton>
+              <ToolbarButton
+                icon={<Filter className="h-3.5 w-3.5" />}
+                onClick={() => setFiltersOpen(true)}
+                className={filterRules.length > 0 ? 'text-accent' : undefined}
+              >
+                {filterRules.length > 0 ? `Filtro (${filterRules.length})` : 'Filtro'}
+              </ToolbarButton>
+              <ToolbarButton
+                icon={<ArrowUpDown className="h-3.5 w-3.5" />}
+                onClick={() => setSortDesc((d) => !d)}
+                className={sortDesc ? 'text-accent' : undefined}
+                title={sortDesc ? 'Mais novo para o mais antigo' : 'Mais antigo para o mais novo'}
+              >
+                Ordenar
+              </ToolbarButton>
               <ToolbarButton icon={<Rows3 className="h-3.5 w-3.5" />}>Agrupar por</ToolbarButton>
-              <ToolbarButton icon={<Ellipsis className="h-3.5 w-3.5" />} className="px-2" />
             </div>
 
             {boards.length === 0 ? (
@@ -763,8 +867,11 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                     <BoardGroup
                       key={board.id}
                       board={board}
+                      allBoards={boards}
                       search={search}
                       sdrFilter={sdrFilter}
+                      filterRules={filterRules}
+                      sortDesc={sortDesc}
                       focusRowId={focusRowId}
                       onFocused={() => setFocusRowId(null)}
                       onCreateRow={handleCreateRow}
@@ -780,6 +887,8 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                       onBoardDragOver={handleBoardDragOver}
                       onBoardDragLeave={handleBoardDragLeave}
                       onBoardDrop={handleBoardDrop}
+                      columnWidths={columnWidths}
+                      onResizeColumn={handleResizeColumn}
                     />
                   ))}
                   <button
@@ -800,7 +909,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                     style={{ height: 14 }}
                     onScroll={handleSharedScroll}
                   >
-                    <div style={{ width: TABLE_WIDTH, height: 1 }} />
+                    <div style={{ width: tableWidth, height: 1 }} />
                   </div>
                 </div>
 
@@ -818,6 +927,14 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
 
       <CreateBoardModal open={boardModalOpen} onClose={() => setBoardModalOpen(false)} page={page} />
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
+      <LeadFiltersModal
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        rules={filterRules}
+        onChange={setFilterRules}
+        visibleCount={visibleCount}
+        totalCount={pageRows.length}
+      />
     </>
   )
 }

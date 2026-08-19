@@ -19,11 +19,12 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadNotesDrawer } from '@/components/comercial/LeadNotesDrawer'
+import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { cn, formatDateTimeShort } from '@/lib/utils'
 import { useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { leadBoardsService } from '@/services/leadBoards'
-import type { LeadBoard, LeadRow, LeadRowField } from '@/types/leadBoard'
+import type { LeadBoard, LeadLabelField, LeadRow, LeadRowField } from '@/types/leadBoard'
 
 interface ColumnDef {
   key: LeadRowField | 'createdAt'
@@ -31,6 +32,7 @@ interface ColumnDef {
   type?: 'text' | 'date'
   width: string
   readOnly?: boolean
+  tag?: boolean
 }
 
 const COLUMNS: ColumnDef[] = [
@@ -38,8 +40,8 @@ const COLUMNS: ColumnDef[] = [
   { key: 'tipo', label: 'Tipo', width: 'min-w-[110px]' },
   { key: 'empresa', label: 'Empresa', width: 'min-w-[180px]' },
   { key: 'telefone', label: 'Telefone', width: 'min-w-[140px]' },
-  { key: 'diaContato', label: 'Dia de contato', type: 'date', width: 'min-w-[150px]' },
-  { key: 'status', label: 'Status', width: 'min-w-[130px]' },
+  { key: 'diaContato', label: 'Dia de contato', width: 'min-w-[170px]', tag: true },
+  { key: 'status', label: 'Status', width: 'min-w-[170px]', tag: true },
   { key: 'retornar', label: 'Retornar', type: 'date', width: 'min-w-[130px]' },
   { key: 'ligacao', label: 'Ligação', width: 'min-w-[110px]' },
   { key: 'responsavel', label: 'Resp.', width: 'min-w-[110px]' },
@@ -243,6 +245,12 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenN
                             )}
                           </button>
                         </div>
+                      ) : col.tag ? (
+                        <LeadLabelCell
+                          field={col.key as LeadLabelField}
+                          value={row[col.key as LeadRowField]}
+                          onChange={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
+                        />
                       ) : (
                         <EditableCell
                           value={row[col.key as LeadRowField]}

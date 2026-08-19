@@ -338,6 +338,18 @@ DROP TRIGGER IF EXISTS lead_notes_count_trigger ON lead_notes;
 CREATE TRIGGER lead_notes_count_trigger AFTER INSERT ON lead_notes
   FOR EACH ROW EXECUTE FUNCTION increment_lead_notes_count();
 
+-- ---------- lead_labels (etiquetas coloridas de "Dia de contato" e "Status") ----------
+CREATE TABLE IF NOT EXISTS lead_labels (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  field TEXT NOT NULL CHECK (field IN ('dia_contato', 'status')),
+  name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#9CA3AF',
+  position INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS lead_labels_field_idx ON lead_labels(field);
+
 -- ---------- kb_articles ----------
 CREATE TABLE IF NOT EXISTS kb_articles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -592,6 +604,10 @@ DROP TRIGGER IF EXISTS notify_lead_notes ON lead_notes;
 CREATE TRIGGER notify_lead_notes AFTER INSERT ON lead_notes
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+DROP TRIGGER IF EXISTS notify_lead_labels ON lead_labels;
+CREATE TRIGGER notify_lead_labels AFTER INSERT OR UPDATE OR DELETE ON lead_labels
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 -- ---------- Seed de categorias ----------
 INSERT INTO ticket_categories (name, description, icon, color, position, default_sla_hours, default_priority)
 SELECT * FROM (VALUES
@@ -629,6 +645,37 @@ INSERT INTO lead_boards (name, color, position)
 SELECT s.name, s.color, next_pos.base + s.ord
 FROM seed s, next_pos
 WHERE NOT EXISTS (SELECT 1 FROM lead_boards lb WHERE lb.name = s.name);
+
+-- ---------- Seed das etiquetas de Dia de contato e Status ----------
+INSERT INTO lead_labels (field, name, color, position)
+SELECT * FROM (VALUES
+  ('dia_contato', '1º Dia - ChatBot',   '#9CA3AF', 1),
+  ('dia_contato', '2º Dia - ChatBot',   '#60A5FA', 2),
+  ('dia_contato', '3º Dia - ChatBot',   '#3B82F6', 3),
+  ('dia_contato', '4º Dia - ChatBot',   '#1E3A8A', 4),
+  ('dia_contato', '5º Dia - ChatBot',   '#2563EB', 5),
+  ('dia_contato', '6º Dia - ChatBot',   '#4338CA', 6),
+  ('dia_contato', '7º Dia - ChatBot',   '#F97316', 7),
+  ('dia_contato', 'Sem contato',        '#DC2626', 8),
+  ('dia_contato', 'NoShow 1º Dia',      '#EAB308', 9),
+  ('dia_contato', 'NoShow 2º Dia',      '#FB923C', 10),
+  ('dia_contato', 'NoShow 3º Dia',      '#E11D48', 11),
+  ('dia_contato', 'NEUTRO',             '#92400E', 12),
+  ('status', 'Primeiro Contato',        '#5B9BD5', 1),
+  ('status', 'Reunião agendada',        '#D97706', 2),
+  ('status', 'Reunião não comparecida', '#DC2626', 3),
+  ('status', 'Proposta Enviada',        '#84CC16', 4),
+  ('status', 'Follow-up Propostas',     '#8B5CF6', 5),
+  ('status', 'Vendido',                 '#10B981', 6),
+  ('status', 'Follow-up Mensal',        '#F97316', 7),
+  ('status', 'Disparo em massa',        '#9F1239', 8),
+  ('status', 'Perdidos',                '#EC4899', 9),
+  ('status', 'Leads 3C',                '#78350F', 10),
+  ('status', 'Leads/Março',             '#047857', 11),
+  ('status', 'Leads Outbount',          '#7C3AED', 12),
+  ('status', 'Desqualificado',          '#374151', 13)
+) AS v(field, name, color, position)
+WHERE NOT EXISTS (SELECT 1 FROM lead_labels ll WHERE ll.field = v.field AND ll.name = v.name);
 
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:

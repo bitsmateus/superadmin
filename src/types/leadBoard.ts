@@ -50,3 +50,15 @@ export interface LeadNote {
   content: string
   createdAt: string
 }
+
+/** Campos que usam etiqueta colorida selecionável (estilo Monday) em vez de texto livre. */
+export type LeadLabelField = 'diaContato' | 'status'
+
+export interface LeadLabel {
+  id: string
+  field: LeadLabelField
+  name: string
+  color: string
+  position: number
+  createdAt: string
+}

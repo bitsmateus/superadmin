@@ -60,11 +60,11 @@ const COLUMNS: ColumnDef[] = [
   { key: 'nome', label: 'Nome', width: 180 },
   { key: 'empresa', label: 'Empresa', width: 170 },
   { key: 'telefone', label: 'Telefone', width: 140 },
-  { key: 'tipo', label: 'Tipo', width: 130, tag: true },
-  { key: 'diaContato', label: 'Dia de contato', width: 170, tag: true },
+  { key: 'tipo', label: 'Tipo', width: 108, tag: true },
+  { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true },
   { key: 'status', label: 'Status', width: 170, tag: true },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
-  { key: 'sdr', label: 'SDR', width: 140, tag: true },
+  { key: 'sdr', label: 'SDR', width: 100, tag: true },
   { key: 'dorCliente', label: 'Dor do cliente', width: 200 },
   { key: 'numeroAtendentes', label: 'Número de atendentes', width: 170 },
   { key: 'valorMrr', label: 'Valor MRR', width: 140, currency: true },
@@ -518,7 +518,7 @@ function BoardGroup({
                   return (
                     <th
                       key={col.key}
-                      className={cn('relative truncate px-2.5 py-2 font-semibold', GRID_BORDER)}
+                      className={cn('relative truncate px-2.5 py-2 text-center font-semibold', GRID_BORDER)}
                       style={{ width }}
                     >
                       {col.label}

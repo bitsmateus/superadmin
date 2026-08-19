@@ -45,7 +45,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'tipo', label: 'Tipo', width: 130, tag: true },
   { key: 'diaContato', label: 'Dia de contato', width: 170, tag: true },
   { key: 'status', label: 'Status', width: 170, tag: true },
-  { key: 'sdr', label: 'SDR', width: 130 },
+  { key: 'sdr', label: 'SDR', width: 140, tag: true },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
   { key: 'responsavel', label: 'Resp.', width: 130 },
   { key: 'numero', label: 'Número', width: 110 },
@@ -405,13 +405,16 @@ export function NovosLeadsPage() {
                   </button>
                 </div>
 
-                {/* Barra de rolagem horizontal única — arrasta todos os quadros juntos */}
-                <div
-                  className="sticky bottom-0 mt-3 overflow-x-auto overflow-y-hidden border-t border-gray-200 bg-white"
-                  style={{ height: 16 }}
-                  onScroll={handleSharedScroll}
-                >
-                  <div style={{ width: TABLE_WIDTH, height: 1 }} />
+                {/* Barra de rolagem horizontal única, flutuante — visível na tela toda,
+                    não precisa descer até o fim da página pra arrastar. */}
+                <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 sm:px-6 lg:px-8 lg:pl-[236px]">
+                  <div
+                    className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-gray-200 bg-white shadow-lg"
+                    style={{ height: 14 }}
+                    onScroll={handleSharedScroll}
+                  >
+                    <div style={{ width: TABLE_WIDTH, height: 1 }} />
+                  </div>
                 </div>
               </>
             )}

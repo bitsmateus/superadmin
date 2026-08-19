@@ -366,9 +366,9 @@ END $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_labels_field_idx ON lead_labels(field)`);
-  // "Tipo" também virou etiqueta colorida — amplia o CHECK pra bancos já existentes.
+  // "Tipo" e "SDR" também viraram etiqueta colorida — amplia o CHECK pra bancos já existentes.
   await pool.query(`ALTER TABLE lead_labels DROP CONSTRAINT IF EXISTS lead_labels_field_check`);
-  await pool.query(`ALTER TABLE lead_labels ADD CONSTRAINT lead_labels_field_check CHECK (field IN ('tipo', 'dia_contato', 'status'))`);
+  await pool.query(`ALTER TABLE lead_labels ADD CONSTRAINT lead_labels_field_check CHECK (field IN ('tipo', 'dia_contato', 'status', 'sdr'))`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_lead_labels ON lead_labels;
@@ -380,6 +380,8 @@ END $$`);
     SELECT * FROM (VALUES
       ('tipo', 'IA',                        '#10B981', 1),
       ('tipo', 'CHATBOT',                   '#F97316', 2),
+      ('sdr', 'Luis',                       '#4F8EF7', 1),
+      ('sdr', 'Arthur',                     '#8B5CF6', 2),
       ('dia_contato', '1º Dia - ChatBot',   '#9CA3AF', 1),
       ('dia_contato', '2º Dia - ChatBot',   '#60A5FA', 2),
       ('dia_contato', '3º Dia - ChatBot',   '#3B82F6', 3),

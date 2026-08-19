@@ -4,7 +4,7 @@ import type { LeadLabel, LeadLabelField } from '@/types/leadBoard'
 
 type LabelRow = { id: string; field: string; name: string; color: string; position: number; created_at: string }
 function rowToLabel(r: LabelRow): LeadLabel {
-  const field: LeadLabelField = r.field === 'dia_contato' ? 'diaContato' : r.field === 'tipo' ? 'tipo' : 'status'
+  const field: LeadLabelField = r.field === 'dia_contato' ? 'diaContato' : (r.field as LeadLabelField)
   return {
     id: r.id, field,
     name: r.name, color: r.color, position: r.position, createdAt: r.created_at,

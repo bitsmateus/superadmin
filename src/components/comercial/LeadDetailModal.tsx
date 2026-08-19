@@ -115,7 +115,7 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               <LeadLabelCell field="status" value={row.status} onChange={(v) => leadBoardsService.updateRow(row.id, { status: v })} />
             </FieldRow>
             <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="SDR">
-              <BoxedField value={row.sdr} onSave={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />
+              <LeadLabelCell field="sdr" value={row.sdr} onChange={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />
             </FieldRow>
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Retornar">
               <BoxedField type="datetime-local" value={row.retornar} onSave={(v) => leadBoardsService.updateRow(row.id, { retornar: v })} />

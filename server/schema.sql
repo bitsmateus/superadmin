@@ -349,10 +349,10 @@ DROP TRIGGER IF EXISTS lead_notes_decrement_trigger ON lead_notes;
 CREATE TRIGGER lead_notes_decrement_trigger AFTER DELETE ON lead_notes
   FOR EACH ROW EXECUTE FUNCTION decrement_lead_notes_count();
 
--- ---------- lead_labels (etiquetas coloridas de "Tipo", "Dia de contato" e "Status") ----------
+-- ---------- lead_labels (etiquetas coloridas de "Tipo", "Dia de contato", "Status" e "SDR") ----------
 CREATE TABLE IF NOT EXISTS lead_labels (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  field TEXT NOT NULL CHECK (field IN ('tipo', 'dia_contato', 'status')),
+  field TEXT NOT NULL CHECK (field IN ('tipo', 'dia_contato', 'status', 'sdr')),
   name TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#9CA3AF',
   position INT NOT NULL DEFAULT 0,
@@ -657,11 +657,13 @@ SELECT s.name, s.color, next_pos.base + s.ord
 FROM seed s, next_pos
 WHERE NOT EXISTS (SELECT 1 FROM lead_boards lb WHERE lb.name = s.name);
 
--- ---------- Seed das etiquetas de Tipo, Dia de contato e Status ----------
+-- ---------- Seed das etiquetas de Tipo, Dia de contato, Status e SDR ----------
 INSERT INTO lead_labels (field, name, color, position)
 SELECT * FROM (VALUES
   ('tipo', 'IA',                        '#10B981', 1),
   ('tipo', 'CHATBOT',                   '#F97316', 2),
+  ('sdr', 'Luis',                       '#4F8EF7', 1),
+  ('sdr', 'Arthur',                     '#8B5CF6', 2),
   ('dia_contato', '1º Dia - ChatBot',   '#9CA3AF', 1),
   ('dia_contato', '2º Dia - ChatBot',   '#60A5FA', 2),
   ('dia_contato', '3º Dia - ChatBot',   '#3B82F6', 3),

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import type { LeadLabelField } from '@/types/leadBoard'
 
 const FIELD_TITLES: Record<LeadLabelField, string> = {
+  tipo: 'Tipo',
   diaContato: 'Dia de contato',
   status: 'Status',
 }

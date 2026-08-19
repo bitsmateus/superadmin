@@ -50,7 +50,7 @@ export function LeadLabelCell({ field, value, onChange }: LeadLabelCellProps) {
         type="button"
         onClick={openPicker}
         className={cn(
-          'flex h-full min-h-[34px] w-full items-center truncate px-2.5 py-1.5 text-left text-xs font-medium',
+          'flex h-full min-h-[34px] w-full items-center justify-center truncate px-2.5 py-1.5 text-center text-xs font-medium',
           value ? 'text-white' : 'text-gray-300',
         )}
         style={value ? { backgroundColor: current?.color ?? '#9CA3AF' } : undefined}

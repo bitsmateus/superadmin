@@ -23,14 +23,13 @@ export interface LeadRow {
   diaContato: string
   status: string
   retornar: string
-  ligacao: string
   responsavel: string
   sdr: string
   numero: string
   dorCliente: string
   numeroAtendentes: string
-  valorPrevisto: string
-  valorFechado: string
+  valorMrr: string
+  valorImplementacao: string
   notesCount: number
   position: number
   createdAt: string

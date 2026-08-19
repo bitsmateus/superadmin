@@ -109,9 +109,6 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Dia de contato">
               <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} />
             </FieldRow>
-            <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Ligação">
-              <BoxedField value={row.ligacao} onSave={(v) => leadBoardsService.updateRow(row.id, { ligacao: v })} />
-            </FieldRow>
             <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Status">
               <LeadLabelCell field="status" value={row.status} onChange={(v) => leadBoardsService.updateRow(row.id, { status: v })} />
             </FieldRow>
@@ -133,11 +130,11 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
             <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Nº atendentes">
               <BoxedField value={row.numeroAtendentes} onSave={(v) => leadBoardsService.updateRow(row.id, { numeroAtendentes: v })} />
             </FieldRow>
-            <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor Previsto">
-              <BoxedField value={row.valorPrevisto} onSave={(v) => leadBoardsService.updateRow(row.id, { valorPrevisto: v })} />
+            <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor MRR">
+              <BoxedField value={row.valorMrr} onSave={(v) => leadBoardsService.updateRow(row.id, { valorMrr: v })} />
             </FieldRow>
-            <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor Fechado">
-              <BoxedField value={row.valorFechado} onSave={(v) => leadBoardsService.updateRow(row.id, { valorFechado: v })} />
+            <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor Implementação">
+              <BoxedField value={row.valorImplementacao} onSave={(v) => leadBoardsService.updateRow(row.id, { valorImplementacao: v })} />
             </FieldRow>
             <FieldRow icon={<Clock className="h-3.5 w-3.5" />} label="Log de criação">
               <div className="rounded-md bg-elevate/[0.03] px-2 py-1.5 text-xs text-foreground/40">

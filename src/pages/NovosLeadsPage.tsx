@@ -44,7 +44,6 @@ const COLUMNS: ColumnDef[] = [
   { key: 'telefone', label: 'Telefone', width: 140 },
   { key: 'tipo', label: 'Tipo', width: 130, tag: true },
   { key: 'diaContato', label: 'Dia de contato', width: 170, tag: true },
-  { key: 'ligacao', label: 'Ligação', width: 100 },
   { key: 'status', label: 'Status', width: 170, tag: true },
   { key: 'sdr', label: 'SDR', width: 130 },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
@@ -52,8 +51,8 @@ const COLUMNS: ColumnDef[] = [
   { key: 'numero', label: 'Número', width: 110 },
   { key: 'dorCliente', label: 'Dor do cliente', width: 200 },
   { key: 'numeroAtendentes', label: 'Número de atendentes', width: 170 },
-  { key: 'valorPrevisto', label: 'Valor Previsto', width: 140 },
-  { key: 'valorFechado', label: 'Valor Fechado', width: 140 },
+  { key: 'valorMrr', label: 'Valor MRR', width: 140 },
+  { key: 'valorImplementacao', label: 'Valor de Implementação', width: 170 },
   { key: 'createdAt', label: 'Log de criação', width: 160, readOnly: true },
 ]
 

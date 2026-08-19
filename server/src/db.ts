@@ -257,6 +257,18 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_fechado TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS notes_count INT NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS sdr TEXT NOT NULL DEFAULT ''`);
+  // "Valor Previsto"/"Valor Fechado" viraram "Valor MRR"/"Valor de Implementação"
+  // — rename preserva os dados ja digitados (nao e um drop+recreate).
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'lead_rows' AND column_name = 'valor_previsto') THEN
+      ALTER TABLE lead_rows RENAME COLUMN valor_previsto TO valor_mrr;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'lead_rows' AND column_name = 'valor_fechado') THEN
+      ALTER TABLE lead_rows RENAME COLUMN valor_fechado TO valor_implementacao;
+    END IF;
+  END $$`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_mrr TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_implementacao TEXT NOT NULL DEFAULT ''`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'touch_updated_at') THEN
       DROP TRIGGER IF EXISTS lead_rows_touch_updated_at ON lead_rows;

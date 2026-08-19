@@ -21,9 +21,12 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
+import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn, formatDateTimeShort } from '@/lib/utils'
 import { useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
+import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
+import { leadLabelsService } from '@/services/leadLabels'
 import type { LeadBoard, LeadLabelField, LeadRow, LeadRowField } from '@/types/leadBoard'
 
 interface ColumnDef {
@@ -94,6 +97,60 @@ function ToolbarButton({
   )
 }
 
+function SdrFilterButton({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const labels = useLeadLabels('sdr')
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(ref, open, () => setOpen(false))
+
+  React.useEffect(() => { void leadLabelsService.ensureLoaded() }, [])
+
+  const current = labels.find((l) => l.name === value)
+
+  return (
+    <div ref={ref} className="relative">
+      <ToolbarButton
+        icon={<UserRound className="h-3.5 w-3.5" style={current ? { color: current.color } : undefined} />}
+        onClick={() => setOpen((o) => !o)}
+        className={value ? 'text-accent' : undefined}
+      >
+        {value ? `SDR: ${value}` : 'SDR'}
+      </ToolbarButton>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+          <button
+            type="button"
+            onClick={() => { onChange(null); setOpen(false) }}
+            className={cn(
+              'flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs',
+              !value ? 'bg-accent/10 font-medium text-accent' : 'text-gray-600 hover:bg-gray-50',
+            )}
+          >
+            Todos
+          </button>
+          {labels.length === 0 && (
+            <p className="px-2 py-1.5 text-xs text-gray-400">Nenhum SDR cadastrado.</p>
+          )}
+          {labels.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => { onChange(l.name); setOpen(false) }}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs',
+                l.name === value ? 'bg-accent/10 font-medium text-accent' : 'text-gray-600 hover:bg-gray-50',
+              )}
+            >
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
+              {l.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BoardNameEditor({ board }: { board: LeadBoard }) {
   const [value, setValue] = React.useState(board.name)
   React.useEffect(() => setValue(board.name), [board.name])
@@ -116,6 +173,7 @@ function BoardNameEditor({ board }: { board: LeadBoard }) {
 interface BoardGroupProps {
   board: LeadBoard
   search: string
+  sdrFilter: string | null
   focusRowId: string | null
   onFocused: () => void
   onCreateRow: (boardId: string) => void
@@ -123,10 +181,13 @@ interface BoardGroupProps {
   registerScrollEl: (boardId: string, el: HTMLDivElement | null) => void
 }
 
-function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl }: BoardGroupProps) {
+function BoardGroup({ board, search, sdrFilter, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
   const allRows = useLeadRows(board.id)
-  const rows = React.useMemo(() => allRows.filter((r) => matchesSearch(r, search)), [allRows, search])
+  const rows = React.useMemo(
+    () => allRows.filter((r) => matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter)),
+    [allRows, search, sdrFilter],
+  )
 
   return (
     <div
@@ -314,6 +375,7 @@ export function NovosLeadsPage() {
   const booted = useLeadBoardsBooted()
   const boards = useLeadBoards()
   const [search, setSearch] = React.useState('')
+  const [sdrFilter, setSdrFilter] = React.useState<string | null>(null)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
@@ -365,7 +427,7 @@ export function NovosLeadsPage() {
                   className="h-9 w-44 rounded-md border border-gray-200 bg-white pl-9 pr-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-accent/60 focus:outline-none"
                 />
               </div>
-              <ToolbarButton icon={<UserRound className="h-3.5 w-3.5" />}>Pessoa</ToolbarButton>
+              <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} />
               <ToolbarButton icon={<Filter className="h-3.5 w-3.5" />}>Filtro</ToolbarButton>
               <ToolbarButton icon={<ArrowUpDown className="h-3.5 w-3.5" />}>Ordenar</ToolbarButton>
               <ToolbarButton icon={<EyeOff className="h-3.5 w-3.5" />}>Ocultar</ToolbarButton>
@@ -388,6 +450,7 @@ export function NovosLeadsPage() {
                       key={board.id}
                       board={board}
                       search={search}
+                      sdrFilter={sdrFilter}
                       focusRowId={focusRowId}
                       onFocused={() => setFocusRowId(null)}
                       onCreateRow={handleCreateRow}

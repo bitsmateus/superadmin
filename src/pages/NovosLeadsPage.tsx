@@ -130,24 +130,27 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
   const rows = React.useMemo(() => allRows.filter((r) => matchesSearch(r, search)), [allRows, search])
 
   return (
-    <div className="mb-4 overflow-hidden rounded-xl border border-gray-200">
-      <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2.5">
+    <div className="mb-5 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+      <div
+        className="flex items-center gap-2.5 border-b border-gray-200 px-4 py-3"
+        style={{ backgroundColor: `${board.color}12` }}
+      >
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
         >
           <ChevronDown className={cn('h-4 w-4 transition-transform', open ? '' : '-rotate-90')} />
         </button>
-        <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: board.color }} />
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-4" style={{ backgroundColor: board.color, boxShadow: `0 0 0 4px ${board.color}1f` }} />
         <BoardNameEditor board={board} />
-        <span className="text-xs text-gray-400">{rows.length}</span>
+        <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{rows.length}</span>
         <input
           type="color"
           value={board.color}
           onChange={(e) => leadBoardsService.updateBoard(board.id, { color: e.target.value })}
           title="Cor do quadro"
-          className="ml-auto h-6 w-6 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+          className="ml-auto h-6 w-6 shrink-0 cursor-pointer rounded-md border-0 bg-transparent p-0"
         />
         <button
           type="button"
@@ -157,7 +160,7 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
             }
           }}
           title="Excluir quadro"
-          className="grid h-6 w-6 shrink-0 place-items-center rounded text-gray-400 hover:bg-danger/10 hover:text-danger"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-gray-400 transition-colors hover:bg-danger/10 hover:text-danger"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -167,21 +170,21 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
         <div ref={(el) => registerScrollEl(board.id, el)} className="overflow-x-hidden">
           <table className="border-collapse table-fixed" style={{ width: TABLE_WIDTH }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-500">
-                <th className={cn('px-3 py-2', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
+              <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <th className={cn('px-3 py-2.5', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
                   <input type="checkbox" className="rounded border-gray-300" />
                 </th>
                 {COLUMNS.map((col) => (
-                  <th key={col.key} className={cn('truncate px-3 py-2 font-medium', GRID_BORDER)} style={{ width: col.width }}>
+                  <th key={col.key} className={cn('truncate px-3 py-2.5 font-semibold', GRID_BORDER)} style={{ width: col.width }}>
                     {col.label}
                   </th>
                 ))}
-                <th className="px-1 py-2" style={{ width: ACTIONS_COL_WIDTH }} />
+                <th className="px-1 py-2.5" style={{ width: ACTIONS_COL_WIDTH }} />
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="group border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                <tr key={row.id} className="group border-b border-gray-200 transition-colors hover:bg-accent/[0.04]">
                   <td className={cn('px-3 py-2 align-middle', GRID_BORDER)}>
                     <input type="checkbox" className="rounded border-gray-300" />
                   </td>
@@ -243,12 +246,12 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
                   </td>
                 </tr>
               ))}
-              <tr>
-                <td colSpan={COLUMNS.length + 2} className="px-3 py-2">
+              <tr className="hover:bg-gray-50">
+                <td colSpan={COLUMNS.length + 2} className="px-3 py-2.5">
                   <button
                     type="button"
                     onClick={() => onCreateRow(board.id)}
-                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700"
+                    className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-accent"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Adicionar nome
@@ -390,9 +393,14 @@ export function NovosLeadsPage() {
                       registerScrollEl={registerScrollEl}
                     />
                   ))}
-                  <ToolbarButton icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setBoardModalOpen(true)}>
+                  <button
+                    type="button"
+                    onClick={() => setBoardModalOpen(true)}
+                    className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-gray-300 text-xs font-medium text-gray-400 transition-colors hover:border-accent/50 hover:bg-accent/[0.03] hover:text-accent"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
                     Novo quadro
-                  </ToolbarButton>
+                  </button>
                 </div>
 
                 {/* Barra de rolagem horizontal única — arrasta todos os quadros juntos */}

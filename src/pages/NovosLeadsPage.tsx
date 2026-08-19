@@ -107,7 +107,7 @@ function BoardNameEditor({ board }: { board: LeadBoard }) {
         else setValue(board.name)
       }}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      className="min-w-0 max-w-[280px] truncate bg-transparent text-base font-bold uppercase tracking-wide outline-none focus:underline"
+      className="min-w-0 max-w-[280px] truncate bg-transparent text-sm font-semibold uppercase tracking-wide outline-none focus:underline"
       style={{ color: board.color }}
     />
   )
@@ -134,25 +134,25 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
       style={{ borderLeft: `4px solid ${board.color}` }}
     >
       <div
-        className="flex items-center gap-2.5 border-b border-gray-200 px-4 py-3"
+        className="flex items-center gap-2 border-b border-gray-200 px-3 py-2"
         style={{ backgroundColor: `${board.color}12` }}
       >
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
+          className="grid h-5 w-5 shrink-0 place-items-center rounded text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
         >
-          <ChevronDown className={cn('h-4 w-4 transition-transform', open ? '' : '-rotate-90')} />
+          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open ? '' : '-rotate-90')} />
         </button>
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-4" style={{ backgroundColor: board.color, boxShadow: `0 0 0 4px ${board.color}1f` }} />
+        <span className="h-2 w-2 shrink-0 rounded-full ring-4" style={{ backgroundColor: board.color, boxShadow: `0 0 0 3px ${board.color}1f` }} />
         <BoardNameEditor board={board} />
-        <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-medium text-gray-500">{rows.length}</span>
+        <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{rows.length}</span>
         <input
           type="color"
           value={board.color}
           onChange={(e) => leadBoardsService.updateBoard(board.id, { color: e.target.value })}
           title="Cor do quadro"
-          className="ml-auto h-6 w-6 shrink-0 cursor-pointer rounded-md border-0 bg-transparent p-0"
+          className="ml-auto h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
         />
         <button
           type="button"
@@ -162,9 +162,9 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
             }
           }}
           title="Excluir quadro"
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-gray-400 transition-colors hover:bg-danger/10 hover:text-danger"
+          className="grid h-5 w-5 shrink-0 place-items-center rounded text-gray-400 transition-colors hover:bg-danger/10 hover:text-danger"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-3 w-3" />
         </button>
       </div>
 
@@ -172,28 +172,28 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
         <div ref={(el) => registerScrollEl(board.id, el)} className="overflow-x-hidden">
           <table className="border-collapse table-fixed" style={{ width: TABLE_WIDTH }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-[13px] font-semibold uppercase tracking-wide text-[#323338]">
-                <th className={cn('px-3 py-3', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
-                  <input type="checkbox" className="h-4 w-4 rounded border-gray-300" />
+              <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-xs font-semibold text-[#323338]">
+                <th className={cn('px-2.5 py-2', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
+                  <input type="checkbox" className="h-3.5 w-3.5 rounded border-gray-300" />
                 </th>
                 {COLUMNS.map((col) => (
-                  <th key={col.key} className={cn('truncate px-3 py-3 font-semibold', GRID_BORDER)} style={{ width: col.width }}>
+                  <th key={col.key} className={cn('truncate px-2.5 py-2 font-semibold', GRID_BORDER)} style={{ width: col.width }}>
                     {col.label}
                   </th>
                 ))}
-                <th className="px-1 py-3" style={{ width: ACTIONS_COL_WIDTH }} />
+                <th className="px-1 py-2" style={{ width: ACTIONS_COL_WIDTH }} />
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id} className="group border-b border-gray-200 transition-colors hover:bg-accent/[0.04]">
-                  <td className={cn('px-3 py-2.5 align-middle', GRID_BORDER)}>
-                    <input type="checkbox" className="h-4 w-4 rounded border-gray-300" />
+                  <td className={cn('px-2.5 py-1.5 align-middle', GRID_BORDER)}>
+                    <input type="checkbox" className="h-3.5 w-3.5 rounded border-gray-300" />
                   </td>
                   {COLUMNS.map((col) => (
                     <td key={col.key} className={cn('align-middle', GRID_BORDER)}>
                       {col.readOnly ? (
-                        <div className="truncate px-3 py-3 text-sm text-gray-400">
+                        <div className="truncate px-2.5 py-1.5 text-xs text-gray-400">
                           {formatDateTimeShort(row.createdAt)}
                         </div>
                       ) : col.key === 'nome' ? (
@@ -204,17 +204,17 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
                             } : undefined}
                             value={row.nome}
                             onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
-                            className="bg-transparent px-3 py-3 text-[15px] font-medium text-gray-800"
+                            className="bg-transparent px-2.5 py-1.5 text-sm font-medium text-gray-800"
                           />
                           <button
                             type="button"
                             onClick={() => onOpenLead(row.id)}
                             title="Abrir lead"
-                            className="relative mr-2 grid h-7 w-7 shrink-0 place-items-center rounded text-gray-400 hover:bg-gray-100 hover:text-accent"
+                            className="relative mr-1.5 grid h-6 w-6 shrink-0 place-items-center rounded text-gray-400 hover:bg-gray-100 hover:text-accent"
                           >
-                            <MessageSquare className="h-4 w-4" />
+                            <MessageSquare className="h-3.5 w-3.5" />
                             {row.notesCount > 0 && (
-                              <span className="absolute -right-1 -top-1 grid h-4 min-w-[1rem] place-items-center rounded-full bg-accent px-0.5 text-[10px] font-semibold text-white">
+                              <span className="absolute -right-1 -top-1 grid h-3.5 min-w-[0.875rem] place-items-center rounded-full bg-accent px-0.5 text-[9px] font-semibold text-white">
                                 {row.notesCount > 9 ? '9+' : row.notesCount}
                               </span>
                             )}
@@ -231,7 +231,7 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
                           value={row[col.key as LeadRowField]}
                           type={col.type}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
-                          className="bg-transparent px-3 py-3 text-[15px] text-gray-800"
+                          className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
                         />
                       )}
                     </td>
@@ -241,21 +241,21 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
                       type="button"
                       onClick={() => void leadBoardsService.deleteRow(row.id)}
                       title="Remover lead"
-                      className="grid h-8 w-8 place-items-center rounded text-gray-300 hover:bg-danger/10 hover:text-danger"
+                      className="grid h-7 w-7 place-items-center rounded text-gray-300 hover:bg-danger/10 hover:text-danger"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </td>
                 </tr>
               ))}
               <tr className="hover:bg-gray-50">
-                <td colSpan={COLUMNS.length + 2} className="px-3 py-3">
+                <td colSpan={COLUMNS.length + 2} className="px-2.5 py-2">
                   <button
                     type="button"
                     onClick={() => onCreateRow(board.id)}
-                    className="flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-accent"
+                    className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-accent"
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3.5 w-3.5" />
                     Adicionar nome
                   </button>
                 </td>
@@ -398,9 +398,9 @@ export function NovosLeadsPage() {
                   <button
                     type="button"
                     onClick={() => setBoardModalOpen(true)}
-                    className="flex h-12 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-gray-300 text-sm font-medium text-gray-400 transition-colors hover:border-accent/50 hover:bg-accent/[0.03] hover:text-accent"
+                    className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-gray-300 text-xs font-medium text-gray-400 transition-colors hover:border-accent/50 hover:bg-accent/[0.03] hover:text-accent"
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3.5 w-3.5" />
                     Novo quadro
                   </button>
                 </div>

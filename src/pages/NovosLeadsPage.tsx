@@ -130,7 +130,10 @@ function BoardGroup({ board, search, focusRowId, onFocused, onCreateRow, onOpenL
   const rows = React.useMemo(() => allRows.filter((r) => matchesSearch(r, search)), [allRows, search])
 
   return (
-    <div className="mb-5 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+    <div
+      className="mb-5 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+      style={{ borderLeft: `4px solid ${board.color}` }}
+    >
       <div
         className="flex items-center gap-2.5 border-b border-gray-200 px-4 py-3"
         style={{ backgroundColor: `${board.color}12` }}

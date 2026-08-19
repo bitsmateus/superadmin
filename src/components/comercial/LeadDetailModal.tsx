@@ -261,7 +261,6 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
         items={[
           { value: 'updates', label: 'Atualizações' },
           { value: 'files', label: 'Arquivos' },
-          { value: 'activity', label: 'Log de atividade' },
         ]}
       />
 
@@ -495,9 +494,6 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
           )
         )}
 
-        {tab === 'activity' && (
-          <p className="text-xs text-foreground/40">Em breve.</p>
-        )}
       </div>
     </div>
   )

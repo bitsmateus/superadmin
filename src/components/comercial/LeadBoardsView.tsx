@@ -66,7 +66,6 @@ const COLUMNS: ColumnDef[] = [
   { key: 'status', label: 'Status', width: 170, tag: true },
   { key: 'sdr', label: 'SDR', width: 140, tag: true },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
-  { key: 'numero', label: 'Número', width: 110 },
   { key: 'dorCliente', label: 'Dor do cliente', width: 200 },
   { key: 'numeroAtendentes', label: 'Número de atendentes', width: 170 },
   { key: 'valorMrr', label: 'Valor MRR', width: 140, currency: true },

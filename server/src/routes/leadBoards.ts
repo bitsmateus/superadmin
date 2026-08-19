@@ -15,16 +15,18 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const b = req.body;
       const id = (b.id as string) || uuidv4();
+      const page = (b.page as string) || 'novos_leads';
       let position = b.position as number | undefined;
       if (position === undefined) {
         const [row] = await query<{ max: number | null }>(
-          'SELECT MAX(position) as max FROM lead_boards'
+          'SELECT MAX(position) as max FROM lead_boards WHERE page = $1',
+          [page]
         );
         position = (row?.max ?? -1) + 1;
       }
       const [board] = await query(
-        `INSERT INTO lead_boards (id, name, color, position) VALUES ($1,$2,$3,$4) RETURNING *`,
-        [id, b.name, b.color ?? '#4F8EF7', position]
+        `INSERT INTO lead_boards (id, name, color, page, position) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [id, b.name, b.color ?? '#4F8EF7', page, position]
       );
       return reply.status(201).send(board);
     }

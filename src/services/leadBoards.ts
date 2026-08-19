@@ -1,6 +1,6 @@
 import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
-import type { LeadBoard, LeadRow } from '@/types/leadBoard'
+import type { LeadBoard, LeadBoardPage, LeadRow } from '@/types/leadBoard'
 
 function uuid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -20,14 +20,15 @@ function uuid(): string {
 
 // ---------- Snake ↔ camel ----------
 
-type BoardRow = { id: string; name: string; color: string; position: number; created_at: string }
+type BoardRow = { id: string; name: string; color: string; page: LeadBoardPage; position: number; created_at: string }
 function rowToBoard(r: BoardRow): LeadBoard {
-  return { id: r.id, name: r.name, color: r.color, position: r.position, createdAt: r.created_at }
+  return { id: r.id, name: r.name, color: r.color, page: r.page, position: r.position, createdAt: r.created_at }
 }
 function boardToRow(patch: Partial<LeadBoard>): Record<string, unknown> {
   const row: Record<string, unknown> = {}
   if ('name' in patch) row.name = patch.name
   if ('color' in patch) row.color = patch.color
+  if ('page' in patch) row.page = patch.page
   if ('position' in patch) row.position = patch.position
   return row
 }
@@ -178,15 +179,16 @@ export const leadBoardsService = {
     return rows.filter((r) => r.boardId === boardId).sort((a, b) => a.position - b.position)
   },
 
-  createBoard(name: string, color = '#4F8EF7'): LeadBoard {
-    const position = boards.length ? Math.max(...boards.map((b) => b.position)) + 1 : 0
-    const board: LeadBoard = { id: uuid(), name, color, position, createdAt: new Date().toISOString() }
+  createBoard(name: string, color = '#4F8EF7', page: LeadBoardPage = 'novos_leads'): LeadBoard {
+    const pageBoards = boards.filter((b) => b.page === page)
+    const position = pageBoards.length ? Math.max(...pageBoards.map((b) => b.position)) + 1 : 0
+    const board: LeadBoard = { id: uuid(), name, color, page, position, createdAt: new Date().toISOString() }
     boards = [...boards, board].sort((a, b) => a.position - b.position)
     notify()
 
     void (async () => {
       try {
-        await api.post('/api/lead-boards', { id: board.id, name: board.name, color: board.color, position: board.position })
+        await api.post('/api/lead-boards', { id: board.id, name: board.name, color: board.color, page: board.page, position: board.position })
       } catch (err) {
         boards = boards.filter((b) => b.id !== board.id)
         notify()

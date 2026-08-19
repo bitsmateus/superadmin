@@ -224,7 +224,7 @@ END $$`);
     FROM clients c
     WHERE NOT EXISTS (SELECT 1 FROM stage_history sh WHERE sh.client_id = c.id)`);
 
-  // ── Comercial > Novos Leads (quadros estilo Monday) ──────────────────────
+  // ── Comercial > Novos Leads / CRM NX Luis / CRM NX Arthur (quadros estilo Monday) ──
   await pool.query(`CREATE TABLE IF NOT EXISTS lead_boards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -232,6 +232,11 @@ END $$`);
     position INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  // Aba onde o quadro aparece — permite "mover" um lead pra outra tela (CRM de
+  // um SDR especifico) so trocando o board_id pra um quadro daquela page.
+  await pool.query(`ALTER TABLE lead_boards ADD COLUMN IF NOT EXISTS page TEXT NOT NULL DEFAULT 'novos_leads'`);
+  await pool.query(`ALTER TABLE lead_boards DROP CONSTRAINT IF EXISTS lead_boards_page_check`);
+  await pool.query(`ALTER TABLE lead_boards ADD CONSTRAINT lead_boards_page_check CHECK (page IN ('novos_leads', 'crm_luis', 'crm_arthur'))`);
   await pool.query(`CREATE TABLE IF NOT EXISTS lead_rows (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,

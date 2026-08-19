@@ -5,10 +5,14 @@
  * O service mapeia um pro outro.
  */
 
+/** Aba do Comercial onde o quadro aparece. */
+export type LeadBoardPage = 'novos_leads' | 'crm_luis' | 'crm_arthur'
+
 export interface LeadBoard {
   id: string
   name: string
   color: string
+  page: LeadBoardPage
   position: number
   createdAt: string
 }

@@ -277,11 +277,14 @@ CREATE TABLE IF NOT EXISTS ticket_triage_steps (
 
 CREATE INDEX IF NOT EXISTS triage_category_idx ON ticket_triage_steps(category_id);
 
--- ---------- lead_boards / lead_rows (Comercial > Novos Leads) ----------
+-- ---------- lead_boards / lead_rows (Comercial: Novos Leads, CRM NX Luis, CRM NX Arthur) ----------
 CREATE TABLE IF NOT EXISTS lead_boards (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#4F8EF7',
+  -- Aba/tela onde o quadro aparece. Mover um lead pra outra aba é so trocar o
+  -- board_id do lead pra um quadro que fique numa "page" diferente.
+  page TEXT NOT NULL DEFAULT 'novos_leads' CHECK (page IN ('novos_leads', 'crm_luis', 'crm_arthur')),
   position INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

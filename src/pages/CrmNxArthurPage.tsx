@@ -1,6 +1,11 @@
-import { Contact } from 'lucide-react'
-import { ComercialBlankPage } from '@/components/comercial/ComercialBlankPage'
+import { LeadBoardsView } from '@/components/comercial/LeadBoardsView'
 
 export function CrmNxArthurPage() {
-  return <ComercialBlankPage title="CRM NX Arthur" icon={Contact} />
+  return (
+    <LeadBoardsView
+      page="crm_arthur"
+      title="CRM NX Arthur"
+      subtitle="Comercial · quadros do Arthur"
+    />
+  )
 }

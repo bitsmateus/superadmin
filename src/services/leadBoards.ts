@@ -113,6 +113,22 @@ export async function teardownLeadBoards(): Promise<void> {
   notify()
 }
 
+async function reloadBoards() {
+  try {
+    const fresh = await api.get<BoardRow[]>('/api/lead-boards')
+    boards = fresh.map(rowToBoard).sort((a, b) => a.position - b.position)
+    notify()
+  } catch { /* silent — próxima mudança real corrige o cache */ }
+}
+
+async function reloadRows() {
+  try {
+    const fresh = await api.get<LeadRowRow[]>('/api/lead-rows')
+    rows = fresh.map(rowToLead)
+    notify()
+  } catch { /* silent — próxima mudança real corrige o cache */ }
+}
+
 function subscribeRealtime() {
   if (unsubSse) return
   unsubSse = onSseEvent((table, type, data) => {
@@ -120,24 +136,32 @@ function subscribeRealtime() {
       if (type === 'DELETE') {
         const id = (data as { id?: string }).id
         if (id) boards = boards.filter((b) => b.id !== id)
-      } else {
-        const next = rowToBoard(data as BoardRow)
-        const idx = boards.findIndex((b) => b.id === next.id)
-        if (idx === -1) boards = [...boards, next]
-        else { const copy = boards.slice(); copy[idx] = next; boards = copy }
-        boards = boards.slice().sort((a, b) => a.position - b.position)
+        notify()
+        return
       }
+      // Payload grande demais chega truncado só com {id} — recarrega a lista
+      // inteira em vez de gravar um quadro incompleto no cache.
+      const row = data as Partial<BoardRow>
+      if (typeof row.name !== 'string') { void reloadBoards(); return }
+      const next = rowToBoard(row as BoardRow)
+      const idx = boards.findIndex((b) => b.id === next.id)
+      if (idx === -1) boards = [...boards, next]
+      else { const copy = boards.slice(); copy[idx] = next; boards = copy }
+      boards = boards.slice().sort((a, b) => a.position - b.position)
       notify()
     } else if (table === 'lead_rows') {
       if (type === 'DELETE') {
         const id = (data as { id?: string }).id
         if (id) rows = rows.filter((r) => r.id !== id)
-      } else {
-        const next = rowToLead(data as LeadRowRow)
-        const idx = rows.findIndex((r) => r.id === next.id)
-        if (idx === -1) rows = [...rows, next]
-        else { const copy = rows.slice(); copy[idx] = next; rows = copy }
+        notify()
+        return
       }
+      const row = data as Partial<LeadRowRow>
+      if (typeof row.nome !== 'string') { void reloadRows(); return }
+      const next = rowToLead(row as LeadRowRow)
+      const idx = rows.findIndex((r) => r.id === next.id)
+      if (idx === -1) rows = [...rows, next]
+      else { const copy = rows.slice(); copy[idx] = next; rows = copy }
       notify()
     }
   })

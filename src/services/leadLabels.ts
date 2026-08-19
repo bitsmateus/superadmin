@@ -31,12 +31,15 @@ function ensureRealtime() {
     if (type === 'DELETE') {
       const id = (data as { id?: string }).id
       if (id) labels = labels.filter((l) => l.id !== id)
-    } else {
-      const next = rowToLabel(data as LabelRow)
-      const idx = labels.findIndex((l) => l.id === next.id)
-      if (idx === -1) labels = [...labels, next]
-      else { const copy = labels.slice(); copy[idx] = next; labels = copy }
+      notify()
+      return
     }
+    const row = data as Partial<LabelRow>
+    if (typeof row.name !== 'string') return
+    const next = rowToLabel(row as LabelRow)
+    const idx = labels.findIndex((l) => l.id === next.id)
+    if (idx === -1) labels = [...labels, next]
+    else { const copy = labels.slice(); copy[idx] = next; labels = copy }
     notify()
   })
 }

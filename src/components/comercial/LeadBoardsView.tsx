@@ -64,7 +64,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'telefone', label: 'Telefone', width: 140 },
   { key: 'tipo', label: 'Tipo', width: 108, tag: true },
   { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true },
-  { key: 'ligacao', label: 'Ligação', width: 62, align: 'center' },
+  { key: 'ligacao', label: 'Ligação', width: 62, tag: true },
   { key: 'status', label: 'Status', width: 170, tag: true },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
   { key: 'sdr', label: 'SDR', width: 100, tag: true },
@@ -718,12 +718,6 @@ function BoardGroup({
                           retornado={row.retornado}
                           onChange={(patch) => applyFieldChange(row, patch)}
                           className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
-                        />
-                      ) : col.key === 'ligacao' ? (
-                        <EditableField
-                          value={row.ligacao}
-                          onSave={(next) => applyFieldChange(row, { ligacao: next })}
-                          className={cn('bg-transparent px-2.5 py-1.5 text-sm text-gray-800', col.align === 'center' && 'text-center')}
                         />
                       ) : (
                         <EditableField

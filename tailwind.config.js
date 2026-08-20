@@ -36,14 +36,12 @@ export default {
       },
       fontFamily: {
         sans: [
-          'Geist',
-          'DM Sans',
-          'Inter',
+          'Roboto',
           'ui-sans-serif',
           'system-ui',
           'sans-serif',
         ],
-        mono: ['Geist Mono', 'ui-monospace', 'monospace'],
+        mono: ['ui-monospace', 'monospace'],
       },
       boxShadow: {
         glow: '0 0 0 1px rgba(79,142,247,0.4), 0 8px 24px -8px rgba(79,142,247,0.35)',

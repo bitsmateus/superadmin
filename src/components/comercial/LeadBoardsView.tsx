@@ -474,9 +474,9 @@ interface BoardGroupProps {
   selectedIds: Set<string>
   onToggleRow: (id: string) => void
   onToggleAll: (ids: string[], select: boolean) => void
-  draggingRowId: string | null
+  draggingIds: string[] | null
   isDragOver: boolean
-  onRowDragStart: (id: string) => void
+  onRowDragStart: (ids: string[]) => void
   onRowDragEnd: () => void
   onBoardDragOver: (boardId: string) => void
   onBoardDragLeave: () => void
@@ -488,7 +488,7 @@ interface BoardGroupProps {
 function BoardGroup({
   board, allBoards, search, sdrFilter, filterRules, sortDesc, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
   selectedIds, onToggleRow, onToggleAll,
-  draggingRowId, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
+  draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
   columnWidths, onResizeColumn,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
@@ -531,10 +531,12 @@ function BoardGroup({
   }
 
   const startDrag = (e: React.DragEvent, id: string, label: string) => {
+    // Arrastar uma linha que já está selecionada leva a seleção inteira junto.
+    const ids = selectedIds.has(id) && selectedIds.size > 1 ? Array.from(selectedIds) : [id]
     e.dataTransfer.setData('text/plain', id)
     e.dataTransfer.effectAllowed = 'move'
     const ghost = document.createElement('div')
-    ghost.textContent = label || 'Lead sem nome'
+    ghost.textContent = ids.length > 1 ? `${ids.length} leads selecionados` : (label || 'Lead sem nome')
     ghost.style.cssText =
       'position:fixed;top:-1000px;left:-1000px;padding:6px 12px;background:#4F8EF7;color:#fff;' +
       'font-size:12px;font-weight:600;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.25);' +
@@ -542,7 +544,7 @@ function BoardGroup({
     document.body.appendChild(ghost)
     e.dataTransfer.setDragImage(ghost, 14, 14)
     window.setTimeout(() => { document.body.removeChild(ghost) }, 0)
-    onRowDragStart(id)
+    onRowDragStart(ids)
   }
 
   return (
@@ -634,7 +636,7 @@ function BoardGroup({
                   onDragEnd={onRowDragEnd}
                   className={cn(
                     'group border-b border-gray-200 transition-colors',
-                    draggingRowId === row.id ? 'opacity-40' : '',
+                    draggingIds?.includes(row.id) ? 'opacity-40' : '',
                     selected ? 'bg-accent/10 hover:bg-accent/15' : 'hover:bg-accent/[0.04]',
                   )}
                 >
@@ -822,7 +824,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
-  const [draggingRowId, setDraggingRowId] = React.useState<string | null>(null)
+  const [draggingIds, setDraggingIds] = React.useState<string[] | null>(null)
   const [dragOverBoardId, setDragOverBoardId] = React.useState<string | null>(null)
   const [columnWidths, setColumnWidths] = React.useState<Record<string, number>>(() => loadColumnWidths(page))
 
@@ -840,16 +842,16 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
     [columnWidths],
   )
 
-  const handleRowDragStart = React.useCallback((id: string) => setDraggingRowId(id), [])
+  const handleRowDragStart = React.useCallback((ids: string[]) => setDraggingIds(ids), [])
   const handleRowDragEnd = React.useCallback(() => {
-    setDraggingRowId(null)
+    setDraggingIds(null)
     setDragOverBoardId(null)
   }, [])
   const handleBoardDragOver = React.useCallback((boardId: string) => setDragOverBoardId(boardId), [])
   const handleBoardDragLeave = React.useCallback(() => setDragOverBoardId(null), [])
   const handleBoardDrop = React.useCallback((boardId: string) => {
-    setDraggingRowId((current) => {
-      if (current) leadBoardsService.updateRow(current, { boardId })
+    setDraggingIds((current) => {
+      if (current) for (const id of current) leadBoardsService.updateRow(id, { boardId })
       return null
     })
     setDragOverBoardId(null)
@@ -971,7 +973,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                       selectedIds={selectedIds}
                       onToggleRow={toggleRow}
                       onToggleAll={toggleAll}
-                      draggingRowId={draggingRowId}
+                      draggingIds={draggingIds}
                       isDragOver={dragOverBoardId === board.id}
                       onRowDragStart={handleRowDragStart}
                       onRowDragEnd={handleRowDragEnd}

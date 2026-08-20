@@ -9,6 +9,8 @@ import {
   Download,
   Filter,
   GripVertical,
+  KanbanSquare,
+  ListTodo,
   Loader2,
   MessageCircle,
   Pencil,
@@ -25,6 +27,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
+import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
@@ -884,12 +887,21 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
     handleCreateRow(boards[0].id)
   }
 
-  const visibleCount = React.useMemo(
+  const visibleRows = React.useMemo(
     () => pageRows.filter((r) =>
       matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter) && matchesLeadFilters(r, filterRules),
-    ).length,
+    ),
     [pageRows, search, sdrFilter, filterRules],
   )
+  const visibleCount = visibleRows.length
+
+  // Kanban é uma preferência do usuário/navegador, vale pras 3 telas do Comercial.
+  const [view, setView] = React.useState<'list' | 'kanban'>(() => {
+    try { return window.localStorage.getItem('comercial_view_mode') === 'kanban' ? 'kanban' : 'list' } catch { return 'list' }
+  })
+  React.useEffect(() => {
+    try { window.localStorage.setItem('comercial_view_mode', view) } catch { /* ignore */ }
+  }, [view])
 
   return (
     <>
@@ -934,6 +946,30 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
               >
                 {sortDesc ? 'Mais novo' : 'Mais antigo'}
               </ToolbarButton>
+              <div className="ml-auto inline-flex overflow-hidden rounded-lg border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setView('list')}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
+                    view === 'list' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+                  )}
+                >
+                  <ListTodo className="h-3.5 w-3.5" />
+                  Lista
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView('kanban')}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
+                    view === 'kanban' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+                  )}
+                >
+                  <KanbanSquare className="h-3.5 w-3.5" />
+                  Kanban
+                </button>
+              </div>
             </div>
 
             {boards.length === 0 ? (
@@ -943,6 +979,8 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                 description="Crie o primeiro quadro para começar a registrar leads."
                 action={<Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button>}
               />
+            ) : view === 'kanban' ? (
+              <LeadKanbanBoard rows={visibleRows} onOpenLead={setOpenLeadId} />
             ) : (
               <>
                 <div className="flex-1">

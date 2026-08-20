@@ -1,4 +1,5 @@
 import * as React from 'react'
+import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { CheckCircle2, UploadCloud } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -8,6 +9,23 @@ import { leadBoardsService } from '@/services/leadBoards'
 import { parseCsv } from '@/lib/csv'
 import { sanitizeCurrencyRaw, prettifyCurrencyRaw } from '@/lib/currency'
 import type { LeadBoard, LeadBoardPage, LeadRowField } from '@/types/leadBoard'
+
+/** CSV lê como texto puro; .xlsx/.xls usa o SheetJS (só a primeira planilha do arquivo). */
+async function readSpreadsheet(file: File): Promise<string[][]> {
+  const isExcel = /\.xlsx?$/i.test(file.name)
+    || file.type === 'application/vnd.ms-excel'
+    || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  if (isExcel) {
+    const buffer = await file.arrayBuffer()
+    const workbook = XLSX.read(buffer, { type: 'array' })
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '' })
+    return rows
+      .map((r) => r.map((c) => String(c ?? '').trim()))
+      .filter((r) => r.some((c) => c !== ''))
+  }
+  return parseCsv(await file.text())
+}
 
 const IMPORT_FIELDS: { key: LeadRowField; label: string; aliases: string[] }[] = [
   { key: 'nome', label: 'Nome', aliases: ['nome', 'name', 'lead', 'cliente', 'contato'] },
@@ -84,8 +102,7 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
 
   const handleFile = async (file: File) => {
     try {
-      const text = await file.text()
-      const allRows = parseCsv(text)
+      const allRows = await readSpreadsheet(file)
       if (allRows.length < 1) { toast.error('Não consegui ler nenhuma linha desse arquivo.'); return }
       const [headerRow, ...rest] = allRows
       setHeaders(headerRow)
@@ -136,7 +153,7 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
     <Modal
       open={open}
       onClose={onClose}
-      title="Importar leads de um CSV"
+      title="Importar leads de uma planilha"
       description="Envie a planilha, confira o mapeamento das colunas e importe direto pro quadro certo."
       size="xl"
       footer={
@@ -166,11 +183,11 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
       ) : headers.length === 0 ? (
         <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line px-6 py-14 text-center transition-colors hover:border-accent/50 hover:bg-accent/[0.03]">
           <UploadCloud className="h-8 w-8 text-foreground/30" />
-          <p className="text-sm font-medium text-foreground">Clique para escolher um arquivo CSV</p>
-          <p className="text-xs text-foreground/45">Aceita separador "," ou ";" — exporta certinho do Excel/Google Sheets.</p>
+          <p className="text-sm font-medium text-foreground">Clique para escolher um arquivo CSV ou Excel</p>
+          <p className="text-xs text-foreground/45">Aceita .csv (separador "," ou ";") e .xlsx/.xls — exporta certinho do Excel/Google Sheets.</p>
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f) }}
           />

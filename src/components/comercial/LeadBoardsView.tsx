@@ -32,7 +32,6 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
-import { LeadImportModal } from '@/components/comercial/LeadImportModal'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
@@ -50,6 +49,12 @@ import { ABA_LABELS, ABA_ORDER } from '@/types/leadBoard'
 import type { LeadBoard, LeadBoardPage, LeadLabelField, LeadRow, LeadRowField } from '@/types/leadBoard'
 
 export { ABA_LABELS, ABA_ORDER }
+
+// A lib de leitura de .xlsx é pesada (~400KB) — carrega só quando alguém abre o import,
+// não no bundle inicial da tela de Lista/Kanban/Dashboard.
+const LeadImportModal = React.lazy(() =>
+  import('@/components/comercial/LeadImportModal').then((m) => ({ default: m.LeadImportModal })),
+)
 
 interface ColumnDef {
   key: LeadRowField | 'createdAt'
@@ -1125,7 +1130,17 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
       </div>
 
       <CreateBoardModal open={boardModalOpen} onClose={() => setBoardModalOpen(false)} page={page} />
-      <LeadImportModal open={importModalOpen} onClose={() => setImportModalOpen(false)} page={page} boards={boards} />
+      {importModalOpen && (
+        <React.Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm">
+              <Loader2 className="h-6 w-6 animate-spin text-white" />
+            </div>
+          }
+        >
+          <LeadImportModal open={importModalOpen} onClose={() => setImportModalOpen(false)} page={page} boards={boards} />
+        </React.Suspense>
+      )}
       <LeadTrashModal open={trashModalOpen} onClose={() => setTrashModalOpen(false)} boards={boards} />
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
       <LeadFiltersModal

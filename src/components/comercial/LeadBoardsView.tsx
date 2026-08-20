@@ -682,7 +682,7 @@ function BoardGroup({
                     </div>
                   </td>
                   {COLUMNS.map((col) => (
-                    <td key={col.key} className={cn('align-middle', GRID_BORDER)}>
+                    <td key={col.key} className={cn('p-0 align-middle', GRID_BORDER)}>
                       {col.readOnly ? (
                         <div className={cn('truncate px-2.5 py-1.5 text-sm text-gray-400', col.align === 'center' && 'text-center')}>
                           {formatDateTimeShort(row.createdAt)}

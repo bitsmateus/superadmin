@@ -11,6 +11,7 @@ import {
   GripVertical,
   Loader2,
   MessageCircle,
+  Pencil,
   Plus,
   Rows3,
   Search,
@@ -285,6 +286,64 @@ function MoveSubmenu({ allBoards, onMove }: { allBoards: LeadBoard[]; onMove: (b
   )
 }
 
+const BULK_EDIT_FIELDS: { key: LeadLabelField; label: string }[] = [
+  { key: 'tipo', label: 'Tipo' },
+  { key: 'diaContato', label: 'Dia de contato' },
+  { key: 'status', label: 'Status' },
+  { key: 'sdr', label: 'SDR' },
+]
+
+function BulkEditSubmenu({ onApply }: { onApply: (field: LeadLabelField, value: string) => void }) {
+  const [field, setField] = React.useState<LeadLabelField | null>(null)
+  const labels = useLeadLabels(field ?? 'status')
+
+  if (!field) {
+    return (
+      <>
+        {BULK_EDIT_FIELDS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setField(f.key)}
+            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
+          >
+            {f.label}
+            <ChevronRight className="h-3.5 w-3.5 text-gray-300" />
+          </button>
+        ))}
+      </>
+    )
+  }
+
+  const title = BULK_EDIT_FIELDS.find((f) => f.key === field)?.label ?? ''
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setField(null)}
+        className="mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+      >
+        <ChevronLeft className="h-3 w-3" /> {title}
+      </button>
+      {labels.length === 0 ? (
+        <p className="px-2 py-1.5 text-xs text-gray-400">Nenhuma etiqueta cadastrada.</p>
+      ) : (
+        labels.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            onClick={() => onApply(field, l.name)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
+          >
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
+            <span className="truncate">{l.name}</span>
+          </button>
+        ))
+      )}
+    </>
+  )
+}
+
 function BulkActionBar({
   selectedIds,
   allRows,
@@ -299,6 +358,9 @@ function BulkActionBar({
   const [moveOpen, setMoveOpen] = React.useState(false)
   const moveRef = React.useRef<HTMLDivElement>(null)
   useOutsideClose(moveRef, moveOpen, () => setMoveOpen(false))
+  const [editOpen, setEditOpen] = React.useState(false)
+  const editRef = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(editRef, editOpen, () => setEditOpen(false))
 
   if (selectedIds.size === 0) return null
 
@@ -329,6 +391,12 @@ function BulkActionBar({
     onClear()
   }
 
+  const applyBulkEdit = (field: LeadLabelField, value: string) => {
+    for (const r of selectedRows) leadBoardsService.updateRow(r.id, { [field]: value })
+    setEditOpen(false)
+    onClear()
+  }
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-16 z-40 flex justify-center px-4">
       <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-1.5 shadow-xl">
@@ -341,6 +409,14 @@ function BulkActionBar({
         <div className="mx-1 h-6 w-px bg-gray-200" />
         <BulkActionButton icon={<Copy className="h-4 w-4" />} label="Duplicar" onClick={duplicate} />
         <BulkActionButton icon={<Download className="h-4 w-4" />} label="Exportar" onClick={() => exportLeadsCsv(selectedRows)} />
+        <div className="relative" ref={editRef}>
+          <BulkActionButton icon={<Pencil className="h-4 w-4" />} label="Editar" onClick={() => setEditOpen((o) => !o)} />
+          {editOpen && (
+            <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+              <BulkEditSubmenu onApply={applyBulkEdit} />
+            </div>
+          )}
+        </div>
         <div className="relative" ref={moveRef}>
           <BulkActionButton icon={<ArrowRightLeft className="h-4 w-4" />} label="Mover" onClick={() => setMoveOpen((o) => !o)} />
           {moveOpen && (

@@ -850,7 +850,6 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
               >
                 Ordenar
               </ToolbarButton>
-              <ToolbarButton icon={<Rows3 className="h-3.5 w-3.5" />}>Agrupar por</ToolbarButton>
             </div>
 
             {boards.length === 0 ? (

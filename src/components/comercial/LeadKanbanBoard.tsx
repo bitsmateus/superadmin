@@ -82,6 +82,11 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
 
   const activeRow = activeId ? rows.find((r) => r.id === activeId) ?? null : null
 
+  // Colunas são w-64 (256px) com gap-3 (12px) entre elas — dá pra calcular a largura total
+  // sem medir o DOM, e usar isso pra dimensionar a barra de rolagem flutuante abaixo.
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const contentWidth = columns.length * 256 + Math.max(0, columns.length - 1) * 12
+
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
   const onDragEnd = (e: DragEndEvent) => {
     setActiveId(null)
@@ -125,7 +130,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
       </div>
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div className="flex items-start gap-3 overflow-x-auto pb-4">
+        <div ref={scrollRef} className="flex items-start gap-3 overflow-x-hidden pb-4">
           {columns.map((col) => (
             <KanbanColumn
               key={col.key || '__none__'}
@@ -142,6 +147,18 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
           document.body,
         )}
       </DndContext>
+
+      {/* Barra de rolagem horizontal flutuante, fixa na tela — igual à da Lista, pra não
+          precisar descer até o fim de colunas cheias de card só pra arrastar de lado. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 sm:px-6 lg:px-8 lg:pl-[236px]">
+        <div
+          className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-gray-200 bg-white shadow-lg"
+          style={{ height: 14 }}
+          onScroll={(e) => { if (scrollRef.current) scrollRef.current.scrollLeft = e.currentTarget.scrollLeft }}
+        >
+          <div style={{ width: contentWidth, height: 1 }} />
+        </div>
+      </div>
     </div>
   )
 }

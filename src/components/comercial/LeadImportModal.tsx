@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select'
 import { leadBoardsService } from '@/services/leadBoards'
 import { parseCsv } from '@/lib/csv'
 import { sanitizeCurrencyRaw, prettifyCurrencyRaw } from '@/lib/currency'
+import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadBoardPage, LeadRowField } from '@/types/leadBoard'
 
 /** CSV lê como texto puro; .xlsx/.xls usa o SheetJS (só a primeira planilha do arquivo). */
@@ -88,6 +89,7 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
   const [newBoardName, setNewBoardName] = React.useState('')
   const [importing, setImporting] = React.useState(false)
   const [result, setResult] = React.useState<{ created: number; skipped: number } | null>(null)
+  const [dragOver, setDragOver] = React.useState(false)
 
   React.useEffect(() => {
     if (!open) return
@@ -96,6 +98,7 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
     setMapping({})
     setResult(null)
     setImporting(false)
+    setDragOver(false)
     setTargetBoardId(boards[0]?.id ?? NEW_BOARD)
     setNewBoardName('')
   }, [open, boards])
@@ -181,9 +184,24 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
           </p>
         </div>
       ) : headers.length === 0 ? (
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line px-6 py-14 text-center transition-colors hover:border-accent/50 hover:bg-accent/[0.03]">
+        <label
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragOver(false)
+            const f = e.dataTransfer.files?.[0]
+            if (f) void handleFile(f)
+          }}
+          className={cn(
+            'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-14 text-center transition-colors',
+            dragOver ? 'border-accent bg-accent/[0.06]' : 'border-line hover:border-accent/50 hover:bg-accent/[0.03]',
+          )}
+        >
           <UploadCloud className="h-8 w-8 text-foreground/30" />
-          <p className="text-sm font-medium text-foreground">Clique para escolher um arquivo CSV ou Excel</p>
+          <p className="text-sm font-medium text-foreground">
+            {dragOver ? 'Solte o arquivo aqui' : 'Arraste ou clique para escolher um arquivo CSV ou Excel'}
+          </p>
           <p className="text-xs text-foreground/45">Aceita .csv (separador "," ou ";") e .xlsx/.xls — exporta certinho do Excel/Google Sheets.</p>
           <input
             type="file"

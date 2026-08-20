@@ -344,6 +344,14 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
     [team, mentionSearch],
   )
 
+  // Cresce junto com o texto (até um teto, pra não empurrar o botão de enviar pra fora da tela).
+  React.useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [text])
+
   const insertMention = (m: TeamMember) => {
     const label = `@${teamMemberLabel(m)} `
     const el = textareaRef.current
@@ -440,7 +448,8 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                 onChange={(e) => setText(e.target.value)}
                 onPaste={handlePaste}
                 placeholder="Escreva uma atualização, cole um print (Ctrl+V) e mencione outros com @"
-                className="min-h-[70px] w-full resize-y bg-transparent text-sm text-[#323338] placeholder:text-foreground/30 focus:outline-none"
+                rows={1}
+                className="max-h-[40vh] min-h-[70px] w-full resize-none overflow-y-auto bg-transparent text-sm text-[#323338] placeholder:text-foreground/30 focus:outline-none"
               />
               {pendingAttachments.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">

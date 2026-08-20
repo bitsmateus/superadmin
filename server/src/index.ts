@@ -17,6 +17,7 @@ import { automationRoutes } from './routes/automation.js';
 import { chatbotFlowRoutes } from './routes/chatbotFlow.js';
 import { leadBoardRoutes } from './routes/leadBoards.js';
 import { leadLabelRoutes } from './routes/leadLabels.js';
+import { supportColumnRoutes } from './routes/supportColumns.js';
 import { userBoardAccessRoutes } from './routes/userBoardAccess.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
@@ -67,6 +68,7 @@ async function main() {
   await app.register(chatbotFlowRoutes);
   await app.register(leadBoardRoutes);
   await app.register(leadLabelRoutes);
+  await app.register(supportColumnRoutes);
   await app.register(userBoardAccessRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));

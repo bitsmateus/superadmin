@@ -312,6 +312,12 @@ export const ticketsService = {
     }
   },
 
+  /** Recarrega as tarefas do backend — usado quando algo fora daqui mexe
+   *  nelas em massa (ex.: apagar uma coluna do Kanban realoca as tarefas). */
+  async refreshReminders(): Promise<void> {
+    await reloadReminders()
+  },
+
   /** Atualiza campos pontuais (status, due_at, etc.) sem reescrever tudo. */
   async patchReminder(id: string, patch: Record<string, unknown>): Promise<void> {
     try {

@@ -133,7 +133,13 @@ export interface MessageTemplate {
 }
 
 export type ReminderKind = 'task' | 'pending' | 'meeting' | 'note'
-export type ReminderStatus = 'todo' | 'doing' | 'waiting' | 'done'
+/**
+ * Etapa da tarefa no quadro do Suporte — é a `key` de uma linha de
+ * `support_columns`, e não um enum fechado: o time cria e apaga colunas pela
+ * tela. As 4 built-ins semeadas pela migração são 'todo' | 'doing' | 'waiting'
+ * | 'done'; qualquer outra key criada pelo time também é válida.
+ */
+export type ReminderStatus = string
 export type ReminderPriority = 'low' | 'normal' | 'high'
 
 export interface Reminder {

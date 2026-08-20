@@ -12,7 +12,9 @@ export const KIND_META: Record<ReminderKind, { label: string; icon: React.ReactN
   note: { label: 'Anotação', icon: <StickyNote className="h-3.5 w-3.5" /> },
 }
 
-export const STATUS_META: Record<ReminderStatus, { label: string }> = {
+/** Rótulos das etapas built-in — usados só como fallback quando a coluna não
+ *  está (ou não está mais) cadastrada em `support_columns`. */
+export const STATUS_META: Record<string, { label: string }> = {
   todo: { label: 'A fazer' },
   doing: { label: 'Fazendo' },
   waiting: { label: 'Aguardando técnico' },
@@ -20,6 +22,13 @@ export const STATUS_META: Record<ReminderStatus, { label: string }> = {
 }
 
 export const STATUS_ORDER: ReminderStatus[] = ['todo', 'doing', 'waiting', 'done']
+
+/** Nome de exibição de uma etapa: o cadastrado na coluna, senão o built-in,
+ *  senão a própria key (coluna apagada / dado antigo). */
+export function statusLabel(status: string | undefined, labels: Map<string, string>): string {
+  const key = status ?? 'todo'
+  return labels.get(key) ?? STATUS_META[key]?.label ?? key
+}
 
 export const PRIORITY_META: Record<
   ReminderPriority,

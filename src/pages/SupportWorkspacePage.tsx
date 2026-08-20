@@ -49,12 +49,13 @@ import {
   KIND_META,
   PRIORITY_META,
   PRIORITY_ORDER,
-  STATUS_META,
-  STATUS_ORDER,
   bucketOf,
   dueChipCls,
   fmtDue,
+  statusLabel,
 } from '@/lib/supportMeta'
+import { useSupportColumns, useSupportColumnLabels } from '@/hooks/useSupportColumns'
+import type { SupportColumn } from '@/types/supportColumn'
 
 /** Modo de visualização escolhido (lista ou kanban) — lembrado no navegador. */
 const VIEW_KEY = 'support_view_mode'
@@ -104,6 +105,10 @@ export function SupportWorkspacePage() {
 
   // A visão em lista segue sendo o padrão; o Kanban é opcional e a escolha
   // fica salva no navegador pra não ter que alternar a cada visita.
+  // As colunas do quadro também nomeiam o status na lista e no modal.
+  const columns = useSupportColumns()
+  const statusLabels = useSupportColumnLabels()
+
   const [view, setView] = React.useState<'list' | 'kanban'>(() =>
     localStorage.getItem(VIEW_KEY) === 'kanban' ? 'kanban' : 'list',
   )
@@ -295,6 +300,7 @@ export function SupportWorkspacePage() {
                 doneTasks={doneTasks}
                 companyOf={companyOf}
                 teamMap={teamMap}
+                statusLabels={statusLabels}
                 onEdit={setEditing}
                 onOpenClient={(id) => navigate(`/clients?open=${id}`)}
               />
@@ -339,6 +345,7 @@ export function SupportWorkspacePage() {
           initial={editing}
           clients={clients}
           team={team}
+          columns={columns}
           defaultAssignee={myId}
           onClose={() => setEditing(undefined)}
         />
@@ -353,6 +360,7 @@ function ListView({
   doneTasks,
   companyOf,
   teamMap,
+  statusLabels,
   onEdit,
   onOpenClient,
 }: {
@@ -360,6 +368,7 @@ function ListView({
   doneTasks: Reminder[]
   companyOf: (id?: string | null) => string | undefined
   teamMap: Map<string, string>
+  statusLabels: Map<string, string>
   onEdit: (r: Reminder) => void
   onOpenClient: (id: string) => void
 }) {
@@ -388,6 +397,7 @@ function ListView({
                   r={r}
                   company={companyOf(r.clientId)}
                   assignee={teamMap.get(r.userId)}
+                  statusLabels={statusLabels}
                   onEdit={() => onEdit(r)}
                   onOpenClient={onOpenClient}
                 />
@@ -409,6 +419,7 @@ function ListView({
                 r={r}
                 company={companyOf(r.clientId)}
                 assignee={teamMap.get(r.userId)}
+                statusLabels={statusLabels}
                 onEdit={() => onEdit(r)}
                 onOpenClient={onOpenClient}
                 done
@@ -425,6 +436,7 @@ function TaskRow({
   r,
   company,
   assignee,
+  statusLabels,
   onEdit,
   onOpenClient,
   done,
@@ -432,6 +444,7 @@ function TaskRow({
   r: Reminder
   company?: string
   assignee?: string
+  statusLabels: Map<string, string>
   onEdit: () => void
   onOpenClient: (id: string) => void
   done?: boolean
@@ -500,7 +513,7 @@ function TaskRow({
             <Users2 className="h-3 w-3" />
             {assignee ?? '—'}
           </span>
-          <span className="text-foreground/35">· {STATUS_META[r.status ?? 'todo'].label}</span>
+          <span className="text-foreground/35">· {statusLabel(r.status, statusLabels)}</span>
         </div>
 
         {r.notes && <p className="mt-1.5 line-clamp-2 text-[11px] text-foreground/50">{r.notes}</p>}
@@ -630,12 +643,14 @@ function TaskModal({
   initial,
   clients,
   team,
+  columns,
   defaultAssignee,
   onClose,
 }: {
   initial: Reminder | null
   clients: ReturnType<typeof useClients>
   team: ReturnType<typeof useTeam>
+  columns: SupportColumn[]
   defaultAssignee?: string
   onClose: () => void
 }) {
@@ -650,7 +665,10 @@ function TaskModal({
   )
   const [assignee, setAssignee] = React.useState(initial?.userId || defaultAssignee || '')
   const [priority, setPriority] = React.useState<ReminderPriority>(initial?.priority ?? 'normal')
-  const [status, setStatus] = React.useState<ReminderStatus>(initial?.status ?? 'todo')
+  // Tarefa nova nasce na primeira coluna do quadro (hoje "A Fazer").
+  const [status, setStatus] = React.useState<ReminderStatus>(
+    initial?.status ?? columns[0]?.key ?? 'todo',
+  )
   const [saving, setSaving] = React.useState(false)
 
   const save = async () => {
@@ -759,9 +777,9 @@ function TaskModal({
           </Field>
           <Field label="Status">
             <Select value={status} onChange={(v) => setStatus(v as ReminderStatus)}>
-              {STATUS_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_META[s].label}
+              {columns.map((c) => (
+                <option key={c.id} value={c.key}>
+                  {c.name}
                 </option>
               ))}
             </Select>

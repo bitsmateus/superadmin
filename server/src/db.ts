@@ -447,6 +447,38 @@ END $$`);
     ) AS v(field, name, color, position)
     WHERE NOT EXISTS (SELECT 1 FROM lead_labels ll WHERE ll.field = v.field AND ll.name = v.name)`);
 
+  // ── Colunas do quadro do Suporte ───────────────────────────────────────────
+  // As etapas do Kanban deixam de ser fixas no código: o time cria, renomeia,
+  // reordena e apaga colunas pela própria tela. `key` é o valor gravado em
+  // reminders.status, por isso é imutável depois de criada (renomear muda só
+  // o `name`) — assim nenhuma tarefa existente fica órfã.
+  await pool.query(`CREATE TABLE IF NOT EXISTS support_columns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#9CA3AF',
+    position INT NOT NULL DEFAULT 0,
+    is_done BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_support_columns ON support_columns;
+      CREATE TRIGGER notify_support_columns AFTER INSERT OR UPDATE OR DELETE ON support_columns
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+  // Semeia as 4 etapas que já existiam hard-coded, com as mesmas keys que as
+  // tarefas antigas gravaram em reminders.status.
+  await pool.query(`INSERT INTO support_columns (key, name, color, position, is_done)
+    SELECT * FROM (VALUES
+      ('todo',    'A Fazer',            '#9CA3AF', 1, FALSE),
+      ('doing',   'Fazendo',            '#4F8EF7', 2, FALSE),
+      ('waiting', 'Aguardando técnico', '#F59E0B', 3, FALSE),
+      ('done',    'Feito',              '#10B981', 4, TRUE)
+    ) AS v(key, name, color, position, is_done)
+    WHERE NOT EXISTS (SELECT 1 FROM support_columns sc WHERE sc.key = v.key)`);
+
   console.log('[db] migrations applied');
 }
 

@@ -51,25 +51,25 @@ interface ColumnDef {
   readOnly?: boolean
   tag?: boolean
   currency?: boolean
+  align?: 'center'
 }
 
 const CHECKBOX_COL_WIDTH = 58
-const ACTIONS_COL_WIDTH = 36
 
 const COLUMNS: ColumnDef[] = [
   { key: 'nome', label: 'Nome', width: 180 },
-  { key: 'empresa', label: 'Empresa', width: 170 },
+  { key: 'empresa', label: 'Empresa', width: 170, align: 'center' },
   { key: 'telefone', label: 'Telefone', width: 140 },
   { key: 'tipo', label: 'Tipo', width: 108, tag: true },
   { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true },
   { key: 'status', label: 'Status', width: 170, tag: true },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
   { key: 'sdr', label: 'SDR', width: 100, tag: true },
-  { key: 'dorCliente', label: 'Dor do cliente', width: 200 },
-  { key: 'numeroAtendentes', label: 'Número de atendentes', width: 170 },
-  { key: 'valorMrr', label: 'Valor MRR', width: 140, currency: true },
-  { key: 'valorImplementacao', label: 'Valor de Implementação', width: 170, currency: true },
-  { key: 'createdAt', label: 'Log de criação', width: 160, readOnly: true },
+  { key: 'dorCliente', label: 'Dor do cliente', width: 200, align: 'center' },
+  { key: 'numeroAtendentes', label: 'Número de atendentes', width: 170, align: 'center' },
+  { key: 'valorMrr', label: 'Valor MRR', width: 140, currency: true, align: 'center' },
+  { key: 'valorImplementacao', label: 'Valor de Implementação', width: 170, currency: true, align: 'center' },
+  { key: 'createdAt', label: 'Log de criação', width: 160, readOnly: true, align: 'center' },
 ]
 
 const GRID_BORDER = 'border-r border-gray-200'
@@ -375,7 +375,7 @@ function BoardNameEditor({ board }: { board: LeadBoard }) {
         else setValue(board.name)
       }}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      className="min-w-0 max-w-[280px] truncate bg-transparent text-sm font-semibold uppercase tracking-wide outline-none focus:underline"
+      className="min-w-0 flex-1 truncate bg-transparent text-sm font-semibold uppercase tracking-wide outline-none focus:underline"
       style={{ color: board.color }}
     />
   )
@@ -414,7 +414,7 @@ function BoardGroup({
   columnWidths, onResizeColumn,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
-  const tableWidth = CHECKBOX_COL_WIDTH + ACTIONS_COL_WIDTH
+  const tableWidth = CHECKBOX_COL_WIDTH
     + COLUMNS.reduce((sum, c) => sum + (columnWidths[c.key] ?? c.width), 0)
 
   const startResize = React.useCallback((e: React.MouseEvent, key: string, startWidth: number) => {
@@ -530,7 +530,6 @@ function BoardGroup({
                     </th>
                   )
                 })}
-                <th className="px-1 py-2" style={{ width: ACTIONS_COL_WIDTH }} />
               </tr>
             </thead>
             <tbody>
@@ -570,7 +569,7 @@ function BoardGroup({
                   {COLUMNS.map((col) => (
                     <td key={col.key} className={cn('align-middle', GRID_BORDER)}>
                       {col.readOnly ? (
-                        <div className="truncate px-2.5 py-1.5 text-xs text-gray-400">
+                        <div className={cn('truncate px-2.5 py-1.5 text-xs text-gray-400', col.align === 'center' && 'text-center')}>
                           {formatDateTimeShort(row.createdAt)}
                         </div>
                       ) : col.key === 'nome' ? (
@@ -619,33 +618,23 @@ function BoardGroup({
                         <CurrencyField
                           value={row[col.key as LeadRowField]}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
-                          className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
+                          className={cn('bg-transparent px-2.5 py-1.5 text-sm text-gray-800', col.align === 'center' && 'text-center')}
                         />
                       ) : (
                         <EditableField
                           value={row[col.key as LeadRowField]}
                           type={col.type}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
-                          className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
+                          className={cn('bg-transparent px-2.5 py-1.5 text-sm text-gray-800', col.align === 'center' && 'text-center')}
                         />
                       )}
                     </td>
                   ))}
-                  <td className="text-center align-middle">
-                    <button
-                      type="button"
-                      onClick={() => void leadBoardsService.deleteRow(row.id)}
-                      title="Remover lead"
-                      className="grid h-7 w-7 place-items-center rounded text-gray-300 hover:bg-danger/10 hover:text-danger"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
                 </tr>
                 )
               })}
               <tr className="hover:bg-gray-50">
-                <td colSpan={COLUMNS.length + 2} className="px-2.5 py-2">
+                <td colSpan={COLUMNS.length + 1} className="px-2.5 py-2">
                   <button
                     type="button"
                     onClick={() => onCreateRow(board.id)}
@@ -743,7 +732,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
   }, [page])
 
   const tableWidth = React.useMemo(
-    () => CHECKBOX_COL_WIDTH + ACTIONS_COL_WIDTH
+    () => CHECKBOX_COL_WIDTH
       + COLUMNS.reduce((sum, c) => sum + (columnWidths[c.key] ?? c.width), 0),
     [columnWidths],
   )

@@ -12,7 +12,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { copyToClipboard } from '@/lib/clipboard'
+import { accessClientSystem } from '@/lib/accessSystem'
 import { Drawer } from '@/components/ui/Drawer'
 import { Tabs } from '@/components/ui/Tabs'
 import { Badge } from '@/components/ui/Badge'
@@ -30,8 +30,6 @@ import { useAuth } from '@/hooks/useAuth'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { canDeleteClient } from '@/services/supabase'
 import { db } from '@/services/db'
-import { useServerById } from '@/store/authStore'
-import { useAccessStore } from '@/store/accessStore'
 import { NEXT_STAGE, PIPELINE_STAGES, STAGE_COLORS } from '@/constants/stageColors'
 import { asText, cn, initials } from '@/lib/utils'
 import type { PipelineStage } from '@/types/client'
@@ -71,22 +69,12 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
   const [user] = useCurrentUser()
   const { profile } = useAuth()
   const canDelete = canDeleteClient(profile?.role)
-  const { systemUrl } = useAccessStore()
-  const tenantServer = useServerById(client?.tenantServerId)
-  const accessUrl = tenantServer?.loginUrl ?? systemUrl
 
   // "Acessar sistema": abre o login e já copia o e-mail de suporte (evita ter
-  // que voltar aqui só para copiá-lo antes de logar).
-  const accessSystem = async () => {
-    // Copia ANTES de abrir a aba — abrir primeiro tira o foco do documento e o
-    // clipboard falharia.
-    const email = client?.supportEmail?.trim()
-    if (email) {
-      const ok = await copyToClipboard(email)
-      if (ok) toast.success('E-mail de suporte copiado')
-    }
-    window.open(accessUrl, '_blank', 'noopener,noreferrer')
-  }
+  // que voltar aqui só para copiá-lo antes de logar). A lógica vive em
+  // lib/accessSystem pra ser reaproveitada em outras telas (ex.: Kanban do
+  // Suporte).
+  const accessSystem = () => accessClientSystem(client)
 
   React.useEffect(() => {
     setTab('overview')

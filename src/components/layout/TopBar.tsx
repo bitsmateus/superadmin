@@ -1,5 +1,6 @@
 import { useLocation, Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 const labels: Record<string, string> = {
   '': 'Dashboard',
@@ -24,10 +25,12 @@ export interface TopBarProps {
   rightSlot?: React.ReactNode
   title?: string
   subtitle?: string
+  /** Sobrescreve o tamanho padrão (text-base) do <h1> — ex.: "text-[36px]". */
+  titleClassName?: string
   breadcrumbs?: { label: string; to?: string }[]
 }
 
-export function TopBar({ rightSlot, title, subtitle, breadcrumbs }: TopBarProps) {
+export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs }: TopBarProps) {
   const location = useLocation()
   const parts = location.pathname.split('/').filter(Boolean)
 
@@ -47,7 +50,7 @@ export function TopBar({ rightSlot, title, subtitle, breadcrumbs }: TopBarProps)
 
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-bg/85 backdrop-blur-md">
-      <div className="flex h-14 items-center justify-between gap-3 pl-16 pr-4 sm:gap-4 lg:px-8">
+      <div className="flex min-h-14 items-center justify-between gap-3 py-1.5 pl-16 pr-4 sm:gap-4 lg:px-8">
         <div className="min-w-0 flex-1">
           <nav className="flex items-center gap-1 text-xs text-foreground/40">
             {computedCrumbs.map((c, i) => (
@@ -67,7 +70,7 @@ export function TopBar({ rightSlot, title, subtitle, breadcrumbs }: TopBarProps)
             ))}
           </nav>
           <div className="mt-0.5 flex items-baseline gap-2">
-            <h1 className="text-base font-semibold text-foreground truncate">{heading}</h1>
+            <h1 className={cn('font-semibold text-foreground truncate', titleClassName ?? 'text-base')}>{heading}</h1>
             {subtitle && <span className="text-xs text-foreground/40">{subtitle}</span>}
           </div>
         </div>

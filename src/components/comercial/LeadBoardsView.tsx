@@ -961,7 +961,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
 
   return (
     <>
-      <TopBar title={title} subtitle={subtitle} />
+      <TopBar title={title} subtitle={subtitle} titleClassName="text-[36px]" />
 
       <div className="flex min-h-screen flex-col bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!booted ? (

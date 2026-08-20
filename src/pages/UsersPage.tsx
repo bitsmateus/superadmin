@@ -550,13 +550,33 @@ function EditUserModal({
               </div>
             ) : (
               <div className="space-y-4">
-                {(['comercial', 'suporte'] as const).map((group) => (
+                {(['comercial', 'suporte'] as const).map((group) => {
+                  const groupItems = MENU_ACCESS_ITEMS.filter((item) => item.group === group)
+                  const allChecked = groupItems.every((item) => menuKeys.has(item.key))
+                  const toggleGroup = () => {
+                    setMenuKeys((prev) => {
+                      const next = new Set(prev)
+                      for (const item of groupItems) {
+                        if (allChecked) next.delete(item.key)
+                        else next.add(item.key)
+                      }
+                      return next
+                    })
+                  }
+                  return (
                   <div key={group}>
-                    <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-foreground/40">
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-foreground/40">
+                      <input
+                        type="checkbox"
+                        checked={allChecked}
+                        onChange={toggleGroup}
+                        className="h-3 w-3 rounded border-line"
+                      />
                       {MENU_ACCESS_GROUP_LABEL[group]}
-                    </div>
+                      <span className="font-normal normal-case text-foreground/30">— marcar todos</span>
+                    </label>
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                      {MENU_ACCESS_ITEMS.filter((item) => item.group === group).map((item) => {
+                      {groupItems.map((item) => {
                         const checked = menuKeys.has(item.key)
                         const pageBoards = item.boardsPage ? boards.filter((b) => b.page === item.boardsPage) : []
                         const isExpanded = expanded.has(item.key)
@@ -602,7 +622,8 @@ function EditUserModal({
                       })}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             <p className="mt-2 text-[10.5px] leading-relaxed text-foreground/45">

@@ -70,7 +70,7 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs
             ))}
           </nav>
           <div className="mt-0.5 flex items-baseline gap-2">
-            <h1 className={cn('font-semibold text-foreground truncate', titleClassName ?? 'text-base')}>{heading}</h1>
+            <h1 className={cn('text-foreground truncate', titleClassName ?? 'text-base font-semibold')}>{heading}</h1>
             {subtitle && <span className="text-xs text-foreground/40">{subtitle}</span>}
           </div>
         </div>

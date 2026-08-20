@@ -7,9 +7,6 @@ import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 const STALE_MS = 24 * 60 * 60 * 1000
 
-/** Etiqueta de Status usada pra achar "propostas" — precisa bater com o texto exato cadastrado. */
-const PROPOSTA_STATUS = 'Proposta Enviada'
-
 function todayKey(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -122,7 +119,7 @@ export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps
       if (retornarKey && retornarKey < today && !r.retornado) atrasados.push(r)
 
       if (dateKey(r.agendamento) === today) reunioesHoje.push(r)
-      if (r.status === PROPOSTA_STATUS && retornarKey === today && !r.retornado) propostasHoje.push(r)
+      if (retornarKey === today && !r.retornado) propostasHoje.push(r)
     }
     return { naoAtualizados, atrasados, reunioesHoje, propostasHoje }
   }, [rows, today, activityById])

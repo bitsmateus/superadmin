@@ -1,9 +1,16 @@
 import * as React from 'react'
-import { BarChart3, LayoutGrid, Tags, Users } from 'lucide-react'
+import { BarChart3, LayoutGrid, Tags, UserRound, Users } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
+import { useLeadMilestones } from '@/hooks/useLeadMilestones'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
+
+/** Etiquetas de Status que "contam" pro funil do SDR — precisam bater com o texto exato
+ * cadastrado em Status (ver server/src/routes/leadBoards.ts, MILESTONE_STATUSES). */
+const MILESTONE_AGENDADA = 'Reunião agendada'
+const MILESTONE_NO_SHOW = 'Reunião não comparecida'
+const MILESTONE_VENDIDO = 'Vendido'
 
 interface Bucket {
   key: string
@@ -58,6 +65,119 @@ function SummaryCard({ icon, label, value }: { icon: React.ReactNode; label: str
   )
 }
 
+interface SdrMetrics {
+  sdr: string
+  color: string
+  total: number
+  agendados: number
+  noShow: number
+  vendas: number
+  pctAgendamento: number
+  pctNoShow: number
+  pctAgendamentoVenda: number
+}
+
+function pct(n: number): string {
+  return `${Math.round(n * 100)}%`
+}
+
+function MetricCell({ value, sub }: { value: React.ReactNode; sub?: string }) {
+  return (
+    <td className="px-3 py-2.5 text-center">
+      <div className="text-sm font-semibold text-[#323338]">{value}</div>
+      {sub && <div className="text-[10px] text-gray-400">{sub}</div>}
+    </td>
+  )
+}
+
+/** Métricas por SDR — usa sempre o marco (agendada/no-show/venda) mais recente da linha do
+ * tempo de cada lead, não o status literal atual, pra não contar duas vezes reagendamentos. */
+function SdrMetricsTable({ rows }: { rows: LeadRow[] }) {
+  const milestones = useLeadMilestones()
+  const sdrLabels = useLeadLabels('sdr')
+  const milestoneById = React.useMemo(
+    () => new Map(milestones.map((m) => [m.id, m.milestone])),
+    [milestones],
+  )
+
+  const bySdr = React.useMemo<SdrMetrics[]>(() => {
+    const buckets = new Map<string, { total: number; agendados: number; noShow: number; vendas: number }>()
+    for (const r of rows) {
+      const name = r.sdr || 'Sem SDR'
+      const b = buckets.get(name) ?? { total: 0, agendados: 0, noShow: 0, vendas: 0 }
+      b.total += 1
+      const milestone = milestoneById.get(r.id)
+      if (milestone === MILESTONE_AGENDADA) b.agendados += 1
+      else if (milestone === MILESTONE_NO_SHOW) b.noShow += 1
+      else if (milestone === MILESTONE_VENDIDO) b.vendas += 1
+      buckets.set(name, b)
+    }
+    return Array.from(buckets.entries())
+      .map(([name, b]) => ({
+        sdr: name,
+        color: sdrLabels.find((l) => l.name === name)?.color ?? '#9CA3AF',
+        total: b.total,
+        agendados: b.agendados,
+        noShow: b.noShow,
+        vendas: b.vendas,
+        pctAgendamento: b.total > 0 ? b.agendados / b.total : 0,
+        pctNoShow: b.agendados > 0 ? b.noShow / b.agendados : 0,
+        pctAgendamentoVenda: b.agendados > 0 ? b.vendas / b.agendados : 0,
+      }))
+      .sort((a, b) => b.total - a.total)
+  }, [rows, milestoneById, sdrLabels])
+
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#323338]">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
+          <UserRound className="h-4 w-4" />
+        </span>
+        Métricas por SDR
+      </div>
+      {bySdr.length === 0 ? (
+        <p className="py-4 text-center text-xs text-gray-400">Sem dados pra mostrar.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-gray-200 text-[11px] font-semibold text-gray-500">
+                <th className="px-3 py-2">SDR</th>
+                <th className="px-3 py-2 text-center">Total de leads</th>
+                <th className="px-3 py-2 text-center">Reunião agendada</th>
+                <th className="px-3 py-2 text-center">% de agendamento</th>
+                <th className="px-3 py-2 text-center">Reunião não comparecida</th>
+                <th className="px-3 py-2 text-center">% de no show</th>
+                <th className="px-3 py-2 text-center">Total de vendas</th>
+                <th className="px-3 py-2 text-center">% agend. p/ venda</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bySdr.map((m) => (
+                <tr key={m.sdr} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/70">
+                  <td className="px-3 py-2.5">
+                    <span className="inline-flex items-center gap-1.5 font-medium text-gray-700">
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
+                      {m.sdr}
+                    </span>
+                  </td>
+                  <MetricCell value={m.total} />
+                  <MetricCell value={m.agendados} />
+                  <MetricCell value={pct(m.pctAgendamento)} />
+                  <MetricCell value={m.noShow} />
+                  <MetricCell value={pct(m.pctNoShow)} />
+                  <MetricCell value={m.vendas} />
+                  <MetricCell value={pct(m.pctAgendamentoVenda)} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export interface LeadDashboardViewProps {
   rows: LeadRow[]
   boards: LeadBoard[]
@@ -65,6 +185,7 @@ export interface LeadDashboardViewProps {
 
 /** Painel só de visualização — nada aqui é editável, é resumo de leitura dos leads filtrados. */
 export function LeadDashboardView({ rows, boards }: LeadDashboardViewProps) {
+  const [subView, setSubView] = React.useState<'geral' | 'sdr'>('geral')
   const statusLabels = useLeadLabels('status')
   const diaContatoLabels = useLeadLabels('diaContato')
 
@@ -114,17 +235,48 @@ export function LeadDashboardView({ rows, boards }: LeadDashboardViewProps) {
 
   return (
     <div className={cn('flex-1 space-y-4')}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <SummaryCard icon={<Users className="h-5 w-5" />} label="Total de leads" value={String(totalLeads)} />
-        <SummaryCard icon={<BarChart3 className="h-5 w-5" />} label="Valor MRR (total)" value={formatBRLCents(totalMrr)} />
-        <SummaryCard icon={<BarChart3 className="h-5 w-5" />} label="Valor Implementação (total)" value={formatBRLCents(totalImplementacao)} />
+      <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+        <button
+          type="button"
+          onClick={() => setSubView('geral')}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
+            subView === 'geral' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+          )}
+        >
+          <BarChart3 className="h-3.5 w-3.5" />
+          Dashboard geral
+        </button>
+        <button
+          type="button"
+          onClick={() => setSubView('sdr')}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
+            subView === 'sdr' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+          )}
+        >
+          <UserRound className="h-3.5 w-3.5" />
+          Dashboard do SDR
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <BarList icon={<LayoutGrid className="h-4 w-4" />} title="Leads por quadro" buckets={byBoard} total={totalLeads} />
-        <BarList icon={<Tags className="h-4 w-4" />} title="Leads por status" buckets={byStatus} total={totalLeads} />
-        <BarList icon={<Tags className="h-4 w-4" />} title="Leads por dia de contato" buckets={byDiaContato} total={totalLeads} />
-      </div>
+      {subView === 'sdr' ? (
+        <SdrMetricsTable rows={rows} />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <SummaryCard icon={<Users className="h-5 w-5" />} label="Total de leads" value={String(totalLeads)} />
+            <SummaryCard icon={<BarChart3 className="h-5 w-5" />} label="Valor MRR (total)" value={formatBRLCents(totalMrr)} />
+            <SummaryCard icon={<BarChart3 className="h-5 w-5" />} label="Valor Implementação (total)" value={formatBRLCents(totalImplementacao)} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <BarList icon={<LayoutGrid className="h-4 w-4" />} title="Leads por quadro" buckets={byBoard} total={totalLeads} />
+            <BarList icon={<Tags className="h-4 w-4" />} title="Leads por status" buckets={byStatus} total={totalLeads} />
+            <BarList icon={<Tags className="h-4 w-4" />} title="Leads por dia de contato" buckets={byDiaContato} total={totalLeads} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

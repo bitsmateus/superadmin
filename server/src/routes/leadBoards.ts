@@ -79,6 +79,15 @@ const TRACKED_FIELDS: Record<string, string> = {
   retornado: 'retornado',
 };
 
+/**
+ * Etiquetas de Status que contam como "marco" pro dashboard de SDR. A classificação de cada
+ * lead usa sempre a ocorrência MAIS RECENTE de uma dessas três na linha do tempo (não o status
+ * literal atual) — assim, se o lead voltou de "no-show" pra "Reunião agendada", conta como
+ * agendada; se saiu de "no-show" pra um status fora dessa lista (ex.: disparo em massa), continua
+ * contando como no-show.
+ */
+const MILESTONE_STATUSES = ['Reunião agendada', 'Reunião não comparecida', 'Vendido'];
+
 export async function leadBoardRoutes(app: FastifyInstance) {
   // GET /api/lead-boards
   app.get('/api/lead-boards', { onRequest: [app.authenticate] }, async (req) => {
@@ -340,6 +349,32 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       );
     }
   );
+
+  // GET /api/lead-milestones — status "que conta" de cada lead (Reunião agendada / Reunião
+  // não comparecida / Vendido), pro Dashboard de SDR. Sempre pega o mais recente desses três
+  // na linha do tempo do lead; se nunca teve evento (linha antiga), cai pro status atual.
+  app.get('/api/lead-milestones', { onRequest: [app.authenticate] }, async (req) => {
+    const { sub, role } = req.user as { sub: string; role: string };
+    const allowed = await restrictedBoardFilter(sub, role);
+    if (allowed !== null && !allowed.length) return [];
+
+    const boardFilter = allowed !== null ? 'WHERE lr.board_id = ANY($2)' : '';
+    const params: unknown[] = [MILESTONE_STATUSES];
+    if (allowed !== null) params.push(allowed);
+
+    return query(
+      `SELECT lr.id, lr.board_id, lr.sdr,
+        COALESCE(
+          (SELECT le.to_value FROM lead_events le
+           WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($1)
+           ORDER BY le.created_at DESC LIMIT 1),
+          CASE WHEN lr.status = ANY($1) THEN lr.status END
+        ) AS milestone
+       FROM lead_rows lr
+       ${boardFilter}`,
+      params
+    );
+  });
 
   // GET /api/lead-notes?lead_row_id=xxx — bloco de anotações/atualizações do lead
   app.get<{ Querystring: { lead_row_id?: string } }>(

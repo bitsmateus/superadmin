@@ -265,6 +265,16 @@ export const leadBoardsService = {
     return row
   },
 
+  /** Ajuste local do contador de anotações — sem chamada à API (o trigger do banco já persiste). */
+  bumpNotesCount(rowId: string, delta: number): void {
+    const idx = rows.findIndex((r) => r.id === rowId)
+    if (idx === -1) return
+    const copy = rows.slice()
+    copy[idx] = { ...copy[idx], notesCount: Math.max(0, copy[idx].notesCount + delta) }
+    rows = copy
+    notify()
+  },
+
   updateRow(id: string, patch: Partial<LeadRow>): void {
     const idx = rows.findIndex((r) => r.id === id)
     if (idx === -1) return

@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
+import { leadBoardsService } from '@/services/leadBoards'
 import type { LeadNote, LeadNoteAttachment } from '@/types/leadBoard'
 
 type NoteRow = {
@@ -82,6 +83,7 @@ export const leadNotesService = {
       const note = rowToNote(row)
       notes = [note, ...notes]
       notify()
+      leadBoardsService.bumpNotesCount(leadRowId, 1)
       return note
     } catch (err) {
       toast.error('Falha ao enviar atualização: ' + (err as Error).message)
@@ -115,13 +117,16 @@ export const leadNotesService = {
 
   async deleteNote(id: string): Promise<void> {
     const prev = notes
+    const removed = notes.find((n) => n.id === id)
     notes = notes.filter((n) => n.id !== id)
     notify()
+    if (removed) leadBoardsService.bumpNotesCount(removed.leadRowId, -1)
     try {
       await api.delete(`/api/lead-notes/${id}`)
     } catch (err) {
       notes = prev
       notify()
+      if (removed) leadBoardsService.bumpNotesCount(removed.leadRowId, 1)
       toast.error('Falha ao excluir atualização: ' + (err as Error).message)
     }
   },

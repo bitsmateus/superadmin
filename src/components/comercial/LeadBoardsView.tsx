@@ -463,7 +463,6 @@ function BoardGroup({
         'mb-5 overflow-hidden rounded-2xl bg-white shadow-sm transition-all duration-150 hover:shadow-md',
         isDragOver && 'bg-accent/[0.03] shadow-lg ring-2 ring-accent/50',
       )}
-      style={{ borderLeft: `4px solid ${board.color}` }}
       onDragOver={(e) => { e.preventDefault(); onBoardDragOver(board.id) }}
       onDragLeave={onBoardDragLeave}
       onDrop={(e) => { e.preventDefault(); onBoardDrop(board.id) }}
@@ -501,7 +500,11 @@ function BoardGroup({
       </div>
 
       {open && (
-        <div ref={(el) => registerScrollEl(board.id, el)} className="overflow-x-hidden">
+        <div
+          ref={(el) => registerScrollEl(board.id, el)}
+          className="overflow-x-hidden"
+          style={{ borderLeft: `4px solid ${board.color}` }}
+        >
           <table className="border-collapse table-fixed" style={{ width: tableWidth }}>
             <thead>
               <tr className="border-b border-gray-200 bg-white text-left text-xs font-semibold text-[#323338]">

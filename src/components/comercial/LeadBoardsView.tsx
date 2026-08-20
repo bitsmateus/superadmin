@@ -984,6 +984,32 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
               >
                 Dashboard
               </ToolbarButton>
+              <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => changeView('list')}
+                  title="Aplicar visão em lista"
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
+                    view === 'list' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+                  )}
+                >
+                  <ListTodo className="h-3.5 w-3.5" />
+                  Lista
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeView('kanban')}
+                  title="Aplicar visão em Kanban"
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
+                    view === 'kanban' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+                  )}
+                >
+                  <KanbanSquare className="h-3.5 w-3.5" />
+                  Kanban
+                </button>
+              </div>
               <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} />
               <ToolbarButton
                 icon={<Filter className="h-3.5 w-3.5" />}
@@ -1000,35 +1026,6 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
               >
                 {sortDesc ? 'Mais novo' : 'Mais antigo'}
               </ToolbarButton>
-              <div className="flex items-center gap-2">
-                <span className="hidden text-[11px] text-gray-400 sm:inline">Sua escolha fica salva pra você</span>
-                <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
-                  <button
-                    type="button"
-                    onClick={() => changeView('list')}
-                    title="Aplicar visão em lista — fica salva pra você, mesmo saindo e voltando"
-                    className={cn(
-                      'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-                      view === 'list' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
-                    )}
-                  >
-                    <ListTodo className="h-3.5 w-3.5" />
-                    Lista
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => changeView('kanban')}
-                    title="Aplicar visão em Kanban — fica salva pra você, mesmo saindo e voltando"
-                    className={cn(
-                      'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-                      view === 'kanban' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
-                    )}
-                  >
-                    <KanbanSquare className="h-3.5 w-3.5" />
-                    Kanban
-                  </button>
-                </div>
-              </div>
             </div>
 
             {boards.length === 0 ? (

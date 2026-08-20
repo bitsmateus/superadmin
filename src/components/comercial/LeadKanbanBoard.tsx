@@ -16,7 +16,7 @@ import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
 import { cn } from '@/lib/utils'
-import type { LeadRow } from '@/types/leadBoard'
+import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 type GroupField = 'status' | 'diaContato'
 
@@ -36,12 +36,13 @@ function fmtShortDay(iso: string): string {
 
 export interface LeadKanbanBoardProps {
   rows: LeadRow[]
+  allBoards: LeadBoard[]
   onOpenLead: (id: string) => void
 }
 
 /** Visão alternativa em quadro — mesmos leads da lista, agrupados por Status ou Dia de
  * contato (à escolha) em vez de por quadro. Arrastar um card muda o campo agrupado. */
-export function LeadKanbanBoard({ rows, onOpenLead }: LeadKanbanBoardProps) {
+export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoardProps) {
   const [groupField, setGroupField] = React.useState<GroupField>(() => {
     try {
       return window.localStorage.getItem(GROUP_STORAGE_KEY) === 'diaContato' ? 'diaContato' : 'status'
@@ -97,7 +98,17 @@ export function LeadKanbanBoard({ rows, onOpenLead }: LeadKanbanBoardProps) {
     if (columnKey === undefined) return
     const row = rows.find((r) => r.id === rowId)
     if (!row || row[groupField] === columnKey) return
-    leadBoardsService.updateRow(rowId, { [groupField]: columnKey })
+
+    // Arrastar pra uma coluna de Status move o lead pro quadro com o mesmo nome — igual à
+    // lista, onde mudar o Status já leva o lead pro quadro correspondente.
+    if (groupField === 'status') {
+      const target = allBoards.find(
+        (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === columnKey.trim().toLowerCase(),
+      )
+      leadBoardsService.updateRow(rowId, target ? { status: columnKey, boardId: target.id } : { status: columnKey })
+    } else {
+      leadBoardsService.updateRow(rowId, { [groupField]: columnKey })
+    }
   }
 
   return (

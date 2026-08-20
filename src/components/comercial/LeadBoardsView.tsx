@@ -980,7 +980,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                 action={<Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button>}
               />
             ) : view === 'kanban' ? (
-              <LeadKanbanBoard rows={visibleRows} onOpenLead={setOpenLeadId} />
+              <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} />
             ) : (
               <>
                 <div className="flex-1">

@@ -33,6 +33,7 @@ import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
+import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
@@ -1065,6 +1066,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} />
             ) : (
               <>
+                <LeadTodayPanel rows={pageRows} />
                 <div className="flex-1">
                   {boards.map((board) => (
                     <BoardGroup

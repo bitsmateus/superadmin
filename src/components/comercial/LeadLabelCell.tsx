@@ -54,7 +54,8 @@ export function LeadLabelCell({ field, value, onChange, required }: LeadLabelCel
         onClick={openPicker}
         title={!value && required ? 'Obrigatório' : undefined}
         className={cn(
-          'flex h-full min-h-[34px] w-full items-center justify-center truncate px-2.5 py-1.5 text-center text-sm font-medium',
+          'flex h-full min-h-[34px] w-full items-center truncate px-2.5 py-1.5 text-sm font-medium',
+          field === 'tipo' ? 'justify-start text-left' : 'justify-center text-center',
           value ? 'text-white' : required ? 'bg-red-50 text-red-400 ring-1 ring-inset ring-red-200' : 'text-gray-300',
         )}
         style={value ? { backgroundColor: current?.color ?? '#9CA3AF' } : undefined}

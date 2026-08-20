@@ -27,6 +27,7 @@ import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
+import { RetornarField } from '@/components/comercial/RetornarField'
 import { LeadFiltersModal, matchesLeadFilters, type FilterRule } from '@/components/comercial/LeadFiltersModal'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn, formatDateTimeShort } from '@/lib/utils'
@@ -624,6 +625,12 @@ function BoardGroup({
                           value={row[col.key as LeadRowField]}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
                           className={cn('bg-transparent px-2.5 py-1.5 text-sm text-gray-800', col.align === 'center' && 'text-center')}
+                        />
+                      ) : col.key === 'retornar' ? (
+                        <RetornarField
+                          value={row.retornar}
+                          onSave={(next) => leadBoardsService.updateRow(row.id, { retornar: next })}
+                          className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
                         />
                       ) : (
                         <EditableField

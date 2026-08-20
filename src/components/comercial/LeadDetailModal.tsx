@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
+import { RetornarField } from '@/components/comercial/RetornarField'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useAuth } from '@/hooks/useAuth'
@@ -119,7 +120,11 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               <LeadLabelCell field="sdr" value={row.sdr} onChange={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />
             </FieldRow>
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Retornar">
-              <BoxedField type="datetime-local" value={row.retornar} onSave={(v) => leadBoardsService.updateRow(row.id, { retornar: v })} />
+              <RetornarField
+                value={row.retornar}
+                onSave={(v) => leadBoardsService.updateRow(row.id, { retornar: v })}
+                className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338]"
+              />
             </FieldRow>
             <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Dor do cliente">
               <BoxedField value={row.dorCliente} onSave={(v) => leadBoardsService.updateRow(row.id, { dorCliente: v })} />

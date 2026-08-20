@@ -8,7 +8,6 @@ import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 /** Etiquetas de Status que "contam" pro funil do SDR — precisam bater com o texto exato
  * cadastrado em Status (ver server/src/routes/leadBoards.ts, MILESTONE_STATUSES). */
-const MILESTONE_AGENDADA = 'Reunião agendada'
 const MILESTONE_NO_SHOW = 'Reunião não comparecida'
 const MILESTONE_VENDIDO = 'Vendido'
 
@@ -117,7 +116,7 @@ function RingStat({
         <span style={{ color }}>{icon}</span>
         {label}
       </div>
-      <div className="text-[10px] text-gray-400">{count} de {of}</div>
+      <div className="text-[10px] text-gray-400">{count} de {Math.max(of, count)}</div>
     </div>
   )
 }
@@ -207,13 +206,15 @@ function SdrMetricsTable({ bySdr }: { bySdr: SdrMetrics[] }) {
   )
 }
 
-/** Métricas por SDR — usa sempre o marco (agendada/no-show/venda) mais recente da linha do
- * tempo de cada lead, não o status literal atual, pra não contar duas vezes reagendamentos. */
+/** Métricas por SDR. "Reunião agendada" conta todo lead que JÁ passou por esse marco em algum
+ * momento (mesmo se hoje já virou Vendido/No-show) — é o denominador do funil. "No-show" e
+ * "Vendas" usam sempre o marco mais recente da linha do tempo de cada lead, não o status literal
+ * atual, pra não contar duas vezes reagendamentos. */
 function SdrMetricsGrid({ rows }: { rows: LeadRow[] }) {
   const milestones = useLeadMilestones()
   const sdrLabels = useLeadLabels('sdr')
   const milestoneById = React.useMemo(
-    () => new Map(milestones.map((m) => [m.id, m.milestone])),
+    () => new Map(milestones.map((m) => [m.id, { milestone: m.milestone, everAgendada: m.everAgendada }])),
     [milestones],
   )
 
@@ -223,10 +224,10 @@ function SdrMetricsGrid({ rows }: { rows: LeadRow[] }) {
       const name = r.sdr || 'Sem SDR'
       const b = buckets.get(name) ?? { total: 0, agendados: 0, noShow: 0, vendas: 0 }
       b.total += 1
-      const milestone = milestoneById.get(r.id)
-      if (milestone === MILESTONE_AGENDADA) b.agendados += 1
-      else if (milestone === MILESTONE_NO_SHOW) b.noShow += 1
-      else if (milestone === MILESTONE_VENDIDO) b.vendas += 1
+      const info = milestoneById.get(r.id)
+      if (info?.everAgendada) b.agendados += 1
+      if (info?.milestone === MILESTONE_NO_SHOW) b.noShow += 1
+      else if (info?.milestone === MILESTONE_VENDIDO) b.vendas += 1
       buckets.set(name, b)
     }
     return Array.from(buckets.entries())
@@ -238,8 +239,8 @@ function SdrMetricsGrid({ rows }: { rows: LeadRow[] }) {
         noShow: b.noShow,
         vendas: b.vendas,
         pctAgendamento: b.total > 0 ? b.agendados / b.total : 0,
-        pctNoShow: b.agendados > 0 ? b.noShow / b.agendados : 0,
-        pctAgendamentoVenda: b.agendados > 0 ? b.vendas / b.agendados : 0,
+        pctNoShow: b.agendados > 0 ? b.noShow / b.agendados : (b.noShow > 0 ? 1 : 0),
+        pctAgendamentoVenda: b.agendados > 0 ? b.vendas / b.agendados : (b.vendas > 0 ? 1 : 0),
       }))
       .sort((a, b) => b.total - a.total)
   }, [rows, milestoneById, sdrLabels])

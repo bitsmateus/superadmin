@@ -86,7 +86,8 @@ const TRACKED_FIELDS: Record<string, string> = {
  * agendada; se saiu de "no-show" pra um status fora dessa lista (ex.: disparo em massa), continua
  * contando como no-show.
  */
-const MILESTONE_STATUSES = ['Reunião agendada', 'Reunião não comparecida', 'Vendido'];
+const MILESTONE_AGENDADA = 'Reunião agendada';
+const MILESTONE_STATUSES = [MILESTONE_AGENDADA, 'Reunião não comparecida', 'Vendido'];
 
 export async function leadBoardRoutes(app: FastifyInstance) {
   // GET /api/lead-boards
@@ -351,15 +352,19 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   );
 
   // GET /api/lead-milestones — status "que conta" de cada lead (Reunião agendada / Reunião
-  // não comparecida / Vendido), pro Dashboard de SDR. Sempre pega o mais recente desses três
-  // na linha do tempo do lead; se nunca teve evento (linha antiga), cai pro status atual.
+  // não comparecida / Vendido), pro Dashboard de SDR. "milestone" pega sempre o mais recente
+  // desses três na linha do tempo (se nunca teve evento, cai pro status atual). "ever_agendada"
+  // é à parte: verdadeiro se o lead JÁ passou por "Reunião agendada" em algum momento — precisa
+  // ser assim porque, quando o lead vira Vendido/No-show, isso vira o marco mais recente e o
+  // "agendada" deixa de ser o atual; sem esse flag, o funil (% de no-show, % de venda) ficaria
+  // sem denominador pra quem já converteu.
   app.get('/api/lead-milestones', { onRequest: [app.authenticate] }, async (req) => {
     const { sub, role } = req.user as { sub: string; role: string };
     const allowed = await restrictedBoardFilter(sub, role);
     if (allowed !== null && !allowed.length) return [];
 
-    const boardFilter = allowed !== null ? 'WHERE lr.board_id = ANY($2)' : '';
-    const params: unknown[] = [MILESTONE_STATUSES];
+    const boardFilter = allowed !== null ? 'WHERE lr.board_id = ANY($3)' : '';
+    const params: unknown[] = [MILESTONE_STATUSES, MILESTONE_AGENDADA];
     if (allowed !== null) params.push(allowed);
 
     return query(
@@ -369,7 +374,14 @@ export async function leadBoardRoutes(app: FastifyInstance) {
            WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($1)
            ORDER BY le.created_at DESC LIMIT 1),
           CASE WHEN lr.status = ANY($1) THEN lr.status END
-        ) AS milestone
+        ) AS milestone,
+        (
+          lr.status = $2
+          OR EXISTS (
+            SELECT 1 FROM lead_events le
+            WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $2
+          )
+        ) AS ever_agendada
        FROM lead_rows lr
        ${boardFilter}`,
       params

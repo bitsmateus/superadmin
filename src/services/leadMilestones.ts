@@ -7,9 +7,12 @@ export interface LeadMilestone {
   boardId: string
   sdr: string
   milestone: string | null
+  /** Já passou por "Reunião agendada" em algum momento — mesmo se o marco atual for outro
+   * (ex.: já virou Vendido). Denominador do funil (% de no-show, % de venda). */
+  everAgendada: boolean
 }
 
-type Row = { id: string; board_id: string; sdr: string; milestone: string | null }
+type Row = { id: string; board_id: string; sdr: string; milestone: string | null; ever_agendada: boolean }
 
 let milestones: LeadMilestone[] = []
 let loaded = false
@@ -48,7 +51,9 @@ export const leadMilestonesService = {
   async reload(): Promise<void> {
     try {
       const rows = await api.get<Row[]>('/api/lead-milestones')
-      milestones = rows.map((r) => ({ id: r.id, boardId: r.board_id, sdr: r.sdr, milestone: r.milestone }))
+      milestones = rows.map((r) => ({
+        id: r.id, boardId: r.board_id, sdr: r.sdr, milestone: r.milestone, everAgendada: r.ever_agendada,
+      }))
       loaded = true
       notify()
     } catch (err) {

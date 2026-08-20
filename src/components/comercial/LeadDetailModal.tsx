@@ -239,10 +239,10 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
     setMentionSearch('')
   }
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || !files.length) return
+  const handleFiles = async (files: File[]) => {
+    if (!files.length) return
     const next: LeadNoteAttachment[] = []
-    for (const file of Array.from(files)) {
+    for (const file of files) {
       if (file.size > MAX_FILE_BYTES) {
         toast.error(`"${file.name}" passa de 5MB`)
         continue
@@ -253,9 +253,26 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
-      next.push({ id: crypto.randomUUID(), name: file.name, type: file.type, size: file.size, dataUrl })
+      next.push({
+        id: crypto.randomUUID(),
+        name: file.name || (file.type.startsWith('image/') ? 'print.png' : 'arquivo'),
+        type: file.type,
+        size: file.size,
+        dataUrl,
+      })
     }
     setPendingAttachments((prev) => [...prev, ...next])
+  }
+
+  // Colar print/imagem direto com Ctrl+V já anexa na atualização, sem precisar salvar em disco antes.
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.items)
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => !!f)
+    if (!files.length) return
+    e.preventDefault()
+    void handleFiles(files)
   }
 
   const submit = async () => {
@@ -286,7 +303,8 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                 ref={textareaRef}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Escreva uma atualização e mencione outros com @"
+                onPaste={handlePaste}
+                placeholder="Escreva uma atualização, cole um print (Ctrl+V) e mencione outros com @"
                 className="min-h-[70px] w-full resize-y bg-transparent text-sm text-[#323338] placeholder:text-foreground/30 focus:outline-none"
               />
               {pendingAttachments.length > 0 && (
@@ -355,10 +373,10 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*,application/pdf"
+                    accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
                     multiple
                     className="hidden"
-                    onChange={(e) => { void handleFiles(e.target.files); e.target.value = '' }}
+                    onChange={(e) => { void handleFiles(Array.from(e.target.files ?? [])); e.target.value = '' }}
                   />
                   <button
                     type="button"

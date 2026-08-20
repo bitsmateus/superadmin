@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   ArrowRightLeft,
@@ -31,6 +30,7 @@ import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
+import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
@@ -835,7 +835,6 @@ export interface LeadBoardsViewProps {
 }
 
 export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
-  const navigate = useNavigate()
   const booted = useLeadBoardsBooted()
   const allBoards = useLeadBoards()
   const boards = React.useMemo(() => allBoards.filter((b) => b.page === page), [allBoards, page])
@@ -931,17 +930,21 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
   )
   const visibleCount = visibleRows.length
 
-  // Kanban é uma preferência do usuário/navegador, vale pras 3 telas do Comercial.
-  const [view, setView] = React.useState<'list' | 'kanban'>(() => {
-    try { return window.localStorage.getItem('comercial_view_mode') === 'kanban' ? 'kanban' : 'list' } catch { return 'list' }
+  // Kanban/Dashboard é uma preferência do usuário/navegador, vale pras 3 telas do Comercial.
+  const [view, setView] = React.useState<'list' | 'kanban' | 'dashboard'>(() => {
+    try {
+      const stored = window.localStorage.getItem('comercial_view_mode')
+      return stored === 'kanban' || stored === 'dashboard' ? stored : 'list'
+    } catch { return 'list' }
   })
   React.useEffect(() => {
     try { window.localStorage.setItem('comercial_view_mode', view) } catch { /* ignore */ }
   }, [view])
-  const changeView = (next: 'list' | 'kanban') => {
+  const VIEW_LABEL: Record<'list' | 'kanban' | 'dashboard', string> = { list: 'lista', kanban: 'Kanban', dashboard: 'Dashboard' }
+  const changeView = (next: 'list' | 'kanban' | 'dashboard') => {
     if (next === view) return
     setView(next)
-    toast.success(`Visão em ${next === 'kanban' ? 'Kanban' : 'lista'} aplicada — fica salva pra você.`)
+    toast.success(`Visão em ${VIEW_LABEL[next]} aplicada — fica salva pra você.`)
   }
 
   return (
@@ -959,9 +962,11 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
         ) : (
           <>
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Button rightIcon={<ChevronDown className="h-4 w-4" />} onClick={handleCreateNome}>
-                Criar nome
-              </Button>
+              {view !== 'dashboard' && (
+                <Button rightIcon={<ChevronDown className="h-4 w-4" />} onClick={handleCreateNome}>
+                  Criar nome
+                </Button>
+              )}
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
@@ -973,7 +978,9 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
               </div>
               <ToolbarButton
                 icon={<LayoutDashboard className="h-3.5 w-3.5" />}
-                onClick={() => navigate('/comercial/dashboard')}
+                onClick={() => changeView('dashboard')}
+                className={view === 'dashboard' ? 'bg-accent/10 text-accent' : undefined}
+                title="Ver resumo em relatório — só visualização"
               >
                 Dashboard
               </ToolbarButton>
@@ -1031,6 +1038,8 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                 description="Crie o primeiro quadro para começar a registrar leads."
                 action={<Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button>}
               />
+            ) : view === 'dashboard' ? (
+              <LeadDashboardView rows={visibleRows} boards={boards} />
             ) : view === 'kanban' ? (
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} />
             ) : (

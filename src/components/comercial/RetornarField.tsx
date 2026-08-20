@@ -78,7 +78,7 @@ export function RetornarField({ value, retornado, onChange, className, placehold
   const parsed = React.useMemo(() => parseValue(value), [value])
   const [viewYear, setViewYear] = React.useState(() => (parsed.date ?? new Date()).getFullYear())
   const [viewMonth, setViewMonth] = React.useState(() => (parsed.date ?? new Date()).getMonth())
-  const btnRef = React.useRef<HTMLButtonElement>(null)
+  const btnRef = React.useRef<HTMLDivElement>(null)
   const popRef = React.useRef<HTMLDivElement>(null)
   const activeTimeRef = React.useRef<HTMLButtonElement>(null)
   useOutsideClose(popRef, open, () => setOpen(false))
@@ -135,20 +135,33 @@ export function RetornarField({ value, retornado, onChange, className, placehold
 
   return (
     <>
-      <button
+      <div
         ref={btnRef}
-        type="button"
-        onClick={openPicker}
         style={status === 'none' ? undefined : { backgroundColor: statusStyle.bg, color: statusStyle.text }}
         className={cn('flex h-full w-full items-center gap-1.5 truncate text-left', className)}
       >
-        <Calendar className={cn('h-3.5 w-3.5 shrink-0', status === 'none' && 'text-gray-400')} style={status === 'none' ? undefined : { color: statusStyle.text }} />
-        {value ? (
-          <span className="truncate font-medium">{formatDisplay(value)}</span>
-        ) : (
-          <span className="truncate text-gray-300">{placeholder}</span>
+        {value && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange({ retornado: !retornado }) }}
+            title={retornado ? 'Desmarcar como retornado' : 'Marcar como retornado'}
+            className={cn(
+              'grid h-3.5 w-3.5 shrink-0 place-items-center rounded border transition-colors',
+              retornado ? 'border-accent bg-accent text-white' : 'border-gray-300 bg-white hover:border-accent',
+            )}
+          >
+            {retornado && <Check className="h-2.5 w-2.5" />}
+          </button>
         )}
-      </button>
+        <button type="button" onClick={openPicker} className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left">
+          <Calendar className={cn('h-3.5 w-3.5 shrink-0', status === 'none' && 'text-gray-400')} style={status === 'none' ? undefined : { color: statusStyle.text }} />
+          {value ? (
+            <span className="truncate font-medium">{formatDisplay(value)}</span>
+          ) : (
+            <span className="truncate text-gray-300">{placeholder}</span>
+          )}
+        </button>
+      </div>
 
       {open && coords && createPortal(
         <div

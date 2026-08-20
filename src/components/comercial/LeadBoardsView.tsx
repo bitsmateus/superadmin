@@ -632,7 +632,7 @@ function BoardGroup({
                   return (
                     <th
                       key={col.key}
-                      className={cn('relative truncate px-2.5 py-2 text-center font-semibold', GRID_BORDER)}
+                      className={cn('relative truncate px-2.5 py-2 text-center font-normal', GRID_BORDER)}
                       style={{ width }}
                     >
                       {col.label}
@@ -695,7 +695,7 @@ function BoardGroup({
                             } : undefined}
                             value={row.nome}
                             onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
-                            className="bg-transparent px-2.5 py-1.5 text-sm font-medium text-gray-800"
+                            className="bg-transparent px-2.5 py-1.5 text-sm font-normal text-gray-800"
                           />
                           <button
                             type="button"

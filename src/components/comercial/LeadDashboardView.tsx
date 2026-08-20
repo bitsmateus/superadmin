@@ -19,7 +19,6 @@ interface Bucket {
 }
 
 function BarList({ icon, title, buckets, total }: { icon: React.ReactNode; title: string; buckets: Bucket[]; total: number }) {
-  const max = Math.max(1, ...buckets.map((b) => b.count))
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#323338]">
@@ -29,19 +28,14 @@ function BarList({ icon, title, buckets, total }: { icon: React.ReactNode; title
       {buckets.length === 0 ? (
         <p className="py-4 text-center text-xs text-gray-400">Sem dados pra mostrar.</p>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {buckets.map((b) => (
-            <div key={b.key} className="flex items-center gap-2.5">
-              <span className="w-28 shrink-0 truncate text-xs font-medium text-gray-600" title={b.label}>
+            <div key={b.key} className="flex items-center gap-2.5 border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-gray-600" title={b.label}>
                 {b.label}
               </span>
-              <div className="h-5 flex-1 overflow-hidden rounded-full bg-gray-100">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${(b.count / max) * 100}%`, backgroundColor: b.color }}
-                />
-              </div>
-              <span className="w-16 shrink-0 text-right text-xs font-semibold text-gray-700">
+              <span className="shrink-0 text-xs font-semibold text-gray-700">
                 {b.count} {total > 0 ? `(${Math.round((b.count / total) * 100)}%)` : ''}
               </span>
             </div>
@@ -292,30 +286,30 @@ export function LeadDashboardView({ rows, boards }: LeadDashboardViewProps) {
       .sort((a, b) => b.count - a.count)
   }, [rows, boards])
 
+  // Sempre mostra TODAS as etiquetas cadastradas (mesmo com 0 leads), não só as que já têm
+  // lead — igual "Leads por quadro" já fazia. Mantém a ordem cadastrada (1º Dia, 2º Dia...),
+  // não reordena por quantidade. "Sem status"/"Sem dia de contato" só aparece se tiver algum
+  // lead de fato sem essa etiqueta preenchida, e fica sempre por último.
   const byStatus = React.useMemo<Bucket[]>(() => {
     const counts = new Map<string, number>()
     for (const r of rows) counts.set(r.status || '—', (counts.get(r.status || '—') ?? 0) + 1)
-    return Array.from(counts.entries())
-      .map(([name, count]) => ({
-        key: name,
-        label: name,
-        color: statusLabels.find((l) => l.name === name)?.color ?? '#9CA3AF',
-        count,
-      }))
-      .sort((a, b) => b.count - a.count)
+    const items: Bucket[] = statusLabels.map((l) => ({
+      key: l.name, label: l.name, color: l.color, count: counts.get(l.name) ?? 0,
+    }))
+    const blank = counts.get('—') ?? 0
+    if (blank > 0) items.push({ key: '—', label: 'Sem status', color: '#9CA3AF', count: blank })
+    return items
   }, [rows, statusLabels])
 
   const byDiaContato = React.useMemo<Bucket[]>(() => {
     const counts = new Map<string, number>()
     for (const r of rows) counts.set(r.diaContato || '—', (counts.get(r.diaContato || '—') ?? 0) + 1)
-    return Array.from(counts.entries())
-      .map(([name, count]) => ({
-        key: name,
-        label: name,
-        color: diaContatoLabels.find((l) => l.name === name)?.color ?? '#9CA3AF',
-        count,
-      }))
-      .sort((a, b) => b.count - a.count)
+    const items: Bucket[] = diaContatoLabels.map((l) => ({
+      key: l.name, label: l.name, color: l.color, count: counts.get(l.name) ?? 0,
+    }))
+    const blank = counts.get('—') ?? 0
+    if (blank > 0) items.push({ key: '—', label: 'Sem dia de contato', color: '#9CA3AF', count: blank })
+    return items
   }, [rows, diaContatoLabels])
 
   return (

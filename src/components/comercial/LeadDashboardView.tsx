@@ -150,6 +150,63 @@ function SdrCard({ metrics }: { metrics: SdrMetrics }) {
   )
 }
 
+function MetricCell({ value, sub }: { value: React.ReactNode; sub?: string }) {
+  return (
+    <td className="px-3 py-2.5 text-center">
+      <div className="text-sm font-semibold text-[#323338]">{value}</div>
+      {sub && <div className="text-[10px] text-gray-400">{sub}</div>}
+    </td>
+  )
+}
+
+function SdrMetricsTable({ bySdr }: { bySdr: SdrMetrics[] }) {
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#323338]">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
+          <UserRound className="h-4 w-4" />
+        </span>
+        Métricas por SDR
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+          <thead>
+            <tr className="border-b border-gray-200 text-[11px] font-semibold text-gray-500">
+              <th className="px-3 py-2">SDR</th>
+              <th className="px-3 py-2 text-center">Total de leads</th>
+              <th className="px-3 py-2 text-center">Reunião agendada</th>
+              <th className="px-3 py-2 text-center">% de agendamento</th>
+              <th className="px-3 py-2 text-center">Reunião não comparecida</th>
+              <th className="px-3 py-2 text-center">% de no show</th>
+              <th className="px-3 py-2 text-center">Total de vendas</th>
+              <th className="px-3 py-2 text-center">% agend. p/ venda</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bySdr.map((m) => (
+              <tr key={m.sdr} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/70">
+                <td className="px-3 py-2.5">
+                  <span className="inline-flex items-center gap-1.5 font-medium text-gray-700">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
+                    {m.sdr}
+                  </span>
+                </td>
+                <MetricCell value={m.total} />
+                <MetricCell value={m.agendados} />
+                <MetricCell value={pct(m.pctAgendamento)} />
+                <MetricCell value={m.noShow} />
+                <MetricCell value={pct(m.pctNoShow)} />
+                <MetricCell value={m.vendas} />
+                <MetricCell value={pct(m.pctAgendamentoVenda)} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 /** Métricas por SDR — usa sempre o marco (agendada/no-show/venda) mais recente da linha do
  * tempo de cada lead, não o status literal atual, pra não contar duas vezes reagendamentos. */
 function SdrMetricsGrid({ rows }: { rows: LeadRow[] }) {
@@ -196,8 +253,11 @@ function SdrMetricsGrid({ rows }: { rows: LeadRow[] }) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {bySdr.map((m) => <SdrCard key={m.sdr} metrics={m} />)}
+    <div className="space-y-4">
+      <SdrMetricsTable bySdr={bySdr} />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {bySdr.map((m) => <SdrCard key={m.sdr} metrics={m} />)}
+      </div>
     </div>
   )
 }

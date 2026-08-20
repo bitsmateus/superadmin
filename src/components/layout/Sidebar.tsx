@@ -138,8 +138,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       )}
     >
       <div className="flex items-center gap-2 px-5 py-5">
-        <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent/15 ring-1 ring-accent/30">
-          <span className="text-accent font-bold leading-none">T</span>
+        <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent">
+          <span className="text-[11px] font-extrabold leading-none tracking-tight text-white">NX</span>
         </div>
         <div className="flex flex-col leading-tight">
           <span className="text-sm font-semibold text-foreground">TenantHub</span>

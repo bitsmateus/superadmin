@@ -1000,7 +1000,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
               >
                 {sortDesc ? 'Mais novo' : 'Mais antigo'}
               </ToolbarButton>
-              <div className="ml-auto flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <span className="hidden text-[11px] text-gray-400 sm:inline">Sua escolha fica salva pra você</span>
                 <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
                   <button

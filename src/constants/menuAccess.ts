@@ -24,6 +24,7 @@ export const MENU_ACCESS_GROUP_LABEL: Record<MenuAccessGroup, string> = {
 }
 
 export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
+  { key: 'comercial_dashboard', label: 'Dashboard', path: '/comercial/dashboard', group: 'comercial' },
   { key: 'comercial_novos_leads', label: 'Novos Leads', path: '/comercial/novos-leads', group: 'comercial', boardsPage: 'novos_leads' },
   { key: 'comercial_crm_luis', label: 'CRM NX Luis', path: '/comercial/crm-nx-luis', group: 'comercial', boardsPage: 'crm_luis' },
   { key: 'comercial_crm_arthur', label: 'CRM NX Arthur', path: '/comercial/crm-nx-arthur', group: 'comercial', boardsPage: 'crm_arthur' },

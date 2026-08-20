@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   ArrowRightLeft,
@@ -11,6 +12,7 @@ import {
   Filter,
   GripVertical,
   KanbanSquare,
+  LayoutDashboard,
   ListTodo,
   Loader2,
   MessageCircle,
@@ -822,6 +824,7 @@ export interface LeadBoardsViewProps {
 }
 
 export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
+  const navigate = useNavigate()
   const booted = useLeadBoardsBooted()
   const allBoards = useLeadBoards()
   const boards = React.useMemo(() => allBoards.filter((b) => b.page === page), [allBoards, page])
@@ -957,6 +960,12 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                   className="h-9 w-44 rounded-md border border-gray-200 bg-white pl-9 pr-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-accent/60 focus:outline-none"
                 />
               </div>
+              <ToolbarButton
+                icon={<LayoutDashboard className="h-3.5 w-3.5" />}
+                onClick={() => navigate('/comercial/dashboard')}
+              >
+                Dashboard
+              </ToolbarButton>
               <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} />
               <ToolbarButton
                 icon={<Filter className="h-3.5 w-3.5" />}

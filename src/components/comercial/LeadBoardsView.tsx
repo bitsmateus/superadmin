@@ -618,7 +618,7 @@ function BoardGroup({
         >
           <table className="border-collapse table-fixed" style={{ width: tableWidth }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-white text-left text-xs font-semibold text-[#323338]">
+              <tr className="border-b border-gray-200 bg-white text-left text-sm font-semibold text-[#323338]">
                 <th className={cn('px-2.5 py-2', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
                   <input
                     type="checkbox"
@@ -684,7 +684,7 @@ function BoardGroup({
                   {COLUMNS.map((col) => (
                     <td key={col.key} className={cn('align-middle', GRID_BORDER)}>
                       {col.readOnly ? (
-                        <div className={cn('truncate px-2.5 py-1.5 text-xs text-gray-400', col.align === 'center' && 'text-center')}>
+                        <div className={cn('truncate px-2.5 py-1.5 text-sm text-gray-400', col.align === 'center' && 'text-center')}>
                           {formatDateTimeShort(row.createdAt)}
                         </div>
                       ) : col.key === 'nome' ? (
@@ -763,7 +763,7 @@ function BoardGroup({
                 )
               })}
               {rows.length > 0 && (
-                <tr className="border-t border-gray-200 bg-gray-50/70 text-xs font-semibold text-[#323338]">
+                <tr className="border-t border-gray-200 bg-gray-50/70 text-sm font-semibold text-[#323338]">
                   <td className={GRID_BORDER} style={{ width: CHECKBOX_COL_WIDTH }} />
                   {COLUMNS.map((col) => (
                     <td key={col.key} className={cn('px-2.5 py-1.5 text-center', GRID_BORDER)}>

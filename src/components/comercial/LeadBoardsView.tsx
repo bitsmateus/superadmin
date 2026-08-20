@@ -618,7 +618,7 @@ function BoardGroup({
         >
           <table className="border-collapse table-fixed" style={{ width: tableWidth }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-white text-left text-sm font-semibold text-[#323338]">
+              <tr className="border-b border-gray-200 bg-white text-left text-sm text-[#323338]">
                 <th className={cn('px-2.5 py-2', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
                   <input
                     type="checkbox"

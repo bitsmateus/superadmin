@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Calendar, Copy, MessageCircle } from 'lucide-react'
+import { Calendar, MessageCircle } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
@@ -82,15 +82,6 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
 
   const activeRow = activeId ? rows.find((r) => r.id === activeId) ?? null : null
 
-  const duplicate = (row: LeadRow) => {
-    leadBoardsService.createRow(row.boardId, {
-      nome: row.nome, empresa: row.empresa, telefone: row.telefone, tipo: row.tipo,
-      diaContato: row.diaContato, ligacao: row.ligacao, status: row.status, sdr: row.sdr, retornar: row.retornar,
-      responsavel: row.responsavel, numero: row.numero, dorCliente: row.dorCliente,
-      numeroAtendentes: row.numeroAtendentes, valorMrr: row.valorMrr, valorImplementacao: row.valorImplementacao,
-    })
-  }
-
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
   const onDragEnd = (e: DragEndEvent) => {
     setActiveId(null)
@@ -141,13 +132,12 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
               col={col}
               rows={rowsByColumn.get(col.key) ?? []}
               onOpenLead={onOpenLead}
-              onDuplicate={duplicate}
             />
           ))}
         </div>
         {createPortal(
           <DragOverlay>
-            {activeRow && <KanbanCard row={activeRow} overlay onOpenLead={() => {}} onDuplicate={() => {}} />}
+            {activeRow && <KanbanCard row={activeRow} overlay onOpenLead={() => {}} />}
           </DragOverlay>,
           document.body,
         )}
@@ -160,12 +150,10 @@ function KanbanColumn({
   col,
   rows,
   onOpenLead,
-  onDuplicate,
 }: {
   col: { key: string; label: string; color: string }
   rows: LeadRow[]
   onOpenLead: (id: string) => void
-  onDuplicate: (row: LeadRow) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col-${col.key}`, data: { column: col.key } })
   const totalMrr = React.useMemo(() => rows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0), [rows])
@@ -195,7 +183,7 @@ function KanbanColumn({
       </div>
       <div className="min-h-[40px] space-y-2 p-2">
         {rows.map((row) => (
-          <KanbanCard key={row.id} row={row} onOpenLead={onOpenLead} onDuplicate={onDuplicate} />
+          <KanbanCard key={row.id} row={row} onOpenLead={onOpenLead} />
         ))}
         {rows.length === 0 && <p className="px-1 py-3 text-center text-[11px] text-gray-400">Nenhum lead</p>}
       </div>
@@ -207,12 +195,10 @@ function KanbanCard({
   row,
   overlay,
   onOpenLead,
-  onDuplicate,
 }: {
   row: LeadRow
   overlay?: boolean
   onOpenLead: (id: string) => void
-  onDuplicate: (row: LeadRow) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: row.id,
@@ -236,29 +222,28 @@ function KanbanCard({
         overlay && 'w-64 rotate-2 shadow-xl',
       )}
     >
-      <div className="truncate text-sm font-medium text-gray-800">{row.nome || 'Sem nome'}</div>
+      <div className="flex items-start gap-1.5">
+        <div className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{row.nome || 'Sem nome'}</div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onOpenLead(row.id) }}
+          title="Atualizações"
+          className="relative grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-gray-100"
+        >
+          <MessageCircle className={cn('h-3.5 w-3.5', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-gray-300')} />
+          {row.notesCount > 0 && (
+            <span className="absolute -bottom-0.5 -right-0.5 grid h-3.5 min-w-[0.875rem] place-items-center rounded-full bg-accent px-0.5 text-[9px] font-semibold text-white ring-2 ring-white">
+              {row.notesCount > 9 ? '9+' : row.notesCount}
+            </span>
+          )}
+        </button>
+      </div>
       {row.retornar && (
         <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-elevate/[0.05] px-1.5 py-0.5 text-[11px] text-gray-500">
           <Calendar className="h-3 w-3" />
           {fmtShortDay(row.retornar)} (Retornar)
         </div>
       )}
-      <div className="mt-2 flex items-center gap-1 text-gray-400">
-        {row.notesCount > 0 && (
-          <span className="inline-flex items-center gap-1 text-[11px]">
-            <MessageCircle className="h-3.5 w-3.5" />
-            {row.notesCount}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onDuplicate(row) }}
-          title="Duplicar"
-          className="ml-auto grid h-6 w-6 place-items-center rounded hover:bg-gray-100 hover:text-gray-700"
-        >
-          <Copy className="h-3.5 w-3.5" />
-        </button>
-      </div>
     </div>
   )
 }

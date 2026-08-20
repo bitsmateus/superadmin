@@ -471,8 +471,14 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                             <div className="mt-2 flex flex-wrap gap-2">
                               {n.attachments.map((a) => (
                                 a.type.startsWith('image/') ? (
-                                  <a key={a.id} href={a.dataUrl} target="_blank" rel="noreferrer">
-                                    <img src={a.dataUrl} alt={a.name} className="h-16 w-16 rounded object-cover ring-1 ring-line" />
+                                  <a
+                                    key={a.id}
+                                    href={a.dataUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block overflow-hidden rounded-lg ring-1 ring-line"
+                                  >
+                                    <img src={a.dataUrl} alt={a.name} className="max-h-72 max-w-full object-contain" />
                                   </a>
                                 ) : (
                                   <a

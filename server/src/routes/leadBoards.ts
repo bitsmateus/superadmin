@@ -272,8 +272,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const b = req.body;
-      if (!b.lead_row_id || !b.content) {
-        return reply.status(400).send({ message: 'lead_row_id e content são obrigatórios' });
+      const hasAttachments = Array.isArray(b.attachments) && b.attachments.length > 0;
+      // Conteúdo é opcional quando tem anexo — mandar só um print/arquivo sem texto é válido.
+      if (!b.lead_row_id || (!b.content && !hasAttachments)) {
+        return reply.status(400).send({ message: 'lead_row_id é obrigatório, e content ou attachments também' });
       }
       const { sub: authorId, role } = req.user as { sub: string; role: string };
       const allowed = await restrictedBoardFilter(authorId, role);
@@ -290,7 +292,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments)
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
         [
-          b.lead_row_id, authorId ?? null, b.author_name ?? 'Alguém', b.content,
+          b.lead_row_id, authorId ?? null, b.author_name ?? 'Alguém', b.content ?? '',
           JSON.stringify(b.attachments ?? []),
         ]
       );

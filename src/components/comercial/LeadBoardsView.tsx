@@ -1066,7 +1066,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} />
             ) : (
               <>
-                <LeadTodayPanel rows={pageRows} />
+                <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} />
                 <div className="flex-1">
                   {boards.map((board) => (
                     <BoardGroup

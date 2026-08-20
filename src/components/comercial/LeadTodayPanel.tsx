@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { AlertTriangle, CalendarCheck2, CalendarClock, FileText } from 'lucide-react'
+import { AlertTriangle, CalendarCheck2, CalendarClock, ChevronRight, FileText } from 'lucide-react'
+import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn } from '@/lib/utils'
-import type { LeadRow } from '@/types/leadBoard'
+import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 /** Etiqueta de Status usada pra achar "propostas" — precisa bater com o texto exato cadastrado. */
 const PROPOSTA_STATUS = 'Proposta Enviada'
@@ -15,50 +16,118 @@ function dateKey(iso: string): string {
   return iso ? iso.slice(0, 10) : ''
 }
 
+interface StatCard {
+  key: string
+  icon: React.ReactNode
+  label: string
+  tone: string
+  matches: LeadRow[]
+}
+
+function TodayStatCard({
+  card,
+  boards,
+  onOpenLead,
+}: {
+  card: StatCard
+  boards: LeadBoard[]
+  onOpenLead: (id: string) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(ref, open, () => setOpen(false))
+
+  const boardName = (boardId: string) => boards.find((b) => b.id === boardId)?.name ?? ''
+
+  const handleClick = () => {
+    if (card.matches.length === 0) return
+    // 1 resultado só = já abre direto o lead. Mais de um = lista pra escolher qual.
+    if (card.matches.length === 1) { onOpenLead(card.matches[0].id); return }
+    setOpen((o) => !o)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={card.matches.length === 0}
+        className={cn(
+          'flex w-full items-center gap-3 rounded-2xl bg-white p-3.5 text-left shadow-sm ring-1 ring-gray-100 transition-shadow',
+          card.matches.length > 0 ? 'cursor-pointer hover:shadow-md' : 'cursor-default opacity-60',
+        )}
+      >
+        <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', card.tone)}>{card.icon}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-xl font-bold leading-none text-[#323338]">{card.matches.length}</p>
+          <p className="mt-1 truncate text-[11px] text-gray-500">{card.label}</p>
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+          <ul className="max-h-64 overflow-y-auto">
+            {card.matches.map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => { onOpenLead(r.id); setOpen(false) }}
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <span className="min-w-0 flex-1 truncate font-medium">{r.nome || 'Sem nome'}</span>
+                  <span className="shrink-0 truncate text-[10px] text-gray-400">{boardName(r.boardId)}</span>
+                  <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export interface LeadTodayPanelProps {
   rows: LeadRow[]
+  boards: LeadBoard[]
+  onOpenLead: (id: string) => void
 }
 
 /** Resumo fixo do dia, acima dos quadros — pra bater o olho ao abrir a tela e já saber o que
  * fazer, sem precisar mexer em filtro nenhum. Sempre calculado em cima de TODOS os leads da
- * aba (não respeita busca/filtro da lista abaixo), pra ser sempre o retrato real do dia. */
-export function LeadTodayPanel({ rows }: LeadTodayPanelProps) {
+ * aba (não respeita busca/filtro da lista abaixo), pra ser sempre o retrato real do dia. Clicar
+ * num card abre o lead direto (se só tiver 1) ou lista pra escolher qual (se tiver mais de 1). */
+export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps) {
   const today = React.useMemo(() => todayKey(), [])
 
-  const stats = React.useMemo(() => {
-    let retornosHoje = 0
-    let atrasados = 0
-    let reunioesHoje = 0
-    let propostasHoje = 0
+  const groups = React.useMemo(() => {
+    const retornosHoje: LeadRow[] = []
+    const atrasados: LeadRow[] = []
+    const reunioesHoje: LeadRow[] = []
+    const propostasHoje: LeadRow[] = []
     for (const r of rows) {
       const retornarKey = dateKey(r.retornar)
       if (retornarKey && !r.retornado) {
-        if (retornarKey === today) retornosHoje += 1
-        else if (retornarKey < today) atrasados += 1
+        if (retornarKey === today) retornosHoje.push(r)
+        else if (retornarKey < today) atrasados.push(r)
       }
-      if (dateKey(r.agendamento) === today) reunioesHoje += 1
-      if (r.status === PROPOSTA_STATUS && retornarKey === today) propostasHoje += 1
+      if (dateKey(r.agendamento) === today) reunioesHoje.push(r)
+      if (r.status === PROPOSTA_STATUS && retornarKey === today) propostasHoje.push(r)
     }
     return { retornosHoje, atrasados, reunioesHoje, propostasHoje }
   }, [rows, today])
 
-  const cards: { icon: React.ReactNode; label: string; value: number; tone: string }[] = [
-    { icon: <CalendarClock className="h-4 w-4" />, label: 'Retornos de hoje', value: stats.retornosHoje, tone: 'text-amber-600 bg-amber-50' },
-    { icon: <AlertTriangle className="h-4 w-4" />, label: 'Atrasados (não retornados)', value: stats.atrasados, tone: 'text-red-600 bg-red-50' },
-    { icon: <CalendarCheck2 className="h-4 w-4" />, label: 'Reuniões agendadas hoje', value: stats.reunioesHoje, tone: 'text-blue-600 bg-blue-50' },
-    { icon: <FileText className="h-4 w-4" />, label: 'Propostas p/ retornar hoje', value: stats.propostasHoje, tone: 'text-emerald-600 bg-emerald-50' },
+  const cards: StatCard[] = [
+    { key: 'retornos', icon: <CalendarClock className="h-4 w-4" />, label: 'Retornos de hoje', tone: 'text-amber-600 bg-amber-50', matches: groups.retornosHoje },
+    { key: 'atrasados', icon: <AlertTriangle className="h-4 w-4" />, label: 'Atrasados (não retornados)', tone: 'text-red-600 bg-red-50', matches: groups.atrasados },
+    { key: 'reunioes', icon: <CalendarCheck2 className="h-4 w-4" />, label: 'Reuniões agendadas hoje', tone: 'text-blue-600 bg-blue-50', matches: groups.reunioesHoje },
+    { key: 'propostas', icon: <FileText className="h-4 w-4" />, label: 'Propostas p/ retornar hoje', tone: 'text-emerald-600 bg-emerald-50', matches: groups.propostasHoje },
   ]
 
   return (
     <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
       {cards.map((c) => (
-        <div key={c.label} className="flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-sm ring-1 ring-gray-100">
-          <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', c.tone)}>{c.icon}</span>
-          <div className="min-w-0">
-            <p className="text-xl font-bold leading-none text-[#323338]">{c.value}</p>
-            <p className="mt-1 truncate text-[11px] text-gray-500">{c.label}</p>
-          </div>
-        </div>
+        <TodayStatCard key={c.key} card={c} boards={boards} onOpenLead={onOpenLead} />
       ))}
     </div>
   )

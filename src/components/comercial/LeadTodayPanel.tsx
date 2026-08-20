@@ -1,8 +1,11 @@
 import * as React from 'react'
-import { AlertTriangle, CalendarCheck2, CalendarClock, ChevronRight, FileText } from 'lucide-react'
+import { AlertTriangle, CalendarCheck2, Clock, FileText, ChevronRight } from 'lucide-react'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
+import { useLeadActivity } from '@/hooks/useLeadActivity'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
+
+const STALE_MS = 24 * 60 * 60 * 1000
 
 /** Etiqueta de Status usada pra achar "propostas" — precisa bater com o texto exato cadastrado. */
 const PROPOSTA_STATUS = 'Proposta Enviada'
@@ -99,26 +102,33 @@ export interface LeadTodayPanelProps {
  * num card abre o lead direto (se só tiver 1) ou lista pra escolher qual (se tiver mais de 1). */
 export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps) {
   const today = React.useMemo(() => todayKey(), [])
+  const activity = useLeadActivity()
+  const activityById = React.useMemo(
+    () => new Map(activity.map((a) => [a.id, a.diaContatoUpdatedAt])),
+    [activity],
+  )
 
   const groups = React.useMemo(() => {
-    const retornosHoje: LeadRow[] = []
+    const naoAtualizados: LeadRow[] = []
     const atrasados: LeadRow[] = []
     const reunioesHoje: LeadRow[] = []
     const propostasHoje: LeadRow[] = []
+    const now = Date.now()
     for (const r of rows) {
+      const updatedAt = activityById.get(r.id)
+      if (updatedAt && now - new Date(updatedAt).getTime() > STALE_MS) naoAtualizados.push(r)
+
       const retornarKey = dateKey(r.retornar)
-      if (retornarKey && !r.retornado) {
-        if (retornarKey === today) retornosHoje.push(r)
-        else if (retornarKey < today) atrasados.push(r)
-      }
+      if (retornarKey && retornarKey < today && !r.retornado) atrasados.push(r)
+
       if (dateKey(r.agendamento) === today) reunioesHoje.push(r)
       if (r.status === PROPOSTA_STATUS && retornarKey === today) propostasHoje.push(r)
     }
-    return { retornosHoje, atrasados, reunioesHoje, propostasHoje }
-  }, [rows, today])
+    return { naoAtualizados, atrasados, reunioesHoje, propostasHoje }
+  }, [rows, today, activityById])
 
   const cards: StatCard[] = [
-    { key: 'retornos', icon: <CalendarClock className="h-4 w-4" />, label: 'Retornos de hoje', tone: 'text-amber-600 bg-amber-50', matches: groups.retornosHoje },
+    { key: 'nao-atualizados', icon: <Clock className="h-4 w-4" />, label: 'Status não atualizado (24h+)', tone: 'text-amber-600 bg-amber-50', matches: groups.naoAtualizados },
     { key: 'atrasados', icon: <AlertTriangle className="h-4 w-4" />, label: 'Atrasados (não retornados)', tone: 'text-red-600 bg-red-50', matches: groups.atrasados },
     { key: 'reunioes', icon: <CalendarCheck2 className="h-4 w-4" />, label: 'Reuniões agendadas hoje', tone: 'text-blue-600 bg-blue-50', matches: groups.reunioesHoje },
     { key: 'propostas', icon: <FileText className="h-4 w-4" />, label: 'Propostas p/ retornar hoje', tone: 'text-emerald-600 bg-emerald-50', matches: groups.propostasHoje },

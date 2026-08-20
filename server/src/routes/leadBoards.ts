@@ -380,6 +380,31 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     }
   );
 
+  // GET /api/lead-activity — quando cada lead teve o "Dia de contato" alterado pela última vez
+  // (ou a data de criação, se nunca mudou) — usado pra sinalizar quem está parado há mais de
+  // 24h sem o SDR mexer (painel do dia, cartão "Status não atualizado").
+  app.get('/api/lead-activity', { onRequest: [app.authenticate] }, async (req) => {
+    const { sub, role } = req.user as { sub: string; role: string };
+    const allowed = await restrictedBoardFilter(sub, role);
+    if (allowed !== null && !allowed.length) return [];
+
+    const boardFilter = allowed !== null ? 'WHERE lr.board_id = ANY($1)' : '';
+    const params: unknown[] = allowed !== null ? [allowed] : [];
+
+    return query(
+      `SELECT lr.id, lr.board_id,
+        COALESCE(
+          (SELECT le.created_at FROM lead_events le
+           WHERE le.lead_row_id = lr.id AND le.type = 'dia_contato'
+           ORDER BY le.created_at DESC LIMIT 1),
+          lr.created_at
+        ) AS dia_contato_updated_at
+       FROM lead_rows lr
+       ${boardFilter}`,
+      params
+    );
+  });
+
   // GET /api/lead-milestones — status "que conta" de cada lead (Reunião agendada / Reunião
   // não comparecida / Vendido), pro Dashboard de SDR. "milestone" pega sempre o mais recente
   // desses três na linha do tempo (se nunca teve evento, cai pro status atual). "ever_agendada"

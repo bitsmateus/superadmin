@@ -41,15 +41,17 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => `${pad(Math.floor(i / 
 
 export type RetornarStatus = 'none' | 'pending' | 'overdue' | 'done'
 
-/** none = sem data · pending = agendado, ainda não chegou o dia · overdue = passou e não foi marcado como retornado · done = marcado como retornado. */
+/** none = sem data ou falta mais de 1 dia (fica branquinho) · pending = o dia é hoje · overdue = passou da hora e não foi marcado como retornado · done = marcado como retornado. */
 export function retornarStatus(value: string, retornado: boolean): RetornarStatus {
   const { date, time } = parseValue(value)
   if (!date) return 'none'
   if (retornado) return 'done'
+  const now = new Date()
   const dt = new Date(date)
   const [h, m] = (time || '00:00').split(':').map(Number)
   dt.setHours(h, m, 0, 0)
-  return dt.getTime() < Date.now() ? 'overdue' : 'pending'
+  if (dt.getTime() < now.getTime()) return 'overdue'
+  return sameDay(date, now) ? 'pending' : 'none'
 }
 
 const STATUS_STYLE: Record<RetornarStatus, { bg: string; text: string }> = {

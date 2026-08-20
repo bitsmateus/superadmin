@@ -832,12 +832,12 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                 {filterRules.length > 0 ? `Filtro (${filterRules.length})` : 'Filtro'}
               </ToolbarButton>
               <ToolbarButton
-                icon={<ArrowUpDown className="h-3.5 w-3.5" />}
+                icon={<ArrowUpDown className={cn('h-3.5 w-3.5 transition-transform', sortDesc && 'rotate-180')} />}
                 onClick={() => setSortDesc((d) => !d)}
-                className={sortDesc ? 'text-accent' : undefined}
-                title={sortDesc ? 'Mais novo para o mais antigo' : 'Mais antigo para o mais novo'}
+                className="text-accent"
+                title={sortDesc ? 'Clique para ordenar do mais antigo para o mais novo' : 'Clique para ordenar do mais novo para o mais antigo'}
               >
-                Ordenar
+                {sortDesc ? 'Mais novo' : 'Mais antigo'}
               </ToolbarButton>
             </div>
 

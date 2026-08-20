@@ -6,6 +6,7 @@ import {
   Calendar,
   Circle,
   Clock,
+  Download,
   FileText,
   Hash,
   Image as ImageIcon,
@@ -200,6 +201,7 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
   const [mentionSearch, setMentionSearch] = React.useState('')
   const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null)
   const [editingText, setEditingText] = React.useState('')
+  const [preview, setPreview] = React.useState<LeadNoteAttachment | null>(null)
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -273,6 +275,15 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
     if (!files.length) return
     e.preventDefault()
     void handleFiles(files)
+  }
+
+  const downloadAttachment = (a: LeadNoteAttachment) => {
+    const link = document.createElement('a')
+    link.href = a.dataUrl
+    link.download = a.name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const submit = async () => {
@@ -471,24 +482,23 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                             <div className="mt-2 flex flex-wrap gap-2">
                               {n.attachments.map((a) => (
                                 a.type.startsWith('image/') ? (
-                                  <a
+                                  <button
                                     key={a.id}
-                                    href={a.dataUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
+                                    type="button"
+                                    onClick={() => setPreview(a)}
                                     className="block overflow-hidden rounded-lg ring-1 ring-line"
                                   >
                                     <img src={a.dataUrl} alt={a.name} className="max-h-72 max-w-full object-contain" />
-                                  </a>
+                                  </button>
                                 ) : (
-                                  <a
+                                  <button
                                     key={a.id}
-                                    href={a.dataUrl}
-                                    download={a.name}
+                                    type="button"
+                                    onClick={() => setPreview(a)}
                                     className="flex items-center gap-1.5 rounded-md border border-line bg-elevate/[0.03] px-2 py-1.5 text-xs text-foreground/70 hover:text-foreground"
                                   >
                                     <FileText className="h-3.5 w-3.5" /> {a.name}
-                                  </a>
+                                  </button>
                                 )
                               ))}
                             </div>
@@ -509,12 +519,10 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
           ) : (
             <div className={cn('grid grid-cols-3 gap-3')}>
               {allAttachments.map(({ attachment: a, note: n }) => (
-                <a
+                <button
                   key={a.id}
-                  href={a.dataUrl}
-                  target={a.type.startsWith('image/') ? '_blank' : undefined}
-                  download={a.type.startsWith('image/') ? undefined : a.name}
-                  rel="noreferrer"
+                  type="button"
+                  onClick={() => setPreview(a)}
                   className="group rounded-lg border border-line p-2 text-center hover:border-accent/50"
                 >
                   {a.type.startsWith('image/') ? (
@@ -526,13 +534,64 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                   )}
                   <p className="truncate text-[11px] text-foreground/70">{a.name}</p>
                   <p className="truncate text-[10px] text-foreground/35">{n.authorName}</p>
-                </a>
+                </button>
               ))}
             </div>
           )
         )}
 
       </div>
+
+      {preview && createPortal(
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-6 animate-fade-in"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="flex max-h-full max-w-full flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex w-full max-w-full items-center justify-between gap-4">
+              <span className="truncate text-sm text-white/90">{preview.name}</span>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => downloadAttachment(preview)}
+                  className="flex items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/20"
+                >
+                  <Download className="h-3.5 w-3.5" /> Baixar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreview(null)}
+                  aria-label="Fechar"
+                  className="grid h-8 w-8 place-items-center rounded-md bg-white/10 text-white hover:bg-white/20"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            {preview.type.startsWith('image/') ? (
+              <img
+                src={preview.dataUrl}
+                alt={preview.name}
+                className="max-h-[80vh] max-w-[90vw] rounded-lg object-contain"
+              />
+            ) : preview.type === 'application/pdf' ? (
+              <iframe
+                src={preview.dataUrl}
+                title={preview.name}
+                className="h-[80vh] w-[90vw] rounded-lg bg-white"
+              />
+            ) : (
+              <div className="grid h-40 w-80 max-w-[90vw] place-items-center rounded-lg bg-white/10 p-4 text-center text-sm text-white/70">
+                Pré-visualização não disponível pra esse tipo de arquivo. Clique em "Baixar" pra abrir.
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

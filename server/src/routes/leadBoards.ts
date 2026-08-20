@@ -174,15 +174,21 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     }
   );
 
-  // GET /api/lead-rows
-  app.get('/api/lead-rows', { onRequest: [app.authenticate] }, async (req) => {
+  // GET /api/lead-rows — ?trash=1 lista os excluídos (pra Lixeira), em vez dos ativos.
+  app.get<{ Querystring: { trash?: string } }>('/api/lead-rows', { onRequest: [app.authenticate] }, async (req) => {
     const { sub, role } = req.user as { sub: string; role: string };
     const allowed = await restrictedBoardFilter(sub, role);
+    const trash = req.query.trash === '1';
+    const deletedCond = trash ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL';
+    const orderBy = trash ? 'deleted_at DESC' : 'position, created_at';
     if (allowed !== null) {
       if (!allowed.length) return [];
-      return query('SELECT * FROM lead_rows WHERE board_id = ANY($1) ORDER BY position, created_at', [allowed]);
+      return query(
+        `SELECT * FROM lead_rows WHERE board_id = ANY($1) AND ${deletedCond} ORDER BY ${orderBy}`,
+        [allowed]
+      );
     }
-    return query('SELECT * FROM lead_rows ORDER BY position, created_at');
+    return query(`SELECT * FROM lead_rows WHERE ${deletedCond} ORDER BY ${orderBy}`);
   });
 
   // POST /api/lead-rows
@@ -306,7 +312,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     }
   );
 
-  // DELETE /api/lead-rows/:id
+  // DELETE /api/lead-rows/:id — soft delete (marca deleted_at, não apaga de verdade) pra dar
+  // pra restaurar depois pela Lixeira.
   app.delete<{ Params: { id: string } }>(
     '/api/lead-rows/:id',
     { onRequest: [app.authenticate] },
@@ -322,8 +329,30 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           return reply.status(403).send({ message: 'Acesso negado' });
         }
       }
-      await query('DELETE FROM lead_rows WHERE id = $1', [req.params.id]);
+      await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1', [req.params.id]);
       return reply.status(204).send();
+    }
+  );
+
+  // POST /api/lead-rows/:id/restore — tira da Lixeira, volta a aparecer normal no quadro.
+  app.post<{ Params: { id: string } }>(
+    '/api/lead-rows/:id/restore',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null) {
+        const current = await queryOne<{ board_id: string }>(
+          'SELECT board_id FROM lead_rows WHERE id = $1',
+          [req.params.id]
+        );
+        if (!current || !allowed.includes(current.board_id)) {
+          return reply.status(403).send({ message: 'Acesso negado' });
+        }
+      }
+      const [row] = await query('UPDATE lead_rows SET deleted_at = NULL WHERE id = $1 RETURNING *', [req.params.id]);
+      if (!row) return reply.status(404).send({ message: 'Linha não encontrada' });
+      return row;
     }
   );
 

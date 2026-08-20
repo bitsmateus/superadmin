@@ -333,10 +333,14 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   notes_count INT NOT NULL DEFAULT 0,
   position INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- Exclusão é sempre "soft delete" (marca a data, não apaga a linha) — dá pra restaurar
+  -- pela Lixeira na tela de Lista. NULL = ativo, preenchido = na lixeira.
+  deleted_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);
+CREATE INDEX IF NOT EXISTS lead_rows_deleted_at_idx ON lead_rows(deleted_at) WHERE deleted_at IS NOT NULL;
 
 DROP TRIGGER IF EXISTS lead_rows_touch_updated_at ON lead_rows;
 CREATE TRIGGER lead_rows_touch_updated_at BEFORE UPDATE ON lead_rows

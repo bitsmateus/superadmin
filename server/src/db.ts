@@ -297,6 +297,10 @@ END $$`);
   END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_mrr TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_implementacao TEXT NOT NULL DEFAULT ''`);
+  // Exclusão de lead é sempre "soft delete" — marca deleted_at em vez de apagar a linha,
+  // pra dar pra restaurar depois pela Lixeira na tela de Lista.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_deleted_at_idx ON lead_rows(deleted_at) WHERE deleted_at IS NOT NULL`);
   // Limpa colunas "valor_previsto"/"valor_fechado" que sobraram vazias/duplicadas
   // de boots anteriores (enquanto o bug acima existia) — só remove se a coluna
   // nova ja existir, entao os dados reais ja estao em valor_mrr/valor_implementacao.

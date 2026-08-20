@@ -33,6 +33,7 @@ import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { LeadImportModal } from '@/components/comercial/LeadImportModal'
+import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
@@ -852,6 +853,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
   const [sortDesc, setSortDesc] = React.useState(false)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [importModalOpen, setImportModalOpen] = React.useState(false)
+  const [trashModalOpen, setTrashModalOpen] = React.useState(false)
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
@@ -1086,6 +1088,14 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                     <Plus className="h-3.5 w-3.5" />
                     Novo quadro
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setTrashModalOpen(true)}
+                    className="mt-2 flex items-center gap-1 text-[11px] text-gray-400 transition-colors hover:text-gray-600"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Excluídos
+                  </button>
                 </div>
 
                 {/* Barra de rolagem horizontal única, flutuante — visível na tela toda,
@@ -1114,6 +1124,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
 
       <CreateBoardModal open={boardModalOpen} onClose={() => setBoardModalOpen(false)} page={page} />
       <LeadImportModal open={importModalOpen} onClose={() => setImportModalOpen(false)} page={page} boards={boards} />
+      <LeadTrashModal open={trashModalOpen} onClose={() => setTrashModalOpen(false)} boards={boards} />
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
       <LeadFiltersModal
         open={filtersOpen}

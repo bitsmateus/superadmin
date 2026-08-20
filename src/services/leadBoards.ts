@@ -38,6 +38,7 @@ type LeadRowRow = {
   dia_contato: string; ligacao: string; status: string; retornar: string; retornado: boolean; responsavel: string
   sdr: string; numero: string; dor_cliente: string; numero_atendentes: string; valor_mrr: string
   valor_implementacao: string; notes_count: number; position: number; created_at: string; updated_at: string
+  deleted_at: string | null
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
@@ -47,7 +48,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     responsavel: r.responsavel, sdr: r.sdr, numero: r.numero,
     dorCliente: r.dor_cliente, numeroAtendentes: r.numero_atendentes,
     valorMrr: r.valor_mrr, valorImplementacao: r.valor_implementacao, notesCount: r.notes_count ?? 0,
-    position: r.position, createdAt: r.created_at, updatedAt: r.updated_at,
+    position: r.position, createdAt: r.created_at, updatedAt: r.updated_at, deletedAt: r.deleted_at ?? null,
   }
 }
 function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
@@ -162,6 +163,14 @@ function subscribeRealtime() {
       }
       const row = data as Partial<LeadRowRow>
       if (typeof row.nome !== 'string') { void reloadRows(); return }
+      // Exclusão é soft delete (UPDATE com deleted_at preenchido) — some do cache dos
+      // ativos igual a um DELETE de verdade; restaurar (deleted_at volta a null) recai
+      // no ramo de baixo e a linha volta a aparecer normal.
+      if (row.deleted_at) {
+        rows = rows.filter((r) => r.id !== row.id)
+        notify()
+        return
+      }
       const next = rowToLead(row as LeadRowRow)
       const idx = rows.findIndex((r) => r.id === next.id)
       if (idx === -1) rows = [...rows, next]
@@ -250,7 +259,7 @@ export const leadBoardsService = {
       id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '', ligacao: '',
       status: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
       dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
-      position, createdAt: now, updatedAt: now, ...initial,
+      position, createdAt: now, updatedAt: now, deletedAt: null, ...initial,
     }
     rows = [...rows, row]
     notify()
@@ -300,6 +309,8 @@ export const leadBoardsService = {
     })()
   },
 
+  /** Soft delete — o back só marca deleted_at, a linha continua no banco pra dar pra
+   * restaurar depois pela Lixeira (ver getTrash/restoreRow). */
   async deleteRow(id: string): Promise<void> {
     const prev = rows
     rows = rows.filter((r) => r.id !== id)
@@ -312,5 +323,17 @@ export const leadBoardsService = {
       notify()
       toast.error('Falha ao remover lead: ' + (err as Error).message)
     }
+  },
+
+  /** Busca os leads excluídos (Lixeira) — não fica em cache, é sob demanda toda vez que abre. */
+  async getTrash(): Promise<LeadRow[]> {
+    const fresh = await api.get<LeadRowRow[]>('/api/lead-rows?trash=1')
+    return fresh.map(rowToLead)
+  },
+
+  /** Tira da Lixeira — a linha volta a aparecer no quadro (o cache de ativos se atualiza
+   * sozinho pelo realtime, já que restaurar também é um UPDATE de lead_rows). */
+  async restoreRow(id: string): Promise<void> {
+    await api.post(`/api/lead-rows/${id}/restore`, {})
   },
 }

@@ -47,11 +47,13 @@ export interface LeadRow {
   position: number
   createdAt: string
   updatedAt: string
+  /** Preenchido quando o lead está na Lixeira (soft delete) — null = ativo. */
+  deletedAt: string | null
 }
 
 export type LeadRowField = Exclude<
   keyof LeadRow,
-  'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
+  'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado' | 'deletedAt'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

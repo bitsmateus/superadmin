@@ -25,6 +25,7 @@ export interface LeadRow {
   empresa: string
   telefone: string
   diaContato: string
+  ligacao: string
   status: string
   retornar: string
   retornado: boolean

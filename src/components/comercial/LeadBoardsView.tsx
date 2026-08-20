@@ -63,6 +63,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'telefone', label: 'Telefone', width: 140 },
   { key: 'tipo', label: 'Tipo', width: 108, tag: true },
   { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true },
+  { key: 'ligacao', label: 'Ligação', width: 62, align: 'center' },
   { key: 'status', label: 'Status', width: 170, tag: true },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
   { key: 'sdr', label: 'SDR', width: 100, tag: true },
@@ -307,7 +308,7 @@ function BulkActionBar({
     for (const r of selectedRows) {
       leadBoardsService.createRow(r.boardId, {
         nome: r.nome, empresa: r.empresa, telefone: r.telefone, tipo: r.tipo,
-        diaContato: r.diaContato, status: r.status, sdr: r.sdr, retornar: r.retornar,
+        diaContato: r.diaContato, ligacao: r.ligacao, status: r.status, sdr: r.sdr, retornar: r.retornar,
         responsavel: r.responsavel, numero: r.numero, dorCliente: r.dorCliente,
         numeroAtendentes: r.numeroAtendentes, valorMrr: r.valorMrr,
         valorImplementacao: r.valorImplementacao,

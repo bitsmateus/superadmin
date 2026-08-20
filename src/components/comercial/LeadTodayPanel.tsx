@@ -122,7 +122,7 @@ export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps
       if (retornarKey && retornarKey < today && !r.retornado) atrasados.push(r)
 
       if (dateKey(r.agendamento) === today) reunioesHoje.push(r)
-      if (r.status === PROPOSTA_STATUS && retornarKey === today) propostasHoje.push(r)
+      if (r.status === PROPOSTA_STATUS && retornarKey === today && !r.retornado) propostasHoje.push(r)
     }
     return { naoAtualizados, atrasados, reunioesHoje, propostasHoje }
   }, [rows, today, activityById])

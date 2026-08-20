@@ -701,13 +701,16 @@ function BoardGroup({
                             type="button"
                             onClick={() => onOpenLead(row.id)}
                             title="Abrir lead"
-                            className="relative mr-1.5 grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors hover:bg-gray-100"
+                            className={cn(
+                              'relative mr-1.5 grid h-7 w-7 shrink-0 place-items-center rounded-md transition-colors',
+                              row.notesCount > 0 ? 'bg-accent/15 hover:bg-accent/25' : 'hover:bg-gray-100',
+                            )}
                           >
                             <MessageCircle
-                              className={cn('h-5 w-5', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-gray-300')}
+                              className={cn('h-4 w-4', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-gray-300')}
                             />
                             {row.notesCount > 0 && (
-                              <span className="absolute -bottom-0.5 -right-0.5 grid h-4 min-w-[1rem] place-items-center rounded-full bg-accent px-0.5 text-[10px] font-semibold text-white ring-2 ring-white">
+                              <span className="absolute -top-1.5 -right-1.5 grid h-4 min-w-[1rem] place-items-center rounded-full bg-accent px-0.5 text-[10px] font-semibold text-white ring-2 ring-white">
                                 {row.notesCount > 9 ? '9+' : row.notesCount}
                               </span>
                             )}

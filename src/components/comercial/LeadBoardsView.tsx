@@ -35,6 +35,7 @@ import { RetornarField } from '@/components/comercial/RetornarField'
 import { LeadFiltersModal, matchesLeadFilters, type FilterRule } from '@/components/comercial/LeadFiltersModal'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn, formatDateTimeShort } from '@/lib/utils'
+import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
@@ -76,6 +77,7 @@ const COLUMNS: ColumnDef[] = [
 
 const GRID_BORDER = 'border-r border-gray-200'
 const MIN_COL_WIDTH = 80
+
 
 function columnWidthsStorageKey(page: LeadBoardPage) {
   return `leadColumnWidths:${page}`
@@ -518,6 +520,11 @@ function BoardGroup({
     )
   }, [allRows, search, sdrFilter, filterRules, sortDesc])
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
+  const totalMrr = React.useMemo(() => rows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0), [rows])
+  const totalImplementacao = React.useMemo(
+    () => rows.reduce((sum, r) => sum + parseBRLCents(r.valorImplementacao), 0),
+    [rows],
+  )
 
   // Tipo, Dia de contato, Status, Ligação, SDR e Retornar propagam pra toda a seleção
   // quando editados numa linha que já está marcada — igual ao Monday.
@@ -731,6 +738,20 @@ function BoardGroup({
                 </tr>
                 )
               })}
+              {rows.length > 0 && (
+                <tr className="border-t border-gray-200 bg-gray-50/70 text-xs font-semibold text-[#323338]">
+                  <td className={GRID_BORDER} style={{ width: CHECKBOX_COL_WIDTH }} />
+                  {COLUMNS.map((col) => (
+                    <td key={col.key} className={cn('px-2.5 py-1.5 text-center', GRID_BORDER)}>
+                      {col.key === 'valorMrr'
+                        ? formatBRLCents(totalMrr)
+                        : col.key === 'valorImplementacao'
+                          ? formatBRLCents(totalImplementacao)
+                          : null}
+                    </td>
+                  ))}
+                </tr>
+              )}
               <tr className="hover:bg-gray-50">
                 <td colSpan={COLUMNS.length + 1} className="px-2.5 py-2">
                   <button

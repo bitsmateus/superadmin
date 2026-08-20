@@ -16,6 +16,7 @@ import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
 import { cn } from '@/lib/utils'
+import { formatBRLCompact, parseBRLCents } from '@/lib/currency'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 type GroupField = 'status' | 'diaContato'
@@ -167,6 +168,7 @@ function KanbanColumn({
   onDuplicate: (row: LeadRow) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col-${col.key}`, data: { column: col.key } })
+  const totalMrr = React.useMemo(() => rows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0), [rows])
   return (
     <div
       ref={setNodeRef}
@@ -176,10 +178,13 @@ function KanbanColumn({
       )}
     >
       <div
-        className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white"
+        className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white"
         style={{ backgroundColor: col.color }}
       >
         <span className="truncate">{col.label}</span>
+        {totalMrr > 0 && (
+          <span className="shrink-0 text-[11px] font-medium text-white/85">{formatBRLCompact(totalMrr)}</span>
+        )}
         <span className="ml-auto shrink-0 rounded-full bg-white/25 px-1.5 py-0.5 text-[11px]">{rows.length}</span>
       </div>
       <div className="min-h-[40px] space-y-2 p-2">

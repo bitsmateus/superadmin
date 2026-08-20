@@ -54,6 +54,11 @@ CREATE TABLE IF NOT EXISTS profiles (
   email TEXT UNIQUE NOT NULL,
   name TEXT,
   role user_role NOT NULL DEFAULT 'suporte',
+  -- Área no funil: 'comercial' | 'entrega' | 'ambos'. Nulo = ambos.
+  area TEXT,
+  -- Trava opcional de acesso (só relevante pro papel 'suporte'/"Usuário"): restringe à área e,
+  -- dentro dela, a quadros específicos de lead_boards (ver user_board_access). Default = sem restrição.
+  restrict_access BOOLEAN NOT NULL DEFAULT false,
   password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -287,6 +292,15 @@ CREATE TABLE IF NOT EXISTS lead_boards (
   page TEXT NOT NULL DEFAULT 'novos_leads' CHECK (page IN ('novos_leads', 'crm_luis', 'crm_arthur')),
   position INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Allowlist de quadros pra usuários com profiles.restrict_access = true. Sem linhas pra um
+-- user_id = sem restrição de quadro (vê todos os quadros da área liberada).
+CREATE TABLE IF NOT EXISTS user_board_access (
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, board_id)
 );
 
 CREATE TABLE IF NOT EXISTS lead_rows (

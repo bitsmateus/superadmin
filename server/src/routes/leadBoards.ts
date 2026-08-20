@@ -1,10 +1,37 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
-import { query } from '../db.js';
+import { query, queryOne } from '../db.js';
+
+/**
+ * Resolve a allowlist de quadros de um usuário restrito.
+ * null = sem restrição (vê tudo) · [] = não vê nenhum quadro · string[] = allowlist.
+ * Só faz consulta extra pro papel 'suporte' ("Usuário") — admin/supervisor saem de cara com null.
+ */
+async function restrictedBoardFilter(userId: string, role: string): Promise<string[] | null> {
+  if (role !== 'suporte') return null;
+  const profile = await queryOne<{ restrict_access: boolean; area: string | null }>(
+    'SELECT restrict_access, area FROM profiles WHERE id = $1',
+    [userId]
+  );
+  if (!profile?.restrict_access) return null;
+  const area = profile.area ?? 'ambos';
+  if (area !== 'comercial' && area !== 'ambos') return [];
+  const access = await query<{ board_id: string }>(
+    'SELECT board_id FROM user_board_access WHERE user_id = $1',
+    [userId]
+  );
+  return access.length ? access.map((r) => r.board_id) : null;
+}
 
 export async function leadBoardRoutes(app: FastifyInstance) {
   // GET /api/lead-boards
-  app.get('/api/lead-boards', { onRequest: [app.authenticate] }, async () => {
+  app.get('/api/lead-boards', { onRequest: [app.authenticate] }, async (req) => {
+    const { sub, role } = req.user as { sub: string; role: string };
+    const allowed = await restrictedBoardFilter(sub, role);
+    if (allowed !== null) {
+      if (!allowed.length) return [];
+      return query('SELECT * FROM lead_boards WHERE id = ANY($1) ORDER BY position, created_at', [allowed]);
+    }
     return query('SELECT * FROM lead_boards ORDER BY position, created_at');
   });
 
@@ -13,6 +40,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     '/api/lead-boards',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null) return reply.status(403).send({ message: 'Acesso negado' });
+
       const b = req.body;
       const id = (b.id as string) || uuidv4();
       const page = (b.page as string) || 'novos_leads';
@@ -37,6 +68,12 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     '/api/lead-boards/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null && !allowed.includes(req.params.id)) {
+        return reply.status(403).send({ message: 'Acesso negado' });
+      }
+
       const patch = req.body;
       const sets: string[] = [];
       const params: unknown[] = [];
@@ -61,13 +98,24 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     '/api/lead-boards/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null && !allowed.includes(req.params.id)) {
+        return reply.status(403).send({ message: 'Acesso negado' });
+      }
       await query('DELETE FROM lead_boards WHERE id = $1', [req.params.id]);
       return reply.status(204).send();
     }
   );
 
   // GET /api/lead-rows
-  app.get('/api/lead-rows', { onRequest: [app.authenticate] }, async () => {
+  app.get('/api/lead-rows', { onRequest: [app.authenticate] }, async (req) => {
+    const { sub, role } = req.user as { sub: string; role: string };
+    const allowed = await restrictedBoardFilter(sub, role);
+    if (allowed !== null) {
+      if (!allowed.length) return [];
+      return query('SELECT * FROM lead_rows WHERE board_id = ANY($1) ORDER BY position, created_at', [allowed]);
+    }
     return query('SELECT * FROM lead_rows ORDER BY position, created_at');
   });
 
@@ -76,8 +124,15 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     '/api/lead-rows',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
       const b = req.body;
       if (!b.board_id) return reply.status(400).send({ message: 'board_id é obrigatório' });
+
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null && !allowed.includes(b.board_id as string)) {
+        return reply.status(403).send({ message: 'Acesso negado' });
+      }
+
       const id = (b.id as string) || uuidv4();
       let position = b.position as number | undefined;
       if (position === undefined) {
@@ -110,6 +165,19 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     '/api/lead-rows/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null) {
+        const current = await queryOne<{ board_id: string }>(
+          'SELECT board_id FROM lead_rows WHERE id = $1',
+          [req.params.id]
+        );
+        const targetBoardId = (req.body.board_id as string | undefined) ?? current?.board_id;
+        if (!current || !allowed.includes(current.board_id) || (targetBoardId && !allowed.includes(targetBoardId))) {
+          return reply.status(403).send({ message: 'Acesso negado' });
+        }
+      }
+
       const patch = req.body;
       const sets: string[] = [];
       const params: unknown[] = [];
@@ -134,6 +202,17 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     '/api/lead-rows/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null) {
+        const current = await queryOne<{ board_id: string }>(
+          'SELECT board_id FROM lead_rows WHERE id = $1',
+          [req.params.id]
+        );
+        if (!current || !allowed.includes(current.board_id)) {
+          return reply.status(403).send({ message: 'Acesso negado' });
+        }
+      }
       await query('DELETE FROM lead_rows WHERE id = $1', [req.params.id]);
       return reply.status(204).send();
     }
@@ -145,6 +224,17 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       if (!req.query.lead_row_id) return reply.status(400).send({ message: 'lead_row_id é obrigatório' });
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null) {
+        const row = await queryOne<{ board_id: string }>(
+          'SELECT board_id FROM lead_rows WHERE id = $1',
+          [req.query.lead_row_id]
+        );
+        if (!row || !allowed.includes(row.board_id)) {
+          return reply.status(403).send({ message: 'Acesso negado' });
+        }
+      }
       return query(
         'SELECT * FROM lead_notes WHERE lead_row_id = $1 ORDER BY created_at DESC',
         [req.query.lead_row_id]
@@ -161,7 +251,17 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       if (!b.lead_row_id || !b.content) {
         return reply.status(400).send({ message: 'lead_row_id e content são obrigatórios' });
       }
-      const { sub: authorId } = req.user as { sub: string };
+      const { sub: authorId, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(authorId, role);
+      if (allowed !== null) {
+        const row = await queryOne<{ board_id: string }>(
+          'SELECT board_id FROM lead_rows WHERE id = $1',
+          [b.lead_row_id]
+        );
+        if (!row || !allowed.includes(row.board_id)) {
+          return reply.status(403).send({ message: 'Acesso negado' });
+        }
+      }
       const [note] = await query(
         `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments)
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
@@ -179,6 +279,22 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     '/api/lead-notes/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null) {
+        const note = await queryOne<{ lead_row_id: string }>(
+          'SELECT lead_row_id FROM lead_notes WHERE id = $1',
+          [req.params.id]
+        );
+        const row = note && await queryOne<{ board_id: string }>(
+          'SELECT board_id FROM lead_rows WHERE id = $1',
+          [note.lead_row_id]
+        );
+        if (!row || !allowed.includes(row.board_id)) {
+          return reply.status(403).send({ message: 'Acesso negado' });
+        }
+      }
+
       const content = req.body.content?.trim();
       if (!content) return reply.status(400).send({ message: 'content é obrigatório' });
       const [note] = await query(
@@ -195,6 +311,21 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     '/api/lead-notes/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null) {
+        const note = await queryOne<{ lead_row_id: string }>(
+          'SELECT lead_row_id FROM lead_notes WHERE id = $1',
+          [req.params.id]
+        );
+        const row = note && await queryOne<{ board_id: string }>(
+          'SELECT board_id FROM lead_rows WHERE id = $1',
+          [note.lead_row_id]
+        );
+        if (!row || !allowed.includes(row.board_id)) {
+          return reply.status(403).send({ message: 'Acesso negado' });
+        }
+      }
       await query('DELETE FROM lead_notes WHERE id = $1', [req.params.id]);
       return reply.status(204).send();
     }

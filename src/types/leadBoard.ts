@@ -8,6 +8,13 @@
 /** Aba do Comercial onde o quadro aparece. */
 export type LeadBoardPage = 'novos_leads' | 'crm_luis' | 'crm_arthur'
 
+export const ABA_LABELS: Record<LeadBoardPage, string> = {
+  novos_leads: 'Novos Leads',
+  crm_luis: 'CRM NX Luis',
+  crm_arthur: 'CRM NX Arthur',
+}
+export const ABA_ORDER: LeadBoardPage[] = ['novos_leads', 'crm_luis', 'crm_arthur']
+
 export interface LeadBoard {
   id: string
   name: string

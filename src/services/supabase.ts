@@ -14,6 +14,9 @@ export interface Profile {
   name: string | null
   role: UserRole
   area?: TeamArea | null
+  /** Trava opcional de acesso (só relevante pro papel 'suporte', exibido como "Usuário"): restringe
+   * à área e, dentro dela, a quadros específicos do Comercial. Default false = sem restrição. */
+  restrictAccess?: boolean
   created_at: string
 }
 

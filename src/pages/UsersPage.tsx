@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import {
   CheckCircle2,
   Loader2,
+  LayoutGrid,
   ShieldCheck,
   Trash2,
   UserCircle2,
@@ -28,6 +29,7 @@ import {
 } from '@/services/supabase'
 import { api, onSseEvent } from '@/services/api'
 import { cn, formatDateShort, initials } from '@/lib/utils'
+import { ABA_LABELS, ABA_ORDER } from '@/types/leadBoard'
 
 const ROLE_OPTIONS: { value: UserRole; label: string; description: string }[] = [
   {
@@ -42,20 +44,21 @@ const ROLE_OPTIONS: { value: UserRole; label: string; description: string }[] = 
   },
   {
     value: 'suporte',
-    label: 'Suporte',
-    description: 'Não vê contrato/financeiro. Não pode excluir.',
+    label: 'Usuário',
+    description: 'Não vê contrato/financeiro. Não pode excluir. Pode ter o acesso restrito a uma área ou a quadros específicos do Comercial.',
   },
 ]
 
 const ROLE_LABEL: Record<UserRole, string> = {
   admin: 'Administrador',
   supervisor: 'Supervisor',
-  suporte: 'Suporte',
+  suporte: 'Usuário',
 }
 
 /**
  * Área no funil — define onde a pessoa aparece como responsável (filtros do
- * pipeline e seletores do cliente). Não tem relação com permissão de acesso.
+ * pipeline e seletores do cliente). Também vira controle de acesso quando o
+ * usuário (papel "suporte") tem a restrição ligada — aí ele só vê a área definida aqui.
  */
 const AREA_OPTIONS: { value: TeamArea; label: string; description: string }[] = [
   {
@@ -141,6 +144,16 @@ export function UsersPage() {
     }
   }
 
+  const changeRestrictAccess = async (id: string, restrictAccess: boolean) => {
+    try {
+      await api.patch(`/api/users/${id}`, { restrictAccess })
+      toast.success(restrictAccess ? 'Acesso restrito ativado' : 'Acesso restrito desativado')
+      void reload()
+    } catch (err) {
+      toast.error('Falha ao alterar restrição: ' + (err instanceof Error ? err.message : 'Erro'))
+    }
+  }
+
   return (
     <>
       <TopBar
@@ -184,6 +197,7 @@ export function UsersPage() {
                 <TH>E-mail</TH>
                 <TH>Papel</TH>
                 <TH>Área</TH>
+                <TH>Acesso</TH>
                 <TH>Criado em</TH>
                 <TH className="text-right">Ações</TH>
               </tr>
@@ -196,6 +210,7 @@ export function UsersPage() {
                   isSelf={p.id === profile?.id}
                   onChangeRole={(role) => changeRole(p.id, role)}
                   onChangeArea={(area) => changeArea(p.id, area)}
+                  onChangeRestrictAccess={(val) => changeRestrictAccess(p.id, val)}
                   onDeleted={() => reload()}
                 />
               ))}
@@ -230,16 +245,19 @@ function ProfileRow({
   isSelf,
   onChangeRole,
   onChangeArea,
+  onChangeRestrictAccess,
   onDeleted,
 }: {
   profile: Profile
   isSelf: boolean
   onChangeRole: (role: UserRole) => void | Promise<void>
   onChangeArea: (area: TeamArea) => void | Promise<void>
+  onChangeRestrictAccess: (val: boolean) => void | Promise<void>
   onDeleted: () => void
 }) {
   const [confirmRemoveOpen, setConfirmRemoveOpen] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
+  const [boardAccessOpen, setBoardAccessOpen] = React.useState(false)
 
   const removeProfile = async () => {
     setRemoving(true)
@@ -308,6 +326,40 @@ function ProfileRow({
           />
         </div>
       </TD>
+      <TD>
+        {profile.role === 'suporte' ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onChangeRestrictAccess(!profile.restrictAccess)}
+              title={profile.restrictAccess ? 'Clique pra desligar a restrição' : 'Clique pra restringir o acesso à área definida'}
+              className={cn(
+                'relative h-5 w-9 shrink-0 rounded-full transition-colors',
+                profile.restrictAccess ? 'bg-accent' : 'bg-elevate/[0.15]',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
+                  profile.restrictAccess ? 'translate-x-4' : 'translate-x-0.5',
+                )}
+              />
+            </button>
+            {profile.restrictAccess && resolveArea(profile.area) !== 'entrega' && (
+              <button
+                type="button"
+                onClick={() => setBoardAccessOpen(true)}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground/70 hover:bg-elevate/[0.06]"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Quadros
+              </button>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-foreground/35">—</span>
+        )}
+      </TD>
       <TD className="text-foreground/60">{formatDateShort(profile.created_at)}</TD>
       <TD className="text-right">
         {!isSelf && (
@@ -349,7 +401,133 @@ function ProfileRow({
           perde acesso ao painel imediatamente.
         </p>
       </Modal>
+
+      <BoardAccessModal
+        profile={profile}
+        open={boardAccessOpen}
+        onClose={() => setBoardAccessOpen(false)}
+      />
     </TR>
+  )
+}
+
+function BoardAccessModal({
+  profile,
+  open,
+  onClose,
+}: {
+  profile: Profile
+  open: boolean
+  onClose: () => void
+}) {
+  const [boards, setBoards] = React.useState<{ id: string; name: string; color: string; page: string }[]>([])
+  const [selected, setSelected] = React.useState<Set<string>>(new Set())
+  const [loading, setLoading] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    Promise.all([
+      api.get<{ id: string; name: string; color: string; page: string }[]>('/api/lead-boards'),
+      api.get<string[]>(`/api/users/${profile.id}/board-access`),
+    ])
+      .then(([allBoards, access]) => {
+        setBoards(allBoards)
+        setSelected(new Set(access))
+      })
+      .catch((err) => toast.error('Falha ao carregar quadros: ' + (err instanceof Error ? err.message : 'Erro')))
+      .finally(() => setLoading(false))
+  }, [open, profile.id])
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await api.put(`/api/users/${profile.id}/board-access`, { boardIds: Array.from(selected) })
+      toast.success('Quadros atualizados')
+      onClose()
+    } catch (err) {
+      toast.error('Falha ao salvar: ' + (err instanceof Error ? err.message : 'Erro'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const byAba = ABA_ORDER.map((page) => ({
+    page,
+    label: ABA_LABELS[page],
+    boards: boards.filter((b) => b.page === page),
+  }))
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Quadros liberados — ${profile.name || profile.email}`}
+      description={
+        selected.size === 0
+          ? 'Nenhum marcado = vê todos os quadros da área liberada.'
+          : `${selected.size} quadro(s) selecionado(s) — só esses vão aparecer pra esse usuário.`
+      }
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button onClick={save} loading={saving}>
+            Salvar
+          </Button>
+        </>
+      }
+    >
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-foreground/55">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando quadros…
+        </div>
+      ) : (
+        <div className="max-h-[50vh] space-y-4 overflow-y-auto">
+          {byAba.map(({ page, label, boards: abaBoards }) => (
+            <div key={page}>
+              <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">
+                {label}
+              </div>
+              {abaBoards.length === 0 ? (
+                <p className="text-xs text-foreground/40">Nenhum quadro nessa aba.</p>
+              ) : (
+                <div className="space-y-1">
+                  {abaBoards.map((b) => (
+                    <label
+                      key={b.id}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-elevate/[0.04]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.has(b.id)}
+                        onChange={() => toggle(b.id)}
+                        className="h-3.5 w-3.5 rounded border-line"
+                      />
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
+                      <span className="truncate text-foreground/85">{b.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -367,6 +545,7 @@ function InviteUserModal({
   const [name, setName] = React.useState('')
   const [role, setRole] = React.useState<UserRole>('suporte')
   const [area, setArea] = React.useState<TeamArea>('ambos')
+  const [restrictAccess, setRestrictAccess] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
 
   React.useEffect(() => {
@@ -376,6 +555,7 @@ function InviteUserModal({
       setName('')
       setRole('suporte')
       setArea('ambos')
+      setRestrictAccess(false)
     }
   }, [open])
 
@@ -396,6 +576,7 @@ function InviteUserModal({
         password,
         role,
         area,
+        restrictAccess: role === 'suporte' ? restrictAccess : false,
       })
       toast.success('Usuário criado')
       onCreated()
@@ -503,6 +684,23 @@ function InviteUserModal({
             ))}
           </div>
         </div>
+        {role === 'suporte' && (
+          <label className="flex items-start gap-2.5 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2.5 text-xs">
+            <input
+              type="checkbox"
+              checked={restrictAccess}
+              onChange={(e) => setRestrictAccess(e.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 rounded border-line"
+            />
+            <span>
+              <span className="block text-sm font-medium text-foreground">Restringir acesso</span>
+              <span className="mt-0.5 block text-[10.5px] leading-relaxed text-foreground/55">
+                Esse usuário só vai enxergar a área "{AREA_OPTIONS.find((o) => o.value === area)?.label}"
+                definida acima. Dá pra liberar quadros específicos do Comercial depois, aqui em Equipe.
+              </span>
+            </span>
+          </label>
+        )}
       </div>
     </Modal>
   )

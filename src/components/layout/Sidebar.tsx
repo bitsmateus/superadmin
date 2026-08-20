@@ -31,7 +31,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut, useAuth } from '@/hooks/useAuth'
-import { canManageUsers, canSeeFinancials } from '@/services/supabase'
+import { canManageUsers, canSeeFinancials, resolveArea } from '@/services/supabase'
 import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
 import { ServerSwitcher } from './ServerSwitcher'
@@ -56,7 +56,7 @@ const comercialItems = [
 const ROLE_LABELS = {
   admin: 'Administrador',
   supervisor: 'Supervisor',
-  suporte: 'Suporte',
+  suporte: 'Usuário',
 } as const
 
 export interface SidebarProps {
@@ -86,6 +86,13 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const isAdmin = canManageUsers(profile?.role)
   const seeFinancials = canSeeFinancials(profile?.role)
   const myTasks = useMyOpenTaskCount(profile?.id)
+
+  // Usuário com acesso restrito só enxerga o grupo da sua área — Comercial (área
+  // 'comercial') ou Suporte/Arquivados (área 'entrega', onde o trabalho de entrega
+  // já acontece hoje). 'ambos' ou sem restrição = sem corte nenhum.
+  const restrictArea = profile?.restrictAccess ? resolveArea(profile.area) : 'ambos'
+  const showSuporteGroup = restrictArea !== 'comercial'
+  const showComercialGroup = restrictArea !== 'entrega'
 
   const [archivedOpen, setArchivedOpen] = React.useState(false)
   const [comercialOpen, setComercialOpen] = React.useState(() =>
@@ -159,6 +166,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
 
       <nav className="mt-2 flex flex-1 flex-col gap-0.5 px-3">
         {/* Suporte — grupo expansível com subpáginas */}
+        {showSuporteGroup && (
+        <>
         <button
           type="button"
           onClick={() => setSuporteOpen((o) => !o)}
@@ -230,8 +239,12 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
               </NavLink>
             )
           })}
+        </>
+        )}
 
         {/* Comercial — grupo expansível com subpáginas */}
+        {showComercialGroup && (
+        <>
         <button
           type="button"
           onClick={() => setComercialOpen((o) => !o)}
@@ -286,7 +299,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
               )}
             </NavLink>
           ))}
+        </>
+        )}
 
+        {showSuporteGroup && (
+        <>
         <div className="my-2 h-px bg-elevate/[0.05]" />
 
         {secondaryItems.map(({ to, label, icon: Icon }) => (
@@ -366,6 +383,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                 </NavLink>
               ))}
           </>
+        )}
+        </>
         )}
       </nav>
 

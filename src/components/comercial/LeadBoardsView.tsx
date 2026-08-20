@@ -36,14 +36,10 @@ import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted, useLeadRows } from 
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
+import { ABA_LABELS, ABA_ORDER } from '@/types/leadBoard'
 import type { LeadBoard, LeadBoardPage, LeadLabelField, LeadRow, LeadRowField } from '@/types/leadBoard'
 
-export const ABA_LABELS: Record<LeadBoardPage, string> = {
-  novos_leads: 'Novos Leads',
-  crm_luis: 'CRM NX Luis',
-  crm_arthur: 'CRM NX Arthur',
-}
-const ABA_ORDER: LeadBoardPage[] = ['novos_leads', 'crm_luis', 'crm_arthur']
+export { ABA_LABELS, ABA_ORDER }
 
 interface ColumnDef {
   key: LeadRowField | 'createdAt'

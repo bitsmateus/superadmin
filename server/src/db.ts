@@ -113,6 +113,10 @@ export async function runMigrations() {
   // Área de atuação do usuário no funil: comercial, entrega ou ambos.
   // Filtra quem aparece como responsável comercial x de entrega.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS area TEXT`);
+  // Trava opcional de acesso (só relevante pro papel 'suporte'/"Usuário"): restringe à área e,
+  // dentro dela, a quadros específicos de lead_boards (ver user_board_access). Default = sem restrição
+  // — preserva o comportamento de quem já está cadastrado.
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS restrict_access BOOLEAN NOT NULL DEFAULT false`);
   // Roteiro da sessão de ativação (checklist do que é feito com o cliente).
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS session_checklist JSONB`);
   // Quantas configurações simultâneas cada responsável de entrega pode ter.
@@ -237,6 +241,14 @@ END $$`);
   await pool.query(`ALTER TABLE lead_boards ADD COLUMN IF NOT EXISTS page TEXT NOT NULL DEFAULT 'novos_leads'`);
   await pool.query(`ALTER TABLE lead_boards DROP CONSTRAINT IF EXISTS lead_boards_page_check`);
   await pool.query(`ALTER TABLE lead_boards ADD CONSTRAINT lead_boards_page_check CHECK (page IN ('novos_leads', 'crm_luis', 'crm_arthur'))`);
+  // Allowlist de quadros pra usuários com profiles.restrict_access = true. Sem linhas pra um
+  // user_id = sem restrição de quadro (vê todos os quadros da área liberada).
+  await pool.query(`CREATE TABLE IF NOT EXISTS user_board_access (
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, board_id)
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS lead_rows (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,

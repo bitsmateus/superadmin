@@ -29,6 +29,7 @@ import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { RetornarField } from '@/components/comercial/RetornarField'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
+import { RichTextEditor, type RichTextEditorHandle } from '@/components/comercial/RichTextEditor'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useAuth } from '@/hooks/useAuth'
 import { useLeadBoards, useLeadRow } from '@/hooks/useLeadBoards'
@@ -41,6 +42,7 @@ import { leadNotesService } from '@/services/leadNotes'
 import { leadEventsService } from '@/services/leadEvents'
 import { leadLabelsService } from '@/services/leadLabels'
 import { cn, formatDateTimeShort, initials } from '@/lib/utils'
+import { sanitizeHtml, stripHtml } from '@/lib/richText'
 import { timeAgo } from '@/lib/time'
 import type { LeadEvent, LeadNoteAttachment } from '@/types/leadBoard'
 
@@ -295,7 +297,7 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
   const [editingText, setEditingText] = React.useState('')
   const [preview, setPreview] = React.useState<LeadNoteAttachment | null>(null)
 
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const editorRef = React.useRef<RichTextEditorHandle>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const mentionBtnRef = React.useRef<HTMLButtonElement>(null)
   const mentionPopRef = React.useRef<HTMLDivElement>(null)
@@ -325,17 +327,20 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
       const desc = describeEvent(e, eventColors)
       return { id: e.id, at: e.createdAt, actor: e.actorName, ...desc }
     })
-    const fromNotes = notes.map((n) => ({
+    const fromNotes = notes.map((n) => {
+      const plain = stripHtml(n.content)
+      return {
       id: `note-${n.id}`,
       at: n.createdAt,
       icon: <MessageSquare className="h-3.5 w-3.5" />,
-      text: n.content
-        ? `Atualização: "${n.content.length > 90 ? n.content.slice(0, 90) + '…' : n.content}"`
+      text: plain
+        ? `Atualização: "${plain.length > 90 ? plain.slice(0, 90) + '…' : plain}"`
         : n.attachments.length > 0 ? 'Anexou um arquivo' : 'Atualização',
       from: undefined as EventChip | undefined,
       to: undefined as EventChip | undefined,
       actor: n.authorName,
-    }))
+      }
+    })
     return [...fromEvents, ...fromNotes].sort((a, b) => b.at.localeCompare(a.at))
   }, [events, notes, eventColors])
 
@@ -344,27 +349,10 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
     [team, mentionSearch],
   )
 
-  // Cresce junto com o texto (até um teto, pra não empurrar o botão de enviar pra fora da tela).
-  React.useEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [text])
-
   const insertMention = (m: TeamMember) => {
     const label = `@${teamMemberLabel(m)} `
-    const el = textareaRef.current
-    if (el) {
-      const start = el.selectionStart ?? text.length
-      const end = el.selectionEnd ?? text.length
-      const next = text.slice(0, start) + label + text.slice(end)
-      setText(next)
-      requestAnimationFrame(() => {
-        el.focus()
-        const pos = start + label.length
-        el.setSelectionRange(pos, pos)
-      })
+    if (editorRef.current) {
+      editorRef.current.insertTextAtCursor(label)
     } else {
       setText((t) => t + label)
     }
@@ -397,17 +385,6 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
     setPendingAttachments((prev) => [...prev, ...next])
   }
 
-  // Colar print/imagem direto com Ctrl+V já anexa na atualização, sem precisar salvar em disco antes.
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(e.clipboardData.items)
-      .filter((item) => item.kind === 'file')
-      .map((item) => item.getAsFile())
-      .filter((f): f is File => !!f)
-    if (!files.length) return
-    e.preventDefault()
-    void handleFiles(files)
-  }
-
   const downloadAttachment = (a: LeadNoteAttachment) => {
     const link = document.createElement('a')
     link.href = a.dataUrl
@@ -417,8 +394,10 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
     document.body.removeChild(link)
   }
 
+  const hasText = stripHtml(text).length > 0
+
   const submit = async () => {
-    if (!text.trim() && pendingAttachments.length === 0) return
+    if (!hasText && pendingAttachments.length === 0) return
     setSending(true)
     const authorName = profile?.name || profile?.email || 'Alguém'
     const note = await leadNotesService.addNote(leadRowId, text, authorName, pendingAttachments)
@@ -441,15 +420,13 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
       <div className="flex-1 overflow-y-auto p-4">
         {tab === 'updates' && (
           <>
-            <div className="rounded-lg border border-line p-3">
-              <textarea
-                ref={textareaRef}
+            <div className="rounded-lg border border-line p-3 transition-colors focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15">
+              <RichTextEditor
+                ref={editorRef}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
-                onPaste={handlePaste}
+                onChange={setText}
+                onPasteFiles={handleFiles}
                 placeholder="Escreva uma atualização, cole um print (Ctrl+V) e mencione outros com @"
-                rows={1}
-                className="max-h-[40vh] min-h-[70px] w-full resize-none overflow-y-auto bg-transparent text-sm text-[#323338] placeholder:text-foreground/30 focus:outline-none"
               />
               {pendingAttachments.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -531,7 +508,7 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                     <Paperclip className="h-4 w-4" />
                   </button>
                 </div>
-                <Button size="sm" onClick={submit} disabled={(!text.trim() && !pendingAttachments.length) || sending} loading={sending}>
+                <Button size="sm" onClick={submit} disabled={(!hasText && !pendingAttachments.length) || sending} loading={sending}>
                   Enviar atualização
                 </Button>
               </div>
@@ -560,7 +537,7 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                                   <button
                                     type="button"
                                     title="Editar"
-                                    onClick={() => { setEditingNoteId(n.id); setEditingText(n.content) }}
+                                    onClick={() => { setEditingNoteId(n.id); setEditingText(stripHtml(n.content)) }}
                                     className="grid h-5 w-5 place-items-center rounded text-foreground/35 transition-colors hover:text-accent"
                                   >
                                     <Pencil className="h-3 w-3" />
@@ -609,7 +586,12 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                               </div>
                             </div>
                           ) : (
-                            n.content && <p className="mt-1 whitespace-pre-wrap text-sm text-[#323338]">{n.content}</p>
+                            stripHtml(n.content) && (
+                              <div
+                                className="mt-1 whitespace-pre-wrap text-sm text-[#323338]"
+                                dangerouslySetInnerHTML={{ __html: sanitizeHtml(n.content) }}
+                              />
+                            )
                           )}
                           {n.attachments.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">

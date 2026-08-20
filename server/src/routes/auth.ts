@@ -9,10 +9,20 @@ interface Profile {
   role: string;
   /** Área no funil: 'comercial' | 'entrega' | 'ambos'. Nulo = ambos. */
   area: string | null;
-  /** Trava opcional de acesso (só relevante pro papel 'suporte'/"Usuário"): restringe à área e, dentro
-   * dela, a quadros específicos de lead_boards (ver user_board_access). Default false = sem restrição. */
+  /** Trava opcional de acesso (só relevante pro papel 'suporte'/"Usuário"): restringe a itens de
+   * menu e quadros específicos (ver user_menu_access/user_board_access). Default false = sem restrição. */
   restrictAccess: boolean;
   created_at: string;
+  /** Só preenchido quando restrictAccess=true — os itens de menu que esse usuário pode ver. */
+  menuAccess?: string[];
+}
+
+/** Anexa a allowlist de itens de menu do próprio usuário — só relevante quando ele está restrito;
+ * é isso que o front usa (Sidebar/rotas) pra saber exatamente o que essa sessão pode enxergar. */
+async function attachMenuAccess<T extends { id: string; restrictAccess: boolean }>(profile: T): Promise<T & { menuAccess?: string[] }> {
+  if (!profile.restrictAccess) return profile;
+  const rows = await query<{ menu_key: string }>('SELECT menu_key FROM user_menu_access WHERE user_id = $1', [profile.id]);
+  return { ...profile, menuAccess: rows.map((r) => r.menu_key) };
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -38,7 +48,7 @@ export async function authRoutes(app: FastifyInstance) {
       );
 
       const { password_hash: _, ...user } = profile;
-      return { token, user };
+      return { token, user: await attachMenuAccess(user) };
     }
   );
 
@@ -50,7 +60,7 @@ export async function authRoutes(app: FastifyInstance) {
       [sub]
     );
     if (!profile) return reply.status(404).send({ message: 'Usuário não encontrado' });
-    return profile;
+    return attachMenuAccess(profile);
   });
 
   // GET /api/users — admin only
@@ -89,13 +99,13 @@ export async function authRoutes(app: FastifyInstance) {
   );
 
   // PATCH /api/users/:id
-  app.patch<{ Params: { id: string }; Body: { name?: string; role?: string; area?: string; restrictAccess?: boolean; password?: string } }>(
+  app.patch<{ Params: { id: string }; Body: { name?: string; email?: string; role?: string; area?: string; restrictAccess?: boolean; password?: string } }>(
     '/api/users/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { sub, role: actorRole } = req.user as { sub: string; role: string };
       const { id } = req.params;
-      const { name, role, area, restrictAccess, password } = req.body;
+      const { name, email, role, area, restrictAccess, password } = req.body;
 
       // Only admin can change roles or edit other users
       if (id !== sub && actorRole !== 'admin') {
@@ -103,6 +113,9 @@ export async function authRoutes(app: FastifyInstance) {
       }
       if (role && actorRole !== 'admin') {
         return reply.status(403).send({ message: 'Somente admin pode alterar roles' });
+      }
+      if (email && actorRole !== 'admin') {
+        return reply.status(403).send({ message: 'Somente admin pode alterar o e-mail' });
       }
       // Área e a trava de acesso são atributos organizacionais — só admin.
       if (area && actorRole !== 'admin') {
@@ -117,6 +130,7 @@ export async function authRoutes(app: FastifyInstance) {
       let i = 1;
 
       if (name !== undefined) { sets.push(`name = $${i++}`); params.push(name); }
+      if (email !== undefined) { sets.push(`email = $${i++}`); params.push(email.trim().toLowerCase()); }
       if (role !== undefined) { sets.push(`role = $${i++}`); params.push(role); }
       if (area !== undefined) { sets.push(`area = $${i++}`); params.push(area); }
       if (restrictAccess !== undefined) { sets.push(`restrict_access = $${i++}`); params.push(restrictAccess); }

@@ -2,25 +2,49 @@ import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
 
+/** Página do Comercial ↔ chave de menu correspondente na tela de Permissões (Equipe). */
+const COMERCIAL_MENU_KEY: Record<string, string> = {
+  novos_leads: 'comercial_novos_leads',
+  crm_luis: 'comercial_crm_luis',
+  crm_arthur: 'comercial_crm_arthur',
+};
+
 /**
- * Resolve a allowlist de quadros de um usuário restrito.
+ * Resolve a allowlist de quadros de um usuário restrito, combinando a página liberada em
+ * "Permissões de menu" com a lista fina de quadros (user_board_access).
  * null = sem restrição (vê tudo) · [] = não vê nenhum quadro · string[] = allowlist.
  * Só faz consulta extra pro papel 'suporte' ("Usuário") — admin/supervisor saem de cara com null.
  */
 async function restrictedBoardFilter(userId: string, role: string): Promise<string[] | null> {
   if (role !== 'suporte') return null;
-  const profile = await queryOne<{ restrict_access: boolean; area: string | null }>(
-    'SELECT restrict_access, area FROM profiles WHERE id = $1',
+  const profile = await queryOne<{ restrict_access: boolean }>(
+    'SELECT restrict_access FROM profiles WHERE id = $1',
     [userId]
   );
   if (!profile?.restrict_access) return null;
-  const area = profile.area ?? 'ambos';
-  if (area !== 'comercial' && area !== 'ambos') return [];
+
+  const menuRows = await query<{ menu_key: string }>(
+    'SELECT menu_key FROM user_menu_access WHERE user_id = $1',
+    [userId]
+  );
+  const menuKeys = new Set(menuRows.map((r) => r.menu_key));
+  // Sem nenhuma permissão de menu salva ainda = restrição não configurada por página, só por quadro.
+  const allowedPages = menuKeys.size === 0
+    ? Object.keys(COMERCIAL_MENU_KEY)
+    : Object.keys(COMERCIAL_MENU_KEY).filter((page) => menuKeys.has(COMERCIAL_MENU_KEY[page]));
+  if (!allowedPages.length) return [];
+
+  const boards = await query<{ id: string }>(
+    'SELECT id FROM lead_boards WHERE page = ANY($1)',
+    [allowedPages]
+  );
   const access = await query<{ board_id: string }>(
     'SELECT board_id FROM user_board_access WHERE user_id = $1',
     [userId]
   );
-  return access.length ? access.map((r) => r.board_id) : null;
+  if (!access.length) return boards.map((b) => b.id);
+  const explicit = new Set(access.map((r) => r.board_id));
+  return boards.map((b) => b.id).filter((id) => explicit.has(id));
 }
 
 export async function leadBoardRoutes(app: FastifyInstance) {

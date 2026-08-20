@@ -303,6 +303,15 @@ CREATE TABLE IF NOT EXISTS user_board_access (
   PRIMARY KEY (user_id, board_id)
 );
 
+-- Allowlist de itens de menu pra usuários com profiles.restrict_access = true. Sem linhas pra um
+-- user_id = ainda não configurado (não corta por página — só por quadro, se houver).
+CREATE TABLE IF NOT EXISTS user_menu_access (
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  menu_key TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, menu_key)
+);
+
 CREATE TABLE IF NOT EXISTS lead_rows (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,

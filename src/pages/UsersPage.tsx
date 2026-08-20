@@ -1,9 +1,10 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { Navigate } from 'react-router-dom'
 import {
   CheckCircle2,
+  ChevronRight,
   Loader2,
-  LayoutGrid,
+  Pencil,
   ShieldCheck,
   Trash2,
   UserCircle2,
@@ -27,9 +28,9 @@ import {
   type TeamArea,
   type UserRole,
 } from '@/services/supabase'
+import { MENU_ACCESS_ITEMS } from '@/constants/menuAccess'
 import { api, onSseEvent } from '@/services/api'
 import { cn, formatDateShort, initials } from '@/lib/utils'
-import { ABA_LABELS, ABA_ORDER } from '@/types/leadBoard'
 
 const ROLE_OPTIONS: { value: UserRole; label: string; description: string }[] = [
   {
@@ -45,7 +46,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string; description: string }[] = 
   {
     value: 'suporte',
     label: 'Usuário',
-    description: 'Não vê contrato/financeiro. Não pode excluir. Pode ter o acesso restrito a uma área ou a quadros específicos do Comercial.',
+    description: 'Não vê contrato/financeiro. Não pode excluir. Pode ter as Permissões de menu restritas ao que ele deve ver.',
   },
 ]
 
@@ -57,8 +58,8 @@ const ROLE_LABEL: Record<UserRole, string> = {
 
 /**
  * Área no funil — define onde a pessoa aparece como responsável (filtros do
- * pipeline e seletores do cliente). Também vira controle de acesso quando o
- * usuário (papel "suporte") tem a restrição ligada — aí ele só vê a área definida aqui.
+ * pipeline e seletores do cliente). Não tem relação com permissão de acesso —
+ * isso agora é o bloco "Permissões de menu" no editar usuário.
  */
 const AREA_OPTIONS: { value: TeamArea; label: string; description: string }[] = [
   {
@@ -124,16 +125,6 @@ export function UsersPage() {
     return <Navigate to="/" replace />
   }
 
-  const changeRole = async (id: string, role: UserRole) => {
-    try {
-      await api.patch(`/api/users/${id}`, { role })
-      toast.success('Papel atualizado')
-      void reload()
-    } catch (err) {
-      toast.error('Falha ao alterar papel: ' + (err instanceof Error ? err.message : 'Erro'))
-    }
-  }
-
   const changeArea = async (id: string, area: TeamArea) => {
     try {
       await api.patch(`/api/users/${id}`, { area })
@@ -141,16 +132,6 @@ export function UsersPage() {
       void reload()
     } catch (err) {
       toast.error('Falha ao alterar área: ' + (err instanceof Error ? err.message : 'Erro'))
-    }
-  }
-
-  const changeRestrictAccess = async (id: string, restrictAccess: boolean) => {
-    try {
-      await api.patch(`/api/users/${id}`, { restrictAccess })
-      toast.success(restrictAccess ? 'Acesso restrito ativado' : 'Acesso restrito desativado')
-      void reload()
-    } catch (err) {
-      toast.error('Falha ao alterar restrição: ' + (err instanceof Error ? err.message : 'Erro'))
     }
   }
 
@@ -197,7 +178,7 @@ export function UsersPage() {
                 <TH>E-mail</TH>
                 <TH>Papel</TH>
                 <TH>Área</TH>
-                <TH>Acesso</TH>
+                <TH>Permissões</TH>
                 <TH>Criado em</TH>
                 <TH className="text-right">Ações</TH>
               </tr>
@@ -208,9 +189,8 @@ export function UsersPage() {
                   key={p.id}
                   profile={p}
                   isSelf={p.id === profile?.id}
-                  onChangeRole={(role) => changeRole(p.id, role)}
                   onChangeArea={(area) => changeArea(p.id, area)}
-                  onChangeRestrictAccess={(val) => changeRestrictAccess(p.id, val)}
+                  onSaved={() => reload()}
                   onDeleted={() => reload()}
                 />
               ))}
@@ -221,10 +201,10 @@ export function UsersPage() {
         <p className="mt-6 rounded-lg border border-line bg-elevate/[0.02] px-4 py-3 text-[11.5px] text-foreground/55">
           <strong className="text-foreground/80">Como criar um novo usuário:</strong>{' '}
           clique em <em>"Novo usuário"</em> — você cria o e-mail e a senha; ele
-          entra com role <em>suporte</em> por padrão e você pode promover aqui.
-          A <strong className="text-foreground/80">área</strong> é outra coisa:
-          define se a pessoa aparece como responsável comercial, de entrega ou
-          nos dois — é o que alimenta os filtros do pipeline.
+          entra com role <em>suporte</em> por padrão. Clique em <em>"Editar"</em>{' '}
+          numa linha pra trocar nome, e-mail, senha, perfil e as{' '}
+          <strong className="text-foreground/80">permissões de menu</strong> — exatamente
+          o que essa pessoa pode ver (e, dentro do Comercial, quais quadros).
         </p>
       </div>
 
@@ -243,21 +223,19 @@ export function UsersPage() {
 function ProfileRow({
   profile,
   isSelf,
-  onChangeRole,
   onChangeArea,
-  onChangeRestrictAccess,
+  onSaved,
   onDeleted,
 }: {
   profile: Profile
   isSelf: boolean
-  onChangeRole: (role: UserRole) => void | Promise<void>
   onChangeArea: (area: TeamArea) => void | Promise<void>
-  onChangeRestrictAccess: (val: boolean) => void | Promise<void>
+  onSaved: () => void
   onDeleted: () => void
 }) {
   const [confirmRemoveOpen, setConfirmRemoveOpen] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
-  const [boardAccessOpen, setBoardAccessOpen] = React.useState(false)
+  const [editOpen, setEditOpen] = React.useState(false)
 
   const removeProfile = async () => {
     setRemoving(true)
@@ -296,22 +274,7 @@ function ProfileRow({
       </TD>
       <TD className="text-foreground/70">{profile.email}</TD>
       <TD>
-        <div className="flex items-center gap-2">
-          <Badge tone={ROLE_TONE[profile.role]}>
-            {ROLE_LABEL[profile.role]}
-          </Badge>
-          {!isSelf && (
-            <Select
-              value={profile.role}
-              onChange={(e) => onChangeRole(e.target.value as UserRole)}
-              options={ROLE_OPTIONS.map((o) => ({
-                value: o.value,
-                label: o.label,
-              }))}
-              className="max-w-[160px]"
-            />
-          )}
-        </div>
+        <Badge tone={ROLE_TONE[profile.role]}>{ROLE_LABEL[profile.role]}</Badge>
       </TD>
       <TD>
         <div className="flex items-center gap-2">
@@ -322,57 +285,44 @@ function ProfileRow({
             value={resolveArea(profile.area)}
             onChange={(e) => onChangeArea(e.target.value as TeamArea)}
             options={AREA_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-            className="max-w-[140px]"
+            className="max-w-[120px]"
           />
         </div>
       </TD>
       <TD>
         {profile.role === 'suporte' ? (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onChangeRestrictAccess(!profile.restrictAccess)}
-              title={profile.restrictAccess ? 'Clique pra desligar a restrição' : 'Clique pra restringir o acesso à área definida'}
-              className={cn(
-                'relative h-5 w-9 shrink-0 rounded-full transition-colors',
-                profile.restrictAccess ? 'bg-accent' : 'bg-elevate/[0.15]',
-              )}
-            >
-              <span
-                className={cn(
-                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
-                  profile.restrictAccess ? 'translate-x-4' : 'translate-x-0.5',
-                )}
-              />
-            </button>
-            {profile.restrictAccess && resolveArea(profile.area) !== 'entrega' && (
-              <button
-                type="button"
-                onClick={() => setBoardAccessOpen(true)}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground/70 hover:bg-elevate/[0.06]"
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Quadros
-              </button>
-            )}
-          </div>
+          profile.restrictAccess ? (
+            <Badge tone="warning">Restrito</Badge>
+          ) : (
+            <Badge tone="neutral">Acesso total</Badge>
+          )
         ) : (
-          <span className="text-xs text-foreground/35">—</span>
+          <span className="text-xs text-foreground/35">Acesso total</span>
         )}
       </TD>
       <TD className="text-foreground/60">{formatDateShort(profile.created_at)}</TD>
       <TD className="text-right">
-        {!isSelf && (
+        <div className="flex items-center justify-end gap-1">
           <button
             type="button"
-            onClick={() => setConfirmRemoveOpen(true)}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-danger hover:bg-danger/10"
-            aria-label="Remover acesso"
+            onClick={() => setEditOpen(true)}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground/65 hover:bg-elevate/[0.06]"
           >
-            <Trash2 className="h-3.5 w-3.5" />
-            Remover
+            <Pencil className="h-3.5 w-3.5" />
+            Editar
           </button>
-        )}
+          {!isSelf && (
+            <button
+              type="button"
+              onClick={() => setConfirmRemoveOpen(true)}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-danger hover:bg-danger/10"
+              aria-label="Remover acesso"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Remover
+            </button>
+          )}
+        </div>
       </TD>
 
       <Modal
@@ -402,46 +352,83 @@ function ProfileRow({
         </p>
       </Modal>
 
-      <BoardAccessModal
+      <EditUserModal
         profile={profile}
-        open={boardAccessOpen}
-        onClose={() => setBoardAccessOpen(false)}
+        isSelf={isSelf}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        onSaved={onSaved}
       />
     </TR>
   )
 }
 
-function BoardAccessModal({
+interface BoardLite {
+  id: string
+  name: string
+  color: string
+  page: string
+}
+
+function EditUserModal({
   profile,
+  isSelf,
   open,
   onClose,
+  onSaved,
 }: {
   profile: Profile
+  isSelf: boolean
   open: boolean
   onClose: () => void
+  onSaved: () => void
 }) {
-  const [boards, setBoards] = React.useState<{ id: string; name: string; color: string; page: string }[]>([])
-  const [selected, setSelected] = React.useState<Set<string>>(new Set())
-  const [loading, setLoading] = React.useState(false)
+  const [name, setName] = React.useState('')
+  const [email, setEmail] = React.useState('')
+  const [password, setPassword] = React.useState('')
+  const [role, setRole] = React.useState<UserRole>('suporte')
+  const [restricted, setRestricted] = React.useState(false)
+  const [menuKeys, setMenuKeys] = React.useState<Set<string>>(new Set())
+  const [boardIds, setBoardIds] = React.useState<Set<string>>(new Set())
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set())
+  const [boards, setBoards] = React.useState<BoardLite[]>([])
+  const [loadingPerms, setLoadingPerms] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     if (!open) return
-    setLoading(true)
+    setName(profile.name ?? '')
+    setEmail(profile.email)
+    setPassword('')
+    setRole(profile.role)
+    setRestricted(!!profile.restrictAccess)
+    setExpanded(new Set())
+    setLoadingPerms(true)
     Promise.all([
-      api.get<{ id: string; name: string; color: string; page: string }[]>('/api/lead-boards'),
+      api.get<BoardLite[]>('/api/lead-boards'),
+      api.get<string[]>(`/api/users/${profile.id}/menu-access`),
       api.get<string[]>(`/api/users/${profile.id}/board-access`),
     ])
-      .then(([allBoards, access]) => {
+      .then(([allBoards, menu, boardAccess]) => {
         setBoards(allBoards)
-        setSelected(new Set(access))
+        setMenuKeys(new Set(menu.length ? menu : MENU_ACCESS_ITEMS.map((i) => i.key)))
+        setBoardIds(new Set(boardAccess))
       })
-      .catch((err) => toast.error('Falha ao carregar quadros: ' + (err instanceof Error ? err.message : 'Erro')))
-      .finally(() => setLoading(false))
-  }, [open, profile.id])
+      .catch((err) => toast.error('Falha ao carregar permissões: ' + (err instanceof Error ? err.message : 'Erro')))
+      .finally(() => setLoadingPerms(false))
+  }, [open, profile])
 
-  const toggle = (id: string) => {
-    setSelected((prev) => {
+  const toggleMenuKey = (key: string) => {
+    setMenuKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const toggleBoardId = (id: string) => {
+    setBoardIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -449,11 +436,42 @@ function BoardAccessModal({
     })
   }
 
+  const toggleExpanded = (key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   const save = async () => {
+    if (!name.trim() || !email.trim()) {
+      toast.error('Informe nome e e-mail')
+      return
+    }
+    if (password.trim() && password.length < 6) {
+      toast.error('A nova senha precisa ter no mínimo 6 caracteres')
+      return
+    }
     setSaving(true)
     try {
-      await api.put(`/api/users/${profile.id}/board-access`, { boardIds: Array.from(selected) })
-      toast.success('Quadros atualizados')
+      const patch: Record<string, unknown> = {
+        name: name.trim(),
+        email: email.trim(),
+        role,
+        restrictAccess: role === 'suporte' ? restricted : false,
+      }
+      if (password.trim()) patch.password = password
+      await api.patch(`/api/users/${profile.id}`, patch)
+      if (role === 'suporte' && restricted) {
+        await Promise.all([
+          api.put(`/api/users/${profile.id}/menu-access`, { menuKeys: Array.from(menuKeys) }),
+          api.put(`/api/users/${profile.id}/board-access`, { boardIds: Array.from(boardIds) }),
+        ])
+      }
+      toast.success('Usuário atualizado')
+      onSaved()
       onClose()
     } catch (err) {
       toast.error('Falha ao salvar: ' + (err instanceof Error ? err.message : 'Erro'))
@@ -462,71 +480,130 @@ function BoardAccessModal({
     }
   }
 
-  const byAba = ABA_ORDER.map((page) => ({
-    page,
-    label: ABA_LABELS[page],
-    boards: boards.filter((b) => b.page === page),
-  }))
-
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={`Quadros liberados — ${profile.name || profile.email}`}
-      description={
-        selected.size === 0
-          ? 'Nenhum marcado = vê todos os quadros da área liberada.'
-          : `${selected.size} quadro(s) selecionado(s) — só esses vão aparecer pra esse usuário.`
-      }
-      size="md"
+      title="Editar usuário"
+      size="lg"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Cancelar
           </Button>
-          <Button onClick={save} loading={saving}>
+          <Button onClick={save} loading={saving} leftIcon={!saving ? <CheckCircle2 className="h-4 w-4" /> : undefined}>
             Salvar
           </Button>
         </>
       }
     >
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-foreground/55">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando quadros…
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input label="Nome *" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input label="E-mail *" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
-      ) : (
-        <div className="max-h-[50vh] space-y-4 overflow-y-auto">
-          {byAba.map(({ page, label, boards: abaBoards }) => (
-            <div key={page}>
-              <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">
-                {label}
-              </div>
-              {abaBoards.length === 0 ? (
-                <p className="text-xs text-foreground/40">Nenhum quadro nessa aba.</p>
-              ) : (
-                <div className="space-y-1">
-                  {abaBoards.map((b) => (
-                    <label
-                      key={b.id}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-elevate/[0.04]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selected.has(b.id)}
-                        onChange={() => toggle(b.id)}
-                        className="h-3.5 w-3.5 rounded border-line"
-                      />
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
-                      <span className="truncate text-foreground/85">{b.name}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input
+            label="Nova senha (deixe em branco pra manter)"
+            type="password"
+            placeholder="Mínimo 6 caracteres"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-foreground/70">Perfil *</label>
+            <Select
+              value={role}
+              onChange={(e) => setRole(e.target.value as UserRole)}
+              options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              disabled={isSelf}
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        {role === 'suporte' && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-foreground/70">Usuário restrito</label>
+            <Select
+              value={restricted ? 'on' : 'off'}
+              onChange={(e) => setRestricted(e.target.value === 'on')}
+              options={[
+                { value: 'off', label: 'Desabilitado — acesso total' },
+                { value: 'on', label: 'Habilitado — só o que for marcado abaixo' },
+              ]}
+              className="w-full sm:max-w-xs"
+            />
+          </div>
+        )}
+
+        {role === 'suporte' && restricted && (
+          <div className="rounded-lg border border-line bg-elevate/[0.015] p-3">
+            <div className="mb-2 text-xs font-medium text-foreground/70">
+              Permissões de menu — exatamente o que esse usuário vai ver
             </div>
-          ))}
-        </div>
-      )}
+            {loadingPerms ? (
+              <div className="flex items-center gap-2 py-3 text-xs text-foreground/50">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Carregando…
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {MENU_ACCESS_ITEMS.map((item) => {
+                  const checked = menuKeys.has(item.key)
+                  const pageBoards = item.boardsPage ? boards.filter((b) => b.page === item.boardsPage) : []
+                  const isExpanded = expanded.has(item.key)
+                  return (
+                    <div key={item.key} className="rounded-md border border-line/60 bg-card px-2.5 py-1.5">
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleMenuKey(item.key)}
+                          className="h-3.5 w-3.5 rounded border-line"
+                        />
+                        <span className="flex-1 text-foreground/85">{item.label}</span>
+                        {item.boardsPage && checked && pageBoards.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(item.key)}
+                            title="Quadros específicos"
+                            className="text-foreground/35 hover:text-foreground/70"
+                          >
+                            <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-90')} />
+                          </button>
+                        )}
+                      </label>
+                      {item.boardsPage && checked && isExpanded && (
+                        <div className="ml-5 mt-1.5 space-y-1 border-l border-line/60 pl-2.5">
+                          {pageBoards.map((b) => (
+                            <label key={b.id} className="flex items-center gap-1.5 text-[11px]">
+                              <input
+                                type="checkbox"
+                                checked={boardIds.has(b.id)}
+                                onChange={() => toggleBoardId(b.id)}
+                                className="h-3 w-3 rounded border-line"
+                              />
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
+                              <span className="truncate text-foreground/65">{b.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <p className="mt-2 text-[10.5px] leading-relaxed text-foreground/45">
+              Item desmarcado some do menu e das rotas desse usuário. Nos itens do Comercial, clique na
+              setinha pra liberar quadros específicos — sem nenhum marcado, ele vê todos os quadros
+              daquela tela.
+            </p>
+          </div>
+        )}
+      </div>
     </Modal>
   )
 }
@@ -545,7 +622,6 @@ function InviteUserModal({
   const [name, setName] = React.useState('')
   const [role, setRole] = React.useState<UserRole>('suporte')
   const [area, setArea] = React.useState<TeamArea>('ambos')
-  const [restrictAccess, setRestrictAccess] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
 
   React.useEffect(() => {
@@ -555,7 +631,6 @@ function InviteUserModal({
       setName('')
       setRole('suporte')
       setArea('ambos')
-      setRestrictAccess(false)
     }
   }, [open])
 
@@ -576,7 +651,6 @@ function InviteUserModal({
         password,
         role,
         area,
-        restrictAccess: role === 'suporte' ? restrictAccess : false,
       })
       toast.success('Usuário criado')
       onCreated()
@@ -592,7 +666,7 @@ function InviteUserModal({
       open={open}
       onClose={onClose}
       title="Novo usuário"
-      description="Cria a conta de acesso ao painel. A senha pode ser trocada depois pelo próprio usuário."
+      description="Cria a conta de acesso ao painel. Depois de criado, clique em Editar pra ajustar as permissões de menu."
       size="md"
       footer={
         <>
@@ -684,23 +758,6 @@ function InviteUserModal({
             ))}
           </div>
         </div>
-        {role === 'suporte' && (
-          <label className="flex items-start gap-2.5 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2.5 text-xs">
-            <input
-              type="checkbox"
-              checked={restrictAccess}
-              onChange={(e) => setRestrictAccess(e.target.checked)}
-              className="mt-0.5 h-3.5 w-3.5 rounded border-line"
-            />
-            <span>
-              <span className="block text-sm font-medium text-foreground">Restringir acesso</span>
-              <span className="mt-0.5 block text-[10.5px] leading-relaxed text-foreground/55">
-                Esse usuário só vai enxergar a área "{AREA_OPTIONS.find((o) => o.value === area)?.label}"
-                definida acima. Dá pra liberar quadros específicos do Comercial depois, aqui em Equipe.
-              </span>
-            </span>
-          </label>
-        )}
       </div>
     </Modal>
   )

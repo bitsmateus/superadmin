@@ -1,7 +1,7 @@
 ﻿import { Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { resolveArea } from '@/services/supabase'
+import { MENU_ACCESS_ITEMS } from '@/constants/menuAccess'
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { profile: session, loading } = useAuth()
@@ -28,16 +28,16 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Usuário com acesso restrito só navega dentro da área liberada — Comercial
-  // ou o restante do painel (onde o trabalho de entrega já acontece hoje).
+  // Usuário com acesso restrito só navega pelas páginas liberadas em Permissões (Equipe).
+  // Páginas fora da lista gerenciada aqui (admin-only, financeiro) já têm gate próprio por papel.
   if (session.restrictAccess) {
-    const area = resolveArea(session.area)
-    const onComercial = location.pathname.startsWith('/comercial')
-    if (area === 'comercial' && !onComercial) {
-      return <Navigate to="/comercial/novos-leads" replace />
-    }
-    if (area === 'entrega' && onComercial) {
-      return <Navigate to="/" replace />
+    const allowed = new Set(session.menuAccess ?? [])
+    const matched = MENU_ACCESS_ITEMS.find(
+      (item) => location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path)),
+    )
+    if (matched && !allowed.has(matched.key)) {
+      const fallback = MENU_ACCESS_ITEMS.find((item) => allowed.has(item.key))
+      return <Navigate to={fallback?.path ?? '/'} replace />
     }
   }
 

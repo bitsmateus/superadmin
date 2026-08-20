@@ -31,7 +31,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut, useAuth } from '@/hooks/useAuth'
-import { canManageUsers, canSeeFinancials, resolveArea } from '@/services/supabase'
+import { canManageUsers, canSeeFinancials } from '@/services/supabase'
+import { MENU_KEY_BY_PATH } from '@/constants/menuAccess'
 import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
 import { ServerSwitcher } from './ServerSwitcher'
@@ -87,12 +88,17 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const seeFinancials = canSeeFinancials(profile?.role)
   const myTasks = useMyOpenTaskCount(profile?.id)
 
-  // Usuário com acesso restrito só enxerga o grupo da sua área — Comercial (área
-  // 'comercial') ou Suporte/Arquivados (área 'entrega', onde o trabalho de entrega
-  // já acontece hoje). 'ambos' ou sem restrição = sem corte nenhum.
-  const restrictArea = profile?.restrictAccess ? resolveArea(profile.area) : 'ambos'
-  const showSuporteGroup = restrictArea !== 'comercial'
-  const showComercialGroup = restrictArea !== 'entrega'
+  // Usuário com acesso restrito só enxerga os itens liberados em Permissões (Equipe).
+  // Itens fora dessa lista (admin-only, financeiro) já têm gate próprio por papel.
+  const menuAllowed = profile?.restrictAccess ? new Set(profile.menuAccess ?? []) : null
+  const canSee = React.useCallback(
+    (to: string) => {
+      if (menuAllowed === null) return true
+      const key = MENU_KEY_BY_PATH[to]
+      return key ? menuAllowed.has(key) : true
+    },
+    [menuAllowed],
+  )
 
   const [archivedOpen, setArchivedOpen] = React.useState(false)
   const [comercialOpen, setComercialOpen] = React.useState(() =>
@@ -105,7 +111,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const suporte = [
     ...suporteItems,
     ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
-  ]
+  ].filter((item) => canSee(item.to))
+  const visibleComercialItems = comercialItems.filter((item) => canSee(item.to))
   const suporteActive = SUPORTE_ROUTES.some((r) =>
     r === '/' ? location.pathname === '/' : location.pathname.startsWith(r),
   )
@@ -121,7 +128,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       ? [{ to: '/auditoria', label: 'Auditoria', icon: FileSearch }]
       : []),
     { to: '/settings', label: 'Configurações', icon: Settings },
-  ]
+  ].filter((item) => canSee(item.to))
 
   // Movidos para "Arquivados" (acessíveis, fora do caminho do dia a dia).
   const archivedItems = [
@@ -135,7 +142,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       : []),
     { to: '/templates', label: 'Templates', icon: MessageSquare },
     ...(isAdmin ? [{ to: '/equipe', label: 'Performance', icon: Trophy }] : []),
-  ]
+  ].filter((item) => canSee(item.to))
 
   return (
     <aside
@@ -166,7 +173,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
 
       <nav className="mt-2 flex flex-1 flex-col gap-0.5 px-3">
         {/* Suporte — grupo expansível com subpáginas */}
-        {showSuporteGroup && (
+        {suporte.length > 0 && (
         <>
         <button
           type="button"
@@ -243,7 +250,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         )}
 
         {/* Comercial — grupo expansível com subpáginas */}
-        {showComercialGroup && (
+        {visibleComercialItems.length > 0 && (
         <>
         <button
           type="button"
@@ -272,7 +279,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
           />
         </button>
         {comercialOpen &&
-          comercialItems.map(({ to, label, icon: Icon }) => (
+          visibleComercialItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -302,7 +309,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         </>
         )}
 
-        {showSuporteGroup && (
+        {(secondaryItems.length > 0 || archivedItems.length > 0) && (
         <>
         <div className="my-2 h-px bg-elevate/[0.05]" />
 

@@ -469,7 +469,7 @@ function BoardNameEditor({ board }: { board: LeadBoard }) {
         else setValue(board.name)
       }}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      className="min-w-0 flex-1 truncate bg-transparent text-sm font-semibold uppercase tracking-wide outline-none focus:underline"
+      className="min-w-0 flex-1 truncate bg-transparent text-sm uppercase tracking-wide outline-none focus:underline"
       style={{ color: board.color }}
     />
   )
@@ -961,7 +961,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
 
   return (
     <>
-      <TopBar title={title} subtitle={subtitle} titleClassName="text-[36px] font-normal" />
+      <TopBar title={title} subtitle={subtitle} titleClassName="text-[36px] font-semibold" />
 
       <div className="flex min-h-screen flex-col bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!booted ? (

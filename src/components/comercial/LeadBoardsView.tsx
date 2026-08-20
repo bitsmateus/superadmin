@@ -520,6 +520,16 @@ function BoardGroup({
   }, [allRows, search, sdrFilter, filterRules, sortDesc])
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
 
+  // Tipo, Dia de contato, Status, Ligação, SDR e Retornar propagam pra toda a seleção
+  // quando editados numa linha que já está marcada — igual ao Monday.
+  const applyFieldChange = (row: LeadRow, patch: Partial<LeadRow>) => {
+    if (selectedIds.has(row.id) && selectedIds.size > 1) {
+      for (const id of selectedIds) leadBoardsService.updateRow(id, patch)
+    } else {
+      leadBoardsService.updateRow(row.id, patch)
+    }
+  }
+
   const startDrag = (e: React.DragEvent, id: string, label: string) => {
     e.dataTransfer.setData('text/plain', id)
     e.dataTransfer.effectAllowed = 'move'
@@ -688,12 +698,9 @@ function BoardGroup({
                               const target = allBoards.find(
                                 (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === next.trim().toLowerCase(),
                               )
-                              leadBoardsService.updateRow(
-                                row.id,
-                                target ? { status: next, boardId: target.id } : { status: next },
-                              )
+                              applyFieldChange(row, target ? { status: next, boardId: target.id } : { status: next })
                             } else {
-                              leadBoardsService.updateRow(row.id, { [col.key]: next })
+                              applyFieldChange(row, { [col.key]: next })
                             }
                           }}
                         />
@@ -707,8 +714,14 @@ function BoardGroup({
                         <RetornarField
                           value={row.retornar}
                           retornado={row.retornado}
-                          onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
+                          onChange={(patch) => applyFieldChange(row, patch)}
                           className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
+                        />
+                      ) : col.key === 'ligacao' ? (
+                        <EditableField
+                          value={row.ligacao}
+                          onSave={(next) => applyFieldChange(row, { ligacao: next })}
+                          className={cn('bg-transparent px-2.5 py-1.5 text-sm text-gray-800', col.align === 'center' && 'text-center')}
                         />
                       ) : (
                         <EditableField

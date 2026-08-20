@@ -35,7 +35,7 @@ function boardToRow(patch: Partial<LeadBoard>): Record<string, unknown> {
 
 type LeadRowRow = {
   id: string; board_id: string; nome: string; tipo: string; empresa: string; telefone: string
-  dia_contato: string; status: string; retornar: string; responsavel: string
+  dia_contato: string; status: string; retornar: string; retornado: boolean; responsavel: string
   sdr: string; numero: string; dor_cliente: string; numero_atendentes: string; valor_mrr: string
   valor_implementacao: string; notes_count: number; position: number; created_at: string; updated_at: string
 }
@@ -43,6 +43,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
   return {
     id: r.id, boardId: r.board_id, nome: r.nome, tipo: r.tipo, empresa: r.empresa,
     telefone: r.telefone, diaContato: r.dia_contato, status: r.status, retornar: r.retornar,
+    retornado: r.retornado ?? false,
     responsavel: r.responsavel, sdr: r.sdr, numero: r.numero,
     dorCliente: r.dor_cliente, numeroAtendentes: r.numero_atendentes,
     valorMrr: r.valor_mrr, valorImplementacao: r.valor_implementacao, notesCount: r.notes_count ?? 0,
@@ -58,6 +59,7 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('diaContato' in patch) row.dia_contato = patch.diaContato
   if ('status' in patch) row.status = patch.status
   if ('retornar' in patch) row.retornar = patch.retornar
+  if ('retornado' in patch) row.retornado = patch.retornado
   if ('responsavel' in patch) row.responsavel = patch.responsavel
   if ('sdr' in patch) row.sdr = patch.sdr
   if ('numero' in patch) row.numero = patch.numero
@@ -245,7 +247,7 @@ export const leadBoardsService = {
     const now = new Date().toISOString()
     const row: LeadRow = {
       id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '',
-      status: '', retornar: '', responsavel: '', sdr: '', numero: '',
+      status: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
       dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
       position, createdAt: now, updatedAt: now, ...initial,
     }

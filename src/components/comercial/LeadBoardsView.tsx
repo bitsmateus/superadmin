@@ -629,7 +629,8 @@ function BoardGroup({
                       ) : col.key === 'retornar' ? (
                         <RetornarField
                           value={row.retornar}
-                          onSave={(next) => leadBoardsService.updateRow(row.id, { retornar: next })}
+                          retornado={row.retornado}
+                          onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
                           className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
                         />
                       ) : (

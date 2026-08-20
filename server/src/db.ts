@@ -260,6 +260,8 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS numero_atendentes TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS notes_count INT NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS sdr TEXT NOT NULL DEFAULT ''`);
+  // Marca se o retorno agendado já foi feito — usado pra colorir a coluna Retornar (amarelo = pendente, vermelho = atrasado).
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS retornado BOOLEAN NOT NULL DEFAULT false`);
   // "Valor Previsto"/"Valor Fechado" viraram "Valor MRR"/"Valor de Implementação"
   // — rename preserva os dados ja digitados (nao e um drop+recreate). So renomeia
   // se o destino ainda nao existir (evita colisao em boots repetidos).

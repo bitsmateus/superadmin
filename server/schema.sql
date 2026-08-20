@@ -299,6 +299,7 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   dia_contato TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT '',
   retornar TEXT NOT NULL DEFAULT '',
+  retornado BOOLEAN NOT NULL DEFAULT false,
   responsavel TEXT NOT NULL DEFAULT '',
   sdr TEXT NOT NULL DEFAULT '',
   numero TEXT NOT NULL DEFAULT '',

@@ -122,7 +122,8 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Retornar">
               <RetornarField
                 value={row.retornar}
-                onSave={(v) => leadBoardsService.updateRow(row.id, { retornar: v })}
+                retornado={row.retornado}
+                onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
                 className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338]"
               />
             </FieldRow>

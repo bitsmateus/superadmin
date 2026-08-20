@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
-import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
+import { Calendar, Check, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn } from '@/lib/utils'
 
@@ -39,15 +39,37 @@ function formatDisplay(value: string): string {
 
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => `${pad(Math.floor(i / 2))}:${i % 2 === 0 ? '00' : '30'}`)
 
+export type RetornarStatus = 'none' | 'pending' | 'overdue' | 'done'
+
+/** none = sem data · pending = agendado, ainda não chegou o dia · overdue = passou e não foi marcado como retornado · done = marcado como retornado. */
+export function retornarStatus(value: string, retornado: boolean): RetornarStatus {
+  const { date, time } = parseValue(value)
+  if (!date) return 'none'
+  if (retornado) return 'done'
+  const dt = new Date(date)
+  const [h, m] = (time || '00:00').split(':').map(Number)
+  dt.setHours(h, m, 0, 0)
+  return dt.getTime() < Date.now() ? 'overdue' : 'pending'
+}
+
+const STATUS_STYLE: Record<RetornarStatus, { bg: string; text: string }> = {
+  none: { bg: 'transparent', text: '' },
+  pending: { bg: '#FEF3C7', text: '#92400E' },
+  overdue: { bg: '#FEE2E2', text: '#B91C1C' },
+  done: { bg: '#DCFCE7', text: '#15803D' },
+}
+
 export interface RetornarFieldProps {
   value: string
-  onSave: (next: string) => void
+  retornado: boolean
+  onChange: (patch: { retornar?: string; retornado?: boolean }) => void
   className?: string
   placeholder?: string
 }
 
-/** Data + hora num calendário flutuante moderno — o campo de horário só aparece depois que a data é escolhida. */
-export function RetornarField({ value, onSave, className, placeholder = 'Selecionar…' }: RetornarFieldProps) {
+/** Data + hora num calendário flutuante moderno — o horário só aparece depois que a data é escolhida, e a
+ * célula fica amarela (agendado), vermelha (passou e ninguém marcou como retornado) ou verde (retornado). */
+export function RetornarField({ value, retornado, onChange, className, placeholder = 'Selecionar…' }: RetornarFieldProps) {
   const [open, setOpen] = React.useState(false)
   const [timeOpen, setTimeOpen] = React.useState(false)
   const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null)
@@ -74,7 +96,8 @@ export function RetornarField({ value, onSave, className, placeholder = 'Selecio
   }
 
   const pickDay = (d: Date) => {
-    onSave(toValue(d, parsed.time || '09:00'))
+    const isNewDate = !parsed.date || !sameDay(d, parsed.date)
+    onChange({ retornar: toValue(d, parsed.time || '09:00'), ...(isNewDate ? { retornado: false } : {}) })
     if (d.getMonth() !== viewMonth || d.getFullYear() !== viewYear) {
       setViewYear(d.getFullYear())
       setViewMonth(d.getMonth())
@@ -83,11 +106,11 @@ export function RetornarField({ value, onSave, className, placeholder = 'Selecio
   }
 
   const setTime = (time: string) => {
-    onSave(toValue(parsed.date ?? new Date(viewYear, viewMonth, 1), time))
+    onChange({ retornar: toValue(parsed.date ?? new Date(viewYear, viewMonth, 1), time) })
     setTimeOpen(false)
   }
 
-  const clear = () => { onSave(''); setOpen(false) }
+  const clear = () => { onChange({ retornar: '', retornado: false }); setOpen(false) }
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1) } else setViewMonth((m) => m - 1)
@@ -105,6 +128,8 @@ export function RetornarField({ value, onSave, className, placeholder = 'Selecio
     return d
   })
   const today = new Date()
+  const status = retornarStatus(value, retornado)
+  const statusStyle = STATUS_STYLE[status]
 
   return (
     <>
@@ -112,11 +137,12 @@ export function RetornarField({ value, onSave, className, placeholder = 'Selecio
         ref={btnRef}
         type="button"
         onClick={openPicker}
+        style={status === 'none' ? undefined : { backgroundColor: statusStyle.bg, color: statusStyle.text }}
         className={cn('flex h-full w-full items-center gap-1.5 truncate text-left', className)}
       >
-        <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+        <Calendar className={cn('h-3.5 w-3.5 shrink-0', status === 'none' && 'text-gray-400')} style={status === 'none' ? undefined : { color: statusStyle.text }} />
         {value ? (
-          <span className="truncate">{formatDisplay(value)}</span>
+          <span className="truncate font-medium">{formatDisplay(value)}</span>
         ) : (
           <span className="truncate text-gray-300">{placeholder}</span>
         )}
@@ -206,6 +232,24 @@ export function RetornarField({ value, onSave, className, placeholder = 'Selecio
                 </div>
               )}
             </div>
+          )}
+
+          {parsed.date && (
+            <button
+              type="button"
+              onClick={() => onChange({ retornado: !retornado })}
+              className="mt-2.5 flex w-full items-center gap-2 rounded-md border border-gray-100 bg-gray-50/60 px-2 py-1.5 text-left text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100"
+            >
+              <span
+                className={cn(
+                  'grid h-4 w-4 shrink-0 place-items-center rounded border',
+                  retornado ? 'border-accent bg-accent text-white' : 'border-gray-300 bg-white',
+                )}
+              >
+                {retornado && <Check className="h-3 w-3" />}
+              </span>
+              Já retornei esse lead
+            </button>
           )}
 
           <div className="mt-2.5 flex items-center justify-between border-t border-gray-100 pt-2.5">

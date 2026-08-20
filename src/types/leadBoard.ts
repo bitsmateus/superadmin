@@ -27,6 +27,7 @@ export interface LeadRow {
   diaContato: string
   status: string
   retornar: string
+  retornado: boolean
   responsavel: string
   sdr: string
   numero: string
@@ -42,7 +43,7 @@ export interface LeadRow {
 
 export type LeadRowField = Exclude<
   keyof LeadRow,
-  'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount'
+  'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

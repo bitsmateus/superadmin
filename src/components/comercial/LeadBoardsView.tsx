@@ -89,7 +89,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'createdAt', label: 'Log de criação', width: 160, readOnly: true, align: 'center' },
 ]
 
-const GRID_BORDER = 'border-r border-gray-200'
+const GRID_BORDER = 'border-r border-gray-100'
 const MIN_COL_WIDTH = 80
 
 
@@ -657,7 +657,7 @@ function BoardGroup({
                   onDragStart={(e) => startDrag(e, row.id, row.nome)}
                   onDragEnd={onRowDragEnd}
                   className={cn(
-                    'group border-b border-gray-200 transition-colors',
+                    'group border-b border-gray-100 transition-colors',
                     draggingIds?.includes(row.id) ? 'opacity-40' : '',
                     selected ? 'bg-accent/10 hover:bg-accent/15' : 'hover:bg-accent/[0.04]',
                   )}

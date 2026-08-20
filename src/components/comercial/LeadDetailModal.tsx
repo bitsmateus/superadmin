@@ -2,17 +2,21 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import {
+  ArrowRightLeft,
   AtSign,
   Calendar,
+  CheckCircle2,
   Circle,
   Clock,
   Download,
   FileText,
   Hash,
   Image as ImageIcon,
+  MessageSquare,
   Paperclip,
   Pencil,
   Phone,
+  Sparkles,
   Trash2,
   Type,
   UserCircle2,
@@ -28,12 +32,14 @@ import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useAuth } from '@/hooks/useAuth'
 import { useLeadBoards, useLeadRow } from '@/hooks/useLeadBoards'
 import { useLeadNotes } from '@/hooks/useLeadNotes'
+import { useLeadEvents } from '@/hooks/useLeadEvents'
 import { useTeam, teamMemberLabel, type TeamMember } from '@/hooks/useTeam'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadNotesService } from '@/services/leadNotes'
+import { leadEventsService } from '@/services/leadEvents'
 import { cn, formatDateTimeShort, initials } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
-import type { LeadNoteAttachment } from '@/types/leadBoard'
+import type { LeadEvent, LeadNoteAttachment } from '@/types/leadBoard'
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024
 
@@ -189,9 +195,45 @@ function BoxedCurrencyField({ value, onSave }: { value: string; onSave: (v: stri
   )
 }
 
+/** Traduz um evento automático (status/dia de contato/SDR/quadro/retornado/criação) pra texto. */
+function describeEvent(e: LeadEvent): { icon: React.ReactNode; label: string } {
+  switch (e.type) {
+    case 'created':
+      return { icon: <Sparkles className="h-3.5 w-3.5" />, label: 'Lead criado' }
+    case 'status':
+      return {
+        icon: <Circle className="h-3.5 w-3.5" />,
+        label: e.fromValue ? `Status mudou de "${e.fromValue}" para "${e.toValue}"` : `Status definido como "${e.toValue}"`,
+      }
+    case 'dia_contato':
+      return {
+        icon: <Calendar className="h-3.5 w-3.5" />,
+        label: e.fromValue ? `Dia de contato mudou de "${e.fromValue}" para "${e.toValue}"` : `Dia de contato definido como "${e.toValue}"`,
+      }
+    case 'sdr':
+      return {
+        icon: <UserCircle2 className="h-3.5 w-3.5" />,
+        label: e.fromValue ? `SDR mudou de "${e.fromValue}" para "${e.toValue}"` : `SDR definido como "${e.toValue}"`,
+      }
+    case 'board':
+      return {
+        icon: <ArrowRightLeft className="h-3.5 w-3.5" />,
+        label: e.fromValue ? `Movido do quadro "${e.fromValue}" para "${e.toValue}"` : `Adicionado ao quadro "${e.toValue}"`,
+      }
+    case 'retornado':
+      return {
+        icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+        label: e.toValue === 'true' ? 'Marcado como retornado' : 'Desmarcado como retornado',
+      }
+    default:
+      return { icon: <Sparkles className="h-3.5 w-3.5" />, label: 'Atualização' }
+  }
+}
+
 function UpdatesPane({ leadRowId }: { leadRowId: string }) {
   const { profile } = useAuth()
   const notes = useLeadNotes(leadRowId)
+  const events = useLeadEvents(leadRowId)
   const team = useTeam()
   const [tab, setTab] = React.useState('updates')
   const [text, setText] = React.useState('')
@@ -210,11 +252,31 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
   useOutsideClose(mentionPopRef, mentionOpen, () => setMentionOpen(false))
 
   React.useEffect(() => { void leadNotesService.loadNotes(leadRowId) }, [leadRowId])
+  React.useEffect(() => { void leadEventsService.loadEvents(leadRowId) }, [leadRowId])
 
   const allAttachments = React.useMemo(
     () => notes.flatMap((n) => n.attachments.map((a) => ({ attachment: a, note: n }))),
     [notes],
   )
+
+  // Linha do tempo automática: junta os eventos gravados pelo backend (chegada, mudança de
+  // status/dia de contato/SDR/quadro, retornado) com as próprias atualizações, por ordem de hora.
+  const timelineItems = React.useMemo(() => {
+    const fromEvents = events.map((e) => {
+      const { icon, label } = describeEvent(e)
+      return { id: e.id, at: e.createdAt, icon, label, actor: e.actorName }
+    })
+    const fromNotes = notes.map((n) => ({
+      id: `note-${n.id}`,
+      at: n.createdAt,
+      icon: <MessageSquare className="h-3.5 w-3.5" />,
+      label: n.content
+        ? `Atualização: "${n.content.length > 90 ? n.content.slice(0, 90) + '…' : n.content}"`
+        : n.attachments.length > 0 ? 'Anexou um arquivo' : 'Atualização',
+      actor: n.authorName,
+    }))
+    return [...fromEvents, ...fromNotes].sort((a, b) => b.at.localeCompare(a.at))
+  }, [events, notes])
 
   const filteredTeam = React.useMemo(
     () => team.filter((m) => teamMemberLabel(m).toLowerCase().includes(mentionSearch.toLowerCase())),
@@ -303,6 +365,7 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
         items={[
           { value: 'updates', label: 'Atualizações' },
           { value: 'files', label: 'Arquivos' },
+          { value: 'timeline', label: 'Linha do tempo' },
         ]}
       />
 
@@ -537,6 +600,26 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                 </button>
               ))}
             </div>
+          )
+        )}
+
+        {tab === 'timeline' && (
+          timelineItems.length === 0 ? (
+            <p className="text-xs text-foreground/40">Sem histórico ainda.</p>
+          ) : (
+            <ul className="relative ml-3 space-y-5 border-l border-line pl-5">
+              {timelineItems.map((item) => (
+                <li key={item.id} className="relative">
+                  <span className="absolute -left-8 top-0.5 grid h-6 w-6 place-items-center rounded-full bg-accent/10 text-accent ring-4 ring-card">
+                    {item.icon}
+                  </span>
+                  <p className="text-sm text-[#323338]">{item.label}</p>
+                  <p className="mt-0.5 text-[11px] text-foreground/40">
+                    {item.actor} · <span title={timeAgo(item.at)}>{formatDateTimeShort(item.at)}</span>
+                  </p>
+                </li>
+              ))}
+            </ul>
           )
         )}
 

@@ -344,6 +344,19 @@ END $$`);
   await pool.query(`DROP TRIGGER IF EXISTS lead_notes_decrement_trigger ON lead_notes`);
   await pool.query(`CREATE TRIGGER lead_notes_decrement_trigger AFTER DELETE ON lead_notes
     FOR EACH ROW EXECUTE FUNCTION decrement_lead_notes_count()`);
+  // Linha do tempo automática de um lead (chegada, mudança de status/dia de contato/SDR/quadro,
+  // marcado como retornado) — gravada pelo backend a cada PATCH relevante em lead_rows, ver
+  // leadBoardRoutes.ts. Só INSERT (sem UPDATE/DELETE) porque é um log imutável.
+  await pool.query(`CREATE TABLE IF NOT EXISTS lead_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_row_id UUID NOT NULL REFERENCES lead_rows(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    from_value TEXT,
+    to_value TEXT,
+    actor_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_events_lead_row_idx ON lead_events(lead_row_id)`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_lead_boards ON lead_boards;
@@ -354,6 +367,9 @@ END $$`);
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
       DROP TRIGGER IF EXISTS notify_lead_notes ON lead_notes;
       CREATE TRIGGER notify_lead_notes AFTER INSERT OR UPDATE OR DELETE ON lead_notes
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_lead_events ON lead_events;
+      CREATE TRIGGER notify_lead_events AFTER INSERT ON lead_events
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);

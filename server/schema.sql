@@ -355,6 +355,21 @@ CREATE TABLE IF NOT EXISTS lead_notes (
 
 CREATE INDEX IF NOT EXISTS lead_notes_lead_row_idx ON lead_notes(lead_row_id);
 
+-- ---------- lead_events (linha do tempo automática por lead) ----------
+-- Chegada, mudança de status/dia de contato/SDR/quadro, marcado como retornado — gravado pelo
+-- backend a cada PATCH relevante em lead_rows. Log imutável: só INSERT, sem UPDATE/DELETE.
+CREATE TABLE IF NOT EXISTS lead_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_row_id UUID NOT NULL REFERENCES lead_rows(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  from_value TEXT,
+  to_value TEXT,
+  actor_name TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS lead_events_lead_row_idx ON lead_events(lead_row_id);
+
 -- Mantém lead_rows.notes_count em sincronia sem precisar contar em toda leitura.
 CREATE OR REPLACE FUNCTION increment_lead_notes_count() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
@@ -640,6 +655,10 @@ CREATE TRIGGER notify_lead_rows AFTER INSERT OR UPDATE OR DELETE ON lead_rows
 
 DROP TRIGGER IF EXISTS notify_lead_notes ON lead_notes;
 CREATE TRIGGER notify_lead_notes AFTER INSERT OR UPDATE OR DELETE ON lead_notes
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_lead_events ON lead_events;
+CREATE TRIGGER notify_lead_events AFTER INSERT ON lead_events
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 DROP TRIGGER IF EXISTS notify_lead_labels ON lead_labels;

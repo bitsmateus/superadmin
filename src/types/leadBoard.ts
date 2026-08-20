@@ -74,6 +74,20 @@ export interface LeadNote {
   createdAt: string
 }
 
+/** Tipo de evento gravado automaticamente na linha do tempo do lead. */
+export type LeadEventType = 'created' | 'status' | 'dia_contato' | 'sdr' | 'board' | 'retornado'
+
+/** Entrada da linha do tempo automática — gravada pelo backend a cada mudança relevante. */
+export interface LeadEvent {
+  id: string
+  leadRowId: string
+  type: LeadEventType
+  fromValue: string | null
+  toValue: string | null
+  actorName: string
+  createdAt: string
+}
+
 /** Campos que usam etiqueta colorida selecionável (estilo Monday) em vez de texto livre. */
 export type LeadLabelField = 'tipo' | 'diaContato' | 'status' | 'sdr' | 'ligacao'
 

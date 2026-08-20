@@ -47,6 +47,38 @@ async function restrictedBoardFilter(userId: string, role: string): Promise<stri
   return boards.map((b) => b.id).filter((id) => explicit.has(id));
 }
 
+async function getActorName(userId: string | null | undefined): Promise<string> {
+  if (!userId) return 'Sistema';
+  const profile = await queryOne<{ name: string | null; email: string }>(
+    'SELECT name, email FROM profiles WHERE id = $1',
+    [userId]
+  );
+  return profile?.name || profile?.email || 'Alguém';
+}
+
+/** Grava um evento na linha do tempo automática do lead (ver aba "Linha do tempo" no modal). */
+async function logLeadEvent(
+  leadRowId: string,
+  type: string,
+  fromValue: string | null,
+  toValue: string | null,
+  actorName: string
+): Promise<void> {
+  await query(
+    `INSERT INTO lead_events (lead_row_id, type, from_value, to_value, actor_name)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [leadRowId, type, fromValue, toValue, actorName]
+  );
+}
+
+/** Campos rastreados na linha do tempo — chave da coluna ↔ tipo de evento gravado. */
+const TRACKED_FIELDS: Record<string, string> = {
+  status: 'status',
+  dia_contato: 'dia_contato',
+  sdr: 'sdr',
+  retornado: 'retornado',
+};
+
 export async function leadBoardRoutes(app: FastifyInstance) {
   // GET /api/lead-boards
   app.get('/api/lead-boards', { onRequest: [app.authenticate] }, async (req) => {
@@ -180,6 +212,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           position,
         ]
       );
+      void getActorName(sub).then((actorName) => logLeadEvent(id, 'created', null, null, actorName));
       return reply.status(201).send(leadRow);
     }
   );
@@ -211,12 +244,54 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         params.push(val);
       }
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+
+      // Snapshot "antes" só dos campos rastreados na linha do tempo — pra saber o que
+      // realmente mudou depois do UPDATE (nada disso roda se não tiver campo rastreado no patch).
+      const trackedKeys = Object.keys(patch).filter((k) => k in TRACKED_FIELDS || k === 'board_id');
+      const before = trackedKeys.length
+        ? await queryOne<{ status: string; dia_contato: string; sdr: string; retornado: boolean; board_id: string }>(
+            'SELECT status, dia_contato, sdr, retornado, board_id FROM lead_rows WHERE id = $1',
+            [req.params.id]
+          )
+        : null;
+
       params.push(req.params.id);
       const [leadRow] = await query(
         `UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
         params
       );
       if (!leadRow) return reply.status(404).send({ message: 'Linha não encontrada' });
+
+      if (before) {
+        void (async () => {
+          const actorName = await getActorName(sub);
+          for (const key of trackedKeys) {
+            if (key === 'board_id') {
+              const fromId = before.board_id;
+              const toId = patch.board_id as string;
+              if (fromId === toId) continue;
+              const [fromBoard, toBoard] = await Promise.all([
+                queryOne<{ name: string }>('SELECT name FROM lead_boards WHERE id = $1', [fromId]),
+                queryOne<{ name: string }>('SELECT name FROM lead_boards WHERE id = $1', [toId]),
+              ]);
+              await logLeadEvent(req.params.id, 'board', fromBoard?.name ?? null, toBoard?.name ?? null, actorName);
+              continue;
+            }
+            const type = TRACKED_FIELDS[key];
+            const fromVal = before[key as 'status' | 'dia_contato' | 'sdr' | 'retornado'];
+            const toVal = patch[key];
+            if (String(fromVal ?? '') === String(toVal ?? '')) continue;
+            await logLeadEvent(
+              req.params.id,
+              type,
+              fromVal === null || fromVal === undefined ? null : String(fromVal),
+              toVal === null || toVal === undefined ? null : String(toVal),
+              actorName
+            );
+          }
+        })();
+      }
+
       return leadRow;
     }
   );
@@ -239,6 +314,30 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       }
       await query('DELETE FROM lead_rows WHERE id = $1', [req.params.id]);
       return reply.status(204).send();
+    }
+  );
+
+  // GET /api/lead-events?lead_row_id=xxx — linha do tempo automática do lead
+  app.get<{ Querystring: { lead_row_id?: string } }>(
+    '/api/lead-events',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      if (!req.query.lead_row_id) return reply.status(400).send({ message: 'lead_row_id é obrigatório' });
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null) {
+        const row = await queryOne<{ board_id: string }>(
+          'SELECT board_id FROM lead_rows WHERE id = $1',
+          [req.query.lead_row_id]
+        );
+        if (!row || !allowed.includes(row.board_id)) {
+          return reply.status(403).send({ message: 'Acesso negado' });
+        }
+      }
+      return query(
+        'SELECT * FROM lead_events WHERE lead_row_id = $1 ORDER BY created_at DESC',
+        [req.query.lead_row_id]
+      );
     }
   );
 

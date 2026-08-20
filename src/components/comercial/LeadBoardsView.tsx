@@ -469,7 +469,7 @@ function BoardNameEditor({ board }: { board: LeadBoard }) {
         else setValue(board.name)
       }}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      className="min-w-0 flex-1 truncate bg-transparent text-sm uppercase tracking-wide outline-none focus:underline"
+      className="min-w-0 flex-1 truncate bg-transparent text-sm font-semibold uppercase tracking-wide outline-none focus:underline"
       style={{ color: board.color }}
     />
   )
@@ -578,36 +578,40 @@ function BoardGroup({
       onDragLeave={onBoardDragLeave}
       onDrop={(e) => { e.preventDefault(); onBoardDrop(board.id) }}
     >
-      <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="grid h-5 w-5 shrink-0 place-items-center rounded text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
-        >
-          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open ? '' : '-rotate-90')} />
-        </button>
-        <span className="h-2 w-2 shrink-0 rounded-full ring-4" style={{ backgroundColor: board.color, boxShadow: `0 0 0 3px ${board.color}1f` }} />
-        <BoardNameEditor board={board} />
-        <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{rows.length}</span>
-        <input
-          type="color"
-          value={board.color}
-          onChange={(e) => leadBoardsService.updateBoard(board.id, { color: e.target.value })}
-          title="Cor do quadro"
-          className="ml-auto h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
-        />
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm(`Excluir o quadro "${board.name}" e todos os leads dentro dele?`)) {
-              void leadBoardsService.deleteBoard(board.id)
-            }
-          }}
-          title="Excluir quadro"
-          className="grid h-5 w-5 shrink-0 place-items-center rounded text-gray-400 transition-colors hover:bg-danger/10 hover:text-danger"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+      <div className="border-b border-gray-200 bg-white px-3 py-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="grid h-5 w-5 shrink-0 place-items-center rounded text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
+          >
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open ? '' : '-rotate-90')} />
+          </button>
+          <span className="h-2 w-2 shrink-0 rounded-full ring-4" style={{ backgroundColor: board.color, boxShadow: `0 0 0 3px ${board.color}1f` }} />
+          <BoardNameEditor board={board} />
+          <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{rows.length}</span>
+          <input
+            type="color"
+            value={board.color}
+            onChange={(e) => leadBoardsService.updateBoard(board.id, { color: e.target.value })}
+            title="Cor do quadro"
+            className="ml-auto h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm(`Excluir o quadro "${board.name}" e todos os leads dentro dele?`)) {
+                void leadBoardsService.deleteBoard(board.id)
+              }
+            }}
+            title="Excluir quadro"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded text-gray-400 transition-colors hover:bg-danger/10 hover:text-danger"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+        {/* Fechado, o quadro vira um "resumo" — mostra o total pra não precisar abrir só pra contar. */}
+        {!open && <p className="ml-7 mt-0.5 text-[11px] text-gray-400">{rows.length} Nome</p>}
       </div>
 
       {open && (

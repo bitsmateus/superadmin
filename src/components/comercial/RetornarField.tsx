@@ -37,6 +37,8 @@ function formatDisplay(value: string): string {
   return time ? `${d}  ${time}` : d
 }
 
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => `${pad(Math.floor(i / 2))}:${i % 2 === 0 ? '00' : '30'}`)
+
 export interface RetornarFieldProps {
   value: string
   onSave: (next: string) => void
@@ -47,13 +49,20 @@ export interface RetornarFieldProps {
 /** Data + hora num calendário flutuante moderno — o campo de horário só aparece depois que a data é escolhida. */
 export function RetornarField({ value, onSave, className, placeholder = 'Selecionar…' }: RetornarFieldProps) {
   const [open, setOpen] = React.useState(false)
+  const [timeOpen, setTimeOpen] = React.useState(false)
   const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null)
   const parsed = React.useMemo(() => parseValue(value), [value])
   const [viewYear, setViewYear] = React.useState(() => (parsed.date ?? new Date()).getFullYear())
   const [viewMonth, setViewMonth] = React.useState(() => (parsed.date ?? new Date()).getMonth())
   const btnRef = React.useRef<HTMLButtonElement>(null)
   const popRef = React.useRef<HTMLDivElement>(null)
+  const activeTimeRef = React.useRef<HTMLButtonElement>(null)
   useOutsideClose(popRef, open, () => setOpen(false))
+
+  React.useEffect(() => { if (!open) setTimeOpen(false) }, [open])
+  React.useEffect(() => {
+    if (timeOpen) activeTimeRef.current?.scrollIntoView({ block: 'center' })
+  }, [timeOpen])
 
   const openPicker = () => {
     const rect = btnRef.current?.getBoundingClientRect()
@@ -70,10 +79,12 @@ export function RetornarField({ value, onSave, className, placeholder = 'Selecio
       setViewYear(d.getFullYear())
       setViewMonth(d.getMonth())
     }
+    if (!parsed.date) setTimeOpen(true)
   }
 
   const setTime = (time: string) => {
     onSave(toValue(parsed.date ?? new Date(viewYear, viewMonth, 1), time))
+    setTimeOpen(false)
   }
 
   const clear = () => { onSave(''); setOpen(false) }
@@ -164,14 +175,36 @@ export function RetornarField({ value, onSave, className, placeholder = 'Selecio
           </div>
 
           {parsed.date && (
-            <div className="mt-2.5 flex items-center gap-2 border-t border-gray-100 pt-2.5">
-              <Clock className="h-4 w-4 shrink-0 text-accent" />
-              <input
-                type="time"
-                value={parsed.time || '09:00'}
-                onChange={(e) => setTime(e.target.value)}
-                className="h-8 flex-1 rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-800 outline-none focus:border-accent"
-              />
+            <div className="relative mt-2.5 border-t border-gray-100 pt-2.5">
+              <button
+                type="button"
+                onClick={() => setTimeOpen((o) => !o)}
+                className="flex h-8 w-full items-center gap-2 rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-800 transition-colors hover:border-accent/60"
+              >
+                <Clock className="h-4 w-4 shrink-0 text-accent" />
+                <span className="flex-1 text-left font-medium">{parsed.time || '09:00'}</span>
+              </button>
+              {timeOpen && (
+                <div className="absolute inset-x-0 top-full z-10 mt-1 max-h-40 overflow-y-auto rounded-md border border-gray-200 bg-white p-1 shadow-lg">
+                  {TIME_OPTIONS.map((t) => {
+                    const active = t === (parsed.time || '09:00')
+                    return (
+                      <button
+                        key={t}
+                        ref={active ? activeTimeRef : undefined}
+                        type="button"
+                        onClick={() => setTime(t)}
+                        className={cn(
+                          'block w-full rounded px-2 py-1 text-left text-xs',
+                          active ? 'bg-accent font-semibold text-white' : 'text-gray-600 hover:bg-accent/10',
+                        )}
+                      >
+                        {t}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 

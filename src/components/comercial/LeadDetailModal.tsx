@@ -114,20 +114,20 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
             <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Empresa">
               <BoxedField value={row.empresa} onSave={(v) => leadBoardsService.updateRow(row.id, { empresa: v })} />
             </FieldRow>
-            <FieldRow icon={<Phone className="h-3.5 w-3.5" />} label="Telefone">
-              <BoxedField value={row.telefone} onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })} />
+            <FieldRow icon={<Phone className="h-3.5 w-3.5" />} label="Telefone" required>
+              <BoxedField value={row.telefone} onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })} required />
             </FieldRow>
             <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Tipo">
               <LeadLabelCell field="tipo" value={row.tipo} onChange={(v) => leadBoardsService.updateRow(row.id, { tipo: v })} />
             </FieldRow>
-            <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Dia de contato">
-              <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} />
+            <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Dia de contato" required>
+              <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} required />
             </FieldRow>
             <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Ligação">
               <LeadLabelCell field="ligacao" value={row.ligacao} onChange={(v) => leadBoardsService.updateRow(row.id, { ligacao: v })} />
             </FieldRow>
-            <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Status">
-              <LeadLabelCell field="status" value={row.status} onChange={(v) => leadBoardsService.updateRow(row.id, { status: v })} />
+            <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Status" required>
+              <LeadLabelCell field="status" value={row.status} onChange={(v) => leadBoardsService.updateRow(row.id, { status: v })} required />
             </FieldRow>
             <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="SDR">
               <LeadLabelCell field="sdr" value={row.sdr} onChange={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />
@@ -167,23 +167,30 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
   )
 }
 
-function FieldRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+function FieldRow({ icon, label, required, children }: { icon: React.ReactNode; label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 border-b border-line/60 py-1.5">
       <span className="flex w-5 shrink-0 items-center justify-center text-[#323338]/60">{icon}</span>
-      <span className="w-[104px] shrink-0 text-xs font-medium text-[#323338]">{label}</span>
+      <span className="w-[104px] shrink-0 text-xs font-medium text-[#323338]">
+        {label}
+        {required && <span className="text-red-400" title="Obrigatório"> *</span>}
+      </span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
 }
 
-function BoxedField({ value, onSave, type }: { value: string; onSave: (v: string) => void; type?: 'text' | 'date' | 'datetime-local' }) {
+function BoxedField({ value, onSave, type, required }: { value: string; onSave: (v: string) => void; type?: 'text' | 'date' | 'datetime-local'; required?: boolean }) {
   return (
     <EditableField
       value={value}
       type={type}
+      placeholder={required ? 'Obrigatório' : undefined}
       onSave={onSave}
-      className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338]"
+      className={cn(
+        'rounded-md px-2 py-1.5 text-sm text-[#323338]',
+        required && !value ? 'bg-red-50 ring-1 ring-inset ring-red-200' : 'bg-elevate/[0.05]',
+      )}
     />
   )
 }

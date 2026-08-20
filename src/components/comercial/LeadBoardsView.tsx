@@ -57,6 +57,8 @@ interface ColumnDef {
   tag?: boolean
   currency?: boolean
   align?: 'center'
+  /** Pendência obrigatória pro SDR preencher — vazio fica marcado em vermelho. */
+  required?: boolean
 }
 
 const CHECKBOX_COL_WIDTH = 58
@@ -64,11 +66,11 @@ const CHECKBOX_COL_WIDTH = 58
 const COLUMNS: ColumnDef[] = [
   { key: 'nome', label: 'Nome', width: 180 },
   { key: 'empresa', label: 'Empresa', width: 170, align: 'center' },
-  { key: 'telefone', label: 'Telefone', width: 140 },
+  { key: 'telefone', label: 'Telefone', width: 140, required: true },
   { key: 'tipo', label: 'Tipo', width: 108, tag: true },
-  { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true },
+  { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true, required: true },
   { key: 'ligacao', label: 'Ligação', width: 62, tag: true },
-  { key: 'status', label: 'Status', width: 170, tag: true },
+  { key: 'status', label: 'Status', width: 170, tag: true, required: true },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
   { key: 'sdr', label: 'SDR', width: 100, tag: true },
   { key: 'dorCliente', label: 'Dor do cliente', width: 200, align: 'center' },
@@ -624,6 +626,7 @@ function BoardGroup({
                       style={{ width }}
                     >
                       {col.label}
+                      {col.required && <span className="text-red-400" title="Obrigatório"> *</span>}
                       <span
                         onMouseDown={(e) => startResize(e, col.key, width)}
                         title="Redimensionar coluna"
@@ -704,6 +707,7 @@ function BoardGroup({
                         <LeadLabelCell
                           field={col.key as LeadLabelField}
                           value={row[col.key as LeadRowField]}
+                          required={col.required}
                           onChange={(next) => {
                             if (col.key === 'status') {
                               const target = allBoards.find(
@@ -732,8 +736,15 @@ function BoardGroup({
                         <EditableField
                           value={row[col.key as LeadRowField]}
                           type={col.type}
+                          placeholder={col.required ? 'Obrigatório' : undefined}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
-                          className={cn('bg-transparent px-2.5 py-1.5 text-sm text-gray-800', col.align === 'center' && 'text-center')}
+                          className={cn(
+                            'px-2.5 py-1.5 text-sm text-gray-800',
+                            col.align === 'center' && 'text-center',
+                            col.required && !row[col.key as LeadRowField]
+                              ? 'bg-red-50 ring-1 ring-inset ring-red-200'
+                              : 'bg-transparent',
+                          )}
                         />
                       )}
                     </td>

@@ -21,9 +21,11 @@ export interface LeadLabelCellProps {
   field: LeadLabelField
   value: string
   onChange: (next: string) => void
+  /** Marca a célula vazia como pendência obrigatória (borda/tom vermelho + "Obrigatório"). */
+  required?: boolean
 }
 
-export function LeadLabelCell({ field, value, onChange }: LeadLabelCellProps) {
+export function LeadLabelCell({ field, value, onChange, required }: LeadLabelCellProps) {
   const labels = useLeadLabels(field)
   const [open, setOpen] = React.useState(false)
   const [manageOpen, setManageOpen] = React.useState(false)
@@ -50,13 +52,14 @@ export function LeadLabelCell({ field, value, onChange }: LeadLabelCellProps) {
         ref={btnRef}
         type="button"
         onClick={openPicker}
+        title={!value && required ? 'Obrigatório' : undefined}
         className={cn(
           'flex h-full min-h-[34px] w-full items-center justify-center truncate px-2.5 py-1.5 text-center text-xs font-medium',
-          value ? 'text-white' : 'text-gray-300',
+          value ? 'text-white' : required ? 'bg-red-50 text-red-400 ring-1 ring-inset ring-red-200' : 'text-gray-300',
         )}
         style={value ? { backgroundColor: current?.color ?? '#9CA3AF' } : undefined}
       >
-        {value || 'Selecionar…'}
+        {value ? value : required ? 'Obrigatório' : 'Selecionar…'}
       </button>
 
       {open && coords && createPortal(

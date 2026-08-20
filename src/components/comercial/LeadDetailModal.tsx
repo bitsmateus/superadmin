@@ -2,6 +2,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import {
+  ArrowRight,
   ArrowRightLeft,
   AtSign,
   Calendar,
@@ -33,10 +34,12 @@ import { useAuth } from '@/hooks/useAuth'
 import { useLeadBoards, useLeadRow } from '@/hooks/useLeadBoards'
 import { useLeadNotes } from '@/hooks/useLeadNotes'
 import { useLeadEvents } from '@/hooks/useLeadEvents'
+import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useTeam, teamMemberLabel, type TeamMember } from '@/hooks/useTeam'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadNotesService } from '@/services/leadNotes'
 import { leadEventsService } from '@/services/leadEvents'
+import { leadLabelsService } from '@/services/leadLabels'
 import { cn, formatDateTimeShort, initials } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
 import type { LeadEvent, LeadNoteAttachment } from '@/types/leadBoard'
@@ -195,38 +198,67 @@ function BoxedCurrencyField({ value, onSave }: { value: string; onSave: (v: stri
   )
 }
 
-/** Traduz um evento automático (status/dia de contato/SDR/quadro/retornado/criação) pra texto. */
-function describeEvent(e: LeadEvent): { icon: React.ReactNode; label: string } {
+interface EventChip { label: string; color: string }
+interface EventDescription {
+  icon: React.ReactNode
+  text: string
+  from?: EventChip
+  to?: EventChip
+}
+interface EventColorMaps {
+  status: Record<string, string>
+  diaContato: Record<string, string>
+  sdr: Record<string, string>
+  board: Record<string, string>
+}
+
+/** Traduz um evento automático (status/dia de contato/SDR/quadro/retornado/criação) pra texto +
+ * etiquetas coloridas, usando as mesmas cores cadastradas em "Editar etiquetas" e nos quadros. */
+function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescription {
+  const chip = (value: string | null, map: Record<string, string>): EventChip | undefined =>
+    value ? { label: value, color: map[value] ?? '#9CA3AF' } : undefined
+
   switch (e.type) {
     case 'created':
-      return { icon: <Sparkles className="h-3.5 w-3.5" />, label: 'Lead criado' }
+      return { icon: <Sparkles className="h-3.5 w-3.5" />, text: 'Lead chegou' }
     case 'status':
       return {
         icon: <Circle className="h-3.5 w-3.5" />,
-        label: e.fromValue ? `Status mudou de "${e.fromValue}" para "${e.toValue}"` : `Status definido como "${e.toValue}"`,
+        text: e.fromValue ? 'Status' : 'Status definido como',
+        from: chip(e.fromValue, colors.status),
+        to: chip(e.toValue, colors.status),
       }
     case 'dia_contato':
       return {
         icon: <Calendar className="h-3.5 w-3.5" />,
-        label: e.fromValue ? `Dia de contato mudou de "${e.fromValue}" para "${e.toValue}"` : `Dia de contato definido como "${e.toValue}"`,
+        text: e.fromValue ? 'Dia de contato' : 'Dia de contato definido como',
+        from: chip(e.fromValue, colors.diaContato),
+        to: chip(e.toValue, colors.diaContato),
       }
     case 'sdr':
       return {
         icon: <UserCircle2 className="h-3.5 w-3.5" />,
-        label: e.fromValue ? `SDR mudou de "${e.fromValue}" para "${e.toValue}"` : `SDR definido como "${e.toValue}"`,
+        text: e.fromValue ? 'SDR' : 'SDR assumiu o lead',
+        from: chip(e.fromValue, colors.sdr),
+        to: chip(e.toValue, colors.sdr),
       }
     case 'board':
       return {
         icon: <ArrowRightLeft className="h-3.5 w-3.5" />,
-        label: e.fromValue ? `Movido do quadro "${e.fromValue}" para "${e.toValue}"` : `Adicionado ao quadro "${e.toValue}"`,
+        text: e.fromValue ? 'Movido de quadro' : 'Entrou no quadro',
+        from: chip(e.fromValue, colors.board),
+        to: chip(e.toValue, colors.board),
       }
     case 'retornado':
       return {
         icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-        label: e.toValue === 'true' ? 'Marcado como retornado' : 'Desmarcado como retornado',
+        text: '',
+        to: e.toValue === 'true'
+          ? { label: 'Marcado como retornado', color: '#15803D' }
+          : { label: 'Desmarcado como retornado', color: '#9CA3AF' },
       }
     default:
-      return { icon: <Sparkles className="h-3.5 w-3.5" />, label: 'Atualização' }
+      return { icon: <Sparkles className="h-3.5 w-3.5" />, text: 'Atualização' }
   }
 }
 
@@ -234,6 +266,10 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
   const { profile } = useAuth()
   const notes = useLeadNotes(leadRowId)
   const events = useLeadEvents(leadRowId)
+  const statusLabels = useLeadLabels('status')
+  const diaContatoLabels = useLeadLabels('diaContato')
+  const sdrLabels = useLeadLabels('sdr')
+  const allBoards = useLeadBoards()
   const team = useTeam()
   const [tab, setTab] = React.useState('updates')
   const [text, setText] = React.useState('')
@@ -253,6 +289,14 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
 
   React.useEffect(() => { void leadNotesService.loadNotes(leadRowId) }, [leadRowId])
   React.useEffect(() => { void leadEventsService.loadEvents(leadRowId) }, [leadRowId])
+  React.useEffect(() => { void leadLabelsService.ensureLoaded() }, [])
+
+  const eventColors = React.useMemo<EventColorMaps>(() => ({
+    status: Object.fromEntries(statusLabels.map((l) => [l.name, l.color])),
+    diaContato: Object.fromEntries(diaContatoLabels.map((l) => [l.name, l.color])),
+    sdr: Object.fromEntries(sdrLabels.map((l) => [l.name, l.color])),
+    board: Object.fromEntries(allBoards.map((b) => [b.name, b.color])),
+  }), [statusLabels, diaContatoLabels, sdrLabels, allBoards])
 
   const allAttachments = React.useMemo(
     () => notes.flatMap((n) => n.attachments.map((a) => ({ attachment: a, note: n }))),
@@ -261,22 +305,25 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
 
   // Linha do tempo automática: junta os eventos gravados pelo backend (chegada, mudança de
   // status/dia de contato/SDR/quadro, retornado) com as próprias atualizações, por ordem de hora.
+  // Atualiza em tempo real — events/notes já são reativos via SSE (useLeadEvents/useLeadNotes).
   const timelineItems = React.useMemo(() => {
     const fromEvents = events.map((e) => {
-      const { icon, label } = describeEvent(e)
-      return { id: e.id, at: e.createdAt, icon, label, actor: e.actorName }
+      const desc = describeEvent(e, eventColors)
+      return { id: e.id, at: e.createdAt, actor: e.actorName, ...desc }
     })
     const fromNotes = notes.map((n) => ({
       id: `note-${n.id}`,
       at: n.createdAt,
       icon: <MessageSquare className="h-3.5 w-3.5" />,
-      label: n.content
+      text: n.content
         ? `Atualização: "${n.content.length > 90 ? n.content.slice(0, 90) + '…' : n.content}"`
         : n.attachments.length > 0 ? 'Anexou um arquivo' : 'Atualização',
+      from: undefined as EventChip | undefined,
+      to: undefined as EventChip | undefined,
       actor: n.authorName,
     }))
     return [...fromEvents, ...fromNotes].sort((a, b) => b.at.localeCompare(a.at))
-  }, [events, notes])
+  }, [events, notes, eventColors])
 
   const filteredTeam = React.useMemo(
     () => team.filter((m) => teamMemberLabel(m).toLowerCase().includes(mentionSearch.toLowerCase())),
@@ -613,8 +660,27 @@ function UpdatesPane({ leadRowId }: { leadRowId: string }) {
                   <span className="absolute -left-8 top-0.5 grid h-6 w-6 place-items-center rounded-full bg-accent/10 text-accent ring-4 ring-card">
                     {item.icon}
                   </span>
-                  <p className="text-sm text-[#323338]">{item.label}</p>
-                  <p className="mt-0.5 text-[11px] text-foreground/40">
+                  <p className="flex flex-wrap items-center gap-1.5 text-sm text-[#323338]">
+                    {item.text && <span>{item.text}</span>}
+                    {item.from && (
+                      <span
+                        className="rounded px-1.5 py-0.5 text-[11px] font-medium text-white"
+                        style={{ backgroundColor: item.from.color }}
+                      >
+                        {item.from.label}
+                      </span>
+                    )}
+                    {item.from && item.to && <ArrowRight className="h-3 w-3 shrink-0 text-foreground/30" />}
+                    {item.to && (
+                      <span
+                        className="rounded px-1.5 py-0.5 text-[11px] font-medium text-white"
+                        style={{ backgroundColor: item.to.color }}
+                      >
+                        {item.to.label}
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-1 text-[11px] text-foreground/40">
                     {item.actor} · <span title={timeAgo(item.at)}>{formatDateTimeShort(item.at)}</span>
                   </p>
                 </li>

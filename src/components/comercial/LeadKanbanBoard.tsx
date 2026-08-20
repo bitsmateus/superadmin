@@ -169,6 +169,10 @@ function KanbanColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col-${col.key}`, data: { column: col.key } })
   const totalMrr = React.useMemo(() => rows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0), [rows])
+  const totalImplementacao = React.useMemo(
+    () => rows.reduce((sum, r) => sum + parseBRLCents(r.valorImplementacao), 0),
+    [rows],
+  )
   return (
     <div
       ref={setNodeRef}
@@ -182,8 +186,10 @@ function KanbanColumn({
         style={{ backgroundColor: col.color }}
       >
         <span className="truncate">{col.label}</span>
-        {totalMrr > 0 && (
-          <span className="shrink-0 text-[11px] font-medium text-white/85">{formatBRLCompact(totalMrr)}</span>
+        {(totalMrr > 0 || totalImplementacao > 0) && (
+          <span className="shrink-0 text-[11px] font-medium text-white/85" title="Valor MRR / Valor de Implementação">
+            {formatBRLCompact(totalMrr)} / {formatBRLCompact(totalImplementacao)}
+          </span>
         )}
         <span className="ml-auto shrink-0 rounded-full bg-white/25 px-1.5 py-0.5 text-[11px]">{rows.length}</span>
       </div>

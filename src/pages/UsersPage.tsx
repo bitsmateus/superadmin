@@ -28,7 +28,7 @@ import {
   type TeamArea,
   type UserRole,
 } from '@/services/supabase'
-import { MENU_ACCESS_ITEMS } from '@/constants/menuAccess'
+import { MENU_ACCESS_GROUP_LABEL, MENU_ACCESS_ITEMS } from '@/constants/menuAccess'
 import { api, onSseEvent } from '@/services/api'
 import { cn, formatDateShort, initials } from '@/lib/utils'
 
@@ -549,51 +549,60 @@ function EditUserModal({
                 Carregando…
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                {MENU_ACCESS_ITEMS.map((item) => {
-                  const checked = menuKeys.has(item.key)
-                  const pageBoards = item.boardsPage ? boards.filter((b) => b.page === item.boardsPage) : []
-                  const isExpanded = expanded.has(item.key)
-                  return (
-                    <div key={item.key} className="rounded-md border border-line/60 bg-card px-2.5 py-1.5">
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleMenuKey(item.key)}
-                          className="h-3.5 w-3.5 rounded border-line"
-                        />
-                        <span className="flex-1 text-foreground/85">{item.label}</span>
-                        {item.boardsPage && checked && pageBoards.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => toggleExpanded(item.key)}
-                            title="Quadros específicos"
-                            className="text-foreground/35 hover:text-foreground/70"
-                          >
-                            <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-90')} />
-                          </button>
-                        )}
-                      </label>
-                      {item.boardsPage && checked && isExpanded && (
-                        <div className="ml-5 mt-1.5 space-y-1 border-l border-line/60 pl-2.5">
-                          {pageBoards.map((b) => (
-                            <label key={b.id} className="flex items-center gap-1.5 text-[11px]">
+              <div className="space-y-4">
+                {(['comercial', 'suporte'] as const).map((group) => (
+                  <div key={group}>
+                    <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-foreground/40">
+                      {MENU_ACCESS_GROUP_LABEL[group]}
+                    </div>
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      {MENU_ACCESS_ITEMS.filter((item) => item.group === group).map((item) => {
+                        const checked = menuKeys.has(item.key)
+                        const pageBoards = item.boardsPage ? boards.filter((b) => b.page === item.boardsPage) : []
+                        const isExpanded = expanded.has(item.key)
+                        return (
+                          <div key={item.key} className="rounded-md border border-line/60 bg-card px-2.5 py-1.5">
+                            <label className="flex items-center gap-2 text-xs">
                               <input
                                 type="checkbox"
-                                checked={boardIds.has(b.id)}
-                                onChange={() => toggleBoardId(b.id)}
-                                className="h-3 w-3 rounded border-line"
+                                checked={checked}
+                                onChange={() => toggleMenuKey(item.key)}
+                                className="h-3.5 w-3.5 rounded border-line"
                               />
-                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
-                              <span className="truncate text-foreground/65">{b.name}</span>
+                              <span className="flex-1 text-foreground/85">{item.label}</span>
+                              {item.boardsPage && checked && pageBoards.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpanded(item.key)}
+                                  title="Quadros específicos"
+                                  className="text-foreground/35 hover:text-foreground/70"
+                                >
+                                  <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-90')} />
+                                </button>
+                              )}
                             </label>
-                          ))}
-                        </div>
-                      )}
+                            {item.boardsPage && checked && isExpanded && (
+                              <div className="ml-5 mt-1.5 space-y-1 border-l border-line/60 pl-2.5">
+                                {pageBoards.map((b) => (
+                                  <label key={b.id} className="flex items-center gap-1.5 text-[11px]">
+                                    <input
+                                      type="checkbox"
+                                      checked={boardIds.has(b.id)}
+                                      onChange={() => toggleBoardId(b.id)}
+                                      className="h-3 w-3 rounded border-line"
+                                    />
+                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
+                                    <span className="truncate text-foreground/65">{b.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                })}
+                  </div>
+                ))}
               </div>
             )}
             <p className="mt-2 text-[10.5px] leading-relaxed text-foreground/45">

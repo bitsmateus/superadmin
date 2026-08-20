@@ -10,7 +10,7 @@ import {
   Filter,
   GripVertical,
   Loader2,
-  MessageSquare,
+  MessageCircle,
   Plus,
   Rows3,
   Search,
@@ -589,11 +589,13 @@ function BoardGroup({
                             type="button"
                             onClick={() => onOpenLead(row.id)}
                             title="Abrir lead"
-                            className="relative mr-1.5 grid h-6 w-6 shrink-0 place-items-center rounded text-gray-400 hover:bg-gray-100 hover:text-accent"
+                            className="relative mr-1.5 grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors hover:bg-gray-100"
                           >
-                            <MessageSquare className="h-3.5 w-3.5" />
+                            <MessageCircle
+                              className={cn('h-5 w-5', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-gray-300')}
+                            />
                             {row.notesCount > 0 && (
-                              <span className="absolute -right-1 -top-1 grid h-3.5 min-w-[0.875rem] place-items-center rounded-full bg-accent px-0.5 text-[9px] font-semibold text-white">
+                              <span className="absolute -bottom-0.5 -right-0.5 grid h-4 min-w-[1rem] place-items-center rounded-full bg-accent px-0.5 text-[10px] font-semibold text-white ring-2 ring-white">
                                 {row.notesCount > 9 ? '9+' : row.notesCount}
                               </span>
                             )}

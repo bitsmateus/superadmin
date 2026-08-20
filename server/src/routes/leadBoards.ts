@@ -217,13 +217,13 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const [leadRow] = await query(
         `INSERT INTO lead_rows (
           id, board_id, nome, tipo, empresa, telefone, dia_contato, ligacao, status,
-          retornar, responsavel, sdr, numero,
+          agendamento, retornar, responsavel, sdr, numero,
           dor_cliente, numero_atendentes, valor_mrr, valor_implementacao, position
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
         [
           id, b.board_id, b.nome ?? '', b.tipo ?? '', b.empresa ?? '', b.telefone ?? '',
           b.dia_contato ?? '', b.ligacao ?? '', b.status ?? '',
-          b.retornar ?? '', b.responsavel ?? '', b.sdr ?? '', b.numero ?? '',
+          b.agendamento ?? '', b.retornar ?? '', b.responsavel ?? '', b.sdr ?? '', b.numero ?? '',
           b.dor_cliente ?? '', b.numero_atendentes ?? '', b.valor_mrr ?? '', b.valor_implementacao ?? '',
           position,
         ]

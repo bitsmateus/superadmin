@@ -17,6 +17,7 @@ const IMPORT_FIELDS: { key: LeadRowField; label: string; aliases: string[] }[] =
   { key: 'diaContato', label: 'Dia de contato', aliases: ['dia de contato', 'dia contato', 'diacontato'] },
   { key: 'ligacao', label: 'Ligação', aliases: ['ligacao', 'ligação', 'call'] },
   { key: 'status', label: 'Status', aliases: ['status', 'etapa', 'estagio', 'estágio'] },
+  { key: 'agendamento', label: 'Agendamento', aliases: ['agendamento', 'data agendamento', 'dia agendado', 'agendado'] },
   { key: 'retornar', label: 'Retornar', aliases: ['retornar', 'follow up', 'followup', 'proximo contato', 'próximo contato'] },
   { key: 'sdr', label: 'SDR', aliases: ['sdr', 'responsavel', 'responsável', 'vendedor', 'owner'] },
   { key: 'dorCliente', label: 'Dor do cliente', aliases: ['dor do cliente', 'dor', 'observacao', 'observação', 'obs', 'nota'] },

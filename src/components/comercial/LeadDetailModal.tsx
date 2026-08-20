@@ -132,6 +132,13 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
             <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="SDR">
               <LeadLabelCell field="sdr" value={row.sdr} onChange={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />
             </FieldRow>
+            <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Agendamento">
+              <BoxedField
+                value={row.agendamento}
+                onSave={(v) => leadBoardsService.updateRow(row.id, { agendamento: v })}
+                type="date"
+              />
+            </FieldRow>
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Retornar">
               <RetornarField
                 value={row.retornar}

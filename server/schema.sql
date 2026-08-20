@@ -321,6 +321,7 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   telefone TEXT NOT NULL DEFAULT '',
   dia_contato TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT '',
+  agendamento TEXT NOT NULL DEFAULT '',
   retornar TEXT NOT NULL DEFAULT '',
   retornado BOOLEAN NOT NULL DEFAULT false,
   responsavel TEXT NOT NULL DEFAULT '',

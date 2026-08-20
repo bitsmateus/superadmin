@@ -35,7 +35,8 @@ function boardToRow(patch: Partial<LeadBoard>): Record<string, unknown> {
 
 type LeadRowRow = {
   id: string; board_id: string; nome: string; tipo: string; empresa: string; telefone: string
-  dia_contato: string; ligacao: string; status: string; retornar: string; retornado: boolean; responsavel: string
+  dia_contato: string; ligacao: string; status: string; agendamento: string; retornar: string; retornado: boolean
+  responsavel: string
   sdr: string; numero: string; dor_cliente: string; numero_atendentes: string; valor_mrr: string
   valor_implementacao: string; notes_count: number; position: number; created_at: string; updated_at: string
   deleted_at: string | null
@@ -43,7 +44,8 @@ type LeadRowRow = {
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
     id: r.id, boardId: r.board_id, nome: r.nome, tipo: r.tipo, empresa: r.empresa,
-    telefone: r.telefone, diaContato: r.dia_contato, ligacao: r.ligacao, status: r.status, retornar: r.retornar,
+    telefone: r.telefone, diaContato: r.dia_contato, ligacao: r.ligacao, status: r.status,
+    agendamento: r.agendamento ?? '', retornar: r.retornar,
     retornado: r.retornado ?? false,
     responsavel: r.responsavel, sdr: r.sdr, numero: r.numero,
     dorCliente: r.dor_cliente, numeroAtendentes: r.numero_atendentes,
@@ -60,6 +62,7 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('diaContato' in patch) row.dia_contato = patch.diaContato
   if ('ligacao' in patch) row.ligacao = patch.ligacao
   if ('status' in patch) row.status = patch.status
+  if ('agendamento' in patch) row.agendamento = patch.agendamento
   if ('retornar' in patch) row.retornar = patch.retornar
   if ('retornado' in patch) row.retornado = patch.retornado
   if ('responsavel' in patch) row.responsavel = patch.responsavel
@@ -257,7 +260,7 @@ export const leadBoardsService = {
     const now = new Date().toISOString()
     const row: LeadRow = {
       id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '', ligacao: '',
-      status: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
+      status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
       dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
       position, createdAt: now, updatedAt: now, deletedAt: null, ...initial,
     }

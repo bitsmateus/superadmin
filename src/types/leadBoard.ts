@@ -34,6 +34,8 @@ export interface LeadRow {
   diaContato: string
   ligacao: string
   status: string
+  /** Dia em que o SDR agendou a reunião com o lead. */
+  agendamento: string
   retornar: string
   retornado: boolean
   responsavel: string

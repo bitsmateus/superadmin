@@ -20,6 +20,7 @@ import {
   Rows3,
   Search,
   Trash2,
+  Upload,
   UserRound,
   X,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
+import { LeadImportModal } from '@/components/comercial/LeadImportModal'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
@@ -849,6 +851,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
   const [filtersOpen, setFiltersOpen] = React.useState(false)
   const [sortDesc, setSortDesc] = React.useState(false)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
+  const [importModalOpen, setImportModalOpen] = React.useState(false)
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
@@ -963,9 +966,14 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
           <>
             <div className="mb-4 flex flex-wrap items-center gap-2">
               {view !== 'dashboard' && (
-                <Button rightIcon={<ChevronDown className="h-4 w-4" />} onClick={handleCreateNome}>
-                  Criar nome
-                </Button>
+                <>
+                  <Button rightIcon={<ChevronDown className="h-4 w-4" />} onClick={handleCreateNome}>
+                    Criar nome
+                  </Button>
+                  <ToolbarButton icon={<Upload className="h-3.5 w-3.5" />} onClick={() => setImportModalOpen(true)}>
+                    Importar
+                  </ToolbarButton>
+                </>
               )}
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -1105,6 +1113,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
       </div>
 
       <CreateBoardModal open={boardModalOpen} onClose={() => setBoardModalOpen(false)} page={page} />
+      <LeadImportModal open={importModalOpen} onClose={() => setImportModalOpen(false)} page={page} boards={boards} />
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
       <LeadFiltersModal
         open={filtersOpen}

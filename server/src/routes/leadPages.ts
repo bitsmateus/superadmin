@@ -113,8 +113,10 @@ export async function leadPageRoutes(app: FastifyInstance) {
   );
 
   // POST /api/lead-pages/:id/duplicate — admin only. Cria uma aba nova "<nome> (cópia)" com a
-  // MESMA estrutura de quadros (nome/cor/posição) da original — sem copiar nenhum lead.
-  app.post<{ Params: { id: string }; Body: { name?: string } }>(
+  // MESMA estrutura (nome/cor/posição) dos quadros da original — sem copiar nenhum lead.
+  // boardIds opcional: só duplica esses quadros específicos; sem informar (ou vazio), duplica
+  // todos os quadros da aba de origem.
+  app.post<{ Params: { id: string }; Body: { name?: string; boardIds?: string[] } }>(
     '/api/lead-pages/:id/duplicate',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -136,10 +138,16 @@ export async function leadPageRoutes(app: FastifyInstance) {
         [newId, name, position]
       );
 
-      const sourceBoards = await query<{ name: string; color: string; position: number }>(
-        'SELECT name, color, position FROM lead_boards WHERE page = $1 ORDER BY position',
-        [source.id]
-      );
+      const boardIds = req.body.boardIds;
+      const sourceBoards = boardIds && boardIds.length
+        ? await query<{ name: string; color: string; position: number }>(
+            'SELECT name, color, position FROM lead_boards WHERE page = $1 AND id = ANY($2) ORDER BY position',
+            [source.id, boardIds]
+          )
+        : await query<{ name: string; color: string; position: number }>(
+            'SELECT name, color, position FROM lead_boards WHERE page = $1 ORDER BY position',
+            [source.id]
+          );
       for (const b of sourceBoards) {
         await query(
           'INSERT INTO lead_boards (name, color, page, position) VALUES ($1,$2,$3,$4)',

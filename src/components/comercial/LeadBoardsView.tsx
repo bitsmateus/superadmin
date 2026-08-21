@@ -183,19 +183,30 @@ function ToolbarButton({
 
 /** Duplicar (só a estrutura de quadros, sem leads) e arquivar a aba do Comercial — admin only.
  * Arquivar não apaga nada: quadros e leads continuam intactos no banco até alguém restaurar. */
-function PageActionsMenu({ pageId, pageName }: { pageId: string; pageName: string }) {
+function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageName: string; boards: LeadBoard[] }) {
   const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [duplicateOpen, setDuplicateOpen] = React.useState(false)
   const [duplicateName, setDuplicateName] = React.useState('')
+  const [duplicateBoardIds, setDuplicateBoardIds] = React.useState<Set<string>>(new Set())
   const ref = React.useRef<HTMLDivElement>(null)
   useOutsideClose(ref, open, () => setOpen(false))
 
   const openDuplicate = () => {
     setDuplicateName(`${pageName} (cópia)`)
+    setDuplicateBoardIds(new Set(boards.map((b) => b.id)))
     setDuplicateOpen(true)
     setOpen(false)
+  }
+
+  const toggleDuplicateBoard = (id: string) => {
+    setDuplicateBoardIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   const confirmDuplicate = async () => {
@@ -203,7 +214,7 @@ function PageActionsMenu({ pageId, pageName }: { pageId: string; pageName: strin
     if (!name) return
     setBusy(true)
     try {
-      const created = await leadPagesService.duplicate(pageId, name)
+      const created = await leadPagesService.duplicate(pageId, name, Array.from(duplicateBoardIds))
       toast.success(`"${created.name}" criada — mesma estrutura de quadros, sem os leads.`)
       setDuplicateOpen(false)
       navigate(`/comercial/${created.id}`)
@@ -264,7 +275,37 @@ function PageActionsMenu({ pageId, pageName }: { pageId: string; pageName: strin
           autoFocus
           onKeyDown={(e) => { if (e.key === 'Enter') void confirmDuplicate() }}
         />
-        <p className="mt-2 text-xs text-foreground/45">Copia só os quadros (nome/cor) — sem trazer os leads.</p>
+        {boards.length > 0 && (
+          <div className="mt-3">
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-xs font-medium text-foreground/70">Quadros a duplicar</label>
+              <button
+                type="button"
+                onClick={() => setDuplicateBoardIds(
+                  duplicateBoardIds.size === boards.length ? new Set() : new Set(boards.map((b) => b.id)),
+                )}
+                className="text-[11px] font-medium text-accent hover:underline"
+              >
+                {duplicateBoardIds.size === boards.length ? 'Desmarcar todos' : 'Marcar todos'}
+              </button>
+            </div>
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
+              {boards.map((b) => (
+                <label key={b.id} className="flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-elevate/[0.03]">
+                  <input
+                    type="checkbox"
+                    checked={duplicateBoardIds.has(b.id)}
+                    onChange={() => toggleDuplicateBoard(b.id)}
+                    className="h-3.5 w-3.5 rounded border-line"
+                  />
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
+                  <span className="truncate text-foreground/80">{b.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-foreground/45">Copia só a estrutura dos quadros marcados (nome/cor) — sem trazer os leads.</p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setDuplicateOpen(false)} disabled={busy}>Cancelar</Button>
           <Button onClick={confirmDuplicate} disabled={!duplicateName.trim()} loading={busy}>Duplicar</Button>
@@ -1154,7 +1195,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   <ToolbarButton icon={<Upload className="h-3.5 w-3.5" />} onClick={() => setImportModalOpen(true)}>
                     Importar
                   </ToolbarButton>
-                  {isAdmin && <PageActionsMenu pageId={page} pageName={title} />}
+                  {isAdmin && <PageActionsMenu pageId={page} pageName={title} boards={boards} />}
                 </>
               )}
               <div className="relative">

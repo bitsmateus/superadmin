@@ -80,8 +80,9 @@ export const leadPagesService = {
     }
   },
 
-  async duplicate(id: string, name?: string): Promise<LeadPage> {
-    const row = await api.post<PageRow>(`/api/lead-pages/${id}/duplicate`, { name })
+  /** boardIds vazio/omitido = duplica todos os quadros da aba de origem. */
+  async duplicate(id: string, name?: string, boardIds?: string[]): Promise<LeadPage> {
+    const row = await api.post<PageRow>(`/api/lead-pages/${id}/duplicate`, { name, boardIds })
     await reloadPages()
     return rowToPage(row)
   },

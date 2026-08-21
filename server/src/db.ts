@@ -509,6 +509,11 @@ END $$`);
     ) AS v(field, name, color, position)
     WHERE NOT EXISTS (SELECT 1 FROM lead_labels ll WHERE ll.field = v.field AND ll.name = v.name)`);
 
+  // Lead novo já nasce com Lig. = '0' (ver leadBoardsService.createRow) — isso só vale a partir
+  // de agora, então preenche com '0' quem ficou pra trás com o campo em branco. Efetivamente
+  // roda uma vez só: depois disso não sobra nenhuma linha com ligacao = '' pra essa query pegar.
+  await pool.query(`UPDATE lead_rows SET ligacao = '0' WHERE ligacao = ''`);
+
   // ── Colunas do quadro do Suporte ───────────────────────────────────────────
   // As etapas do Kanban deixam de ser fixas no código: o time cria, renomeia,
   // reordena e apaga colunas pela própria tela. `key` é o valor gravado em

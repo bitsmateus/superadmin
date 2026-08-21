@@ -70,13 +70,15 @@ export function LeadLabelCell({ field, value, onChange, required }: LeadLabelCel
           className="z-50 w-72 rounded-xl border border-gray-200 bg-white p-2.5 shadow-xl"
         >
           <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={() => { onChange(''); setOpen(false) }}
-              className="rounded-md border border-dashed border-gray-300 px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-50"
-            >
-              Nenhum
-            </button>
+            {field !== 'ligacao' && (
+              <button
+                type="button"
+                onClick={() => { onChange(''); setOpen(false) }}
+                className="rounded-md border border-dashed border-gray-300 px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-50"
+              >
+                Nenhum
+              </button>
+            )}
             {labels.map((l) => (
               <button
                 key={l.id}

@@ -398,6 +398,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   // ser assim porque, quando o lead vira Vendido/No-show, isso vira o marco mais recente e o
   // "agendada" deixa de ser o atual; sem esse flag, o funil (% de no-show, % de venda) ficaria
   // sem denominador pra quem já converteu.
+  // "milestone_at" é a data do evento que gerou o "milestone" atual (quando virou no-show/vendido
+  // da forma como está agora) — usado pro Dashboard Comercial filtrar por período. "first_agendada_at"
+  // é a data do PRIMEIRO "Reunião agendada" da história do lead — fica fixa mesmo que ele tenha
+  // dado no-show e sido reagendado depois, porque reagendar não é um novo agendamento pro
+  // relatório, é o mesmo lead sendo retomado.
   app.get('/api/lead-milestones', { onRequest: [app.authenticate] }, async (req) => {
     const { sub, role } = req.user as { sub: string; role: string };
     const allowed = await restrictedBoardFilter(sub, role);
@@ -409,20 +414,27 @@ export async function leadBoardRoutes(app: FastifyInstance) {
 
     return query(
       `SELECT lr.id, lr.board_id, lr.sdr,
-        COALESCE(
-          (SELECT le.to_value FROM lead_events le
-           WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($1)
-           ORDER BY le.created_at DESC LIMIT 1),
-          CASE WHEN lr.status = ANY($1) THEN lr.status END
-        ) AS milestone,
+        COALESCE(m.milestone, CASE WHEN lr.status = ANY($1) THEN lr.status END) AS milestone,
+        COALESCE(m.milestone_at, CASE WHEN lr.status = ANY($1) THEN lr.created_at END) AS milestone_at,
         (
           lr.status = $2
           OR EXISTS (
             SELECT 1 FROM lead_events le
             WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $2
           )
-        ) AS ever_agendada
+        ) AS ever_agendada,
+        COALESCE(
+          (SELECT MIN(le.created_at) FROM lead_events le
+           WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $2),
+          CASE WHEN lr.status = $2 THEN lr.created_at END
+        ) AS first_agendada_at
        FROM lead_rows lr
+       LEFT JOIN LATERAL (
+         SELECT le.to_value AS milestone, le.created_at AS milestone_at
+         FROM lead_events le
+         WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($1)
+         ORDER BY le.created_at DESC LIMIT 1
+       ) m ON true
        ${boardFilter}`,
       params
     );

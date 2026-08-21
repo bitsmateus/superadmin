@@ -7,12 +7,21 @@ export interface LeadMilestone {
   boardId: string
   sdr: string
   milestone: string | null
+  /** Data do evento que gerou o "milestone" atual (quando virou no-show/vendido do jeito que
+   * está agora) — usado pro Dashboard Comercial filtrar por período. */
+  milestoneAt: string | null
   /** Já passou por "Reunião agendada" em algum momento — mesmo se o marco atual for outro
    * (ex.: já virou Vendido). Denominador do funil (% de no-show, % de venda). */
   everAgendada: boolean
+  /** Data do PRIMEIRO "Reunião agendada" da história do lead — fica fixa mesmo que ele tenha
+   * dado no-show e sido reagendado depois (reagendar não conta como um novo agendamento). */
+  firstAgendadaAt: string | null
 }
 
-type Row = { id: string; board_id: string; sdr: string; milestone: string | null; ever_agendada: boolean }
+type Row = {
+  id: string; board_id: string; sdr: string; milestone: string | null; milestone_at: string | null
+  ever_agendada: boolean; first_agendada_at: string | null
+}
 
 let milestones: LeadMilestone[] = []
 let loaded = false
@@ -52,7 +61,8 @@ export const leadMilestonesService = {
     try {
       const rows = await api.get<Row[]>('/api/lead-milestones')
       milestones = rows.map((r) => ({
-        id: r.id, boardId: r.board_id, sdr: r.sdr, milestone: r.milestone, everAgendada: r.ever_agendada,
+        id: r.id, boardId: r.board_id, sdr: r.sdr, milestone: r.milestone, milestoneAt: r.milestone_at,
+        everAgendada: r.ever_agendada, firstAgendadaAt: r.first_agendada_at,
       }))
       loaded = true
       notify()

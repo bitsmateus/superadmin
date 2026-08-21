@@ -50,7 +50,8 @@ function RangePill({ active, onClick, children }: { active: boolean; onClick: ()
  * operação sem entrar aba por aba. Propositalmente diferente (mais resumido/visual) do dashboard
  * de cada aba: sem os gráficos de "leads por quadro/status/dia de contato", só painel do dia
  * combinado + funil e status do dia sempre abertos por SDR (Luis/Arthur, mesmo zerados). Filtro
- * por data (de quando o lead entrou) e por SDR — parte em "Hoje" por padrão. */
+ * por data e por SDR — parte em "Hoje" por padrão. O total de leads do card usa a data de criação
+ * do lead; Agendadas/No-show/Vendas usam a data do próprio evento (ver SdrSummaryPanel). */
 export function ComercialDashboardPage() {
   const boardsBooted = useLeadBoardsBooted()
   const pagesBooted = useLeadPagesBooted()
@@ -90,6 +91,13 @@ export function ComercialDashboardPage() {
       return true
     })
   }, [pageRows, sdrFilter, from, to])
+
+  // Sem filtro de data — Agendadas/No-show/Vendas do SdrSummaryPanel usam a DATA DO PRÓPRIO
+  // EVENTO (não a de criação do lead) pra decidir o que entra no período selecionado.
+  const sdrScopedRows = React.useMemo(
+    () => pageRows.filter((r) => !sdrFilter || r.sdr === sdrFilter),
+    [pageRows, sdrFilter],
+  )
 
   return (
     <>
@@ -146,7 +154,7 @@ export function ComercialDashboardPage() {
             </div>
 
             <LeadTodayPanel rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
-            <SdrSummaryPanel rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
+            <SdrSummaryPanel rows={rows} allRows={sdrScopedRows} from={from} to={to} boards={boards} onOpenLead={setOpenLeadId} />
             <LeadTodayBySdr rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
           </>
         )}

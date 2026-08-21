@@ -151,42 +151,77 @@ function SdrSummaryCard({ s, boards, onOpenLead }: { s: SdrSummary; boards: Lead
 }
 
 export interface SdrSummaryPanelProps {
+  /** Leads dentro do período selecionado (filtrado por data de criação + SDR) — usado só pro
+   * total de leads do card. */
   rows: LeadRow[]
+  /** Leads filtrados só por SDR (sem filtro de data) — Agendadas/No-show/Vendas usam a DATA DO
+   * PRÓPRIO EVENTO (quando agendou/quando deu no-show/quando vendeu) pra decidir se entram no
+   * período, em vez da data de criação do lead. */
+  allRows: LeadRow[]
+  /** Início/fim do período (YYYY-MM-DD) — vazio = sem limite naquela ponta. */
+  from: string
+  to: string
   boards: LeadBoard[]
   onOpenLead: (id: string) => void
+}
+
+function newBucket(name: string, color: string): SdrSummary {
+  return { sdr: name, color, totalRows: [], agendadosRows: [], noShowRows: [], vendasRows: [] }
 }
 
 /** Resumo visual e enxuto do funil por SDR, pra bater o olho — sem os gráficos de "leads por
  * quadro/status" do dashboard de cada aba, só o que interessa pra gestão: quantos leads, quantas
  * reuniões agendadas, no-show e vendas. Sempre mostra os SDRs cadastrados (mesmo zerados) — a
  * ordem e a lista vêm das etiquetas de SDR (Equipe > Etiquetas), não dos leads existentes. Cada
- * número é clicável — abre o lead direto (1 resultado) ou uma lista pra escolher (mais de 1). */
-export function SdrSummaryPanel({ rows, boards, onOpenLead }: SdrSummaryPanelProps) {
+ * número é clicável — abre o lead direto (1 resultado) ou uma lista pra escolher (mais de 1).
+ *
+ * Agendadas/No-show/Vendas contam pela DATA DO EVENTO, não pela data de criação do lead — reunião
+ * agendada em julho conta em julho mesmo que o lead tenha sido criado em maio. E se um lead dá
+ * no-show e o SDR consegue reagendar de novo, isso NÃO soma um segundo "agendada": a data de
+ * "Agendadas" é sempre a do primeiro agendamento da história do lead, e o no-show sai da contagem
+ * (o marco atual dele voltou a ser "Reunião agendada"). */
+export function SdrSummaryPanel({ rows, allRows, from, to, boards, onOpenLead }: SdrSummaryPanelProps) {
   const sdrLabels = useLeadLabels('sdr')
   const milestones = useLeadMilestones()
   const milestoneById = React.useMemo(
-    () => new Map(milestones.map((m) => [m.id, { milestone: m.milestone, everAgendada: m.everAgendada }])),
+    () => new Map(milestones.map((m) => [m.id, m])),
     [milestones],
   )
 
+  const inRange = React.useCallback((iso: string | null | undefined) => {
+    if (!iso) return false
+    const key = iso.slice(0, 10)
+    if (from && key < from) return false
+    if (to && key > to) return false
+    return true
+  }, [from, to])
+
   const summaries = React.useMemo<SdrSummary[]>(() => {
     const buckets = new Map<string, SdrSummary>()
-    for (const l of sdrLabels) buckets.set(l.name, { sdr: l.name, color: l.color, totalRows: [], agendadosRows: [], noShowRows: [], vendasRows: [] })
+    for (const l of sdrLabels) buckets.set(l.name, newBucket(l.name, l.color))
+
     for (const r of rows) {
       const name = r.sdr || 'Sem SDR'
-      const b = buckets.get(name) ?? { sdr: name, color: '#9CA3AF', totalRows: [], agendadosRows: [], noShowRows: [], vendasRows: [] }
+      const b = buckets.get(name) ?? newBucket(name, '#9CA3AF')
       b.totalRows.push(r)
-      const info = milestoneById.get(r.id)
-      if (info?.everAgendada) b.agendadosRows.push(r)
-      if (info?.milestone === MILESTONE_NO_SHOW) b.noShowRows.push(r)
-      else if (info?.milestone === MILESTONE_VENDIDO) b.vendasRows.push(r)
       buckets.set(name, b)
     }
+
+    for (const r of allRows) {
+      const name = r.sdr || 'Sem SDR'
+      const b = buckets.get(name) ?? newBucket(name, '#9CA3AF')
+      const info = milestoneById.get(r.id)
+      if (inRange(info?.firstAgendadaAt)) b.agendadosRows.push(r)
+      if (info?.milestone === MILESTONE_NO_SHOW && inRange(info.milestoneAt)) b.noShowRows.push(r)
+      else if (info?.milestone === MILESTONE_VENDIDO && inRange(info.milestoneAt)) b.vendasRows.push(r)
+      buckets.set(name, b)
+    }
+
     const seededNames = new Set(sdrLabels.map((l) => l.name))
     const seeded = sdrLabels.map((l) => buckets.get(l.name)!)
     const extra = Array.from(buckets.values()).filter((b) => !seededNames.has(b.sdr))
     return [...seeded, ...extra]
-  }, [rows, sdrLabels, milestoneById])
+  }, [rows, allRows, sdrLabels, milestoneById, inRange])
 
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm">

@@ -318,7 +318,7 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
   )
 }
 
-function SdrFilterButton({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+export function SdrFilterButton({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
   const labels = useLeadLabels('sdr')
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)

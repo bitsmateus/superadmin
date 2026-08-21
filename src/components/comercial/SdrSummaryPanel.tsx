@@ -1,17 +1,19 @@
 import * as React from 'react'
-import { Calendar, ShoppingBag, UserRound, UserX } from 'lucide-react'
+import { Calendar, ChevronRight, ShoppingBag, UserRound, UserX } from 'lucide-react'
+import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useLeadMilestones } from '@/hooks/useLeadMilestones'
 import { MILESTONE_NO_SHOW, MILESTONE_VENDIDO } from '@/components/comercial/LeadDashboardView'
-import type { LeadRow } from '@/types/leadBoard'
+import { cn } from '@/lib/utils'
+import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 interface SdrSummary {
   sdr: string
   color: string
-  total: number
-  agendados: number
-  noShow: number
-  vendas: number
+  totalRows: LeadRow[]
+  agendadosRows: LeadRow[]
+  noShowRows: LeadRow[]
+  vendasRows: LeadRow[]
 }
 
 function initials(name: string): string {
@@ -20,19 +22,96 @@ function initials(name: string): string {
   return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase()
 }
 
-function StatPill({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: string }) {
+/** Número clicável (total/agendadas/no-show/vendas) — abre o lead direto se só tiver 1, ou uma
+ * lista pra escolher qual se tiver mais de 1, igual o painel do dia e o status por SDR. */
+function ClickableStat({
+  matches,
+  boards,
+  onOpenLead,
+  children,
+}: {
+  matches: LeadRow[]
+  boards: LeadBoard[]
+  onOpenLead: (id: string) => void
+  children: (onClick: () => void) => React.ReactNode
+}) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(ref, open, () => setOpen(false))
+
+  const boardName = (boardId: string) => boards.find((b) => b.id === boardId)?.name ?? ''
+
+  const handleClick = () => {
+    if (matches.length === 0) return
+    if (matches.length === 1) { onOpenLead(matches[0].id); return }
+    setOpen((o) => !o)
+  }
+
   return (
-    <div className="flex flex-1 flex-col items-center gap-1 rounded-xl bg-gray-50/70 px-2 py-2.5">
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400">
-        <span style={{ color }}>{icon}</span>
-        {label}
-      </span>
-      <span className="text-lg font-bold" style={{ color }}>{value}</span>
+    <div ref={ref} className="relative">
+      {children(handleClick)}
+      {open && (
+        <div className="absolute left-1/2 top-full z-20 mt-1 w-64 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-1.5 text-left shadow-xl">
+          <ul className="max-h-56 overflow-y-auto">
+            {matches.map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => { onOpenLead(r.id); setOpen(false) }}
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <span className="min-w-0 flex-1 truncate font-medium">{r.nome || 'Sem nome'}</span>
+                  <span className="shrink-0 truncate text-[10px] text-gray-400">{boardName(r.boardId)}</span>
+                  <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
 
-function SdrSummaryCard({ s }: { s: SdrSummary }) {
+function StatPill({
+  icon,
+  label,
+  matches,
+  boards,
+  onOpenLead,
+  color,
+}: {
+  icon: React.ReactNode
+  label: string
+  matches: LeadRow[]
+  boards: LeadBoard[]
+  onOpenLead: (id: string) => void
+  color: string
+}) {
+  return (
+    <ClickableStat matches={matches} boards={boards} onOpenLead={onOpenLead}>
+      {(onClick) => (
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={matches.length === 0}
+          className={cn(
+            'flex w-full flex-1 flex-col items-center gap-1 rounded-xl bg-gray-50/70 px-2 py-2.5 transition-opacity',
+            matches.length > 0 ? 'cursor-pointer hover:opacity-70' : 'cursor-default',
+          )}
+        >
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400">
+            <span style={{ color }}>{icon}</span>
+            {label}
+          </span>
+          <span className="text-lg font-bold" style={{ color }}>{matches.length}</span>
+        </button>
+      )}
+    </ClickableStat>
+  )
+}
+
+function SdrSummaryCard({ s, boards, onOpenLead }: { s: SdrSummary; boards: LeadBoard[]; onOpenLead: (id: string) => void }) {
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100 transition-shadow hover:shadow-md">
       <div className="mb-3 flex items-center gap-3">
@@ -44,16 +123,28 @@ function SdrSummaryCard({ s }: { s: SdrSummary }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-[#323338]">{s.sdr === 'Sem SDR' ? s.sdr : `SDR ${s.sdr}`}</p>
-          <p className="text-[11px] text-gray-400">{s.total} lead{s.total === 1 ? '' : 's'} no total</p>
+          <p className="text-[11px] text-gray-400">{s.totalRows.length} lead{s.totalRows.length === 1 ? '' : 's'} no total</p>
         </div>
-        <span className="shrink-0 rounded-full bg-accent/10 px-2.5 py-1 text-sm font-bold text-accent">
-          {s.total}
-        </span>
+        <ClickableStat matches={s.totalRows} boards={boards} onOpenLead={onOpenLead}>
+          {(onClick) => (
+            <button
+              type="button"
+              onClick={onClick}
+              disabled={s.totalRows.length === 0}
+              className={cn(
+                'shrink-0 rounded-full bg-accent/10 px-2.5 py-1 text-sm font-bold text-accent transition-opacity',
+                s.totalRows.length > 0 ? 'cursor-pointer hover:opacity-70' : 'cursor-default',
+              )}
+            >
+              {s.totalRows.length}
+            </button>
+          )}
+        </ClickableStat>
       </div>
       <div className="flex gap-2">
-        <StatPill icon={<Calendar className="h-3 w-3" />} label="Agendadas" value={s.agendados} color="#4F8EF7" />
-        <StatPill icon={<UserX className="h-3 w-3" />} label="No-show" value={s.noShow} color="#EF4444" />
-        <StatPill icon={<ShoppingBag className="h-3 w-3" />} label="Vendas" value={s.vendas} color="#22C55E" />
+        <StatPill icon={<Calendar className="h-3 w-3" />} label="Agendadas" matches={s.agendadosRows} boards={boards} onOpenLead={onOpenLead} color="#4F8EF7" />
+        <StatPill icon={<UserX className="h-3 w-3" />} label="No-show" matches={s.noShowRows} boards={boards} onOpenLead={onOpenLead} color="#EF4444" />
+        <StatPill icon={<ShoppingBag className="h-3 w-3" />} label="Vendas" matches={s.vendasRows} boards={boards} onOpenLead={onOpenLead} color="#22C55E" />
       </div>
     </div>
   )
@@ -61,13 +152,16 @@ function SdrSummaryCard({ s }: { s: SdrSummary }) {
 
 export interface SdrSummaryPanelProps {
   rows: LeadRow[]
+  boards: LeadBoard[]
+  onOpenLead: (id: string) => void
 }
 
 /** Resumo visual e enxuto do funil por SDR, pra bater o olho — sem os gráficos de "leads por
  * quadro/status" do dashboard de cada aba, só o que interessa pra gestão: quantos leads, quantas
  * reuniões agendadas, no-show e vendas. Sempre mostra os SDRs cadastrados (mesmo zerados) — a
- * ordem e a lista vêm das etiquetas de SDR (Equipe > Etiquetas), não dos leads existentes. */
-export function SdrSummaryPanel({ rows }: SdrSummaryPanelProps) {
+ * ordem e a lista vêm das etiquetas de SDR (Equipe > Etiquetas), não dos leads existentes. Cada
+ * número é clicável — abre o lead direto (1 resultado) ou uma lista pra escolher (mais de 1). */
+export function SdrSummaryPanel({ rows, boards, onOpenLead }: SdrSummaryPanelProps) {
   const sdrLabels = useLeadLabels('sdr')
   const milestones = useLeadMilestones()
   const milestoneById = React.useMemo(
@@ -77,15 +171,15 @@ export function SdrSummaryPanel({ rows }: SdrSummaryPanelProps) {
 
   const summaries = React.useMemo<SdrSummary[]>(() => {
     const buckets = new Map<string, SdrSummary>()
-    for (const l of sdrLabels) buckets.set(l.name, { sdr: l.name, color: l.color, total: 0, agendados: 0, noShow: 0, vendas: 0 })
+    for (const l of sdrLabels) buckets.set(l.name, { sdr: l.name, color: l.color, totalRows: [], agendadosRows: [], noShowRows: [], vendasRows: [] })
     for (const r of rows) {
       const name = r.sdr || 'Sem SDR'
-      const b = buckets.get(name) ?? { sdr: name, color: '#9CA3AF', total: 0, agendados: 0, noShow: 0, vendas: 0 }
-      b.total += 1
+      const b = buckets.get(name) ?? { sdr: name, color: '#9CA3AF', totalRows: [], agendadosRows: [], noShowRows: [], vendasRows: [] }
+      b.totalRows.push(r)
       const info = milestoneById.get(r.id)
-      if (info?.everAgendada) b.agendados += 1
-      if (info?.milestone === MILESTONE_NO_SHOW) b.noShow += 1
-      else if (info?.milestone === MILESTONE_VENDIDO) b.vendas += 1
+      if (info?.everAgendada) b.agendadosRows.push(r)
+      if (info?.milestone === MILESTONE_NO_SHOW) b.noShowRows.push(r)
+      else if (info?.milestone === MILESTONE_VENDIDO) b.vendasRows.push(r)
       buckets.set(name, b)
     }
     const seededNames = new Set(sdrLabels.map((l) => l.name))
@@ -103,7 +197,7 @@ export function SdrSummaryPanel({ rows }: SdrSummaryPanelProps) {
         Métricas por SDR
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {summaries.map((s) => <SdrSummaryCard key={s.sdr} s={s} />)}
+        {summaries.map((s) => <SdrSummaryCard key={s.sdr} s={s} boards={boards} onOpenLead={onOpenLead} />)}
       </div>
     </div>
   )

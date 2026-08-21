@@ -1,18 +1,18 @@
 import * as React from 'react'
 import { Loader2 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
-import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { LeadTodayBySdr } from '@/components/comercial/LeadTodayBySdr'
+import { SdrSummaryPanel } from '@/components/comercial/SdrSummaryPanel'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted } from '@/hooks/useLeadBoards'
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
 
 /** Visão geral do Comercial — junta TODAS as abas ativas (Novos Leads, CRM NX Luis, CRM NX
  * Arthur e as que forem criadas depois) num só lugar, pra bater o olho e entender o cenário da
- * operação sem entrar aba por aba. Mostra o mesmo painel do dia (combinado) e as mesmas métricas
- * de funil (combinadas e por SDR) já usadas dentro de cada aba, só que somando tudo — mais a
- * quebra por SDR dos 4 status do dia, que só existe aqui. */
+ * operação sem entrar aba por aba. Propositalmente diferente (mais resumido/visual) do dashboard
+ * de cada aba: sem os gráficos de "leads por quadro/status/dia de contato", só painel do dia
+ * combinado + funil e status do dia sempre abertos por SDR (Luis/Arthur, mesmo zerados). */
 export function ComercialDashboardPage() {
   const boardsBooted = useLeadBoardsBooted()
   const pagesBooted = useLeadPagesBooted()
@@ -58,8 +58,8 @@ export function ComercialDashboardPage() {
         ) : (
           <>
             <LeadTodayPanel rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
+            <SdrSummaryPanel rows={rows} />
             <LeadTodayBySdr rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
-            <LeadDashboardView rows={rows} boards={boards} />
           </>
         )}
       </div>

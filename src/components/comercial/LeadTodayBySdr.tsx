@@ -97,6 +97,9 @@ export function LeadTodayBySdr({ rows, boards, onOpenLead }: LeadTodayBySdrProps
 
   const bySdr = React.useMemo<SdrToday[]>(() => {
     const buckets = new Map<string, SdrToday>()
+    // Sempre mostra os SDRs cadastrados (Equipe > Etiquetas), mesmo zerados — a lista não
+    // depende de já ter lead ou não pra aparecer aqui.
+    for (const l of sdrLabels) buckets.set(l.name, { sdr: l.name, color: l.color, naoAtualizado: [], atrasado: [], reuniaoHoje: [], propostaHoje: [] })
     for (const r of rows) {
       const name = r.sdr || 'Sem SDR'
       const b = buckets.get(name) ?? {
@@ -111,7 +114,10 @@ export function LeadTodayBySdr({ rows, boards, onOpenLead }: LeadTodayBySdrProps
       if (c.propostaHoje) b.propostaHoje.push(r)
       buckets.set(name, b)
     }
-    return Array.from(buckets.values()).sort((a, b) => a.sdr.localeCompare(b.sdr))
+    const seededNames = new Set(sdrLabels.map((l) => l.name))
+    const seeded = sdrLabels.map((l) => buckets.get(l.name)!)
+    const extra = Array.from(buckets.values()).filter((b) => !seededNames.has(b.sdr))
+    return [...seeded, ...extra]
   }, [rows, today, activityById, sdrLabels])
 
   return (
@@ -142,7 +148,7 @@ export function LeadTodayBySdr({ rows, boards, onOpenLead }: LeadTodayBySdrProps
                   <td className="px-3 py-2.5">
                     <span className="inline-flex items-center gap-1.5 font-medium text-gray-700">
                       <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
-                      {m.sdr}
+                      {m.sdr === 'Sem SDR' ? m.sdr : `SDR ${m.sdr}`}
                     </span>
                   </td>
                   <CountCell matches={m.naoAtualizado} boards={boards} onOpenLead={onOpenLead} tone="text-amber-600 bg-amber-50" />

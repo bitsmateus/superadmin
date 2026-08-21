@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 /** Etiquetas de Status que "contam" pro funil do SDR — precisam bater com o texto exato
- * cadastrado em Status (ver server/src/routes/leadBoards.ts, MILESTONE_STATUSES). */
-const MILESTONE_NO_SHOW = 'Reunião não comparecida'
-const MILESTONE_VENDIDO = 'Vendido'
+ * cadastrado em Status (ver server/src/routes/leadBoards.ts, MILESTONE_STATUSES). Exportadas pra
+ * reuso no resumo por SDR do Dashboard Comercial (SdrSummaryPanel), que usa o mesmo critério. */
+export const MILESTONE_NO_SHOW = 'Reunião não comparecida'
+export const MILESTONE_VENDIDO = 'Vendido'
 
 interface Bucket {
   key: string

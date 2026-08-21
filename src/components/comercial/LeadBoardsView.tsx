@@ -79,7 +79,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'telefone', label: 'Telefone', width: 140, required: true },
   { key: 'tipo', label: 'Tipo', width: 108, tag: true },
   { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true, required: true },
-  { key: 'ligacao', label: 'Lig.', width: 32, tag: true },
+  { key: 'ligacao', label: 'Lig.', width: 28, tag: true },
   { key: 'status', label: 'Status', width: 170, tag: true, required: true },
   { key: 'agendamento', label: 'Agendamento', type: 'date', width: 150, align: 'center' },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },

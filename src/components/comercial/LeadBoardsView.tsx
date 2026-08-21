@@ -107,6 +107,14 @@ const GRID_BORDER = 'border-r border-gray-200'
 const MIN_COL_WIDTH = 80
 
 
+/** As duas abas fixas do Comercial que pertencem a um SDR específico — dentro delas, o Dashboard
+ * só pode mostrar as métricas daquele SDR, nunca do outro (Luis não vê métricas do Arthur e
+ * vice-versa). A visão combinada dos dois só existe no Dashboard Comercial (visão do admin). */
+const PAGE_SDR_LOCK: Record<string, string> = {
+  crm_luis: 'Luis',
+  crm_arthur: 'Arthur',
+}
+
 function columnWidthsStorageKey(page: LeadBoardPage) {
   return `leadColumnWidths:${page}`
 }
@@ -1149,6 +1157,12 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   )
   const visibleCount = visibleRows.length
 
+  const sdrLock = PAGE_SDR_LOCK[page]
+  const dashboardRows = React.useMemo(
+    () => (sdrLock ? visibleRows.filter((r) => r.sdr === sdrLock) : visibleRows),
+    [visibleRows, sdrLock],
+  )
+
   // Kanban/Dashboard é uma preferência do usuário/navegador, vale pras 3 telas do Comercial.
   const [view, setView] = React.useState<'list' | 'kanban' | 'dashboard'>(() => {
     try {
@@ -1270,7 +1284,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                 action={<Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button>}
               />
             ) : view === 'dashboard' ? (
-              <LeadDashboardView rows={visibleRows} boards={boards} />
+              <LeadDashboardView rows={dashboardRows} boards={boards} />
             ) : view === 'kanban' ? (
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} />
             ) : (

@@ -261,10 +261,13 @@ function SdrMetricsGrid({ rows }: { rows: LeadRow[] }) {
 export interface LeadDashboardViewProps {
   rows: LeadRow[]
   boards: LeadBoard[]
+  /** Rótulo da 2ª aba — "Dashboard do SDR" por padrão (Novos Leads, com os 2 SDRs juntos).
+   * CRM NX Luis/Arthur passam "Minhas métricas" porque ali só existe o SDR dono da aba. */
+  sdrTabLabel?: string
 }
 
 /** Painel só de visualização — nada aqui é editável, é resumo de leitura dos leads filtrados. */
-export function LeadDashboardView({ rows, boards }: LeadDashboardViewProps) {
+export function LeadDashboardView({ rows, boards, sdrTabLabel = 'Dashboard do SDR' }: LeadDashboardViewProps) {
   const [subView, setSubView] = React.useState<'geral' | 'sdr'>('geral')
   const statusLabels = useLeadLabels('status')
   const diaContatoLabels = useLeadLabels('diaContato')
@@ -336,7 +339,7 @@ export function LeadDashboardView({ rows, boards }: LeadDashboardViewProps) {
           )}
         >
           <UserRound className="h-3.5 w-3.5" />
-          Dashboard do SDR
+          {sdrTabLabel}
         </button>
       </div>
 

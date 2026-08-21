@@ -107,19 +107,21 @@ const GRID_BORDER = 'border-r border-gray-200'
 const MIN_COL_WIDTH = 80
 
 
-/** As duas abas fixas do Comercial que pertencem a um SDR específico — dentro delas, o Dashboard
- * só pode mostrar as métricas daquele SDR, nunca do outro (Luis não vê métricas do Arthur e
- * vice-versa). A visão combinada dos dois só existe no Dashboard Comercial (visão do admin). */
-const PAGE_SDR_LOCK: Record<string, string> = {
-  crm_luis: 'Luis',
-  crm_arthur: 'Arthur',
+/** Abas que pertencem a um SDR específico (ex.: "CRM LUIS", "CRM NX Arthur") travam nele — o
+ * Dashboard só mostra as métricas daquele SDR e a coluna SDR some da tabela (não faz sentido
+ * escolher entre os dois ali dentro). Casa pelo NOME da aba, não pelo id — o id fixo das 3 abas
+ * de sempre não muda com uma renomeação, mas uma aba nova/duplicada pode ter qualquer nome, e é
+ * o nome que a pessoa realmente lê pra saber de quem é aquela aba. A visão combinada dos dois só
+ * existe no Dashboard Comercial (visão do admin). */
+function sdrLockForPageName(pageName: string, sdrLabels: { name: string }[]): string | undefined {
+  const lower = pageName.toLowerCase()
+  return sdrLabels.find((l) => lower.includes(l.name.toLowerCase()))?.name
 }
 
 /** Colunas visíveis numa aba — a coluna SDR só faz sentido em Novos Leads (várias pessoas
- * cadastrando ali); em CRM NX Luis/Arthur cada aba já é de um SDR só, então a coluna vira
- * redundante e some da tabela. */
-function columnsForPage(page: LeadBoardPage): ColumnDef[] {
-  return page in PAGE_SDR_LOCK ? COLUMNS.filter((c) => c.key !== 'sdr') : COLUMNS
+ * cadastrando ali); numa aba travada num SDR só, a coluna vira redundante e some da tabela. */
+function columnsForSdrLock(sdrLock: string | undefined): ColumnDef[] {
+  return sdrLock ? COLUMNS.filter((c) => c.key !== 'sdr') : COLUMNS
 }
 
 function columnWidthsStorageKey(page: LeadBoardPage) {
@@ -701,16 +703,17 @@ interface BoardGroupProps {
   onBoardDrop: (boardId: string) => void
   columnWidths: Record<string, number>
   onResizeColumn: (key: string, width: number) => void
+  sdrLock: string | undefined
 }
 
 function BoardGroup({
   board, allBoards, search, sdrFilter, filterRules, sortDesc, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
   selectedIds, onToggleRow, onToggleAll,
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
-  columnWidths, onResizeColumn,
+  columnWidths, onResizeColumn, sdrLock,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
-  const cols = columnsForPage(board.page)
+  const cols = columnsForSdrLock(sdrLock)
   const tableWidth = CHECKBOX_COL_WIDTH
     + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
 
@@ -1067,6 +1070,8 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const currentPage = allPages.find((p) => p.id === page)
   const title = currentPage?.name ?? '...'
   const subtitle = 'Comercial · quadros de captação de leads'
+  const sdrLabelsForLock = useLeadLabels('sdr')
+  const sdrLock = React.useMemo(() => sdrLockForPageName(title, sdrLabelsForLock), [title, sdrLabelsForLock])
 
   const booted = useLeadBoardsBooted()
   const allBoards = useLeadBoards()
@@ -1101,8 +1106,8 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
 
   const tableWidth = React.useMemo(
     () => CHECKBOX_COL_WIDTH
-      + columnsForPage(page).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0),
-    [columnWidths, page],
+      + columnsForSdrLock(sdrLock).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0),
+    [columnWidths, sdrLock],
   )
 
   const handleRowDragStart = React.useCallback((ids: string[]) => setDraggingIds(ids), [])
@@ -1165,7 +1170,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   )
   const visibleCount = visibleRows.length
 
-  const sdrLock = PAGE_SDR_LOCK[page]
   const dashboardRows = React.useMemo(
     () => (sdrLock ? visibleRows.filter((r) => r.sdr === sdrLock) : visibleRows),
     [visibleRows, sdrLock],
@@ -1325,6 +1329,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                       onBoardDrop={handleBoardDrop}
                       columnWidths={columnWidths}
                       onResizeColumn={handleResizeColumn}
+                      sdrLock={sdrLock}
                     />
                   ))}
                   <button

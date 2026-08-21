@@ -166,7 +166,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
           <span className="text-[11px] font-extrabold leading-none tracking-tight text-white">NX</span>
         </div>
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold text-foreground">TenantHub</span>
+          <span className="text-sm font-semibold text-foreground">GRUPO NX DIGITAL</span>
           <span className="text-[10px] uppercase tracking-wider text-foreground/40">
             Painel interno
           </span>

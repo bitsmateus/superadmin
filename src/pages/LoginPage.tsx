@@ -79,7 +79,7 @@ export function LoginPage() {
             <ShieldCheck className="h-6 w-6 text-accent" />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            TenantHub
+            GRUPO NX DIGITAL
           </h1>
           <p className="mt-1 text-sm text-foreground/50">
             Painel interno de gestão de tenants

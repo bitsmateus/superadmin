@@ -106,7 +106,7 @@ export function ComercialDashboardPage() {
         subtitle="Comercial · visão geral de todas as abas"
         titleClassName="text-[36px] font-semibold"
         breadcrumbs={[
-          { label: 'TenantHub', to: '/' },
+          { label: 'Grupo NX Digital', to: '/' },
           { label: 'Comercial', to: '/comercial' },
           { label: 'Dashboard Comercial' },
         ]}

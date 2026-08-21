@@ -2280,11 +2280,11 @@ function BriefingHeader({ companyName }: { companyName: string }) {
     <header className="border-b border-slate-200 bg-white shadow-sm">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#4F8EF7] font-bold text-white">
-            T
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#4F8EF7] text-[11px] font-extrabold text-white">
+            NX
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-slate-900">TenantHub</p>
+            <p className="text-sm font-semibold text-slate-900">Grupo NX Digital</p>
             <p className="text-xs text-slate-400">Briefing de onboarding</p>
           </div>
         </div>

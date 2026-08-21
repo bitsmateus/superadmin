@@ -37,7 +37,7 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs
   const computedCrumbs =
     breadcrumbs ??
     [
-      { label: 'TenantHub', to: '/' },
+      { label: 'Grupo NX Digital', to: '/' },
       ...parts.map((p, i) => {
         const path = '/' + parts.slice(0, i + 1).join('/')
         return { label: labels[p] || p, to: path }

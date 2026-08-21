@@ -188,7 +188,7 @@ export function TenantDetailPage() {
     <>
       <TopBar
         breadcrumbs={[
-          { label: 'TenantHub', to: '/' },
+          { label: 'Grupo NX Digital', to: '/' },
           { label: 'Tenants', to: '/tenants' },
           { label: asText(tenant.name, 'Tenant') },
         ]}

@@ -1221,7 +1221,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
         subtitle={subtitle}
         titleClassName="text-[36px] font-semibold"
         breadcrumbs={[
-          { label: 'TenantHub', to: '/' },
+          { label: 'Grupo NX Digital', to: '/' },
           { label: 'Comercial', to: '/comercial' },
           { label: title },
         ]}

@@ -337,7 +337,7 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
         <TopBar
           title="Ticket"
           breadcrumbs={[
-            { label: 'TenantHub', to: '/' },
+            { label: 'Grupo NX Digital', to: '/' },
             { label: 'Tickets', to: '/tickets' },
             { label: '…' },
           ]}
@@ -395,7 +395,7 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
       <TopBar
         title={`#${ticket.number} · ${ticket.subject}`}
         breadcrumbs={[
-          { label: 'TenantHub', to: '/' },
+          { label: 'Grupo NX Digital', to: '/' },
           { label: 'Tickets', to: '/tickets' },
           { label: `#${ticket.number}` },
         ]}

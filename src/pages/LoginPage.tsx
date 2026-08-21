@@ -6,11 +6,11 @@ import {
   KeyRound,
   LogIn,
   Mail,
-  ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import logoNx from '@/assets/logo-nx.jpg'
 import { signIn, useAuth } from '@/hooks/useAuth'
 
 export function LoginPage() {
@@ -75,9 +75,7 @@ export function LoginPage() {
 
       <div className="relative z-10 w-full max-w-[400px] animate-fade-in">
         <div className="mb-6 flex flex-col items-center">
-          <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-card ring-1 ring-line shadow-glow">
-            <ShieldCheck className="h-6 w-6 text-accent" />
-          </div>
+          <img src={logoNx} alt="Grupo NX Digital" className="mb-4 h-16 w-16 rounded-2xl object-cover shadow-glow" />
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             GRUPO NX DIGITAL
           </h1>

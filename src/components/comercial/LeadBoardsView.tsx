@@ -69,6 +69,14 @@ interface ColumnDef {
   align?: 'center'
   /** Pendência obrigatória pro SDR preencher — vazio fica marcado em vermelho. */
   required?: boolean
+  /** Largura travada — ninguém arrasta pra redimensionar, ignora qualquer preferência salva. */
+  widthLocked?: boolean
+}
+
+/** Largura de exibição de uma coluna: travada usa sempre o padrão fixo; senão, a preferência
+ * salva do usuário (se existir) manda mais que o padrão do código. */
+function columnWidth(col: ColumnDef, columnWidths: Record<string, number>): number {
+  return col.widthLocked ? col.width : (columnWidths[col.key] ?? col.width)
 }
 
 const CHECKBOX_COL_WIDTH = 58
@@ -79,7 +87,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'telefone', label: 'Telefone', width: 140, required: true },
   { key: 'tipo', label: 'Tipo', width: 108, tag: true },
   { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true, required: true },
-  { key: 'ligacao', label: 'Lig.', width: 32, tag: true },
+  { key: 'ligacao', label: 'Lig.', width: 40, tag: true, widthLocked: true },
   { key: 'status', label: 'Status', width: 170, tag: true, required: true },
   { key: 'agendamento', label: 'Agendamento', type: 'date', width: 150, align: 'center' },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
@@ -534,7 +542,7 @@ function BoardGroup({
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
   const tableWidth = CHECKBOX_COL_WIDTH
-    + COLUMNS.reduce((sum, c) => sum + (columnWidths[c.key] ?? c.width), 0)
+    + COLUMNS.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
 
   const startResize = React.useCallback((e: React.MouseEvent, key: string, startWidth: number) => {
     e.preventDefault()
@@ -657,7 +665,7 @@ function BoardGroup({
                   />
                 </th>
                 {COLUMNS.map((col) => {
-                  const width = columnWidths[col.key] ?? col.width
+                  const width = columnWidth(col, columnWidths)
                   return (
                     <th
                       key={col.key}
@@ -666,11 +674,13 @@ function BoardGroup({
                     >
                       {col.label}
                       {col.required && <span className="text-red-400" title="Obrigatório"> *</span>}
-                      <span
-                        onMouseDown={(e) => startResize(e, col.key, width)}
-                        title="Redimensionar coluna"
-                        className="absolute right-0 top-0 h-full w-2 cursor-col-resize select-none hover:bg-accent/30 active:bg-accent/40"
-                      />
+                      {!col.widthLocked && (
+                        <span
+                          onMouseDown={(e) => startResize(e, col.key, width)}
+                          title="Redimensionar coluna"
+                          className="absolute right-0 top-0 h-full w-2 cursor-col-resize select-none hover:bg-accent/30 active:bg-accent/40"
+                        />
+                      )}
                     </th>
                   )
                 })}
@@ -916,7 +926,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
 
   const tableWidth = React.useMemo(
     () => CHECKBOX_COL_WIDTH
-      + COLUMNS.reduce((sum, c) => sum + (columnWidths[c.key] ?? c.width), 0),
+      + COLUMNS.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0),
     [columnWidths],
   )
 

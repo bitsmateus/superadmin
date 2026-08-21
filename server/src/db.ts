@@ -564,6 +564,12 @@ END $$`);
     archived_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  // "Duplicar" cria uma segunda entrada no menu com nome próprio, mas apontando pra MESMA
+  // tela/rota do original (ex.: "Pipeline" e "Pipeline (cópia)" os dois abrem /pipeline) — as
+  // telas do Suporte não são um container genérico como o Comercial, então duplicar não cria
+  // dados independentes, só um atalho nomeado. source_key = id pro item original; numa cópia,
+  // aponta pro id do item de origem (mesmo se a origem já for uma cópia).
+  await pool.query(`ALTER TABLE support_pages ADD COLUMN IF NOT EXISTS source_key TEXT`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_support_pages ON support_pages;
@@ -584,6 +590,8 @@ END $$`);
       ('templates',     'Templates',            9)
     ) AS v(id, name, position)
     WHERE NOT EXISTS (SELECT 1 FROM support_pages sp WHERE sp.id = v.id)`);
+  await pool.query(`UPDATE support_pages SET source_key = id WHERE source_key IS NULL`);
+  await pool.query(`ALTER TABLE support_pages ALTER COLUMN source_key SET NOT NULL`);
 
   console.log('[db] migrations applied');
 }

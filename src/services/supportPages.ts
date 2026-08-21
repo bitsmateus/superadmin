@@ -1,17 +1,23 @@
 import { api, onSseEvent } from '@/services/api'
 
-/** Item fixo do menu Suporte (Tarefas, Pipeline, Clientes...) — a URL é sempre a mesma, só a
- * visibilidade no menu (arquivado ou não) é gerenciável por um admin. */
+/** Item do menu Suporte (Tarefas, Pipeline, Clientes...) — a URL é sempre a mesma, só a
+ * visibilidade no menu (arquivado ou não) é gerenciável por um admin. `sourceKey` é o id do item
+ * original: pro item de origem, é ele mesmo; numa cópia ("Duplicar"), aponta pra qual rota/tela
+ * ela deve abrir — duas entradas podem apontar pra mesma tela com nomes diferentes. */
 export interface SupportPage {
   id: string
   name: string
+  sourceKey: string
   position: number
   archivedAt: string | null
 }
 
-type PageRow = { id: string; name: string; position: number; archived_at: string | null; created_at: string }
+type PageRow = {
+  id: string; name: string; source_key: string; position: number
+  archived_at: string | null; created_at: string
+}
 function rowToPage(r: PageRow): SupportPage {
-  return { id: r.id, name: r.name, position: r.position, archivedAt: r.archived_at }
+  return { id: r.id, name: r.name, sourceKey: r.source_key, position: r.position, archivedAt: r.archived_at }
 }
 
 let pages: SupportPage[] = []
@@ -66,6 +72,13 @@ function subscribeRealtime() {
 export const supportPagesService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
   getAll(): SupportPage[] { return pages },
+
+  /** name vazio/omitido = "<nome de origem> (cópia)". */
+  async duplicate(id: string, name?: string): Promise<SupportPage> {
+    const row = await api.post<PageRow>(`/api/support-pages/${id}/duplicate`, { name })
+    await reloadPages()
+    return rowToPage(row)
+  },
 
   async archive(id: string): Promise<void> {
     await api.post(`/api/support-pages/${id}/archive`, {})

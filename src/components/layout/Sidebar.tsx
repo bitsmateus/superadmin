@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Columns3,
   Contact,
+  Copy,
   FileSearch,
   LayoutDashboard,
   LifeBuoy,
@@ -63,6 +64,23 @@ const suporteItems = [
 ]
 
 const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/canais', '/tenants', '/nps']
+
+/** Intercala cópias ("Duplicar") logo depois do item original de cada rota — cada cópia herda
+ * ícone/rota do original, só o nome e o id (pra arquivar/duplicar de novo) são próprios dela.
+ * Itens sem entrada em MENU_KEY_BY_PATH (Dashboard, Conhecimento, Equipe…) nunca têm cópia. */
+function withDuplicates<T extends { to: string; label: string }>(
+  items: T[],
+  duplicatesByKey: Map<string, SupportPage[]>,
+): (T & { pageId?: string })[] {
+  return items.flatMap((item) => {
+    const key = MENU_KEY_BY_PATH[item.to]
+    const dups = key ? duplicatesByKey.get(key) ?? [] : []
+    return [
+      { ...item, pageId: key } as T & { pageId?: string },
+      ...dups.map((d) => ({ ...item, label: d.name, pageId: d.id }) as T & { pageId?: string }),
+    ]
+  })
+}
 
 const ROLE_LABELS = {
   admin: 'Administrador',
@@ -124,6 +142,19 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     return supportPages.some((p) => p.id === key)
   }, [supportPages, supportPagesBooted])
 
+  // Cópias ("Duplicar") de um item do Suporte — abrem a MESMA rota do original, com nome
+  // próprio. Agrupadas pelo id do item de origem pra saber onde encaixar cada uma no menu.
+  const duplicatesByKey = React.useMemo(() => {
+    const map = new Map<string, SupportPage[]>()
+    for (const p of supportPages) {
+      if (p.id === p.sourceKey) continue
+      const list = map.get(p.sourceKey) ?? []
+      list.push(p)
+      map.set(p.sourceKey, list)
+    }
+    return map
+  }, [supportPages])
+
   const [archivedOpen, setArchivedOpen] = React.useState(false)
   const [supportArchiveOpen, setSupportArchiveOpen] = React.useState(false)
   const [comercialOpen, setComercialOpen] = React.useState(() =>
@@ -135,10 +166,13 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const [newPageOpen, setNewPageOpen] = React.useState(false)
   const [pagesArchiveOpen, setPagesArchiveOpen] = React.useState(false)
 
-  const suporte = [
-    ...suporteItems,
-    ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
-  ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to))
+  const suporte = withDuplicates(
+    [
+      ...suporteItems,
+      ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
+    ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to)),
+    duplicatesByKey,
+  )
   const leadPages = useLeadPages()
   const visibleComercialItems = canSee('/comercial')
     ? leadPages.map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact, page: p }))
@@ -147,32 +181,38 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     r === '/' ? location.pathname === '/' : location.pathname.startsWith(r),
   )
 
-  const secondaryItems = [
-    ...(isAdmin
-      ? [{ to: '/kb', label: 'Conhecimento', icon: BookOpen }]
-      : []),
-    ...(isAdmin
-      ? [{ to: '/users', label: 'Equipe', icon: ShieldCheck }]
-      : []),
-    ...(isAdmin
-      ? [{ to: '/auditoria', label: 'Auditoria', icon: FileSearch }]
-      : []),
-    { to: '/settings', label: 'Configurações', icon: Settings },
-  ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to))
+  const secondaryItems = withDuplicates(
+    [
+      ...(isAdmin
+        ? [{ to: '/kb', label: 'Conhecimento', icon: BookOpen }]
+        : []),
+      ...(isAdmin
+        ? [{ to: '/users', label: 'Equipe', icon: ShieldCheck }]
+        : []),
+      ...(isAdmin
+        ? [{ to: '/auditoria', label: 'Auditoria', icon: FileSearch }]
+        : []),
+      { to: '/settings', label: 'Configurações', icon: Settings },
+    ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to)),
+    duplicatesByKey,
+  )
 
   // Movidos para "Arquivados" (acessíveis, fora do caminho do dia a dia).
-  const archivedItems = [
-    { to: '/arquivados', label: 'Clientes arquivados', icon: Archive },
-    { to: '/tickets', label: 'Tickets', icon: MessageCircle },
-    ...(seeFinancials
-      ? [
-          { to: '/comando', label: 'Comando', icon: Zap },
-          { to: '/financeiro', label: 'Financeiro', icon: Wallet },
-        ]
-      : []),
-    { to: '/templates', label: 'Templates', icon: MessageSquare },
-    ...(isAdmin ? [{ to: '/equipe', label: 'Performance', icon: Trophy }] : []),
-  ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to))
+  const archivedItems = withDuplicates(
+    [
+      { to: '/arquivados', label: 'Clientes arquivados', icon: Archive },
+      { to: '/tickets', label: 'Tickets', icon: MessageCircle },
+      ...(seeFinancials
+        ? [
+            { to: '/comando', label: 'Comando', icon: Zap },
+            { to: '/financeiro', label: 'Financeiro', icon: Wallet },
+          ]
+        : []),
+      { to: '/templates', label: 'Templates', icon: MessageSquare },
+      ...(isAdmin ? [{ to: '/equipe', label: 'Performance', icon: Trophy }] : []),
+    ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to)),
+    duplicatesByKey,
+  )
 
   return (
     <aside
@@ -242,7 +282,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                 : null
             return (
               <NavLink
-                key={item.to}
+                key={item.pageId ?? item.to}
                 to={item.to}
                 end={'end' in item ? item.end : undefined}
                 onClick={closeOnMobile}
@@ -269,8 +309,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                         {badge > 99 ? '99+' : badge}
                       </span>
                     )}
-                    {isAdmin && MENU_KEY_BY_PATH[item.to] && item.to !== '/' && (
-                      <SidebarPageMenu pageId={MENU_KEY_BY_PATH[item.to]} pageName={item.label} />
+                    {isAdmin && item.pageId && item.to !== '/' && (
+                      <SidebarPageMenu pageId={item.pageId} pageName={item.label} />
                     )}
                   </>
                 )}
@@ -384,9 +424,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         <>
         <div className="my-2 h-px bg-elevate/[0.05]" />
 
-        {secondaryItems.map(({ to, label, icon: Icon }) => (
+        {secondaryItems.map(({ to, label, icon: Icon, pageId }) => (
           <NavLink
-            key={to}
+            key={pageId ?? to}
             to={to}
             onClick={closeOnMobile}
             className={({ isActive }) =>
@@ -409,8 +449,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                   )}
                 />
                 <span className="truncate">{label}</span>
-                {isAdmin && MENU_KEY_BY_PATH[to] && (
-                  <SidebarPageMenu pageId={MENU_KEY_BY_PATH[to]} pageName={label} />
+                {isAdmin && pageId && (
+                  <SidebarPageMenu pageId={pageId} pageName={label} />
                 )}
               </>
             )}
@@ -436,9 +476,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
               />
             </button>
             {archivedOpen &&
-              archivedItems.map(({ to, label, icon: Icon }) => (
+              archivedItems.map(({ to, label, icon: Icon, pageId }) => (
                 <NavLink
-                  key={to}
+                  key={pageId ?? to}
                   to={to}
                   onClick={closeOnMobile}
                   className={({ isActive }) =>
@@ -459,8 +499,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                         )}
                       />
                       <span className="truncate">{label}</span>
-                      {isAdmin && MENU_KEY_BY_PATH[to] && (
-                        <SidebarPageMenu pageId={MENU_KEY_BY_PATH[to]} pageName={label} />
+                      {isAdmin && pageId && (
+                        <SidebarPageMenu pageId={pageId} pageName={label} />
                       )}
                     </>
                   )}
@@ -549,12 +589,14 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   )
 }
 
-/** "..." de um item do menu Suporte — admin only. Só "Excluir aba" por enquanto: essas telas são
- * cada uma sua própria feature (Pipeline, Tickets, Clientes...), não um container genérico como
- * o Comercial, então "duplicar" não teria um resultado real — arquivar/restaurar sim. */
+/** "..." de um item do menu Suporte — admin only. "Duplicar" cria uma segunda entrada no menu
+ * com nome próprio, mas que abre a MESMA tela do original (essas telas não são um container
+ * genérico como o Comercial, então uma cópia não tem dados independentes — é um atalho nomeado
+ * pra mesma rota, útil pra organizar/rotular sem duplicar nada por trás). */
 function SidebarPageMenu({ pageId, pageName }: { pageId: string; pageName: string }) {
   const [open, setOpen] = React.useState(false)
   const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null)
+  const [duplicateOpen, setDuplicateOpen] = React.useState(false)
   const btnRef = React.useRef<HTMLButtonElement>(null)
   const popRef = React.useRef<HTMLDivElement>(null)
   useOutsideClose(popRef, open, () => setOpen(false))
@@ -599,6 +641,14 @@ function SidebarPageMenu({ pageId, pageName }: { pageId: string; pageName: strin
         >
           <button
             type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); setDuplicateOpen(true) }}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/80 hover:bg-elevate/[0.06]"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            Duplicar
+          </button>
+          <button
+            type="button"
             onClick={excluir}
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger hover:bg-danger/10"
           >
@@ -608,7 +658,63 @@ function SidebarPageMenu({ pageId, pageName }: { pageId: string; pageName: strin
         </div>,
         document.body,
       )}
+      <DuplicateSupportPageModal
+        open={duplicateOpen}
+        onClose={() => setDuplicateOpen(false)}
+        sourceId={pageId}
+        sourceName={pageName}
+      />
     </>
+  )
+}
+
+/** Nome pra cópia de um item do Suporte — admin only. A cópia abre a mesma rota do original, só
+ * com um nome próprio no menu (ver comentário em SidebarPageMenu). */
+function DuplicateSupportPageModal({
+  open,
+  onClose,
+  sourceId,
+  sourceName,
+}: {
+  open: boolean
+  onClose: () => void
+  sourceId: string
+  sourceName: string
+}) {
+  const [name, setName] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => { if (open) setName(`${sourceName} (cópia)`) }, [open, sourceName])
+
+  const submit = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setSaving(true)
+    try {
+      const page = await supportPagesService.duplicate(sourceId, trimmed)
+      toast.success(`"${page.name}" criada — abre a mesma tela de "${sourceName}".`)
+      onClose()
+    } catch (err) {
+      toast.error('Falha ao duplicar: ' + (err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Duplicar aba" description={`A cópia abre a mesma tela de "${sourceName}" — não cria dados independentes, só um atalho com nome próprio.`} size="sm">
+      <Input
+        label="Nome da cópia"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        autoFocus
+        onKeyDown={(e) => { if (e.key === 'Enter') void submit() }}
+      />
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button onClick={submit} disabled={!name.trim()} loading={saving}>Duplicar</Button>
+      </div>
+    </Modal>
   )
 }
 

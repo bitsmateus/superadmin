@@ -115,6 +115,13 @@ const PAGE_SDR_LOCK: Record<string, string> = {
   crm_arthur: 'Arthur',
 }
 
+/** Colunas visíveis numa aba — a coluna SDR só faz sentido em Novos Leads (várias pessoas
+ * cadastrando ali); em CRM NX Luis/Arthur cada aba já é de um SDR só, então a coluna vira
+ * redundante e some da tabela. */
+function columnsForPage(page: LeadBoardPage): ColumnDef[] {
+  return page in PAGE_SDR_LOCK ? COLUMNS.filter((c) => c.key !== 'sdr') : COLUMNS
+}
+
 function columnWidthsStorageKey(page: LeadBoardPage) {
   return `leadColumnWidths:${page}`
 }
@@ -703,8 +710,9 @@ function BoardGroup({
   columnWidths, onResizeColumn,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
+  const cols = columnsForPage(board.page)
   const tableWidth = CHECKBOX_COL_WIDTH
-    + COLUMNS.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
+    + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
 
   const startResize = React.useCallback((e: React.MouseEvent, key: string, startWidth: number) => {
     e.preventDefault()
@@ -826,7 +834,7 @@ function BoardGroup({
                     className="h-3.5 w-3.5 rounded border-gray-300"
                   />
                 </th>
-                {COLUMNS.map((col) => {
+                {cols.map((col) => {
                   const width = columnWidth(col, columnWidths)
                   return (
                     <th
@@ -882,7 +890,7 @@ function BoardGroup({
                       />
                     </div>
                   </td>
-                  {COLUMNS.map((col) => (
+                  {cols.map((col) => (
                     <td key={col.key} className={cn('p-0 align-middle', GRID_BORDER)}>
                       {col.readOnly ? (
                         <div className={cn('truncate px-2.5 py-1.5 text-sm text-gray-400', col.align === 'center' && 'text-center')}>
@@ -975,7 +983,7 @@ function BoardGroup({
               {rows.length > 0 && (
                 <tr className="border-t border-gray-200 bg-gray-50/70 text-sm font-semibold text-[#323338]">
                   <td className={GRID_BORDER} style={{ width: CHECKBOX_COL_WIDTH }} />
-                  {COLUMNS.map((col) => (
+                  {cols.map((col) => (
                     <td key={col.key} className={cn('px-2.5 py-1.5 text-center', GRID_BORDER)}>
                       {col.key === 'valorMrr'
                         ? formatBRLCents(totalMrr)
@@ -987,7 +995,7 @@ function BoardGroup({
                 </tr>
               )}
               <tr className="hover:bg-gray-50">
-                <td colSpan={COLUMNS.length + 1} className="px-2.5 py-2">
+                <td colSpan={cols.length + 1} className="px-2.5 py-2">
                   <button
                     type="button"
                     onClick={() => onCreateRow(board.id)}
@@ -1093,8 +1101,8 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
 
   const tableWidth = React.useMemo(
     () => CHECKBOX_COL_WIDTH
-      + COLUMNS.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0),
-    [columnWidths],
+      + columnsForPage(page).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0),
+    [columnWidths, page],
   )
 
   const handleRowDragStart = React.useCallback((ids: string[]) => setDraggingIds(ids), [])

@@ -33,16 +33,20 @@ async function init() {
     return
   }
 
+  // O token já é suficiente pra essas rotas — não precisam esperar o /auth/me terminar
+  // pra começar a carregar. Disparar junto (em vez de só depois do profile chegar) corta
+  // pela metade o tempo até o menu Comercial aparecer no primeiro load da sessão.
+  startSse()
+  void bootDb()
+  void bootTickets()
+  void bootAnalytics()
+  void bootLeadBoards()
+  void bootLeadPages()
+
   try {
     const profile = await api.get<Profile>('/api/auth/me')
     setCurrentProfile(profile)
     setState({ profile, loading: false })
-    startSse()
-    void bootDb()
-    void bootTickets()
-    void bootAnalytics()
-    void bootLeadBoards()
-    void bootLeadPages()
   } catch {
     clearToken()
     setState({ loading: false })
@@ -86,6 +90,7 @@ export async function signIn(email: string, password: string) {
   void bootTickets()
   void bootAnalytics()
   void bootLeadBoards()
+  void bootLeadPages()
   return { data: { user }, error: null }
 }
 

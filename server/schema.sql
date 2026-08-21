@@ -743,6 +743,7 @@ SELECT * FROM (VALUES
   ('tipo', 'CAMPANHA 01 - VALIDADO — Cópia / VALIDADO + IMAGENS',                           '#6366F1', 11),
   ('sdr', 'Luis',                       '#4F8EF7', 1),
   ('sdr', 'Arthur',                     '#8B5CF6', 2),
+  ('ligacao', '0',                      '#E5E5E5', 0),
   ('ligacao', '1',                      '#C4C4C4', 1),
   ('ligacao', '2',                      '#1BC47D', 2),
   ('ligacao', '3',                      '#8DC63F', 3),

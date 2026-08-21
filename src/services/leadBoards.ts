@@ -263,7 +263,7 @@ export const leadBoardsService = {
     const position = boardRows.length ? Math.max(...boardRows.map((r) => r.position)) + 1 : 0
     const now = new Date().toISOString()
     const row: LeadRow = {
-      id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '', ligacao: '',
+      id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
       status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
       dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
       position, createdAt: now, updatedAt: now, deletedAt: null, ...initial,

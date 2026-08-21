@@ -113,7 +113,7 @@ export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps
   const cards: StatCard[] = [
     { key: 'nao-atualizados', icon: <Clock className="h-4 w-4" />, label: 'Status não atualizado (24h+)', tone: 'text-amber-600 bg-amber-50', matches: groups.naoAtualizados },
     { key: 'atrasados', icon: <AlertTriangle className="h-4 w-4" />, label: 'Atrasados (não retornados)', tone: 'text-red-600 bg-red-50', matches: groups.atrasados },
-    { key: 'reunioes', icon: <CalendarCheck2 className="h-4 w-4" />, label: 'Reuniões agendadas hoje', tone: 'text-blue-600 bg-blue-50', matches: groups.reunioesHoje },
+    { key: 'reunioes', icon: <CalendarCheck2 className="h-4 w-4" />, label: 'Reuniões de hoje', tone: 'text-blue-600 bg-blue-50', matches: groups.reunioesHoje },
     { key: 'propostas', icon: <FileText className="h-4 w-4" />, label: 'Propostas p/ retornar hoje', tone: 'text-emerald-600 bg-emerald-50', matches: groups.propostasHoje },
   ]
 

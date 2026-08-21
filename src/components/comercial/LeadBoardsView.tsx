@@ -38,6 +38,7 @@ import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { RetornarField } from '@/components/comercial/RetornarField'
+import { AgendamentoField } from '@/components/comercial/AgendamentoField'
 import { LeadFiltersModal, matchesLeadFilters, type FilterRule } from '@/components/comercial/LeadFiltersModal'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn, formatDateTimeShort } from '@/lib/utils'
@@ -78,7 +79,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'telefone', label: 'Telefone', width: 140, required: true },
   { key: 'tipo', label: 'Tipo', width: 108, tag: true },
   { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true, required: true },
-  { key: 'ligacao', label: 'Ligação', width: 62, tag: true },
+  { key: 'ligacao', label: 'Lig.', width: 56, tag: true },
   { key: 'status', label: 'Status', width: 170, tag: true, required: true },
   { key: 'agendamento', label: 'Agendamento', type: 'date', width: 150, align: 'center' },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
@@ -749,6 +750,12 @@ function BoardGroup({
                           retornado={row.retornado}
                           onChange={(patch) => applyFieldChange(row, patch)}
                           className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
+                        />
+                      ) : col.key === 'agendamento' ? (
+                        <AgendamentoField
+                          value={row.agendamento}
+                          onChange={(next) => leadBoardsService.updateRow(row.id, { agendamento: next })}
+                          className="justify-center bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
                         />
                       ) : (
                         <EditableField

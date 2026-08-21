@@ -704,13 +704,14 @@ interface BoardGroupProps {
   columnWidths: Record<string, number>
   onResizeColumn: (key: string, width: number) => void
   sdrLock: string | undefined
+  sdrPageBoards: Map<string, LeadBoard[]>
 }
 
 function BoardGroup({
   board, allBoards, search, sdrFilter, filterRules, sortDesc, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
   selectedIds, onToggleRow, onToggleAll,
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
-  columnWidths, onResizeColumn, sdrLock,
+  columnWidths, onResizeColumn, sdrLock, sdrPageBoards,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
   const cols = columnsForSdrLock(sdrLock)
@@ -939,6 +940,16 @@ function BoardGroup({
                                 (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === next.trim().toLowerCase(),
                               )
                               applyFieldChange(row, target ? { status: next, boardId: target.id } : { status: next })
+                            } else if (col.key === 'sdr') {
+                              // Marcar o SDR aqui (só existe em abas sem dono, ex.: Novos Leads) já
+                              // manda o lead pro quadro de MESMO NOME na aba daquele SDR — não faz
+                              // sentido ficar em Novos Leads depois de atribuído.
+                              const target = next
+                                ? sdrPageBoards.get(next)?.find(
+                                    (b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase(),
+                                  )
+                                : undefined
+                              applyFieldChange(row, target ? { sdr: next, boardId: target.id } : { sdr: next })
                             } else {
                               applyFieldChange(row, { [col.key]: next })
                             }
@@ -1076,6 +1087,17 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const booted = useLeadBoardsBooted()
   const allBoards = useLeadBoards()
   const boards = React.useMemo(() => allBoards.filter((b) => b.page === page), [allBoards, page])
+  // Quadros de cada aba travada num SDR (CRM Luis/Arthur) — usado só em abas SEM trava (ex.: Novos
+  // Leads): quando alguém marca o SDR ali, o lead pula sozinho pro quadro de MESMO NOME na aba
+  // daquele SDR (ex.: "Leads Novos" em Novos Leads → "Leads Novos" em CRM Luis).
+  const sdrPageBoards = React.useMemo(() => {
+    const map = new Map<string, LeadBoard[]>()
+    for (const l of sdrLabelsForLock) {
+      const targetPage = allPages.find((p) => sdrLockForPageName(p.name, sdrLabelsForLock) === l.name)
+      if (targetPage) map.set(l.name, allBoards.filter((b) => b.page === targetPage.id))
+    }
+    return map
+  }, [sdrLabelsForLock, allPages, allBoards])
   const allRows = useAllLeadRows()
   const pageRows = React.useMemo(() => {
     const boardIds = new Set(boards.map((b) => b.id))
@@ -1330,6 +1352,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                       columnWidths={columnWidths}
                       onResizeColumn={handleResizeColumn}
                       sdrLock={sdrLock}
+                      sdrPageBoards={sdrPageBoards}
                     />
                   ))}
                   <button

@@ -99,7 +99,30 @@ function columnWidthsStorageKey(page: LeadBoardPage) {
   return `leadColumnWidths:${page}`
 }
 
+const LIGACAO_WIDTH_MIGRATION_KEY = 'leadColumnWidths:ligacaoNarrowMigration'
+
+// A coluna Lig. ficou bem mais estreita (28px) — sem isso, quem já tinha redimensionado ela
+// manualmente (ou herdou o valor antigo, mais largo) nunca veria a mudança, porque a
+// preferência salva sempre ganha do padrão novo do código. Roda só uma vez por navegador.
+function migrateLigacaoWidthOnce() {
+  try {
+    if (window.localStorage.getItem(LIGACAO_WIDTH_MIGRATION_KEY)) return
+    for (const p of ABA_ORDER) {
+      const key = columnWidthsStorageKey(p)
+      const raw = window.localStorage.getItem(key)
+      if (!raw) continue
+      const parsed = JSON.parse(raw)
+      if ('ligacao' in parsed) {
+        delete parsed.ligacao
+        window.localStorage.setItem(key, JSON.stringify(parsed))
+      }
+    }
+    window.localStorage.setItem(LIGACAO_WIDTH_MIGRATION_KEY, '1')
+  } catch { /* ignore */ }
+}
+
 function loadColumnWidths(page: LeadBoardPage): Record<string, number> {
+  migrateLigacaoWidthOnce()
   try {
     const raw = window.localStorage.getItem(columnWidthsStorageKey(page))
     return raw ? JSON.parse(raw) : {}

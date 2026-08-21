@@ -2,43 +2,45 @@ import { FastifyInstance } from 'fastify';
 import { query } from '../db.js';
 
 /**
- * Allowlist de quadros (lead_boards) e de itens de menu por usuário — só tem
+ * Allowlist de abas do Comercial (lead_pages) e de itens de menu por usuário — só tem
  * efeito pra quem tem profiles.restrict_access = true. Gerenciado em Equipe, admin-only.
+ * A restrição é por ABA inteira (ex.: "só CRM Luis e Novos Leads"), não por quadro — todos
+ * os quadros de uma aba liberada ficam visíveis.
  */
-export async function userBoardAccessRoutes(app: FastifyInstance) {
-  // GET /api/users/:id/board-access — admin only
+export async function userPageAccessRoutes(app: FastifyInstance) {
+  // GET /api/users/:id/page-access — admin only
   app.get<{ Params: { id: string } }>(
-    '/api/users/:id/board-access',
+    '/api/users/:id/page-access',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { role } = req.user as { role: string };
       if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
-      const rows = await query<{ board_id: string }>(
-        'SELECT board_id FROM user_board_access WHERE user_id = $1',
+      const rows = await query<{ page_id: string }>(
+        'SELECT page_id FROM user_page_access WHERE user_id = $1',
         [req.params.id]
       );
-      return rows.map((r) => r.board_id);
+      return rows.map((r) => r.page_id);
     }
   );
 
-  // PUT /api/users/:id/board-access — admin only, substitui a lista inteira
-  app.put<{ Params: { id: string }; Body: { boardIds?: string[] } }>(
-    '/api/users/:id/board-access',
+  // PUT /api/users/:id/page-access — admin only, substitui a lista inteira
+  app.put<{ Params: { id: string }; Body: { pageIds?: string[] } }>(
+    '/api/users/:id/page-access',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { role } = req.user as { role: string };
       if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
 
-      const boardIds = req.body.boardIds ?? [];
-      await query('DELETE FROM user_board_access WHERE user_id = $1', [req.params.id]);
-      if (boardIds.length) {
+      const pageIds = req.body.pageIds ?? [];
+      await query('DELETE FROM user_page_access WHERE user_id = $1', [req.params.id]);
+      if (pageIds.length) {
         await query(
-          `INSERT INTO user_board_access (user_id, board_id)
-           SELECT $1, unnest($2::uuid[])`,
-          [req.params.id, boardIds]
+          `INSERT INTO user_page_access (user_id, page_id)
+           SELECT $1, unnest($2::text[])`,
+          [req.params.id, pageIds]
         );
       }
-      return { boardIds };
+      return { pageIds };
     }
   );
 

@@ -36,8 +36,8 @@ async function uniquePageId(name: string): Promise<string> {
   return id;
 }
 
-/** true se o usuário tem acesso ao Comercial como um todo — granularidade fina fica por quadro
- * (user_board_access), não mais por página. */
+/** true se o usuário tem acesso ao Comercial como um todo — granularidade fina fica por ABA
+ * (user_page_access, ver allowedPageIds abaixo). */
 async function hasComercialAccess(userId: string, role: string): Promise<boolean> {
   if (role !== 'suporte') return true;
   const profile = await queryOne<{ restrict_access: boolean }>(
@@ -49,9 +49,27 @@ async function hasComercialAccess(userId: string, role: string): Promise<boolean
     'SELECT menu_key FROM user_menu_access WHERE user_id = $1',
     [userId]
   );
-  // Sem nenhuma permissão de menu salva ainda = restrição não configurada por área, só por quadro.
+  // Sem nenhuma permissão de menu salva ainda = restrição não configurada por área, só por aba.
   if (menuRows.length === 0) return true;
   return menuRows.some((r) => r.menu_key === 'comercial');
+}
+
+/** Allowlist de abas visíveis pra quem tem profiles.restrict_access = true — ex.: um SDR só
+ * enxerga "Novos Leads" e "CRM Luis", nunca "CRM Arthur". null = sem restrição de aba configurada
+ * (vê todas as abas ativas). */
+async function allowedPageIds(userId: string, role: string): Promise<string[] | null> {
+  if (role !== 'suporte') return null;
+  const profile = await queryOne<{ restrict_access: boolean }>(
+    'SELECT restrict_access FROM profiles WHERE id = $1',
+    [userId]
+  );
+  if (!profile?.restrict_access) return null;
+  const rows = await query<{ page_id: string }>(
+    'SELECT page_id FROM user_page_access WHERE user_id = $1',
+    [userId]
+  );
+  if (!rows.length) return null;
+  return rows.map((r) => r.page_id);
 }
 
 export async function leadPageRoutes(app: FastifyInstance) {
@@ -66,6 +84,15 @@ export async function leadPageRoutes(app: FastifyInstance) {
       if (!wantsArchived && !(await hasComercialAccess(sub, role))) return [];
 
       const cond = wantsArchived ? 'archived_at IS NOT NULL' : 'archived_at IS NULL';
+      if (!wantsArchived) {
+        const allowed = await allowedPageIds(sub, role);
+        if (allowed !== null) {
+          return query(
+            `SELECT * FROM lead_pages WHERE ${cond} AND id = ANY($1) ORDER BY position, created_at`,
+            [allowed]
+          );
+        }
+      }
       return query(`SELECT * FROM lead_pages WHERE ${cond} ORDER BY position, created_at`);
     }
   );

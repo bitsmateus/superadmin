@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   -- Área no funil: 'comercial' | 'entrega' | 'ambos'. Nulo = ambos.
   area TEXT,
   -- Trava opcional de acesso (só relevante pro papel 'suporte'/"Usuário"): restringe à área e,
-  -- dentro dela, a quadros específicos de lead_boards (ver user_board_access). Default = sem restrição.
+  -- dentro dela, a abas específicas do Comercial (ver user_page_access). Default = sem restrição.
   restrict_access BOOLEAN NOT NULL DEFAULT false,
   password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -309,13 +309,23 @@ CREATE TABLE IF NOT EXISTS lead_boards (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Allowlist de quadros pra usuários com profiles.restrict_access = true. Sem linhas pra um
--- user_id = sem restrição de quadro (vê todos os quadros da área liberada).
+-- Legado: allowlist por QUADRO — substituída por user_page_access (allowlist por ABA inteira,
+-- ver abaixo). Mantida só porque já existe em bancos antigos; nada no app lê/escreve mais aqui.
 CREATE TABLE IF NOT EXISTS user_board_access (
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, board_id)
+);
+
+-- Allowlist de ABAS do Comercial (lead_pages) pra usuários com profiles.restrict_access = true.
+-- Sem linhas pra um user_id = sem restrição de aba (vê todas as abas ativas). Todos os quadros
+-- de uma aba liberada ficam visíveis — a granularidade é por aba inteira, não por quadro.
+CREATE TABLE IF NOT EXISTS user_page_access (
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  page_id TEXT NOT NULL REFERENCES lead_pages(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, page_id)
 );
 
 -- Allowlist de itens de menu pra usuários com profiles.restrict_access = true. Sem linhas pra um

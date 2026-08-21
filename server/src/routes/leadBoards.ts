@@ -3,10 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
 
 /**
- * Resolve a allowlist de quadros de um usuário restrito. A permissão de menu agora é só
- * "comercial" (tudo ou nada — as abas viraram gerenciáveis, não dá mais pra restringir por
- * aba individual); a granularidade fina continua por quadro (user_board_access).
- * null = sem restrição (vê tudo) · [] = não vê nenhum quadro · string[] = allowlist.
+ * Resolve a allowlist de quadros de um usuário restrito. A permissão de menu é só "comercial"
+ * (tudo ou nada — as abas viraram gerenciáveis, não dá mais pra restringir por aba individual
+ * nessa camada); a granularidade fina é por ABA inteira (user_page_access) — ex.: um SDR só
+ * enxerga "Novos Leads" e "CRM Luis", nunca "CRM Arthur", com todos os quadros dessas 2 abas.
+ * null = sem restrição (vê tudo) · [] = não vê nenhum quadro · string[] = allowlist de board ids.
  * Só faz consulta extra pro papel 'suporte' ("Usuário") — admin/supervisor saem de cara com null.
  */
 async function restrictedBoardFilter(userId: string, role: string): Promise<string[] | null> {
@@ -21,16 +22,21 @@ async function restrictedBoardFilter(userId: string, role: string): Promise<stri
     'SELECT menu_key FROM user_menu_access WHERE user_id = $1',
     [userId]
   );
-  // Sem nenhuma permissão de menu salva ainda = restrição não configurada por área, só por quadro.
+  // Sem nenhuma permissão de menu salva ainda = restrição não configurada por área, só por aba.
   const hasComercial = menuRows.length === 0 || menuRows.some((r) => r.menu_key === 'comercial');
   if (!hasComercial) return [];
 
-  const access = await query<{ board_id: string }>(
-    'SELECT board_id FROM user_board_access WHERE user_id = $1',
+  const pageAccess = await query<{ page_id: string }>(
+    'SELECT page_id FROM user_page_access WHERE user_id = $1',
     [userId]
   );
-  if (!access.length) return null;
-  return access.map((r) => r.board_id);
+  if (!pageAccess.length) return null; // sem restrição de aba = vê todos os quadros de todas as abas
+
+  const boards = await query<{ id: string }>(
+    'SELECT id FROM lead_boards WHERE page = ANY($1)',
+    [pageAccess.map((r) => r.page_id)]
+  );
+  return boards.map((r) => r.id);
 }
 
 async function getActorName(userId: string | null | undefined): Promise<string> {

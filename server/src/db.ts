@@ -114,7 +114,7 @@ export async function runMigrations() {
   // Filtra quem aparece como responsável comercial x de entrega.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS area TEXT`);
   // Trava opcional de acesso (só relevante pro papel 'suporte'/"Usuário"): restringe à área e,
-  // dentro dela, a quadros específicos de lead_boards (ver user_board_access). Default = sem restrição
+  // dentro dela, a abas específicas do Comercial (ver user_page_access). Default = sem restrição
   // — preserva o comportamento de quem já está cadastrado.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS restrict_access BOOLEAN NOT NULL DEFAULT false`);
   // Roteiro da sessão de ativação (checklist do que é feito com o cliente).
@@ -264,13 +264,22 @@ END $$`);
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);
-  // Allowlist de quadros pra usuários com profiles.restrict_access = true. Sem linhas pra um
-  // user_id = sem restrição de quadro (vê todos os quadros da área liberada).
+  // Legado: allowlist por QUADRO — substituída por user_page_access (allowlist por ABA inteira,
+  // logo abaixo). Mantida só porque já existe em bancos antigos; nada no app lê/escreve mais aqui.
   await pool.query(`CREATE TABLE IF NOT EXISTS user_board_access (
     user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, board_id)
+  )`);
+  // Allowlist de ABAS do Comercial (lead_pages) pra usuários com profiles.restrict_access = true.
+  // Sem linhas pra um user_id = sem restrição de aba (vê todas as abas ativas). Todos os quadros
+  // de uma aba liberada ficam visíveis — a granularidade é por aba inteira, não por quadro.
+  await pool.query(`CREATE TABLE IF NOT EXISTS user_page_access (
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    page_id TEXT NOT NULL REFERENCES lead_pages(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, page_id)
   )`);
   // Allowlist de itens de menu pra usuários com profiles.restrict_access = true. Sem linhas pra
   // um user_id = ainda não configurado (não corta por página — só por quadro, se houver).

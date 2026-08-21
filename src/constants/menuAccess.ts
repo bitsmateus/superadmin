@@ -12,9 +12,9 @@ export interface MenuAccessItem {
   label: string
   path: string
   group: MenuAccessGroup
-  /** Marca esse item como liberado por quadro (user_board_access), não por página inteira —
-   * só o "comercial" tem isso, já que as abas viraram dinâmicas (gerenciáveis por admin). */
-  boardsPicker?: boolean
+  /** Marca esse item como liberado por ABA (user_page_access) — só o "comercial" tem isso, já
+   * que as abas viraram dinâmicas (gerenciáveis por admin) e cada uma pode ser liberada à parte. */
+  pagesPicker?: boolean
 }
 
 export const MENU_ACCESS_GROUP_LABEL: Record<MenuAccessGroup, string> = {
@@ -25,7 +25,7 @@ export const MENU_ACCESS_GROUP_LABEL: Record<MenuAccessGroup, string> = {
 export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   // Tudo ou nada pro Comercial inteiro (Novos Leads, CRM NX Luis, CRM NX Arthur, e o que um
   // admin criar/duplicar depois) — a granularidade fina fica por quadro, marcado abaixo.
-  { key: 'comercial', label: 'Comercial (todas as abas)', path: '/comercial', group: 'comercial', boardsPicker: true },
+  { key: 'comercial', label: 'Comercial (todas as abas)', path: '/comercial', group: 'comercial', pagesPicker: true },
   { key: 'dashboard', label: 'Dashboard', path: '/', group: 'suporte' },
   { key: 'tarefas', label: 'Suporte (Tarefas)', path: '/tarefas', group: 'suporte' },
   { key: 'pipeline', label: 'Pipeline', path: '/pipeline', group: 'suporte' },

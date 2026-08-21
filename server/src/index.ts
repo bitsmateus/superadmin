@@ -19,7 +19,7 @@ import { leadBoardRoutes } from './routes/leadBoards.js';
 import { leadPageRoutes } from './routes/leadPages.js';
 import { leadLabelRoutes } from './routes/leadLabels.js';
 import { supportColumnRoutes } from './routes/supportColumns.js';
-import { userBoardAccessRoutes } from './routes/userBoardAccess.js';
+import { userPageAccessRoutes } from './routes/userPageAccess.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
@@ -71,7 +71,7 @@ async function main() {
   await app.register(leadPageRoutes);
   await app.register(leadLabelRoutes);
   await app.register(supportColumnRoutes);
-  await app.register(userBoardAccessRoutes);
+  await app.register(userPageAccessRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

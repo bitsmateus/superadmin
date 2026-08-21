@@ -363,11 +363,9 @@ function ProfileRow({
   )
 }
 
-interface BoardLite {
+interface PageLite {
   id: string
   name: string
-  color: string
-  page: string
 }
 
 function EditUserModal({
@@ -389,9 +387,9 @@ function EditUserModal({
   const [role, setRole] = React.useState<UserRole>('suporte')
   const [restricted, setRestricted] = React.useState(false)
   const [menuKeys, setMenuKeys] = React.useState<Set<string>>(new Set())
-  const [boardIds, setBoardIds] = React.useState<Set<string>>(new Set())
+  const [pageIds, setPageIds] = React.useState<Set<string>>(new Set())
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set())
-  const [boards, setBoards] = React.useState<BoardLite[]>([])
+  const [pages, setPages] = React.useState<PageLite[]>([])
   const [loadingPerms, setLoadingPerms] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
 
@@ -405,14 +403,14 @@ function EditUserModal({
     setExpanded(new Set())
     setLoadingPerms(true)
     Promise.all([
-      api.get<BoardLite[]>('/api/lead-boards'),
+      api.get<PageLite[]>('/api/lead-pages'),
       api.get<string[]>(`/api/users/${profile.id}/menu-access`),
-      api.get<string[]>(`/api/users/${profile.id}/board-access`),
+      api.get<string[]>(`/api/users/${profile.id}/page-access`),
     ])
-      .then(([allBoards, menu, boardAccess]) => {
-        setBoards(allBoards)
+      .then(([allPages, menu, pageAccess]) => {
+        setPages(allPages)
         setMenuKeys(new Set(menu.length ? menu : MENU_ACCESS_ITEMS.map((i) => i.key)))
-        setBoardIds(new Set(boardAccess))
+        setPageIds(new Set(pageAccess))
       })
       .catch((err) => toast.error('Falha ao carregar permissões: ' + (err instanceof Error ? err.message : 'Erro')))
       .finally(() => setLoadingPerms(false))
@@ -427,8 +425,8 @@ function EditUserModal({
     })
   }
 
-  const toggleBoardId = (id: string) => {
-    setBoardIds((prev) => {
+  const togglePageId = (id: string) => {
+    setPageIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -467,7 +465,7 @@ function EditUserModal({
       if (role === 'suporte' && restricted) {
         await Promise.all([
           api.put(`/api/users/${profile.id}/menu-access`, { menuKeys: Array.from(menuKeys) }),
-          api.put(`/api/users/${profile.id}/board-access`, { boardIds: Array.from(boardIds) }),
+          api.put(`/api/users/${profile.id}/page-access`, { pageIds: Array.from(pageIds) }),
         ])
       }
       toast.success('Usuário atualizado')
@@ -578,7 +576,7 @@ function EditUserModal({
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                       {groupItems.map((item) => {
                         const checked = menuKeys.has(item.key)
-                        const pageBoards = item.boardsPicker ? boards : []
+                        const pickerPages = item.pagesPicker ? pages : []
                         const isExpanded = expanded.has(item.key)
                         return (
                           <div key={item.key} className="rounded-md border border-line/60 bg-card px-2.5 py-1.5">
@@ -590,29 +588,28 @@ function EditUserModal({
                                 className="h-3.5 w-3.5 rounded border-line"
                               />
                               <span className="flex-1 text-foreground/85">{item.label}</span>
-                              {item.boardsPicker && checked && pageBoards.length > 0 && (
+                              {item.pagesPicker && checked && pickerPages.length > 0 && (
                                 <button
                                   type="button"
                                   onClick={() => toggleExpanded(item.key)}
-                                  title="Quadros específicos"
+                                  title="Abas específicas"
                                   className="text-foreground/35 hover:text-foreground/70"
                                 >
                                   <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-90')} />
                                 </button>
                               )}
                             </label>
-                            {item.boardsPicker && checked && isExpanded && (
+                            {item.pagesPicker && checked && isExpanded && (
                               <div className="ml-5 mt-1.5 space-y-1 border-l border-line/60 pl-2.5">
-                                {pageBoards.map((b) => (
-                                  <label key={b.id} className="flex items-center gap-1.5 text-[11px]">
+                                {pickerPages.map((p) => (
+                                  <label key={p.id} className="flex items-center gap-1.5 text-[11px]">
                                     <input
                                       type="checkbox"
-                                      checked={boardIds.has(b.id)}
-                                      onChange={() => toggleBoardId(b.id)}
+                                      checked={pageIds.has(p.id)}
+                                      onChange={() => togglePageId(p.id)}
                                       className="h-3 w-3 rounded border-line"
                                     />
-                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
-                                    <span className="truncate text-foreground/65">{b.name}</span>
+                                    <span className="truncate text-foreground/65">{p.name}</span>
                                   </label>
                                 ))}
                               </div>
@@ -628,8 +625,8 @@ function EditUserModal({
             )}
             <p className="mt-2 text-[10.5px] leading-relaxed text-foreground/45">
               Item desmarcado some do menu e das rotas desse usuário. Marcando "Comercial", clique na
-              setinha pra liberar quadros específicos (de qualquer aba) — sem nenhum marcado, ele vê
-              todos os quadros de todas as abas.
+              setinha pra liberar abas específicas (ex.: só "Novos Leads" e "CRM Luis") — sem nenhuma
+              marcada, ele vê todas as abas do Comercial.
             </p>
           </div>
         )}

@@ -74,7 +74,7 @@ export interface RetornarFieldProps {
 export function RetornarField({ value, retornado, onChange, className, placeholder = 'Selecionar…' }: RetornarFieldProps) {
   const [open, setOpen] = React.useState(false)
   const [timeOpen, setTimeOpen] = React.useState(false)
-  const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null)
+  const [coords, setCoords] = React.useState<{ top?: number; bottom?: number; left: number } | null>(null)
   const parsed = React.useMemo(() => parseValue(value), [value])
   const [viewYear, setViewYear] = React.useState(() => (parsed.date ?? new Date()).getFullYear())
   const [viewMonth, setViewMonth] = React.useState(() => (parsed.date ?? new Date()).getMonth())
@@ -90,7 +90,17 @@ export function RetornarField({ value, retornado, onChange, className, placehold
 
   const openPicker = () => {
     const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) setCoords({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 300) })
+    if (rect) {
+      const left = Math.min(rect.left, window.innerWidth - 300)
+      // Calendário + hora + rodapé passa fácil de 400px — se não couber embaixo mas couber
+      // em cima, abre pra cima (ancorado por "bottom", sem precisar adivinhar a altura certa).
+      const spaceBelow = window.innerHeight - rect.bottom
+      if (spaceBelow < 420 && rect.top > spaceBelow) {
+        setCoords({ bottom: window.innerHeight - rect.top + 4, left })
+      } else {
+        setCoords({ top: rect.bottom + 4, left })
+      }
+    }
     const base = parsed.date ?? new Date()
     setViewYear(base.getFullYear())
     setViewMonth(base.getMonth())
@@ -166,7 +176,11 @@ export function RetornarField({ value, retornado, onChange, className, placehold
       {open && coords && createPortal(
         <div
           ref={popRef}
-          style={{ position: 'fixed', top: coords.top, left: coords.left }}
+          style={{
+            position: 'fixed',
+            left: coords.left,
+            ...(coords.top !== undefined ? { top: coords.top } : { bottom: coords.bottom }),
+          }}
           className="z-50 w-72 rounded-2xl border border-gray-200 bg-white p-3 shadow-2xl"
         >
           <div className="mb-1 flex items-center justify-between">

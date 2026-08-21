@@ -330,16 +330,6 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                 )}
               </NavLink>
             ))}
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setPagesArchiveOpen(true)}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-1.5 pl-5 text-xs text-foreground/35 transition-colors hover:bg-elevate/[0.03] hover:text-foreground/65"
-              >
-                <Archive className="h-3.5 w-3.5 shrink-0" />
-                <span>Abas arquivadas</span>
-              </button>
-            )}
           </>
         )}
         </>
@@ -425,6 +415,16 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                   )}
                 </NavLink>
               ))}
+            {archivedOpen && isAdmin && (
+              <button
+                type="button"
+                onClick={() => setPagesArchiveOpen(true)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm text-foreground/45 transition-colors hover:bg-elevate/[0.03] hover:text-foreground/80"
+              >
+                <Briefcase className="h-4 w-4 shrink-0 text-foreground/40" />
+                <span>Abas do Comercial</span>
+              </button>
+            )}
           </>
         )}
         </>

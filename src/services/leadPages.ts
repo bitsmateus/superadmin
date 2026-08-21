@@ -80,8 +80,8 @@ export const leadPagesService = {
     }
   },
 
-  async duplicate(id: string): Promise<LeadPage> {
-    const row = await api.post<PageRow>(`/api/lead-pages/${id}/duplicate`, {})
+  async duplicate(id: string, name?: string): Promise<LeadPage> {
+    const row = await api.post<PageRow>(`/api/lead-pages/${id}/duplicate`, { name })
     await reloadPages()
     return rowToPage(row)
   },

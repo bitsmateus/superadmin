@@ -86,7 +86,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
 
   // POST /api/lead-pages/:id/duplicate — admin only. Cria uma aba nova "<nome> (cópia)" com a
   // MESMA estrutura de quadros (nome/cor/posição) da original — sem copiar nenhum lead.
-  app.post<{ Params: { id: string } }>(
+  app.post<{ Params: { id: string }; Body: { name?: string } }>(
     '/api/lead-pages/:id/duplicate',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -99,12 +99,13 @@ export async function leadPageRoutes(app: FastifyInstance) {
       );
       if (!source) return reply.status(404).send({ message: 'Aba não encontrada' });
 
+      const name = req.body.name?.trim() || `${source.name} (cópia)`;
       const [row] = await query<{ max: number | null }>('SELECT MAX(position) as max FROM lead_pages');
       const position = (row?.max ?? -1) + 1;
       const newId = uuidv4();
       const [newPage] = await query(
         'INSERT INTO lead_pages (id, name, position) VALUES ($1,$2,$3) RETURNING *',
-        [newId, `${source.name} (cópia)`, position]
+        [newId, name, position]
       );
 
       const sourceBoards = await query<{ name: string; color: string; position: number }>(

@@ -187,15 +187,25 @@ function PageActionsMenu({ pageId, pageName }: { pageId: string; pageName: strin
   const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
+  const [duplicateOpen, setDuplicateOpen] = React.useState(false)
+  const [duplicateName, setDuplicateName] = React.useState('')
   const ref = React.useRef<HTMLDivElement>(null)
   useOutsideClose(ref, open, () => setOpen(false))
 
-  const duplicate = async () => {
+  const openDuplicate = () => {
+    setDuplicateName(`${pageName} (cópia)`)
+    setDuplicateOpen(true)
+    setOpen(false)
+  }
+
+  const confirmDuplicate = async () => {
+    const name = duplicateName.trim()
+    if (!name) return
     setBusy(true)
     try {
-      const created = await leadPagesService.duplicate(pageId)
+      const created = await leadPagesService.duplicate(pageId, name)
       toast.success(`"${created.name}" criada — mesma estrutura de quadros, sem os leads.`)
-      setOpen(false)
+      setDuplicateOpen(false)
       navigate(`/comercial/${created.id}`)
     } catch (err) {
       toast.error('Falha ao duplicar: ' + (err as Error).message)
@@ -228,9 +238,8 @@ function PageActionsMenu({ pageId, pageName }: { pageId: string; pageName: strin
         <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
           <button
             type="button"
-            onClick={duplicate}
-            disabled={busy}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            onClick={openDuplicate}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
           >
             <Copy className="h-3.5 w-3.5" />
             Duplicar aba
@@ -246,6 +255,21 @@ function PageActionsMenu({ pageId, pageName }: { pageId: string; pageName: strin
           </button>
         </div>
       )}
+
+      <Modal open={duplicateOpen} onClose={() => setDuplicateOpen(false)} title="Duplicar aba" size="sm">
+        <Input
+          label="Nome da nova aba"
+          value={duplicateName}
+          onChange={(e) => setDuplicateName(e.target.value)}
+          autoFocus
+          onKeyDown={(e) => { if (e.key === 'Enter') void confirmDuplicate() }}
+        />
+        <p className="mt-2 text-xs text-foreground/45">Copia só os quadros (nome/cor) — sem trazer os leads.</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setDuplicateOpen(false)} disabled={busy}>Cancelar</Button>
+          <Button onClick={confirmDuplicate} disabled={!duplicateName.trim()} loading={busy}>Duplicar</Button>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -303,6 +303,30 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         </button>
         {comercialOpen && (
           <>
+            <NavLink
+              to="/comercial-dashboard"
+              onClick={closeOnMobile}
+              className={({ isActive }) =>
+                cn(
+                  'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                  isActive
+                    ? 'bg-elevate/[0.05] text-foreground'
+                    : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <LayoutDashboard
+                    className={cn(
+                      'h-4 w-4 shrink-0',
+                      isActive ? 'text-accent' : 'text-foreground/35 group-hover:text-foreground/60',
+                    )}
+                  />
+                  <span>Dashboard Comercial</span>
+                </>
+              )}
+            </NavLink>
             {visibleComercialItems.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}

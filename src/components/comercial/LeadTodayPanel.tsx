@@ -2,21 +2,11 @@ import * as React from 'react'
 import { AlertTriangle, CalendarCheck2, Clock, FileText, ChevronRight } from 'lucide-react'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadActivity } from '@/hooks/useLeadActivity'
+import { todayKey, classifyLeadToday } from '@/lib/leadDates'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
-const STALE_MS = 24 * 60 * 60 * 1000
-
-function todayKey(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function dateKey(iso: string): string {
-  return iso ? iso.slice(0, 10) : ''
-}
-
-interface StatCard {
+export interface StatCard {
   key: string
   icon: React.ReactNode
   label: string
@@ -24,7 +14,7 @@ interface StatCard {
   matches: LeadRow[]
 }
 
-function TodayStatCard({
+export function TodayStatCard({
   card,
   boards,
   onOpenLead,
@@ -110,16 +100,12 @@ export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps
     const atrasados: LeadRow[] = []
     const reunioesHoje: LeadRow[] = []
     const propostasHoje: LeadRow[] = []
-    const now = Date.now()
     for (const r of rows) {
-      const updatedAt = activityById.get(r.id)
-      if (updatedAt && now - new Date(updatedAt).getTime() > STALE_MS) naoAtualizados.push(r)
-
-      const retornarKey = dateKey(r.retornar)
-      if (retornarKey && retornarKey < today && !r.retornado) atrasados.push(r)
-
-      if (dateKey(r.agendamento) === today) reunioesHoje.push(r)
-      if (retornarKey === today && !r.retornado) propostasHoje.push(r)
+      const c = classifyLeadToday(r, activityById.get(r.id), today)
+      if (c.naoAtualizado) naoAtualizados.push(r)
+      if (c.atrasado) atrasados.push(r)
+      if (c.reuniaoHoje) reunioesHoje.push(r)
+      if (c.propostaHoje) propostasHoje.push(r)
     }
     return { naoAtualizados, atrasados, reunioesHoje, propostasHoje }
   }, [rows, today, activityById])

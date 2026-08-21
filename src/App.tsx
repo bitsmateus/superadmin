@@ -37,6 +37,9 @@ const CanaisPage = React.lazy(() =>
 const ComercialPage = React.lazy(() =>
   import('./pages/ComercialPage').then((m) => ({ default: m.ComercialPage })),
 )
+const ComercialDashboardPage = React.lazy(() =>
+  import('./pages/ComercialDashboardPage').then((m) => ({ default: m.ComercialDashboardPage })),
+)
 const FinancePage = React.lazy(() =>
   import('./pages/FinancePage').then((m) => ({ default: m.FinancePage })),
 )
@@ -119,6 +122,7 @@ export default function App() {
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/canais" element={<CanaisPage />} />
           <Route path="/comercial" element={<Navigate to="/comercial/novos_leads" replace />} />
+          <Route path="/comercial-dashboard" element={<ComercialDashboardPage />} />
           {/* Compat com os links antigos (hifenizados) das 3 abas de sempre. */}
           <Route path="/comercial/novos-leads" element={<Navigate to="/comercial/novos_leads" replace />} />
           <Route path="/comercial/crm-nx-luis" element={<Navigate to="/comercial/crm_luis" replace />} />

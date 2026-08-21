@@ -1,5 +1,4 @@
 import { FastifyInstance } from 'fastify';
-import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
 
 /**
@@ -7,6 +6,35 @@ import { query, queryOne } from '../db.js';
  * depois). Não são mais um enum fixo no código — viram linhas normais de lead_pages,
  * gerenciáveis por admin (criar, duplicar a estrutura de quadros, arquivar/restaurar).
  */
+
+/** Vira o id da aba (e o pedaço da URL) — nome legível, não um UUID aleatório. */
+function slugify(name: string): string {
+  const noAccents = name
+    .normalize('NFD')
+    .split('')
+    .filter((ch) => {
+      const code = ch.codePointAt(0) ?? 0;
+      return code < 0x0300 || code > 0x036f;
+    })
+    .join('');
+  const base = noAccents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return base.slice(0, 60) || 'aba';
+}
+
+/** Garante um id único — acrescenta -2, -3... se já existir uma aba com o mesmo slug. */
+async function uniquePageId(name: string): Promise<string> {
+  const base = slugify(name);
+  let id = base;
+  let n = 2;
+  while (await queryOne('SELECT 1 FROM lead_pages WHERE id = $1', [id])) {
+    id = `${base}-${n}`;
+    n += 1;
+  }
+  return id;
+}
 
 /** true se o usuário tem acesso ao Comercial como um todo — granularidade fina fica por quadro
  * (user_board_access), não mais por página. */
@@ -56,7 +84,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
       const position = (row?.max ?? -1) + 1;
       const [page] = await query(
         'INSERT INTO lead_pages (id, name, position) VALUES ($1,$2,$3) RETURNING *',
-        [uuidv4(), name, position]
+        [await uniquePageId(name), name, position]
       );
       return reply.status(201).send(page);
     }
@@ -102,7 +130,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
       const name = req.body.name?.trim() || `${source.name} (cópia)`;
       const [row] = await query<{ max: number | null }>('SELECT MAX(position) as max FROM lead_pages');
       const position = (row?.max ?? -1) + 1;
-      const newId = uuidv4();
+      const newId = await uniquePageId(name);
       const [newPage] = await query(
         'INSERT INTO lead_pages (id, name, position) VALUES ($1,$2,$3) RETURNING *',
         [newId, name, position]

@@ -1124,7 +1124,16 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
 
   return (
     <>
-      <TopBar title={title} subtitle={subtitle} titleClassName="text-[36px] font-semibold" />
+      <TopBar
+        title={title}
+        subtitle={subtitle}
+        titleClassName="text-[36px] font-semibold"
+        breadcrumbs={[
+          { label: 'TenantHub', to: '/' },
+          { label: 'Comercial', to: '/comercial' },
+          { label: title },
+        ]}
+      />
 
       <div className="flex min-h-screen flex-col bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!booted ? (

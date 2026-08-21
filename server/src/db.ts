@@ -555,6 +555,36 @@ END $$`);
     ) AS v(key, name, color, position, is_done)
     WHERE NOT EXISTS (SELECT 1 FROM support_columns sc WHERE sc.key = v.key)`);
 
+  // Itens fixos do menu Suporte — admin pode arquivar (some do menu, fica salvo pra
+  // restaurar) e renomear. As URLs continuam fixas, só a visibilidade é gerenciável.
+  await pool.query(`CREATE TABLE IF NOT EXISTS support_pages (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    position INT NOT NULL DEFAULT 0,
+    archived_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_support_pages ON support_pages;
+      CREATE TRIGGER notify_support_pages AFTER INSERT OR UPDATE OR DELETE ON support_pages
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+  await pool.query(`INSERT INTO support_pages (id, name, position)
+    SELECT * FROM (VALUES
+      ('tarefas',       'Suporte (Tarefas)',   1),
+      ('pipeline',      'Pipeline',             2),
+      ('clientes',      'Clientes',             3),
+      ('canais',        'Canais',               4),
+      ('tenants',       'Tenants',              5),
+      ('configuracoes', 'Configurações',        6),
+      ('arquivados',    'Clientes arquivados',  7),
+      ('tickets',       'Tickets',              8),
+      ('templates',     'Templates',            9)
+    ) AS v(id, name, position)
+    WHERE NOT EXISTS (SELECT 1 FROM support_pages sp WHERE sp.id = v.id)`);
+
   console.log('[db] migrations applied');
 }
 

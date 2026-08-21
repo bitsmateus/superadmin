@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import * as React from 'react'
 import { toast } from 'sonner'
+import { createPortal } from 'react-dom'
 import {
   Archive,
   BookOpen,
@@ -17,6 +18,7 @@ import {
   MessageCircle,
   MessageSquare,
   Moon,
+  MoreHorizontal,
   PanelLeftClose,
   Plus,
   Radio,
@@ -25,6 +27,7 @@ import {
   ShieldCheck,
   Star,
   Sun,
+  Trash2,
   Trophy,
   UserCircle2,
   Users,
@@ -37,9 +40,13 @@ import { signOut, useAuth } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
 import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
+import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadPages } from '@/hooks/useLeadPages'
+import { useSupportPages, useSupportPagesBooted } from '@/hooks/useSupportPages'
 import { MENU_KEY_BY_PATH } from '@/constants/menuAccess'
 import { leadPagesService } from '@/services/leadPages'
+import { supportPagesService } from '@/services/supportPages'
+import type { SupportPage } from '@/services/supportPages'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -106,7 +113,19 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     [menuAllowed],
   )
 
+  // Itens do Suporte podem ser arquivados individualmente por um admin (some do menu, fica
+  // salvo em "Abas do Suporte" pra restaurar) — Dashboard fica de fora, é a rota raiz.
+  const supportPages = useSupportPages()
+  const supportPagesBooted = useSupportPagesBooted()
+  const isSupportPageVisible = React.useCallback((to: string) => {
+    if (to === '/' || !supportPagesBooted) return true
+    const key = MENU_KEY_BY_PATH[to]
+    if (!key) return true
+    return supportPages.some((p) => p.id === key)
+  }, [supportPages, supportPagesBooted])
+
   const [archivedOpen, setArchivedOpen] = React.useState(false)
+  const [supportArchiveOpen, setSupportArchiveOpen] = React.useState(false)
   const [comercialOpen, setComercialOpen] = React.useState(() =>
     location.pathname.startsWith('/comercial'),
   )
@@ -119,7 +138,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const suporte = [
     ...suporteItems,
     ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
-  ].filter((item) => canSee(item.to))
+  ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to))
   const leadPages = useLeadPages()
   const visibleComercialItems = canSee('/comercial')
     ? leadPages.map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact, page: p }))
@@ -139,7 +158,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       ? [{ to: '/auditoria', label: 'Auditoria', icon: FileSearch }]
       : []),
     { to: '/settings', label: 'Configurações', icon: Settings },
-  ].filter((item) => canSee(item.to))
+  ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to))
 
   // Movidos para "Arquivados" (acessíveis, fora do caminho do dia a dia).
   const archivedItems = [
@@ -153,7 +172,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       : []),
     { to: '/templates', label: 'Templates', icon: MessageSquare },
     ...(isAdmin ? [{ to: '/equipe', label: 'Performance', icon: Trophy }] : []),
-  ].filter((item) => canSee(item.to))
+  ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to))
 
   return (
     <aside
@@ -244,11 +263,14 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                         isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
                       )}
                     />
-                    <span>{item.label}</span>
+                    <span className="truncate">{item.label}</span>
                     {badge !== null && (
                       <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-semibold text-white">
                         {badge > 99 ? '99+' : badge}
                       </span>
+                    )}
+                    {isAdmin && MENU_KEY_BY_PATH[item.to] && item.to !== '/' && (
+                      <SidebarPageMenu pageId={MENU_KEY_BY_PATH[item.to]} pageName={item.label} />
                     )}
                   </>
                 )}
@@ -386,7 +408,10 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                       : 'text-foreground/50 group-hover:text-foreground/75',
                   )}
                 />
-                <span>{label}</span>
+                <span className="truncate">{label}</span>
+                {isAdmin && MENU_KEY_BY_PATH[to] && (
+                  <SidebarPageMenu pageId={MENU_KEY_BY_PATH[to]} pageName={label} />
+                )}
               </>
             )}
           </NavLink>
@@ -433,7 +458,10 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                           isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
                         )}
                       />
-                      <span>{label}</span>
+                      <span className="truncate">{label}</span>
+                      {isAdmin && MENU_KEY_BY_PATH[to] && (
+                        <SidebarPageMenu pageId={MENU_KEY_BY_PATH[to]} pageName={label} />
+                      )}
                     </>
                   )}
                 </NavLink>
@@ -446,6 +474,16 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
               >
                 <Briefcase className="h-4 w-4 shrink-0 text-foreground/40" />
                 <span>Abas do Comercial</span>
+              </button>
+            )}
+            {archivedOpen && isAdmin && (
+              <button
+                type="button"
+                onClick={() => setSupportArchiveOpen(true)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm text-foreground/45 transition-colors hover:bg-elevate/[0.03] hover:text-foreground/80"
+              >
+                <LifeBuoy className="h-4 w-4 shrink-0 text-foreground/40" />
+                <span>Abas do Suporte</span>
               </button>
             )}
           </>
@@ -506,7 +544,122 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         onCreated={(id) => { navigate(`/comercial/${id}`); closeOnMobile() }}
       />
       <ArchivedComercialPagesModal open={pagesArchiveOpen} onClose={() => setPagesArchiveOpen(false)} />
+      <ArchivedSupportPagesModal open={supportArchiveOpen} onClose={() => setSupportArchiveOpen(false)} />
     </aside>
+  )
+}
+
+/** "..." de um item do menu Suporte — admin only. Só "Excluir aba" por enquanto: essas telas são
+ * cada uma sua própria feature (Pipeline, Tickets, Clientes...), não um container genérico como
+ * o Comercial, então "duplicar" não teria um resultado real — arquivar/restaurar sim. */
+function SidebarPageMenu({ pageId, pageName }: { pageId: string; pageName: string }) {
+  const [open, setOpen] = React.useState(false)
+  const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null)
+  const btnRef = React.useRef<HTMLButtonElement>(null)
+  const popRef = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(popRef, open, () => setOpen(false))
+
+  const openMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) setCoords({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 180) })
+    setOpen((o) => !o)
+  }
+
+  const excluir = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!window.confirm(`Arquivar "${pageName}"? Some do menu, mas fica salva pra restaurar depois.`)) return
+    setOpen(false)
+    try {
+      await supportPagesService.archive(pageId)
+      toast.success(`"${pageName}" arquivada.`)
+    } catch (err) {
+      toast.error('Falha ao arquivar: ' + (err as Error).message)
+    }
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={openMenu}
+        title="Mais opções"
+        className="ml-auto shrink-0 rounded p-1 text-foreground/40 opacity-0 transition-opacity hover:bg-elevate/[0.08] hover:text-foreground/80 group-hover:opacity-100"
+      >
+        <MoreHorizontal className="h-3.5 w-3.5" />
+      </button>
+      {open && coords && createPortal(
+        <div
+          ref={popRef}
+          style={{ position: 'fixed', top: coords.top, left: coords.left }}
+          className="z-50 w-44 rounded-lg border border-line bg-card p-1 shadow-xl"
+        >
+          <button
+            type="button"
+            onClick={excluir}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger hover:bg-danger/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Excluir aba
+          </button>
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
+/** Itens do Suporte arquivados — admin only. Restaurar devolve pro menu na hora; a tela e os
+ * dados dela nunca deixaram de existir, só ficaram escondidos. */
+function ArchivedSupportPagesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [loading, setLoading] = React.useState(false)
+  const [pages, setPages] = React.useState<SupportPage[]>([])
+  const [restoringId, setRestoringId] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    supportPagesService.getArchived()
+      .then(setPages)
+      .catch((err) => toast.error('Falha ao carregar abas arquivadas: ' + (err as Error).message))
+      .finally(() => setLoading(false))
+  }, [open])
+
+  const restore = async (page: SupportPage) => {
+    setRestoringId(page.id)
+    try {
+      await supportPagesService.restore(page.id)
+      setPages((prev) => prev.filter((p) => p.id !== page.id))
+      toast.success(`"${page.name}" restaurada.`)
+    } catch (err) {
+      toast.error('Falha ao restaurar: ' + (err as Error).message)
+    } finally {
+      setRestoringId(null)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Abas do Suporte arquivadas" description="A tela e os dados continuam salvos — restaure se precisar." size="sm">
+      {loading ? (
+        <p className="py-6 text-center text-xs text-foreground/40">Carregando…</p>
+      ) : pages.length === 0 ? (
+        <p className="py-6 text-center text-xs text-foreground/40">Nenhuma aba arquivada.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {pages.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2">
+              <span className="truncate text-sm text-foreground/85">{p.name}</span>
+              <Button size="sm" variant="secondary" onClick={() => restore(p)} loading={restoringId === p.id} leftIcon={<RotateCcw className="h-3.5 w-3.5" />}>
+                Restaurar
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   )
 }
 

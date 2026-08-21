@@ -563,6 +563,28 @@ CREATE TABLE IF NOT EXISTS reminders (
   priority TEXT
 );
 
+-- Itens fixos do menu Suporte — admin pode arquivar (some do menu, fica salvo pra restaurar).
+-- As URLs continuam fixas (/pipeline, /tickets…), só a visibilidade no menu é gerenciável.
+CREATE TABLE IF NOT EXISTS support_pages (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  position INT NOT NULL DEFAULT 0,
+  archived_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO support_pages (id, name, position) VALUES
+  ('tarefas',       'Suporte (Tarefas)',   1),
+  ('pipeline',      'Pipeline',             2),
+  ('clientes',      'Clientes',             3),
+  ('canais',        'Canais',               4),
+  ('tenants',       'Tenants',              5),
+  ('configuracoes', 'Configurações',        6),
+  ('arquivados',    'Clientes arquivados',  7),
+  ('tickets',       'Tickets',              8),
+  ('templates',     'Templates',            9)
+ON CONFLICT (id) DO NOTHING;
+
 -- ---------- stage_history ----------
 CREATE TABLE IF NOT EXISTS stage_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

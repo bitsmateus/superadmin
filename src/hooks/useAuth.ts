@@ -7,6 +7,7 @@ import { bootTickets, teardownTickets } from '@/services/tickets'
 import { bootAnalytics, teardownAnalytics } from '@/services/analytics'
 import { bootLeadBoards, teardownLeadBoards } from '@/services/leadBoards'
 import { bootLeadPages, teardownLeadPages } from '@/services/leadPages'
+import { bootSupportPages, teardownSupportPages } from '@/services/supportPages'
 
 interface AuthState {
   profile: Profile | null
@@ -42,6 +43,7 @@ async function init() {
   void bootAnalytics()
   void bootLeadBoards()
   void bootLeadPages()
+  void bootSupportPages()
 
   try {
     const profile = await api.get<Profile>('/api/auth/me')
@@ -91,6 +93,7 @@ export async function signIn(email: string, password: string) {
   void bootAnalytics()
   void bootLeadBoards()
   void bootLeadPages()
+  void bootSupportPages()
   return { data: { user }, error: null }
 }
 
@@ -100,6 +103,7 @@ export async function signOut() {
   await teardownAnalytics()
   await teardownLeadBoards()
   await teardownLeadPages()
+  await teardownSupportPages()
   stopSse()
   clearToken()
   setCurrentProfile(null)

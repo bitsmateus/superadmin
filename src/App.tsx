@@ -1,7 +1,7 @@
 ﻿import * as React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
 import { Layout } from './components/layout/Layout'
+import { PageFallback } from './components/layout/PageFallback'
 import { ProtectedRoute } from './routes/ProtectedRoute'
 import { LoginPage } from './pages/LoginPage'
 
@@ -88,17 +88,6 @@ const SupportPublicPage = React.lazy(() =>
     default: m.SupportPublicPage,
   })),
 )
-
-function PageFallback() {
-  return (
-    <div className="grid min-h-[40vh] place-items-center text-sm text-foreground/55">
-      <span className="inline-flex items-center gap-2">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Carregando…
-      </span>
-    </div>
-  )
-}
 
 export default function App() {
   return (

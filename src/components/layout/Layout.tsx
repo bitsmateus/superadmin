@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Outlet } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
+import { PageFallback } from './PageFallback'
 import { cn } from '@/lib/utils'
 import { useAsaasAutoSync } from '@/hooks/useAsaasAutoSync'
 import { useTicketNotifications } from '@/hooks/useTicketNotifications'
@@ -52,7 +53,12 @@ export function Layout() {
         )}
       >
         <div className="min-h-screen">
-          <Outlet />
+          {/* Suspense fica aqui (não lá em cima em App.tsx) pra trocar de página lazy sem
+           * desmontar a Sidebar/Layout inteiros — sem isso, toda navegação pra uma página cujo
+           * chunk ainda não carregou fazia a tela inteira "piscar" (sidebar suméia e voltava). */}
+          <React.Suspense fallback={<PageFallback />}>
+            <Outlet />
+          </React.Suspense>
         </div>
       </main>
     </div>

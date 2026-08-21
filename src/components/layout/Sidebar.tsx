@@ -32,6 +32,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import logoNx from '@/assets/logo-nx.jpg'
 import { signOut, useAuth } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
 import { useMyOpenTaskCount } from '@/hooks/useTickets'
@@ -162,9 +163,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       )}
     >
       <div className="flex items-center gap-2 px-5 py-5">
-        <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent">
-          <span className="text-[11px] font-extrabold leading-none tracking-tight text-white">NX</span>
-        </div>
+        <img src={logoNx} alt="Grupo NX Digital" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
         <div className="flex flex-col leading-tight">
           <span className="text-sm font-semibold text-foreground">GRUPO NX DIGITAL</span>
           <span className="text-[10px] uppercase tracking-wider text-foreground/40">

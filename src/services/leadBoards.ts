@@ -189,6 +189,10 @@ export const leadBoardsService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
 
   getBoards(): LeadBoard[] { return boards },
+
+  /** Recarrega os quadros na hora (sem esperar o SSE) — usado depois de mutações em lote no
+   * back (ex.: duplicar uma aba inteira) pra garantir que o cache já chega atualizado. */
+  reloadBoards,
   getRows(): LeadRow[] { return rows },
   getRowsByBoard(boardId: string): LeadRow[] {
     return rows.filter((r) => r.boardId === boardId).sort((a, b) => a.position - b.position)

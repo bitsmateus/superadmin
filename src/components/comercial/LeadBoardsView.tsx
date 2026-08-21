@@ -215,6 +215,9 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
     setBusy(true)
     try {
       const created = await leadPagesService.duplicate(pageId, name, Array.from(duplicateBoardIds))
+      // Os quadros novos entram por SSE, mas recarrega na hora pra não esperar — senão a aba
+      // abre "vazia" por um instante até o realtime alcançar.
+      await leadBoardsService.reloadBoards()
       toast.success(`"${created.name}" criada — mesma estrutura de quadros, sem os leads.`)
       setDuplicateOpen(false)
       navigate(`/comercial/${created.id}`)

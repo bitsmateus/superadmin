@@ -11,7 +11,7 @@ import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted } from '@/hooks/useL
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
 import { cn } from '@/lib/utils'
 
-type DateRange = 'all' | '7d' | '30d' | 'custom'
+type DateRange = 'today' | '7d' | '30d' | 'custom'
 
 function startOfDay(d: Date): Date {
   const c = new Date(d)
@@ -50,7 +50,7 @@ function RangePill({ active, onClick, children }: { active: boolean; onClick: ()
  * operação sem entrar aba por aba. Propositalmente diferente (mais resumido/visual) do dashboard
  * de cada aba: sem os gráficos de "leads por quadro/status/dia de contato", só painel do dia
  * combinado + funil e status do dia sempre abertos por SDR (Luis/Arthur, mesmo zerados). Filtro
- * por data (de quando o lead entrou) e por SDR — sem filtro nenhum aplicado por padrão. */
+ * por data (de quando o lead entrou) e por SDR — parte em "Hoje" por padrão. */
 export function ComercialDashboardPage() {
   const boardsBooted = useLeadBoardsBooted()
   const pagesBooted = useLeadPagesBooted()
@@ -70,16 +70,16 @@ export function ComercialDashboardPage() {
     return allRows.filter((r) => boardIds.has(r.boardId))
   }, [allRows, boards])
 
-  const [dateRange, setDateRange] = React.useState<DateRange>('all')
-  const [from, setFrom] = React.useState<string>('')
-  const [to, setTo] = React.useState<string>('')
+  const [dateRange, setDateRange] = React.useState<DateRange>('today')
+  const [from, setFrom] = React.useState<string>(() => toISODate(new Date()))
+  const [to, setTo] = React.useState<string>(() => toISODate(new Date()))
   const [sdrFilter, setSdrFilter] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    if (dateRange === '7d') { setFrom(toISODate(daysAgo(6))); setTo(toISODate(new Date())) }
+    if (dateRange === 'today') { setFrom(toISODate(new Date())); setTo(toISODate(new Date())) }
+    else if (dateRange === '7d') { setFrom(toISODate(daysAgo(6))); setTo(toISODate(new Date())) }
     else if (dateRange === '30d') { setFrom(toISODate(daysAgo(29))); setTo(toISODate(new Date())) }
-    else if (dateRange === 'all') { setFrom(''); setTo('') }
   }, [dateRange])
 
   const rows = React.useMemo(() => {
@@ -117,7 +117,7 @@ export function ComercialDashboardPage() {
             <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3">
               <div className="flex flex-wrap items-center gap-1.5">
                 <CalendarRange className="h-4 w-4 shrink-0 text-gray-400" />
-                <RangePill active={dateRange === 'all'} onClick={() => setDateRange('all')}>Sempre</RangePill>
+                <RangePill active={dateRange === 'today'} onClick={() => setDateRange('today')}>Hoje</RangePill>
                 <RangePill active={dateRange === '7d'} onClick={() => setDateRange('7d')}>Últimos 7 dias</RangePill>
                 <RangePill active={dateRange === '30d'} onClick={() => setDateRange('30d')}>Últimos 30 dias</RangePill>
                 <RangePill active={dateRange === 'custom'} onClick={() => setDateRange('custom')}>Personalizado</RangePill>

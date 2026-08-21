@@ -239,8 +239,31 @@ END $$`);
   // Aba onde o quadro aparece — permite "mover" um lead pra outra tela (CRM de
   // um SDR especifico) so trocando o board_id pra um quadro daquela page.
   await pool.query(`ALTER TABLE lead_boards ADD COLUMN IF NOT EXISTS page TEXT NOT NULL DEFAULT 'novos_leads'`);
+  // Abas do Comercial viram gerenciáveis (admin cria/duplica/arquiva) — "page" deixa de ser um
+  // enum fixo de 3 valores e passa a referenciar lead_pages. As 3 abas de sempre viram linhas
+  // normais nessa tabela, com o mesmo id que já usavam como valor de "page" (zero backfill).
+  await pool.query(`CREATE TABLE IF NOT EXISTS lead_pages (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    position INT NOT NULL DEFAULT 0,
+    archived_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`INSERT INTO lead_pages (id, name, position) VALUES
+    ('novos_leads', 'Novos Leads', 0),
+    ('crm_luis', 'CRM NX Luis', 1),
+    ('crm_arthur', 'CRM NX Arthur', 2)
+    ON CONFLICT (id) DO NOTHING`);
   await pool.query(`ALTER TABLE lead_boards DROP CONSTRAINT IF EXISTS lead_boards_page_check`);
-  await pool.query(`ALTER TABLE lead_boards ADD CONSTRAINT lead_boards_page_check CHECK (page IN ('novos_leads', 'crm_luis', 'crm_arthur'))`);
+  await pool.query(`ALTER TABLE lead_boards DROP CONSTRAINT IF EXISTS lead_boards_page_fkey`);
+  await pool.query(`ALTER TABLE lead_boards ADD CONSTRAINT lead_boards_page_fkey FOREIGN KEY (page) REFERENCES lead_pages(id)`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_lead_pages ON lead_pages;
+      CREATE TRIGGER notify_lead_pages AFTER INSERT OR UPDATE OR DELETE ON lead_pages
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
   // Allowlist de quadros pra usuários com profiles.restrict_access = true. Sem linhas pra um
   // user_id = sem restrição de quadro (vê todos os quadros da área liberada).
   await pool.query(`CREATE TABLE IF NOT EXISTS user_board_access (
@@ -257,6 +280,13 @@ END $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, menu_key)
   )`);
+  // Quem já tinha permissão granular por sub-aba do Comercial (comercial_novos_leads etc.)
+  // ganha a chave única "comercial" — a granularidade agora é só por quadro (user_board_access),
+  // não mais por página, senão essas pessoas perderiam acesso do nada nessa migração.
+  await pool.query(`INSERT INTO user_menu_access (user_id, menu_key)
+    SELECT DISTINCT user_id, 'comercial' FROM user_menu_access
+    WHERE menu_key IN ('comercial_novos_leads', 'comercial_crm_luis', 'comercial_crm_arthur')
+    ON CONFLICT (user_id, menu_key) DO NOTHING`);
   await pool.query(`CREATE TABLE IF NOT EXISTS lead_rows (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,

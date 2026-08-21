@@ -578,7 +578,7 @@ function EditUserModal({
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                       {groupItems.map((item) => {
                         const checked = menuKeys.has(item.key)
-                        const pageBoards = item.boardsPage ? boards.filter((b) => b.page === item.boardsPage) : []
+                        const pageBoards = item.boardsPicker ? boards : []
                         const isExpanded = expanded.has(item.key)
                         return (
                           <div key={item.key} className="rounded-md border border-line/60 bg-card px-2.5 py-1.5">
@@ -590,7 +590,7 @@ function EditUserModal({
                                 className="h-3.5 w-3.5 rounded border-line"
                               />
                               <span className="flex-1 text-foreground/85">{item.label}</span>
-                              {item.boardsPage && checked && pageBoards.length > 0 && (
+                              {item.boardsPicker && checked && pageBoards.length > 0 && (
                                 <button
                                   type="button"
                                   onClick={() => toggleExpanded(item.key)}
@@ -601,7 +601,7 @@ function EditUserModal({
                                 </button>
                               )}
                             </label>
-                            {item.boardsPage && checked && isExpanded && (
+                            {item.boardsPicker && checked && isExpanded && (
                               <div className="ml-5 mt-1.5 space-y-1 border-l border-line/60 pl-2.5">
                                 {pageBoards.map((b) => (
                                   <label key={b.id} className="flex items-center gap-1.5 text-[11px]">
@@ -627,9 +627,9 @@ function EditUserModal({
               </div>
             )}
             <p className="mt-2 text-[10.5px] leading-relaxed text-foreground/45">
-              Item desmarcado some do menu e das rotas desse usuário. Nos itens do Comercial, clique na
-              setinha pra liberar quadros específicos — sem nenhum marcado, ele vê todos os quadros
-              daquela tela.
+              Item desmarcado some do menu e das rotas desse usuário. Marcando "Comercial", clique na
+              setinha pra liberar quadros específicos (de qualquer aba) — sem nenhum marcado, ele vê
+              todos os quadros de todas as abas.
             </p>
           </div>
         )}

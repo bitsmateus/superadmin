@@ -16,6 +16,7 @@ import { channelsRoutes } from './routes/channels.js';
 import { automationRoutes } from './routes/automation.js';
 import { chatbotFlowRoutes } from './routes/chatbotFlow.js';
 import { leadBoardRoutes } from './routes/leadBoards.js';
+import { leadPageRoutes } from './routes/leadPages.js';
 import { leadLabelRoutes } from './routes/leadLabels.js';
 import { supportColumnRoutes } from './routes/supportColumns.js';
 import { userBoardAccessRoutes } from './routes/userBoardAccess.js';
@@ -67,6 +68,7 @@ async function main() {
   await app.register(automationRoutes);
   await app.register(chatbotFlowRoutes);
   await app.register(leadBoardRoutes);
+  await app.register(leadPageRoutes);
   await app.register(leadLabelRoutes);
   await app.register(supportColumnRoutes);
   await app.register(userBoardAccessRoutes);

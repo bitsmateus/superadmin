@@ -1,6 +1,8 @@
 import * as React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
+  Archive,
   ArrowRightLeft,
   ArrowUpDown,
   ChevronDown,
@@ -15,6 +17,7 @@ import {
   ListTodo,
   Loader2,
   MessageCircle,
+  MoreHorizontal,
   Pencil,
   Plus,
   Rows3,
@@ -45,12 +48,13 @@ import { cn, formatDateTimeShort } from '@/lib/utils'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
+import { useLeadPages } from '@/hooks/useLeadPages'
+import { useAuth } from '@/hooks/useAuth'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
-import { ABA_LABELS, ABA_ORDER } from '@/types/leadBoard'
-import type { LeadBoard, LeadBoardPage, LeadLabelField, LeadRow, LeadRowField } from '@/types/leadBoard'
-
-export { ABA_LABELS, ABA_ORDER }
+import { leadPagesService } from '@/services/leadPages'
+import { canManageUsers } from '@/services/supabase'
+import type { LeadBoard, LeadBoardPage, LeadLabelField, LeadPage, LeadRow, LeadRowField } from '@/types/leadBoard'
 
 // A lib de leitura de .xlsx é pesada (~400KB) — carrega só quando alguém abre o import,
 // não no bundle inicial da tela de Lista/Kanban/Dashboard.
@@ -115,7 +119,9 @@ const LIGACAO_WIDTH_MIGRATION_KEY = 'leadColumnWidths:ligacaoNarrowMigration'
 function migrateLigacaoWidthOnce() {
   try {
     if (window.localStorage.getItem(LIGACAO_WIDTH_MIGRATION_KEY)) return
-    for (const p of ABA_ORDER) {
+    // As 3 abas de sempre — os ids nunca mudaram nessa migração de estrutura, só passaram a
+    // vir de lead_pages em vez de um enum fixo no código.
+    for (const p of ['novos_leads', 'crm_luis', 'crm_arthur']) {
       const key = columnWidthsStorageKey(p)
       const raw = window.localStorage.getItem(key)
       if (!raw) continue
@@ -172,6 +178,75 @@ function ToolbarButton({
       {icon}
       {children}
     </button>
+  )
+}
+
+/** Duplicar (só a estrutura de quadros, sem leads) e arquivar a aba do Comercial — admin only.
+ * Arquivar não apaga nada: quadros e leads continuam intactos no banco até alguém restaurar. */
+function PageActionsMenu({ pageId, pageName }: { pageId: string; pageName: string }) {
+  const navigate = useNavigate()
+  const [open, setOpen] = React.useState(false)
+  const [busy, setBusy] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(ref, open, () => setOpen(false))
+
+  const duplicate = async () => {
+    setBusy(true)
+    try {
+      const created = await leadPagesService.duplicate(pageId)
+      toast.success(`"${created.name}" criada — mesma estrutura de quadros, sem os leads.`)
+      setOpen(false)
+      navigate(`/comercial/${created.id}`)
+    } catch (err) {
+      toast.error('Falha ao duplicar: ' + (err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const archive = async () => {
+    if (!window.confirm(`Arquivar "${pageName}"? Os quadros e leads continuam salvos — dá pra restaurar depois.`)) return
+    setBusy(true)
+    try {
+      await leadPagesService.archive(pageId)
+      toast.success(`"${pageName}" arquivada.`)
+      setOpen(false)
+      navigate('/comercial')
+    } catch (err) {
+      toast.error('Falha ao arquivar: ' + (err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <ToolbarButton icon={<MoreHorizontal className="h-3.5 w-3.5" />} onClick={() => setOpen((o) => !o)} title="Gerenciar esta aba">
+        Página
+      </ToolbarButton>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+          <button
+            type="button"
+            onClick={duplicate}
+            disabled={busy}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            Duplicar aba
+          </button>
+          <button
+            type="button"
+            onClick={archive}
+            disabled={busy}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            Arquivar aba
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -284,20 +359,28 @@ function BulkActionButton({
   )
 }
 
-function MoveSubmenu({ allBoards, onMove }: { allBoards: LeadBoard[]; onMove: (boardId: string) => void }) {
+function MoveSubmenu({
+  allBoards,
+  allPages,
+  onMove,
+}: {
+  allBoards: LeadBoard[]
+  allPages: LeadPage[]
+  onMove: (boardId: string) => void
+}) {
   const [aba, setAba] = React.useState<LeadBoardPage | null>(null)
 
   if (!aba) {
     return (
       <>
-        {ABA_ORDER.map((p) => (
+        {allPages.map((p) => (
           <button
-            key={p}
+            key={p.id}
             type="button"
-            onClick={() => setAba(p)}
+            onClick={() => setAba(p.id)}
             className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
           >
-            {ABA_LABELS[p]}
+            {p.name}
             <ChevronRight className="h-3.5 w-3.5 text-gray-300" />
           </button>
         ))}
@@ -305,6 +388,7 @@ function MoveSubmenu({ allBoards, onMove }: { allBoards: LeadBoard[]; onMove: (b
     )
   }
 
+  const abaLabel = allPages.find((p) => p.id === aba)?.name ?? aba
   const boardsForAba = allBoards.filter((b) => b.page === aba).sort((a, b) => a.position - b.position)
   return (
     <>
@@ -313,7 +397,7 @@ function MoveSubmenu({ allBoards, onMove }: { allBoards: LeadBoard[]; onMove: (b
         onClick={() => setAba(null)}
         className="mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-gray-400 hover:bg-gray-50 hover:text-gray-600"
       >
-        <ChevronLeft className="h-3 w-3" /> {ABA_LABELS[aba]}
+        <ChevronLeft className="h-3 w-3" /> {abaLabel}
       </button>
       {boardsForAba.length === 0 ? (
         <p className="px-2 py-1.5 text-xs text-gray-400">Nenhum quadro nessa aba ainda.</p>
@@ -396,11 +480,13 @@ function BulkActionBar({
   selectedIds,
   allRows,
   allBoards,
+  allPages,
   onClear,
 }: {
   selectedIds: Set<string>
   allRows: LeadRow[]
   allBoards: LeadBoard[]
+  allPages: LeadPage[]
   onClear: () => void
 }) {
   const [moveOpen, setMoveOpen] = React.useState(false)
@@ -470,7 +556,7 @@ function BulkActionBar({
           <BulkActionButton icon={<ArrowRightLeft className="h-4 w-4" />} label="Mover" onClick={() => setMoveOpen((o) => !o)} />
           {moveOpen && (
             <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
-              <MoveSubmenu allBoards={allBoards} onMove={moveTo} />
+              <MoveSubmenu allBoards={allBoards} allPages={allPages} onMove={moveTo} />
             </div>
           )}
         </div>
@@ -888,11 +974,16 @@ function CreateBoardModal({ open, onClose, page }: { open: boolean; onClose: () 
 
 export interface LeadBoardsViewProps {
   page: LeadBoardPage
-  title: string
-  subtitle: string
 }
 
-export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
+export function LeadBoardsView({ page }: LeadBoardsViewProps) {
+  const { profile } = useAuth()
+  const isAdmin = canManageUsers(profile?.role)
+  const allPages = useLeadPages()
+  const currentPage = allPages.find((p) => p.id === page)
+  const title = currentPage?.name ?? '...'
+  const subtitle = 'Comercial · quadros de captação de leads'
+
   const booted = useLeadBoardsBooted()
   const allBoards = useLeadBoards()
   const boards = React.useMemo(() => allBoards.filter((b) => b.page === page), [allBoards, page])
@@ -1030,6 +1121,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                   <ToolbarButton icon={<Upload className="h-3.5 w-3.5" />} onClick={() => setImportModalOpen(true)}>
                     Importar
                   </ToolbarButton>
+                  {isAdmin && <PageActionsMenu pageId={page} pageName={title} />}
                 </>
               )}
               <div className="relative">
@@ -1170,6 +1262,7 @@ export function LeadBoardsView({ page, title, subtitle }: LeadBoardsViewProps) {
                   selectedIds={selectedIds}
                   allRows={allRows}
                   allBoards={allBoards}
+                  allPages={allPages}
                   onClear={() => setSelectedIds(new Set())}
                 />
               </>

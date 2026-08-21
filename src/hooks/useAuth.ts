@@ -6,6 +6,7 @@ import { bootDb, setCurrentProfile, teardownDb } from '@/services/db'
 import { bootTickets, teardownTickets } from '@/services/tickets'
 import { bootAnalytics, teardownAnalytics } from '@/services/analytics'
 import { bootLeadBoards, teardownLeadBoards } from '@/services/leadBoards'
+import { bootLeadPages, teardownLeadPages } from '@/services/leadPages'
 
 interface AuthState {
   profile: Profile | null
@@ -41,6 +42,7 @@ async function init() {
     void bootTickets()
     void bootAnalytics()
     void bootLeadBoards()
+    void bootLeadPages()
   } catch {
     clearToken()
     setState({ loading: false })
@@ -92,6 +94,7 @@ export async function signOut() {
   await teardownTickets()
   await teardownAnalytics()
   await teardownLeadBoards()
+  await teardownLeadPages()
   stopSse()
   clearToken()
   setCurrentProfile(null)

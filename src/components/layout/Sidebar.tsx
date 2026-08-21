@@ -1,5 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import * as React from 'react'
+import { toast } from 'sonner'
 import {
   Archive,
   BookOpen,
@@ -17,14 +18,15 @@ import {
   MessageSquare,
   Moon,
   PanelLeftClose,
+  Plus,
   Radio,
+  RotateCcw,
   Settings,
   ShieldCheck,
   Star,
   Sun,
   Trophy,
   UserCircle2,
-  UserPlus,
   Users,
   Wallet,
   Zap,
@@ -32,9 +34,15 @@ import {
 import { cn } from '@/lib/utils'
 import { signOut, useAuth } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
-import { MENU_KEY_BY_PATH } from '@/constants/menuAccess'
 import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
+import { useLeadPages } from '@/hooks/useLeadPages'
+import { MENU_KEY_BY_PATH } from '@/constants/menuAccess'
+import { leadPagesService } from '@/services/leadPages'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import type { LeadPage } from '@/types/leadBoard'
 import { ServerSwitcher } from './ServerSwitcher'
 
 const suporteItems = [
@@ -47,12 +55,6 @@ const suporteItems = [
 ]
 
 const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/canais', '/tenants', '/nps']
-
-const comercialItems = [
-  { to: '/comercial/novos-leads', label: 'Novos Leads', icon: UserPlus },
-  { to: '/comercial/crm-nx-luis', label: 'CRM NX Luis', icon: Contact },
-  { to: '/comercial/crm-nx-arthur', label: 'CRM NX Arthur', icon: Contact },
-]
 
 const ROLE_LABELS = {
   admin: 'Administrador',
@@ -94,6 +96,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const canSee = React.useCallback(
     (to: string) => {
       if (menuAllowed === null) return true
+      // Comercial é tudo-ou-nada por uma chave só — as abas são dinâmicas, então o caminho
+      // exato (/comercial/<id>) nunca bate igualzinho num dicionário fixo.
+      if (to.startsWith('/comercial')) return menuAllowed.has('comercial')
       const key = MENU_KEY_BY_PATH[to]
       return key ? menuAllowed.has(key) : true
     },
@@ -107,12 +112,17 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const [suporteOpen, setSuporteOpen] = React.useState(() =>
     SUPORTE_ROUTES.some((r) => (r === '/' ? location.pathname === '/' : location.pathname.startsWith(r))),
   )
+  const [newPageOpen, setNewPageOpen] = React.useState(false)
+  const [pagesArchiveOpen, setPagesArchiveOpen] = React.useState(false)
 
   const suporte = [
     ...suporteItems,
     ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
   ].filter((item) => canSee(item.to))
-  const visibleComercialItems = comercialItems.filter((item) => canSee(item.to))
+  const leadPages = useLeadPages()
+  const visibleComercialItems = canSee('/comercial')
+    ? leadPages.map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact, page: p }))
+    : []
   const suporteActive = SUPORTE_ROUTES.some((r) =>
     r === '/' ? location.pathname === '/' : location.pathname.startsWith(r),
   )
@@ -271,41 +281,67 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             )}
           />
           <span>Comercial</span>
+          {isAdmin && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setNewPageOpen(true) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setNewPageOpen(true) } }}
+              title="Nova aba"
+              className="ml-auto grid h-5 w-5 shrink-0 place-items-center rounded text-foreground/35 hover:bg-elevate/[0.06] hover:text-foreground/70"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </span>
+          )}
           <ChevronDown
             className={cn(
-              'ml-auto h-3.5 w-3.5 transition-transform',
+              'h-3.5 w-3.5 shrink-0 transition-transform',
               comercialOpen ? '' : '-rotate-90',
+              isAdmin ? '' : 'ml-auto',
             )}
           />
         </button>
-        {comercialOpen &&
-          visibleComercialItems.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              onClick={closeOnMobile}
-              className={({ isActive }) =>
-                cn(
-                  'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
-                  isActive
-                    ? 'bg-elevate/[0.05] text-foreground'
-                    : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon
-                    className={cn(
-                      'h-4 w-4 shrink-0',
-                      isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
-                    )}
-                  />
-                  <span>{label}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
+        {comercialOpen && (
+          <>
+            {visibleComercialItems.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={closeOnMobile}
+                className={({ isActive }) =>
+                  cn(
+                    'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                    isActive
+                      ? 'bg-elevate/[0.05] text-foreground'
+                      : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon
+                      className={cn(
+                        'h-4 w-4 shrink-0',
+                        isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                      )}
+                    />
+                    <span>{label}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setPagesArchiveOpen(true)}
+                className="flex items-center gap-2.5 rounded-lg px-3 py-1.5 pl-5 text-xs text-foreground/35 transition-colors hover:bg-elevate/[0.03] hover:text-foreground/65"
+              >
+                <Archive className="h-3.5 w-3.5 shrink-0" />
+                <span>Abas arquivadas</span>
+              </button>
+            )}
+          </>
+        )}
         </>
         )}
 
@@ -440,6 +476,113 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
           v{__APP_VERSION__}
         </div>
       </div>
+
+      <NewComercialPageModal
+        open={newPageOpen}
+        onClose={() => setNewPageOpen(false)}
+        onCreated={(id) => { navigate(`/comercial/${id}`); closeOnMobile() }}
+      />
+      <ArchivedComercialPagesModal open={pagesArchiveOpen} onClose={() => setPagesArchiveOpen(false)} />
     </aside>
+  )
+}
+
+/** Nova aba do Comercial — admin only, cria vazia (sem quadro nenhum, dá pra montar depois). */
+function NewComercialPageModal({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean
+  onClose: () => void
+  onCreated: (id: string) => void
+}) {
+  const [name, setName] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => { if (open) setName('') }, [open])
+
+  const submit = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setSaving(true)
+    try {
+      const page = await leadPagesService.create(trimmed)
+      toast.success(`Aba "${page.name}" criada.`)
+      onClose()
+      onCreated(page.id)
+    } catch (err) {
+      toast.error('Falha ao criar aba: ' + (err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Nova aba do Comercial" size="sm">
+      <Input
+        label="Nome da aba"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Ex.: CRM NX Time 2"
+        autoFocus
+        onKeyDown={(e) => { if (e.key === 'Enter') void submit() }}
+      />
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button onClick={submit} disabled={!name.trim()} loading={saving}>Criar aba</Button>
+      </div>
+    </Modal>
+  )
+}
+
+/** Abas arquivadas do Comercial — admin only. Restaurar devolve pro menu na hora; quadros e
+ * leads da aba nunca foram apagados, só ficaram escondidos. */
+function ArchivedComercialPagesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [loading, setLoading] = React.useState(false)
+  const [pages, setPages] = React.useState<LeadPage[]>([])
+  const [restoringId, setRestoringId] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    leadPagesService.getArchived()
+      .then(setPages)
+      .catch((err) => toast.error('Falha ao carregar abas arquivadas: ' + (err as Error).message))
+      .finally(() => setLoading(false))
+  }, [open])
+
+  const restore = async (page: LeadPage) => {
+    setRestoringId(page.id)
+    try {
+      await leadPagesService.restore(page.id)
+      setPages((prev) => prev.filter((p) => p.id !== page.id))
+      toast.success(`"${page.name}" restaurada.`)
+    } catch (err) {
+      toast.error('Falha ao restaurar: ' + (err as Error).message)
+    } finally {
+      setRestoringId(null)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Abas arquivadas" description="Os quadros e leads continuam salvos — restaure se precisar." size="sm">
+      {loading ? (
+        <p className="py-6 text-center text-xs text-foreground/40">Carregando…</p>
+      ) : pages.length === 0 ? (
+        <p className="py-6 text-center text-xs text-foreground/40">Nenhuma aba arquivada.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {pages.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2">
+              <span className="truncate text-sm text-foreground/85">{p.name}</span>
+              <Button size="sm" variant="secondary" onClick={() => restore(p)} loading={restoringId === p.id} leftIcon={<RotateCcw className="h-3.5 w-3.5" />}>
+                Restaurar
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   )
 }

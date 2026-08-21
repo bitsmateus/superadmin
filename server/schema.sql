@@ -283,13 +283,28 @@ CREATE TABLE IF NOT EXISTS ticket_triage_steps (
 CREATE INDEX IF NOT EXISTS triage_category_idx ON ticket_triage_steps(category_id);
 
 -- ---------- lead_boards / lead_rows (Comercial: Novos Leads, CRM NX Luis, CRM NX Arthur) ----------
+-- Abas do Comercial, gerenciáveis por admin (criar/duplicar/arquivar) — não é mais um enum fixo.
+CREATE TABLE IF NOT EXISTS lead_pages (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  position INT NOT NULL DEFAULT 0,
+  archived_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO lead_pages (id, name, position) VALUES
+  ('novos_leads', 'Novos Leads', 0),
+  ('crm_luis', 'CRM NX Luis', 1),
+  ('crm_arthur', 'CRM NX Arthur', 2)
+ON CONFLICT (id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS lead_boards (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#4F8EF7',
   -- Aba/tela onde o quadro aparece. Mover um lead pra outra aba é so trocar o
   -- board_id do lead pra um quadro que fique numa "page" diferente.
-  page TEXT NOT NULL DEFAULT 'novos_leads' CHECK (page IN ('novos_leads', 'crm_luis', 'crm_arthur')),
+  page TEXT NOT NULL DEFAULT 'novos_leads' REFERENCES lead_pages(id),
   position INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -648,6 +663,10 @@ CREATE TRIGGER notify_stage_history AFTER INSERT ON stage_history
 
 DROP TRIGGER IF EXISTS notify_audit_log ON audit_log;
 CREATE TRIGGER notify_audit_log AFTER INSERT ON audit_log
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_lead_pages ON lead_pages;
+CREATE TRIGGER notify_lead_pages AFTER INSERT OR UPDATE OR DELETE ON lead_pages
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 DROP TRIGGER IF EXISTS notify_lead_boards ON lead_boards;

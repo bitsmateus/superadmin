@@ -5,15 +5,17 @@
  * O service mapeia um pro outro.
  */
 
-/** Aba do Comercial onde o quadro aparece. */
-export type LeadBoardPage = 'novos_leads' | 'crm_luis' | 'crm_arthur'
+/** Aba do Comercial onde o quadro aparece — id de uma lead_page (gerenciável por admin). */
+export type LeadBoardPage = string
 
-export const ABA_LABELS: Record<LeadBoardPage, string> = {
-  novos_leads: 'Novos Leads',
-  crm_luis: 'CRM NX Luis',
-  crm_arthur: 'CRM NX Arthur',
+/** Aba do Comercial (Novos Leads, CRM NX Luis, CRM NX Arthur, e as que um admin criar/duplicar
+ * depois). Admin pode duplicar (só a estrutura de quadros, sem leads) e arquivar/restaurar. */
+export interface LeadPage {
+  id: string
+  name: string
+  position: number
+  archivedAt: string | null
 }
-export const ABA_ORDER: LeadBoardPage[] = ['novos_leads', 'crm_luis', 'crm_arthur']
 
 export interface LeadBoard {
   id: string

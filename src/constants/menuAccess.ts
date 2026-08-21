@@ -1,5 +1,3 @@
-import type { LeadBoardPage } from '@/types/leadBoard'
-
 /**
  * Itens de menu que dá pra liberar/restringir por usuário (papel "suporte"/"Usuário").
  * Cada item corresponde a uma entrada real do Sidebar — usado tanto pra montar a tela
@@ -14,8 +12,9 @@ export interface MenuAccessItem {
   label: string
   path: string
   group: MenuAccessGroup
-  /** Presente só nos 3 itens do Comercial — permite refinar pra quadros específicos. */
-  boardsPage?: LeadBoardPage
+  /** Marca esse item como liberado por quadro (user_board_access), não por página inteira —
+   * só o "comercial" tem isso, já que as abas viraram dinâmicas (gerenciáveis por admin). */
+  boardsPicker?: boolean
 }
 
 export const MENU_ACCESS_GROUP_LABEL: Record<MenuAccessGroup, string> = {
@@ -24,9 +23,9 @@ export const MENU_ACCESS_GROUP_LABEL: Record<MenuAccessGroup, string> = {
 }
 
 export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
-  { key: 'comercial_novos_leads', label: 'Novos Leads', path: '/comercial/novos-leads', group: 'comercial', boardsPage: 'novos_leads' },
-  { key: 'comercial_crm_luis', label: 'CRM NX Luis', path: '/comercial/crm-nx-luis', group: 'comercial', boardsPage: 'crm_luis' },
-  { key: 'comercial_crm_arthur', label: 'CRM NX Arthur', path: '/comercial/crm-nx-arthur', group: 'comercial', boardsPage: 'crm_arthur' },
+  // Tudo ou nada pro Comercial inteiro (Novos Leads, CRM NX Luis, CRM NX Arthur, e o que um
+  // admin criar/duplicar depois) — a granularidade fina fica por quadro, marcado abaixo.
+  { key: 'comercial', label: 'Comercial (todas as abas)', path: '/comercial', group: 'comercial', boardsPicker: true },
   { key: 'dashboard', label: 'Dashboard', path: '/', group: 'suporte' },
   { key: 'tarefas', label: 'Suporte (Tarefas)', path: '/tarefas', group: 'suporte' },
   { key: 'pipeline', label: 'Pipeline', path: '/pipeline', group: 'suporte' },

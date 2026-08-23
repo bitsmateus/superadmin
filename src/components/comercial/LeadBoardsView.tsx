@@ -26,6 +26,7 @@ import {
   Upload,
   UserRound,
   X,
+  ShoppingBag,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -100,8 +101,15 @@ const COLUMNS: ColumnDef[] = [
   { key: 'numeroAtendentes', label: 'Número de atendentes', width: 170, align: 'center' },
   { key: 'valorMrr', label: 'Valor MRR', width: 140, currency: true, align: 'center' },
   { key: 'valorImplementacao', label: 'Valor de Implementação', width: 170, currency: true, align: 'center' },
+  { key: 'fechamento', label: 'Fechamento', type: 'date', width: 140, align: 'center' },
   { key: 'createdAt', label: 'Log de criação', width: 160, readOnly: true, align: 'center' },
 ]
+
+/** Colunas do quadro de vendas — só o que interessa numa venda fechada. As do dia a dia do SDR
+ * (Dia de contato, Lig., Retornar, Dor do cliente…) não fazem sentido depois do negócio fechado. */
+const VENDAS_COLUMN_KEYS = new Set<string>([
+  'nome', 'empresa', 'telefone', 'sdr', 'valorMrr', 'valorImplementacao', 'fechamento',
+])
 
 const GRID_BORDER = 'border-r border-gray-200'
 const MIN_COL_WIDTH = 80
@@ -119,9 +127,13 @@ function sdrLockForPageName(pageName: string, sdrLabels: { name: string }[]): st
 }
 
 /** Colunas visíveis numa aba — a coluna SDR só faz sentido em Novos Leads (várias pessoas
- * cadastrando ali); numa aba travada num SDR só, a coluna vira redundante e some da tabela. */
-function columnsForSdrLock(sdrLock: string | undefined): ColumnDef[] {
-  return sdrLock ? COLUMNS.filter((c) => c.key !== 'sdr') : COLUMNS
+ * cadastrando ali); numa aba travada num SDR só, a coluna vira redundante e some da tabela.
+ * O quadro de vendas tem um conjunto próprio: lá o que importa é quem, quanto e quando. */
+function columnsForSdrLock(sdrLock: string | undefined, isVendas = false): ColumnDef[] {
+  if (isVendas) return COLUMNS.filter((c) => VENDAS_COLUMN_KEYS.has(c.key))
+  // "Fechamento" só existe no contexto de venda — fora dele seria uma coluna vazia em todo lead.
+  const base = COLUMNS.filter((c) => c.key !== 'fechamento')
+  return sdrLock ? base.filter((c) => c.key !== 'sdr') : base
 }
 
 function columnWidthsStorageKey(page: LeadBoardPage) {
@@ -714,7 +726,8 @@ function BoardGroup({
   columnWidths, onResizeColumn, sdrLock, sdrPageBoards,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
-  const cols = columnsForSdrLock(sdrLock)
+  const [registrarOpen, setRegistrarOpen] = React.useState(false)
+  const cols = columnsForSdrLock(sdrLock, board.isVendas)
   const tableWidth = CHECKBOX_COL_WIDTH
     + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
 
@@ -742,10 +755,16 @@ function BoardGroup({
     )
   }, [allRows, search, sdrFilter, filterRules, sortDesc])
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
-  const totalMrr = React.useMemo(() => rows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0), [rows])
+  // Venda desfeita continua no quadro (pra não sumir o histórico) mas fica FORA dos totais —
+  // senão o somatório de MRR contaria dinheiro que não entrou.
+  const totalRows = React.useMemo(() => rows.filter((r) => !r.vendaRevertida), [rows])
+  const totalMrr = React.useMemo(
+    () => totalRows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0),
+    [totalRows],
+  )
   const totalImplementacao = React.useMemo(
-    () => rows.reduce((sum, r) => sum + parseBRLCents(r.valorImplementacao), 0),
-    [rows],
+    () => totalRows.reduce((sum, r) => sum + parseBRLCents(r.valorImplementacao), 0),
+    [totalRows],
   )
 
   // Tipo, Dia de contato, Status, Ligação, SDR e Retornar propagam pra toda a seleção
@@ -797,13 +816,48 @@ function BoardGroup({
           <span className="h-2 w-2 shrink-0 rounded-full ring-4" style={{ backgroundColor: board.color, boxShadow: `0 0 0 3px ${board.color}1f` }} />
           <BoardNameEditor board={board} />
           <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{rows.length}</span>
+          {board.isVendas && (
+            <button
+              type="button"
+              onClick={() => setRegistrarOpen(true)}
+              className="ml-auto flex shrink-0 items-center gap-1 rounded-lg bg-accent px-2 py-1 text-[11px] font-medium text-white hover:bg-accent/90"
+            >
+              <Plus className="h-3 w-3" />
+              Registrar venda
+            </button>
+          )}
           <input
             type="color"
             value={board.color}
             onChange={(e) => leadBoardsService.updateBoard(board.id, { color: e.target.value })}
             title="Cor do quadro"
-            className="ml-auto h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+            className={cn('h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0', !board.isVendas && 'ml-auto')}
           />
+          <button
+            type="button"
+            onClick={() => {
+              if (board.isVendas) return
+              if (!window.confirm(
+                `Usar "${board.name}" como quadro de vendas?\n\nA partir de agora, todo lead marcado como "Vendido" em qualquer CRM cria uma oportunidade aqui. Só um quadro pode ter esse papel — se outro já tiver, ele perde.`,
+              )) return
+              leadBoardsService.setVendasBoard(board.id)
+                .then(() => toast.success(`"${board.name}" agora recebe as vendas.`))
+                .catch((err: Error) => toast.error('Falha: ' + err.message))
+            }}
+            title={
+              board.isVendas
+                ? 'Este quadro recebe as vendas marcadas nos CRMs'
+                : 'Usar este quadro para receber as vendas'
+            }
+            className={cn(
+              'grid h-5 w-5 shrink-0 place-items-center rounded transition-colors',
+              board.isVendas
+                ? 'text-emerald-600'
+                : 'text-gray-300 hover:bg-black/5 hover:text-gray-600',
+            )}
+          >
+            <ShoppingBag className="h-3 w-3" />
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -869,9 +923,13 @@ function BoardGroup({
                   draggable
                   onDragStart={(e) => startDrag(e, row.id, row.nome)}
                   onDragEnd={onRowDragEnd}
+                  // Venda desfeita: fica visível (o histórico importa) mas apagada, pra ninguém
+                  // ler como negócio fechado ao bater o olho. Já está fora dos totais.
+                  title={row.vendaRevertida ? 'Venda revertida — o lead saiu de "Vendido"' : undefined}
                   className={cn(
                     'group border-b border-gray-200 transition-colors',
                     draggingIds?.includes(row.id) ? 'opacity-40' : '',
+                    row.vendaRevertida ? 'bg-gray-50 text-gray-400 line-through decoration-gray-300' : '',
                     selected ? 'bg-accent/10 hover:bg-accent/15' : 'hover:bg-accent/[0.04]',
                   )}
                 >
@@ -1024,7 +1082,83 @@ function BoardGroup({
           </table>
         </div>
       )}
+      {board.isVendas && (
+        <RegistrarVendaModal open={registrarOpen} onClose={() => setRegistrarOpen(false)} boardId={board.id} />
+      )}
     </div>
+  )
+}
+
+/**
+ * "Registrar venda" — lança uma oportunidade à mão no quadro de vendas.
+ *
+ * É a porta de entrada pras vendas que não vieram de um lead do CRM (indicação, cliente antigo
+ * voltando, negócio fechado fora do funil). As que vieram de lead entram sozinhas quando o SDR
+ * marca "Vendido", e essas ficam ligadas ao lead de origem — as daqui não, por isso não têm
+ * `venda_origem_id`. Os valores são texto em BRL, igual às colunas do quadro.
+ */
+function RegistrarVendaModal({
+  open,
+  onClose,
+  boardId,
+}: {
+  open: boolean
+  onClose: () => void
+  boardId: string
+}) {
+  const [nome, setNome] = React.useState('')
+  const [empresa, setEmpresa] = React.useState('')
+  const [sdr, setSdr] = React.useState('')
+  const [mrr, setMrr] = React.useState('')
+  const [impl, setImpl] = React.useState('')
+  const [fechamento, setFechamento] = React.useState('')
+
+  React.useEffect(() => {
+    if (!open) return
+    setNome(''); setEmpresa(''); setSdr(''); setMrr(''); setImpl('')
+    // Fechou hoje é o caso comum — quem lança retroativo troca a data.
+    setFechamento(new Date().toISOString().slice(0, 10))
+  }, [open])
+
+  const submit = () => {
+    const trimmed = nome.trim()
+    if (!trimmed) return
+    leadBoardsService.createRow(boardId, {
+      nome: trimmed,
+      empresa: empresa.trim(),
+      sdr: sdr.trim(),
+      valorMrr: mrr.trim(),
+      valorImplementacao: impl.trim(),
+      fechamento,
+      status: 'Vendido',
+    })
+    toast.success(`Venda de "${trimmed}" registrada.`)
+    onClose()
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Registrar venda"
+      description="Para vendas que não vieram de um lead do CRM. As que vêm de lead entram sozinhas quando o SDR marca “Vendido”."
+      size="sm"
+    >
+      <div className="space-y-3">
+        <Input label="Cliente" value={nome} onChange={(e) => setNome(e.target.value)} autoFocus placeholder="Nome do cliente" />
+        <Input label="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)} placeholder="Razão social (opcional)" />
+        <Input label="SDR" value={sdr} onChange={(e) => setSdr(e.target.value)} placeholder="Quem fechou (opcional)" />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Valor MRR" value={mrr} onChange={(e) => setMrr(e.target.value)} placeholder="R$ 0,00" />
+          <Input label="Valor de implementação" value={impl} onChange={(e) => setImpl(e.target.value)} placeholder="R$ 0,00" />
+        </div>
+        <Input label="Data de fechamento" type="date" value={fechamento} onChange={(e) => setFechamento(e.target.value)} />
+      </div>
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button onClick={submit} disabled={!nome.trim()}>Registrar</Button>
+      </div>
+    </Modal>
   )
 }
 

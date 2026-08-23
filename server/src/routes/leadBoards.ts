@@ -79,7 +79,83 @@ const TRACKED_FIELDS: Record<string, string> = {
  * contando como no-show.
  */
 const MILESTONE_AGENDADA = 'Reunião agendada';
-const MILESTONE_STATUSES = [MILESTONE_AGENDADA, 'Reunião não comparecida', 'Vendido'];
+const MILESTONE_VENDIDO = 'Vendido';
+const MILESTONE_STATUSES = [MILESTONE_AGENDADA, 'Reunião não comparecida', MILESTONE_VENDIDO];
+
+/**
+ * Sincroniza o registro de venda quando o status de um lead muda.
+ *
+ * Virou "Vendido"  → cria a oportunidade no quadro marcado com is_vendas, copiando nome, empresa,
+ *                    SDR e os valores COMO ESTÃO AGORA (foto do momento — corrigir o lead depois
+ *                    não altera o que já foi fechado). O lead continua no CRM do SDR, marcado
+ *                    como vendido; a oportunidade é um registro novo, não uma mudança de lugar.
+ * Saiu de "Vendido" → marca a oportunidade como revertida em vez de apagar, pra não perder o
+ *                     histórico se alguém trocou o status por engano.
+ * Voltou a "Vendido" → reaproveita a oportunidade que já existe (venda_origem_id é único), só
+ *                      tira a marca de revertida. Assim ir e voltar não gera duplicata.
+ *
+ * Nunca lança: é chamado em background depois do UPDATE, e falhar aqui não pode derrubar a
+ * edição do lead que o usuário acabou de fazer.
+ */
+async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStatus: string) {
+  try {
+    if (fromStatus === toStatus) return;
+
+    if (toStatus !== MILESTONE_VENDIDO) {
+      if (fromStatus !== MILESTONE_VENDIDO) return;
+      await query(
+        'UPDATE lead_rows SET venda_revertida = true WHERE venda_origem_id = $1',
+        [leadRowId]
+      );
+      return;
+    }
+
+    const existing = await queryOne<{ id: string }>(
+      'SELECT id FROM lead_rows WHERE venda_origem_id = $1',
+      [leadRowId]
+    );
+    if (existing) {
+      await query('UPDATE lead_rows SET venda_revertida = false WHERE id = $1', [existing.id]);
+      return;
+    }
+
+    const target = await queryOne<{ id: string }>('SELECT id FROM lead_boards WHERE is_vendas LIMIT 1');
+    // Sem quadro de vendas configurado não há onde registrar — o lead vira Vendido normalmente e
+    // o painel avisa que falta escolher o quadro. Silenciar aqui é de propósito.
+    if (!target) return;
+
+    const lead = await queryOne<{
+      nome: string; empresa: string; telefone: string; sdr: string;
+      valor_mrr: string; valor_implementacao: string;
+    }>(
+      `SELECT nome, empresa, telefone, sdr, valor_mrr, valor_implementacao
+       FROM lead_rows WHERE id = $1`,
+      [leadRowId]
+    );
+    if (!lead) return;
+
+    const [{ max }] = await query<{ max: number | null }>(
+      'SELECT MAX(position) as max FROM lead_rows WHERE board_id = $1',
+      [target.id]
+    );
+
+    await query(
+      `INSERT INTO lead_rows (
+        board_id, nome, empresa, telefone, sdr, status,
+        valor_mrr, valor_implementacao, fechamento, venda_origem_id, position
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        target.id, lead.nome, lead.empresa, lead.telefone, lead.sdr, MILESTONE_VENDIDO,
+        lead.valor_mrr, lead.valor_implementacao,
+        new Date().toISOString().slice(0, 10),
+        leadRowId,
+        (max ?? -1) + 1,
+      ]
+    );
+  } catch (err) {
+    console.error('[vendas] falha ao sincronizar venda do lead', leadRowId, err);
+  }
+}
 
 export async function leadBoardRoutes(app: FastifyInstance) {
   // GET /api/lead-boards
@@ -145,6 +221,25 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const [board] = await query(
         `UPDATE lead_boards SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
         params
+      );
+      if (!board) return reply.status(404).send({ message: 'Quadro não encontrado' });
+      return board;
+    }
+  );
+
+  // POST /api/lead-boards/:id/set-vendas — admin only. Elege o quadro que recebe as oportunidades
+  // quando um lead vira "Vendido". Só um no sistema inteiro (índice único), então tira a marca dos
+  // outros antes — sem isso o UPDATE quebraria no índice em vez de trocar o quadro escolhido.
+  app.post<{ Params: { id: string } }>(
+    '/api/lead-boards/:id/set-vendas',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { role } = req.user as { role: string };
+      if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
+      await query('UPDATE lead_boards SET is_vendas = false WHERE is_vendas');
+      const [board] = await query(
+        'UPDATE lead_boards SET is_vendas = true WHERE id = $1 RETURNING *',
+        [req.params.id]
       );
       if (!board) return reply.status(404).send({ message: 'Quadro não encontrado' });
       return board;
@@ -289,6 +384,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
             const fromVal = before[key as 'status' | 'dia_contato' | 'sdr' | 'retornado'];
             const toVal = patch[key];
             if (String(fromVal ?? '') === String(toVal ?? '')) continue;
+            // Marcar/desmarcar "Vendido" reflete na aba Vendas — mesmo lugar onde a linha do
+            // tempo já detecta a troca de status, pra não varrer o status em dois pontos.
+            if (key === 'status') {
+              await syncVendaFromStatus(req.params.id, String(fromVal ?? ''), String(toVal ?? ''));
+            }
             await logLeadEvent(
               req.params.id,
               type,

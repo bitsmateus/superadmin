@@ -555,6 +555,24 @@ END $$`);
     ) AS v(key, name, color, position, is_done)
     WHERE NOT EXISTS (SELECT 1 FROM support_columns sc WHERE sc.key = v.key)`);
 
+  // ── Registro de vendas (aba Vendas do Comercial) ──────────────────────────
+  // Quando um lead vira "Vendido" num CRM, ele CONTINUA no CRM do SDR e uma oportunidade é criada
+  // no quadro de vendas. A oportunidade é uma FOTO do momento (copia nome/empresa/SDR/valores):
+  // corrigir o lead depois não mexe no que já foi fechado, senão relatório de mês passado mudaria
+  // sozinho. `venda_origem_id` liga a oportunidade ao lead que a gerou — é o que evita criar duas
+  // quando o status vai e volta. `venda_revertida` marca a venda desfeita sem apagar o histórico.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS fechamento TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS venda_origem_id UUID`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS venda_revertida BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_venda_origem_uniq
+    ON lead_rows(venda_origem_id) WHERE venda_origem_id IS NOT NULL`);
+
+  // Qual quadro recebe as vendas. Fica no quadro (e não numa config solta) pra sobreviver a
+  // renomear a aba, e porque é o quadro que de fato guarda as linhas.
+  await pool.query(`ALTER TABLE lead_boards ADD COLUMN IF NOT EXISTS is_vendas BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_boards_is_vendas_uniq
+    ON lead_boards((is_vendas)) WHERE is_vendas`);
+
   // Itens fixos do menu Suporte — admin pode arquivar (some do menu, fica salvo pra
   // restaurar) e renomear. As URLs continuam fixas, só a visibilidade é gerenciável.
   await pool.query(`CREATE TABLE IF NOT EXISTS support_pages (

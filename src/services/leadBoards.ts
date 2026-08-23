@@ -20,9 +20,15 @@ function uuid(): string {
 
 // ---------- Snake ↔ camel ----------
 
-type BoardRow = { id: string; name: string; color: string; page: LeadBoardPage; position: number; created_at: string }
+type BoardRow = {
+  id: string; name: string; color: string; page: LeadBoardPage; position: number
+  created_at: string; is_vendas?: boolean
+}
 function rowToBoard(r: BoardRow): LeadBoard {
-  return { id: r.id, name: r.name, color: r.color, page: r.page, position: r.position, createdAt: r.created_at }
+  return {
+    id: r.id, name: r.name, color: r.color, page: r.page, position: r.position,
+    createdAt: r.created_at, isVendas: r.is_vendas ?? false,
+  }
 }
 function boardToRow(patch: Partial<LeadBoard>): Record<string, unknown> {
   const row: Record<string, unknown> = {}
@@ -40,6 +46,7 @@ type LeadRowRow = {
   sdr: string; numero: string; dor_cliente: string; numero_atendentes: string; valor_mrr: string
   valor_implementacao: string; notes_count: number; position: number; created_at: string; updated_at: string
   deleted_at: string | null
+  fechamento?: string; venda_origem_id?: string | null; venda_revertida?: boolean
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
@@ -50,6 +57,9 @@ function rowToLead(r: LeadRowRow): LeadRow {
     responsavel: r.responsavel, sdr: r.sdr, numero: r.numero,
     dorCliente: r.dor_cliente, numeroAtendentes: r.numero_atendentes,
     valorMrr: r.valor_mrr, valorImplementacao: r.valor_implementacao, notesCount: r.notes_count ?? 0,
+    fechamento: r.fechamento ?? '',
+    vendaOrigemId: r.venda_origem_id ?? null,
+    vendaRevertida: r.venda_revertida ?? false,
     position: r.position, createdAt: r.created_at, updatedAt: r.updated_at, deletedAt: r.deleted_at ?? null,
   }
 }
@@ -62,6 +72,8 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('diaContato' in patch) row.dia_contato = patch.diaContato
   if ('ligacao' in patch) row.ligacao = patch.ligacao
   if ('status' in patch) row.status = patch.status
+  if ('fechamento' in patch) row.fechamento = patch.fechamento
+  if ('vendaRevertida' in patch) row.venda_revertida = patch.vendaRevertida
   if ('agendamento' in patch) row.agendamento = patch.agendamento
   if ('retornar' in patch) row.retornar = patch.retornar
   if ('retornado' in patch) row.retornado = patch.retornado
@@ -201,7 +213,9 @@ export const leadBoardsService = {
   createBoard(name: string, color = '#4F8EF7', page: LeadBoardPage = 'novos_leads'): LeadBoard {
     const pageBoards = boards.filter((b) => b.page === page)
     const position = pageBoards.length ? Math.max(...pageBoards.map((b) => b.position)) + 1 : 0
-    const board: LeadBoard = { id: uuid(), name, color, page, position, createdAt: new Date().toISOString() }
+    const board: LeadBoard = {
+      id: uuid(), name, color, page, position, createdAt: new Date().toISOString(), isVendas: false,
+    }
     boards = [...boards, board].sort((a, b) => a.position - b.position)
     notify()
 
@@ -216,6 +230,13 @@ export const leadBoardsService = {
     })()
 
     return board
+  },
+
+  /** Elege este quadro como o que recebe as vendas (tira a marca de qualquer outro). */
+  async setVendasBoard(id: string): Promise<void> {
+    await api.post(`/api/lead-boards/${id}/set-vendas`, {})
+    boards = boards.map((b) => ({ ...b, isVendas: b.id === id }))
+    notify()
   },
 
   updateBoard(id: string, patch: Partial<LeadBoard>): void {
@@ -266,6 +287,7 @@ export const leadBoardsService = {
       id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
       status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
       dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
+      fechamento: '', vendaOrigemId: null, vendaRevertida: false,
       position, createdAt: now, updatedAt: now, deletedAt: null, ...initial,
     }
     rows = [...rows, row]

@@ -24,6 +24,8 @@ export interface LeadBoard {
   page: LeadBoardPage
   position: number
   createdAt: string
+  /** Quadro que recebe as oportunidades quando um lead vira "Vendido". Só um no sistema. */
+  isVendas: boolean
 }
 
 export interface LeadRow {
@@ -47,6 +49,12 @@ export interface LeadRow {
   numeroAtendentes: string
   valorMrr: string
   valorImplementacao: string
+  /** Data de fechamento da venda (yyyy-mm-dd). Só preenchida em oportunidades. */
+  fechamento: string
+  /** Lead que gerou esta oportunidade. null = venda lançada à mão pelo botão "Registrar venda". */
+  vendaOrigemId: string | null
+  /** Venda desfeita (o lead saiu de "Vendido"). Fica no quadro, mas fora dos totais. */
+  vendaRevertida: boolean
   notesCount: number
   position: number
   createdAt: string
@@ -55,9 +63,18 @@ export interface LeadRow {
   deletedAt: string | null
 }
 
+/**
+ * Campos de texto do lead — os que viram coluna editável na tabela do quadro.
+ *
+ * Fora da lista ficam os que não são string ou não se editam ali: id/boardId/position/datas,
+ * `retornado` (booleano) e os de controle da venda (`vendaOrigemId`, `vendaRevertida`), que o
+ * sistema preenche sozinho quando o lead vira "Vendido". `fechamento` fica DENTRO porque é uma
+ * data que o time ajusta à mão na aba Vendas.
+ */
 export type LeadRowField = Exclude<
   keyof LeadRow,
-  'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado' | 'deletedAt'
+  | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
+  | 'deletedAt' | 'vendaOrigemId' | 'vendaRevertida'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

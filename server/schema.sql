@@ -306,7 +306,9 @@ CREATE TABLE IF NOT EXISTS lead_boards (
   -- board_id do lead pra um quadro que fique numa "page" diferente.
   page TEXT NOT NULL DEFAULT 'novos_leads' REFERENCES lead_pages(id),
   position INT NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- true no quadro que recebe as oportunidades de venda (so um no sistema).
+  is_vendas BOOLEAN NOT NULL DEFAULT false
 );
 
 -- Legado: allowlist por QUADRO — substituída por user_page_access (allowlist por ABA inteira,
@@ -359,6 +361,11 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   numero_atendentes TEXT NOT NULL DEFAULT '',
   valor_mrr TEXT NOT NULL DEFAULT '',
   valor_implementacao TEXT NOT NULL DEFAULT '',
+  -- Registro de venda: data de fechamento, lead que originou a oportunidade (NULL = venda
+  -- lancada a mao) e marca de venda desfeita. Ver comentario em db.ts.
+  fechamento TEXT NOT NULL DEFAULT '',
+  venda_origem_id UUID,
+  venda_revertida BOOLEAN NOT NULL DEFAULT false,
   notes_count INT NOT NULL DEFAULT 0,
   position INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

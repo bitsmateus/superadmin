@@ -726,7 +726,6 @@ function BoardGroup({
   columnWidths, onResizeColumn, sdrLock, sdrPageBoards,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
-  const [registrarOpen, setRegistrarOpen] = React.useState(false)
   const cols = columnsForSdrLock(sdrLock, board.isVendas)
   const tableWidth = CHECKBOX_COL_WIDTH
     + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
@@ -816,29 +815,19 @@ function BoardGroup({
           <span className="h-2 w-2 shrink-0 rounded-full ring-4" style={{ backgroundColor: board.color, boxShadow: `0 0 0 3px ${board.color}1f` }} />
           <BoardNameEditor board={board} />
           <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{rows.length}</span>
-          {board.isVendas && (
-            <button
-              type="button"
-              onClick={() => setRegistrarOpen(true)}
-              className="ml-auto flex shrink-0 items-center gap-1 rounded-lg bg-accent px-2 py-1 text-[11px] font-medium text-white hover:bg-accent/90"
-            >
-              <Plus className="h-3 w-3" />
-              Registrar venda
-            </button>
-          )}
           <input
             type="color"
             value={board.color}
             onChange={(e) => leadBoardsService.updateBoard(board.id, { color: e.target.value })}
             title="Cor do quadro"
-            className={cn('h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0', !board.isVendas && 'ml-auto')}
+            className="ml-auto h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
           />
           <button
             type="button"
             onClick={() => {
               if (board.isVendas) return
               if (!window.confirm(
-                `Usar "${board.name}" como quadro de vendas?\n\nA partir de agora, todo lead marcado como "Vendido" em qualquer CRM cria uma oportunidade aqui. Só um quadro pode ter esse papel — se outro já tiver, ele perde.`,
+                `Usar "${board.name}" como quadro de vendas?\n\nA ABA INTEIRA vira a tela de Vendas (lista de nome, MRR e implementação com totais por período) — os quadros dela deixam de aparecer como CRM.\n\nTodo lead marcado como "Vendido" em qualquer CRM passa a cair aqui. Só um quadro no sistema tem esse papel; se outro já tiver, ele perde.`,
               )) return
               leadBoardsService.setVendasBoard(board.id)
                 .then(() => toast.success(`"${board.name}" agora recebe as vendas.`))
@@ -1082,83 +1071,7 @@ function BoardGroup({
           </table>
         </div>
       )}
-      {board.isVendas && (
-        <RegistrarVendaModal open={registrarOpen} onClose={() => setRegistrarOpen(false)} boardId={board.id} />
-      )}
     </div>
-  )
-}
-
-/**
- * "Registrar venda" — lança uma oportunidade à mão no quadro de vendas.
- *
- * É a porta de entrada pras vendas que não vieram de um lead do CRM (indicação, cliente antigo
- * voltando, negócio fechado fora do funil). As que vieram de lead entram sozinhas quando o SDR
- * marca "Vendido", e essas ficam ligadas ao lead de origem — as daqui não, por isso não têm
- * `venda_origem_id`. Os valores são texto em BRL, igual às colunas do quadro.
- */
-function RegistrarVendaModal({
-  open,
-  onClose,
-  boardId,
-}: {
-  open: boolean
-  onClose: () => void
-  boardId: string
-}) {
-  const [nome, setNome] = React.useState('')
-  const [empresa, setEmpresa] = React.useState('')
-  const [sdr, setSdr] = React.useState('')
-  const [mrr, setMrr] = React.useState('')
-  const [impl, setImpl] = React.useState('')
-  const [fechamento, setFechamento] = React.useState('')
-
-  React.useEffect(() => {
-    if (!open) return
-    setNome(''); setEmpresa(''); setSdr(''); setMrr(''); setImpl('')
-    // Fechou hoje é o caso comum — quem lança retroativo troca a data.
-    setFechamento(new Date().toISOString().slice(0, 10))
-  }, [open])
-
-  const submit = () => {
-    const trimmed = nome.trim()
-    if (!trimmed) return
-    leadBoardsService.createRow(boardId, {
-      nome: trimmed,
-      empresa: empresa.trim(),
-      sdr: sdr.trim(),
-      valorMrr: mrr.trim(),
-      valorImplementacao: impl.trim(),
-      fechamento,
-      status: 'Vendido',
-    })
-    toast.success(`Venda de "${trimmed}" registrada.`)
-    onClose()
-  }
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Registrar venda"
-      description="Para vendas que não vieram de um lead do CRM. As que vêm de lead entram sozinhas quando o SDR marca “Vendido”."
-      size="sm"
-    >
-      <div className="space-y-3">
-        <Input label="Cliente" value={nome} onChange={(e) => setNome(e.target.value)} autoFocus placeholder="Nome do cliente" />
-        <Input label="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)} placeholder="Razão social (opcional)" />
-        <Input label="SDR" value={sdr} onChange={(e) => setSdr(e.target.value)} placeholder="Quem fechou (opcional)" />
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Valor MRR" value={mrr} onChange={(e) => setMrr(e.target.value)} placeholder="R$ 0,00" />
-          <Input label="Valor de implementação" value={impl} onChange={(e) => setImpl(e.target.value)} placeholder="R$ 0,00" />
-        </div>
-        <Input label="Data de fechamento" type="date" value={fechamento} onChange={(e) => setFechamento(e.target.value)} />
-      </div>
-      <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button onClick={submit} disabled={!nome.trim()}>Registrar</Button>
-      </div>
-    </Modal>
   )
 }
 

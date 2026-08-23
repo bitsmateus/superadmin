@@ -2,7 +2,9 @@ import * as React from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { LeadBoardsView } from '@/components/comercial/LeadBoardsView'
+import { VendasView } from '@/components/comercial/VendasView'
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
+import { useLeadBoards } from '@/hooks/useLeadBoards'
 
 /** Tela do Comercial pra uma aba dinâmica (Novos Leads, CRM NX Luis, CRM NX Arthur, ou qualquer
  * outra que um admin tenha criado/duplicado). Uma rota só (/comercial/:pageId) pras 3 de sempre
@@ -11,6 +13,11 @@ export function ComercialPage() {
   const { pageId } = useParams<{ pageId: string }>()
   const booted = useLeadPagesBooted()
   const pages = useLeadPages()
+  const boards = useLeadBoards()
+  // A aba que contém o quadro de vendas não é um CRM: ela é o fechado do período (nome, MRR,
+  // implementação e totais), então renderiza outra tela. Casa pelo quadro marcado, não pelo nome
+  // da aba — assim renomear "Vendas" não quebra nada.
+  const isVendasPage = boards.some((b) => b.page === pageId && b.isVendas)
 
   if (!booted) {
     return (
@@ -29,6 +36,8 @@ export function ComercialPage() {
     const fallback = pages[0]
     return <Navigate to={fallback ? `/comercial/${fallback.id}` : '/'} replace />
   }
+
+  if (isVendasPage) return <VendasView pageId={pageId as string} />
 
   return <LeadBoardsView page={pageId as string} />
 }

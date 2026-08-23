@@ -138,9 +138,10 @@ export async function supportPageRoutes(app: FastifyInstance) {
       if (!source) return reply.status(404).send({ message: 'Item não encontrado' });
 
       const mode: DuplicateMode = req.body.mode ?? 'view';
-      // Etapas próprias só fazem sentido onde a tela é um quadro de clientes (Pipeline/Clientes).
-      // Nas demais, 'full'/'structure' não teriam o que semear — cai pra 'view'.
-      const stageable = source.source_key === 'pipeline' || source.source_key === 'clientes';
+      // Só o Pipeline sabe se desenhar a partir de etapas por página (ver PipelinePage): a cópia
+      // sai idêntica à tela original, só com outro conteúdo. Nas demais telas 'full'/'structure'
+      // produziria um layout diferente do original, então cai pra 'view'.
+      const stageable = source.source_key === 'pipeline';
       const effectiveMode: DuplicateMode = stageable ? mode : 'view';
 
       // Só strings não-vazias entram: o resto a tela resolve com o padrão dela. Guardar "" faria

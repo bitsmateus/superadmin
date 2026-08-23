@@ -2,9 +2,6 @@ import * as React from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { SupportViewProvider } from '@/components/support/SupportViewContext'
-import { SupportPageBoard } from '@/components/support/SupportPageBoard'
-import { supportPagesService } from '@/services/supportPages'
-import type { SupportPageStage } from '@/services/supportPages'
 import { useSupportPages, useSupportPagesBooted } from '@/hooks/useSupportPages'
 import { useAuth } from '@/hooks/useAuth'
 import { MENU_ACCESS_ITEMS } from '@/constants/menuAccess'
@@ -75,21 +72,6 @@ export function SupportViewPage() {
 
   const page = pages.find((p) => p.id === pageId)
 
-  // Uma cópia criada com "Com tudo"/"Só os quadros" tem etapas próprias e vira um quadro de
-  // verdade; criada com "Só um recorte", a lista vem vazia e ela renderiza a tela original
-  // filtrada. `undefined` = ainda carregando (não dá pra decidir qual das duas ainda).
-  const [stages, setStages] = React.useState<SupportPageStage[] | undefined>(undefined)
-  React.useEffect(() => {
-    if (!pageId) return
-    let alive = true
-    setStages(undefined)
-    supportPagesService
-      .getStages(pageId)
-      .then((rows) => { if (alive) setStages(rows) })
-      .catch(() => { if (alive) setStages([]) })
-    return () => { alive = false }
-  }, [pageId])
-
   // Enquanto o cache não carregou não dá pra saber se a cópia existe — esperar evita mandar o
   // usuário pro Dashboard num piscar de olhos logo depois do login.
   if (!booted) {
@@ -121,17 +103,6 @@ export function SupportViewPage() {
     }
   }
 
-  if (stages === undefined) {
-    return (
-      <Centered>
-        <span className="inline-flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando…
-        </span>
-      </Centered>
-    )
-  }
-
   return (
     <SupportViewProvider
       value={{ pageId: page.id, pageName: page.name, sourceKey: page.sourceKey, config: page.viewConfig }}
@@ -148,11 +119,7 @@ export function SupportViewPage() {
       >
         {/* key: trocar de cópia precisa REMONTAR a tela, senão os useState dos filtros ficam
             com os valores da cópia anterior e a nova "não abre" de verdade. */}
-        {stages.length > 0 ? (
-          <SupportPageBoard key={page.id} pageId={page.id} pageName={page.name} stages={stages} />
-        ) : (
-          <Screen key={page.id} />
-        )}
+        <Screen key={page.id} />
       </React.Suspense>
     </SupportViewProvider>
   )

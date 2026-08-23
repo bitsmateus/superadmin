@@ -23,7 +23,10 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
-import { useSupportViewText } from '@/components/support/SupportViewContext'
+import { useSupportView, useSupportViewText } from '@/components/support/SupportViewContext'
+import { supportPagesService } from '@/services/supportPages'
+import { AddClientsToPageModal } from '@/components/support/AddClientsToPageModal'
+import { onSseEvent } from '@/services/api'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
@@ -76,12 +79,38 @@ type NewClientValues = z.infer<typeof newClientSchema>
 export function PipelinePage() {
   const clients = useClients()
   const settings = useSettings()
+  /**
+   * Numa CÓPIA criada com "Com tudo"/"Só os quadros", esta mesma tela mostra só os clientes que
+   * foram postos nela, na etapa DELA — por isso a cópia sai idêntica ao Pipeline original em
+   * layout, mudando só o conteúdo. `null` = rota fixa /pipeline, comportamento de sempre.
+   */
+  const supportView = useSupportView()
+  const copyPageId = supportView?.pageId ?? null
+  /** clientId -> etapa dentro da cópia. null enquanto carrega (ou fora de uma cópia). */
+  const [membership, setMembership] = React.useState<Map<string, PipelineStage> | null>(null)
+
+  const reloadMembership = React.useCallback(async () => {
+    if (!copyPageId) { setMembership(null); return }
+    try {
+      const rows = await supportPagesService.getClients(copyPageId)
+      setMembership(new Map(rows.map((r) => [r.id, r.page_stage_key as PipelineStage])))
+    } catch {
+      setMembership(new Map())
+    }
+  }, [copyPageId])
+
+  React.useEffect(() => { void reloadMembership() }, [reloadMembership])
+  React.useEffect(
+    () => onSseEvent((table) => { if (table === 'support_page_clients') void reloadMembership() }),
+    [reloadMembership],
+  )
   const [currentUser] = useCurrentUser()
   // Numa cópia do menu ("Duplicar"), o filtro já abre no recorte salvo dela; na rota fixa
   // /pipeline, useSupportViewValue devolve o padrão e nada muda.
   const [search, setSearch] = React.useState(useSupportViewText('search'))
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
   const [openNew, setOpenNew] = React.useState(false)
+  const [addToCopyOpen, setAddToCopyOpen] = React.useState(false)
   // Filtros separados: quem vendeu x quem está entregando. Ver só a própria
   // carga de entrega é o caso de uso principal da fila de configuração.
   const [filterComercial, setFilterComercial] = React.useState(useSupportViewText('filterComercial'))
@@ -165,6 +194,10 @@ export function PipelinePage() {
       churned: [],
     }
     for (const c of clients) {
+      // Na cópia, quem não foi adicionado não aparece, e a etapa que vale é a local.
+      if (copyPageId && !membership?.has(c.id)) continue
+      const stage = (copyPageId ? membership?.get(c.id) : c.stage) ?? c.stage
+      if (!buckets[stage]) continue
       if (q) {
         const blob = normalizeText(`${asText(c.name)} ${asText(c.company)}`)
         if (!blob.includes(q)) continue
@@ -177,7 +210,7 @@ export function PipelinePage() {
       )
         continue
       if (filterEntrega && c.responsavelEntrega !== filterEntrega) continue
-      buckets[c.stage].push(c)
+      buckets[stage].push(c)
     }
     // Oldest entries first within each stage
     for (const stage of Object.keys(buckets) as PipelineStage[]) {
@@ -188,7 +221,7 @@ export function PipelinePage() {
       )
     }
     return buckets
-  }, [clients, search, filterComercial, filterEntrega])
+  }, [clients, search, filterComercial, filterEntrega, copyPageId, membership])
 
   /**
    * Blocos por etapa. As duas etapas de configuração ganham subdivisão:
@@ -302,9 +335,39 @@ export function PipelinePage() {
     startSetup(next)
   }
 
+  /** Etapa que vale pra este cliente aqui: a da cópia, ou a global no Pipeline original. */
+  const stageOf = React.useCallback(
+    (c: Client): PipelineStage => (copyPageId ? membership?.get(c.id) ?? c.stage : c.stage),
+    [copyPageId, membership],
+  )
+
+  /**
+   * Mover DENTRO de uma cópia grava só a etapa local. `clients.stage` continua sendo a verdade do
+   * Pipeline original e do que alimenta funil, Dashboard e relatórios — por isso a cópia não pode
+   * escrever nele. Devolve true quando tratou o movimento (ou seja, estamos numa cópia).
+   */
+  const moveInCopy = React.useCallback(
+    (c: Client, to: PipelineStage): boolean => {
+      if (!copyPageId) return false
+      setMembership((prev) => {
+        const next = new Map(prev ?? [])
+        next.set(c.id, to)
+        return next
+      })
+      supportPagesService.setClientStage(copyPageId, c.id, to).catch((err: Error) => {
+        toast.error('Não deu pra mover: ' + err.message)
+        void reloadMembership()
+      })
+      toast.success(`${c.name} → ${STAGE_COLORS[to].label}`)
+      return true
+    },
+    [copyPageId, reloadMembership],
+  )
+
   const advanceStage = (c: Client) => {
-    const next = NEXT_STAGE[c.stage]
+    const next = NEXT_STAGE[stageOf(c)]
     if (!next) { toast.info('Cliente já está na etapa final'); return }
+    if (moveInCopy(c, next)) return
     // Entrar em configuração passa pela regra de simultâneas.
     if (next === 'setup') { startSetup(c); return }
     // Sair de "Em Configuração" libera a vaga do responsável.
@@ -317,8 +380,9 @@ export function PipelinePage() {
   }
 
   const regressStage = (c: Client) => {
-    const prev = PREV_STAGE[c.stage]
+    const prev = PREV_STAGE[stageOf(c)]
     if (!prev) { toast.info('Cliente já está na primeira etapa'); return }
+    if (moveInCopy(c, prev)) return
     db.updateClient(c.id, {
       stage: prev,
       ...(c.stage === 'setup' ? { setupStartedAt: undefined } : {}),
@@ -330,10 +394,25 @@ export function PipelinePage() {
   return (
     <>
       <TopBar
-        title="Pipeline"
-        subtitle={`${clients.length} cliente(s) no funil`}
+        title={supportView?.pageName ?? 'Pipeline'}
+        subtitle={
+          copyPageId
+            ? `${membership?.size ?? 0} cliente(s) nesta aba`
+            : `${clients.length} cliente(s) no funil`
+        }
         rightSlot={
           <div className="flex items-center gap-2">
+            {copyPageId && (
+              // Numa cópia, o botão útil é trazer quem já existe pra cá — criar cliente novo
+              // continua disponível ao lado, e o novo entra no funil original como sempre.
+              <Button
+                variant="secondary"
+                onClick={() => setAddToCopyOpen(true)}
+                leftIcon={<PlusCircle className="h-4 w-4" />}
+              >
+                Adicionar cliente
+              </Button>
+            )}
             <Button
               variant="secondary"
               onClick={() => {
@@ -450,6 +529,18 @@ export function PipelinePage() {
         clientId={openClientId}
         onClose={() => setOpenClientId(null)}
       />
+
+      {copyPageId && (
+        <AddClientsToPageModal
+          open={addToCopyOpen}
+          onClose={() => setAddToCopyOpen(false)}
+          pageId={copyPageId}
+          pageName={supportView?.pageName ?? ''}
+          firstStageKey={PIPELINE_STAGES[0]}
+          alreadyIn={new Set(membership?.keys() ?? [])}
+          onAdded={reloadMembership}
+        />
+      )}
 
       <Modal
         open={Boolean(wipConfirm)}

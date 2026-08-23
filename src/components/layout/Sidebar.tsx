@@ -929,9 +929,10 @@ function DuplicateSupportPageModal({
   const [mode, setMode] = React.useState<SupportDuplicateMode>('view')
   const [saving, setSaving] = React.useState(false)
   const view = useViewFieldsState(sourceKey, initialConfig, open)
-  // Só Pipeline e Clientes são quadros de clientes; nas outras telas "com tudo" não teria o que
-  // levar, então nem oferecemos a escolha (o back também cai pra 'view' se vier forçado).
-  const stageable = sourceKey === 'pipeline' || sourceKey === 'clientes'
+  // Só o Pipeline sabe se desenhar a partir das etapas da cópia, saindo igual à tela original.
+  // Nas outras, oferecer "com tudo" entregaria um layout diferente do que a pessoa duplicou —
+  // então nem mostramos a escolha (o back também cai pra 'view' se vier forçado).
+  const stageable = sourceKey === 'pipeline'
 
   React.useEffect(() => {
     if (!open) return

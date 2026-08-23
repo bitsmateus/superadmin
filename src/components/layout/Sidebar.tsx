@@ -728,30 +728,37 @@ function SidebarPageMenu({
         </div>,
         document.body,
       )}
-      <DuplicateSupportPageModal
-        open={duplicateOpen}
-        onClose={() => setDuplicateOpen(false)}
-        sourceId={pageId}
-        sourceName={pageName}
-        sourceKey={sourceKey}
-        initialConfig={page?.viewConfig ?? {}}
-      />
-      <RenameSupportPageModal
-        open={renameOpen}
-        onClose={() => setRenameOpen(false)}
-        pageId={pageId}
-        currentName={pageName}
-      />
-      {isCopy && page && (
-        <EditSupportViewModal
-          open={editViewOpen}
-          onClose={() => setEditViewOpen(false)}
-          pageId={page.id}
-          pageName={page.name}
-          sourceKey={page.sourceKey}
-          current={page.viewConfig}
+      {/* Este menu vive DENTRO do <NavLink> do item, e os modais abrem por portal. Portal tira o
+          DOM de dentro do link, mas o evento do React continua subindo pela árvore de componentes
+          — sem parar aqui, cada clique no modal chegava ao NavLink e virava navegação, o que
+          travava os radios de "O que duplicar" na primeira opção. Segurar na borda cobre tudo que
+          está dentro dos modais de uma vez (radios, checkboxes, selects, inputs e botões). */}
+      <span onClick={(e) => e.stopPropagation()}>
+        <DuplicateSupportPageModal
+          open={duplicateOpen}
+          onClose={() => setDuplicateOpen(false)}
+          sourceId={pageId}
+          sourceName={pageName}
+          sourceKey={sourceKey}
+          initialConfig={page?.viewConfig ?? {}}
         />
-      )}
+        <RenameSupportPageModal
+          open={renameOpen}
+          onClose={() => setRenameOpen(false)}
+          pageId={pageId}
+          currentName={pageName}
+        />
+        {isCopy && page && (
+          <EditSupportViewModal
+            open={editViewOpen}
+            onClose={() => setEditViewOpen(false)}
+            pageId={page.id}
+            pageName={page.name}
+            sourceKey={page.sourceKey}
+            current={page.viewConfig}
+          />
+        )}
+      </span>
     </>
   )
 }

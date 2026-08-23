@@ -592,6 +592,52 @@ END $$`);
     WHERE NOT EXISTS (SELECT 1 FROM support_pages sp WHERE sp.id = v.id)`);
   await pool.query(`UPDATE support_pages SET source_key = id WHERE source_key IS NULL`);
   await pool.query(`ALTER TABLE support_pages ALTER COLUMN source_key SET NOT NULL`);
+  // Uma cópia abre a mesma TELA do original, mas com a própria visão salva (filtros/modo de
+  // exibição escolhidos na hora de duplicar) — é o que a diferencia de um atalho repetido.
+  // NULL/{} = abre a tela com os filtros padrão dela, igual ao item de origem.
+  await pool.query(`ALTER TABLE support_pages ADD COLUMN IF NOT EXISTS view_config JSONB`);
+
+  // ── Cópia do Suporte como subpágina de verdade ────────────────────────────
+  // Etapas ("quadros") de uma CÓPIA. O item de origem continua usando as etapas fixas do código
+  // (PIPELINE_STAGES): elas alimentam funil, tempo por etapa, clientes travados e o Dashboard,
+  // e torná-las variáveis quebraria esses relatórios. Só a cópia tem etapas próprias.
+  await pool.query(`CREATE TABLE IF NOT EXISTS support_page_stages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    page_id TEXT NOT NULL REFERENCES support_pages(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#9CA3AF',
+    position INT NOT NULL DEFAULT 0,
+    is_done BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (page_id, key)
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS support_page_stages_page_idx ON support_page_stages(page_id, position)`);
+
+  // Quais clientes aparecem numa cópia, e em que etapa DELA. O cliente continua existindo uma vez
+  // só em `clients` — isto aqui é associação, não duplicata: editar o cliente pela cópia edita o
+  // mesmo registro, e tirar da cópia não apaga ninguém. `stage_key` é a etapa dentro da cópia,
+  // separada de clients.stage (que segue sendo a verdade do Pipeline original e dos relatórios).
+  await pool.query(`CREATE TABLE IF NOT EXISTS support_page_clients (
+    page_id TEXT NOT NULL REFERENCES support_pages(id) ON DELETE CASCADE,
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    stage_key TEXT NOT NULL,
+    position INT NOT NULL DEFAULT 0,
+    added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (page_id, client_id)
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS support_page_clients_page_idx ON support_page_clients(page_id, stage_key, position)`);
+
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_support_page_stages ON support_page_stages;
+      CREATE TRIGGER notify_support_page_stages AFTER INSERT OR UPDATE OR DELETE ON support_page_stages
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_support_page_clients ON support_page_clients;
+      CREATE TRIGGER notify_support_page_clients AFTER INSERT OR UPDATE OR DELETE ON support_page_clients
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
 
   console.log('[db] migrations applied');
 }

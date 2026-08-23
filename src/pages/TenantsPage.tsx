@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
+import { useSupportViewValue, useSupportViewText } from '@/components/support/SupportViewContext'
 import { ServerFilter } from '@/components/layout/ServerFilter'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -48,8 +49,10 @@ export function TenantsPage() {
 
   const [wizardOpen, setWizardOpen] = React.useState(false)
   const [importOpen, setImportOpen] = React.useState(false)
-  const [search, setSearch] = React.useState('')
-  const [statusFilter, setStatusFilter] = React.useState<'all' | 'active' | 'inactive'>('all')
+  const [search, setSearch] = React.useState(useSupportViewText('search'))
+  const [statusFilter, setStatusFilter] = React.useState<'all' | 'active' | 'inactive'>(
+    useSupportViewValue<'all' | 'active' | 'inactive'>('statusFilter', 'all'),
+  )
   const { selected: serverFilter, setSelected: setServerFilter } = useServerFilter()
   const [openMenu, setOpenMenu] = React.useState<string | null>(null)
   const [editing, setEditing] = React.useState<TaggedTenant | null>(null)

@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Archive, RotateCcw, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
+import { useSupportViewValue, useSupportViewText } from '@/components/support/SupportViewContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -18,7 +19,7 @@ export function ArchivedClientsPage() {
   const archived = useArchivedClients()
   const { profile } = useAuth()
   const canDelete = canDeleteClient(profile?.role)
-  const [search, setSearch] = React.useState('')
+  const [search, setSearch] = React.useState(useSupportViewText('search'))
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
 
   const filtered = React.useMemo(() => {

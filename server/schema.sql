@@ -351,6 +351,9 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   retornado BOOLEAN NOT NULL DEFAULT false,
   responsavel TEXT NOT NULL DEFAULT '',
   sdr TEXT NOT NULL DEFAULT '',
+  -- Faltava aqui: db.ts cria lead_rows com `ligacao` e uma migracao faz UPDATE nela, entao um
+  -- banco montado so pelo schema.sql quebrava ao subir o servidor ("column ligacao does not exist").
+  ligacao TEXT NOT NULL DEFAULT '',
   numero TEXT NOT NULL DEFAULT '',
   dor_cliente TEXT NOT NULL DEFAULT '',
   numero_atendentes TEXT NOT NULL DEFAULT '',
@@ -573,6 +576,8 @@ CREATE TABLE IF NOT EXISTS support_pages (
   source_key TEXT NOT NULL,
   position INT NOT NULL DEFAULT 0,
   archived_at TIMESTAMPTZ,
+  -- Visao salva da copia (filtros/modo de exibicao escolhidos ao duplicar). NULL = padrao da tela.
+  view_config JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -587,6 +592,34 @@ INSERT INTO support_pages (id, name, source_key, position) VALUES
   ('tickets',       'Tickets',              'tickets',       8),
   ('templates',     'Templates',            'templates',     9)
 ON CONFLICT (id) DO NOTHING;
+
+-- ---------- support_page_stages / support_page_clients ----------
+-- Etapas proprias de uma COPIA do menu Suporte. O item de origem usa as etapas fixas do codigo
+-- (PIPELINE_STAGES), que alimentam funil/Dashboard -- por isso so a copia tem etapas no banco.
+CREATE TABLE IF NOT EXISTS support_page_stages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  page_id TEXT NOT NULL REFERENCES support_pages(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#9CA3AF',
+  position INT NOT NULL DEFAULT 0,
+  is_done BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (page_id, key)
+);
+CREATE INDEX IF NOT EXISTS support_page_stages_page_idx ON support_page_stages(page_id, position);
+
+-- Quais clientes aparecem numa copia, e em que etapa dela. Associacao, nao duplicata: o cliente
+-- continua unico em `clients`, e stage_key e separado de clients.stage (verdade dos relatorios).
+CREATE TABLE IF NOT EXISTS support_page_clients (
+  page_id TEXT NOT NULL REFERENCES support_pages(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  stage_key TEXT NOT NULL,
+  position INT NOT NULL DEFAULT 0,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (page_id, client_id)
+);
+CREATE INDEX IF NOT EXISTS support_page_clients_page_idx ON support_page_clients(page_id, stage_key, position);
 
 -- ---------- stage_history ----------
 CREATE TABLE IF NOT EXISTS stage_history (

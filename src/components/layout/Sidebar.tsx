@@ -20,6 +20,8 @@ import {
   MessageSquare,
   Moon,
   MoreHorizontal,
+  Pencil,
+  SlidersHorizontal,
   PanelLeftClose,
   Plus,
   Radio,
@@ -44,9 +46,12 @@ import { useTheme } from '@/hooks/useTheme'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadPages } from '@/hooks/useLeadPages'
 import { useSupportPages, useSupportPagesBooted } from '@/hooks/useSupportPages'
-import { MENU_KEY_BY_PATH } from '@/constants/menuAccess'
+import { MENU_KEY_BY_PATH, MENU_ACCESS_ITEMS } from '@/constants/menuAccess'
 import { leadPagesService } from '@/services/leadPages'
-import { supportPagesService } from '@/services/supportPages'
+import { supportPagesService, isSupportCopy } from '@/services/supportPages'
+import type { SupportDuplicateMode } from '@/services/supportPages'
+import { supportViewFields, describeSupportView } from '@/lib/supportViews'
+import type { SupportViewField } from '@/lib/supportViews'
 import type { SupportPage } from '@/services/supportPages'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -65,19 +70,30 @@ const suporteItems = [
 
 const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/canais', '/tenants', '/nps']
 
-/** Intercala cópias ("Duplicar") logo depois do item original de cada rota — cada cópia herda
- * ícone/rota do original, só o nome e o id (pra arquivar/duplicar de novo) são próprios dela.
- * Itens sem entrada em MENU_KEY_BY_PATH (Dashboard, Conhecimento, Equipe…) nunca têm cópia. */
+/** Intercala cópias ("Duplicar") logo depois do item original de cada rota. A cópia herda só o
+ * ícone; o nome, o id e a ROTA são próprios dela: `/visao/<id>`, que abre a mesma tela do original
+ * com a visão salva da cópia (ver SupportViewPage). Antes as duas apontavam pra mesma URL, então
+ * clicar na cópia não saía do lugar e os dois itens acendiam como ativos ao mesmo tempo.
+ * Itens sem entrada em MENU_KEY_BY_PATH (Conhecimento, Equipe…) nunca têm cópia. */
 function withDuplicates<T extends { to: string; label: string }>(
   items: T[],
   duplicatesByKey: Map<string, SupportPage[]>,
-): (T & { pageId?: string })[] {
+): (T & { pageId?: string; sourceKey?: string })[] {
   return items.flatMap((item) => {
     const key = MENU_KEY_BY_PATH[item.to]
     const dups = key ? duplicatesByKey.get(key) ?? [] : []
     return [
-      { ...item, pageId: key } as T & { pageId?: string },
-      ...dups.map((d) => ({ ...item, label: d.name, pageId: d.id }) as T & { pageId?: string }),
+      { ...item, pageId: key, sourceKey: key } as T & { pageId?: string; sourceKey?: string },
+      ...dups.map(
+        (d) =>
+          ({
+            ...item,
+            to: `/visao/${d.id}`,
+            label: d.name,
+            pageId: d.id,
+            sourceKey: d.sourceKey,
+          }) as T & { pageId?: string; sourceKey?: string },
+      ),
     ]
   })
 }
@@ -177,9 +193,26 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const visibleComercialItems = canSee('/comercial')
     ? leadPages.map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact, page: p }))
     : []
+  // Numa cópia a URL é /visao/<id>, que não diz nada sobre qual grupo do menu destacar/abrir —
+  // quem decide é a TELA de origem dela. Sem isso, abrir "Pipeline (cópia)" deixava o grupo
+  // "Suporte" fechado e sem destaque, como se nada tivesse acontecido.
+  const activePath = React.useMemo(() => {
+    const match = location.pathname.match(/^\/visao\/(.+)$/)
+    if (!match) return location.pathname
+    const page = supportPages.find((p) => p.id === match[1])
+    if (!page) return location.pathname
+    return MENU_ACCESS_ITEMS.find((i) => i.key === page.sourceKey)?.path ?? location.pathname
+  }, [location.pathname, supportPages])
+
   const suporteActive = SUPORTE_ROUTES.some((r) =>
-    r === '/' ? location.pathname === '/' : location.pathname.startsWith(r),
+    r === '/' ? activePath === '/' : activePath.startsWith(r),
   )
+
+  // O grupo abre sozinho ao entrar numa cópia — o estado inicial não pode saber disso, porque
+  // as páginas do Suporte ainda não carregaram na primeira renderização.
+  React.useEffect(() => {
+    if (suporteActive) setSuporteOpen(true)
+  }, [suporteActive])
 
   const secondaryItems = withDuplicates(
     [
@@ -309,8 +342,12 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                         {badge > 99 ? '99+' : badge}
                       </span>
                     )}
-                    {isAdmin && item.pageId && item.to !== '/' && (
-                      <SidebarPageMenu pageId={item.pageId} pageName={item.label} />
+                    {isAdmin && item.pageId && item.pageId !== 'dashboard' && (
+                      <SidebarPageMenu
+                        pageId={item.pageId}
+                        pageName={item.label}
+                        sourceKey={item.sourceKey ?? item.pageId}
+                      />
                     )}
                   </>
                 )}
@@ -424,7 +461,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         <>
         <div className="my-2 h-px bg-elevate/[0.05]" />
 
-        {secondaryItems.map(({ to, label, icon: Icon, pageId }) => (
+        {secondaryItems.map(({ to, label, icon: Icon, pageId, sourceKey }) => (
           <NavLink
             key={pageId ?? to}
             to={to}
@@ -450,7 +487,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                 />
                 <span className="truncate">{label}</span>
                 {isAdmin && pageId && (
-                  <SidebarPageMenu pageId={pageId} pageName={label} />
+                  <SidebarPageMenu pageId={pageId} pageName={label} sourceKey={sourceKey ?? pageId} />
                 )}
               </>
             )}
@@ -476,7 +513,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
               />
             </button>
             {archivedOpen &&
-              archivedItems.map(({ to, label, icon: Icon, pageId }) => (
+              archivedItems.map(({ to, label, icon: Icon, pageId, sourceKey }) => (
                 <NavLink
                   key={pageId ?? to}
                   to={to}
@@ -500,7 +537,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                       />
                       <span className="truncate">{label}</span>
                       {isAdmin && pageId && (
-                        <SidebarPageMenu pageId={pageId} pageName={label} />
+                        <SidebarPageMenu pageId={pageId} pageName={label} sourceKey={sourceKey ?? pageId} />
                       )}
                     </>
                   )}
@@ -593,10 +630,25 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
  * com nome próprio, mas que abre a MESMA tela do original (essas telas não são um container
  * genérico como o Comercial, então uma cópia não tem dados independentes — é um atalho nomeado
  * pra mesma rota, útil pra organizar/rotular sem duplicar nada por trás). */
-function SidebarPageMenu({ pageId, pageName }: { pageId: string; pageName: string }) {
+function SidebarPageMenu({
+  pageId,
+  pageName,
+  sourceKey,
+}: {
+  pageId: string
+  pageName: string
+  /** Tela de origem — define quais filtros o modal de duplicar oferece. */
+  sourceKey: string
+}) {
   const [open, setOpen] = React.useState(false)
   const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null)
   const [duplicateOpen, setDuplicateOpen] = React.useState(false)
+  const [editViewOpen, setEditViewOpen] = React.useState(false)
+  const [renameOpen, setRenameOpen] = React.useState(false)
+  // Só cópia tem visão própria pra editar — o item de origem define o padrão da tela.
+  const pages = useSupportPages()
+  const page = pages.find((p) => p.id === pageId)
+  const isCopy = page ? isSupportCopy(page) : false
   const btnRef = React.useRef<HTMLButtonElement>(null)
   const popRef = React.useRef<HTMLDivElement>(null)
   useOutsideClose(popRef, open, () => setOpen(false))
@@ -649,6 +701,24 @@ function SidebarPageMenu({ pageId, pageName }: { pageId: string; pageName: strin
           </button>
           <button
             type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); setRenameOpen(true) }}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/80 hover:bg-elevate/[0.06]"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Renomear
+          </button>
+          {isCopy && supportViewFields(sourceKey).length > 0 && (
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); setEditViewOpen(true) }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/80 hover:bg-elevate/[0.06]"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Editar visão
+            </button>
+          )}
+          <button
+            type="button"
             onClick={excluir}
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger hover:bg-danger/10"
           >
@@ -663,37 +733,228 @@ function SidebarPageMenu({ pageId, pageName }: { pageId: string; pageName: strin
         onClose={() => setDuplicateOpen(false)}
         sourceId={pageId}
         sourceName={pageName}
+        sourceKey={sourceKey}
+        initialConfig={page?.viewConfig ?? {}}
       />
+      <RenameSupportPageModal
+        open={renameOpen}
+        onClose={() => setRenameOpen(false)}
+        pageId={pageId}
+        currentName={pageName}
+      />
+      {isCopy && page && (
+        <EditSupportViewModal
+          open={editViewOpen}
+          onClose={() => setEditViewOpen(false)}
+          pageId={page.id}
+          pageName={page.name}
+          sourceKey={page.sourceKey}
+          current={page.viewConfig}
+        />
+      )}
     </>
   )
 }
 
-/** Nome pra cópia de um item do Suporte — admin only. A cópia abre a mesma rota do original, só
- * com um nome próprio no menu (ver comentário em SidebarPageMenu). */
+/**
+ * Estado dos campos de visão (o que a cópia mostra) — compartilhado por "Duplicar" e "Editar
+ * visão". Só o que estiver marcado vira view_config; o resto a tela resolve com o padrão dela.
+ */
+function useViewFieldsState(sourceKey: string, initial: Record<string, string>, open: boolean) {
+  const fields = React.useMemo(() => supportViewFields(sourceKey), [sourceKey])
+  const [enabled, setEnabled] = React.useState<Set<string>>(new Set())
+  const [values, setValues] = React.useState<Record<string, string>>({})
+
+  // Reabrir recomeça do que está salvo — sem isso o modal guardaria a edição abandonada.
+  React.useEffect(() => {
+    if (!open) return
+    setEnabled(new Set(fields.filter((f) => initial[f.key] !== undefined).map((f) => f.key)))
+    setValues(Object.fromEntries(fields.map((f) => [f.key, initial[f.key] ?? f.default])))
+    // `initial` vem de objeto novo a cada render do pai; a dependência real é abrir/fechar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, fields])
+
+  const toggle = (key: string) => {
+    setEnabled((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const build = (): Record<string, string> => {
+    const config: Record<string, string> = {}
+    for (const field of fields) {
+      if (!enabled.has(field.key)) continue
+      const value = values[field.key] ?? ''
+      if (value.trim() !== '') config[field.key] = value.trim()
+    }
+    return config
+  }
+
+  return { fields, enabled, setEnabled, values, setValues, toggle, build }
+}
+
+/** Lista de filtros marcáveis de uma tela — o "o que você quer duplicar daquilo". */
+function ViewFieldsEditor({
+  fields,
+  enabled,
+  setEnabled,
+  values,
+  setValues,
+  toggle,
+  emptyHint,
+}: {
+  fields: SupportViewField[]
+  enabled: Set<string>
+  setEnabled: (next: Set<string>) => void
+  values: Record<string, string>
+  setValues: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  toggle: (key: string) => void
+  emptyHint: string
+}) {
+  if (fields.length === 0) return null
+  return (
+    <div className="mt-4">
+      <div className="mb-2 flex items-center justify-between">
+        <label className="text-xs font-medium text-foreground/70">O que essa aba deve mostrar</label>
+        <button
+          type="button"
+          onClick={() => setEnabled(enabled.size === fields.length ? new Set() : new Set(fields.map((f) => f.key)))}
+          className="text-[11px] text-accent hover:underline"
+        >
+          {enabled.size === fields.length ? 'Desmarcar todos' : 'Marcar todos'}
+        </button>
+      </div>
+      <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-line p-2">
+        {fields.map((field) => {
+          const on = enabled.has(field.key)
+          return (
+            <div key={field.key} className="rounded-md px-1 py-1">
+              <label className="flex items-center gap-2 text-xs text-foreground/80">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => toggle(field.key)}
+                  className="h-3.5 w-3.5 accent-accent"
+                />
+                {field.label}
+              </label>
+              {on && (
+                <div className="mt-1.5 pl-5">
+                  {field.type === 'select' ? (
+                    <select
+                      value={values[field.key] ?? field.default}
+                      onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                      className="h-8 w-full rounded-lg border border-line bg-elevate/[0.04] px-2 text-xs text-foreground/80 outline-none focus:border-accent/40"
+                    >
+                      {field.options?.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={values[field.key] ?? ''}
+                      placeholder={field.placeholder}
+                      onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                      className="h-8 w-full rounded-lg border border-line bg-elevate/[0.04] px-2 text-xs text-foreground/80 outline-none focus:border-accent/40"
+                    />
+                  )}
+                  {field.hint && <p className="mt-1 text-[11px] text-foreground/45">{field.hint}</p>}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-2 text-[11px] text-foreground/45">{emptyHint}</p>
+    </div>
+  )
+}
+
+const DUPLICATE_MODES: { value: SupportDuplicateMode; label: string; hint: string }[] = [
+  {
+    value: 'full',
+    label: 'Com tudo',
+    hint: 'Os quadros e os clientes de hoje, já distribuídos. Os clientes são os mesmos — mover ou editar aqui não duplica ninguém no sistema.',
+  },
+  {
+    value: 'structure',
+    label: 'Só os quadros',
+    hint: 'As mesmas colunas, sem nenhum cliente. Você adiciona quem quiser depois.',
+  },
+  {
+    value: 'view',
+    label: 'Só um recorte',
+    hint: 'Sem quadros próprios: abre a tela original filtrada do jeito que você escolher abaixo.',
+  },
+]
+
+/**
+ * "Duplicar" um item do Suporte — admin only.
+ *
+ * Pergunta o nome E o que a cópia deve mostrar: cada tela expõe seus próprios filtros/modo de
+ * exibição em SUPPORT_VIEW_FIELDS, e só o que for marcado é salvo na visão da cópia. É isso que
+ * faz "Pipeline (entregas do Arthur)" ser uma tela diferente de "Pipeline", e não um atalho
+ * repetido. Ao terminar, navega pra cópia — antes ela era criada e você continuava onde estava,
+ * que é o que dava a impressão de que "duplicar não abriu".
+ */
 function DuplicateSupportPageModal({
   open,
   onClose,
   sourceId,
   sourceName,
+  sourceKey,
+  initialConfig,
 }: {
   open: boolean
   onClose: () => void
   sourceId: string
   sourceName: string
+  sourceKey: string
+  /** Duplicar uma cópia parte dos filtros dela; a partir do item de origem, começa do padrão. */
+  initialConfig: Record<string, string>
 }) {
+  const navigate = useNavigate()
   const [name, setName] = React.useState('')
+  const [mode, setMode] = React.useState<SupportDuplicateMode>('view')
   const [saving, setSaving] = React.useState(false)
+  const view = useViewFieldsState(sourceKey, initialConfig, open)
+  // Só Pipeline e Clientes são quadros de clientes; nas outras telas "com tudo" não teria o que
+  // levar, então nem oferecemos a escolha (o back também cai pra 'view' se vier forçado).
+  const stageable = sourceKey === 'pipeline' || sourceKey === 'clientes'
 
-  React.useEffect(() => { if (open) setName(`${sourceName} (cópia)`) }, [open, sourceName])
+  React.useEffect(() => {
+    if (!open) return
+    setName(`${sourceName} (cópia)`)
+    setMode(stageable ? 'full' : 'view')
+  }, [open, sourceName, stageable])
 
   const submit = async () => {
     const trimmed = name.trim()
     if (!trimmed) return
     setSaving(true)
     try {
-      const page = await supportPagesService.duplicate(sourceId, trimmed)
-      toast.success(`"${page.name}" criada — abre a mesma tela de "${sourceName}".`)
+      const page = await supportPagesService.duplicate(
+        sourceId,
+        trimmed,
+        mode,
+        mode === 'view' ? view.build() : undefined,
+      )
+      const summary = mode === 'view' ? describeSupportView(page.sourceKey, page.viewConfig) : ''
+      toast.success(
+        mode === 'full'
+          ? `"${page.name}" criada com os quadros e os clientes de hoje.`
+          : mode === 'structure'
+            ? `"${page.name}" criada só com os quadros, sem clientes.`
+            : summary
+              ? `"${page.name}" criada — ${summary}.`
+              : `"${page.name}" criada.`,
+      )
       onClose()
+      navigate(`/visao/${page.id}`)
     } catch (err) {
       toast.error('Falha ao duplicar: ' + (err as Error).message)
     } finally {
@@ -702,9 +963,110 @@ function DuplicateSupportPageModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Duplicar aba" description={`A cópia abre a mesma tela de "${sourceName}" — não cria dados independentes, só um atalho com nome próprio.`} size="sm">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Duplicar aba"
+      description={
+        view.fields.length > 0
+          ? `A cópia abre a mesma tela de "${sourceName}", com os filtros que você marcar aqui. Os dados são os mesmos — o que muda é o recorte.`
+          : `A cópia abre a mesma tela de "${sourceName}". Essa tela não tem filtros para pré-configurar, então a cópia só ganha um nome próprio no menu.`
+      }
+      size="sm"
+    >
       <Input
         label="Nome da cópia"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        autoFocus
+        onKeyDown={(e) => { if (e.key === 'Enter' && !stageable && view.fields.length === 0) void submit() }}
+      />
+
+      {stageable && (
+        <div className="mt-4">
+          <label className="mb-2 block text-xs font-medium text-foreground/70">O que duplicar</label>
+          <div className="space-y-1.5">
+            {DUPLICATE_MODES.map((opt) => (
+              <label
+                key={opt.value}
+                className={cn(
+                  'flex cursor-pointer gap-2.5 rounded-lg border p-2.5 transition-colors',
+                  mode === opt.value
+                    ? 'border-accent/50 bg-accent/[0.06]'
+                    : 'border-line hover:bg-elevate/[0.03]',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="duplicate-mode"
+                  checked={mode === opt.value}
+                  onChange={() => setMode(opt.value)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-accent"
+                />
+                <span>
+                  <span className="block text-xs font-medium text-foreground/85">{opt.label}</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-foreground/50">{opt.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mode === 'view' && <ViewFieldsEditor
+        fields={view.fields}
+        enabled={view.enabled}
+        setEnabled={view.setEnabled}
+        values={view.values}
+        setValues={view.setValues}
+        toggle={view.toggle}
+        emptyHint={`Nada marcado = a cópia abre igual a "${sourceName}".`}
+      />}
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button onClick={submit} disabled={!name.trim()} loading={saving}>Duplicar</Button>
+      </div>
+    </Modal>
+  )
+}
+
+/** Renomear um item do menu Suporte — admin only. Vale pro item de origem e pra cópia; o id (que
+ * é a URL da cópia) nunca muda junto, senão links já compartilhados parariam de funcionar. */
+function RenameSupportPageModal({
+  open,
+  onClose,
+  pageId,
+  currentName,
+}: {
+  open: boolean
+  onClose: () => void
+  pageId: string
+  currentName: string
+}) {
+  const [name, setName] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => { if (open) setName(currentName) }, [open, currentName])
+
+  const submit = async () => {
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === currentName) { onClose(); return }
+    setSaving(true)
+    try {
+      const page = await supportPagesService.rename(pageId, trimmed)
+      toast.success(`Agora chama "${page.name}".`)
+      onClose()
+    } catch (err) {
+      toast.error('Falha ao renomear: ' + (err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Renomear" size="sm">
+      <Input
+        label="Nome"
         value={name}
         onChange={(e) => setName(e.target.value)}
         autoFocus
@@ -712,7 +1074,70 @@ function DuplicateSupportPageModal({
       />
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
-        <Button onClick={submit} disabled={!name.trim()} loading={saving}>Duplicar</Button>
+        <Button onClick={submit} disabled={!name.trim()} loading={saving}>Salvar</Button>
+      </div>
+    </Modal>
+  )
+}
+
+/** "Editar visão" de uma cópia — admin only. Sem isso, corrigir um filtro exigiria apagar a cópia
+ * e refazer. Não aparece no item de origem: mexer nele mudaria o padrão da tela pra todo mundo. */
+function EditSupportViewModal({
+  open,
+  onClose,
+  pageId,
+  pageName,
+  sourceKey,
+  current,
+}: {
+  open: boolean
+  onClose: () => void
+  pageId: string
+  pageName: string
+  sourceKey: string
+  current: Record<string, string>
+}) {
+  const [saving, setSaving] = React.useState(false)
+  const view = useViewFieldsState(sourceKey, current, open)
+
+  const submit = async () => {
+    setSaving(true)
+    try {
+      const page = await supportPagesService.saveView(pageId, view.build())
+      const summary = describeSupportView(page.sourceKey, page.viewConfig)
+      toast.success(summary ? `"${page.name}" — ${summary}.` : `"${page.name}" voltou ao padrão da tela.`)
+      onClose()
+    } catch (err) {
+      toast.error('Falha ao salvar: ' + (err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Editar visão"
+      description={`Define o recorte que "${pageName}" mostra ao abrir. Os dados são os mesmos da tela original.`}
+      size="sm"
+    >
+      {view.fields.length === 0 ? (
+        <p className="text-xs text-foreground/55">Essa tela não tem filtros para pré-configurar.</p>
+      ) : (
+        <ViewFieldsEditor
+          fields={view.fields}
+          enabled={view.enabled}
+          setEnabled={view.setEnabled}
+          values={view.values}
+          setValues={view.setValues}
+          toggle={view.toggle}
+          emptyHint="Nada marcado = abre igual à tela original."
+        />
+      )}
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button onClick={submit} loading={saving} disabled={view.fields.length === 0}>Salvar</Button>
       </div>
     </Modal>
   )

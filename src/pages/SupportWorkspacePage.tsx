@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
+import { useSupportView, useSupportViewValue } from '@/components/support/SupportViewContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
@@ -109,15 +110,26 @@ export function SupportWorkspacePage() {
   const columns = useSupportColumns()
   const statusLabels = useSupportColumnLabels()
 
-  const [view, setView] = React.useState<'list' | 'kanban'>(() =>
-    localStorage.getItem(VIEW_KEY) === 'kanban' ? 'kanban' : 'list',
-  )
+  // Numa cópia do menu ("Duplicar") a preferência de Lista/Kanban é dela, não do Suporte inteiro:
+  // a chave do localStorage leva o id da cópia, senão alternar aqui mudaria a tela original também.
+  const supportView = useSupportView()
+  const viewStorageKey = supportView ? `${VIEW_KEY}:${supportView.pageId}` : VIEW_KEY
+  const [view, setView] = React.useState<'list' | 'kanban'>(() => {
+    const saved = localStorage.getItem(viewStorageKey)
+    if (saved === 'kanban' || saved === 'list') return saved
+    // Sem escolha anterior nessa cópia, vale o modo definido ao duplicar.
+    return supportView?.config.view === 'kanban' ? 'kanban' : 'list'
+  })
   React.useEffect(() => {
-    localStorage.setItem(VIEW_KEY, view)
-  }, [view])
-  const [filterKind, setFilterKind] = React.useState<ReminderKind | 'all'>('all')
+    localStorage.setItem(viewStorageKey, view)
+  }, [view, viewStorageKey])
+  const [filterKind, setFilterKind] = React.useState<ReminderKind | 'all'>(
+    useSupportViewValue<ReminderKind | 'all'>('filterKind', 'all'),
+  )
   // Filtros rápidos (uma dimensão) + seletor de pessoa específica (outra).
-  const [quick, setQuick] = React.useState<'all' | 'mine' | 'unassigned' | 'overdue' | 'today'>('all')
+  const [quick, setQuick] = React.useState<'all' | 'mine' | 'unassigned' | 'overdue' | 'today'>(
+    useSupportViewValue<'all' | 'mine' | 'unassigned' | 'overdue' | 'today'>('quick', 'all'),
+  )
   const [filterPerson, setFilterPerson] = React.useState<string>('') // '' = qualquer pessoa
   const [editing, setEditing] = React.useState<Reminder | null | undefined>(undefined) // undefined = closed
 

@@ -37,6 +37,10 @@ const CanaisPage = React.lazy(() =>
 const ComercialPage = React.lazy(() =>
   import('./pages/ComercialPage').then((m) => ({ default: m.ComercialPage })),
 )
+// Cópias do menu Suporte ("Duplicar"): abrem a tela do item de origem com a visão salva delas.
+const SupportViewPage = React.lazy(() =>
+  import('./pages/SupportViewPage').then((m) => ({ default: m.SupportViewPage })),
+)
 const ComercialDashboardPage = React.lazy(() =>
   import('./pages/ComercialDashboardPage').then((m) => ({ default: m.ComercialDashboardPage })),
 )
@@ -118,6 +122,8 @@ export default function App() {
           <Route path="/comercial/crm-nx-arthur" element={<Navigate to="/comercial/crm_arthur" replace />} />
           <Route path="/comercial/:pageId" element={<ComercialPage />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
+          {/* Uma cópia do menu Suporte tem rota só dela — ver SupportViewPage. */}
+          <Route path="/visao/:pageId" element={<SupportViewPage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/arquivados" element={<ArchivedClientsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />

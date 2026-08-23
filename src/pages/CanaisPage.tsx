@@ -21,6 +21,7 @@ import {
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { TopBar } from '@/components/layout/TopBar'
+import { useSupportViewValue, useSupportViewText } from '@/components/support/SupportViewContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -71,10 +72,14 @@ function StatusBadge({ status }: { status: NxChannelStatus | null }) {
 
 export function CanaisPage() {
   const { data, isLoading, isError, error, isFetching, refetch } = useNxChannels()
-  const [view, setView] = React.useState<'canais' | 'relatorios'>('canais')
-  const [search, setSearch] = React.useState('')
+  const [view, setView] = React.useState<'canais' | 'relatorios'>(
+    useSupportViewValue<'canais' | 'relatorios'>('view', 'canais'),
+  )
+  const [search, setSearch] = React.useState(useSupportViewText('search'))
   const [statusFilter, setStatusFilter] = React.useState<NxChannelStatus | 'all'>('all')
-  const [notifyFilter, setNotifyFilter] = React.useState<'all' | 'on' | 'off'>('all')
+  const [notifyFilter, setNotifyFilter] = React.useState<'all' | 'on' | 'off'>(
+    useSupportViewValue<'all' | 'on' | 'off'>('notifyFilter', 'all'),
+  )
   const [onlyDivergent, setOnlyDivergent] = React.useState(false)
   const [assigning, setAssigning] = React.useState<OrphanInstance | null>(null)
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set())

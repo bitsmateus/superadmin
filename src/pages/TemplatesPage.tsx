@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
+import { useSupportViewValue, useSupportViewText } from '@/components/support/SupportViewContext'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -30,8 +31,10 @@ const SCOPE_LABEL: Record<MessageTemplate['scope'], string> = {
 
 export function TemplatesPage() {
   const templates = useMessageTemplates()
-  const [search, setSearch] = React.useState('')
-  const [scopeFilter, setScopeFilter] = React.useState<MessageTemplate['scope'] | 'all'>('all')
+  const [search, setSearch] = React.useState(useSupportViewText('search'))
+  const [scopeFilter, setScopeFilter] = React.useState<MessageTemplate['scope'] | 'all'>(
+    useSupportViewValue<MessageTemplate['scope'] | 'all'>('scopeFilter', 'all'),
+  )
   const [editing, setEditing] = React.useState<MessageTemplate | null>(null)
   const [creating, setCreating] = React.useState(false)
   const [deleting, setDeleting] = React.useState<MessageTemplate | null>(null)

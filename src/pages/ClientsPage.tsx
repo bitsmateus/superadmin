@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
+import { useSupportViewValue, useSupportViewText } from '@/components/support/SupportViewContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
@@ -64,9 +65,9 @@ export function ClientsPage() {
     db.archiveClient(id)
     toast.success('Cliente arquivado')
   }
-  const [search, setSearch] = React.useState('')
+  const [search, setSearch] = React.useState(useSupportViewText('search'))
   const [stageFilter, setStageFilter] = React.useState<PipelineStage | 'all'>(
-    'all',
+    useSupportViewValue<PipelineStage | 'all'>('stageFilter', 'all'),
   )
   const [openNew, setOpenNew] = React.useState(false)
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)

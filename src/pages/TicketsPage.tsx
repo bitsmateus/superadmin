@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
+import { useSupportViewValue, useSupportViewText } from '@/components/support/SupportViewContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -61,10 +62,16 @@ export function TicketsPage() {
   const tickets = useTickets()
   const booted = useTicketsBooted()
   const active = useActiveTickets()
-  const [search, setSearch] = React.useState('')
-  const [statusFilter, setStatusFilter] = React.useState<TicketStatus | 'all' | 'active'>('active')
-  const [priorityFilter, setPriorityFilter] = React.useState<TicketPriority | 'all'>('all')
-  const [assigneeFilter, setAssigneeFilter] = React.useState<'all' | 'mine' | 'unassigned'>('all')
+  const [search, setSearch] = React.useState(useSupportViewText('search'))
+  const [statusFilter, setStatusFilter] = React.useState<TicketStatus | 'all' | 'active'>(
+    useSupportViewValue<TicketStatus | 'all' | 'active'>('statusFilter', 'active'),
+  )
+  const [priorityFilter, setPriorityFilter] = React.useState<TicketPriority | 'all'>(
+    useSupportViewValue<TicketPriority | 'all'>('priorityFilter', 'all'),
+  )
+  const [assigneeFilter, setAssigneeFilter] = React.useState<'all' | 'mine' | 'unassigned'>(
+    useSupportViewValue<'all' | 'mine' | 'unassigned'>('assigneeFilter', 'all'),
+  )
 
   const { profile } = useAuth()
 

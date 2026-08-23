@@ -1,6 +1,7 @@
 import { useLocation, Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSupportView } from '@/components/support/SupportViewContext'
 
 const labels: Record<string, string> = {
   '': 'Dashboard',
@@ -33,16 +34,24 @@ export interface TopBarProps {
 export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs }: TopBarProps) {
   const location = useLocation()
   const parts = location.pathname.split('/').filter(Boolean)
+  // Numa cópia do menu Suporte a URL é /visao/<id>, que viraria um breadcrumb "visao / a1b2c3".
+  // Mostra o nome da cópia — é o que confirma pro usuário que ele abriu a cópia, e não a original.
+  const supportView = useSupportView()
 
   const computedCrumbs =
     breadcrumbs ??
-    [
-      { label: 'Grupo NX Digital', to: '/' },
-      ...parts.map((p, i) => {
-        const path = '/' + parts.slice(0, i + 1).join('/')
-        return { label: labels[p] || p, to: path }
-      }),
-    ]
+    (supportView
+      ? [
+          { label: 'Grupo NX Digital', to: '/' },
+          { label: supportView.pageName },
+        ]
+      : [
+          { label: 'Grupo NX Digital', to: '/' },
+          ...parts.map((p, i) => {
+            const path = '/' + parts.slice(0, i + 1).join('/')
+            return { label: labels[p] || p, to: path }
+          }),
+        ])
 
   const heading =
     title ??

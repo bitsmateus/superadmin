@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
+import { useSupportViewText } from '@/components/support/SupportViewContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
@@ -76,13 +77,15 @@ export function PipelinePage() {
   const clients = useClients()
   const settings = useSettings()
   const [currentUser] = useCurrentUser()
-  const [search, setSearch] = React.useState('')
+  // Numa cópia do menu ("Duplicar"), o filtro já abre no recorte salvo dela; na rota fixa
+  // /pipeline, useSupportViewValue devolve o padrão e nada muda.
+  const [search, setSearch] = React.useState(useSupportViewText('search'))
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
   const [openNew, setOpenNew] = React.useState(false)
   // Filtros separados: quem vendeu x quem está entregando. Ver só a própria
   // carga de entrega é o caso de uso principal da fila de configuração.
-  const [filterComercial, setFilterComercial] = React.useState('')
-  const [filterEntrega, setFilterEntrega] = React.useState('')
+  const [filterComercial, setFilterComercial] = React.useState(useSupportViewText('filterComercial'))
+  const [filterEntrega, setFilterEntrega] = React.useState(useSupportViewText('filterEntrega'))
   /** Confirmação de estouro do limite de configurações simultâneas. */
   const [wipConfirm, setWipConfirm] = React.useState<{
     client: Client

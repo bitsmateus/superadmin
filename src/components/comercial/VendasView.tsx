@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
@@ -472,6 +473,7 @@ function RegistrarVendaModal({
   const [mrr, setMrr] = React.useState('')
   const [impl, setImpl] = React.useState('')
   const [fechamento, setFechamento] = React.useState('')
+  const [fechadoPor, setFechadoPor] = React.useState('')
 
   React.useEffect(() => {
     if (!open) return
@@ -479,6 +481,7 @@ function RegistrarVendaModal({
     setMrr('')
     setImpl('')
     setFechamento(isoDay(new Date()))
+    setFechadoPor('')
   }, [open])
 
   const submit = () => {
@@ -489,6 +492,7 @@ function RegistrarVendaModal({
       valorMrr: mrr.trim(),
       valorImplementacao: impl.trim(),
       fechamento,
+      sdr: fechadoPor,
       status: 'Vendido',
     })
     toast.success(`Venda de "${trimmed}" registrada.`)
@@ -497,7 +501,7 @@ function RegistrarVendaModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Registrar venda" size="sm">
-      <div className="space-y-3">
+      <div className="space-y-4">
         <Input
           label="Nome"
           value={nome}
@@ -524,6 +528,18 @@ function RegistrarVendaModal({
             />
           </div>
         </div>
+        <Select
+          label="Quem fechou a venda"
+          value={fechadoPor}
+          onChange={(e) => setFechadoPor(e.target.value)}
+          options={[
+            { value: '', label: 'Selecionar...' },
+            { value: 'Arthur', label: 'SDR Arthur' },
+            { value: 'Luis', label: 'SDR Luis' },
+            { value: 'Ian', label: 'Ian' },
+            { value: 'Mateus', label: 'Mateus' },
+          ]}
+        />
         <Input
           label="Data de fechamento"
           type="date"
@@ -531,7 +547,7 @@ function RegistrarVendaModal({
           onChange={(e) => setFechamento(e.target.value)}
         />
       </div>
-      <div className="mt-5 flex justify-end gap-2">
+      <div className="mt-6 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button onClick={submit} disabled={!nome.trim()}>Registrar</Button>
       </div>

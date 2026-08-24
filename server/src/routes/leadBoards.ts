@@ -365,6 +365,21 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       );
       if (!leadRow) return reply.status(404).send({ message: 'Linha não encontrada' });
 
+      // Corrigir o MRR/Implementação numa venda sincronizada (ex.: desconto fechado depois)
+      // atualiza o valor "oficial" no lead de origem também — só nesse sentido (Vendas -> CRM),
+      // nunca o contrário, senão editar o lead depois apagaria a correção feita na venda.
+      const vendaOrigemId = (leadRow as { venda_origem_id?: string | null }).venda_origem_id;
+      if (vendaOrigemId && ('valor_mrr' in patch || 'valor_implementacao' in patch)) {
+        const originSets: string[] = [];
+        const originParams: unknown[] = [];
+        let j = 1;
+        if ('valor_mrr' in patch) { originSets.push(`valor_mrr = $${j++}`); originParams.push(patch.valor_mrr); }
+        if ('valor_implementacao' in patch) { originSets.push(`valor_implementacao = $${j++}`); originParams.push(patch.valor_implementacao); }
+        originParams.push(vendaOrigemId);
+        void query(`UPDATE lead_rows SET ${originSets.join(', ')} WHERE id = $${j}`, originParams)
+          .catch((err) => console.error('[vendas] falha ao propagar valor pro lead de origem', vendaOrigemId, err));
+      }
+
       if (before) {
         void (async () => {
           const actorName = await getActorName(sub);
@@ -405,8 +420,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   );
 
   // DELETE /api/lead-rows/:id — soft delete (marca deleted_at, não apaga de verdade) pra dar
-  // pra restaurar depois pela Lixeira.
-  app.delete<{ Params: { id: string } }>(
+  // pra restaurar depois pela Lixeira. `reason` é opcional (só a aba Vendas pede motivo hoje).
+  app.delete<{ Params: { id: string }; Body: { reason?: string } | undefined }>(
     '/api/lead-rows/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -421,7 +436,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           return reply.status(403).send({ message: 'Acesso negado' });
         }
       }
-      await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1', [req.params.id]);
+      const reason = req.body?.reason?.trim() || null;
+      await query('UPDATE lead_rows SET deleted_at = NOW(), delete_reason = $2 WHERE id = $1', [req.params.id, reason]);
       return reply.status(204).send();
     }
   );

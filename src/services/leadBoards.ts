@@ -46,6 +46,7 @@ type LeadRowRow = {
   sdr: string; numero: string; dor_cliente: string; numero_atendentes: string; valor_mrr: string
   valor_implementacao: string; notes_count: number; position: number; created_at: string; updated_at: string
   deleted_at: string | null
+  delete_reason?: string | null
   fechamento?: string; venda_origem_id?: string | null; venda_revertida?: boolean
 }
 function rowToLead(r: LeadRowRow): LeadRow {
@@ -61,6 +62,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     vendaOrigemId: r.venda_origem_id ?? null,
     vendaRevertida: r.venda_revertida ?? false,
     position: r.position, createdAt: r.created_at, updatedAt: r.updated_at, deletedAt: r.deleted_at ?? null,
+    deleteReason: r.delete_reason ?? null,
   }
 }
 function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
@@ -292,7 +294,7 @@ export const leadBoardsService = {
       status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
       dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
       fechamento: '', vendaOrigemId: null, vendaRevertida: false,
-      position, createdAt: now, updatedAt: now, deletedAt: null, ...initial,
+      position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null, ...initial,
     }
     rows = [...rows, row]
     notify()
@@ -343,14 +345,15 @@ export const leadBoardsService = {
   },
 
   /** Soft delete — o back só marca deleted_at, a linha continua no banco pra dar pra
-   * restaurar depois pela Lixeira (ver getTrash/restoreRow). */
-  async deleteRow(id: string): Promise<void> {
+   * restaurar depois pela Lixeira (ver getTrash/restoreRow). `reason` fica salvo em
+   * delete_reason (só a aba Vendas pede motivo hoje). */
+  async deleteRow(id: string, reason?: string): Promise<void> {
     const prev = rows
     rows = rows.filter((r) => r.id !== id)
     notify()
 
     try {
-      await api.delete(`/api/lead-rows/${id}`)
+      await api.delete(`/api/lead-rows/${id}`, reason !== undefined ? { reason } : undefined)
     } catch (err) {
       rows = prev
       notify()

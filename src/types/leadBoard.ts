@@ -61,6 +61,8 @@ export interface LeadRow {
   updatedAt: string
   /** Preenchido quando o lead está na Lixeira (soft delete) — null = ativo. */
   deletedAt: string | null
+  /** Motivo informado ao excluir uma venda (aba Vendas) — null pra lead comum. */
+  deleteReason: string | null
 }
 
 /**
@@ -74,7 +76,7 @@ export interface LeadRow {
 export type LeadRowField = Exclude<
   keyof LeadRow,
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
-  | 'deletedAt' | 'vendaOrigemId' | 'vendaRevertida'
+  | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

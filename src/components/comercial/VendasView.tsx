@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Plus, ShoppingBag, Trash2 } from 'lucide-react'
+import { Loader2, Plus, RotateCcw, ShoppingBag, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -67,6 +67,7 @@ export function VendasView({ pageId }: { pageId: string }) {
   const [from, setFrom] = React.useState(() => monthRange(0).from)
   const [to, setTo] = React.useState(() => monthRange(0).to)
   const [registrarOpen, setRegistrarOpen] = React.useState(false)
+  const [trashOpen, setTrashOpen] = React.useState(false)
 
   React.useEffect(() => {
     if (periodo === 'personalizado') return
@@ -119,9 +120,14 @@ export function VendasView({ pageId }: { pageId: string }) {
         title="Vendas"
         subtitle={`${validas.length} venda(s) no período`}
         rightSlot={
-          <Button onClick={() => setRegistrarOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
-            Registrar venda
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setTrashOpen(true)} leftIcon={<Trash2 className="h-4 w-4" />}>
+              Lixeira
+            </Button>
+            <Button onClick={() => setRegistrarOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
+              Registrar venda
+            </Button>
+          </div>
         }
       />
 
@@ -205,6 +211,11 @@ export function VendasView({ pageId }: { pageId: string }) {
         onClose={() => setRegistrarOpen(false)}
         boardId={board.id}
       />
+      <VendasTrashModal
+        open={trashOpen}
+        onClose={() => setTrashOpen(false)}
+        boardId={board.id}
+      />
     </>
   )
 }
@@ -233,10 +244,12 @@ function PeriodoTab({
 }
 
 function VendaRow({ row }: { row: LeadRow }) {
-  const remover = () => {
-    if (!window.confirm(`Remover a venda de "${row.nome || 'sem nome'}" desta lista?`)) return
-    void leadBoardsService.deleteRow(row.id)
-  }
+  const [excluirOpen, setExcluirOpen] = React.useState(false)
+
+  // Corrige o valor "oficial" (ex.: desconto negociado no fechamento) — se essa venda veio de um
+  // lead do CRM (vendaOrigemId), o servidor propaga o mesmo valor pro lead de origem também.
+  const saveMrr = (next: string) => leadBoardsService.updateRow(row.id, { valorMrr: next })
+  const saveImpl = (next: string) => leadBoardsService.updateRow(row.id, { valorImplementacao: next })
 
   return (
     <tr
@@ -255,23 +268,151 @@ function VendaRow({ row }: { row: LeadRow }) {
           </span>
         )}
       </td>
-      <td className={cn('px-4 py-3 text-right text-sm tabular-nums', row.vendaRevertida && 'line-through')}>
-        {row.valorMrr ? formatBRLCents(parseBRLCents(row.valorMrr)) : '—'}
+      <td className={cn('px-1 py-1.5 text-sm tabular-nums', row.vendaRevertida && 'line-through')}>
+        <CurrencyField value={row.valorMrr} onSave={saveMrr} className="text-right" />
       </td>
-      <td className={cn('px-4 py-3 text-right text-sm tabular-nums', row.vendaRevertida && 'line-through')}>
-        {row.valorImplementacao ? formatBRLCents(parseBRLCents(row.valorImplementacao)) : '—'}
+      <td className={cn('px-1 py-1.5 text-sm tabular-nums', row.vendaRevertida && 'line-through')}>
+        <CurrencyField value={row.valorImplementacao} onSave={saveImpl} className="text-right" />
       </td>
       <td className="px-2 py-3">
         <button
           type="button"
-          onClick={remover}
-          title="Remover desta lista"
+          onClick={() => setExcluirOpen(true)}
+          title="Excluir venda"
           className="grid h-6 w-6 place-items-center rounded text-gray-300 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </td>
+      <ExcluirVendaModal open={excluirOpen} onClose={() => setExcluirOpen(false)} row={row} />
     </tr>
+  )
+}
+
+/** Excluir só tira a venda desta lista (soft delete, vai pra Lixeira) — o lead de origem no CRM
+ * não é tocado, continua "Vendido" lá normalmente. Pede o motivo pra ficar registrado. */
+function ExcluirVendaModal({
+  open,
+  onClose,
+  row,
+}: {
+  open: boolean
+  onClose: () => void
+  row: LeadRow
+}) {
+  const [motivo, setMotivo] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => { if (open) setMotivo('') }, [open])
+
+  const confirmar = async () => {
+    setSaving(true)
+    try {
+      await leadBoardsService.deleteRow(row.id, motivo.trim())
+      toast.success(`Venda de "${row.nome || 'sem nome'}" excluída.`)
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Excluir venda"
+      description={`Some só desta lista — o lead "${row.nome || 'sem nome'}" continua "Vendido" no CRM normalmente. Vai pra Lixeira, dá pra restaurar depois.`}
+      size="sm"
+    >
+      <Input
+        label="Motivo (opcional)"
+        value={motivo}
+        onChange={(e) => setMotivo(e.target.value)}
+        placeholder="Ex.: venda duplicada, cancelamento..."
+        autoFocus
+        onKeyDown={(e) => { if (e.key === 'Enter') void confirmar() }}
+      />
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button variant="danger" onClick={confirmar} loading={saving}>Excluir</Button>
+      </div>
+    </Modal>
+  )
+}
+
+/** Vendas excluídas desta aba (Lixeira) — mesma trilha de soft delete/restore da Lixeira do CRM,
+ * só que filtrada pro quadro de vendas e mostrando o motivo informado ao excluir. */
+function VendasTrashModal({
+  open,
+  onClose,
+  boardId,
+}: {
+  open: boolean
+  onClose: () => void
+  boardId: string
+}) {
+  const [loading, setLoading] = React.useState(false)
+  const [rows, setRows] = React.useState<LeadRow[]>([])
+  const [restoringId, setRestoringId] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    leadBoardsService.getTrash()
+      .then((all) => setRows(all.filter((r) => r.boardId === boardId)))
+      .catch((err) => toast.error('Falha ao carregar a lixeira: ' + (err as Error).message))
+      .finally(() => setLoading(false))
+  }, [open, boardId])
+
+  const restore = async (id: string) => {
+    setRestoringId(id)
+    try {
+      await leadBoardsService.restoreRow(id)
+      setRows((prev) => prev.filter((r) => r.id !== id))
+      toast.success('Venda restaurada.')
+    } catch (err) {
+      toast.error('Falha ao restaurar: ' + (err as Error).message)
+    } finally {
+      setRestoringId(null)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Lixeira de Vendas" description="Vendas excluídas desta lista — restaure se precisar." size="lg">
+      {loading ? (
+        <div className="grid place-items-center py-10 text-sm text-foreground/50">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="grid place-items-center gap-2 py-10 text-center">
+          <Trash2 className="h-6 w-6 text-foreground/25" />
+          <p className="text-sm text-foreground/40">Nenhuma venda excluída por aqui.</p>
+        </div>
+      ) : (
+        <ul className="max-h-[50vh] divide-y divide-white/[0.04] overflow-y-auto">
+          {rows.map((r) => (
+            <li key={r.id} className="flex items-center gap-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{r.nome || 'Sem nome'}</p>
+                <p className="truncate text-[11px] text-foreground/45">
+                  {r.valorMrr ? formatBRLCents(parseBRLCents(r.valorMrr)) : '—'}
+                  {r.deleteReason && <> · {r.deleteReason}</>}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => restore(r.id)}
+                loading={restoringId === r.id}
+                leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
+              >
+                Restaurar
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   )
 }
 

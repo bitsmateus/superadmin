@@ -372,7 +372,9 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   -- Exclusão é sempre "soft delete" (marca a data, não apaga a linha) — dá pra restaurar
   -- pela Lixeira na tela de Lista. NULL = ativo, preenchido = na lixeira.
-  deleted_at TIMESTAMPTZ
+  deleted_at TIMESTAMPTZ,
+  -- Motivo informado ao excluir uma venda (aba Vendas) — só usado ali; pra lead comum fica vazio.
+  delete_reason TEXT
 );
 
 CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);

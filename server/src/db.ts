@@ -342,6 +342,8 @@ END $$`);
   // pra dar pra restaurar depois pela Lixeira na tela de Lista.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_deleted_at_idx ON lead_rows(deleted_at) WHERE deleted_at IS NOT NULL`);
+  // Motivo informado ao excluir uma venda (aba Vendas) — só usado ali; pra lead comum fica vazio.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS delete_reason TEXT`);
   // Limpa colunas "valor_previsto"/"valor_fechado" que sobraram vazias/duplicadas
   // de boots anteriores (enquanto o bug acima existia) — só remove se a coluna
   // nova ja existir, entao os dados reais ja estao em valor_mrr/valor_implementacao.

@@ -99,6 +99,25 @@ export function VendasView({ pageId }: { pageId: string }) {
     [validas],
   )
 
+  // Mesmos 4 nomes do seletor "Quem fechou a venda" — sempre aparecem, mesmo zerados, pra dar
+  // pra comparar o time inteiro de cara. Alguém fora dessa lista (sdr em branco, nome antigo)
+  // cai num "Outros" só se tiver de fato alguma venda.
+  const resumoPorSdr = React.useMemo(() => {
+    const nomes = ['Arthur', 'Luis', 'Ian', 'Mateus']
+    const buckets = new Map<string, { vendas: number; mrr: number; impl: number }>()
+    for (const nome of nomes) buckets.set(nome, { vendas: 0, mrr: 0, impl: 0 })
+    for (const r of validas) {
+      const nome = nomes.includes(r.sdr) ? r.sdr : (r.sdr || 'Outros')
+      const b = buckets.get(nome) ?? { vendas: 0, mrr: 0, impl: 0 }
+      b.vendas += 1
+      b.mrr += parseBRLCents(r.valorMrr)
+      b.impl += parseBRLCents(r.valorImplementacao)
+      buckets.set(nome, b)
+    }
+    return [...nomes, ...(buckets.has('Outros') ? ['Outros'] : [])]
+      .map((nome) => ({ nome, ...buckets.get(nome)! }))
+  }, [validas])
+
   if (!board) {
     return (
       <>
@@ -202,6 +221,43 @@ export function VendasView({ pageId }: { pageId: string }) {
                   </tr>
                 </tfoot>
               )}
+            </table>
+          </div>
+        </div>
+
+        {/* Resumo por SDR — mesmo período da lista acima */}
+        <div className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm">
+          <div className="border-b border-gray-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Resumo por SDR
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px]">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <th className="px-4 py-3">SDR</th>
+                  <th className="w-28 px-4 py-3 text-right">Vendas</th>
+                  <th className="w-40 px-4 py-3 text-right">MRR (R$)</th>
+                  <th className="w-40 px-4 py-3 text-right">Implementação (R$)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumoPorSdr.map((r) => (
+                  <tr key={r.nome} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/70">
+                    <td className="px-4 py-2.5 text-sm font-medium text-[#323338]">{r.nome}</td>
+                    <td className="px-4 py-2.5 text-right text-sm tabular-nums">{r.vendas}</td>
+                    <td className="px-4 py-2.5 text-right text-sm tabular-nums">{formatBRLCents(r.mrr)}</td>
+                    <td className="px-4 py-2.5 text-right text-sm tabular-nums">{formatBRLCents(r.impl)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-200 bg-gray-50 text-sm font-semibold text-[#323338]">
+                  <td className="px-4 py-3">Equipe</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{validas.length}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-emerald-700">{formatBRLCents(totalMrr)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-emerald-700">{formatBRLCents(totalImpl)}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>

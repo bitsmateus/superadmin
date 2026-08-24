@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { Loader2, Plus, TrendingUp } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowLeft, Loader2, Plus, TrendingUp } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { MILESTONE_NO_SHOW, MILESTONE_VENDIDO } from '@/components/comercial/LeadDashboardView'
@@ -223,6 +224,15 @@ export function PainelMensalPage() {
           { label: 'Dashboard Comercial', to: '/comercial-dashboard' },
           { label: 'Painel do Mês' },
         ]}
+        rightSlot={
+          <Link
+            to="/comercial-dashboard"
+            className="inline-flex items-center gap-1.5 rounded-md bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Voltar
+          </Link>
+        }
       />
 
       <div className="flex min-h-screen flex-col gap-4 bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">

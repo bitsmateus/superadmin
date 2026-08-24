@@ -53,6 +53,38 @@ export function onDbChange(handler: NotifyHandler) {
   handlers.push(handler);
 }
 
+/**
+ * Libera um slug "bonito" (ex.: 'vendas', 'crm-luis') travado por uma aba sobra de teste — quando
+ * uma aba nova nasce com o mesmo nome de outra que já existia, `uniquePageId` evita a colisão
+ * acrescentando "-2". Se a original ficar vazia (sem quadro nenhum, então nunca teve uso real),
+ * apaga ela e renomeia a "-2" pro slug limpo. Não mexe em nada se a original tiver quadro — nesse
+ * caso não dá pra saber se é sobra de teste ou uma aba de verdade, então não arrisca apagar.
+ * Efetivamente roda uma vez só por par: depois que renomeia, `staleId` não existe mais.
+ */
+async function freeUpSlug(cleanId: string, staleWithSuffixId: string) {
+  // DO $$ ... $$ não aceita parâmetro de query ($1/$2) — os dois ids aqui são sempre literais
+  // fixos escritos no próprio código-fonte (nunca vêm de request), então interpolar é seguro.
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM lead_pages WHERE id = '${cleanId}')
+       AND EXISTS (SELECT 1 FROM lead_pages WHERE id = '${staleWithSuffixId}')
+       AND NOT EXISTS (SELECT 1 FROM lead_boards WHERE page = '${cleanId}') THEN
+      DELETE FROM lead_pages WHERE id = '${cleanId}';
+    END IF;
+  END $$`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM lead_pages WHERE id = '${staleWithSuffixId}')
+       AND NOT EXISTS (SELECT 1 FROM lead_pages WHERE id = '${cleanId}') THEN
+      ALTER TABLE lead_boards DROP CONSTRAINT IF EXISTS lead_boards_page_fkey;
+      ALTER TABLE user_page_access DROP CONSTRAINT IF EXISTS user_page_access_page_id_fkey;
+      UPDATE lead_pages SET id = '${cleanId}' WHERE id = '${staleWithSuffixId}';
+      UPDATE lead_boards SET page = '${cleanId}' WHERE page = '${staleWithSuffixId}';
+      UPDATE user_page_access SET page_id = '${cleanId}' WHERE page_id = '${staleWithSuffixId}';
+      ALTER TABLE lead_boards ADD CONSTRAINT lead_boards_page_fkey FOREIGN KEY (page) REFERENCES lead_pages(id);
+      ALTER TABLE user_page_access ADD CONSTRAINT user_page_access_page_id_fkey FOREIGN KEY (page_id) REFERENCES lead_pages(id) ON DELETE CASCADE;
+    END IF;
+  END $$`);
+}
+
 /** Idempotent schema migrations — safe to run on every startup. */
 export async function runMigrations() {
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB`);
@@ -663,33 +695,10 @@ END $$`);
     END IF;
   END $$`);
 
-  // A aba 'vendas' original (sem quadro nenhum — sobra de teste) tranca o slug bonito pra quem
-  // ficou com 'vendas-2' de verdade. Só apaga se estiver mesmo vazia (0 quadros); se tiver
-  // quadro, a constraint de lead_boards.page barra o DELETE de qualquer jeito.
-  await pool.query(`DO $$ BEGIN
-    IF EXISTS (SELECT 1 FROM lead_pages WHERE id = 'vendas')
-       AND EXISTS (SELECT 1 FROM lead_pages WHERE id = 'vendas-2')
-       AND NOT EXISTS (SELECT 1 FROM lead_boards WHERE page = 'vendas') THEN
-      DELETE FROM lead_pages WHERE id = 'vendas';
-    END IF;
-  END $$`);
-
-  // Uma aba "Vendas" criada quando já existia (ou ainda existe) outra com id 'vendas' nasceu
-  // como 'vendas-2' (uniquePageId evita colisão). Assim que a original some, libera o slug bonito
-  // pra quem ficou com o "-2" — efetivamente roda uma vez só, porque depois disso 'vendas-2' não
-  // existe mais pra essa condição bater de novo.
-  await pool.query(`DO $$ BEGIN
-    IF EXISTS (SELECT 1 FROM lead_pages WHERE id = 'vendas-2')
-       AND NOT EXISTS (SELECT 1 FROM lead_pages WHERE id = 'vendas') THEN
-      ALTER TABLE lead_boards DROP CONSTRAINT IF EXISTS lead_boards_page_fkey;
-      ALTER TABLE user_page_access DROP CONSTRAINT IF EXISTS user_page_access_page_id_fkey;
-      UPDATE lead_pages SET id = 'vendas' WHERE id = 'vendas-2';
-      UPDATE lead_boards SET page = 'vendas' WHERE page = 'vendas-2';
-      UPDATE user_page_access SET page_id = 'vendas' WHERE page_id = 'vendas-2';
-      ALTER TABLE lead_boards ADD CONSTRAINT lead_boards_page_fkey FOREIGN KEY (page) REFERENCES lead_pages(id);
-      ALTER TABLE user_page_access ADD CONSTRAINT user_page_access_page_id_fkey FOREIGN KEY (page_id) REFERENCES lead_pages(id) ON DELETE CASCADE;
-    END IF;
-  END $$`);
+  // Abas que nasceram com "-2" no link porque já existia uma sobra de teste vazia no slug limpo
+  // (ver freeUpSlug) — libera o nome bonito assim que a sobra some.
+  await freeUpSlug('vendas', 'vendas-2');
+  await freeUpSlug('crm-luis', 'crm-luis-2');
 
   // "Registrar venda" (tela de Vendas) gravava o valor digitado cru, sem passar pelo mesmo
   // formatador do resto do app (CurrencyField) — "249" ficava salvo como "249" em vez de

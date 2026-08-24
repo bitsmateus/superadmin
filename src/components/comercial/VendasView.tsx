@@ -271,7 +271,7 @@ function PendenteValueCell({
             pendente ? 'bg-amber-400 ring-amber-500' : 'bg-transparent ring-gray-300 hover:ring-gray-400',
           )}
         />
-        <CurrencyField value={value} onSave={onSave} className="flex-1 text-right" />
+        <CurrencyField value={value} onSave={onSave} className="flex-1 bg-transparent text-right" />
       </div>
     </td>
   )

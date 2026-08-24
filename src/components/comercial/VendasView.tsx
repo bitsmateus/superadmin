@@ -46,6 +46,23 @@ export function VendasView({ pageId }: { pageId: string }) {
   )
   const rows = useLeadRows(board?.id ?? '')
 
+  // A venda cai aqui via INSERT feito pelo BACKEND (ao marcar "Vendido" num CRM) — não existe
+  // criação otimista local pra essa linha, então essa tela depende 100% do SSE avisar. Como rede
+  // de segurança, recarrega ao focar a aba/janela e a cada 15s enquanto estiver aberta — assim,
+  // mesmo se uma notificação se perder, a demora pra aparecer é de segundos, não "precisa dar F5".
+  React.useEffect(() => {
+    void leadBoardsService.reloadRows()
+    const onVisible = () => { if (document.visibilityState === 'visible') void leadBoardsService.reloadRows() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    const interval = window.setInterval(() => void leadBoardsService.reloadRows(), 15000)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+      window.clearInterval(interval)
+    }
+  }, [])
+
   const [periodo, setPeriodo] = React.useState<Periodo>('mes_atual')
   const [from, setFrom] = React.useState(() => monthRange(0).from)
   const [to, setTo] = React.useState(() => monthRange(0).to)

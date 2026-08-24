@@ -205,6 +205,10 @@ export const leadBoardsService = {
   /** Recarrega os quadros na hora (sem esperar o SSE) — usado depois de mutações em lote no
    * back (ex.: duplicar uma aba inteira) pra garantir que o cache já chega atualizado. */
   reloadBoards,
+  /** Recarrega as linhas na hora (sem esperar o SSE) — rede de segurança pra telas que dependem
+   * de uma linha criada pelo BACKEND (ex.: venda sincronizada automaticamente ao marcar
+   * "Vendido" num CRM), onde não existe otimismo local de "acabei de criar isso aqui". */
+  reloadRows,
   getRows(): LeadRow[] { return rows },
   getRowsByBoard(boardId: string): LeadRow[] {
     return rows.filter((r) => r.boardId === boardId).sort((a, b) => a.position - b.position)

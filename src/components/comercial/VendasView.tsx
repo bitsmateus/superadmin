@@ -243,6 +243,40 @@ function PeriodoTab({
   )
 }
 
+/** Fundo amarelo = pagamento pendente daquele valor — marcação manual, ninguém calcula isso
+ * sozinho. Toda venda nasce pendente (default true no banco); a pessoa desmarca quando confirma
+ * o pagamento clicando na bolinha. Sem cor = pago/tudo certo. */
+function PendenteValueCell({
+  value,
+  onSave,
+  pendente,
+  onTogglePendente,
+  strikethrough,
+}: {
+  value: string
+  onSave: (next: string) => void
+  pendente: boolean
+  onTogglePendente: () => void
+  strikethrough?: boolean
+}) {
+  return (
+    <td className={cn('px-1 py-1.5 text-sm tabular-nums', pendente && 'bg-amber-100', strikethrough && 'line-through')}>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onTogglePendente}
+          title={pendente ? 'Pendente de pagamento — clique para marcar como pago' : 'Pago — clique para marcar como pendente'}
+          className={cn(
+            'h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset transition-colors',
+            pendente ? 'bg-amber-400 ring-amber-500' : 'bg-transparent ring-gray-300 hover:ring-gray-400',
+          )}
+        />
+        <CurrencyField value={value} onSave={onSave} className="flex-1 text-right" />
+      </div>
+    </td>
+  )
+}
+
 function VendaRow({ row }: { row: LeadRow }) {
   const [excluirOpen, setExcluirOpen] = React.useState(false)
 
@@ -268,12 +302,20 @@ function VendaRow({ row }: { row: LeadRow }) {
           </span>
         )}
       </td>
-      <td className={cn('px-1 py-1.5 text-sm tabular-nums', row.vendaRevertida && 'line-through')}>
-        <CurrencyField value={row.valorMrr} onSave={saveMrr} className="text-right" />
-      </td>
-      <td className={cn('px-1 py-1.5 text-sm tabular-nums', row.vendaRevertida && 'line-through')}>
-        <CurrencyField value={row.valorImplementacao} onSave={saveImpl} className="text-right" />
-      </td>
+      <PendenteValueCell
+        value={row.valorMrr}
+        onSave={saveMrr}
+        pendente={row.mrrPendente}
+        onTogglePendente={() => leadBoardsService.updateRow(row.id, { mrrPendente: !row.mrrPendente })}
+        strikethrough={row.vendaRevertida}
+      />
+      <PendenteValueCell
+        value={row.valorImplementacao}
+        onSave={saveImpl}
+        pendente={row.implPendente}
+        onTogglePendente={() => leadBoardsService.updateRow(row.id, { implPendente: !row.implPendente })}
+        strikethrough={row.vendaRevertida}
+      />
       <td className="px-2 py-3">
         <button
           type="button"

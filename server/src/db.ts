@@ -344,6 +344,10 @@ END $$`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_deleted_at_idx ON lead_rows(deleted_at) WHERE deleted_at IS NOT NULL`);
   // Motivo informado ao excluir uma venda (aba Vendas) — só usado ali; pra lead comum fica vazio.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS delete_reason TEXT`);
+  // Marca manual (só a pessoa liga/desliga, nada calcula isso) de pagamento pendente — usada só
+  // na aba Vendas. Default true: toda venda nasce "pendente" até alguém confirmar o pagamento.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS mrr_pendente BOOLEAN NOT NULL DEFAULT true`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS impl_pendente BOOLEAN NOT NULL DEFAULT true`);
   // Limpa colunas "valor_previsto"/"valor_fechado" que sobraram vazias/duplicadas
   // de boots anteriores (enquanto o bug acima existia) — só remove se a coluna
   // nova ja existir, entao os dados reais ja estao em valor_mrr/valor_implementacao.

@@ -48,6 +48,7 @@ type LeadRowRow = {
   deleted_at: string | null
   delete_reason?: string | null
   fechamento?: string; venda_origem_id?: string | null; venda_revertida?: boolean
+  mrr_pendente?: boolean; impl_pendente?: boolean
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
@@ -63,6 +64,8 @@ function rowToLead(r: LeadRowRow): LeadRow {
     vendaRevertida: r.venda_revertida ?? false,
     position: r.position, createdAt: r.created_at, updatedAt: r.updated_at, deletedAt: r.deleted_at ?? null,
     deleteReason: r.delete_reason ?? null,
+    mrrPendente: r.mrr_pendente ?? true,
+    implPendente: r.impl_pendente ?? true,
   }
 }
 function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
@@ -86,6 +89,8 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('numeroAtendentes' in patch) row.numero_atendentes = patch.numeroAtendentes
   if ('valorMrr' in patch) row.valor_mrr = patch.valorMrr
   if ('valorImplementacao' in patch) row.valor_implementacao = patch.valorImplementacao
+  if ('mrrPendente' in patch) row.mrr_pendente = patch.mrrPendente
+  if ('implPendente' in patch) row.impl_pendente = patch.implPendente
   if ('boardId' in patch) row.board_id = patch.boardId
   if ('position' in patch) row.position = patch.position
   return row
@@ -294,7 +299,8 @@ export const leadBoardsService = {
       status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
       dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
       fechamento: '', vendaOrigemId: null, vendaRevertida: false,
-      position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null, ...initial,
+      position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
+      mrrPendente: true, implPendente: true, ...initial,
     }
     rows = [...rows, row]
     notify()

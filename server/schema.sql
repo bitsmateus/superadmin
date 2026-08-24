@@ -374,7 +374,11 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   -- pela Lixeira na tela de Lista. NULL = ativo, preenchido = na lixeira.
   deleted_at TIMESTAMPTZ,
   -- Motivo informado ao excluir uma venda (aba Vendas) — só usado ali; pra lead comum fica vazio.
-  delete_reason TEXT
+  delete_reason TEXT,
+  -- Marca manual (só a pessoa liga/desliga) de pagamento pendente — usada só na aba Vendas.
+  -- Default true: toda venda nasce "pendente" até alguém confirmar o pagamento.
+  mrr_pendente BOOLEAN NOT NULL DEFAULT true,
+  impl_pendente BOOLEAN NOT NULL DEFAULT true
 );
 
 CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);

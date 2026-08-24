@@ -63,6 +63,10 @@ export interface LeadRow {
   deletedAt: string | null
   /** Motivo informado ao excluir uma venda (aba Vendas) — null pra lead comum. */
   deleteReason: string | null
+  /** Marca manual (ninguém calcula, só a pessoa liga/desliga) de pagamento pendente — usada só
+   * na aba Vendas, pro fundo amarelo do valor. Default true: nasce pendente até confirmar. */
+  mrrPendente: boolean
+  implPendente: boolean
 }
 
 /**
@@ -76,7 +80,7 @@ export interface LeadRow {
 export type LeadRowField = Exclude<
   keyof LeadRow,
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
-  | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida'
+  | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

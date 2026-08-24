@@ -97,6 +97,7 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('observacoes' in patch) row.observacoes = patch.observacoes
   if ('boardId' in patch) row.board_id = patch.boardId
   if ('position' in patch) row.position = patch.position
+  if ('createdAt' in patch) row.created_at = patch.createdAt
   return row
 }
 

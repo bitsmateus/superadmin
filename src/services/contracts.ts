@@ -20,9 +20,14 @@ export interface Contract {
   conteudo: string
   /** Marcação manual — a pessoa marca quando o cliente devolve assinado. */
   status: ContractStatus
-  /** Linha de origem no quadro de Vendas, quando o contrato nasceu da fila "Pendente de
-   * contrato" — null se foi criado direto (sem partir de uma venda). */
+  /** Linha de origem no quadro de Vendas — legado, não é mais usado pra alimentar "Pendente de
+   * contrato" (isso agora vem de `clientId`), mas fica pra contratos antigos que já tinham. */
   vendaLeadId: string | null
+  /** Cliente que preencheu a ficha de cadastro pública, quando o contrato nasceu da fila
+   * "Pendente de contrato" — null se foi criado direto (contrato avulso). */
+  clientId: string | null
+  /** Data em que foi marcado como assinado — null se nunca assinado ou desmarcado depois. */
+  signedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -30,8 +35,8 @@ export interface Contract {
 type TemplateRow = { id: string; name: string; conteudo: string; created_at: string; updated_at: string }
 type ContractRow = {
   id: string; board_id: string; template_id: string | null; campos: Record<string, string>
-  conteudo: string; status: ContractStatus; venda_lead_id: string | null
-  created_at: string; updated_at: string
+  conteudo: string; status: ContractStatus; venda_lead_id: string | null; client_id: string | null
+  signed_at: string | null; created_at: string; updated_at: string
 }
 
 function rowToTemplate(r: TemplateRow): ContractTemplate {
@@ -41,6 +46,7 @@ function rowToContract(r: ContractRow): Contract {
   return {
     id: r.id, boardId: r.board_id, templateId: r.template_id, campos: r.campos ?? {},
     conteudo: r.conteudo, status: r.status ?? 'pendente', vendaLeadId: r.venda_lead_id ?? null,
+    clientId: r.client_id ?? null, signedAt: r.signed_at ?? null,
     createdAt: r.created_at, updatedAt: r.updated_at,
   }
 }
@@ -107,9 +113,9 @@ export const contractsService = {
     templateId: string | null,
     campos: Record<string, string>,
     conteudo: string,
-    vendaLeadId?: string | null,
+    clientId?: string | null,
   ): Promise<Contract> {
-    const row = await api.post<ContractRow>('/api/contracts', { boardId, templateId, campos, conteudo, vendaLeadId })
+    const row = await api.post<ContractRow>('/api/contracts', { boardId, templateId, campos, conteudo, clientId })
     await reload()
     return rowToContract(row)
   },

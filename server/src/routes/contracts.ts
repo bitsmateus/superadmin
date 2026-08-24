@@ -46,7 +46,10 @@ export async function contractRoutes(app: FastifyInstance) {
     return query('SELECT * FROM contracts ORDER BY created_at DESC');
   });
 
-  app.post<{ Body: { boardId?: string; templateId?: string | null; campos?: Record<string, string>; conteudo?: string; vendaLeadId?: string | null } }>(
+  app.post<{ Body: {
+    boardId?: string; templateId?: string | null; campos?: Record<string, string>; conteudo?: string
+    vendaLeadId?: string | null; clientId?: string | null
+  } }>(
     '/api/contracts',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -58,8 +61,11 @@ export async function contractRoutes(app: FastifyInstance) {
       if (allowed !== null && !allowed.includes(boardId)) return reply.status(403).send({ message: 'Acesso negado' });
 
       const [contract] = await query(
-        `INSERT INTO contracts (board_id, template_id, campos, conteudo, venda_lead_id) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [boardId, req.body.templateId ?? null, JSON.stringify(req.body.campos ?? {}), req.body.conteudo ?? '', req.body.vendaLeadId ?? null]
+        `INSERT INTO contracts (board_id, template_id, campos, conteudo, venda_lead_id, client_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [
+          boardId, req.body.templateId ?? null, JSON.stringify(req.body.campos ?? {}), req.body.conteudo ?? '',
+          req.body.vendaLeadId ?? null, req.body.clientId ?? null,
+        ]
       );
       return reply.status(201).send(contract);
     }
@@ -81,7 +87,12 @@ export async function contractRoutes(app: FastifyInstance) {
       let i = 1;
       if (req.body.campos !== undefined) { sets.push(`campos = $${i++}`); params.push(JSON.stringify(req.body.campos)); }
       if (req.body.conteudo !== undefined) { sets.push(`conteudo = $${i++}`); params.push(req.body.conteudo); }
-      if (req.body.status !== undefined) { sets.push(`status = $${i++}`); params.push(req.body.status); }
+      if (req.body.status !== undefined) {
+        sets.push(`status = $${i++}`); params.push(req.body.status);
+        // signed_at é derivada do status, não vem do cliente — evita relógio do navegador
+        // divergir do servidor e mantém "quando foi assinado" consistente com "está assinado".
+        sets.push(req.body.status === 'assinado' ? `signed_at = NOW()` : `signed_at = NULL`);
+      }
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       sets.push(`updated_at = NOW()`);
 

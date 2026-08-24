@@ -802,6 +802,15 @@ END $$`);
   await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS venda_lead_id UUID REFERENCES lead_rows(id) ON DELETE SET NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS contracts_venda_lead_id_idx ON contracts(venda_lead_id)`);
 
+  // "Pendente de contrato" passou a ser alimentada pela ficha de cadastro pública (app/ficha →
+  // tabela clients, clients.ficha_cadastro) em vez de vendas registradas manualmente no CRM —
+  // client_id liga o contrato ao cliente que preencheu a ficha. signed_at é a data em que o
+  // contrato foi marcado como assinado (null = nunca assinado ou desmarcado depois), usada pro
+  // filtro por mês da aba "Contratos assinados".
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS client_id UUID REFERENCES clients(id) ON DELETE SET NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS contracts_client_id_idx ON contracts(client_id)`);
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_at TIMESTAMPTZ`);
+
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_contract_templates ON contract_templates;

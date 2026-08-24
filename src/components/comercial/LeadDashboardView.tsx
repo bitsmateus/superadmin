@@ -264,11 +264,14 @@ export interface LeadDashboardViewProps {
   /** Rótulo da 2ª aba — "Dashboard do SDR" por padrão (Novos Leads, com os 2 SDRs juntos).
    * CRM NX Luis/Arthur passam "Minhas métricas" porque ali só existe o SDR dono da aba. */
   sdrTabLabel?: string
+  /** Numa aba travada num SDR só, o "Dashboard geral" (leads por quadro/status/dia de contato de
+   * TODOS os SDRs) não faz sentido — some o alternador de abas e mostra só "Minhas métricas". */
+  onlySdr?: boolean
 }
 
 /** Painel só de visualização — nada aqui é editável, é resumo de leitura dos leads filtrados. */
-export function LeadDashboardView({ rows, boards, sdrTabLabel = 'Dashboard do SDR' }: LeadDashboardViewProps) {
-  const [subView, setSubView] = React.useState<'geral' | 'sdr'>('geral')
+export function LeadDashboardView({ rows, boards, sdrTabLabel = 'Dashboard do SDR', onlySdr = false }: LeadDashboardViewProps) {
+  const [subView, setSubView] = React.useState<'geral' | 'sdr'>(onlySdr ? 'sdr' : 'geral')
   const statusLabels = useLeadLabels('status')
   const diaContatoLabels = useLeadLabels('diaContato')
 
@@ -318,32 +321,34 @@ export function LeadDashboardView({ rows, boards, sdrTabLabel = 'Dashboard do SD
 
   return (
     <div className={cn('flex-1 space-y-4')}>
-      <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
-        <button
-          type="button"
-          onClick={() => setSubView('geral')}
-          className={cn(
-            'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-            subView === 'geral' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
-          )}
-        >
-          <BarChart3 className="h-3.5 w-3.5" />
-          Dashboard geral
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubView('sdr')}
-          className={cn(
-            'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-            subView === 'sdr' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
-          )}
-        >
-          <UserRound className="h-3.5 w-3.5" />
-          {sdrTabLabel}
-        </button>
-      </div>
+      {!onlySdr && (
+        <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+          <button
+            type="button"
+            onClick={() => setSubView('geral')}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
+              subView === 'geral' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+            )}
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Dashboard geral
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubView('sdr')}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
+              subView === 'sdr' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+            )}
+          >
+            <UserRound className="h-3.5 w-3.5" />
+            {sdrTabLabel}
+          </button>
+        </div>
+      )}
 
-      {subView === 'sdr' ? (
+      {(onlySdr || subView === 'sdr') ? (
         <SdrMetricsGrid rows={rows} />
       ) : (
         <>

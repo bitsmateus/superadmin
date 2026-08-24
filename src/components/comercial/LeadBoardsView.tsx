@@ -1257,7 +1257,9 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   React.useEffect(() => {
     try { window.localStorage.setItem('comercial_view_mode', view) } catch { /* ignore */ }
   }, [view])
-  const VIEW_LABEL: Record<'list' | 'kanban' | 'dashboard', string> = { list: 'lista', kanban: 'Kanban', dashboard: 'Dashboard' }
+  const VIEW_LABEL: Record<'list' | 'kanban' | 'dashboard', string> = {
+    list: 'lista', kanban: 'Kanban', dashboard: sdrLock ? 'Minhas métricas' : 'Dashboard',
+  }
   const changeView = (next: 'list' | 'kanban' | 'dashboard') => {
     if (next === view) return
     setView(next)
@@ -1314,7 +1316,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                 className={view === 'dashboard' ? 'bg-accent/10 text-accent' : undefined}
                 title="Ver resumo em relatório — só visualização"
               >
-                Dashboard
+                {sdrLock ? 'Minhas métricas' : 'Dashboard'}
               </ToolbarButton>
               <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
                 <button
@@ -1368,7 +1370,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                 action={<Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button>}
               />
             ) : view === 'dashboard' ? (
-              <LeadDashboardView rows={dashboardRows} boards={boards} sdrTabLabel={sdrLock ? 'Minhas métricas' : undefined} />
+              <LeadDashboardView rows={dashboardRows} boards={boards} sdrTabLabel={sdrLock ? 'Minhas métricas' : undefined} onlySdr={!!sdrLock} />
             ) : view === 'kanban' ? (
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} />
             ) : (

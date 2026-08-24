@@ -153,14 +153,14 @@ function MetricCell({ value, sub }: { value: React.ReactNode; sub?: string }) {
   )
 }
 
-function SdrMetricsTable({ bySdr }: { bySdr: SdrMetrics[] }) {
+function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMetrics[]; title?: string }) {
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#323338]">
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
           <UserRound className="h-4 w-4" />
         </span>
-        Métricas por SDR
+        {title}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] border-collapse text-left text-xs">
@@ -205,7 +205,7 @@ function SdrMetricsTable({ bySdr }: { bySdr: SdrMetrics[] }) {
  * momento (mesmo se hoje já virou Vendido/No-show) — é o denominador do funil. "No-show" e
  * "Vendas" usam sempre o marco mais recente da linha do tempo de cada lead, não o status literal
  * atual, pra não contar duas vezes reagendamentos. */
-function SdrMetricsGrid({ rows }: { rows: LeadRow[] }) {
+export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: string }) {
   const milestones = useLeadMilestones()
   const sdrLabels = useLeadLabels('sdr')
   const milestoneById = React.useMemo(
@@ -250,7 +250,7 @@ function SdrMetricsGrid({ rows }: { rows: LeadRow[] }) {
 
   return (
     <div className="space-y-4">
-      <SdrMetricsTable bySdr={bySdr} />
+      <SdrMetricsTable bySdr={bySdr} title={title} />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {bySdr.map((m) => <SdrCard key={m.sdr} metrics={m} />)}
       </div>

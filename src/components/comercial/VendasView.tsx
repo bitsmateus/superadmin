@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
 import { leadBoardsService } from '@/services/leadBoards'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
@@ -193,13 +194,14 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <th className="w-28 px-4 py-3">SDR</th>
                   <th className="w-48 px-4 py-3 text-right">Valor MRR</th>
                   <th className="w-56 px-4 py-3 text-right">Valor de implementação</th>
+                  <th className="w-56 px-4 py-3">Observações</th>
                   <th className="w-10 px-2 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
                       Nenhuma venda neste período.
                     </td>
                   </tr>
@@ -219,6 +221,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                     <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
                       {formatBRLCents(totalImpl)}
                     </td>
+                    <td />
                     <td />
                   </tr>
                 </tfoot>
@@ -336,6 +339,34 @@ function PendenteValueCell({
   )
 }
 
+/** Comentário livre pro controle manual (ex.: "paga metade metade", condição especial negociada)
+ * — só existe aqui na aba Vendas, não é uma coluna do CRM. */
+function ObservacoesCell({ value, onSave }: { value: string; onSave: (next: string) => void }) {
+  const [local, setLocal] = React.useState(value)
+  const focusedRef = React.useRef(false)
+  const debouncedSave = useDebouncedCallback((next: string) => onSave(next), 600)
+
+  React.useEffect(() => {
+    if (!focusedRef.current) setLocal(value)
+  }, [value])
+
+  return (
+    <td className="px-2 py-1.5">
+      <input
+        value={local}
+        placeholder="Ex.: paga metade/metade..."
+        onFocus={() => { focusedRef.current = true }}
+        onChange={(e) => { setLocal(e.target.value); debouncedSave(e.target.value) }}
+        onBlur={() => {
+          focusedRef.current = false
+          if (local !== value) onSave(local)
+        }}
+        className="h-9 w-full rounded-lg bg-gray-50 px-2 text-sm text-gray-700 outline-none focus:bg-white focus:ring-1 focus:ring-accent/30"
+      />
+    </td>
+  )
+}
+
 function VendaRow({ row }: { row: LeadRow }) {
   const [excluirOpen, setExcluirOpen] = React.useState(false)
 
@@ -343,6 +374,7 @@ function VendaRow({ row }: { row: LeadRow }) {
   // lead do CRM (vendaOrigemId), o servidor propaga o mesmo valor pro lead de origem também.
   const saveMrr = (next: string) => leadBoardsService.updateRow(row.id, { valorMrr: next })
   const saveImpl = (next: string) => leadBoardsService.updateRow(row.id, { valorImplementacao: next })
+  const saveObs = (next: string) => leadBoardsService.updateRow(row.id, { observacoes: next })
 
   return (
     <tr
@@ -378,6 +410,7 @@ function VendaRow({ row }: { row: LeadRow }) {
         onTogglePendente={() => leadBoardsService.updateRow(row.id, { implPendente: !row.implPendente })}
         strikethrough={row.vendaRevertida}
       />
+      <ObservacoesCell value={row.observacoes} onSave={saveObs} />
       <td className="px-2 py-3">
         <button
           type="button"
@@ -535,6 +568,7 @@ function RegistrarVendaModal({
   const [impl, setImpl] = React.useState('')
   const [fechamento, setFechamento] = React.useState('')
   const [fechadoPor, setFechadoPor] = React.useState('')
+  const [observacoes, setObservacoes] = React.useState('')
 
   React.useEffect(() => {
     if (!open) return
@@ -543,6 +577,7 @@ function RegistrarVendaModal({
     setImpl('')
     setFechamento(isoDay(new Date()))
     setFechadoPor('')
+    setObservacoes('')
   }, [open])
 
   const submit = () => {
@@ -555,6 +590,7 @@ function RegistrarVendaModal({
       fechamento,
       sdr: fechadoPor,
       status: 'Vendido',
+      observacoes: observacoes.trim(),
     })
     toast.success(`Venda de "${trimmed}" registrada.`)
     onClose()
@@ -609,6 +645,12 @@ function RegistrarVendaModal({
             onChange={(e) => setFechamento(e.target.value)}
           />
         </div>
+        <Input
+          label="Observações (opcional)"
+          value={observacoes}
+          onChange={(e) => setObservacoes(e.target.value)}
+          placeholder="Ex.: paga metade/metade, condição especial..."
+        />
       </div>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>

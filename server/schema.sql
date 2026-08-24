@@ -378,7 +378,10 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   -- Marca manual (só a pessoa liga/desliga) de pagamento pendente — usada só na aba Vendas.
   -- Default true: toda venda nasce "pendente" até alguém confirmar o pagamento.
   mrr_pendente BOOLEAN NOT NULL DEFAULT true,
-  impl_pendente BOOLEAN NOT NULL DEFAULT true
+  impl_pendente BOOLEAN NOT NULL DEFAULT true,
+  -- Comentário livre pro controle manual na aba Vendas (ex.: "paga metade metade", condição
+  -- especial negociada). Só aparece/edita lá, não é uma coluna do quadro Monday-style.
+  observacoes TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);

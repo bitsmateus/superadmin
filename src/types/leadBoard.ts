@@ -67,6 +67,9 @@ export interface LeadRow {
    * na aba Vendas, pro fundo amarelo do valor. Default true: nasce pendente até confirmar. */
   mrrPendente: boolean
   implPendente: boolean
+  /** Comentário livre pro controle manual — só aparece/edita na aba Vendas (ex.: "paga metade
+   * metade", condição especial negociada). Não é uma coluna do quadro Monday-style. */
+  observacoes: string
 }
 
 /**
@@ -81,6 +84,7 @@ export type LeadRowField = Exclude<
   keyof LeadRow,
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
+  | 'observacoes'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

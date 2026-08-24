@@ -727,6 +727,11 @@ END $$`);
   // outra aba, mesmo se a ordem delas mudar no futuro.
   await pool.query(`UPDATE lead_pages SET position = -1 WHERE lower(name) LIKE '%venda%' AND position <> -1`);
 
+  // Observações da venda (aba Vendas) — comentário livre pro controle manual (ex.: "paga metade
+  // metade", condição especial negociada). Só aparece/edita na tela de Vendas, não é uma coluna
+  // do quadro Monday-style.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS observacoes TEXT NOT NULL DEFAULT ''`);
+
   // Painel do Mês (Dashboard Comercial > Painel do Mês) — um registro por mês (id = 'YYYY-MM')
   // só com os poucos campos manuais (investimento em tráfego, leads gerados, permanência média).
   // Todo o resto do painel (funil, MRR, ROI) é calculado ao vivo em cima de lead_rows/lead_boards,

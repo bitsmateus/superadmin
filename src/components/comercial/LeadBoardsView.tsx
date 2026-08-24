@@ -1222,7 +1222,10 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   }
 
   const handleCreateRow = (boardId: string) => {
-    const row = leadBoardsService.createRow(boardId)
+    // Aba travada num SDR (CRM Luis/Arthur) — lead criado aqui já nasce com o SDR certo, já que a
+    // coluna nem aparece pra escolher manualmente. Sem isso, o lead ficava "Sem SDR" nos
+    // dashboards (o funil por SDR conta pelo campo, não por em qual aba o lead está).
+    const row = leadBoardsService.createRow(boardId, sdrLock ? { sdr: sdrLock } : undefined)
     setFocusRowId(row.id)
   }
 

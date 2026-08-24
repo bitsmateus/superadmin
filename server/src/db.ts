@@ -708,6 +708,20 @@ END $$`);
   await pool.query(`UPDATE lead_rows SET valor_mrr = valor_mrr || ',00' WHERE valor_mrr ~ '^[0-9]+$'`);
   await pool.query(`UPDATE lead_rows SET valor_implementacao = valor_implementacao || ',00' WHERE valor_implementacao ~ '^[0-9]+$'`);
 
+  // Lead criado direto numa aba travada num SDR (CRM Luis/Arthur) sem o campo sdr preenchido —
+  // acontecia porque a coluna SDR nem aparece lá pra escolher manualmente (antes desse boot, o
+  // front também não preenchia sozinho na criação). Casa pelo NOME da aba, igual sdrLockForPageName
+  // no front, pra funcionar mesmo se a aba for renomeada. Roda em todo boot de propósito — também
+  // corrige lead importado via CSV sem SDR, não é só um backfill de uma vez.
+  await pool.query(`UPDATE lead_rows lr SET sdr = 'Luis'
+    FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page
+    WHERE lr.board_id = lb.id AND lower(lp.name) LIKE '%luis%'
+      AND (lr.sdr IS NULL OR lr.sdr = '') AND lr.deleted_at IS NULL`);
+  await pool.query(`UPDATE lead_rows lr SET sdr = 'Arthur'
+    FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page
+    WHERE lr.board_id = lb.id AND lower(lp.name) LIKE '%arthur%'
+      AND (lr.sdr IS NULL OR lr.sdr = '') AND lr.deleted_at IS NULL`);
+
   console.log('[db] migrations applied');
 }
 

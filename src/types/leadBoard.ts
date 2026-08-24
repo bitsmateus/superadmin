@@ -26,6 +26,9 @@ export interface LeadBoard {
   createdAt: string
   /** Quadro que recebe as oportunidades quando um lead vira "Vendido". Só um no sistema. */
   isVendas: boolean
+  /** Quadro que renderiza a ContratoView (geração de contrato a partir do CNPJ) em vez do quadro
+   * genérico. Sem exclusividade — pode ter mais de um no sistema. */
+  isContrato: boolean
 }
 
 export interface LeadRow {

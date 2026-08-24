@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  FileText,
   Filter,
   GripVertical,
   KanbanSquare,
@@ -846,6 +847,25 @@ function BoardGroup({
             )}
           >
             <ShoppingBag className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              leadBoardsService.updateBoard(board.id, { isContrato: !board.isContrato })
+            }}
+            title={
+              board.isContrato
+                ? 'Esta aba gera contratos a partir do CNPJ — clique pra desligar'
+                : 'Usar esta aba pra gerar contratos a partir do CNPJ'
+            }
+            className={cn(
+              'grid h-5 w-5 shrink-0 place-items-center rounded transition-colors',
+              board.isContrato
+                ? 'text-accent'
+                : 'text-gray-300 hover:bg-black/5 hover:text-gray-600',
+            )}
+          >
+            <FileText className="h-3 w-3" />
           </button>
           <button
             type="button"

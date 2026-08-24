@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg';
+import { DEFAULT_CONTRACT_HTML } from './data/contractTemplateSeed.js';
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -747,6 +748,54 @@ END $$`);
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_commercial_months ON commercial_months;
       CREATE TRIGGER notify_commercial_months AFTER INSERT OR UPDATE OR DELETE ON commercial_months
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
+  // Aba Contrato (Dashboard Comercial) — quadro marcado com is_contrato renderiza a ContratoView
+  // (geração de contrato a partir do CNPJ) em vez do quadro Monday-style genérico. Sem
+  // exclusividade tipo is_vendas: pode ter mais de um quadro de contrato no sistema.
+  await pool.query(`ALTER TABLE lead_boards ADD COLUMN IF NOT EXISTS is_contrato BOOLEAN NOT NULL DEFAULT false`);
+
+  // Modelo(s) padrão de contrato — texto em HTML com placeholders "<<...>>" (guardados como
+  // entidades HTML, &lt;&lt;...&gt;&gt;, pra ficar válido dentro do próprio HTML). O formulário da
+  // aba Contrato detecta cada placeholder no texto do modelo e vira um campo pra preencher.
+  await pool.query(`CREATE TABLE IF NOT EXISTS contract_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    conteudo TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(
+    `INSERT INTO contract_templates (name, conteudo)
+     SELECT 'Contrato Padrão NX', $1
+     WHERE NOT EXISTS (SELECT 1 FROM contract_templates)`,
+    [DEFAULT_CONTRACT_HTML]
+  );
+
+  // Um contrato gerado = um cliente. "campos" guarda o valor que a pessoa preencheu pra cada
+  // placeholder do modelo (inclui campos.CNPJ, usado pra disparar a busca automática); "conteudo"
+  // é o texto final já com os placeholders substituídos — independente do modelo dali pra frente,
+  // editar o modelo depois não muda contratos já gerados.
+  await pool.query(`CREATE TABLE IF NOT EXISTS contracts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,
+    template_id UUID REFERENCES contract_templates(id) ON DELETE SET NULL,
+    campos JSONB NOT NULL DEFAULT '{}',
+    conteudo TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS contracts_board_id_idx ON contracts(board_id)`);
+
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_contract_templates ON contract_templates;
+      CREATE TRIGGER notify_contract_templates AFTER INSERT OR UPDATE OR DELETE ON contract_templates
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_contracts ON contracts;
+      CREATE TRIGGER notify_contracts AFTER INSERT OR UPDATE OR DELETE ON contracts
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);

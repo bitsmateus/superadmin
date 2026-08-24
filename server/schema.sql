@@ -308,7 +308,10 @@ CREATE TABLE IF NOT EXISTS lead_boards (
   position INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   -- true no quadro que recebe as oportunidades de venda (so um no sistema).
-  is_vendas BOOLEAN NOT NULL DEFAULT false
+  is_vendas BOOLEAN NOT NULL DEFAULT false,
+  -- Quadro marcado com is_contrato renderiza a ContratoView (geração de contrato a partir do
+  -- CNPJ) em vez do quadro Monday-style genérico. Sem exclusividade tipo is_vendas.
+  is_contrato BOOLEAN NOT NULL DEFAULT false
 );
 
 -- Legado: allowlist por QUADRO — substituída por user_page_access (allowlist por ABA inteira,
@@ -865,6 +868,28 @@ SELECT * FROM (VALUES
   ('status', 'Desqualificado',          '#374151', 13)
 ) AS v(field, name, color, position)
 WHERE NOT EXISTS (SELECT 1 FROM lead_labels ll WHERE ll.field = v.field AND ll.name = v.name);
+
+-- ---------- contract_templates / contracts ----------
+-- Aba Contrato (Dashboard Comercial) -- modelo(s) padrao de contrato em HTML com placeholders
+-- "<<...>>" (guardados como entidades HTML) e os contratos gerados por cliente.
+CREATE TABLE IF NOT EXISTS contract_templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  conteudo TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS contracts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,
+  template_id UUID REFERENCES contract_templates(id) ON DELETE SET NULL,
+  campos JSONB NOT NULL DEFAULT '{}',
+  conteudo TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS contracts_board_id_idx ON contracts(board_id);
 
 -- ---------- commercial_months ----------
 -- Painel do Mês (Dashboard Comercial) — um registro por mês (id = 'YYYY-MM') só com os campos

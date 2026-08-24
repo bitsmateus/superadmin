@@ -10,7 +10,7 @@ import { query, queryOne } from '../db.js';
  * null = sem restrição (vê tudo) · [] = não vê nenhum quadro · string[] = allowlist de board ids.
  * Só faz consulta extra pro papel 'suporte' ("Usuário") — admin/supervisor saem de cara com null.
  */
-async function restrictedBoardFilter(userId: string, role: string): Promise<string[] | null> {
+export async function restrictedBoardFilter(userId: string, role: string): Promise<string[] | null> {
   if (role !== 'suporte') return null;
   const profile = await queryOne<{ restrict_access: boolean }>(
     'SELECT restrict_access FROM profiles WHERE id = $1',

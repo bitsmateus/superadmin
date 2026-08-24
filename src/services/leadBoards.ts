@@ -22,16 +22,17 @@ function uuid(): string {
 
 type BoardRow = {
   id: string; name: string; color: string; page: LeadBoardPage; position: number
-  created_at: string; is_vendas?: boolean
+  created_at: string; is_vendas?: boolean; is_contrato?: boolean
 }
 function rowToBoard(r: BoardRow): LeadBoard {
   return {
     id: r.id, name: r.name, color: r.color, page: r.page, position: r.position,
-    createdAt: r.created_at, isVendas: r.is_vendas ?? false,
+    createdAt: r.created_at, isVendas: r.is_vendas ?? false, isContrato: r.is_contrato ?? false,
   }
 }
 function boardToRow(patch: Partial<LeadBoard>): Record<string, unknown> {
   const row: Record<string, unknown> = {}
+  if ('isContrato' in patch) row.is_contrato = patch.isContrato
   if ('name' in patch) row.name = patch.name
   if ('color' in patch) row.color = patch.color
   if ('page' in patch) row.page = patch.page
@@ -229,6 +230,7 @@ export const leadBoardsService = {
     const position = pageBoards.length ? Math.max(...pageBoards.map((b) => b.position)) + 1 : 0
     const board: LeadBoard = {
       id: uuid(), name, color, page, position, createdAt: new Date().toISOString(), isVendas: false,
+      isContrato: false,
     }
     boards = [...boards, board].sort((a, b) => a.position - b.position)
     notify()

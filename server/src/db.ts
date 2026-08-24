@@ -789,6 +789,19 @@ END $$`);
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS contracts_board_id_idx ON contracts(board_id)`);
 
+  // Status manual (ninguém calcula sozinho — a pessoa marca quando o cliente devolve assinado,
+  // mesmo espírito do mrr_pendente/impl_pendente em Vendas). "venda_lead_id" liga o contrato à
+  // linha de origem no quadro de Vendas (quando criado a partir da fila "Pendente de contrato") —
+  // é o que permite calcular quais vendas ainda não têm contrato nenhum.
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pendente'`);
+  await pool.query(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'contracts_status_check') THEN
+      ALTER TABLE contracts ADD CONSTRAINT contracts_status_check CHECK (status IN ('pendente', 'assinado'));
+    END IF;
+  END $$`);
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS venda_lead_id UUID REFERENCES lead_rows(id) ON DELETE SET NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS contracts_venda_lead_id_idx ON contracts(venda_lead_id)`);
+
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_contract_templates ON contract_templates;

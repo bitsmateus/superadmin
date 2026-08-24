@@ -9,6 +9,8 @@ export interface ContractTemplate {
   updatedAt: string
 }
 
+export type ContractStatus = 'pendente' | 'assinado'
+
 export interface Contract {
   id: string
   boardId: string
@@ -16,6 +18,11 @@ export interface Contract {
   /** Valor preenchido pra cada placeholder do modelo (chave = nome exato do placeholder). */
   campos: Record<string, string>
   conteudo: string
+  /** Marcação manual — a pessoa marca quando o cliente devolve assinado. */
+  status: ContractStatus
+  /** Linha de origem no quadro de Vendas, quando o contrato nasceu da fila "Pendente de
+   * contrato" — null se foi criado direto (sem partir de uma venda). */
+  vendaLeadId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -23,7 +30,8 @@ export interface Contract {
 type TemplateRow = { id: string; name: string; conteudo: string; created_at: string; updated_at: string }
 type ContractRow = {
   id: string; board_id: string; template_id: string | null; campos: Record<string, string>
-  conteudo: string; created_at: string; updated_at: string
+  conteudo: string; status: ContractStatus; venda_lead_id: string | null
+  created_at: string; updated_at: string
 }
 
 function rowToTemplate(r: TemplateRow): ContractTemplate {
@@ -32,7 +40,8 @@ function rowToTemplate(r: TemplateRow): ContractTemplate {
 function rowToContract(r: ContractRow): Contract {
   return {
     id: r.id, boardId: r.board_id, templateId: r.template_id, campos: r.campos ?? {},
-    conteudo: r.conteudo, createdAt: r.created_at, updatedAt: r.updated_at,
+    conteudo: r.conteudo, status: r.status ?? 'pendente', vendaLeadId: r.venda_lead_id ?? null,
+    createdAt: r.created_at, updatedAt: r.updated_at,
   }
 }
 
@@ -93,13 +102,19 @@ export const contractsService = {
     }
   },
 
-  async createContract(boardId: string, templateId: string | null, campos: Record<string, string>, conteudo: string): Promise<Contract> {
-    const row = await api.post<ContractRow>('/api/contracts', { boardId, templateId, campos, conteudo })
+  async createContract(
+    boardId: string,
+    templateId: string | null,
+    campos: Record<string, string>,
+    conteudo: string,
+    vendaLeadId?: string | null,
+  ): Promise<Contract> {
+    const row = await api.post<ContractRow>('/api/contracts', { boardId, templateId, campos, conteudo, vendaLeadId })
     await reload()
     return rowToContract(row)
   },
 
-  async updateContract(id: string, patch: { campos?: Record<string, string>; conteudo?: string }): Promise<void> {
+  async updateContract(id: string, patch: { campos?: Record<string, string>; conteudo?: string; status?: ContractStatus }): Promise<void> {
     try {
       await api.patch(`/api/contracts/${id}`, patch)
       await reload()

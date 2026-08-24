@@ -886,10 +886,16 @@ CREATE TABLE IF NOT EXISTS contracts (
   template_id UUID REFERENCES contract_templates(id) ON DELETE SET NULL,
   campos JSONB NOT NULL DEFAULT '{}',
   conteudo TEXT NOT NULL DEFAULT '',
+  -- Marcacao manual (a pessoa marca quando o cliente devolve assinado).
+  status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'assinado')),
+  -- Liga o contrato a linha de origem no quadro de Vendas (quando criado a partir da fila
+  -- "Pendente de contrato") -- permite calcular quais vendas ainda nao tem contrato nenhum.
+  venda_lead_id UUID REFERENCES lead_rows(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS contracts_board_id_idx ON contracts(board_id);
+CREATE INDEX IF NOT EXISTS contracts_venda_lead_id_idx ON contracts(venda_lead_id);
 
 -- ---------- commercial_months ----------
 -- Painel do Mês (Dashboard Comercial) — um registro por mês (id = 'YYYY-MM') só com os campos

@@ -109,8 +109,13 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const pendingContracts = React.useMemo(() => contracts.filter((c) => c.status !== 'assinado'), [contracts])
   const signedContracts = React.useMemo(() => contracts.filter((c) => c.status === 'assinado'), [contracts])
 
+  const pendingClientsFilter = useMonthFilter()
   const pendingFilter = useMonthFilter()
   const signedFilter = useMonthFilter()
+  const pendingClientsInRange = React.useMemo(
+    () => pendingClients.filter((c) => withinBounds(c.fichaCadastro?.submittedAt ?? c.createdAt, pendingClientsFilter.bounds)),
+    [pendingClients, pendingClientsFilter.bounds],
+  )
   const pendingContractsInRange = React.useMemo(
     () => pendingContracts.filter((c) => withinBounds(c.createdAt, pendingFilter.bounds)),
     [pendingContracts, pendingFilter.bounds],
@@ -296,7 +301,10 @@ export function ContratoView({ pageId }: { pageId: string }) {
             </div>
 
             {tab === 'pendentes-venda' && (
-              <PendingClientsList clients={pendingClients} onCreate={startNew} />
+              <>
+                <MonthFilterBar filter={pendingClientsFilter} />
+                <PendingClientsList clients={pendingClientsInRange} onCreate={startNew} />
+              </>
             )}
 
             {tab === 'criar' && (

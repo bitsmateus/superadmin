@@ -562,7 +562,7 @@ function RegistrarVendaModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Registrar venda" size="sm">
-      <div className="space-y-4">
+      <div className="space-y-6">
         <Input
           label="Nome"
           value={nome}

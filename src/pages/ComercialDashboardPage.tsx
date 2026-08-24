@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/Input'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { LeadTodayBySdr } from '@/components/comercial/LeadTodayBySdr'
 import { SdrSummaryPanel } from '@/components/comercial/SdrSummaryPanel'
-import { SdrMetricsGrid } from '@/components/comercial/LeadDashboardView'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { SdrFilterButton } from '@/components/comercial/LeadBoardsView'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted } from '@/hooks/useLeadBoards'
@@ -157,10 +156,6 @@ export function ComercialDashboardPage() {
             <LeadTodayPanel rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
             <SdrSummaryPanel rows={rows} allRows={sdrScopedRows} from={from} to={to} boards={boards} onOpenLead={setOpenLeadId} />
             <LeadTodayBySdr rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
-            {/* Sem filtro de data de propósito — mostra a taxa de conversão real do funil de
-             * cada SDR (agendamento/no-show/venda), não só o que aconteceu no período curto
-             * selecionado ali em cima. Respeita o filtro de SDR do topo. */}
-            <SdrMetricsGrid rows={sdrScopedRows} title="Desempenho por SDR" />
           </>
         )}
       </div>

@@ -685,6 +685,14 @@ END $$`);
     END IF;
   END $$`);
 
+  // "Registrar venda" (tela de Vendas) gravava o valor digitado cru, sem passar pelo mesmo
+  // formatador do resto do app (CurrencyField) — "249" ficava salvo como "249" em vez de
+  // "R$ 249,00", e como parseBRLCents só sabe ler centavos a partir de uma vírgula, isso exibia
+  // R$ 2,49 na tela. Corrige o campo já formatado (não mexe mais nele daqui pra frente); reformata
+  // só o que ainda está cru (só dígitos, sem vírgula) — o que já está certo não bate no WHERE.
+  await pool.query(`UPDATE lead_rows SET valor_mrr = valor_mrr || ',00' WHERE valor_mrr ~ '^[0-9]+$'`);
+  await pool.query(`UPDATE lead_rows SET valor_implementacao = valor_implementacao || ',00' WHERE valor_implementacao ~ '^[0-9]+$'`);
+
   console.log('[db] migrations applied');
 }
 

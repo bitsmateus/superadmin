@@ -5,6 +5,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
 import { leadBoardsService } from '@/services/leadBoards'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
@@ -238,10 +239,10 @@ function VendaRow({ row }: { row: LeadRow }) {
         )}
       </td>
       <td className={cn('px-4 py-3 text-right text-sm tabular-nums', row.vendaRevertida && 'line-through')}>
-        {row.valorMrr || '—'}
+        {row.valorMrr ? formatBRLCents(parseBRLCents(row.valorMrr)) : '—'}
       </td>
       <td className={cn('px-4 py-3 text-right text-sm tabular-nums', row.vendaRevertida && 'line-through')}>
-        {row.valorImplementacao || '—'}
+        {row.valorImplementacao ? formatBRLCents(parseBRLCents(row.valorImplementacao)) : '—'}
       </td>
       <td className="px-2 py-3">
         <button
@@ -306,13 +307,22 @@ function RegistrarVendaModal({
           onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
         />
         <div className="grid grid-cols-2 gap-3">
-          <Input label="Valor MRR" value={mrr} onChange={(e) => setMrr(e.target.value)} placeholder="R$ 0,00" />
-          <Input
-            label="Valor de implementação"
-            value={impl}
-            onChange={(e) => setImpl(e.target.value)}
-            placeholder="R$ 0,00"
-          />
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-foreground/70">Valor MRR</label>
+            <CurrencyField
+              value={mrr}
+              onSave={setMrr}
+              className="h-10 rounded-lg border border-line bg-surface px-3 text-foreground"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-foreground/70">Valor de implementação</label>
+            <CurrencyField
+              value={impl}
+              onSave={setImpl}
+              className="h-10 rounded-lg border border-line bg-surface px-3 text-foreground"
+            />
+          </div>
         </div>
         <Input
           label="Data de fechamento"

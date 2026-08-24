@@ -186,10 +186,11 @@ export function VendasView({ pageId }: { pageId: string }) {
         {/* Lista */}
         <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px]">
+            <table className="w-full min-w-[620px]">
               <thead>
                 <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                   <th className="px-4 py-3">Nome</th>
+                  <th className="w-28 px-4 py-3">SDR</th>
                   <th className="w-48 px-4 py-3 text-right">Valor MRR</th>
                   <th className="w-56 px-4 py-3 text-right">Valor de implementação</th>
                   <th className="w-10 px-2 py-3" />
@@ -198,7 +199,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-gray-400">
+                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
                       Nenhuma venda neste período.
                     </td>
                   </tr>
@@ -211,6 +212,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                 <tfoot>
                   <tr className="border-t-2 border-gray-200 bg-gray-50 text-sm font-semibold text-[#323338]">
                     <td className="px-4 py-3">Total</td>
+                    <td />
                     <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
                       {formatBRLCents(totalMrr)}
                     </td>
@@ -231,13 +233,13 @@ export function VendasView({ pageId }: { pageId: string }) {
             Resumo por SDR
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px]">
+            <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                   <th className="px-4 py-3">SDR</th>
                   <th className="w-28 px-4 py-3 text-right">Vendas</th>
-                  <th className="w-40 px-4 py-3 text-right">MRR (R$)</th>
-                  <th className="w-40 px-4 py-3 text-right">Implementação (R$)</th>
+                  <th className="w-40 whitespace-nowrap px-4 py-3 text-right">MRR (R$)</th>
+                  <th className="w-48 whitespace-nowrap px-4 py-3 text-right">Implementação (R$)</th>
                 </tr>
               </thead>
               <tbody>
@@ -358,6 +360,9 @@ function VendaRow({ row }: { row: LeadRow }) {
             revertida
           </span>
         )}
+      </td>
+      <td className={cn('px-4 py-3 text-sm text-gray-600', row.vendaRevertida && 'line-through')}>
+        {row.sdr || '—'}
       </td>
       <PendenteValueCell
         value={row.valorMrr}
@@ -584,24 +589,26 @@ function RegistrarVendaModal({
             />
           </div>
         </div>
-        <Select
-          label="Quem fechou a venda"
-          value={fechadoPor}
-          onChange={(e) => setFechadoPor(e.target.value)}
-          options={[
-            { value: '', label: 'Selecionar...' },
-            { value: 'Arthur', label: 'SDR Arthur' },
-            { value: 'Luis', label: 'SDR Luis' },
-            { value: 'Ian', label: 'Ian' },
-            { value: 'Mateus', label: 'Mateus' },
-          ]}
-        />
-        <Input
-          label="Data de fechamento"
-          type="date"
-          value={fechamento}
-          onChange={(e) => setFechamento(e.target.value)}
-        />
+        <div className="grid grid-cols-2 gap-3">
+          <Select
+            label="Quem fechou a venda"
+            value={fechadoPor}
+            onChange={(e) => setFechadoPor(e.target.value)}
+            options={[
+              { value: '', label: 'Selecionar...' },
+              { value: 'Arthur', label: 'SDR Arthur' },
+              { value: 'Luis', label: 'SDR Luis' },
+              { value: 'Ian', label: 'Ian' },
+              { value: 'Mateus', label: 'Mateus' },
+            ]}
+          />
+          <Input
+            label="Data de fechamento"
+            type="date"
+            value={fechamento}
+            onChange={(e) => setFechamento(e.target.value)}
+          />
+        </div>
       </div>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>

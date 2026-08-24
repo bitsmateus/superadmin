@@ -28,7 +28,12 @@ async function readSpreadsheet(file: File): Promise<string[][]> {
   return parseCsv(await file.text())
 }
 
-const IMPORT_FIELDS: { key: LeadRowField; label: string; aliases: string[] }[] = [
+/** `createdAt` não é um LeadRowField normal (é controlado pelo sistema, não uma coluna do
+ * quadro) — mas na importação a pessoa pode ter uma data de criação antiga na planilha e quer
+ * que o "Log de criação" do lead nasça com ela, em vez da data/hora do import. */
+type ImportField = LeadRowField | 'createdAt'
+
+const IMPORT_FIELDS: { key: ImportField; label: string; aliases: string[] }[] = [
   { key: 'nome', label: 'Nome', aliases: ['nome', 'name', 'lead', 'cliente', 'contato'] },
   { key: 'empresa', label: 'Empresa', aliases: ['empresa', 'company', 'negocio'] },
   { key: 'telefone', label: 'Telefone', aliases: ['telefone', 'celular', 'fone', 'whatsapp', 'phone', 'numero'] },
@@ -46,10 +51,39 @@ const IMPORT_FIELDS: { key: LeadRowField; label: string; aliases: string[] }[] =
     key: 'valorImplementacao', label: 'Valor de Implementação',
     aliases: ['valor de implementacao', 'valor de implementação', 'implementacao', 'implementação', 'implantacao', 'implantação'],
   },
+  {
+    key: 'createdAt', label: 'Log de criação (data de criação)',
+    aliases: ['log de criacao', 'log de criação', 'data de criacao', 'data de criação', 'criado em', 'data de cadastro', 'data cadastro'],
+  },
 ]
 
 const CURRENCY_FIELDS = new Set<LeadRowField>(['valorMrr', 'valorImplementacao'])
 const NEW_BOARD = '__new__'
+
+/** Aceita "dd/mm/aaaa", "dd/mm/aa" e "aaaa-mm-dd", com hora opcional (hh:mm[:ss]) — os formatos
+ * mais comuns de planilha exportada do Excel/Sheets/CRM antigo. Sem match reconhecido = null,
+ * e a linha nasce com a data/hora do import mesmo (mesmo comportamento de antes). */
+function parseImportedDate(raw: string): string | null {
+  const s = raw.trim()
+  if (!s) return null
+
+  const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
+  if (br) {
+    const [, dd, mm, yy, hh, min, sec] = br
+    const year = yy.length === 2 ? 2000 + Number(yy) : Number(yy)
+    const d = new Date(year, Number(mm) - 1, Number(dd), Number(hh ?? 0), Number(min ?? 0), Number(sec ?? 0))
+    if (!Number.isNaN(d.getTime())) return d.toISOString()
+  }
+
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
+  if (iso) {
+    const [, yyyy, mm, dd, hh, min, sec] = iso
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh ?? 0), Number(min ?? 0), Number(sec ?? 0))
+    if (!Number.isNaN(d.getTime())) return d.toISOString()
+  }
+
+  return null
+}
 
 function normalize(s: string): string {
   const noAccents = s
@@ -63,7 +97,7 @@ function normalize(s: string): string {
   return noAccents.toLowerCase().trim()
 }
 
-function guessField(header: string): LeadRowField | '' {
+function guessField(header: string): ImportField | '' {
   const norm = normalize(header)
   if (!norm) return ''
   const exact = IMPORT_FIELDS.find((f) => f.aliases.some((a) => normalize(a) === norm))
@@ -84,7 +118,7 @@ export interface LeadImportModalProps {
 export function LeadImportModal({ open, onClose, page, boards }: LeadImportModalProps) {
   const [headers, setHeaders] = React.useState<string[]>([])
   const [dataRows, setDataRows] = React.useState<string[][]>([])
-  const [mapping, setMapping] = React.useState<Record<number, LeadRowField | ''>>({})
+  const [mapping, setMapping] = React.useState<Record<number, ImportField | ''>>({})
   const [targetBoardId, setTargetBoardId] = React.useState<string>('')
   const [newBoardName, setNewBoardName] = React.useState('')
   const [importing, setImporting] = React.useState(false)
@@ -110,7 +144,7 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
       const [headerRow, ...rest] = allRows
       setHeaders(headerRow)
       setDataRows(rest)
-      const guessed: Record<number, LeadRowField | ''> = {}
+      const guessed: Record<number, ImportField | ''> = {}
       headerRow.forEach((h, i) => { guessed[i] = guessField(h) })
       setMapping(guessed)
     } catch (err) {
@@ -134,16 +168,17 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
     let skipped = 0
     for (const dataRow of dataRows) {
       const patch: Partial<Record<LeadRowField, string>> = {}
+      let createdAt: string | null = null
       for (const [idxStr, field] of Object.entries(mapping)) {
         if (!field) continue
         const idx = Number(idxStr)
-        let raw = (dataRow[idx] ?? '').trim()
+        const raw = (dataRow[idx] ?? '').trim()
         if (!raw) continue
-        if (CURRENCY_FIELDS.has(field)) raw = prettifyCurrencyRaw(sanitizeCurrencyRaw(raw))
-        patch[field] = raw
+        if (field === 'createdAt') { createdAt = parseImportedDate(raw); continue }
+        patch[field] = CURRENCY_FIELDS.has(field) ? prettifyCurrencyRaw(sanitizeCurrencyRaw(raw)) : raw
       }
-      if (Object.keys(patch).length === 0) { skipped += 1; continue }
-      leadBoardsService.createRow(boardId, patch)
+      if (Object.keys(patch).length === 0 && !createdAt) { skipped += 1; continue }
+      leadBoardsService.createRow(boardId, createdAt ? { ...patch, createdAt } : patch)
       created += 1
     }
     setResult({ created, skipped })
@@ -251,7 +286,7 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
                   </div>
                   <Select
                     value={mapping[i] ?? ''}
-                    onChange={(e) => setMapping((prev) => ({ ...prev, [i]: e.target.value as LeadRowField | '' }))}
+                    onChange={(e) => setMapping((prev) => ({ ...prev, [i]: e.target.value as ImportField | '' }))}
                     options={[
                       { value: '', label: 'Ignorar coluna' },
                       ...IMPORT_FIELDS.map((f) => ({ value: f.key, label: f.label })),

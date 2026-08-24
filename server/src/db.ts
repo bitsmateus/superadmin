@@ -657,6 +657,17 @@ END $$`);
     END IF;
   END $$`);
 
+  // A aba 'vendas' original (sem quadro nenhum — sobra de teste) tranca o slug bonito pra quem
+  // ficou com 'vendas-2' de verdade. Só apaga se estiver mesmo vazia (0 quadros); se tiver
+  // quadro, a constraint de lead_boards.page barra o DELETE de qualquer jeito.
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM lead_pages WHERE id = 'vendas')
+       AND EXISTS (SELECT 1 FROM lead_pages WHERE id = 'vendas-2')
+       AND NOT EXISTS (SELECT 1 FROM lead_boards WHERE page = 'vendas') THEN
+      DELETE FROM lead_pages WHERE id = 'vendas';
+    END IF;
+  END $$`);
+
   // Uma aba "Vendas" criada quando já existia (ou ainda existe) outra com id 'vendas' nasceu
   // como 'vendas-2' (uniquePageId evita colisão). Assim que a original some, libera o slug bonito
   // pra quem ficou com o "-2" — efetivamente roda uma vez só, porque depois disso 'vendas-2' não

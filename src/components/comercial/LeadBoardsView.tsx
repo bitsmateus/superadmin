@@ -1271,7 +1271,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
       <TopBar
         title={title}
         subtitle={subtitle}
-        titleClassName="text-[36px] font-semibold"
+        titleClassName="text-[36px] font-semibold font-['Roboto']"
         breadcrumbs={[
           { label: 'Grupo NX Digital', to: '/' },
           { label: 'Comercial', to: '/comercial' },

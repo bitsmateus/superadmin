@@ -722,6 +722,11 @@ END $$`);
     WHERE lr.board_id = lb.id AND lower(lp.name) LIKE '%arthur%'
       AND (lr.sdr IS NULL OR lr.sdr = '') AND lr.deleted_at IS NULL`);
 
+  // Aba "Vendas" sobe pro topo da lista do Comercial (logo abaixo de "Dashboard Comercial", que é
+  // um item fixo fora dessa tabela) — posição bem negativa garante que fica antes de qualquer
+  // outra aba, mesmo se a ordem delas mudar no futuro.
+  await pool.query(`UPDATE lead_pages SET position = -1 WHERE lower(name) LIKE '%venda%' AND position <> -1`);
+
   console.log('[db] migrations applied');
 }
 

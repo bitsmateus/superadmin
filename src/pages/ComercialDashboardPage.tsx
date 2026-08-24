@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { CalendarRange, Loader2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { CalendarRange, Loader2, TrendingUp } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Input } from '@/components/ui/Input'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
@@ -150,12 +151,19 @@ export function ComercialDashboardPage() {
                   </>
                 )}
                 <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} />
+                <Link
+                  to="/comercial-dashboard-mensal"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20"
+                >
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  Painel do Mês
+                </Link>
               </div>
             </div>
 
             <LeadTodayPanel rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
-            <SdrSummaryPanel rows={rows} allRows={sdrScopedRows} from={from} to={to} boards={boards} onOpenLead={setOpenLeadId} />
             <LeadTodayBySdr rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
+            <SdrSummaryPanel rows={rows} allRows={sdrScopedRows} from={from} to={to} boards={boards} onOpenLead={setOpenLeadId} />
           </>
         )}
       </div>

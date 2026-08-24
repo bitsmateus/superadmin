@@ -727,6 +727,25 @@ END $$`);
   // outra aba, mesmo se a ordem delas mudar no futuro.
   await pool.query(`UPDATE lead_pages SET position = -1 WHERE lower(name) LIKE '%venda%' AND position <> -1`);
 
+  // Painel do Mês (Dashboard Comercial > Painel do Mês) — um registro por mês (id = 'YYYY-MM')
+  // só com os poucos campos manuais (investimento em tráfego, leads gerados, permanência média).
+  // Todo o resto do painel (funil, MRR, ROI) é calculado ao vivo em cima de lead_rows/lead_boards,
+  // sem precisar de snapshot.
+  await pool.query(`CREATE TABLE IF NOT EXISTS commercial_months (
+    id TEXT PRIMARY KEY,
+    investimento_trafego TEXT NOT NULL DEFAULT '0,00',
+    leads_gerados INT NOT NULL DEFAULT 0,
+    permanencia_media NUMERIC(10,2) NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_commercial_months ON commercial_months;
+      CREATE TRIGGER notify_commercial_months AFTER INSERT OR UPDATE OR DELETE ON commercial_months
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

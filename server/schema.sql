@@ -863,6 +863,18 @@ SELECT * FROM (VALUES
 ) AS v(field, name, color, position)
 WHERE NOT EXISTS (SELECT 1 FROM lead_labels ll WHERE ll.field = v.field AND ll.name = v.name);
 
+-- ---------- commercial_months ----------
+-- Painel do Mês (Dashboard Comercial) — um registro por mês (id = 'YYYY-MM') só com os campos
+-- manuais (investimento em tráfego, leads gerados, permanência média). O resto do painel é
+-- calculado ao vivo em cima de lead_rows/lead_boards.
+CREATE TABLE IF NOT EXISTS commercial_months (
+  id TEXT PRIMARY KEY,
+  investimento_trafego TEXT NOT NULL DEFAULT '0,00',
+  leads_gerados INT NOT NULL DEFAULT 0,
+  permanencia_media NUMERIC(10,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:
 -- Crie o primeiro usuário admin com:

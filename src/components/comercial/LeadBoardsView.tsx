@@ -699,7 +699,6 @@ interface BoardGroupProps {
   search: string
   sdrFilter: string | null
   filterRules: FilterRule[]
-  sortDesc: boolean
   focusRowId: string | null
   onFocused: () => void
   onCreateRow: (boardId: string) => void
@@ -722,12 +721,16 @@ interface BoardGroupProps {
 }
 
 function BoardGroup({
-  board, allBoards, search, sdrFilter, filterRules, sortDesc, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
+  board, allBoards, search, sdrFilter, filterRules, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
   selectedIds, onToggleRow, onToggleAll,
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
   columnWidths, onResizeColumn, sdrLock, sdrPageBoards,
 }: BoardGroupProps) {
   const [open, setOpen] = React.useState(true)
+  // Ordenação é por QUADRO — cada um guarda a própria direção, ao contrário de antes (um botão só
+  // na barra de cima ordenando todos juntos). Disparada passando o mouse na coluna Nome, igual o
+  // Monday: aparece um ícone de ordenar, sem precisar de botão fixo ocupando espaço.
+  const [sortDesc, setSortDesc] = React.useState(false)
   const cols = columnsForSdrLock(sdrLock, board.isVendas)
   const tableWidth = CHECKBOX_COL_WIDTH
     + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
@@ -863,11 +866,25 @@ function BoardGroup({
                   return (
                     <th
                       key={col.key}
-                      className={cn('relative truncate px-2.5 py-2 text-center font-normal', GRID_BORDER)}
+                      className={cn('group relative truncate px-2.5 py-2 text-center font-normal', GRID_BORDER)}
                       style={{ width }}
                     >
-                      {col.label}
-                      {col.required && <span className="text-red-400" title="Obrigatório"> *</span>}
+                      <span className="inline-flex items-center justify-center gap-1">
+                        <span className="truncate">{col.label}</span>
+                        {col.required && <span className="text-red-400" title="Obrigatório">*</span>}
+                        {/* Igual o Monday: passa o mouse na coluna Nome e aparece o ícone de ordenar
+                            — cada quadro guarda a própria direção (mais antigo/mais novo). */}
+                        {col.key === 'nome' && (
+                          <button
+                            type="button"
+                            onClick={() => setSortDesc((d) => !d)}
+                            title={sortDesc ? 'Ordenar do mais antigo para o mais novo' : 'Ordenar do mais novo para o mais antigo'}
+                            className="grid h-4 w-4 shrink-0 place-items-center rounded text-gray-300 opacity-0 transition-opacity hover:bg-black/5 hover:text-accent group-hover:opacity-100"
+                          >
+                            <ArrowUpDown className={cn('h-3 w-3 transition-transform', sortDesc && 'rotate-180')} />
+                          </button>
+                        )}
+                      </span>
                       {!col.widthLocked && (
                         <span
                           onMouseDown={(e) => startResize(e, col.key, width)}
@@ -1143,7 +1160,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const [sdrFilter, setSdrFilter] = React.useState<string | null>(null)
   const [filterRules, setFilterRules] = React.useState<FilterRule[]>([])
   const [filtersOpen, setFiltersOpen] = React.useState(false)
-  const [sortDesc, setSortDesc] = React.useState(false)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [importModalOpen, setImportModalOpen] = React.useState(false)
   const [importUpdatesModalOpen, setImportUpdatesModalOpen] = React.useState(false)
@@ -1345,14 +1361,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               >
                 {filterRules.length > 0 ? `Filtro (${filterRules.length})` : 'Filtro'}
               </ToolbarButton>
-              <ToolbarButton
-                icon={<ArrowUpDown className={cn('h-3.5 w-3.5 transition-transform', sortDesc && 'rotate-180')} />}
-                onClick={() => setSortDesc((d) => !d)}
-                className="text-accent"
-                title={sortDesc ? 'Clique para ordenar do mais antigo para o mais novo' : 'Clique para ordenar do mais novo para o mais antigo'}
-              >
-                {sortDesc ? 'Mais novo' : 'Mais antigo'}
-              </ToolbarButton>
             </div>
 
             {boards.length === 0 ? (
@@ -1378,7 +1386,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                       search={search}
                       sdrFilter={sdrFilter}
                       filterRules={filterRules}
-                      sortDesc={sortDesc}
                       focusRowId={focusRowId}
                       onFocused={() => setFocusRowId(null)}
                       onCreateRow={handleCreateRow}

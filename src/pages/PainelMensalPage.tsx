@@ -140,14 +140,22 @@ export function PainelMensalPage() {
     const todayIso = toISODate(new Date())
     const untilIso = to < todayIso ? to : todayIso
 
-    const agendadosTotal = allRows.filter((r) => {
-      const d = (r.agendamento || '').slice(0, 10)
-      return d && d >= from && d <= to
+    // Leva do mês = quem foi CRIADO nesse período (mesma lógica das Métricas por SDR — soma
+    // todas as abas/SDRs juntos, sem filtro nenhum por CRM). "Agendamentos" é por STATUS (chegou
+    // em "Reunião agendada" ou etapa seguinte, alguma vez), não pela data marcada no campo
+    // Agendamento — evita divergir do que já aparece em Métricas por SDR pro mesmo período.
+    const monthCohort = allRows.filter((r) => {
+      const d = r.createdAt.slice(0, 10)
+      return d >= from && d <= to
     })
-    const agendadosAteHoje = agendadosTotal.filter((r) => (r.agendamento || '').slice(0, 10) <= untilIso)
+    const agendadosTotal = monthCohort.filter((r) => milestoneById.get(r.id)?.everAgendada)
+    const agendadosAteHoje = agendadosTotal.filter((r) => {
+      const d = milestoneById.get(r.id)?.firstAgendadaAt?.slice(0, 10)
+      return !!d && d <= untilIso
+    })
     const noShowAteHoje = agendadosAteHoje.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_NO_SHOW)
     const comparecimentos = agendadosAteHoje.length - noShowAteHoje.length
-    const vendasFechadas = agendadosTotal.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_VENDIDO)
+    const vendasFechadas = monthCohort.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_VENDIDO)
 
     const vendasRows = vendasBoard
       ? allRows.filter((r) => r.boardId === vendasBoard.id && !r.vendaRevertida)

@@ -1,6 +1,9 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { ArrowRight, CalendarRange, CheckCircle2, Clock, Download, FileText, ListTodo, Loader2, Plus, Search, Settings, Trash2, UserRound, X } from 'lucide-react'
+import {
+  ArrowRight, CalendarRange, CheckCircle2, ChevronDown, Clock, Download, Eye, FileText, ListTodo,
+  Loader2, Pencil, Plus, Printer, Save, Search, Settings, Trash2, UserRound, X,
+} from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -15,8 +18,14 @@ import { NEXT_STAGE, STAGE_COLORS } from '@/constants/stageColors'
 import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/useContracts'
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
-import { applyPlaceholders, cnpjFieldFor, extractPlaceholders } from '@/lib/contractPlaceholders'
+import { lookupCep, type CepData } from '@/services/cepLookup'
+import {
+  applyPlaceholders, applyServicesTable, cepFieldFor, cnpjFieldFor, defaultValueFor,
+  DEFAULT_SERVICE_ROWS, extractPlaceholders, hintFor, parseServiceRows, sectionFor,
+  SECTION_LABELS, SECTION_ORDER, type PlaceholderSection, type ServiceRow,
+} from '@/lib/contractPlaceholders'
 import { formatCnpj, isValidCnpjLength } from '@/lib/cnpj'
+import { formatCep, isValidCepLength } from '@/lib/cep'
 import { openContractSheet } from '@/lib/contractSheet'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { formatDateShort } from '@/lib/utils'
@@ -168,6 +177,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const [draftCampos, setDraftCampos] = React.useState<Record<string, string>>({})
   const [draftClientId, setDraftClientId] = React.useState<string | null>(null)
   const [cnpjLoading, setCnpjLoading] = React.useState(false)
+  const [cepLoading, setCepLoading] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
   const [editTemplateOpen, setEditTemplateOpen] = React.useState(false)
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
@@ -180,13 +190,18 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
   const bodyRef = React.useRef<HTMLDivElement>(null)
   const detailOpen = !!selected
-  // O detalhe agora vive num Modal (desmonta o contentEditable ao fechar), então recarrega o
-  // texto sempre que o modal ABRE — não dá pra confiar num "já carreguei esse id antes", já que a
-  // div é recriada do zero a cada abertura.
+  // Contrato abre em modo leitura — só vira contentEditable depois de clicar "Editar texto".
+  // Reseta pra leitura toda vez que o modal fecha, pra sempre abrir limpo da próxima vez.
+  const [editingBody, setEditingBody] = React.useState(false)
   React.useEffect(() => {
-    if (detailOpen && bodyRef.current && selected) bodyRef.current.innerHTML = selected.conteudo
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!detailOpen) setEditingBody(false)
   }, [detailOpen])
+  // O corpo editável (contentEditable) desmonta sempre que sai do modo edição ou o modal fecha —
+  // recarrega o texto toda vez que ENTRA em edição, não dá pra confiar num "já carreguei antes".
+  React.useEffect(() => {
+    if (detailOpen && editingBody && bodyRef.current && selected) bodyRef.current.innerHTML = selected.conteudo
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailOpen, editingBody])
 
   const debouncedSaveBody = useDebouncedCallback((html: string) => {
     if (selected) void contractsService.updateContract(selected.id, { conteudo: html })
@@ -217,8 +232,38 @@ export function ContratoView({ pageId }: { pageId: string }) {
     }
   }
 
+  const fillFromCep = async (cepOverride?: string) => {
+    const raw = cepOverride ?? draftCampos['CEP'] ?? ''
+    if (!isValidCepLength(raw)) { toast.error('Digite um CEP com 8 dígitos.'); return }
+    setCepLoading(true)
+    try {
+      const data = await lookupCep(raw)
+      setDraftCampos((prev) => {
+        const next = { ...prev }
+        for (const name of placeholders) {
+          const key = cepFieldFor(name)
+          if (key) {
+            const value = data[key as keyof CepData]
+            if (value) next[name] = value
+          }
+        }
+        return next
+      })
+      toast.success('Endereço preenchido a partir do CEP.')
+    } catch (err) {
+      toast.error((err as Error).message || 'Falha ao consultar o CEP.')
+    } finally {
+      setCepLoading(false)
+    }
+  }
+
   const startNew = (client?: Client) => {
     const campos: Record<string, string> = {}
+    for (const name of placeholders) {
+      const def = defaultValueFor(name)
+      if (def) campos[name] = def
+    }
+    if (placeholders.includes('Tabela de Serviços')) campos['Tabela de Serviços'] = JSON.stringify(DEFAULT_SERVICE_ROWS)
     if (client) {
       if (placeholders.includes('Nome Fantasia')) campos['Nome Fantasia'] = client.company || client.name
       const cnpj = client.fichaCadastro?.cnpj
@@ -235,7 +280,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
     if (!board || !template) return
     setCreating(true)
     try {
-      const conteudo = applyPlaceholders(template.conteudo, draftCampos)
+      const conteudo = applyPlaceholders(applyServicesTable(template.conteudo, draftCampos), draftCampos)
       const created = await contractsService.createContract(board.id, template.id, draftCampos, conteudo, draftClientId)
       setDraftCampos({})
       setDraftClientId(null)
@@ -250,7 +295,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const regenerate = () => {
     if (!selected || !template) return
     if (!window.confirm('Isso reaplica os campos preenchidos no texto do modelo, sobrescrevendo o corpo atual do contrato (inclusive edições manuais). Continuar?')) return
-    const conteudo = applyPlaceholders(template.conteudo, selected.campos)
+    const conteudo = applyPlaceholders(applyServicesTable(template.conteudo, selected.campos), selected.campos)
     if (bodyRef.current) bodyRef.current.innerHTML = conteudo
     void contractsService.updateContract(selected.id, { conteudo })
   }
@@ -280,6 +325,30 @@ export function ContratoView({ pageId }: { pageId: string }) {
       toast.error((err as Error).message || 'Falha ao consultar o CNPJ.')
     } finally {
       setCnpjLoading(false)
+    }
+  }
+
+  const fillSelectedFromCep = async () => {
+    if (!selected) return
+    const raw = selected.campos['CEP'] ?? ''
+    if (!isValidCepLength(raw)) { toast.error('Digite um CEP com 8 dígitos.'); return }
+    setCepLoading(true)
+    try {
+      const data = await lookupCep(raw)
+      const next = { ...selected.campos }
+      for (const name of placeholders) {
+        const key = cepFieldFor(name)
+        if (key) {
+          const value = data[key as keyof CepData]
+          if (value) next[name] = value
+        }
+      }
+      await contractsService.updateContract(selected.id, { campos: next })
+      toast.success('Endereço preenchido — clique em "Reaplicar no texto" pra atualizar o corpo.')
+    } catch (err) {
+      toast.error((err as Error).message || 'Falha ao consultar o CEP.')
+    } finally {
+      setCepLoading(false)
     }
   }
 
@@ -339,9 +408,28 @@ export function ContratoView({ pageId }: { pageId: string }) {
     toast.success('Cliente arquivado')
   }
 
+  const currentBodyHtml = () => (editingBody ? bodyRef.current?.innerHTML : undefined) ?? selected?.conteudo ?? ''
+
   const download = () => {
     if (!selected) return
-    openContractSheet(bodyRef.current?.innerHTML ?? selected.conteudo, `Contrato — ${contractLabel(selected)}`)
+    openContractSheet(currentBodyHtml(), `Contrato — ${contractLabel(selected)}`)
+  }
+
+  const printContract = () => {
+    if (!selected) return
+    openContractSheet(currentBodyHtml(), `Contrato — ${contractLabel(selected)}`)
+  }
+
+  const viewContractSheet = () => {
+    if (!selected) return
+    openContractSheet(currentBodyHtml(), `Contrato — ${contractLabel(selected)}`, false)
+  }
+
+  const saveNow = () => {
+    if (!selected) return
+    const html = editingBody ? bodyRef.current?.innerHTML ?? selected.conteudo : selected.conteudo
+    void contractsService.updateContract(selected.id, { conteudo: html })
+    toast.success('Contrato salvo.')
   }
 
   if (!board) {
@@ -417,6 +505,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   onChange={(name, value) => setDraftCampos((prev) => ({ ...prev, [name]: value }))}
                   onCnpjBlur={() => fillFromCnpj()}
                   cnpjLoading={cnpjLoading}
+                  onCepBlur={() => fillFromCep()}
+                  cepLoading={cepLoading}
                 />
                 <div className="mt-4 flex justify-end gap-2">
                   <Button onClick={generate} loading={creating}>Gerar contrato</Button>
@@ -484,22 +574,41 @@ export function ContratoView({ pageId }: { pageId: string }) {
                 onChange={(name, value) => saveField(selected, name, value)}
                 onCnpjBlur={fillSelectedFromCnpj}
                 cnpjLoading={cnpjLoading}
+                onCepBlur={fillSelectedFromCep}
+                cepLoading={cepLoading}
               />
             </div>
 
             <div className="rounded-2xl bg-elevate/[0.03] p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-foreground">Contrato</span>
-                <Button size="sm" onClick={download} leftIcon={<Download className="h-3.5 w-3.5" />}>Baixar PDF</Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" onClick={download} leftIcon={<Download className="h-3.5 w-3.5" />}>Baixar PDF</Button>
+                  <Button size="sm" variant="secondary" onClick={printContract} leftIcon={<Printer className="h-3.5 w-3.5" />}>Imprimir</Button>
+                  <Button size="sm" variant="secondary" onClick={viewContractSheet} leftIcon={<Eye className="h-3.5 w-3.5" />}>Ver PDF</Button>
+                  {editingBody ? (
+                    <Button size="sm" variant="secondary" onClick={saveNow} leftIcon={<Save className="h-3.5 w-3.5" />}>Salvar no histórico</Button>
+                  ) : (
+                    <Button size="sm" variant="secondary" onClick={() => setEditingBody(true)} leftIcon={<Pencil className="h-3.5 w-3.5" />}>Editar texto</Button>
+                  )}
+                </div>
               </div>
-              <div
-                ref={bodyRef}
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) => debouncedSaveBody((e.target as HTMLDivElement).innerHTML)}
-                className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[11.5pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
-                style={{ fontFamily: '"Times New Roman", Georgia, serif' }}
-              />
+              {editingBody ? (
+                <div
+                  ref={bodyRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={(e) => debouncedSaveBody((e.target as HTMLDivElement).innerHTML)}
+                  className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[11.5pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
+                  style={{ fontFamily: '"Times New Roman", Georgia, serif' }}
+                />
+              ) : (
+                <div
+                  dangerouslySetInnerHTML={{ __html: selected.conteudo }}
+                  className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[11.5pt] leading-relaxed"
+                  style={{ fontFamily: '"Times New Roman", Georgia, serif' }}
+                />
+              )}
             </div>
           </div>
         )}
@@ -769,46 +878,181 @@ function PendingClientsList({
   )
 }
 
+/** Agrupa os placeholders detectados no modelo em seções numeradas (Dados do contratante,
+ * Serviços, Valores, Vigência, e "Outros campos" pra qualquer coisa nova adicionada direto no
+ * modelo). CNPJ e CEP ganham busca automática; "Tabela de Serviços" vira uma lista repetível em
+ * vez de um campo de texto único. */
 function FieldForm({
   placeholders,
   campos,
   onChange,
   onCnpjBlur,
   cnpjLoading,
+  onCepBlur,
+  cepLoading,
 }: {
   placeholders: string[]
   campos: Record<string, string>
   onChange: (name: string, value: string) => void
   onCnpjBlur: () => void
   cnpjLoading: boolean
+  onCepBlur: () => void
+  cepLoading: boolean
 }) {
   if (placeholders.length === 0) {
     return <p className="text-xs text-foreground/40">O modelo não tem nenhum campo "&lt;&lt;...&gt;&gt;" pra preencher.</p>
   }
+
+  const bySection = new Map<PlaceholderSection, string[]>()
+  for (const name of placeholders) {
+    const section = sectionFor(name)
+    const list = bySection.get(section) ?? []
+    list.push(name)
+    bySection.set(section, list)
+  }
+  const activeSections = SECTION_ORDER.filter((s) => bySection.has(s))
+
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {placeholders.map((name) => {
-        const isCnpj = name.trim().toLowerCase() === 'cnpj'
-        return (
-          <div key={name} className={isCnpj ? 'sm:col-span-2' : undefined}>
-            <label className="mb-1 block text-[11px] font-medium text-foreground/50">{name}</label>
-            <div className="relative">
-              <input
-                value={campos[name] ?? ''}
-                onChange={(e) => onChange(name, isCnpj ? formatCnpj(e.target.value) : e.target.value)}
-                onBlur={isCnpj ? onCnpjBlur : undefined}
-                placeholder={isCnpj ? '00.000.000/0000-00' : undefined}
-                className="h-9 w-full rounded-lg border border-line px-3 pr-8 text-sm text-foreground/70 outline-none focus:border-accent"
-              />
-              {isCnpj && (
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground/30">
-                  {cnpjLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                </span>
-              )}
-            </div>
+    <div className="space-y-3">
+      {activeSections.map((section, i) => (
+        <FieldSection
+          key={section}
+          number={i + 1}
+          label={SECTION_LABELS[section]}
+          names={bySection.get(section)!}
+          campos={campos}
+          onChange={onChange}
+          onCnpjBlur={onCnpjBlur}
+          cnpjLoading={cnpjLoading}
+          onCepBlur={onCepBlur}
+          cepLoading={cepLoading}
+        />
+      ))}
+    </div>
+  )
+}
+
+function FieldSection({
+  number,
+  label,
+  names,
+  campos,
+  onChange,
+  onCnpjBlur,
+  cnpjLoading,
+  onCepBlur,
+  cepLoading,
+}: {
+  number: number
+  label: string
+  names: string[]
+  campos: Record<string, string>
+  onChange: (name: string, value: string) => void
+  onCnpjBlur: () => void
+  cnpjLoading: boolean
+  onCepBlur: () => void
+  cepLoading: boolean
+}) {
+  const [open, setOpen] = React.useState(true)
+  return (
+    <div className="overflow-hidden rounded-xl border border-line/60">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 bg-elevate/[0.02] px-3 py-2.5 text-left text-xs font-semibold text-foreground"
+      >
+        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent/10 text-[10px] text-accent">{number}</span>
+        {label}
+        <ChevronDown className={cn('ml-auto h-3.5 w-3.5 shrink-0 text-foreground/40 transition-transform', !open && '-rotate-90')} />
+      </button>
+      {open && (
+        <div className="grid grid-cols-1 gap-3 border-t border-line/60 p-3 sm:grid-cols-2">
+          {names.map((name) => {
+            if (name === 'Tabela de Serviços') {
+              return (
+                <div key={name} className="sm:col-span-2">
+                  <ServicesTableField value={campos[name] ?? ''} onChange={(v) => onChange(name, v)} />
+                </div>
+              )
+            }
+            const isCnpj = name.trim().toLowerCase() === 'cnpj'
+            const isCep = name.trim().toLowerCase() === 'cep'
+            const hint = hintFor(name)
+            return (
+              <div key={name} className={isCnpj ? 'sm:col-span-2' : undefined}>
+                <label className="mb-1 block text-[11px] font-medium text-foreground/50">{name}</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={campos[name] ?? ''}
+                    onChange={(e) => onChange(name, isCnpj ? formatCnpj(e.target.value) : isCep ? formatCep(e.target.value) : e.target.value)}
+                    onBlur={isCnpj ? onCnpjBlur : isCep ? onCepBlur : undefined}
+                    placeholder={isCnpj ? '00.000.000/0000-00' : isCep ? '00000-000' : undefined}
+                    className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+                  />
+                  {(isCnpj || isCep) && (
+                    <button
+                      type="button"
+                      onClick={isCnpj ? onCnpjBlur : onCepBlur}
+                      title="Buscar"
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-foreground/40 transition-colors hover:bg-elevate/[0.04] hover:text-foreground"
+                    >
+                      {(isCnpj ? cnpjLoading : cepLoading) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    </button>
+                  )}
+                </div>
+                {hint && <p className="mt-1 text-[10px] text-foreground/40">{hint}</p>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** "Serviços contratados" (Cláusula 2ª) — lista de código+descrição que a pessoa monta na mão,
+ * em vez de um campo de texto único. Guardada como JSON no próprio campo (ver
+ * lib/contractPlaceholders.ts, parseServiceRows/applyServicesTable). */
+function ServicesTableField({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  const rows = parseServiceRows(value)
+  const update = (next: ServiceRow[]) => onChange(JSON.stringify(next))
+
+  return (
+    <div>
+      <label className="mb-1 block text-[11px] font-medium text-foreground/50">Tabela de serviços (Cláusula 2ª)</label>
+      <div className="space-y-1.5">
+        {rows.map((row, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <input
+              value={row.codigo}
+              onChange={(e) => update(rows.map((r, j) => (j === i ? { ...r, codigo: e.target.value } : r)))}
+              placeholder="01"
+              className="h-9 w-14 shrink-0 rounded-lg border border-line px-2 text-center text-sm text-foreground/70 outline-none focus:border-accent"
+            />
+            <input
+              value={row.nome}
+              onChange={(e) => update(rows.map((r, j) => (j === i ? { ...r, nome: e.target.value } : r)))}
+              placeholder="Ex.: PLATAFORMA NX"
+              className="h-9 flex-1 rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+            />
+            <button
+              type="button"
+              onClick={() => update(rows.filter((_, j) => j !== i))}
+              title="Remover serviço"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-foreground/40 transition-colors hover:bg-danger/10 hover:text-danger"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
-        )
-      })}
+        ))}
+        <button
+          type="button"
+          onClick={() => update([...rows, { codigo: String(rows.length + 1).padStart(2, '0'), nome: '' }])}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2 text-xs font-medium text-foreground/50 transition-colors hover:bg-elevate/[0.04]"
+        >
+          <Plus className="h-3.5 w-3.5" /> Adicionar serviço
+        </button>
+      </div>
     </div>
   )
 }

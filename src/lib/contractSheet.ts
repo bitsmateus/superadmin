@@ -3,7 +3,7 @@
  * impressão do navegador. Mesmo mecanismo de `src/lib/accessSheet.ts` (evita dependência de PDF,
  * mantém o layout em HTML/CSS puro).
  */
-export function openContractSheet(html: string, title: string): boolean {
+export function openContractSheet(html: string, title: string, autoPrint = true): boolean {
   const full = renderContractSheetHtml(html, title)
   // NOTE: noopener/noreferrer fazem window.open devolver null — omitido de propósito, precisamos
   // escrever no document da janela nova.
@@ -12,9 +12,13 @@ export function openContractSheet(html: string, title: string): boolean {
   w.document.open()
   w.document.write(full)
   w.document.close()
-  w.setTimeout(() => {
-    try { w.focus(); w.print() } catch { /* ignore */ }
-  }, 250)
+  // autoPrint=false ("Ver PDF"): só abre a prévia, sem forçar o diálogo de impressão — a pessoa
+  // ainda pode clicar no botão flutuante se quiser imprimir/salvar dali.
+  if (autoPrint) {
+    w.setTimeout(() => {
+      try { w.focus(); w.print() } catch { /* ignore */ }
+    }, 250)
+  }
   return true
 }
 

@@ -3,9 +3,17 @@
  * usado pela NX — os trechos entre `&lt;&lt;...&gt;&gt;` são os placeholders (equivalente ao
  * "<<...>>" vermelho do documento original) que o formulário da aba Contrato detecta e preenche.
  *
- * Único ajuste feito no texto original: o placeholder "<<VALOR>>" aparecia duas vezes (valor de
- * instalação e valor mensal) — como cada placeholder vira UM campo só, isso preencheria os dois
- * com o mesmo valor. Foram renomeados para "<<VALOR DE INSTALAÇÃO>>" e "<<VALOR MENSAL>>".
+ * Ajustes feitos no texto original:
+ * - "<<VALOR>>" aparecia duas vezes (valor de instalação e valor mensal) — como cada placeholder
+ *   vira UM campo só, isso preencheria os dois com o mesmo valor. Renomeados para
+ *   "<<VALOR DE INSTALAÇÃO>>" e "<<VALOR MENSAL>>".
+ * - A tabela de serviços (Cláusula 2ª) era um HTML fixo — virou o placeholder
+ *   "<<Tabela de Serviços>>", preenchido a partir de uma lista repetível no formulário (ver
+ *   src/lib/contractPlaceholders.ts, applyServicesTable).
+ * - Vigência (Cláusula 16ª), reajuste (Cláusula 6ª) e multa rescisória (Cláusula 14ª/§1º) eram
+ *   números fixos no texto (12 meses / 12 meses / 30%) — viraram placeholders
+ *   "<<Vigência (meses)>>" / "<<Reajuste (meses)>>" / "<<Multa Rescisória (%)>>", com esses mesmos
+ *   valores como padrão (ver defaultValueFor) — só editáveis se o cliente negociar diferente.
  */
 
 const P = 'style="text-align:justify;margin:0 0 12pt;line-height:1.5;"'
@@ -23,14 +31,7 @@ export const DEFAULT_CONTRACT_HTML = `
 
 <h3 ${H3}>Título II &ndash; Serviços</h3>
 <p ${P}><strong>Cláusula 2ª:</strong> A <strong>CONTRATADA</strong> prestará serviços relativos à tabela abaixo:</p>
-<table style="width:100%;border-collapse:collapse;margin:0 0 14pt;">
-  <thead><tr><th style="border:1px solid #999;padding:6pt;background:#f1f1f1;">Serviços</th><th style="border:1px solid #999;padding:6pt;background:#f1f1f1;">Pacote</th></tr></thead>
-  <tbody>
-    <tr><td style="border:1px solid #999;padding:6pt;text-align:center;">01</td><td style="border:1px solid #999;padding:6pt;">PLATAFORMA NX</td></tr>
-    <tr><td style="border:1px solid #999;padding:6pt;text-align:center;">02</td><td style="border:1px solid #999;padding:6pt;">API</td></tr>
-    <tr><td style="border:1px solid #999;padding:6pt;text-align:center;">03</td><td style="border:1px solid #999;padding:6pt;">SUPORTE DEDICADO</td></tr>
-  </tbody>
-</table>
+&lt;&lt;Tabela de Serviços&gt;&gt;
 <p ${P}>§ 1˚: A <strong>CONTRATADA</strong> não se responsabiliza por quaisquer bloqueios ou indisponibilidades decorrentes de ações de terceiros, inclusive de plataformas utilizadas para a prestação dos serviços, como o WhatsApp. Caso ocorra o bloqueio ou banimento da conta de WhatsApp do <strong>CONTRATANTE</strong> (ou de qualquer outro canal integrado), a <strong>CONTRATADA</strong> não terá qualquer responsabilidade ou obrigação de indenizar, sendo seu dever apenas orientar quanto aos riscos e indicar as melhores práticas para minimizar a possibilidade de bloqueio ou banimento.</p>
 <p ${P}>§ 2ª Caso o <strong>CONTRATANTE</strong> opte pela utilização de API oficial do WhatsApp ou de qualquer outro canal de comunicação que exija contratação ou integração oficial junto ao provedor, será necessário o pagamento de valores adicionais, que deverão ser previamente consultados e acordados entre as partes. Os custos referentes à contratação e utilização da API oficial serão de inteira responsabilidade do <strong>CONTRATANTE</strong>, não estando inclusos no valor pactuado neste instrumento.</p>
 
@@ -51,7 +52,7 @@ export const DEFAULT_CONTRACT_HTML = `
 <p ${P}>§ 7º: As partes podem adotar outra forma de pagamento, desde que uma parte informe com 30 (trinta) dias de antecedência seu desejo de alterar e a outra parte concorde expressamente, através de aditivo contratual ou simples solicitação por e-mail.</p>
 
 <h3 ${H3}>Título V &ndash; Reajuste</h3>
-<p ${P}><strong>Cláusula 6ª:</strong> Os valores deste contrato serão reajustados anualmente, sendo o prazo de 12 meses a partir da data de início, de acordo com o Índice de Preços no Consumo (IPCA) divulgado pelo IBRE (Instituto Brasileiro de Economia) ou outro índice oficial que vier a substituí-lo. Em caso de alteração das alíquotas dos impostos incidentes sobre a prestação de serviços ou de negociações coletivas, as partes em comum acordo poderão majorar o valor pactuado, de forma a restabelecer o equilíbrio econômico contratual.</p>
+<p ${P}><strong>Cláusula 6ª:</strong> Os valores deste contrato serão reajustados anualmente, sendo o prazo de &lt;&lt;Reajuste (meses)&gt;&gt; meses a partir da data de início, de acordo com o Índice de Preços no Consumo (IPCA) divulgado pelo IBRE (Instituto Brasileiro de Economia) ou outro índice oficial que vier a substituí-lo. Em caso de alteração das alíquotas dos impostos incidentes sobre a prestação de serviços ou de negociações coletivas, as partes em comum acordo poderão majorar o valor pactuado, de forma a restabelecer o equilíbrio econômico contratual.</p>
 
 <h3 ${H3}>Título VI &ndash; Direitos autorais</h3>
 <p ${P}><strong>Cláusula 7ª:</strong> A <strong>CONTRATANTE</strong> é a titular dos direitos autorais patrimoniais sobre todas as imagens e vídeos disponibilizados para os trabalhos e sobre todos os trabalhos publicitários desenvolvidos pela <strong>CONTRATADA</strong> e por seus profissionais, para publicação nas redes sociais da contratante, por tempo indeterminado, para fazer uso a qualquer tempo e modo como bem entender.</p>
@@ -87,12 +88,12 @@ export const DEFAULT_CONTRACT_HTML = `
 <p ${LI}>b) Deixar a <strong>CONTRATANTE</strong> de cumprir com o disposto na cláusula quarta deste contrato.</p>
 <p ${LI}>c) Por motivos de força maior.</p>
 <p ${LILAST}>d) Término do prazo ajustado.</p>
-<p ${P}><strong>Cláusula 14ª:</strong> Havendo interesse em sua rescisão, após o prazo de vigência deste contrato, a parte interessada notificará a outra parte por escrito e com assinatura do representante legal da empresa, com antecedência mínima de trinta (30) dias, sob pena de multa equivalente à 30% de uma mensalidade, no valor previsto na cláusula 4ª.</p>
-<p ${P}>§ 1º: Se a <strong>CONTRATANTE</strong> rescindir o contrato antes do prazo de vigência ficará sujeita ao pagamento de multa equivalente 30% da remuneração prevista na cláusula 4ª até o término do prazo de vigência deste contrato.</p>
+<p ${P}><strong>Cláusula 14ª:</strong> Havendo interesse em sua rescisão, após o prazo de vigência deste contrato, a parte interessada notificará a outra parte por escrito e com assinatura do representante legal da empresa, com antecedência mínima de trinta (30) dias, sob pena de multa equivalente à &lt;&lt;Multa Rescisória (%)&gt;&gt;% de uma mensalidade, no valor previsto na cláusula 4ª.</p>
+<p ${P}>§ 1º: Se a <strong>CONTRATANTE</strong> rescindir o contrato antes do prazo de vigência ficará sujeita ao pagamento de multa equivalente &lt;&lt;Multa Rescisória (%)&gt;&gt;% da remuneração prevista na cláusula 4ª até o término do prazo de vigência deste contrato.</p>
 <p ${P}><strong>Cláusula 15ª:</strong> Na hipótese de cessação de determinada prestação de serviço, por qualquer motivo, as partes devolverão, em um prazo máximo de 30 dias, a quem de direito, quaisquer documentos, fórmulas, processos, desenhos em papel ou arquivo eletrônico e demais especificações que estejam em seu poder para a prestação do serviço descontinuado.</p>
 
 <h3 ${H3}>Título XII &ndash; Vigência</h3>
-<p ${P}><strong>Cláusula 16ª:</strong> O presente contrato terá vigência pelo prazo de 12 meses, com renovação automática se nenhuma parte manifestar por escrito interesse em rescindir.</p>
+<p ${P}><strong>Cláusula 16ª:</strong> O presente contrato terá vigência pelo prazo de &lt;&lt;Vigência (meses)&gt;&gt; meses, com renovação automática se nenhuma parte manifestar por escrito interesse em rescindir.</p>
 
 <h3 ${H3}>Título XIII &ndash; Disposições gerais</h3>
 <p ${P}><strong>Cláusula 17ª:</strong> A <strong>CONTRATADA</strong> poderá extinguir o presente contrato, a qualquer tempo, mediante prévia notificação ao <strong>CONTRATANTE</strong> sempre que, a seu critério, considerar caracterizado algum tipo de infração aos dispositivos constantes deste presente contrato;</p>

@@ -765,6 +765,43 @@ END $$`);
      WHERE NOT EXISTS (SELECT 1 FROM contract_templates)`,
     [DEFAULT_CONTRACT_HTML]
   );
+  // Quem já tinha o modelo padrão semeado antes (tabela de serviços fixa, vigência/reajuste/multa
+  // como números soltos no texto) ganha os placeholders novos — só troca se o texto original
+  // exato ainda estiver lá (strpos, não LIKE, pra não tropeçar no "%" literal de "30%"); se a
+  // pessoa já editou esse trecho pelo "Editar modelo padrão", fica como está.
+  const OLD_SERVICES_TABLE = `<table style="width:100%;border-collapse:collapse;margin:0 0 14pt;">
+  <thead><tr><th style="border:1px solid #999;padding:6pt;background:#f1f1f1;">Serviços</th><th style="border:1px solid #999;padding:6pt;background:#f1f1f1;">Pacote</th></tr></thead>
+  <tbody>
+    <tr><td style="border:1px solid #999;padding:6pt;text-align:center;">01</td><td style="border:1px solid #999;padding:6pt;">PLATAFORMA NX</td></tr>
+    <tr><td style="border:1px solid #999;padding:6pt;text-align:center;">02</td><td style="border:1px solid #999;padding:6pt;">API</td></tr>
+    <tr><td style="border:1px solid #999;padding:6pt;text-align:center;">03</td><td style="border:1px solid #999;padding:6pt;">SUPORTE DEDICADO</td></tr>
+  </tbody>
+</table>`;
+  const CONTRACT_TEXT_MIGRATIONS: [string, string][] = [
+    [OLD_SERVICES_TABLE, '&lt;&lt;Tabela de Serviços&gt;&gt;'],
+    [
+      'sendo o prazo de 12 meses a partir da data de início',
+      'sendo o prazo de &lt;&lt;Reajuste (meses)&gt;&gt; meses a partir da data de início',
+    ],
+    [
+      'multa equivalente à 30% de uma mensalidade',
+      'multa equivalente à &lt;&lt;Multa Rescisória (%)&gt;&gt;% de uma mensalidade',
+    ],
+    [
+      'multa equivalente 30% da remuneração',
+      'multa equivalente &lt;&lt;Multa Rescisória (%)&gt;&gt;% da remuneração',
+    ],
+    [
+      'vigência pelo prazo de 12 meses, com renovação',
+      'vigência pelo prazo de &lt;&lt;Vigência (meses)&gt;&gt; meses, com renovação',
+    ],
+  ];
+  for (const [oldText, newText] of CONTRACT_TEXT_MIGRATIONS) {
+    await pool.query(
+      `UPDATE contract_templates SET conteudo = replace(conteudo, $1, $2) WHERE strpos(conteudo, $1) > 0`,
+      [oldText, newText]
+    );
+  }
 
   // Um contrato gerado = um cliente. "campos" guarda o valor que a pessoa preencheu pra cada
   // placeholder do modelo (inclui campos.CNPJ, usado pra disparar a busca automática); "conteudo"

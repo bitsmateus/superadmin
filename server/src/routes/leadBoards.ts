@@ -83,10 +83,12 @@ const MILESTONE_AGENDADA = 'Reunião agendada';
 const MILESTONE_VENDIDO = 'Vendido';
 const MILESTONE_STATUSES = [MILESTONE_AGENDADA, 'Reunião não comparecida', MILESTONE_VENDIDO];
 
-/** Status que só existem DEPOIS de uma reunião ter sido agendada — um lead nesses status "prova"
- * que passou por "Reunião agendada" em algum momento, mesmo sem um evento de mudança de status
- * gravado pra isso (ex.: lead importado já com o status mais avançado, sem histórico completo).
- * Usado só pra completar "ever_agendada" abaixo — não muda o "milestone" (marco mais recente). */
+/** O CAMINHO VÁLIDO depois de agendar uma reunião: continua agendada, virou no-show, seguiu pra
+ * proposta/follow-up, ou fechou venda. Usado como o único critério de "ever_agendada" (denominador
+ * do funil) — o status ATUAL do lead precisa estar aqui, não importa o que ele já foi no passado
+ * (evita contar erro de SDR: marcar Reunião agendada e depois corrigir pra um status fora desse
+ * caminho, tipo "Disparo em massa", não deve contar como agendamento de verdade). Não muda o
+ * "milestone" (marco mais recente, usado separadamente pra no-show/vendas). */
 const POST_AGENDAMENTO_STATUSES = [
   MILESTONE_AGENDADA,
   'Reunião não comparecida',
@@ -533,9 +535,14 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   // massa") tem que SAIR da contagem de vendas: contar pelo último evento do tipo, ignorando
   // mudanças posteriores pra status não-milestone, inflava vendas/no-show com gente que já foi
   // corrigido/mudado de status depois.
-  // "ever_agendada" é à parte, e continua histórico de propósito: verdadeiro se o lead JÁ passou
-  // por qualquer status pós-agendamento em algum momento — reunião agendada é um fato que
-  // aconteceu, mudar a etiqueta depois não desfaz isso (denominador do funil).
+  // "ever_agendada" (denominador do funil) exige um CAMINHO VÁLIDO: o status ATUAL tem que ser
+  // Reunião agendada, Reunião não comparecida, Proposta Enviada, Follow-up Propostas ou Vendido —
+  // ou seja, ou está agendado agora, ou seguiu o funil esperado dali em diante. NÃO basta ter tido
+  // um evento de "virou Reunião agendada" em algum momento da história: se o SDR errou (marcou
+  // Reunião agendada por engano e corrigiu pra outro status fora desse caminho, tipo "Disparo em
+  // massa" ou de volta pra "Primeiro Contato"), isso não é um agendamento de verdade e não deve
+  // contar — só o histórico de evento, sem olhar o status atual, deixava esse erro contando pra
+  // sempre.
   // "milestone_at" é a data do evento de status mais recente do lead (se o status atual bate com
   // o milestone, foi essa mudança que colocou ele lá). "first_agendada_at" é a data do PRIMEIRO
   // "Reunião agendada" da história — fica fixa mesmo com reagendamento depois de um no-show.
@@ -563,13 +570,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
             lr.created_at
           )
         END AS milestone_at,
-        (
-          lr.status = ANY($3)
-          OR EXISTS (
-            SELECT 1 FROM lead_events le
-            WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($3)
-          )
-        ) AS ever_agendada,
+        (lr.status = ANY($3)) AS ever_agendada,
         COALESCE(
           (SELECT MIN(le.created_at) FROM lead_events le
            WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $2),

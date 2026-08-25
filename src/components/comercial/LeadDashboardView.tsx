@@ -4,6 +4,7 @@ import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useLeadMilestones } from '@/hooks/useLeadMilestones'
 import { useMonthFilter, withinBounds, addMonthsToId, currentMonthId } from '@/hooks/useMonthFilter'
 import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
+import { ClickableStat } from '@/components/comercial/ClickableStat'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
@@ -71,6 +72,10 @@ interface SdrMetrics {
   pctAgendamento: number
   pctNoShow: number
   pctAgendamentoVenda: number
+  totalRows: LeadRow[]
+  agendadosRows: LeadRow[]
+  noShowRows: LeadRow[]
+  vendasRows: LeadRow[]
 }
 
 function pct(n: number): string {
@@ -87,38 +92,56 @@ function RingStat({
   icon,
   label,
   color,
-  count,
   of,
   ratio,
+  matches,
+  boards,
+  onOpenLead,
 }: {
   icon: React.ReactNode
   label: string
   color: string
-  count: number
   of: number
   ratio: number
+  matches: LeadRow[]
+  boards: LeadBoard[]
+  onOpenLead: (id: string) => void
 }) {
+  const count = matches.length
   const deg = Math.max(0, Math.min(1, ratio)) * 360
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3">
-      <div
-        className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full"
-        style={{ background: `conic-gradient(${color} ${deg}deg, #E5E7EB 0deg)` }}
-      >
-        <div className="grid h-[52px] w-[52px] place-items-center rounded-full bg-card">
-          <span className="text-sm font-bold" style={{ color }}>{pct(ratio)}</span>
-        </div>
-      </div>
-      <div className="flex items-center gap-1 text-[11px] font-semibold text-foreground/70">
-        <span style={{ color }}>{icon}</span>
-        {label}
-      </div>
-      <div className="text-[10px] text-foreground/40">{count} de {Math.max(of, count)}</div>
-    </div>
+    <ClickableStat matches={matches} boards={boards} onOpenLead={onOpenLead}>
+      {(onClick, ref) => (
+        <button
+          ref={ref}
+          type="button"
+          onClick={onClick}
+          disabled={count === 0}
+          className={cn(
+            'flex flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3 transition-opacity',
+            count > 0 ? 'cursor-pointer hover:opacity-70' : 'cursor-default',
+          )}
+        >
+          <div
+            className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full"
+            style={{ background: `conic-gradient(${color} ${deg}deg, #E5E7EB 0deg)` }}
+          >
+            <div className="grid h-[52px] w-[52px] place-items-center rounded-full bg-card">
+              <span className="text-sm font-bold" style={{ color }}>{pct(ratio)}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-foreground/70">
+            <span style={{ color }}>{icon}</span>
+            {label}
+          </div>
+          <div className="text-[10px] text-foreground/40">{count} de {Math.max(of, count)}</div>
+        </button>
+      )}
+    </ClickableStat>
   )
 }
 
-function SdrCard({ metrics }: { metrics: SdrMetrics }) {
+function SdrCard({ metrics, boards, onOpenLead }: { metrics: SdrMetrics; boards: LeadBoard[]; onOpenLead: (id: string) => void }) {
   const m = metrics
   return (
     <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line transition-shadow hover:shadow-md">
@@ -133,14 +156,27 @@ function SdrCard({ metrics }: { metrics: SdrMetrics }) {
           <p className="truncate text-sm font-semibold text-foreground">{m.sdr}</p>
           <p className="text-[11px] text-foreground/40">{m.total} lead{m.total === 1 ? '' : 's'} no total</p>
         </div>
-        <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-semibold text-accent">
-          {m.total}
-        </span>
+        <ClickableStat matches={m.totalRows} boards={boards} onOpenLead={onOpenLead}>
+          {(onClick, ref) => (
+            <button
+              ref={ref}
+              type="button"
+              onClick={onClick}
+              disabled={m.total === 0}
+              className={cn(
+                'shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-semibold text-accent transition-opacity',
+                m.total > 0 ? 'cursor-pointer hover:opacity-70' : 'cursor-default',
+              )}
+            >
+              {m.total}
+            </button>
+          )}
+        </ClickableStat>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <RingStat icon={<Calendar className="h-3 w-3" />} label="Agendada" color="#4F8EF7" count={m.agendados} of={m.total} ratio={m.pctAgendamento} />
-        <RingStat icon={<UserX className="h-3 w-3" />} label="No-show" color="#EF4444" count={m.noShow} of={m.agendados} ratio={m.pctNoShow} />
-        <RingStat icon={<ShoppingBag className="h-3 w-3" />} label="Venda" color="#22C55E" count={m.vendas} of={m.agendados} ratio={m.pctAgendamentoVenda} />
+        <RingStat icon={<Calendar className="h-3 w-3" />} label="Agendada" color="#4F8EF7" of={m.total} ratio={m.pctAgendamento} matches={m.agendadosRows} boards={boards} onOpenLead={onOpenLead} />
+        <RingStat icon={<UserX className="h-3 w-3" />} label="No-show" color="#EF4444" of={m.agendados} ratio={m.pctNoShow} matches={m.noShowRows} boards={boards} onOpenLead={onOpenLead} />
+        <RingStat icon={<ShoppingBag className="h-3 w-3" />} label="Venda" color="#22C55E" of={m.agendados} ratio={m.pctAgendamentoVenda} matches={m.vendasRows} boards={boards} onOpenLead={onOpenLead} />
       </div>
     </div>
   )
@@ -207,7 +243,7 @@ function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMet
  * momento (mesmo se hoje já virou Vendido/No-show) — é o denominador do funil. "No-show" e
  * "Vendas" usam sempre o marco mais recente da linha do tempo de cada lead, não o status literal
  * atual, pra não contar duas vezes reagendamentos. */
-export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: string }) {
+export function SdrMetricsGrid({ rows, boards, onOpenLead, title }: { rows: LeadRow[]; boards: LeadBoard[]; onOpenLead: (id: string) => void; title?: string }) {
   const milestones = useLeadMilestones()
   const sdrLabels = useLeadLabels('sdr')
   const milestoneById = React.useMemo(
@@ -220,7 +256,7 @@ export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: strin
 
   const bySdr = React.useMemo<SdrMetrics[]>(() => {
     const bounds = monthFilter.bounds
-    const buckets = new Map<string, { total: number; agendados: number; noShow: number; vendas: number }>()
+    const buckets = new Map<string, { totalRows: LeadRow[]; agendadosRows: LeadRow[]; noShowRows: LeadRow[]; vendasRows: LeadRow[] }>()
     for (const r of rows) {
       // O período filtra a LEVA de leads (quem nasceu nesse mês) — não cada marco individualmente.
       // Uma vez que o lead entrou na leva do mês, ele carrega o funil inteiro dali: se agendou, fica
@@ -228,25 +264,29 @@ export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: strin
       // status — mudar a etiqueta não tira ele da contagem de quem já agendou.
       if (!withinBounds(r.createdAt, bounds)) continue
       const name = r.sdr || 'Sem SDR'
-      const b = buckets.get(name) ?? { total: 0, agendados: 0, noShow: 0, vendas: 0 }
+      const b = buckets.get(name) ?? { totalRows: [], agendadosRows: [], noShowRows: [], vendasRows: [] }
       const info = milestoneById.get(r.id)
-      b.total += 1
-      if (info?.everAgendada) b.agendados += 1
-      if (info?.milestone === MILESTONE_NO_SHOW) b.noShow += 1
-      else if (info?.milestone === MILESTONE_VENDIDO) b.vendas += 1
+      b.totalRows.push(r)
+      if (info?.everAgendada) b.agendadosRows.push(r)
+      if (info?.milestone === MILESTONE_NO_SHOW) b.noShowRows.push(r)
+      else if (info?.milestone === MILESTONE_VENDIDO) b.vendasRows.push(r)
       buckets.set(name, b)
     }
     return Array.from(buckets.entries())
       .map(([name, b]) => ({
         sdr: name,
         color: sdrLabels.find((l) => l.name === name)?.color ?? '#9CA3AF',
-        total: b.total,
-        agendados: b.agendados,
-        noShow: b.noShow,
-        vendas: b.vendas,
-        pctAgendamento: b.total > 0 ? b.agendados / b.total : 0,
-        pctNoShow: b.agendados > 0 ? b.noShow / b.agendados : (b.noShow > 0 ? 1 : 0),
-        pctAgendamentoVenda: b.agendados > 0 ? b.vendas / b.agendados : (b.vendas > 0 ? 1 : 0),
+        total: b.totalRows.length,
+        agendados: b.agendadosRows.length,
+        noShow: b.noShowRows.length,
+        vendas: b.vendasRows.length,
+        pctAgendamento: b.totalRows.length > 0 ? b.agendadosRows.length / b.totalRows.length : 0,
+        pctNoShow: b.agendadosRows.length > 0 ? b.noShowRows.length / b.agendadosRows.length : (b.noShowRows.length > 0 ? 1 : 0),
+        pctAgendamentoVenda: b.agendadosRows.length > 0 ? b.vendasRows.length / b.agendadosRows.length : (b.vendasRows.length > 0 ? 1 : 0),
+        totalRows: b.totalRows,
+        agendadosRows: b.agendadosRows,
+        noShowRows: b.noShowRows,
+        vendasRows: b.vendasRows,
       }))
       .sort((a, b) => b.total - a.total)
   }, [rows, milestoneById, sdrLabels, monthFilter.bounds])
@@ -267,7 +307,7 @@ export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: strin
       <MonthFilterBar filter={monthFilter} />
       <SdrMetricsTable bySdr={bySdr} title={title} />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {bySdr.map((m) => <SdrCard key={m.sdr} metrics={m} />)}
+        {bySdr.map((m) => <SdrCard key={m.sdr} metrics={m} boards={boards} onOpenLead={onOpenLead} />)}
       </div>
     </div>
   )
@@ -276,6 +316,8 @@ export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: strin
 export interface LeadDashboardViewProps {
   rows: LeadRow[]
   boards: LeadBoard[]
+  /** Abre o lead ao clicar num número das Métricas por SDR (Agendada/No-show/Venda/total). */
+  onOpenLead: (id: string) => void
   /** Rótulo da 2ª aba — "Dashboard do SDR" por padrão (Novos Leads, com os 2 SDRs juntos).
    * CRM NX Luis/Arthur passam "Minhas métricas" porque ali só existe o SDR dono da aba. */
   sdrTabLabel?: string
@@ -285,7 +327,7 @@ export interface LeadDashboardViewProps {
 }
 
 /** Painel só de visualização — nada aqui é editável, é resumo de leitura dos leads filtrados. */
-export function LeadDashboardView({ rows, boards, sdrTabLabel = 'Dashboard do SDR', onlySdr = false }: LeadDashboardViewProps) {
+export function LeadDashboardView({ rows, boards, onOpenLead, sdrTabLabel = 'Dashboard do SDR', onlySdr = false }: LeadDashboardViewProps) {
   const [subView, setSubView] = React.useState<'geral' | 'sdr'>(onlySdr ? 'sdr' : 'geral')
   // boards já vem filtrado pra UMA aba só (chamado de dentro de LeadBoardsView).
   const pageId = boards[0]?.page
@@ -366,7 +408,7 @@ export function LeadDashboardView({ rows, boards, sdrTabLabel = 'Dashboard do SD
       )}
 
       {(onlySdr || subView === 'sdr') ? (
-        <SdrMetricsGrid rows={rows} />
+        <SdrMetricsGrid rows={rows} boards={boards} onOpenLead={onOpenLead} />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

@@ -1325,6 +1325,16 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
     [visibleRows, sdrLock],
   )
 
+  // Pesquisando, só mostra os quadros que TÊM algum resultado — sem isso, a lista inteira de
+  // quadros vazios ficava à vista só pra achar o único cliente que bateu com a busca. Sem termo de
+  // busca, volta a mostrar todos os quadros normalmente (mesmo que o filtro de SDR/Filtro avançado
+  // esteja ativo — isso continua só esvaziando o quadro, não escondendo ele).
+  const visibleBoards = React.useMemo(() => {
+    if (!search.trim()) return boards
+    const matchingBoardIds = new Set(visibleRows.map((r) => r.boardId))
+    return boards.filter((b) => matchingBoardIds.has(b.id))
+  }, [boards, visibleRows, search])
+
   // Kanban/Dashboard é uma preferência do usuário/navegador, vale pras 3 telas do Comercial.
   const [view, setView] = React.useState<'list' | 'kanban' | 'dashboard'>(() => {
     try {
@@ -1447,7 +1457,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               <>
                 <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} />
                 <div className="flex-1">
-                  {boards.map((board) => (
+                  {visibleBoards.map((board) => (
                     <BoardGroup
                       key={board.id}
                       board={board}

@@ -571,11 +571,13 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           )
         END AS milestone_at,
         (lr.status = ANY($3)) AS ever_agendada,
-        COALESCE(
-          (SELECT MIN(le.created_at) FROM lead_events le
-           WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $2),
-          CASE WHEN lr.status = $2 THEN lr.created_at END
-        ) AS first_agendada_at
+        CASE WHEN lr.status = ANY($3) THEN
+          COALESCE(
+            (SELECT MIN(le.created_at) FROM lead_events le
+             WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($3)),
+            lr.created_at
+          )
+        END AS first_agendada_at
        FROM lead_rows lr
        JOIN lead_boards lb ON lb.id = lr.board_id
        WHERE lb.is_vendas = false

@@ -18,16 +18,21 @@ export const STALE_MS = 24 * 60 * 60 * 1000
  * Retornar de antes dessa data nunca conta como atrasado, não importa quão no passado esteja. */
 export const ATRASADO_CUTOFF = '2026-08-01'
 
+/** "Atrasados" só considera lead que está atualmente em Proposta Enviada — se já virou Vendido,
+ * Follow-up ou qualquer outro status, o retorno antigo que ficou marcado não conta mais como
+ * atrasado (o lead seguiu o funil, não está "esquecido"). */
+export const ATRASADO_STATUS = 'Proposta Enviada'
+
 /** Classifica um lead nos 4 "status do dia" (não atualizado, atrasado, reunião hoje, proposta
  * hoje) — mesma lógica usada no painel do dia e no dashboard comercial, geral ou por SDR. */
-export function classifyLeadToday<T extends { id: string; retornar: string; retornado: boolean; agendamento: string }>(
+export function classifyLeadToday<T extends { id: string; retornar: string; retornado: boolean; agendamento: string; status: string }>(
   row: T,
   diaContatoUpdatedAt: string | undefined,
   today: string,
 ): { naoAtualizado: boolean; atrasado: boolean; reuniaoHoje: boolean; propostaHoje: boolean } {
   const naoAtualizado = !!diaContatoUpdatedAt && Date.now() - new Date(diaContatoUpdatedAt).getTime() > STALE_MS
   const retornarKey = dateKey(row.retornar)
-  const atrasado = !!retornarKey && retornarKey >= ATRASADO_CUTOFF && retornarKey < today && !row.retornado
+  const atrasado = row.status === ATRASADO_STATUS && !!retornarKey && retornarKey >= ATRASADO_CUTOFF && retornarKey < today && !row.retornado
   const reuniaoHoje = dateKey(row.agendamento) === today
   const propostaHoje = retornarKey === today && !row.retornado
   return { naoAtualizado, atrasado, reuniaoHoje, propostaHoje }

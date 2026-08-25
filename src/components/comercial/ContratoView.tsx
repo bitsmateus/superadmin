@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarRange, CheckCircle2, Clock, Download, FileText, ListTodo, Loader2, Plus, Search, Settings, Trash2, UserRound, X } from 'lucide-react'
+import { ArrowRight, CalendarRange, CheckCircle2, Clock, Download, FileText, ListTodo, Loader2, Plus, Search, Settings, Trash2, UserRound, X } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -11,6 +11,7 @@ import { db } from '@/services/db'
 import { canDeleteClient } from '@/services/supabase'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { StageAgeBadge } from '@/components/crm/StageAgeBadge'
+import { NEXT_STAGE, STAGE_COLORS } from '@/constants/stageColors'
 import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/useContracts'
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
@@ -311,6 +312,18 @@ export function ContratoView({ pageId }: { pageId: string }) {
     startNew(client)
   }
 
+  // Atalho pra não precisar abrir o drawer só pra avançar — mesma lógica do botão "Avançar
+  // etapa" de lá (ClientDrawer.advance), só que direto na linha. Só em Boas-vindas (welcome ->
+  // contract): em Pendente de contrato isso pularia a pessoa direto pra Briefing sem nunca gerar
+  // o contrato, furando o próprio motivo dessa fila existir.
+  const advanceStage = (client: Client) => {
+    const next = NEXT_STAGE[client.stage]
+    if (!next) return
+    db.updateClient(client.id, { stage: next })
+    db.addLog(client.id, 'Etapa alterada', `${STAGE_COLORS[client.stage].label} → ${STAGE_COLORS[next].label}`)
+    toast.success(`Etapa: ${STAGE_COLORS[next].label}`)
+  }
+
   const archiveClient = (client: Client) => {
     const label = client.company || client.name
     const ok = window.confirm(
@@ -371,7 +384,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
             {tab === 'boas-vindas' && (
               <>
                 <MonthFilterBar filter={boasVindasFilter} />
-                <PendingClientsList clients={boasVindasInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} emptyText="Nenhum cliente em Boas-vindas nesse período." />
+                <PendingClientsList clients={boasVindasInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={advanceStage} emptyText="Nenhum cliente em Boas-vindas nesse período." />
               </>
             )}
 
@@ -618,11 +631,13 @@ function PendingClientsList({
   clients,
   onOpen,
   onArchive,
+  onAdvance,
   emptyText = 'Nenhuma ficha pendente de contrato — tudo em dia.',
 }: {
   clients: Client[]
   onOpen: (client: Client) => void
   onArchive?: (client: Client) => void
+  onAdvance?: (client: Client) => void
   emptyText?: string
 }) {
   if (clients.length === 0) {
@@ -642,7 +657,7 @@ function PendingClientsList({
               <th className="w-40 px-4 py-3">CNPJ</th>
               <th className="w-32 px-4 py-3">Entrada</th>
               <th className="w-24 px-4 py-3">Na etapa</th>
-              <th className="w-14 px-2 py-3" />
+              <th className="w-24 px-2 py-3" />
             </tr>
           </thead>
           <tbody>
@@ -656,17 +671,29 @@ function PendingClientsList({
                 <td className="px-4 py-3 text-sm text-gray-600">{c.fichaCadastro?.cnpj ? formatCnpj(c.fichaCadastro.cnpj) : '—'}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">{formatDateShort(c.createdAt)}</td>
                 <td className="px-4 py-3 text-sm"><StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} /></td>
-                <td className="px-2 py-3 text-right">
-                  {onArchive && (
-                    <button
-                      type="button"
-                      title="Arquivar cliente"
-                      onClick={(e) => { e.stopPropagation(); onArchive(c) }}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 ring-1 ring-gray-200 transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                <td className="px-2 py-3">
+                  <div className="flex items-center justify-end gap-1.5">
+                    {onAdvance && (
+                      <button
+                        type="button"
+                        title="Avançar etapa"
+                        onClick={(e) => { e.stopPropagation(); onAdvance(c) }}
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 ring-1 ring-gray-200 transition-colors hover:bg-accent/10 hover:text-accent hover:ring-accent/30"
+                      >
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {onArchive && (
+                      <button
+                        type="button"
+                        title="Arquivar cliente"
+                        onClick={(e) => { e.stopPropagation(); onArchive(c) }}
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 ring-1 ring-gray-200 transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

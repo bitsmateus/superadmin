@@ -179,13 +179,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const selected = listForTab.find((c) => c.id === selectedId) ?? null
 
   const bodyRef = React.useRef<HTMLDivElement>(null)
-  const loadedIdRef = React.useRef<string | null>(null)
+  const detailOpen = !!selected
+  // O detalhe agora vive num Modal (desmonta o contentEditable ao fechar), então recarrega o
+  // texto sempre que o modal ABRE — não dá pra confiar num "já carreguei esse id antes", já que a
+  // div é recriada do zero a cada abertura.
   React.useEffect(() => {
-    if (!selected || !bodyRef.current) return
-    if (loadedIdRef.current === selected.id) return
-    bodyRef.current.innerHTML = selected.conteudo
-    loadedIdRef.current = selected.id
-  }, [selected])
+    if (detailOpen && bodyRef.current && selected) bodyRef.current.innerHTML = selected.conteudo
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailOpen])
 
   const debouncedSaveBody = useDebouncedCallback((html: string) => {
     if (selected) void contractsService.updateContract(selected.id, { conteudo: html })
@@ -236,7 +237,6 @@ export function ContratoView({ pageId }: { pageId: string }) {
     try {
       const conteudo = applyPlaceholders(template.conteudo, draftCampos)
       const created = await contractsService.createContract(board.id, template.id, draftCampos, conteudo, draftClientId)
-      loadedIdRef.current = null
       setDraftCampos({})
       setDraftClientId(null)
       setTab('pendentes-contrato')
@@ -427,101 +427,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
             {(tab === 'pendentes-contrato' || tab === 'assinados') && (
               <>
                 <MonthFilterBar filter={tab === 'assinados' ? signedFilter : pendingFilter} />
-                <div className="flex flex-col gap-4 lg:flex-row">
-                  <aside className="shrink-0 rounded-2xl bg-card p-3 shadow-sm lg:w-64">
-                    {listForTab.length === 0 ? (
-                      <p className="px-1 py-6 text-center text-xs text-foreground/40">
-                        {tab === 'assinados' ? 'Nenhum contrato assinado nesse período.' : 'Nenhum contrato pendente de assinatura nesse período.'}
-                      </p>
-                    ) : (
-                      <ul className="space-y-1">
-                        {listForTab.map((c) => (
-                          <li key={c.id}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedId(c.id)}
-                              className={cn(
-                                'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
-                                selectedId === c.id ? 'bg-accent/10 text-accent' : 'text-foreground/70 hover:bg-elevate/[0.04]',
-                              )}
-                            >
-                              <span className="min-w-0 flex-1 truncate font-medium">{contractLabel(c)}</span>
-                              <span className="flex shrink-0 items-center gap-1">
-                                {tab === 'pendentes-contrato' && (
-                                  <span
-                                    role="button"
-                                    title="Marcar como assinado"
-                                    onClick={(e) => { e.stopPropagation(); setContractStatus(c, 'assinado') }}
-                                    className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-success/10 text-success transition-colors hover:bg-success/20"
-                                  >
-                                    <ArrowRight className="h-3 w-3" />
-                                  </span>
-                                )}
-                                <span
-                                  role="button"
-                                  title="Excluir contrato"
-                                  onClick={(e) => { e.stopPropagation(); removeContract(c) }}
-                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-danger/10 text-danger transition-colors hover:bg-danger/20"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </span>
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </aside>
-
-                  <div className="min-w-0 flex-1 space-y-4">
-                    {selected ? (
-                      <>
-                        <div className="rounded-2xl bg-card p-4 shadow-sm">
-                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-sm font-semibold text-foreground">Campos do cliente</span>
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="secondary" onClick={regenerate}>Reaplicar no texto</Button>
-                              <Button
-                                size="sm"
-                                variant={selected.status === 'assinado' ? 'secondary' : 'primary'}
-                                onClick={toggleSigned}
-                                leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
-                              >
-                                {selected.status === 'assinado' ? 'Marcar como pendente' : 'Marcar como assinado'}
-                              </Button>
-                            </div>
-                          </div>
-                          <FieldForm
-                            placeholders={placeholders}
-                            campos={selected.campos}
-                            onChange={(name, value) => saveField(selected, name, value)}
-                            onCnpjBlur={fillSelectedFromCnpj}
-                            cnpjLoading={cnpjLoading}
-                          />
-                        </div>
-
-                        <div className="rounded-2xl bg-card p-4 shadow-sm">
-                          <div className="mb-3 flex items-center justify-between gap-2">
-                            <span className="text-sm font-semibold text-foreground">Contrato</span>
-                            <Button size="sm" onClick={download} leftIcon={<Download className="h-3.5 w-3.5" />}>Baixar PDF</Button>
-                          </div>
-                          <div
-                            ref={bodyRef}
-                            contentEditable
-                            suppressContentEditableWarning
-                            onInput={(e) => debouncedSaveBody((e.target as HTMLDivElement).innerHTML)}
-                            className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[11.5pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
-                            style={{ fontFamily: '"Times New Roman", Georgia, serif' }}
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <div className="grid min-h-[30vh] place-items-center text-center text-sm text-foreground/40">
-                        Selecione um contrato na lista.
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <ContractsList
+                  contracts={listForTab}
+                  showSignedAt={tab === 'assinados'}
+                  onOpen={(c) => setSelectedId(c.id)}
+                  onAdvance={tab === 'pendentes-contrato' ? (c) => setContractStatus(c, 'assinado') : undefined}
+                  onArchive={removeContract}
+                  emptyText={tab === 'assinados' ? 'Nenhum contrato assinado nesse período.' : 'Nenhum contrato pendente de assinatura nesse período.'}
+                />
               </>
             )}
           </>
@@ -541,7 +454,140 @@ export function ContratoView({ pageId }: { pageId: string }) {
           ) : undefined
         }
       />
+
+      <Modal
+        open={detailOpen}
+        onClose={() => setSelectedId(null)}
+        title={selected ? contractLabel(selected) : ''}
+        size="xl"
+      >
+        {selected && (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-elevate/[0.03] p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-foreground">Campos do cliente</span>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={regenerate}>Reaplicar no texto</Button>
+                  <Button
+                    size="sm"
+                    variant={selected.status === 'assinado' ? 'secondary' : 'primary'}
+                    onClick={toggleSigned}
+                    leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
+                  >
+                    {selected.status === 'assinado' ? 'Marcar como pendente' : 'Marcar como assinado'}
+                  </Button>
+                </div>
+              </div>
+              <FieldForm
+                placeholders={placeholders}
+                campos={selected.campos}
+                onChange={(name, value) => saveField(selected, name, value)}
+                onCnpjBlur={fillSelectedFromCnpj}
+                cnpjLoading={cnpjLoading}
+              />
+            </div>
+
+            <div className="rounded-2xl bg-elevate/[0.03] p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-foreground">Contrato</span>
+                <Button size="sm" onClick={download} leftIcon={<Download className="h-3.5 w-3.5" />}>Baixar PDF</Button>
+              </div>
+              <div
+                ref={bodyRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) => debouncedSaveBody((e.target as HTMLDivElement).innerHTML)}
+                className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[11.5pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
+                style={{ fontFamily: '"Times New Roman", Georgia, serif' }}
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
     </>
+  )
+}
+
+/** Mesmo layout de tabela de Boas-vindas/Pendente de contrato (PendingClientsList) — clicar na
+ * linha abre o detalhe do contrato num modal. */
+function ContractsList({
+  contracts,
+  showSignedAt,
+  onOpen,
+  onAdvance,
+  onArchive,
+  emptyText,
+}: {
+  contracts: Contract[]
+  showSignedAt: boolean
+  onOpen: (contract: Contract) => void
+  onAdvance?: (contract: Contract) => void
+  onArchive: (contract: Contract) => void
+  emptyText: string
+}) {
+  if (contracts.length === 0) {
+    return (
+      <div className="grid min-h-[30vh] place-items-center rounded-2xl bg-card text-center text-sm text-foreground/40 shadow-sm">
+        {emptyText}
+      </div>
+    )
+  }
+  return (
+    <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px]">
+          <thead>
+            <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+              <th className="px-4 py-3">Empresa</th>
+              <th className="w-40 px-4 py-3">CNPJ</th>
+              <th className="w-32 px-4 py-3">Criado em</th>
+              {showSignedAt && <th className="w-32 px-4 py-3">Assinado em</th>}
+              <th className="w-24 px-2 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {contracts.map((c) => (
+              <tr
+                key={c.id}
+                onClick={() => onOpen(c)}
+                className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]"
+              >
+                <td className="px-4 py-3 text-sm font-medium text-accent">{contractLabel(c)}</td>
+                <td className="px-4 py-3 text-sm text-foreground/70">{c.campos['CNPJ'] || '—'}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-sm text-foreground/70">{formatDateShort(c.createdAt)}</td>
+                {showSignedAt && (
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-foreground/70">
+                    {c.signedAt ? formatDateShort(c.signedAt) : '—'}
+                  </td>
+                )}
+                <td className="px-2 py-3">
+                  <div className="flex items-center justify-end gap-1.5">
+                    {onAdvance && (
+                      <button
+                        type="button"
+                        title="Marcar como assinado"
+                        onClick={(e) => { e.stopPropagation(); onAdvance(c) }}
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success transition-colors hover:bg-success/20"
+                      >
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      title="Excluir contrato"
+                      onClick={(e) => { e.stopPropagation(); onArchive(c) }}
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger transition-colors hover:bg-danger/20"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 

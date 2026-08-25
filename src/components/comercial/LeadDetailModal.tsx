@@ -130,7 +130,21 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               <LeadLabelCell field="ligacao" value={row.ligacao} onChange={(v) => leadBoardsService.updateRow(row.id, { ligacao: v })} pageId={board?.page} />
             </FieldRow>
             <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Status" required>
-              <LeadLabelCell field="status" value={row.status} onChange={(v) => leadBoardsService.updateRow(row.id, { status: v })} required pageId={board?.page} />
+              <LeadLabelCell
+                field="status"
+                value={row.status}
+                onChange={(v) => {
+                  // Mesma regra da lista: status vira o nome de um quadro (ex.: "Reunião
+                  // agendada"), o lead pula pra lá sozinho — senão fica com o Status dizendo uma
+                  // coisa e o Grupo (quadro) mostrando outra.
+                  const target = boards.find(
+                    (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === v.trim().toLowerCase(),
+                  )
+                  leadBoardsService.updateRow(row.id, target ? { status: v, boardId: target.id } : { status: v })
+                }}
+                required
+                pageId={board?.page}
+              />
             </FieldRow>
             <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="SDR">
               <LeadLabelCell field="sdr" value={row.sdr} onChange={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />

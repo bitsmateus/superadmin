@@ -91,6 +91,25 @@ export const leadNotesService = {
     }
   },
 
+  /** Igual `addNote`, mas pra importação: aceita autor e data livres (a atualização já veio com
+   * data e autor próprios do Monday, não é "agora" nem é a pessoa que está importando). */
+  async importNote(leadRowId: string, content: string, authorName: string, createdAt: string | null): Promise<void> {
+    const trimmed = content.trim()
+    if (!trimmed) return
+    try {
+      const row = await api.post<NoteRow>('/api/lead-notes', {
+        lead_row_id: leadRowId, content: trimmed, author_name: authorName || 'Importado', attachments: [],
+        ...(createdAt ? { created_at: createdAt } : {}),
+      })
+      const note = rowToNote(row)
+      notes = [note, ...notes]
+      notify()
+      leadBoardsService.bumpNotesCount(leadRowId, 1)
+    } catch (err) {
+      toast.error('Falha ao importar atualização: ' + (err as Error).message)
+    }
+  },
+
   updateNote(id: string, content: string): void {
     const trimmed = content.trim()
     if (!trimmed) return

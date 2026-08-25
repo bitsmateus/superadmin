@@ -609,11 +609,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         }
       }
       const [note] = await query(
-        `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments)
-         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments, created_at)
+         VALUES ($1,$2,$3,$4,$5, COALESCE($6::timestamptz, NOW())) RETURNING *`,
         [
           b.lead_row_id, authorId ?? null, b.author_name ?? 'Alguém', b.content ?? '',
-          JSON.stringify(b.attachments ?? []),
+          JSON.stringify(b.attachments ?? []), b.created_at ?? null,
         ]
       );
       return reply.status(201).send(note);

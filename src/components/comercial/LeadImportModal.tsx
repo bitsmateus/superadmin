@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { leadBoardsService } from '@/services/leadBoards'
+import { leadNotesService } from '@/services/leadNotes'
 import { parseCsv } from '@/lib/csv'
 import { sanitizeCurrencyRaw, prettifyCurrencyRaw } from '@/lib/currency'
 import { cn } from '@/lib/utils'
@@ -28,10 +29,11 @@ async function readSpreadsheet(file: File): Promise<string[][]> {
   return parseCsv(await file.text())
 }
 
-/** `createdAt` não é um LeadRowField normal (é controlado pelo sistema, não uma coluna do
- * quadro) — mas na importação a pessoa pode ter uma data de criação antiga na planilha e quer
- * que o "Log de criação" do lead nasça com ela, em vez da data/hora do import. */
-type ImportField = LeadRowField | 'createdAt'
+/** `createdAt`/`atualizacoes` não são LeadRowField normais — são controlados pelo sistema (a
+ * data de criação e o bloco de anotações do lead), não uma coluna do quadro. Na importação a
+ * pessoa pode ter esses dados na planilha (ex.: exportado do Monday) e quer que o lead já nasça
+ * com o "Log de criação" e as atualizações certas, em vez da data/hora do import. */
+type ImportField = LeadRowField | 'createdAt' | 'atualizacoes'
 
 const IMPORT_FIELDS: { key: ImportField; label: string; aliases: string[] }[] = [
   { key: 'nome', label: 'Nome', aliases: ['nome', 'name', 'lead', 'cliente', 'contato'] },
@@ -54,6 +56,10 @@ const IMPORT_FIELDS: { key: ImportField; label: string; aliases: string[] }[] = 
   {
     key: 'createdAt', label: 'Log de criação (data de criação)',
     aliases: ['log de criacao', 'log de criação', 'data de criacao', 'data de criação', 'criado em', 'data de cadastro', 'data cadastro'],
+  },
+  {
+    key: 'atualizacoes', label: 'Atualizações',
+    aliases: ['atualizacoes', 'atualizações', 'updates', 'update', 'historico', 'histórico', 'anotacoes', 'anotações', 'comentarios', 'comentários'],
   },
 ]
 
@@ -114,6 +120,37 @@ function parseImportedDate(raw: string): string | null {
   if (!Number.isNaN(fallback.getTime())) return fallback.toISOString()
 
   return null
+}
+
+interface ImportedUpdate {
+  authorName: string
+  content: string
+  createdAt: string | null
+}
+
+/** Exportação do Monday costuma trazer o bloco de "Atualizações" de um lead como um texto só,
+ * com um cabeçalho "[dd/mm/aaaa hh:mm — Autor]" antes de cada anotação, tudo concatenado numa
+ * célula só. Quebra em uma anotação por cabeçalho — sem cabeçalho nenhum, vira uma anotação só
+ * com o texto inteiro (autor "Importado", sem data própria = nasce com a data do import). */
+const UPDATE_HEADER_RE = /\[(\d{1,2}\/\d{1,2}\/\d{2,4})(?:[ ,]+(\d{1,2}:\d{2}))?\s*[—–-]\s*([^\]]+)\]/g
+
+function parseUpdatesCell(raw: string): ImportedUpdate[] {
+  const s = raw.trim()
+  if (!s) return []
+  const matches = [...s.matchAll(UPDATE_HEADER_RE)]
+  if (!matches.length) return [{ authorName: 'Importado', content: s, createdAt: null }]
+
+  const entries: ImportedUpdate[] = []
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i]
+    const start = (m.index ?? 0) + m[0].length
+    const end = i + 1 < matches.length ? (matches[i + 1].index ?? s.length) : s.length
+    const content = s.slice(start, end).trim()
+    if (!content) continue
+    const dateTime = m[2] ? `${m[1]} ${m[2]}` : m[1]
+    entries.push({ authorName: m[3].trim(), content, createdAt: parseImportedDate(dateTime) })
+  }
+  return entries
 }
 
 function normalize(s: string): string {
@@ -185,7 +222,7 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
 
   const mappedFieldCount = Object.values(mapping).filter(Boolean).length
 
-  const runImport = () => {
+  const runImport = async () => {
     if (!mappedFieldCount) { toast.error('Mapeie pelo menos uma coluna.'); return }
     let boardId = targetBoardId
     if (boardId === NEW_BOARD) {
@@ -200,17 +237,29 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
     for (const dataRow of dataRows) {
       const patch: Partial<Record<LeadRowField, string>> = {}
       let createdAt: string | null = null
+      let updatesRaw = ''
       for (const [idxStr, field] of Object.entries(mapping)) {
         if (!field) continue
         const idx = Number(idxStr)
         const raw = (dataRow[idx] ?? '').trim()
         if (!raw) continue
         if (field === 'createdAt') { createdAt = parseImportedDate(raw); continue }
+        if (field === 'atualizacoes') { updatesRaw = raw; continue }
         patch[field] = CURRENCY_FIELDS.has(field) ? prettifyCurrencyRaw(sanitizeCurrencyRaw(raw)) : raw
       }
-      if (Object.keys(patch).length === 0 && !createdAt) { skipped += 1; continue }
-      leadBoardsService.createRow(boardId, createdAt ? { ...patch, createdAt } : patch)
-      created += 1
+      if (Object.keys(patch).length === 0 && !createdAt && !updatesRaw) { skipped += 1; continue }
+      try {
+        // Precisa esperar o lead existir no banco ANTES de criar as anotações dele — senão a
+        // anotação chega no servidor antes do lead e a foreign key derruba a importação.
+        const row = await leadBoardsService.createRowAwaited(boardId, createdAt ? { ...patch, createdAt } : patch)
+        created += 1
+        if (updatesRaw) {
+          const updates = parseUpdatesCell(updatesRaw)
+          await Promise.all(updates.map((u) => leadNotesService.importNote(row.id, u.content, u.authorName, u.createdAt)))
+        }
+      } catch {
+        skipped += 1
+      }
     }
     setResult({ created, skipped })
     setImporting(false)

@@ -209,6 +209,35 @@ function subscribeRealtime() {
 
 // ---------- Public API ----------
 
+/** Monta a linha local (otimista) e dispara o POST — devolve os dois, pra `createRow` (dispara e
+ * esquece) e `createRowAwaited` (importação, que precisa saber quando o lead JÁ EXISTE no banco
+ * antes de criar anotações que referenciam esse id) reusarem a mesma lógica. */
+function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: LeadRow; promise: Promise<void> } {
+  const boardRows = rows.filter((r) => r.boardId === boardId)
+  const position = boardRows.length ? Math.max(...boardRows.map((r) => r.position)) + 1 : 0
+  const now = new Date().toISOString()
+  const row: LeadRow = {
+    id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
+    status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
+    dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
+    fechamento: '', vendaOrigemId: null, vendaRevertida: false,
+    position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
+    mrrPendente: true, implPendente: true, observacoes: '', ...initial,
+  }
+  rows = [...rows, row]
+  notify()
+
+  const promise = api.post('/api/lead-rows', { id: row.id, board_id: boardId, position, ...leadToRow(row) })
+    .then(() => undefined)
+    .catch((err) => {
+      rows = rows.filter((r) => r.id !== row.id)
+      notify()
+      throw err
+    })
+
+  return { row, promise }
+}
+
 export const leadBoardsService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
 
@@ -297,30 +326,17 @@ export const leadBoardsService = {
   },
 
   createRow(boardId: string, initial?: Partial<LeadRow>): LeadRow {
-    const boardRows = rows.filter((r) => r.boardId === boardId)
-    const position = boardRows.length ? Math.max(...boardRows.map((r) => r.position)) + 1 : 0
-    const now = new Date().toISOString()
-    const row: LeadRow = {
-      id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
-      status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
-      dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
-      fechamento: '', vendaOrigemId: null, vendaRevertida: false,
-      position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
-      mrrPendente: true, implPendente: true, observacoes: '', ...initial,
-    }
-    rows = [...rows, row]
-    notify()
+    const { row, promise } = buildAndPostRow(boardId, initial)
+    promise.catch((err) => toast.error('Falha ao criar lead: ' + (err as Error).message))
+    return row
+  },
 
-    void (async () => {
-      try {
-        await api.post('/api/lead-rows', { id: row.id, board_id: boardId, position, ...leadToRow(row) })
-      } catch (err) {
-        rows = rows.filter((r) => r.id !== row.id)
-        notify()
-        toast.error('Falha ao criar lead: ' + (err as Error).message)
-      }
-    })()
-
+  /** Igual `createRow`, mas só resolve depois que o lead JÁ EXISTE no banco — usado na
+   * importação de planilha, que precisa criar anotações vinculadas a esse id logo em seguida
+   * (criar a anotação antes do lead existir no servidor derrubaria a foreign key). */
+  async createRowAwaited(boardId: string, initial?: Partial<LeadRow>): Promise<LeadRow> {
+    const { row, promise } = buildAndPostRow(boardId, initial)
+    await promise
     return row
   },
 

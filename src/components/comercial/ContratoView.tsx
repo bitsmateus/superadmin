@@ -61,6 +61,23 @@ function useMonthFilter() {
   const [customFrom, setCustomFrom] = React.useState('')
   const [customTo, setCustomTo] = React.useState('')
 
+  // Se o calendário virou de mês com a tela aberta (ou a pessoa volta depois de dias sem
+  // recarregar), adiciona sozinho o mês atual nos pills — sem tirar nem trocar o mês que já
+  // estava selecionado, então o que tinha no mês anterior (Boas-vindas, Pendente etc.) continua
+  // à vista até a pessoa clicar no novo mês por conta própria.
+  React.useEffect(() => {
+    const checkRollover = () => {
+      const now = currentMonthId()
+      setMonths((prev) => (prev.includes(now) ? prev : [...prev, now]))
+    }
+    const interval = window.setInterval(checkRollover, 5 * 60 * 1000)
+    window.addEventListener('focus', checkRollover)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', checkRollover)
+    }
+  }, [])
+
   const addMonth = () => {
     const next = addMonthsToId(months[months.length - 1] ?? currentMonthId(), 1)
     setMonths((prev) => (prev.includes(next) ? prev : [...prev, next]))
@@ -75,11 +92,12 @@ function useMonthFilter() {
 type MonthFilter = ReturnType<typeof useMonthFilter>
 
 /**
- * Aba Contrato — organizada em 4 seções: "Pendente de contrato" (clientes que preencheram a ficha
- * de cadastro pública e ainda não têm contrato gerado), "Criar contrato" (formulário com busca
- * automática por CNPJ), "Contratos pendentes" e "Contratos assinados" (marcação manual, sem
- * assinatura eletrônica — a pessoa marca quando o cliente devolve assinado; as duas últimas têm
- * filtro por mês/período, igual o Painel do Mês).
+ * Aba Contrato — organizada em seções: "Boas-vindas" (ficha preenchida, ainda não avançou pra
+ * etapa Contrato), "Pendente de contrato" (cliente já na etapa Contrato, sem nenhum contrato
+ * gerado ainda — a geração acontece pela ficha, ver ClientDrawer/extraHeaderAction), "Pendente de
+ * assinatura" (contrato já gerado, aguardando o cliente devolver assinado) e "Contratos assinados"
+ * (marcação manual, sem assinatura eletrônica — a pessoa marca quando o cliente devolve assinado;
+ * as duas últimas têm filtro por mês/período, igual o Painel do Mês).
  */
 export function ContratoView({ pageId }: { pageId: string }) {
   const { profile } = useAuth()
@@ -345,7 +363,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
             <div className="mb-4 flex flex-wrap gap-2 rounded-2xl bg-white p-3 shadow-sm">
               <TabPill active={tab === 'boas-vindas'} onClick={() => changeTab('boas-vindas')} icon={<UserRound className="h-3.5 w-3.5" />} label="Boas-vindas" count={boasVindasClients.length} />
               <TabPill active={tab === 'pendentes-venda'} onClick={() => changeTab('pendentes-venda')} icon={<ListTodo className="h-3.5 w-3.5" />} label="Pendente de contrato" count={pendingClients.length} />
-              <TabPill active={tab === 'pendentes-contrato'} onClick={() => changeTab('pendentes-contrato')} icon={<Clock className="h-3.5 w-3.5" />} label="Contratos pendentes" count={pendingContracts.length} />
+              <TabPill active={tab === 'pendentes-contrato'} onClick={() => changeTab('pendentes-contrato')} icon={<Clock className="h-3.5 w-3.5" />} label="Pendente de assinatura" count={pendingContracts.length} />
               <TabPill active={tab === 'assinados'} onClick={() => changeTab('assinados')} icon={<CheckCircle2 className="h-3.5 w-3.5" />} label="Contratos assinados" count={signedContracts.length} />
             </div>
 
@@ -396,7 +414,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   <aside className="shrink-0 rounded-2xl bg-white p-3 shadow-sm lg:w-64">
                     {listForTab.length === 0 ? (
                       <p className="px-1 py-6 text-center text-xs text-gray-400">
-                        {tab === 'assinados' ? 'Nenhum contrato assinado nesse período.' : 'Nenhum contrato pendente nesse período.'}
+                        {tab === 'assinados' ? 'Nenhum contrato assinado nesse período.' : 'Nenhum contrato pendente de assinatura nesse período.'}
                       </p>
                     ) : (
                       <ul className="space-y-1">

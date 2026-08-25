@@ -45,7 +45,8 @@ export async function cnpjRoutes(app: FastifyInstance) {
           uf: data.uf ?? '',
           cep: data.cep ?? '',
         };
-      } catch {
+      } catch (err) {
+        app.log.error({ err }, 'Falha ao consultar CNPJ na BrasilAPI');
         return reply.status(502).send({ message: 'Falha ao consultar o CNPJ, tenta de novo' });
       } finally {
         clearTimeout(timeout);

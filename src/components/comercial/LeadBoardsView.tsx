@@ -1248,6 +1248,13 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
       }
     }
     window.addEventListener('dragover', onDragOverWindow)
+    // Girar a rodinha do mouse durante o arrasto — o navegador ignora scroll nativo nesse
+    // momento (padrão do drag-and-drop HTML5), então rola manualmente na mesma quantidade.
+    const onWheelWindow = (e: WheelEvent) => {
+      e.preventDefault()
+      window.scrollBy(0, e.deltaY)
+    }
+    window.addEventListener('wheel', onWheelWindow, { passive: false })
     let raf = 0
     const tick = () => {
       if (scrollDirRef.current !== 0) window.scrollBy(0, scrollDirRef.current)
@@ -1256,6 +1263,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
     raf = window.requestAnimationFrame(tick)
     return () => {
       window.removeEventListener('dragover', onDragOverWindow)
+      window.removeEventListener('wheel', onWheelWindow)
       window.cancelAnimationFrame(raf)
       scrollDirRef.current = 0
     }

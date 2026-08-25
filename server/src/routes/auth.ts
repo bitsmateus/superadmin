@@ -12,6 +12,8 @@ interface Profile {
   /** Trava opcional de acesso (só relevante pro papel 'suporte'/"Usuário"): restringe a itens de
    * menu e quadros específicos (ver user_menu_access/user_board_access). Default false = sem restrição. */
   restrictAccess: boolean;
+  /** Preferência de tema salva na conta — null = nunca escolheu, usa o padrão do dispositivo. */
+  theme: 'light' | 'dark' | null;
   created_at: string;
   /** Só preenchido quando restrictAccess=true — os itens de menu que esse usuário pode ver. */
   menuAccess?: string[];
@@ -33,7 +35,7 @@ export async function authRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const { email, password } = req.body;
       const profile = await queryOne<Profile & { password_hash: string }>(
-        `SELECT id, email, name, role, area, restrict_access AS "restrictAccess", created_at, password_hash
+        `SELECT id, email, name, role, area, restrict_access AS "restrictAccess", theme, created_at, password_hash
          FROM profiles WHERE lower(email) = lower($1)`,
         [email.trim()]
       );
@@ -56,7 +58,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.get('/api/auth/me', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { sub } = req.user as { sub: string };
     const profile = await queryOne<Profile>(
-      'SELECT id, email, name, role, area, restrict_access AS "restrictAccess", created_at FROM profiles WHERE id = $1',
+      'SELECT id, email, name, role, area, restrict_access AS "restrictAccess", theme, created_at FROM profiles WHERE id = $1',
       [sub]
     );
     if (!profile) return reply.status(404).send({ message: 'Usuário não encontrado' });
@@ -99,13 +101,19 @@ export async function authRoutes(app: FastifyInstance) {
   );
 
   // PATCH /api/users/:id
-  app.patch<{ Params: { id: string }; Body: { name?: string; email?: string; role?: string; area?: string; restrictAccess?: boolean; password?: string } }>(
+  app.patch<{ Params: { id: string }; Body: { name?: string; email?: string; role?: string; area?: string; restrictAccess?: boolean; password?: string; theme?: 'light' | 'dark' } }>(
     '/api/users/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { sub, role: actorRole } = req.user as { sub: string; role: string };
       const { id } = req.params;
-      const { name, email, role, area, restrictAccess, password } = req.body;
+      const { name, email, role, area, restrictAccess, password, theme } = req.body;
+
+      // Tema é preferência pessoal — qualquer um pode mudar o PRÓPRIO, mas não o de outra pessoa
+      // (nem admin edita o tema de outro usuário por essa rota).
+      if (theme !== undefined && id !== sub) {
+        return reply.status(403).send({ message: 'Só é possível alterar o próprio tema' });
+      }
 
       // Only admin can change roles or edit other users
       if (id !== sub && actorRole !== 'admin') {
@@ -134,6 +142,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (role !== undefined) { sets.push(`role = $${i++}`); params.push(role); }
       if (area !== undefined) { sets.push(`area = $${i++}`); params.push(area); }
       if (restrictAccess !== undefined) { sets.push(`restrict_access = $${i++}`); params.push(restrictAccess); }
+      if (theme !== undefined) { sets.push(`theme = $${i++}`); params.push(theme); }
       if (password !== undefined) {
         const hash = await bcrypt.hash(password, 10);
         sets.push(`password_hash = $${i++}`);
@@ -143,7 +152,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       params.push(id);
       const [updated] = await query<Profile>(
-        `UPDATE profiles SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, email, name, role, area, restrict_access AS "restrictAccess", created_at`,
+        `UPDATE profiles SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, email, name, role, area, restrict_access AS "restrictAccess", theme, created_at`,
         params
       );
       if (!updated) return reply.status(404).send({ message: 'Usuário não encontrado' });

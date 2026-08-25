@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   -- Trava opcional de acesso (só relevante pro papel 'suporte'/"Usuário"): restringe à área e,
   -- dentro dela, a abas específicas do Comercial (ver user_page_access). Default = sem restrição.
   restrict_access BOOLEAN NOT NULL DEFAULT false,
+  -- Preferência de tema da pessoa (não do navegador) — NULL = nunca escolheu ainda.
+  theme TEXT CHECK (theme IS NULL OR theme IN ('light', 'dark')),
   password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

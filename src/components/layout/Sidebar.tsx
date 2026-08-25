@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import logoNx from '@/assets/logo-nx.jpg'
-import { signOut, useAuth } from '@/hooks/useAuth'
+import { signOut, useAuth, saveOwnTheme } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
 import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
@@ -673,7 +673,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
 
         {/* Tema */}
         <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onClick={() => {
+            const next = theme === 'dark' ? 'light' : 'dark'
+            setTheme(next)
+            void saveOwnTheme(next)
+          }}
           className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground/65 transition-colors hover:bg-elevate/[0.04] hover:text-foreground"
         >
           {theme === 'dark'

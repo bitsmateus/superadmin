@@ -20,6 +20,9 @@ export interface Profile {
   restrictAccess?: boolean
   /** Só vem preenchido quando restrictAccess=true — chaves de src/constants/menuAccess.ts. */
   menuAccess?: string[]
+  /** Preferência de tema salva na conta (não no navegador) — null/undefined = nunca escolheu,
+   * usa o que já estava aplicado localmente. */
+  theme?: 'light' | 'dark' | null
   created_at: string
 }
 

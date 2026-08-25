@@ -2,6 +2,7 @@ import * as React from 'react'
 import { toast } from 'sonner'
 import { api, setToken, clearToken, startSse, stopSse, onSseEvent } from '@/services/api'
 import type { Profile, UserRole } from '@/services/supabase'
+import { setThemeGlobal } from '@/hooks/useTheme'
 import { bootDb, setCurrentProfile, teardownDb } from '@/services/db'
 import { bootTickets, teardownTickets } from '@/services/tickets'
 import { bootAnalytics, teardownAnalytics } from '@/services/analytics'
@@ -64,6 +65,9 @@ async function init() {
     setCurrentProfile(profile)
     setState({ profile, loading: false })
     watchOwnAccessChanges(profile.id)
+    // Tema salvo na conta manda mais que o que já estava aplicado localmente nesse navegador —
+    // assim a pessoa vê o mesmo tema dela em qualquer dispositivo que logar.
+    if (profile.theme) setThemeGlobal(profile.theme)
   } catch {
     clearToken()
     setState({ loading: false })
@@ -104,6 +108,7 @@ export async function signIn(email: string, password: string) {
   setState({ profile: user, loading: false })
   startSse()
   watchOwnAccessChanges(user.id)
+  if (user.theme) setThemeGlobal(user.theme)
   void bootDb()
   void bootTickets()
   void bootAnalytics()
@@ -127,6 +132,22 @@ export async function signOut() {
   // Reload to clear any in-memory state
   window.location.href = '/login'
   return { error: null }
+}
+
+/** Salva a escolha de tema na CONTA (não só no navegador) — chamada pelo botão de tema da
+ * Sidebar. Sem usuário logado (ex.: tela pública de ficha), não faz nada além de já ter aplicado
+ * localmente via setThemeGlobal. */
+export async function saveOwnTheme(theme: 'light' | 'dark') {
+  const profile = state.profile
+  if (!profile) return
+  try {
+    const updated = await api.patch<Profile>(`/api/users/${profile.id}`, { theme })
+    setCurrentProfile(updated)
+    setState({ profile: updated })
+  } catch {
+    // Falha ao salvar não deve travar a troca de tema local — só fica sem sincronizar
+    // pros outros dispositivos até a próxima tentativa.
+  }
 }
 
 // For components that previously used supabase.auth.updateUser

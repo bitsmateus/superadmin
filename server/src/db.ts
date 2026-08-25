@@ -150,6 +150,11 @@ export async function runMigrations() {
   // dentro dela, a abas específicas do Comercial (ver user_page_access). Default = sem restrição
   // — preserva o comportamento de quem já está cadastrado.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS restrict_access BOOLEAN NOT NULL DEFAULT false`);
+  // Preferência de tema (claro/escuro) da PESSOA, não do navegador — fica salva na conta e volta
+  // igual em qualquer dispositivo que ela logar. NULL = nunca escolheu ainda (usa o padrão local).
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS theme TEXT`);
+  await pool.query(`ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_theme_check`);
+  await pool.query(`ALTER TABLE profiles ADD CONSTRAINT profiles_theme_check CHECK (theme IS NULL OR theme IN ('light', 'dark'))`);
   // Roteiro da sessão de ativação (checklist do que é feito com o cliente).
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS session_checklist JSONB`);
   // Quantas configurações simultâneas cada responsável de entrega pode ter.

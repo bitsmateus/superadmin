@@ -86,7 +86,7 @@ export function VendasView({ pageId }: { pageId: string }) {
         const dia = (r.fechamento || r.createdAt).slice(0, 10)
         return dia >= from && dia <= to
       })
-      .sort((a, b) => (b.fechamento || b.createdAt).localeCompare(a.fechamento || a.createdAt))
+      .sort((a, b) => (a.fechamento || a.createdAt).localeCompare(b.fechamento || b.createdAt))
   }, [rows, from, to])
 
   // Revertida continua visível (o histórico importa) mas fora da conta.

@@ -539,12 +539,16 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   // "milestone_at" é a data do evento de status mais recente do lead (se o status atual bate com
   // o milestone, foi essa mudança que colocou ele lá). "first_agendada_at" é a data do PRIMEIRO
   // "Reunião agendada" da história — fica fixa mesmo com reagendamento depois de um no-show.
+  // EXCLUI quadros marcados is_vendas: quando um lead vira "Vendido", o app cria uma cópia dele
+  // (oportunidade) no quadro de Vendas (ver comentário em POST/PATCH lead-rows) — sem excluir
+  // esses quadros aqui, a mesma venda contava duas vezes (o lead original marcado Vendido E a
+  // cópia da oportunidade), inflando "Vendas fechadas" nas métricas de SDR/Painel do Mês.
   app.get('/api/lead-milestones', { onRequest: [app.authenticate] }, async (req) => {
     const { sub, role } = req.user as { sub: string; role: string };
     const allowed = await restrictedBoardFilter(sub, role);
     if (allowed !== null && !allowed.length) return [];
 
-    const boardFilter = allowed !== null ? 'WHERE lr.board_id = ANY($4)' : '';
+    const boardFilter = allowed !== null ? 'AND lr.board_id = ANY($4)' : '';
     const params: unknown[] = [MILESTONE_STATUSES, MILESTONE_AGENDADA, POST_AGENDAMENTO_STATUSES];
     if (allowed !== null) params.push(allowed);
 
@@ -572,6 +576,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           CASE WHEN lr.status = $2 THEN lr.created_at END
         ) AS first_agendada_at
        FROM lead_rows lr
+       JOIN lead_boards lb ON lb.id = lr.board_id
+       WHERE lb.is_vendas = false
        ${boardFilter}`,
       params
     );

@@ -10,20 +10,11 @@ import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { SdrFilterButton } from '@/components/comercial/LeadBoardsView'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted } from '@/hooks/useLeadBoards'
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
+import { currentMonthId, addMonthsToId, monthIdBounds } from '@/hooks/useMonthFilter'
 import { cn } from '@/lib/utils'
 
-type DateRange = 'today' | '7d' | '30d' | 'custom'
+type DateRange = 'today' | 'current_month' | 'last_month' | 'custom'
 
-function startOfDay(d: Date): Date {
-  const c = new Date(d)
-  c.setHours(0, 0, 0, 0)
-  return c
-}
-function daysAgo(n: number): Date {
-  const d = startOfDay(new Date())
-  d.setDate(d.getDate() - n)
-  return d
-}
 function toISODate(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -80,8 +71,13 @@ export function ComercialDashboardPage() {
 
   React.useEffect(() => {
     if (dateRange === 'today') { setFrom(toISODate(new Date())); setTo(toISODate(new Date())) }
-    else if (dateRange === '7d') { setFrom(toISODate(daysAgo(6))); setTo(toISODate(new Date())) }
-    else if (dateRange === '30d') { setFrom(toISODate(daysAgo(29))); setTo(toISODate(new Date())) }
+    else if (dateRange === 'current_month') {
+      const b = monthIdBounds(currentMonthId())
+      setFrom(b.from); setTo(b.to)
+    } else if (dateRange === 'last_month') {
+      const b = monthIdBounds(addMonthsToId(currentMonthId(), -1))
+      setFrom(b.from); setTo(b.to)
+    }
   }, [dateRange])
 
   const rows = React.useMemo(() => {
@@ -127,8 +123,8 @@ export function ComercialDashboardPage() {
               <div className="flex flex-wrap items-center gap-1.5">
                 <CalendarRange className="h-4 w-4 shrink-0 text-foreground/40" />
                 <RangePill active={dateRange === 'today'} onClick={() => setDateRange('today')}>Hoje</RangePill>
-                <RangePill active={dateRange === '7d'} onClick={() => setDateRange('7d')}>Últimos 7 dias</RangePill>
-                <RangePill active={dateRange === '30d'} onClick={() => setDateRange('30d')}>Últimos 30 dias</RangePill>
+                <RangePill active={dateRange === 'current_month'} onClick={() => setDateRange('current_month')}>Mês atual</RangePill>
+                <RangePill active={dateRange === 'last_month'} onClick={() => setDateRange('last_month')}>Mês anterior</RangePill>
                 <RangePill active={dateRange === 'custom'} onClick={() => setDateRange('custom')}>Personalizado</RangePill>
               </div>
               <div className="flex flex-wrap items-end gap-2">

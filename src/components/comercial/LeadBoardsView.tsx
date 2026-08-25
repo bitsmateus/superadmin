@@ -129,11 +129,11 @@ const IAN_MATEUS_HIDDEN_COLUMN_KEYS = new Set<string>([
   'tipo', 'ligacao', 'sdr', 'dorCliente', 'numeroAtendentes', 'valorMrr', 'valorImplementacao',
 ])
 
-/** true só pra aba cujo nome cita os dois (ex.: "CRM Ian e Mateus") — casa pelo nome, como
- * sdrLockForPageName já faz, pra sobreviver a uma renomeação de id. */
+/** true pra aba do Ian OU do Mateus (ex.: "CRM Ian", "CRM Mateus") — casa pelo nome, como
+ * sdrLockForPageName já faz, pra sobreviver a uma renomeação de id. Usa \b (palavra inteira) pra
+ * não confundir "ian" com um pedaço de outra palavra qualquer (ex.: "diante"). */
 function isIanMateusPage(pageName: string): boolean {
-  const lower = pageName.toLowerCase()
-  return lower.includes('ian') && lower.includes('mateus')
+  return /\bian\b/i.test(pageName) || /\bmateus\b/i.test(pageName)
 }
 
 /** Colunas visíveis numa aba — a coluna SDR só faz sentido em Novos Leads (várias pessoas

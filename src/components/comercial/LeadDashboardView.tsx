@@ -21,22 +21,22 @@ interface Bucket {
 
 function BarList({ icon, title, buckets, total }: { icon: React.ReactNode; title: string; buckets: Bucket[]; total: number }) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#323338]">
+    <div className="rounded-2xl bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">{icon}</span>
         {title}
       </div>
       {buckets.length === 0 ? (
-        <p className="py-4 text-center text-xs text-gray-400">Sem dados pra mostrar.</p>
+        <p className="py-4 text-center text-xs text-foreground/40">Sem dados pra mostrar.</p>
       ) : (
         <div className="space-y-2">
           {buckets.map((b) => (
-            <div key={b.key} className="flex items-center gap-2.5 border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+            <div key={b.key} className="flex items-center gap-2.5 border-b border-line/60 pb-2 last:border-0 last:pb-0">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
-              <span className="min-w-0 flex-1 truncate text-xs font-medium text-gray-600" title={b.label}>
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground/70" title={b.label}>
                 {b.label}
               </span>
-              <span className="shrink-0 text-xs font-semibold text-gray-700">
+              <span className="shrink-0 text-xs font-semibold text-foreground/70">
                 {b.count} {total > 0 ? `(${Math.round((b.count / total) * 100)}%)` : ''}
               </span>
             </div>
@@ -49,11 +49,11 @@ function BarList({ icon, title, buckets, total }: { icon: React.ReactNode; title
 
 function SummaryCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
+    <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-sm">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent">{icon}</span>
       <div className="min-w-0">
-        <p className="text-[11px] font-medium text-gray-400">{label}</p>
-        <p className="truncate text-lg font-bold text-[#323338]">{value}</p>
+        <p className="text-[11px] font-medium text-foreground/40">{label}</p>
+        <p className="truncate text-lg font-bold text-foreground">{value}</p>
       </div>
     </div>
   )
@@ -98,20 +98,20 @@ function RingStat({
 }) {
   const deg = Math.max(0, Math.min(1, ratio)) * 360
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl bg-gray-50/70 px-2 py-3">
+    <div className="flex flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3">
       <div
         className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full"
         style={{ background: `conic-gradient(${color} ${deg}deg, #E5E7EB 0deg)` }}
       >
-        <div className="grid h-[52px] w-[52px] place-items-center rounded-full bg-white">
+        <div className="grid h-[52px] w-[52px] place-items-center rounded-full bg-card">
           <span className="text-sm font-bold" style={{ color }}>{pct(ratio)}</span>
         </div>
       </div>
-      <div className="flex items-center gap-1 text-[11px] font-semibold text-gray-600">
+      <div className="flex items-center gap-1 text-[11px] font-semibold text-foreground/70">
         <span style={{ color }}>{icon}</span>
         {label}
       </div>
-      <div className="text-[10px] text-gray-400">{count} de {Math.max(of, count)}</div>
+      <div className="text-[10px] text-foreground/40">{count} de {Math.max(of, count)}</div>
     </div>
   )
 }
@@ -119,7 +119,7 @@ function RingStat({
 function SdrCard({ metrics }: { metrics: SdrMetrics }) {
   const m = metrics
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100 transition-shadow hover:shadow-md">
+    <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line transition-shadow hover:shadow-md">
       <div className="mb-3 flex items-center gap-3">
         <span
           className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-bold text-white"
@@ -128,8 +128,8 @@ function SdrCard({ metrics }: { metrics: SdrMetrics }) {
           {initials(m.sdr)}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-[#323338]">{m.sdr}</p>
-          <p className="text-[11px] text-gray-400">{m.total} lead{m.total === 1 ? '' : 's'} no total</p>
+          <p className="truncate text-sm font-semibold text-foreground">{m.sdr}</p>
+          <p className="text-[11px] text-foreground/40">{m.total} lead{m.total === 1 ? '' : 's'} no total</p>
         </div>
         <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-semibold text-accent">
           {m.total}
@@ -147,16 +147,16 @@ function SdrCard({ metrics }: { metrics: SdrMetrics }) {
 function MetricCell({ value, sub }: { value: React.ReactNode; sub?: string }) {
   return (
     <td className="px-3 py-2.5 text-center">
-      <div className="text-sm font-semibold text-[#323338]">{value}</div>
-      {sub && <div className="text-[10px] text-gray-400">{sub}</div>}
+      <div className="text-sm font-semibold text-foreground">{value}</div>
+      {sub && <div className="text-[10px] text-foreground/40">{sub}</div>}
     </td>
   )
 }
 
 function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMetrics[]; title?: string }) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#323338]">
+    <div className="rounded-2xl bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
           <UserRound className="h-4 w-4" />
         </span>
@@ -165,7 +165,7 @@ function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMet
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] border-collapse text-left text-xs">
           <thead>
-            <tr className="border-b border-gray-200 text-[11px] font-semibold text-gray-500">
+            <tr className="border-b border-line text-[11px] font-semibold text-foreground/50">
               <th className="px-3 py-2">SDR</th>
               <th className="px-3 py-2 text-center">Total de leads</th>
               <th className="px-3 py-2 text-center">Reunião agendada</th>
@@ -178,9 +178,9 @@ function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMet
           </thead>
           <tbody>
             {bySdr.map((m) => (
-              <tr key={m.sdr} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/70">
+              <tr key={m.sdr} className="border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]">
                 <td className="px-3 py-2.5">
-                  <span className="inline-flex items-center gap-1.5 font-medium text-gray-700">
+                  <span className="inline-flex items-center gap-1.5 font-medium text-foreground/70">
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
                     {m.sdr}
                   </span>
@@ -242,8 +242,8 @@ export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: strin
 
   if (bySdr.length === 0) {
     return (
-      <div className="rounded-2xl bg-white p-8 shadow-sm">
-        <p className="text-center text-xs text-gray-400">Sem dados pra mostrar.</p>
+      <div className="rounded-2xl bg-card p-8 shadow-sm">
+        <p className="text-center text-xs text-foreground/40">Sem dados pra mostrar.</p>
       </div>
     )
   }
@@ -324,13 +324,13 @@ export function LeadDashboardView({ rows, boards, sdrTabLabel = 'Dashboard do SD
   return (
     <div className={cn('flex-1 space-y-4')}>
       {!onlySdr && (
-        <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+        <div className="inline-flex overflow-hidden rounded-lg border border-line">
           <button
             type="button"
             onClick={() => setSubView('geral')}
             className={cn(
               'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-              subView === 'geral' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+              subView === 'geral' ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
             )}
           >
             <BarChart3 className="h-3.5 w-3.5" />
@@ -341,7 +341,7 @@ export function LeadDashboardView({ rows, boards, sdrTabLabel = 'Dashboard do SD
             onClick={() => setSubView('sdr')}
             className={cn(
               'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-              subView === 'sdr' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+              subView === 'sdr' ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
             )}
           >
             <UserRound className="h-3.5 w-3.5" />

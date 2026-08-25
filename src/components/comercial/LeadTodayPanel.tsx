@@ -43,30 +43,30 @@ export function TodayStatCard({
         onClick={handleClick}
         disabled={card.matches.length === 0}
         className={cn(
-          'flex w-full items-center gap-3 rounded-2xl bg-white p-3.5 text-left shadow-sm ring-1 ring-gray-100 transition-shadow',
+          'flex w-full items-center gap-3 rounded-2xl bg-card p-3.5 text-left shadow-sm ring-1 ring-line transition-shadow',
           card.matches.length > 0 ? 'cursor-pointer hover:shadow-md' : 'cursor-default opacity-60',
         )}
       >
         <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', card.tone)}>{card.icon}</span>
         <div className="min-w-0 flex-1">
-          <p className="text-xl font-bold leading-none text-[#323338]">{card.matches.length}</p>
-          <p className="mt-1 truncate text-[11px] text-gray-500">{card.label}</p>
+          <p className="text-xl font-bold leading-none text-foreground">{card.matches.length}</p>
+          <p className="mt-1 truncate text-[11px] text-foreground/50">{card.label}</p>
         </div>
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+        <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-line bg-card p-1.5 shadow-xl">
           <ul className="max-h-64 overflow-y-auto">
             {card.matches.map((r) => (
               <li key={r.id}>
                 <button
                   type="button"
                   onClick={() => { onOpenLead(r.id); setOpen(false) }}
-                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50"
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
                 >
                   <span className="min-w-0 flex-1 truncate font-medium">{r.nome || 'Sem nome'}</span>
-                  <span className="shrink-0 truncate text-[10px] text-gray-400">{boardName(r.boardId)}</span>
-                  <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" />
+                  <span className="shrink-0 truncate text-[10px] text-foreground/40">{boardName(r.boardId)}</span>
+                  <ChevronRight className="h-3 w-3 shrink-0 text-foreground/30" />
                 </button>
               </li>
             ))}
@@ -111,10 +111,10 @@ export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps
   }, [rows, today, activityById])
 
   const cards: StatCard[] = [
-    { key: 'nao-atualizados', icon: <Clock className="h-4 w-4" />, label: 'Status não atualizado (24h+)', tone: 'text-amber-600 bg-amber-50', matches: groups.naoAtualizados },
-    { key: 'atrasados', icon: <AlertTriangle className="h-4 w-4" />, label: 'Atrasados (não retornados)', tone: 'text-red-600 bg-red-50', matches: groups.atrasados },
-    { key: 'reunioes', icon: <CalendarCheck2 className="h-4 w-4" />, label: 'Reuniões de hoje', tone: 'text-blue-600 bg-blue-50', matches: groups.reunioesHoje },
-    { key: 'propostas', icon: <FileText className="h-4 w-4" />, label: 'Propostas p/ retornar hoje', tone: 'text-emerald-600 bg-emerald-50', matches: groups.propostasHoje },
+    { key: 'nao-atualizados', icon: <Clock className="h-4 w-4" />, label: 'Status não atualizado (24h+)', tone: 'text-warning bg-warning/10', matches: groups.naoAtualizados },
+    { key: 'atrasados', icon: <AlertTriangle className="h-4 w-4" />, label: 'Atrasados (não retornados)', tone: 'text-danger bg-danger/10', matches: groups.atrasados },
+    { key: 'reunioes', icon: <CalendarCheck2 className="h-4 w-4" />, label: 'Reuniões de hoje', tone: 'text-accent bg-accent/10', matches: groups.reunioesHoje },
+    { key: 'propostas', icon: <FileText className="h-4 w-4" />, label: 'Propostas p/ retornar hoje', tone: 'text-success bg-success/10', matches: groups.propostasHoje },
   ]
 
   return (

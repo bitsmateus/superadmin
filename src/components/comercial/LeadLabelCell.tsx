@@ -58,7 +58,7 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
         className={cn(
           'flex h-full min-h-[34px] w-full items-center truncate px-2.5 py-1.5 text-sm font-medium',
           field === 'tipo' ? 'justify-start text-left' : 'justify-center text-center',
-          value ? 'text-white' : required ? 'bg-red-50 text-red-400 ring-1 ring-inset ring-red-200' : 'text-gray-300',
+          value ? 'text-white' : required ? 'bg-danger/10 text-danger ring-1 ring-inset ring-danger/30' : 'text-foreground/30',
         )}
         style={value ? { backgroundColor: current?.color ?? '#9CA3AF' } : undefined}
       >
@@ -69,14 +69,14 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
         <div
           ref={popRef}
           style={{ position: 'fixed', top: coords.top, left: coords.left }}
-          className="z-50 w-72 rounded-xl border border-gray-200 bg-white p-2.5 shadow-xl"
+          className="z-50 w-72 rounded-xl border border-line bg-card p-2.5 shadow-xl"
         >
           <div className="grid grid-cols-2 gap-1.5">
             {field !== 'ligacao' && (
               <button
                 type="button"
                 onClick={() => { onChange(''); setOpen(false) }}
-                className="rounded-md border border-dashed border-gray-300 px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-50"
+                className="rounded-md border border-dashed border-line px-2 py-1.5 text-xs text-foreground/40 hover:bg-elevate/[0.04]"
               >
                 Nenhum
               </button>
@@ -88,7 +88,7 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
                 onClick={() => { onChange(l.name); setOpen(false) }}
                 className={cn(
                   'truncate rounded-md px-2 py-1.5 text-xs font-medium text-white hover:opacity-90',
-                  l.name === value && 'ring-2 ring-gray-400 ring-offset-1',
+                  l.name === value && 'ring-2 ring-foreground/40 ring-offset-1',
                 )}
                 style={{ backgroundColor: l.color }}
               >
@@ -99,7 +99,7 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
           <button
             type="button"
             onClick={() => { setOpen(false); setManageOpen(true) }}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-gray-500 hover:bg-gray-50"
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-foreground/50 hover:bg-elevate/[0.04]"
           >
             <Pencil className="h-3 w-3" />
             Editar etiquetas

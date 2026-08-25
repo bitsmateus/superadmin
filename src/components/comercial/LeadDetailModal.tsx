@@ -86,7 +86,7 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               value={row.nome}
               onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
               placeholder="Nome do lead"
-              className="w-full text-xl font-semibold text-[#323338]"
+              className="w-full text-xl font-semibold text-foreground"
             />
             <p className="mt-1 text-xs text-foreground/40">
               in → {board?.name ?? '—'} Board
@@ -108,9 +108,9 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               <select
                 value={row.boardId}
                 onChange={(e) => leadBoardsService.updateRow(row.id, { boardId: e.target.value })}
-                className="w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338] outline-none"
+                className="w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
               >
-                {boards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {boards.filter((b) => b.page === board?.page).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </FieldRow>
 
@@ -139,7 +139,7 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               <AgendamentoField
                 value={row.agendamento}
                 onChange={(next) => leadBoardsService.updateRow(row.id, { agendamento: next })}
-                className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338]"
+                className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
               />
             </FieldRow>
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Retornar">
@@ -147,7 +147,7 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
                 value={row.retornar}
                 retornado={row.retornado}
                 onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
-                className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338]"
+                className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
               />
             </FieldRow>
             <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Dor do cliente">
@@ -180,10 +180,10 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
 function FieldRow({ icon, label, required, children }: { icon: React.ReactNode; label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 border-b border-line/60 py-1.5">
-      <span className="flex w-5 shrink-0 items-center justify-center text-[#323338]/60">{icon}</span>
-      <span className="w-[104px] shrink-0 text-xs font-medium text-[#323338]">
+      <span className="flex w-5 shrink-0 items-center justify-center text-foreground/60">{icon}</span>
+      <span className="w-[104px] shrink-0 text-xs font-medium text-foreground">
         {label}
-        {required && <span className="text-red-400" title="Obrigatório"> *</span>}
+        {required && <span className="text-danger" title="Obrigatório"> *</span>}
       </span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
@@ -198,8 +198,8 @@ function BoxedField({ value, onSave, type, required }: { value: string; onSave: 
       placeholder={required ? 'Obrigatório' : undefined}
       onSave={onSave}
       className={cn(
-        'rounded-md px-2 py-1.5 text-sm text-[#323338]',
-        required && !value ? 'bg-red-50 ring-1 ring-inset ring-red-200' : 'bg-elevate/[0.05]',
+        'rounded-md px-2 py-1.5 text-sm text-foreground',
+        required && !value ? 'bg-danger/10 ring-1 ring-inset ring-danger/30' : 'bg-elevate/[0.05]',
       )}
     />
   )
@@ -210,7 +210,7 @@ function BoxedCurrencyField({ value, onSave }: { value: string; onSave: (v: stri
     <CurrencyField
       value={value}
       onSave={onSave}
-      className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-[#323338]"
+      className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
     />
   )
 }
@@ -523,12 +523,12 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
                   {notes.map((n) => (
                     <li key={n.id} className="group rounded-lg border border-line bg-elevate/[0.02] p-3">
                       <div className="flex items-start gap-3">
-                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[10px] font-medium text-[#323338] ring-1 ring-line">
+                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[10px] font-medium text-foreground ring-1 ring-line">
                           {initials(n.authorName) || <UserCircle2 className="h-3.5 w-3.5" />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-medium text-[#323338]">{n.authorName}</span>
+                            <span className="text-xs font-medium text-foreground">{n.authorName}</span>
                             <div className="flex items-center gap-1">
                               <span className="text-[10px] text-foreground/40" title={timeAgo(n.createdAt)}>
                                 {formatDateTimeShort(n.createdAt)}
@@ -564,7 +564,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
                                 onChange={(e) => setEditingText(e.target.value)}
                                 rows={3}
                                 autoFocus
-                                className="w-full resize-y rounded-lg border border-accent/40 bg-surface px-3 py-2 text-sm text-[#323338] focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+                                className="w-full resize-y rounded-lg border border-accent/40 bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
                               />
                               <div className="flex items-center justify-end gap-2">
                                 <button
@@ -589,7 +589,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
                           ) : (
                             stripHtml(n.content) && (
                               <div
-                                className="mt-1 whitespace-pre-wrap text-sm text-[#323338]"
+                                className="mt-1 whitespace-pre-wrap text-sm text-foreground"
                                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(n.content) }}
                               />
                             )
@@ -666,7 +666,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
                   <span className="absolute -left-8 top-0.5 grid h-6 w-6 place-items-center rounded-full bg-accent/10 text-accent ring-4 ring-card">
                     {item.icon}
                   </span>
-                  <p className="flex flex-wrap items-center gap-1.5 text-sm text-[#323338]">
+                  <p className="flex flex-wrap items-center gap-1.5 text-sm text-foreground">
                     {item.text && <span>{item.text}</span>}
                     {item.from && (
                       <span

@@ -51,18 +51,18 @@ function ClickableStat({
     <div ref={ref} className="relative">
       {children(handleClick)}
       {open && (
-        <div className="absolute left-1/2 top-full z-20 mt-1 w-64 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-1.5 text-left shadow-xl">
+        <div className="absolute left-1/2 top-full z-20 mt-1 w-64 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 text-left shadow-xl">
           <ul className="max-h-56 overflow-y-auto">
             {matches.map((r) => (
               <li key={r.id}>
                 <button
                   type="button"
                   onClick={() => { onOpenLead(r.id); setOpen(false) }}
-                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50"
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
                 >
                   <span className="min-w-0 flex-1 truncate font-medium">{r.nome || 'Sem nome'}</span>
-                  <span className="shrink-0 truncate text-[10px] text-gray-400">{boardName(r.boardId)}</span>
-                  <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" />
+                  <span className="shrink-0 truncate text-[10px] text-foreground/40">{boardName(r.boardId)}</span>
+                  <ChevronRight className="h-3 w-3 shrink-0 text-foreground/30" />
                 </button>
               </li>
             ))}
@@ -96,11 +96,11 @@ function StatPill({
           onClick={onClick}
           disabled={matches.length === 0}
           className={cn(
-            'flex w-full flex-1 flex-col items-center gap-1 rounded-xl bg-gray-50/70 px-2 py-2.5 transition-opacity',
+            'flex w-full flex-1 flex-col items-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-2.5 transition-opacity',
             matches.length > 0 ? 'cursor-pointer hover:opacity-70' : 'cursor-default',
           )}
         >
-          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400">
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-foreground/40">
             <span style={{ color }}>{icon}</span>
             {label}
           </span>
@@ -113,7 +113,7 @@ function StatPill({
 
 function SdrSummaryCard({ s, boards, onOpenLead }: { s: SdrSummary; boards: LeadBoard[]; onOpenLead: (id: string) => void }) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100 transition-shadow hover:shadow-md">
+    <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-line transition-shadow hover:shadow-md">
       <div className="mb-3 flex items-center gap-3">
         <span
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold text-white"
@@ -122,8 +122,8 @@ function SdrSummaryCard({ s, boards, onOpenLead }: { s: SdrSummary; boards: Lead
           {initials(s.sdr)}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-[#323338]">{s.sdr === 'Sem SDR' ? s.sdr : `SDR ${s.sdr}`}</p>
-          <p className="text-[11px] text-gray-400">{s.totalRows.length} lead{s.totalRows.length === 1 ? '' : 's'} no total</p>
+          <p className="truncate text-sm font-semibold text-foreground">{s.sdr === 'Sem SDR' ? s.sdr : `SDR ${s.sdr}`}</p>
+          <p className="text-[11px] text-foreground/40">{s.totalRows.length} lead{s.totalRows.length === 1 ? '' : 's'} no total</p>
         </div>
         <ClickableStat matches={s.totalRows} boards={boards} onOpenLead={onOpenLead}>
           {(onClick) => (
@@ -224,8 +224,8 @@ export function SdrSummaryPanel({ rows, allRows, from, to, boards, onOpenLead }:
   }, [rows, allRows, sdrLabels, milestoneById, inRange])
 
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#323338]">
+    <div className="rounded-2xl bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
           <UserRound className="h-4 w-4" />
         </span>

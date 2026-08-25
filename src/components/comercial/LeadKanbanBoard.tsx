@@ -113,8 +113,8 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <span className="text-xs font-medium text-gray-500">Agrupar por</span>
-        <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+        <span className="text-xs font-medium text-foreground/50">Agrupar por</span>
+        <div className="inline-flex overflow-hidden rounded-lg border border-line">
           {GROUP_OPTIONS.map((o) => (
             <button
               key={o.value}
@@ -122,7 +122,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
               onClick={() => setGroupField(o.value)}
               className={cn(
                 'px-3 py-1.5 text-xs font-medium transition-colors',
-                groupField === o.value ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+                groupField === o.value ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
               )}
             >
               {o.label}
@@ -154,7 +154,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
           precisar descer até o fim de colunas cheias de card só pra arrastar de lado. */}
       <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 sm:px-6 lg:px-8 lg:pl-[236px]">
         <div
-          className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-gray-200 bg-white shadow-lg"
+          className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-line bg-card shadow-lg"
           style={{ height: 14 }}
           onScroll={(e) => { if (scrollRef.current) scrollRef.current.scrollLeft = e.currentTarget.scrollLeft }}
         >
@@ -184,7 +184,7 @@ function KanbanColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        'w-64 shrink-0 overflow-hidden rounded-xl bg-gray-50 transition-colors',
+        'w-64 shrink-0 overflow-hidden rounded-xl bg-elevate/[0.03] transition-colors',
         isOver && 'bg-accent/[0.06] ring-2 ring-accent/40',
       )}
     >
@@ -204,7 +204,7 @@ function KanbanColumn({
         {rows.map((row) => (
           <KanbanCard key={row.id} row={row} onOpenLead={onOpenLead} />
         ))}
-        {rows.length === 0 && <p className="px-1 py-3 text-center text-[11px] text-gray-400">Nenhum lead</p>}
+        {rows.length === 0 && <p className="px-1 py-3 text-center text-[11px] text-foreground/40">Nenhum lead</p>}
       </div>
     </div>
   )
@@ -236,29 +236,29 @@ function KanbanCard({
       {...(overlay ? {} : attributes)}
       onClick={() => { if (!overlay) onOpenLead(row.id) }}
       className={cn(
-        'cursor-grab select-none rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing',
+        'cursor-grab select-none rounded-lg border border-line bg-card p-2.5 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing',
         !overlay && isDragging && 'opacity-40',
         overlay && 'w-64 rotate-2 shadow-xl',
       )}
     >
       <div className="flex items-start gap-1.5">
-        <div className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{row.nome || 'Sem nome'}</div>
+        <div className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{row.nome || 'Sem nome'}</div>
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onOpenLead(row.id) }}
           title="Atualizações"
-          className="relative grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-gray-100"
+          className="relative grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-elevate/[0.08]"
         >
-          <MessageCircle className={cn('h-3.5 w-3.5', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-gray-300')} />
+          <MessageCircle className={cn('h-3.5 w-3.5', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-foreground/30')} />
           {row.notesCount > 0 && (
-            <span className="absolute -bottom-0.5 -right-0.5 grid h-3.5 min-w-[0.875rem] place-items-center rounded-full bg-accent px-0.5 text-[9px] font-semibold text-white ring-2 ring-white">
+            <span className="absolute -bottom-0.5 -right-0.5 grid h-3.5 min-w-[0.875rem] place-items-center rounded-full bg-accent px-0.5 text-[9px] font-semibold text-white ring-2 ring-card">
               {row.notesCount > 9 ? '9+' : row.notesCount}
             </span>
           )}
         </button>
       </div>
       {row.retornar && (
-        <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-elevate/[0.05] px-1.5 py-0.5 text-[11px] text-gray-500">
+        <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-elevate/[0.05] px-1.5 py-0.5 text-[11px] text-foreground/50">
           <Calendar className="h-3 w-3" />
           {fmtShortDay(row.retornar)} (Retornar)
         </div>

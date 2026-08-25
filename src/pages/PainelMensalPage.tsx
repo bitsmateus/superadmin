@@ -47,9 +47,9 @@ function meses(n: number): string { return `${n.toFixed(1)} ${n === 1 ? 'mês' :
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm">
-      <div className="mb-2 text-sm font-semibold text-[#323338]">{title}</div>
-      <div className="divide-y divide-gray-50">{children}</div>
+    <div className="rounded-2xl bg-card p-4 shadow-sm">
+      <div className="mb-2 text-sm font-semibold text-foreground">{title}</div>
+      <div className="divide-y divide-line/60">{children}</div>
     </div>
   )
 }
@@ -57,11 +57,11 @@ function SectionCard({ title, children }: { title: string; children: React.React
 function MetricRow({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2 text-sm">
-      <span className="min-w-0 text-gray-500">
+      <span className="min-w-0 text-foreground/50">
         {label}
-        {hint && <span className="ml-1.5 text-[11px] text-gray-300">{hint}</span>}
+        {hint && <span className="ml-1.5 text-[11px] text-foreground/30">{hint}</span>}
       </span>
-      <span className="shrink-0 font-semibold text-[#323338]">{value}</span>
+      <span className="shrink-0 font-semibold text-foreground">{value}</span>
     </div>
   )
 }
@@ -69,9 +69,9 @@ function MetricRow({ label, value, hint }: { label: string; value: React.ReactNo
 function ManualCurrencyRow({ label, value, onSave }: { label: string; value: string; onSave: (next: string) => void }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2 text-sm">
-      <span className="text-gray-500">{label}</span>
-      <div className="w-36 shrink-0 rounded-lg bg-amber-50 ring-1 ring-amber-100">
-        <CurrencyField value={value} onSave={onSave} className="h-9 rounded-lg bg-transparent px-3 text-right font-semibold text-amber-700" />
+      <span className="text-foreground/50">{label}</span>
+      <div className="w-36 shrink-0 rounded-lg bg-warning/10 ring-1 ring-warning/20">
+        <CurrencyField value={value} onSave={onSave} className="h-9 rounded-lg bg-transparent px-3 text-right font-semibold text-warning" />
       </div>
     </div>
   )
@@ -82,7 +82,7 @@ function ManualNumberRow({ label, value, onSave, step }: { label: string; value:
   React.useEffect(() => { setLocal(String(value)) }, [value])
   return (
     <div className="flex items-center justify-between gap-3 py-2 text-sm">
-      <span className="text-gray-500">{label}</span>
+      <span className="text-foreground/50">{label}</span>
       <input
         type="number"
         step={step ?? 1}
@@ -96,7 +96,7 @@ function ManualNumberRow({ label, value, onSave, step }: { label: string; value:
           if (safe !== value) onSave(safe)
         }}
         onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-        className="h-9 w-28 shrink-0 rounded-lg bg-amber-50 px-3 text-right font-semibold text-amber-700 outline-none ring-1 ring-amber-100"
+        className="h-9 w-28 shrink-0 rounded-lg bg-warning/10 px-3 text-right font-semibold text-warning outline-none ring-1 ring-warning/20"
       />
     </div>
   )
@@ -235,9 +235,9 @@ export function PainelMensalPage() {
         }
       />
 
-      <div className="flex min-h-screen flex-col gap-4 bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="flex min-h-screen flex-col gap-4 bg-bg px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!booted ? (
-          <div className="grid min-h-[30vh] place-items-center text-sm text-gray-500">
+          <div className="grid min-h-[30vh] place-items-center text-sm text-foreground/50">
             <span className="inline-flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               Carregando…
@@ -245,7 +245,7 @@ export function PainelMensalPage() {
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-gray-200 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-line bg-card p-3">
               {months.map((m) => (
                 <button
                   key={m.id}
@@ -253,7 +253,7 @@ export function PainelMensalPage() {
                   onClick={() => setSelectedId(m.id)}
                   className={cn(
                     'rounded-md px-2.5 py-1.5 text-xs font-medium capitalize transition-colors',
-                    m.id === selectedId ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-gray-500 hover:bg-gray-50',
+                    m.id === selectedId ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
                   )}
                 >
                   {monthLabel(m.id)}
@@ -270,7 +270,7 @@ export function PainelMensalPage() {
             </div>
 
             {!month || !stats ? (
-              <div className="grid min-h-[30vh] place-items-center text-center text-sm text-gray-400">
+              <div className="grid min-h-[30vh] place-items-center text-center text-sm text-foreground/40">
                 Nenhum mês criado ainda — clique em "Adicionar {monthLabel(nextId).toLowerCase()}" pra começar.
               </div>
             ) : (
@@ -329,7 +329,7 @@ export function PainelMensalPage() {
 
                   <SectionCard title="Veredito do Mês">
                     {!veredito ? (
-                      <p className="py-4 text-center text-xs text-gray-400">
+                      <p className="py-4 text-center text-xs text-foreground/40">
                         Preencha o total de leads gerados pra ver o veredito.
                       </p>
                     ) : (
@@ -340,8 +340,8 @@ export function PainelMensalPage() {
                         <div className="flex items-start gap-2 py-2 text-sm">
                           <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
                           <div>
-                            <p className="text-gray-500">Onde está o gargalo</p>
-                            <p className="font-semibold text-[#323338]">{veredito.gargalo}</p>
+                            <p className="text-foreground/50">Onde está o gargalo</p>
+                            <p className="font-semibold text-foreground">{veredito.gargalo}</p>
                           </div>
                         </div>
                       </>

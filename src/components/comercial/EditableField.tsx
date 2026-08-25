@@ -39,7 +39,7 @@ export const EditableField = React.forwardRef<HTMLInputElement, EditableFieldPro
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
         }}
-        className={cn('h-full w-full outline-none placeholder:text-gray-300', className)}
+        className={cn('h-full w-full outline-none placeholder:text-foreground/30', className)}
       />
     )
   },

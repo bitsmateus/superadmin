@@ -109,7 +109,7 @@ const VENDAS_COLUMN_KEYS = new Set<string>([
   'nome', 'empresa', 'telefone', 'sdr', 'valorMrr', 'valorImplementacao', 'fechamento',
 ])
 
-const GRID_BORDER = 'border-r border-gray-200'
+const GRID_BORDER = 'border-r border-line'
 const MIN_COL_WIDTH = 80
 
 
@@ -220,8 +220,8 @@ function ToolbarButton({
       onClick={onClick}
       title={title}
       className={cn(
-        'inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-gray-500',
-        'transition-colors hover:bg-gray-100 hover:text-gray-800',
+        'inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-foreground/50',
+        'transition-colors hover:bg-elevate/[0.08] hover:text-foreground',
         className,
       )}
     >
@@ -299,11 +299,11 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
         Página
       </ToolbarButton>
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+        <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-line bg-card p-1.5 shadow-xl">
           <button
             type="button"
             onClick={openDuplicate}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
           >
             <Copy className="h-3.5 w-3.5" />
             Duplicar aba
@@ -312,7 +312,7 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
             type="button"
             onClick={archive}
             disabled={busy}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-danger/10 hover:text-danger disabled:opacity-50"
           >
             <Archive className="h-3.5 w-3.5" />
             Arquivar aba
@@ -388,19 +388,19 @@ export function SdrFilterButton({ value, onChange }: { value: string | null; onC
         {value ? `SDR: ${value}` : 'SDR'}
       </ToolbarButton>
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+        <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border border-line bg-card p-1.5 shadow-xl">
           <button
             type="button"
             onClick={() => { onChange(null); setOpen(false) }}
             className={cn(
               'flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs',
-              !value ? 'bg-accent/10 font-medium text-accent' : 'text-gray-600 hover:bg-gray-50',
+              !value ? 'bg-accent/10 font-medium text-accent' : 'text-foreground/70 hover:bg-elevate/[0.04]',
             )}
           >
             Todos
           </button>
           {labels.length === 0 && (
-            <p className="px-2 py-1.5 text-xs text-gray-400">Nenhum SDR cadastrado.</p>
+            <p className="px-2 py-1.5 text-xs text-foreground/40">Nenhum SDR cadastrado.</p>
           )}
           {labels.map((l) => (
             <button
@@ -409,7 +409,7 @@ export function SdrFilterButton({ value, onChange }: { value: string | null; onC
               onClick={() => { onChange(l.name); setOpen(false) }}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs',
-                l.name === value ? 'bg-accent/10 font-medium text-accent' : 'text-gray-600 hover:bg-gray-50',
+                l.name === value ? 'bg-accent/10 font-medium text-accent' : 'text-foreground/70 hover:bg-elevate/[0.04]',
               )}
             >
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
@@ -468,7 +468,7 @@ function BulkActionButton({
       onClick={onClick}
       className={cn(
         'flex flex-col items-center gap-0.5 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors',
-        danger ? 'text-gray-500 hover:bg-danger/10 hover:text-danger' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800',
+        danger ? 'text-foreground/50 hover:bg-danger/10 hover:text-danger' : 'text-foreground/50 hover:bg-elevate/[0.08] hover:text-foreground',
       )}
     >
       {icon}
@@ -496,10 +496,10 @@ function MoveSubmenu({
             key={p.id}
             type="button"
             onClick={() => setAba(p.id)}
-            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
+            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
           >
             {p.name}
-            <ChevronRight className="h-3.5 w-3.5 text-gray-300" />
+            <ChevronRight className="h-3.5 w-3.5 text-foreground/30" />
           </button>
         ))}
       </>
@@ -513,19 +513,19 @@ function MoveSubmenu({
       <button
         type="button"
         onClick={() => setAba(null)}
-        className="mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+        className="mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-foreground/40 hover:bg-elevate/[0.04] hover:text-foreground/70"
       >
         <ChevronLeft className="h-3 w-3" /> {abaLabel}
       </button>
       {boardsForAba.length === 0 ? (
-        <p className="px-2 py-1.5 text-xs text-gray-400">Nenhum quadro nessa aba ainda.</p>
+        <p className="px-2 py-1.5 text-xs text-foreground/40">Nenhum quadro nessa aba ainda.</p>
       ) : (
         boardsForAba.map((b) => (
           <button
             key={b.id}
             type="button"
             onClick={() => onMove(b.id)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
           >
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
             <span className="truncate">{b.name}</span>
@@ -555,10 +555,10 @@ function BulkEditSubmenu({ onApply, pageId }: { onApply: (field: LeadLabelField,
             key={f.key}
             type="button"
             onClick={() => setField(f.key)}
-            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
+            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
           >
             {f.label}
-            <ChevronRight className="h-3.5 w-3.5 text-gray-300" />
+            <ChevronRight className="h-3.5 w-3.5 text-foreground/30" />
           </button>
         ))}
       </>
@@ -571,19 +571,19 @@ function BulkEditSubmenu({ onApply, pageId }: { onApply: (field: LeadLabelField,
       <button
         type="button"
         onClick={() => setField(null)}
-        className="mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+        className="mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-foreground/40 hover:bg-elevate/[0.04] hover:text-foreground/70"
       >
         <ChevronLeft className="h-3 w-3" /> {title}
       </button>
       {labels.length === 0 ? (
-        <p className="px-2 py-1.5 text-xs text-gray-400">Nenhuma etiqueta cadastrada.</p>
+        <p className="px-2 py-1.5 text-xs text-foreground/40">Nenhuma etiqueta cadastrada.</p>
       ) : (
         labels.map((l) => (
           <button
             key={l.id}
             type="button"
             onClick={() => onApply(field, l.name)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
           >
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
             <span className="truncate">{l.name}</span>
@@ -654,20 +654,20 @@ function BulkActionBar({
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-16 z-40 flex justify-center px-4">
-      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-1.5 shadow-xl">
+      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-line bg-card px-2 py-1.5 shadow-xl">
         <span className="mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-white">
           {selectedRows.length}
         </span>
-        <span className="mr-1.5 whitespace-nowrap text-xs font-medium text-gray-600">
+        <span className="mr-1.5 whitespace-nowrap text-xs font-medium text-foreground/70">
           {selectedRows.length === 1 ? 'Nome selecionado' : 'Nomes selecionados'}
         </span>
-        <div className="mx-1 h-6 w-px bg-gray-200" />
+        <div className="mx-1 h-6 w-px bg-line" />
         <BulkActionButton icon={<Copy className="h-4 w-4" />} label="Duplicar" onClick={duplicate} />
         <BulkActionButton icon={<Download className="h-4 w-4" />} label="Exportar" onClick={() => exportLeadsCsv(selectedRows)} />
         <div className="relative" ref={editRef}>
           <BulkActionButton icon={<Pencil className="h-4 w-4" />} label="Editar" onClick={() => setEditOpen((o) => !o)} />
           {editOpen && (
-            <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+            <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 shadow-xl">
               <BulkEditSubmenu onApply={applyBulkEdit} pageId={pageId} />
             </div>
           )}
@@ -675,18 +675,18 @@ function BulkActionBar({
         <div className="relative" ref={moveRef}>
           <BulkActionButton icon={<ArrowRightLeft className="h-4 w-4" />} label="Mover" onClick={() => setMoveOpen((o) => !o)} />
           {moveOpen && (
-            <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+            <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 shadow-xl">
               <MoveSubmenu allBoards={allBoards} allPages={allPages} onMove={moveTo} />
             </div>
           )}
         </div>
         <BulkActionButton icon={<Trash2 className="h-4 w-4" />} label="Excluir" onClick={bulkDelete} danger />
-        <div className="mx-1 h-6 w-px bg-gray-200" />
+        <div className="mx-1 h-6 w-px bg-line" />
         <button
           type="button"
           onClick={onClear}
           title="Limpar seleção"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-foreground/40 hover:bg-elevate/[0.08] hover:text-foreground/70"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -828,25 +828,25 @@ function BoardGroup({
   return (
     <div
       className={cn(
-        'mb-5 overflow-hidden rounded-2xl bg-white shadow-sm transition-all duration-150 hover:shadow-md',
+        'mb-5 overflow-hidden rounded-2xl bg-card shadow-sm transition-all duration-150 hover:shadow-md',
         isDragOver && 'bg-accent/[0.03] shadow-lg ring-2 ring-accent/50',
       )}
       onDragOver={(e) => { e.preventDefault(); onBoardDragOver(board.id) }}
       onDragLeave={onBoardDragLeave}
       onDrop={(e) => { e.preventDefault(); onBoardDrop(board.id) }}
     >
-      <div className="border-b border-gray-200 bg-white px-3 py-2">
+      <div className="border-b border-line bg-card px-3 py-2">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="grid h-5 w-5 shrink-0 place-items-center rounded text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded text-foreground/40 transition-colors hover:bg-elevate/[0.05] hover:text-foreground/70"
           >
             <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open ? '' : '-rotate-90')} />
           </button>
           <span className="h-2 w-2 shrink-0 rounded-full ring-4" style={{ backgroundColor: board.color, boxShadow: `0 0 0 3px ${board.color}1f` }} />
           <BoardNameEditor board={board} />
-          <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{rows.length}</span>
+          <span className="rounded-full bg-elevate/[0.05] px-1.5 py-0.5 text-[11px] font-medium text-foreground/50">{rows.length}</span>
           <input
             type="color"
             value={board.color}
@@ -862,13 +862,13 @@ function BoardGroup({
               }
             }}
             title="Excluir quadro"
-            className="grid h-5 w-5 shrink-0 place-items-center rounded text-gray-400 transition-colors hover:bg-danger/10 hover:text-danger"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded text-foreground/40 transition-colors hover:bg-danger/10 hover:text-danger"
           >
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
         {/* Fechado, o quadro vira um "resumo" — mostra o total pra não precisar abrir só pra contar. */}
-        {!open && <p className="ml-7 mt-0.5 text-[11px] text-gray-400">{rows.length} Nome</p>}
+        {!open && <p className="ml-7 mt-0.5 text-[11px] text-foreground/40">{rows.length} Nome</p>}
       </div>
 
       {open && (
@@ -879,13 +879,13 @@ function BoardGroup({
         >
           <table className="border-collapse table-fixed" style={{ width: tableWidth }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-white text-left text-sm text-[#323338]">
+              <tr className="border-b border-line bg-card text-left text-sm text-foreground">
                 <th className={cn('px-2.5 py-2', GRID_BORDER)} style={{ width: CHECKBOX_COL_WIDTH }}>
                   <input
                     type="checkbox"
                     checked={allSelected}
                     onChange={() => onToggleAll(rows.map((r) => r.id), !allSelected)}
-                    className="h-3.5 w-3.5 rounded border-gray-300"
+                    className="h-3.5 w-3.5 rounded border-line"
                   />
                 </th>
                 {cols.map((col) => {
@@ -899,7 +899,7 @@ function BoardGroup({
                     >
                       <span className="inline-flex items-center justify-center gap-1">
                         <span className="truncate">{col.label}</span>
-                        {col.required && <span className="text-red-400" title="Obrigatório">*</span>}
+                        {col.required && <span className="text-danger" title="Obrigatório">*</span>}
                         {/* Igual o Monday: passa o mouse em QUALQUER coluna e aparece o ícone de
                             ordenar — cada quadro guarda a própria coluna/direção ativa. A coluna
                             que está ordenando agora fica com o ícone sempre visível (não só no hover). */}
@@ -908,8 +908,8 @@ function BoardGroup({
                           onClick={() => toggleSort(col.key)}
                           title={sortActive ? (sortBy.desc ? 'Ordenar crescente' : 'Ordenar decrescente') : 'Ordenar'}
                           className={cn(
-                            'grid h-4 w-4 shrink-0 place-items-center rounded transition-opacity hover:bg-black/5 hover:text-accent',
-                            sortActive ? 'text-accent opacity-100' : 'text-gray-300 opacity-0 group-hover:opacity-100',
+                            'grid h-4 w-4 shrink-0 place-items-center rounded transition-opacity hover:bg-elevate/[0.05] hover:text-accent',
+                            sortActive ? 'text-accent opacity-100' : 'text-foreground/30 opacity-0 group-hover:opacity-100',
                           )}
                         >
                           <ArrowUpDown className={cn('h-3 w-3 transition-transform', sortActive && sortBy.desc && 'rotate-180')} />
@@ -940,9 +940,9 @@ function BoardGroup({
                   // ler como negócio fechado ao bater o olho. Já está fora dos totais.
                   title={row.vendaRevertida ? 'Venda revertida — o lead saiu de "Vendido"' : undefined}
                   className={cn(
-                    'group border-b border-gray-200 transition-colors',
+                    'group border-b border-line transition-colors',
                     draggingIds?.includes(row.id) ? 'opacity-40' : '',
-                    row.vendaRevertida ? 'bg-gray-50 text-gray-400 line-through decoration-gray-300' : '',
+                    row.vendaRevertida ? 'bg-elevate/[0.03] text-foreground/40 line-through decoration-foreground/30' : '',
                     selected ? 'bg-accent/10 hover:bg-accent/15' : 'hover:bg-accent/[0.04]',
                   )}
                 >
@@ -953,7 +953,7 @@ function BoardGroup({
                         onDragStart={(e) => startDrag(e, row.id, row.nome)}
                         onDragEnd={onRowDragEnd}
                         title="Arrastar para outro quadro"
-                        className="grid h-5 w-4 shrink-0 cursor-grab place-items-center text-gray-300 hover:text-gray-500 active:cursor-grabbing"
+                        className="grid h-5 w-4 shrink-0 cursor-grab place-items-center text-foreground/30 hover:text-foreground/50 active:cursor-grabbing"
                       >
                         <GripVertical className="h-3.5 w-3.5" />
                       </span>
@@ -961,14 +961,14 @@ function BoardGroup({
                         type="checkbox"
                         checked={selected}
                         onChange={() => onToggleRow(row.id)}
-                        className="h-3.5 w-3.5 rounded border-gray-300"
+                        className="h-3.5 w-3.5 rounded border-line"
                       />
                     </div>
                   </td>
                   {cols.map((col) => (
                     <td key={col.key} className={cn('p-0 align-middle', GRID_BORDER)}>
                       {col.readOnly ? (
-                        <div className={cn('truncate px-2.5 py-1.5 text-sm text-gray-400', col.align === 'center' && 'text-center')}>
+                        <div className={cn('truncate px-2.5 py-1.5 text-sm text-foreground/40', col.align === 'center' && 'text-center')}>
                           {formatDateTimeShort(row.createdAt)}
                         </div>
                       ) : col.key === 'nome' ? (
@@ -979,7 +979,7 @@ function BoardGroup({
                             } : undefined}
                             value={row.nome}
                             onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
-                            className="bg-transparent px-2.5 py-1.5 text-sm font-normal text-gray-800"
+                            className="bg-transparent px-2.5 py-1.5 text-sm font-normal text-foreground"
                           />
                           <button
                             type="button"
@@ -987,11 +987,11 @@ function BoardGroup({
                             title="Abrir lead"
                             className={cn(
                               'relative mr-1.5 grid h-7 w-7 shrink-0 place-items-center rounded-md transition-colors',
-                              row.notesCount > 0 ? 'bg-accent/15 hover:bg-accent/25' : 'hover:bg-gray-100',
+                              row.notesCount > 0 ? 'bg-accent/15 hover:bg-accent/25' : 'hover:bg-elevate/[0.08]',
                             )}
                           >
                             <MessageCircle
-                              className={cn('h-4 w-4', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-gray-300')}
+                              className={cn('h-4 w-4', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-foreground/30')}
                             />
                             {row.notesCount > 0 && (
                               <span className="absolute -top-1.5 -right-1.5 grid h-4 min-w-[1rem] place-items-center rounded-full bg-accent px-0.5 text-[10px] font-semibold text-white ring-2 ring-white">
@@ -1031,20 +1031,20 @@ function BoardGroup({
                         <CurrencyField
                           value={row[col.key as LeadRowField]}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
-                          className={cn('bg-transparent px-2.5 py-1.5 text-sm text-gray-800', col.align === 'center' && 'text-center')}
+                          className={cn('bg-transparent px-2.5 py-1.5 text-sm text-foreground', col.align === 'center' && 'text-center')}
                         />
                       ) : col.key === 'retornar' ? (
                         <RetornarField
                           value={row.retornar}
                           retornado={row.retornado}
                           onChange={(patch) => applyFieldChange(row, patch)}
-                          className="bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
+                          className="bg-transparent px-2.5 py-1.5 text-sm text-foreground"
                         />
                       ) : col.key === 'agendamento' ? (
                         <AgendamentoField
                           value={row.agendamento}
                           onChange={(next) => leadBoardsService.updateRow(row.id, { agendamento: next })}
-                          className="justify-center bg-transparent px-2.5 py-1.5 text-sm text-gray-800"
+                          className="justify-center bg-transparent px-2.5 py-1.5 text-sm text-foreground"
                         />
                       ) : (
                         <EditableField
@@ -1053,10 +1053,10 @@ function BoardGroup({
                           placeholder={col.required ? 'Obrigatório' : undefined}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
                           className={cn(
-                            'px-2.5 py-1.5 text-sm text-gray-800',
+                            'px-2.5 py-1.5 text-sm text-foreground',
                             col.align === 'center' && 'text-center',
                             col.required && !row[col.key as LeadRowField]
-                              ? 'bg-red-50 ring-1 ring-inset ring-red-200'
+                              ? 'bg-danger/10 ring-1 ring-inset ring-danger/30'
                               : 'bg-transparent',
                           )}
                         />
@@ -1067,7 +1067,7 @@ function BoardGroup({
                 )
               })}
               {rows.length > 0 && (
-                <tr className="border-t border-gray-200 bg-gray-50/70 text-sm font-semibold text-[#323338]">
+                <tr className="border-t border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                   <td className={GRID_BORDER} style={{ width: CHECKBOX_COL_WIDTH }} />
                   {cols.map((col) => (
                     <td key={col.key} className={cn('px-2.5 py-1.5 text-center', GRID_BORDER)}>
@@ -1080,12 +1080,12 @@ function BoardGroup({
                   ))}
                 </tr>
               )}
-              <tr className="hover:bg-gray-50">
+              <tr className="hover:bg-elevate/[0.04]">
                 <td colSpan={cols.length + 1} className="px-2.5 py-2">
                   <button
                     type="button"
                     onClick={() => onCreateRow(board.id)}
-                    className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-accent"
+                    className="flex items-center gap-1.5 text-xs text-foreground/40 transition-colors hover:text-accent"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Adicionar nome
@@ -1316,9 +1316,9 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
         ]}
       />
 
-      <div className="flex min-h-screen flex-col bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="flex min-h-screen flex-col bg-card px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!booted ? (
-          <div className="grid min-h-[30vh] place-items-center text-sm text-gray-500">
+          <div className="grid min-h-[30vh] place-items-center text-sm text-foreground/50">
             <span className="inline-flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               Carregando…
@@ -1339,12 +1339,12 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                 </>
               )}
               <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Pesquisar"
-                  className="h-9 w-44 rounded-md border border-gray-200 bg-white pl-9 pr-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-accent/60 focus:outline-none"
+                  className="h-9 w-44 rounded-md border border-line bg-card pl-9 pr-2 text-sm text-foreground placeholder:text-foreground/40 focus:border-accent/60 focus:outline-none"
                 />
               </div>
               <ToolbarButton
@@ -1355,14 +1355,14 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               >
                 {sdrLock ? 'Minhas métricas' : 'Dashboard'}
               </ToolbarButton>
-              <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+              <div className="inline-flex overflow-hidden rounded-lg border border-line">
                 <button
                   type="button"
                   onClick={() => changeView('list')}
                   title="Aplicar visão em lista"
                   className={cn(
                     'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-                    view === 'list' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+                    view === 'list' ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
                   )}
                 >
                   <ListTodo className="h-3.5 w-3.5" />
@@ -1374,7 +1374,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   title="Aplicar visão em Kanban"
                   className={cn(
                     'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-                    view === 'kanban' ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-gray-50',
+                    view === 'kanban' ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
                   )}
                 >
                   <KanbanSquare className="h-3.5 w-3.5" />
@@ -1439,7 +1439,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   <button
                     type="button"
                     onClick={() => setBoardModalOpen(true)}
-                    className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-gray-300 text-xs font-medium text-gray-400 transition-colors hover:border-accent/50 hover:bg-accent/[0.03] hover:text-accent"
+                    className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-line text-xs font-medium text-foreground/40 transition-colors hover:border-accent/50 hover:bg-accent/[0.03] hover:text-accent"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Novo quadro
@@ -1447,7 +1447,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   <button
                     type="button"
                     onClick={() => setTrashModalOpen(true)}
-                    className="mt-2 flex items-center gap-1 text-[11px] text-gray-400 transition-colors hover:text-gray-600"
+                    className="mt-2 flex items-center gap-1 text-[11px] text-foreground/40 transition-colors hover:text-foreground/70"
                   >
                     <Trash2 className="h-3 w-3" />
                     Excluídos
@@ -1458,7 +1458,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                     não precisa descer até o fim da página pra arrastar. */}
                 <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 sm:px-6 lg:px-8 lg:pl-[236px]">
                   <div
-                    className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-gray-200 bg-white shadow-lg"
+                    className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-line bg-card shadow-lg"
                     style={{ height: 14 }}
                     onScroll={handleSharedScroll}
                   >

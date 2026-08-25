@@ -38,7 +38,7 @@ function RangePill({ active, onClick, children }: { active: boolean; onClick: ()
       onClick={onClick}
       className={cn(
         'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-        active ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-gray-500 hover:bg-gray-50',
+        active ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
       )}
     >
       {children}
@@ -113,9 +113,9 @@ export function ComercialDashboardPage() {
         ]}
       />
 
-      <div className="flex min-h-screen flex-col gap-4 bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="flex min-h-screen flex-col gap-4 bg-bg px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!booted ? (
-          <div className="grid min-h-[30vh] place-items-center text-sm text-gray-500">
+          <div className="grid min-h-[30vh] place-items-center text-sm text-foreground/50">
             <span className="inline-flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               Carregando…
@@ -123,9 +123,9 @@ export function ComercialDashboardPage() {
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3">
+            <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-line bg-card p-3">
               <div className="flex flex-wrap items-center gap-1.5">
-                <CalendarRange className="h-4 w-4 shrink-0 text-gray-400" />
+                <CalendarRange className="h-4 w-4 shrink-0 text-foreground/40" />
                 <RangePill active={dateRange === 'today'} onClick={() => setDateRange('today')}>Hoje</RangePill>
                 <RangePill active={dateRange === '7d'} onClick={() => setDateRange('7d')}>Últimos 7 dias</RangePill>
                 <RangePill active={dateRange === '30d'} onClick={() => setDateRange('30d')}>Últimos 30 dias</RangePill>

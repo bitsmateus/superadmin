@@ -25,7 +25,7 @@ export function ComercialPage() {
 
   if (!booted) {
     return (
-      <div className="grid min-h-screen place-items-center text-sm text-gray-500">
+      <div className="grid min-h-screen place-items-center text-sm text-foreground/50">
         <span className="inline-flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
           Carregando…

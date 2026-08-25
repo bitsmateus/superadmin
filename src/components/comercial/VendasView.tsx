@@ -123,10 +123,10 @@ export function VendasView({ pageId }: { pageId: string }) {
     return (
       <>
         <TopBar title="Vendas" subtitle="Comercial" />
-        <div className="mx-auto mt-10 max-w-md rounded-2xl bg-white p-6 text-center shadow-sm">
-          <ShoppingBag className="mx-auto h-8 w-8 text-gray-300" />
-          <p className="mt-3 text-sm font-medium text-[#323338]">Nenhum quadro de vendas nesta aba</p>
-          <p className="mt-1 text-xs text-gray-500">
+        <div className="mx-auto mt-10 max-w-md rounded-2xl bg-card p-6 text-center shadow-sm">
+          <ShoppingBag className="mx-auto h-8 w-8 text-foreground/30" />
+          <p className="mt-3 text-sm font-medium text-foreground">Nenhum quadro de vendas nesta aba</p>
+          <p className="mt-1 text-xs text-foreground/50">
             Crie um quadro aqui e marque-o como quadro de vendas (ícone de sacola) para as vendas
             começarem a cair nesta tela.
           </p>
@@ -154,7 +154,7 @@ export function VendasView({ pageId }: { pageId: string }) {
 
       <div className="px-1 pb-8">
         {/* Período */}
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl bg-card p-3 shadow-sm">
           <PeriodoTab active={periodo === 'mes_atual'} onClick={() => setPeriodo('mes_atual')}>
             Mês atual
           </PeriodoTab>
@@ -171,25 +171,25 @@ export function VendasView({ pageId }: { pageId: string }) {
                 type="date"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                className="h-8 rounded-lg border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-accent"
+                className="h-8 rounded-lg border border-line px-2 text-xs text-foreground/70 outline-none focus:border-accent"
               />
-              <span className="text-xs text-gray-400">até</span>
+              <span className="text-xs text-foreground/40">até</span>
               <input
                 type="date"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                className="h-8 rounded-lg border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-accent"
+                className="h-8 rounded-lg border border-line px-2 text-xs text-foreground/70 outline-none focus:border-accent"
               />
             </div>
           )}
         </div>
 
         {/* Lista */}
-        <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[620px]">
               <thead>
-                <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                   <th className="px-4 py-3">Nome</th>
                   <th className="w-28 px-4 py-3">SDR</th>
                   <th className="w-48 px-4 py-3 text-right">Valor MRR</th>
@@ -201,7 +201,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-foreground/40">
                       Nenhuma venda neste período.
                     </td>
                   </tr>
@@ -212,7 +212,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               </tbody>
               {noPeriodo.length > 0 && (
                 <tfoot>
-                  <tr className="border-t-2 border-gray-200 bg-gray-50 text-sm font-semibold text-[#323338]">
+                  <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                     <td className="px-4 py-3">Total</td>
                     <td />
                     <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
@@ -231,14 +231,14 @@ export function VendasView({ pageId }: { pageId: string }) {
         </div>
 
         {/* Resumo por SDR — mesmo período da lista acima */}
-        <div className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        <div className="mt-4 overflow-hidden rounded-2xl bg-card shadow-sm">
+          <div className="border-b border-line px-4 py-3 text-xs font-semibold uppercase tracking-wide text-foreground/50">
             Resumo por SDR
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[600px]">
               <thead>
-                <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                   <th className="px-4 py-3">SDR</th>
                   <th className="w-28 px-4 py-3 text-right">Vendas</th>
                   <th className="w-40 whitespace-nowrap px-4 py-3 text-right">MRR (R$)</th>
@@ -247,8 +247,8 @@ export function VendasView({ pageId }: { pageId: string }) {
               </thead>
               <tbody>
                 {resumoPorSdr.map((r) => (
-                  <tr key={r.nome} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/70">
-                    <td className="px-4 py-2.5 text-sm font-medium text-[#323338]">{r.nome}</td>
+                  <tr key={r.nome} className="border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]">
+                    <td className="px-4 py-2.5 text-sm font-medium text-foreground">{r.nome}</td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums">{r.vendas}</td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums">{formatBRLCents(r.mrr)}</td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums">{formatBRLCents(r.impl)}</td>
@@ -256,7 +256,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-gray-200 bg-gray-50 text-sm font-semibold text-[#323338]">
+                <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                   <td className="px-4 py-3">Equipe</td>
                   <td className="px-4 py-3 text-right tabular-nums">{validas.length}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-emerald-700">{formatBRLCents(totalMrr)}</td>
@@ -297,7 +297,7 @@ function PeriodoTab({
       onClick={onClick}
       className={cn(
         'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-        active ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-gray-500 hover:bg-gray-50',
+        active ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
       )}
     >
       {children}
@@ -322,7 +322,7 @@ function PendenteValueCell({
   strikethrough?: boolean
 }) {
   return (
-    <td className={cn('px-1 py-1.5 text-sm tabular-nums', pendente && 'bg-amber-100', strikethrough && 'line-through')}>
+    <td className={cn('px-1 py-1.5 text-sm tabular-nums', pendente && 'bg-warning/15', strikethrough && 'line-through')}>
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -330,7 +330,7 @@ function PendenteValueCell({
           title={pendente ? 'Pendente de pagamento — clique para marcar como pago' : 'Pago — clique para marcar como pendente'}
           className={cn(
             'h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset transition-colors',
-            pendente ? 'bg-amber-400 ring-amber-500' : 'bg-transparent ring-gray-300 hover:ring-gray-400',
+            pendente ? 'bg-amber-400 ring-amber-500' : 'bg-transparent ring-line hover:ring-foreground/40',
           )}
         />
         <CurrencyField value={value} onSave={onSave} className="flex-1 bg-transparent text-right" />
@@ -361,7 +361,7 @@ function ObservacoesCell({ value, onSave }: { value: string; onSave: (next: stri
           focusedRef.current = false
           if (local !== value) onSave(local)
         }}
-        className="h-9 w-full rounded-lg bg-gray-50 px-2 text-sm text-gray-700 outline-none focus:bg-white focus:ring-1 focus:ring-accent/30"
+        className="h-9 w-full rounded-lg bg-elevate/[0.03] px-2 text-sm text-foreground/70 outline-none focus:bg-card focus:ring-1 focus:ring-accent/30"
       />
     </td>
   )
@@ -379,21 +379,21 @@ function VendaRow({ row }: { row: LeadRow }) {
   return (
     <tr
       className={cn(
-        'group border-b border-gray-100 last:border-0 hover:bg-gray-50/70',
-        row.vendaRevertida && 'text-gray-400',
+        'group border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]',
+        row.vendaRevertida && 'text-foreground/40',
       )}
     >
       <td className="px-4 py-3">
-        <span className={cn('text-sm', row.vendaRevertida && 'line-through decoration-gray-300')}>
+        <span className={cn('text-sm', row.vendaRevertida && 'line-through decoration-foreground/30')}>
           {row.nome || 'Sem nome'}
         </span>
         {row.vendaRevertida && (
-          <span className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+          <span className="ml-2 rounded-full bg-elevate/[0.08] px-1.5 py-0.5 text-[10px] font-medium text-foreground/50">
             revertida
           </span>
         )}
       </td>
-      <td className={cn('px-4 py-3 text-sm text-gray-600', row.vendaRevertida && 'line-through')}>
+      <td className={cn('px-4 py-3 text-sm text-foreground/70', row.vendaRevertida && 'line-through')}>
         {row.sdr || '—'}
       </td>
       <PendenteValueCell
@@ -416,7 +416,7 @@ function VendaRow({ row }: { row: LeadRow }) {
           type="button"
           onClick={() => setExcluirOpen(true)}
           title="Excluir venda"
-          className="grid h-6 w-6 place-items-center rounded text-gray-300 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
+          className="grid h-6 w-6 place-items-center rounded text-foreground/30 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -526,7 +526,7 @@ function VendasTrashModal({
           <p className="text-sm text-foreground/40">Nenhuma venda excluída por aqui.</p>
         </div>
       ) : (
-        <ul className="max-h-[50vh] divide-y divide-white/[0.04] overflow-y-auto">
+        <ul className="max-h-[50vh] divide-y divide-line/60 overflow-y-auto">
           {rows.map((r) => (
             <li key={r.id} className="flex items-center gap-3 py-2.5">
               <div className="min-w-0 flex-1">

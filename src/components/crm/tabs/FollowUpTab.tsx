@@ -91,7 +91,7 @@ export function FollowUpTab({ client }: { client: Client }) {
                         ? 'bg-accent animate-pulse'
                         : state === 'late'
                           ? 'bg-danger'
-                          : 'bg-white/30',
+                          : 'bg-elevate/30',
                   )}
                 />
                 <div className="rounded-xl border border-line bg-elevate/[0.02] p-3">

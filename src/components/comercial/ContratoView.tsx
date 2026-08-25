@@ -4,9 +4,11 @@ import { CalendarRange, CheckCircle2, Clock, Download, FileText, ListTodo, Loade
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { useAuth } from '@/hooks/useAuth'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 import { useClients } from '@/hooks/useClients'
 import { db } from '@/services/db'
+import { canDeleteClient } from '@/services/supabase'
 import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/useContracts'
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
@@ -79,6 +81,8 @@ type MonthFilter = ReturnType<typeof useMonthFilter>
  * filtro por mês/período, igual o Painel do Mês).
  */
 export function ContratoView({ pageId }: { pageId: string }) {
+  const { profile } = useAuth()
+  const canDelete = canDeleteClient(profile?.role)
   const boards = useLeadBoards()
   const board = React.useMemo(
     () => boards.find((b) => b.page === pageId && b.isContrato) ?? boards.find((b) => b.page === pageId),
@@ -277,6 +281,18 @@ export function ContratoView({ pageId }: { pageId: string }) {
     void contractsService.deleteContract(c.id)
   }
 
+  const archiveClient = (client: Client) => {
+    const label = client.company || client.name
+    const ok = window.confirm(
+      `Arquivar "${label}"?\n\n` +
+        'O cliente sai dessa fila e do pipeline, mas pode ser restaurado ou ' +
+        'excluído permanentemente na tela "Arquivados".',
+    )
+    if (!ok) return
+    db.archiveClient(client.id)
+    toast.success('Cliente arquivado')
+  }
+
   const download = () => {
     if (!selected) return
     openContractSheet(bodyRef.current?.innerHTML ?? selected.conteudo, `Contrato — ${contractLabel(selected)}`)
@@ -326,14 +342,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
             {tab === 'boas-vindas' && (
               <>
                 <MonthFilterBar filter={boasVindasFilter} />
-                <PendingClientsList clients={boasVindasInRange} onCreate={startNew} emptyText="Nenhum cliente em Boas-vindas nesse período." />
+                <PendingClientsList clients={boasVindasInRange} onCreate={startNew} onArchive={canDelete ? archiveClient : undefined} emptyText="Nenhum cliente em Boas-vindas nesse período." />
               </>
             )}
 
             {tab === 'pendentes-venda' && (
               <>
                 <MonthFilterBar filter={pendingClientsFilter} />
-                <PendingClientsList clients={pendingClientsInRange} onCreate={startNew} emptyText="Nenhuma ficha pendente de contrato nesse período." />
+                <PendingClientsList clients={pendingClientsInRange} onCreate={startNew} onArchive={canDelete ? archiveClient : undefined} emptyText="Nenhuma ficha pendente de contrato nesse período." />
               </>
             )}
 
@@ -560,10 +576,12 @@ function MonthFilterBar({ filter }: { filter: MonthFilter }) {
 function PendingClientsList({
   clients,
   onCreate,
+  onArchive,
   emptyText = 'Nenhuma ficha pendente de contrato — tudo em dia.',
 }: {
   clients: Client[]
   onCreate: (client: Client) => void
+  onArchive?: (client: Client) => void
   emptyText?: string
 }) {
   if (clients.length === 0) {
@@ -582,7 +600,7 @@ function PendingClientsList({
               <th className="px-4 py-3">Empresa</th>
               <th className="w-44 px-4 py-3">CNPJ</th>
               <th className="w-32 px-4 py-3">Ficha em</th>
-              <th className="w-40 px-2 py-3" />
+              <th className="w-52 px-2 py-3" />
             </tr>
           </thead>
           <tbody>
@@ -591,8 +609,20 @@ function PendingClientsList({
                 <td className="px-4 py-3 text-sm text-gray-700">{c.company || c.name}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{c.fichaCadastro?.cnpj ? formatCnpj(c.fichaCadastro.cnpj) : '—'}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{formatDateShort(c.fichaCadastro?.submittedAt ?? c.createdAt)}</td>
-                <td className="px-2 py-3 text-right">
-                  <Button size="sm" onClick={() => onCreate(c)} leftIcon={<Plus className="h-3.5 w-3.5" />}>Criar contrato</Button>
+                <td className="px-2 py-3">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Button size="sm" onClick={() => onCreate(c)} leftIcon={<Plus className="h-3.5 w-3.5" />}>Criar contrato</Button>
+                    {onArchive && (
+                      <button
+                        type="button"
+                        title="Arquivar cliente"
+                        onClick={() => onArchive(c)}
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 ring-1 ring-gray-200 transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

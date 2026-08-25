@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Copy,
   Download,
-  FileText,
   Filter,
   GripVertical,
   KanbanSquare,
@@ -27,7 +26,6 @@ import {
   Upload,
   UserRound,
   X,
-  ShoppingBag,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -823,50 +821,6 @@ function BoardGroup({
             title="Cor do quadro"
             className="ml-auto h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
           />
-          <button
-            type="button"
-            onClick={() => {
-              if (board.isVendas) return
-              if (!window.confirm(
-                `Usar "${board.name}" como quadro de vendas?\n\nA ABA INTEIRA vira a tela de Vendas (lista de nome, MRR e implementação com totais por período) — os quadros dela deixam de aparecer como CRM.\n\nTodo lead marcado como "Vendido" em qualquer CRM passa a cair aqui. Só um quadro no sistema tem esse papel; se outro já tiver, ele perde.`,
-              )) return
-              leadBoardsService.setVendasBoard(board.id)
-                .then(() => toast.success(`"${board.name}" agora recebe as vendas.`))
-                .catch((err: Error) => toast.error('Falha: ' + err.message))
-            }}
-            title={
-              board.isVendas
-                ? 'Este quadro recebe as vendas marcadas nos CRMs'
-                : 'Usar este quadro para receber as vendas'
-            }
-            className={cn(
-              'grid h-5 w-5 shrink-0 place-items-center rounded transition-colors',
-              board.isVendas
-                ? 'text-emerald-600'
-                : 'text-gray-300 hover:bg-black/5 hover:text-gray-600',
-            )}
-          >
-            <ShoppingBag className="h-3 w-3" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              leadBoardsService.updateBoard(board.id, { isContrato: !board.isContrato })
-            }}
-            title={
-              board.isContrato
-                ? 'Esta aba gera contratos a partir do CNPJ — clique pra desligar'
-                : 'Usar esta aba pra gerar contratos a partir do CNPJ'
-            }
-            className={cn(
-              'grid h-5 w-5 shrink-0 place-items-center rounded transition-colors',
-              board.isContrato
-                ? 'text-accent'
-                : 'text-gray-300 hover:bg-black/5 hover:text-gray-600',
-            )}
-          >
-            <FileText className="h-3 w-3" />
-          </button>
           <button
             type="button"
             onClick={() => {

@@ -61,10 +61,6 @@ import type { LeadBoard, LeadBoardPage, LeadLabelField, LeadPage, LeadRow, LeadR
 const LeadImportModal = React.lazy(() =>
   import('@/components/comercial/LeadImportModal').then((m) => ({ default: m.LeadImportModal })),
 )
-const ImportUpdatesModal = React.lazy(() =>
-  import('@/components/comercial/ImportUpdatesModal').then((m) => ({ default: m.ImportUpdatesModal })),
-)
-
 interface ColumnDef {
   key: LeadRowField | 'createdAt'
   label: string
@@ -1180,7 +1176,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const [filtersOpen, setFiltersOpen] = React.useState(false)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [importModalOpen, setImportModalOpen] = React.useState(false)
-  const [importUpdatesModalOpen, setImportUpdatesModalOpen] = React.useState(false)
   const [trashModalOpen, setTrashModalOpen] = React.useState(false)
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
@@ -1295,7 +1290,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
       <TopBar
         title={title}
         subtitle={subtitle}
-        titleClassName="text-[36px] font-semibold font-['Roboto']"
+        titleClassName="text-[30px] font-medium font-['Roboto']"
         breadcrumbs={[
           { label: 'Grupo NX Digital', to: '/' },
           { label: 'Comercial', to: '/comercial' },
@@ -1321,9 +1316,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   </Button>
                   <ToolbarButton icon={<Upload className="h-3.5 w-3.5" />} onClick={() => setImportModalOpen(true)}>
                     Importar
-                  </ToolbarButton>
-                  <ToolbarButton icon={<MessageCircle className="h-3.5 w-3.5" />} onClick={() => setImportUpdatesModalOpen(true)}>
-                    Importar atualizações
                   </ToolbarButton>
                   {isAdmin && <PageActionsMenu pageId={page} pageName={title} boards={boards} />}
                 </>
@@ -1478,17 +1470,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
           }
         >
           <LeadImportModal open={importModalOpen} onClose={() => setImportModalOpen(false)} page={page} boards={boards} />
-        </React.Suspense>
-      )}
-      {importUpdatesModalOpen && (
-        <React.Suspense
-          fallback={
-            <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm">
-              <Loader2 className="h-6 w-6 animate-spin text-white" />
-            </div>
-          }
-        >
-          <ImportUpdatesModal open={importUpdatesModalOpen} onClose={() => setImportUpdatesModalOpen(false)} boards={boards} allRows={allRows} />
         </React.Suspense>
       )}
       <LeadTrashModal open={trashModalOpen} onClose={() => setTrashModalOpen(false)} boards={boards} />

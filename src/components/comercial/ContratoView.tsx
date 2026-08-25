@@ -627,12 +627,12 @@ function PendingClientsList({
           </thead>
           <tbody>
             {clients.map((c) => (
-              <tr key={c.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/70">
-                <td className="px-4 py-3 text-sm">
-                  <button type="button" onClick={() => onOpen(c)} className="font-medium text-accent hover:underline">
-                    {c.company || c.name}
-                  </button>
-                </td>
+              <tr
+                key={c.id}
+                onClick={() => onOpen(c)}
+                className="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-gray-50/70"
+              >
+                <td className="px-4 py-3 text-sm font-medium text-accent">{c.company || c.name}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{c.fichaCadastro?.cnpj ? formatCnpj(c.fichaCadastro.cnpj) : '—'}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{formatDateShort(c.fichaCadastro?.submittedAt ?? c.createdAt)}</td>
                 <td className="px-2 py-3 text-right">
@@ -640,7 +640,7 @@ function PendingClientsList({
                     <button
                       type="button"
                       title="Arquivar cliente"
-                      onClick={() => onArchive(c)}
+                      onClick={(e) => { e.stopPropagation(); onArchive(c) }}
                       className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 ring-1 ring-gray-200 transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
                     >
                       <Trash2 className="h-3.5 w-3.5" />

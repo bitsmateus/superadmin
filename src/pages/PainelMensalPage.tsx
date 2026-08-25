@@ -141,16 +141,20 @@ export function PainelMensalPage() {
     const untilIso = to < todayIso ? to : todayIso
 
     // Leva do mês = quem foi CRIADO nesse período (mesma lógica das Métricas por SDR — soma
-    // todas as abas/SDRs juntos, sem filtro nenhum por CRM). "Agendamentos" é por STATUS (chegou
-    // em "Reunião agendada" ou etapa seguinte, alguma vez), não pela data marcada no campo
-    // Agendamento — evita divergir do que já aparece em Métricas por SDR pro mesmo período.
+    // todas as abas/SDRs juntos, sem filtro nenhum por CRM). "Agendamentos (total)" é por STATUS
+    // (chegou em "Reunião agendada" ou etapa seguinte, alguma vez) — evita divergir do que já
+    // aparece em Métricas por SDR pro mesmo período. "Agendamentos até hoje" é diferente: usa a
+    // data REAL da reunião (campo Agendamento), não a data em que o SDR marcou o status — senão
+    // uma reunião marcada hoje pra acontecer só dia 27/28 contaria como "já aconteceu" (a data do
+    // status é sempre <= hoje por definição, então "até hoje" nunca filtrava nada de verdade).
+    // Comparecimento/no-show só fazem sentido pra reunião que já ocorreu, daí o filtro aqui.
     const monthCohort = allRows.filter((r) => {
       const d = r.createdAt.slice(0, 10)
       return d >= from && d <= to
     })
     const agendadosTotal = monthCohort.filter((r) => milestoneById.get(r.id)?.everAgendada)
     const agendadosAteHoje = agendadosTotal.filter((r) => {
-      const d = milestoneById.get(r.id)?.firstAgendadaAt?.slice(0, 10)
+      const d = r.agendamento?.slice(0, 10)
       return !!d && d <= untilIso
     })
     const noShowAteHoje = agendadosAteHoje.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_NO_SHOW)

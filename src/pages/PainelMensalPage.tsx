@@ -183,10 +183,20 @@ export function PainelMensalPage() {
 
     // Mesma receita/MRR/ROI de cima, só que restrita às vendas que vieram do Funil de Vendas
     // (vendasFechadas — mesmos leads que contam em "Vendas fechadas" ali em cima), sem as avulsas
-    // cadastradas direto na aba Vendas. O valor de MRR/Implementação já mora no próprio lead
-    // (é copiado pra aba Vendas quando vira "Vendido", ver syncVendaFromStatus no backend).
-    const mrrTotalFunilCents = vendasFechadas.reduce((s, r) => s + parseBRLCents(r.valorMrr), 0)
-    const implTotalFunilCents = vendasFechadas.reduce((s, r) => s + parseBRLCents(r.valorImplementacao), 0)
+    // cadastradas direto na aba Vendas. O valor de MRR/Implementação normalmente fica vazio no
+    // lead original do CRM (Arthur/Luis) — quem preenche de verdade é a cópia gerada na aba Vendas
+    // (syncVendaFromStatus, ligada pelo vendaOrigemId), então busca o valor de lá.
+    const vendaCopiaPorOrigemId = new Map(
+      vendasRows.filter((r) => r.vendaOrigemId).map((r) => [r.vendaOrigemId as string, r]),
+    )
+    const mrrTotalFunilCents = vendasFechadas.reduce((s, r) => {
+      const copia = vendaCopiaPorOrigemId.get(r.id)
+      return s + parseBRLCents(copia ? copia.valorMrr : r.valorMrr)
+    }, 0)
+    const implTotalFunilCents = vendasFechadas.reduce((s, r) => {
+      const copia = vendaCopiaPorOrigemId.get(r.id)
+      return s + parseBRLCents(copia ? copia.valorImplementacao : r.valorImplementacao)
+    }, 0)
     const entrouFunilCents = mrrTotalFunilCents + implTotalFunilCents
 
     const agendTotal = agendadosTotal.length

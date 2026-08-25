@@ -555,8 +555,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     const allowed = await restrictedBoardFilter(sub, role);
     if (allowed !== null && !allowed.length) return [];
 
-    const boardFilter = allowed !== null ? 'AND lr.board_id = ANY($4)' : '';
-    const params: unknown[] = [MILESTONE_STATUSES, MILESTONE_AGENDADA, POST_AGENDAMENTO_STATUSES];
+    const boardFilter = allowed !== null ? 'AND lr.board_id = ANY($3)' : '';
+    const params: unknown[] = [MILESTONE_STATUSES, POST_AGENDAMENTO_STATUSES];
     if (allowed !== null) params.push(allowed);
 
     return query(
@@ -570,11 +570,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
             lr.created_at
           )
         END AS milestone_at,
-        (lr.status = ANY($3)) AS ever_agendada,
-        CASE WHEN lr.status = ANY($3) THEN
+        (lr.status = ANY($2)) AS ever_agendada,
+        CASE WHEN lr.status = ANY($2) THEN
           COALESCE(
             (SELECT MIN(le.created_at) FROM lead_events le
-             WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($3)),
+             WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($2)),
             lr.created_at
           )
         END AS first_agendada_at

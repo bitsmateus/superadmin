@@ -394,7 +394,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
             {tab === 'pendentes-venda' && (
               <>
                 <MonthFilterBar filter={pendingClientsFilter} />
-                <PendingClientsList clients={pendingClientsInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={advanceStage} emptyText="Nenhuma ficha pendente de contrato nesse período." />
+                <PendingClientsList clients={pendingClientsInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} emptyText="Nenhuma ficha pendente de contrato nesse período." />
               </>
             )}
 

@@ -9,6 +9,7 @@ import { useLeadBoards } from '@/hooks/useLeadBoards'
 import { useClients } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { canDeleteClient } from '@/services/supabase'
+import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/useContracts'
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
@@ -149,6 +150,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const [cnpjLoading, setCnpjLoading] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
   const [editTemplateOpen, setEditTemplateOpen] = React.useState(false)
+  const [openClientId, setOpenClientId] = React.useState<string | null>(null)
+  const openClient = React.useMemo(() => clients.find((c) => c.id === openClientId) ?? null, [clients, openClientId])
 
   const changeTab = (next: Tab) => { setTab(next); setSelectedId(null) }
 
@@ -281,6 +284,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
     void contractsService.deleteContract(c.id)
   }
 
+  // Único jeito de chegar na aba "Criar contrato" agora: pela ficha do cliente, no drawer aberto
+  // pelo nome em Boas-vindas/Pendente de contrato — nunca direto (evita gerar contrato solto, sem
+  // ficha de cadastro vinculada).
+  const createContractFromDrawer = (client: Client) => {
+    setOpenClientId(null)
+    startNew(client)
+  }
+
   const archiveClient = (client: Client) => {
     const label = client.company || client.name
     const ok = window.confirm(
@@ -334,7 +345,6 @@ export function ContratoView({ pageId }: { pageId: string }) {
             <div className="mb-4 flex flex-wrap gap-2 rounded-2xl bg-white p-3 shadow-sm">
               <TabPill active={tab === 'boas-vindas'} onClick={() => changeTab('boas-vindas')} icon={<UserRound className="h-3.5 w-3.5" />} label="Boas-vindas" count={boasVindasClients.length} />
               <TabPill active={tab === 'pendentes-venda'} onClick={() => changeTab('pendentes-venda')} icon={<ListTodo className="h-3.5 w-3.5" />} label="Pendente de contrato" count={pendingClients.length} />
-              <TabPill active={tab === 'criar'} onClick={() => { setDraftCampos({}); setDraftClientId(null); changeTab('criar') }} icon={<Plus className="h-3.5 w-3.5" />} label="Criar contrato" />
               <TabPill active={tab === 'pendentes-contrato'} onClick={() => changeTab('pendentes-contrato')} icon={<Clock className="h-3.5 w-3.5" />} label="Contratos pendentes" count={pendingContracts.length} />
               <TabPill active={tab === 'assinados'} onClick={() => changeTab('assinados')} icon={<CheckCircle2 className="h-3.5 w-3.5" />} label="Contratos assinados" count={signedContracts.length} />
             </div>
@@ -342,14 +352,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
             {tab === 'boas-vindas' && (
               <>
                 <MonthFilterBar filter={boasVindasFilter} />
-                <PendingClientsList clients={boasVindasInRange} onCreate={startNew} onArchive={canDelete ? archiveClient : undefined} emptyText="Nenhum cliente em Boas-vindas nesse período." />
+                <PendingClientsList clients={boasVindasInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} emptyText="Nenhum cliente em Boas-vindas nesse período." />
               </>
             )}
 
             {tab === 'pendentes-venda' && (
               <>
                 <MonthFilterBar filter={pendingClientsFilter} />
-                <PendingClientsList clients={pendingClientsInRange} onCreate={startNew} onArchive={canDelete ? archiveClient : undefined} emptyText="Nenhuma ficha pendente de contrato nesse período." />
+                <PendingClientsList clients={pendingClientsInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} emptyText="Nenhuma ficha pendente de contrato nesse período." />
               </>
             )}
 
@@ -468,6 +478,18 @@ export function ContratoView({ pageId }: { pageId: string }) {
       </div>
 
       <EditTemplateModal open={editTemplateOpen} onClose={() => setEditTemplateOpen(false)} template={template} />
+
+      <ClientDrawer
+        clientId={openClientId}
+        onClose={() => setOpenClientId(null)}
+        extraHeaderAction={
+          openClient && openClient.fichaCadastro && !contractedClientIds.has(openClient.id) ? (
+            <Button size="sm" onClick={() => createContractFromDrawer(openClient)} leftIcon={<Plus className="h-3.5 w-3.5" />}>
+              Criar contrato
+            </Button>
+          ) : undefined
+        }
+      />
     </>
   )
 }
@@ -570,17 +592,17 @@ function MonthFilterBar({ filter }: { filter: MonthFilter }) {
 }
 
 /** Clientes que preencheram a ficha de cadastro pública (app/ficha) e ainda não têm nenhum
- * contrato gerado — fila de "falta fazer o contrato". "Criar contrato" já leva pro formulário com
- * o nome e o CNPJ pré-preenchidos (e já dispara a busca automática), pra sumir da fila assim que
- * o contrato for gerado. */
+ * contrato gerado — fila de "falta fazer o contrato". Clicar no nome abre a ficha completa do
+ * cliente (mesmo drawer usado em Clientes/Pipeline); "Criar contrato" só existe lá dentro — não dá
+ * pra gerar um contrato sem antes ver a ficha. */
 function PendingClientsList({
   clients,
-  onCreate,
+  onOpen,
   onArchive,
   emptyText = 'Nenhuma ficha pendente de contrato — tudo em dia.',
 }: {
   clients: Client[]
-  onCreate: (client: Client) => void
+  onOpen: (client: Client) => void
   onArchive?: (client: Client) => void
   emptyText?: string
 }) {
@@ -600,29 +622,30 @@ function PendingClientsList({
               <th className="px-4 py-3">Empresa</th>
               <th className="w-44 px-4 py-3">CNPJ</th>
               <th className="w-32 px-4 py-3">Ficha em</th>
-              <th className="w-52 px-2 py-3" />
+              <th className="w-14 px-2 py-3" />
             </tr>
           </thead>
           <tbody>
             {clients.map((c) => (
               <tr key={c.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/70">
-                <td className="px-4 py-3 text-sm text-gray-700">{c.company || c.name}</td>
+                <td className="px-4 py-3 text-sm">
+                  <button type="button" onClick={() => onOpen(c)} className="font-medium text-accent hover:underline">
+                    {c.company || c.name}
+                  </button>
+                </td>
                 <td className="px-4 py-3 text-sm text-gray-600">{c.fichaCadastro?.cnpj ? formatCnpj(c.fichaCadastro.cnpj) : '—'}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{formatDateShort(c.fichaCadastro?.submittedAt ?? c.createdAt)}</td>
-                <td className="px-2 py-3">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <Button size="sm" onClick={() => onCreate(c)} leftIcon={<Plus className="h-3.5 w-3.5" />}>Criar contrato</Button>
-                    {onArchive && (
-                      <button
-                        type="button"
-                        title="Arquivar cliente"
-                        onClick={() => onArchive(c)}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 ring-1 ring-gray-200 transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
+                <td className="px-2 py-3 text-right">
+                  {onArchive && (
+                    <button
+                      type="button"
+                      title="Arquivar cliente"
+                      onClick={() => onArchive(c)}
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 ring-1 ring-gray-200 transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

@@ -52,9 +52,12 @@ const TAB_DEFS: TabDef[] = [
 export interface ClientDrawerProps {
   clientId: string | null
   onClose: () => void
+  /** Ação extra no cabeçalho, ao lado de "Avançar etapa"/"Acessar sistema" — ex.: "Criar
+   * contrato" quando o drawer é aberto a partir da tela de Contrato. */
+  extraHeaderAction?: React.ReactNode
 }
 
-export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
+export function ClientDrawer({ clientId, onClose, extraHeaderAction }: ClientDrawerProps) {
   const client = useClient(clientId ?? undefined)
   // Carrega os campos pesados (ex.: contract_file) que a listagem em massa
   // omite pra aliviar o boot.
@@ -202,6 +205,7 @@ export function ClientDrawer({ clientId, onClose }: ClientDrawerProps) {
               >
                 Acessar sistema
               </Button>
+              {extraHeaderAction}
               {canDelete && (
                 <button
                   type="button"

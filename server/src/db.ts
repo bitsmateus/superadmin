@@ -796,11 +796,17 @@ END $$`);
       'vigência pelo prazo de &lt;&lt;Vigência (meses)&gt;&gt; meses, com renovação',
     ],
   ];
-  for (const [oldText, newText] of CONTRACT_TEXT_MIGRATIONS) {
-    await pool.query(
-      `UPDATE contract_templates SET conteudo = replace(conteudo, $1, $2) WHERE strpos(conteudo, $1) > 0`,
-      [oldText, newText]
-    );
+  // Isolado do resto do boot: se alguma dessas trocas falhar por qualquer motivo, não pode
+  // impedir as migrações seguintes (criação da tabela contracts etc.) de rodar.
+  try {
+    for (const [oldText, newText] of CONTRACT_TEXT_MIGRATIONS) {
+      await pool.query(
+        `UPDATE contract_templates SET conteudo = replace(conteudo, $1, $2) WHERE strpos(conteudo, $1) > 0`,
+        [oldText, newText]
+      );
+    }
+  } catch (err) {
+    console.error('Migração de texto do contrato padrão falhou (não bloqueia o resto):', err);
   }
 
   // Um contrato gerado = um cliente. "campos" guarda o valor que a pessoa preencheu pra cada

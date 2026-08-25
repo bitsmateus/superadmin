@@ -89,7 +89,15 @@ async function main() {
 
   const PORT = parseInt(process.env.PORT ?? '3001');
 
-  await runMigrations();
+  // Uma migração com erro NUNCA pode derrubar o servidor inteiro — sem isso, uma única instrução
+  // ruim (banco já num estado que não bate com o que o código espera, etc.) travava o boot e
+  // process.exit(1) tirava a API do ar até alguém notar e corrigir. Loga e segue: a imensa maioria
+  // das migrações já são idempotentes (IF NOT EXISTS), então uma falha isolada não impede o resto.
+  try {
+    await runMigrations();
+  } catch (err) {
+    console.error('runMigrations falhou — subindo o servidor mesmo assim:', err);
+  }
   await startRealtimeListener();
   startDailyDigest();
   startChannelAlerts();

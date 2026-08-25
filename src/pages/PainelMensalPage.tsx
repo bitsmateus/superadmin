@@ -118,6 +118,7 @@ export function PainelMensalPage() {
   const months = useCommercialMonths()
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  const [showFunilDetalhe, setShowFunilDetalhe] = React.useState(false)
   React.useEffect(() => {
     if (!selectedId && months.length) setSelectedId(months[0].id)
   }, [months, selectedId])
@@ -198,6 +199,17 @@ export function PainelMensalPage() {
       return s + parseBRLCents(copia ? copia.valorImplementacao : r.valorImplementacao)
     }, 0)
     const entrouFunilCents = mrrTotalFunilCents + implTotalFunilCents
+    // Detalhe pra conferência visual (clicando em "Nº de clientes vendidos") — mostra de onde veio
+    // o valor de cada um: da cópia na aba Vendas, do próprio lead, ou nenhum valor preenchido ainda.
+    const vendasFechadasDetalhe = vendasFechadas.map((r) => {
+      const copia = vendaCopiaPorOrigemId.get(r.id)
+      return {
+        id: r.id, nome: r.nome || 'Sem nome', sdr: r.sdr,
+        mrrCents: parseBRLCents(copia ? copia.valorMrr : r.valorMrr),
+        implCents: parseBRLCents(copia ? copia.valorImplementacao : r.valorImplementacao),
+        fonte: copia ? 'cópia na aba Vendas' : 'sem cópia — valor do próprio lead',
+      }
+    })
 
     const agendTotal = agendadosTotal.length
     const agendAteHoje = agendadosAteHoje.length
@@ -241,7 +253,7 @@ export function PainelMensalPage() {
       mrrTotalCents, implTotalCents, entrouCents, clientesVendidos, permanencia,
       ticketMedioCents, mrrMedioCents, receitaProjetadaCents, roasImediato, roiImediato,
       roiProjetado, retornoProjetadoCents, ltvCac, paybackCac,
-      mrrTotalFunilCents, implTotalFunilCents, entrouFunilCents,
+      mrrTotalFunilCents, implTotalFunilCents, entrouFunilCents, vendasFechadasDetalhe,
       ticketMedioFunilCents, mrrMedioFunilCents, receitaProjetadaFunilCents,
       roasImediatoFunil, roiImediatoFunil, roiProjetadoFunil, retornoProjetadoFunilCents,
       ltvCacFunil, paybackCacFunil,
@@ -402,7 +414,19 @@ export function PainelMensalPage() {
                     <MetricRow label="MRR total do mês (R$)" value={money(stats.mrrTotalFunilCents)} hint="só vendas do funil" />
                     <MetricRow label="Implementação total (R$)" value={money(stats.implTotalFunilCents)} />
                     <MetricRow label="Entrou no 1º mês (R$)" value={money(stats.entrouFunilCents)} hint="MRR + implementação" />
-                    <MetricRow label="Nº de clientes vendidos" value={stats.vendas} hint="Funil de Vendas do mês" />
+                    <MetricRow
+                      label="Nº de clientes vendidos"
+                      value={
+                        <button
+                          type="button"
+                          onClick={() => setShowFunilDetalhe((v) => !v)}
+                          className="underline decoration-dotted underline-offset-2 hover:text-accent"
+                        >
+                          {stats.vendas}
+                        </button>
+                      }
+                      hint="Funil de Vendas do mês — clique pra conferir"
+                    />
                     <MetricRow label="Permanência média (meses)" value={meses(stats.permanencia)} hint="mesma de cima" />
                     <MetricRow label="Ticket médio de entrada (R$)" value={money(stats.ticketMedioFunilCents)} />
                     <MetricRow label="MRR médio por cliente (R$)" value={money(stats.mrrMedioFunilCents)} />
@@ -414,6 +438,37 @@ export function PainelMensalPage() {
                     <MetricRow label="LTV / CAC" value={mult(stats.ltvCacFunil)} />
                     <MetricRow label="Payback do CAC" value={meses(stats.paybackCacFunil)} />
                   </SectionCard>
+
+                  {showFunilDetalhe && (
+                    <SectionCard title="Detalhe — vendas do Funil consideradas neste mês">
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[520px] text-left text-xs">
+                          <thead>
+                            <tr className="border-b border-line text-[11px] font-semibold text-foreground/50">
+                              <th className="py-2 pr-3">Nome</th>
+                              <th className="py-2 pr-3">SDR</th>
+                              <th className="py-2 pr-3 text-right">MRR</th>
+                              <th className="py-2 pr-3 text-right">Implementação</th>
+                              <th className="py-2">Valor veio de</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {stats.vendasFechadasDetalhe.map((d) => (
+                              <tr key={d.id} className="border-b border-line/60 last:border-0">
+                                <td className="py-2 pr-3 font-medium text-foreground">{d.nome}</td>
+                                <td className="py-2 pr-3 text-foreground/70">{d.sdr || '—'}</td>
+                                <td className="py-2 pr-3 text-right tabular-nums">{money(d.mrrCents)}</td>
+                                <td className="py-2 pr-3 text-right tabular-nums">{money(d.implCents)}</td>
+                                <td className={cn('py-2', d.mrrCents === 0 && d.implCents === 0 ? 'text-warning' : 'text-foreground/50')}>
+                                  {d.fonte}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </SectionCard>
+                  )}
                 </div>
               </>
             )}

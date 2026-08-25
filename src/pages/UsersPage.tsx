@@ -2,7 +2,6 @@ import * as React from 'react'
 import { Navigate } from 'react-router-dom'
 import {
   CheckCircle2,
-  ChevronRight,
   Loader2,
   Pencil,
   ShieldCheck,
@@ -388,7 +387,6 @@ function EditUserModal({
   const [restricted, setRestricted] = React.useState(false)
   const [menuKeys, setMenuKeys] = React.useState<Set<string>>(new Set())
   const [pageIds, setPageIds] = React.useState<Set<string>>(new Set())
-  const [expanded, setExpanded] = React.useState<Set<string>>(new Set())
   const [pages, setPages] = React.useState<PageLite[]>([])
   const [loadingPerms, setLoadingPerms] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -400,7 +398,6 @@ function EditUserModal({
     setPassword('')
     setRole(profile.role)
     setRestricted(!!profile.restrictAccess)
-    setExpanded(new Set())
     setLoadingPerms(true)
     Promise.all([
       api.get<PageLite[]>('/api/lead-pages'),
@@ -434,15 +431,6 @@ function EditUserModal({
     })
   }
 
-  const toggleExpanded = (key: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }
-
   const save = async () => {
     if (!name.trim() || !email.trim()) {
       toast.error('Informe nome e e-mail')
@@ -463,8 +451,13 @@ function EditUserModal({
       if (password.trim()) patch.password = password
       await api.patch(`/api/users/${profile.id}`, patch)
       if (role === 'suporte' && restricted) {
+        // "comercial" não tem checkbox próprio — fica ligado sozinho quando pelo menos uma aba
+        // está marcada abaixo, e desliga quando nenhuma está (sem abas marcadas = sem Comercial).
+        const menuKeysToSave = new Set(menuKeys)
+        if (pageIds.size > 0) menuKeysToSave.add('comercial')
+        else menuKeysToSave.delete('comercial')
         await Promise.all([
-          api.put(`/api/users/${profile.id}/menu-access`, { menuKeys: Array.from(menuKeys) }),
+          api.put(`/api/users/${profile.id}/menu-access`, { menuKeys: Array.from(menuKeysToSave) }),
           api.put(`/api/users/${profile.id}/page-access`, { pageIds: Array.from(pageIds) }),
         ])
       }
@@ -548,8 +541,50 @@ function EditUserModal({
               </div>
             ) : (
               <div className="space-y-4">
-                {(['comercial', 'suporte'] as const).map((group) => {
-                  const groupItems = MENU_ACCESS_ITEMS.filter((item) => item.group === group)
+                {/* Comercial não tem um item "todas as abas" — cada aba é marcada direto, sem
+                    marcação por cima; nenhuma marcada = a pessoa não vê nada do Comercial. */}
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-foreground/40">
+                    <input
+                      type="checkbox"
+                      checked={pages.length > 0 && pages.every((p) => pageIds.has(p.id))}
+                      onChange={() => {
+                        const allChecked = pages.length > 0 && pages.every((p) => pageIds.has(p.id))
+                        setPageIds((prev) => {
+                          const next = new Set(prev)
+                          for (const p of pages) {
+                            if (allChecked) next.delete(p.id)
+                            else next.add(p.id)
+                          }
+                          return next
+                        })
+                      }}
+                      className="h-3 w-3 rounded border-line"
+                    />
+                    {MENU_ACCESS_GROUP_LABEL.comercial}
+                    <span className="font-normal normal-case text-foreground/30">— marcar todos</span>
+                  </label>
+                  {pages.length === 0 ? (
+                    <p className="text-[11px] text-foreground/40">Nenhuma aba do Comercial cadastrada ainda.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      {pages.map((p) => (
+                        <label key={p.id} className="flex items-center gap-2 rounded-md border border-line/60 bg-card px-2.5 py-1.5 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={pageIds.has(p.id)}
+                            onChange={() => togglePageId(p.id)}
+                            className="h-3.5 w-3.5 rounded border-line"
+                          />
+                          <span className="flex-1 text-foreground/85">{p.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {(() => {
+                  const groupItems = MENU_ACCESS_ITEMS.filter((item) => item.group === 'suporte')
                   const allChecked = groupItems.every((item) => menuKeys.has(item.key))
                   const toggleGroup = () => {
                     setMenuKeys((prev) => {
@@ -562,71 +597,40 @@ function EditUserModal({
                     })
                   }
                   return (
-                  <div key={group}>
-                    <label className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-foreground/40">
-                      <input
-                        type="checkbox"
-                        checked={allChecked}
-                        onChange={toggleGroup}
-                        className="h-3 w-3 rounded border-line"
-                      />
-                      {MENU_ACCESS_GROUP_LABEL[group]}
-                      <span className="font-normal normal-case text-foreground/30">— marcar todos</span>
-                    </label>
-                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                      {groupItems.map((item) => {
-                        const checked = menuKeys.has(item.key)
-                        const pickerPages = item.pagesPicker ? pages : []
-                        const isExpanded = expanded.has(item.key)
-                        return (
+                    <div>
+                      <label className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-foreground/40">
+                        <input
+                          type="checkbox"
+                          checked={allChecked}
+                          onChange={toggleGroup}
+                          className="h-3 w-3 rounded border-line"
+                        />
+                        {MENU_ACCESS_GROUP_LABEL.suporte}
+                        <span className="font-normal normal-case text-foreground/30">— marcar todos</span>
+                      </label>
+                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        {groupItems.map((item) => (
                           <div key={item.key} className="rounded-md border border-line/60 bg-card px-2.5 py-1.5">
                             <label className="flex items-center gap-2 text-xs">
                               <input
                                 type="checkbox"
-                                checked={checked}
+                                checked={menuKeys.has(item.key)}
                                 onChange={() => toggleMenuKey(item.key)}
                                 className="h-3.5 w-3.5 rounded border-line"
                               />
                               <span className="flex-1 text-foreground/85">{item.label}</span>
-                              {item.pagesPicker && checked && pickerPages.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleExpanded(item.key)}
-                                  title="Abas específicas"
-                                  className="text-foreground/35 hover:text-foreground/70"
-                                >
-                                  <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-90')} />
-                                </button>
-                              )}
                             </label>
-                            {item.pagesPicker && checked && isExpanded && (
-                              <div className="ml-5 mt-1.5 space-y-1 border-l border-line/60 pl-2.5">
-                                {pickerPages.map((p) => (
-                                  <label key={p.id} className="flex items-center gap-1.5 text-[11px]">
-                                    <input
-                                      type="checkbox"
-                                      checked={pageIds.has(p.id)}
-                                      onChange={() => togglePageId(p.id)}
-                                      className="h-3 w-3 rounded border-line"
-                                    />
-                                    <span className="truncate text-foreground/65">{p.name}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            )}
                           </div>
-                        )
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  </div>
                   )
-                })}
+                })()}
               </div>
             )}
             <p className="mt-2 text-[10.5px] leading-relaxed text-foreground/45">
-              Item desmarcado some do menu e das rotas desse usuário. Marcando "Comercial", clique na
-              setinha pra liberar abas específicas (ex.: só "Novos Leads" e "CRM Luis") — sem nenhuma
-              marcada, ele vê todas as abas do Comercial.
+              Item desmarcado some do menu e das rotas desse usuário. No Comercial, marque as abas
+              específicas que a pessoa deve ver — sem nenhuma marcada, ela não vê nada do Comercial.
             </p>
           </div>
         )}

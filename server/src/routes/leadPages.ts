@@ -55,8 +55,9 @@ async function hasComercialAccess(userId: string, role: string): Promise<boolean
 }
 
 /** Allowlist de abas visíveis pra quem tem profiles.restrict_access = true — ex.: um SDR só
- * enxerga "Novos Leads" e "CRM Luis", nunca "CRM Arthur". null = sem restrição de aba configurada
- * (vê todas as abas ativas). */
+ * enxerga "Novos Leads" e "CRM Luis", nunca "CRM Arthur". null = sem restrição (admin/supervisor,
+ * ou usuário sem restrict_access) · [] = nenhuma aba marcada = não vê nenhuma (a pessoa que
+ * gerencia Equipe precisa marcar manualmente o que cada um vê, sem abas marcadas por padrão). */
 async function allowedPageIds(userId: string, role: string): Promise<string[] | null> {
   if (role !== 'suporte') return null;
   const profile = await queryOne<{ restrict_access: boolean }>(
@@ -68,7 +69,7 @@ async function allowedPageIds(userId: string, role: string): Promise<string[] | 
     'SELECT page_id FROM user_page_access WHERE user_id = $1',
     [userId]
   );
-  if (!rows.length) return null;
+  if (!rows.length) return [];
   return rows.map((r) => r.page_id);
 }
 

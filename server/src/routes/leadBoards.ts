@@ -7,8 +7,9 @@ import { query, queryOne } from '../db.js';
  * (tudo ou nada — as abas viraram gerenciáveis, não dá mais pra restringir por aba individual
  * nessa camada); a granularidade fina é por ABA inteira (user_page_access) — ex.: um SDR só
  * enxerga "Novos Leads" e "CRM Luis", nunca "CRM Arthur", com todos os quadros dessas 2 abas.
- * null = sem restrição (vê tudo) · [] = não vê nenhum quadro · string[] = allowlist de board ids.
- * Só faz consulta extra pro papel 'suporte' ("Usuário") — admin/supervisor saem de cara com null.
+ * null = sem restrição (vê tudo) · [] = não vê nenhum quadro (inclui "nenhuma aba marcada ainda" —
+ * quem gerencia Equipe precisa marcar manualmente cada aba liberada) · string[] = allowlist de
+ * board ids. Só faz consulta extra pro papel 'suporte' ("Usuário") — admin/supervisor saem com null.
  */
 export async function restrictedBoardFilter(userId: string, role: string): Promise<string[] | null> {
   if (role !== 'suporte') return null;
@@ -30,7 +31,7 @@ export async function restrictedBoardFilter(userId: string, role: string): Promi
     'SELECT page_id FROM user_page_access WHERE user_id = $1',
     [userId]
   );
-  if (!pageAccess.length) return null; // sem restrição de aba = vê todos os quadros de todas as abas
+  if (!pageAccess.length) return []; // nenhuma aba marcada ainda = não vê nenhum quadro
 
   const boards = await query<{ id: string }>(
     'SELECT id FROM lead_boards WHERE page = ANY($1)',

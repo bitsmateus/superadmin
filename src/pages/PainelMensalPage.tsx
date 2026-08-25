@@ -143,19 +143,22 @@ export function PainelMensalPage() {
     // Leva do mês = quem foi CRIADO nesse período (mesma lógica das Métricas por SDR — soma
     // todas as abas/SDRs juntos, sem filtro nenhum por CRM). "Agendamentos (total)" é por STATUS
     // (chegou em "Reunião agendada" ou etapa seguinte, alguma vez) — evita divergir do que já
-    // aparece em Métricas por SDR pro mesmo período. "Agendamentos até hoje" é diferente: usa a
-    // data REAL da reunião (campo Agendamento), não a data em que o SDR marcou o status — senão
-    // uma reunião marcada hoje pra acontecer só dia 27/28 contaria como "já aconteceu" (a data do
-    // status é sempre <= hoje por definição, então "até hoje" nunca filtrava nada de verdade).
-    // Comparecimento/no-show só fazem sentido pra reunião que já ocorreu, daí o filtro aqui.
+    // aparece em Métricas por SDR pro mesmo período. "Agendamentos até hoje" só conta reunião que
+    // JÁ ACONTECEU: usa a data real da reunião (campo Agendamento) quando o SDR preencheu — uma
+    // reunião marcada hoje pra acontecer só dia 27/28 não pode contar como "já aconteceu". Quando
+    // o campo Agendamento está vazio (SDR não preencheu a data), cai no critério antigo (data em
+    // que o status virou "Reunião agendada") — sem isso, todo lead sem essa data marcada sumia de
+    // "até hoje" mesmo já tendo tido a reunião de verdade, o que fica pior do que o bug original.
     const monthCohort = allRows.filter((r) => {
       const d = r.createdAt.slice(0, 10)
       return d >= from && d <= to
     })
     const agendadosTotal = monthCohort.filter((r) => milestoneById.get(r.id)?.everAgendada)
     const agendadosAteHoje = agendadosTotal.filter((r) => {
-      const d = r.agendamento?.slice(0, 10)
-      return !!d && d <= untilIso
+      const meetingDate = r.agendamento?.slice(0, 10)
+      if (meetingDate) return meetingDate <= untilIso
+      const markedDate = milestoneById.get(r.id)?.firstAgendadaAt?.slice(0, 10)
+      return !!markedDate && markedDate <= untilIso
     })
     const noShowAteHoje = agendadosAteHoje.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_NO_SHOW)
     const comparecimentos = agendadosAteHoje.length - noShowAteHoje.length

@@ -10,6 +10,7 @@ import { useClients } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { canDeleteClient } from '@/services/supabase'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
+import { StageAgeBadge } from '@/components/crm/StageAgeBadge'
 import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/useContracts'
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
@@ -638,8 +639,9 @@ function PendingClientsList({
           <thead>
             <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
               <th className="px-4 py-3">Empresa</th>
-              <th className="w-44 px-4 py-3">CNPJ</th>
-              <th className="w-32 px-4 py-3">Ficha em</th>
+              <th className="w-40 px-4 py-3">CNPJ</th>
+              <th className="w-28 px-4 py-3">Entrada</th>
+              <th className="w-24 px-4 py-3">Na etapa</th>
               <th className="w-14 px-2 py-3" />
             </tr>
           </thead>
@@ -652,7 +654,8 @@ function PendingClientsList({
               >
                 <td className="px-4 py-3 text-sm font-medium text-accent">{c.company || c.name}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{c.fichaCadastro?.cnpj ? formatCnpj(c.fichaCadastro.cnpj) : '—'}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{formatDateShort(c.fichaCadastro?.submittedAt ?? c.createdAt)}</td>
+                <td className="px-4 py-3 text-sm text-gray-600">{formatDateShort(c.createdAt)}</td>
+                <td className="px-4 py-3 text-sm"><StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} /></td>
                 <td className="px-2 py-3 text-right">
                   {onArchive && (
                     <button

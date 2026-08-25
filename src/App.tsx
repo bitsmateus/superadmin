@@ -50,6 +50,12 @@ const PainelMensalPage = React.lazy(() =>
 const FinancePage = React.lazy(() =>
   import('./pages/FinancePage').then((m) => ({ default: m.FinancePage })),
 )
+const FinanceiroVendasPage = React.lazy(() =>
+  import('./pages/FinanceiroVendasPage').then((m) => ({ default: m.FinanceiroVendasPage })),
+)
+const FinanceiroContratoPage = React.lazy(() =>
+  import('./pages/FinanceiroContratoPage').then((m) => ({ default: m.FinanceiroContratoPage })),
+)
 const TicketsPage = React.lazy(() =>
   import('./pages/TicketsPage').then((m) => ({ default: m.TicketsPage })),
 )
@@ -124,7 +130,12 @@ export default function App() {
           <Route path="/comercial/novos-leads" element={<Navigate to="/comercial/novos_leads" replace />} />
           <Route path="/comercial/crm-nx-luis" element={<Navigate to="/comercial/crm_luis" replace />} />
           <Route path="/comercial/crm-nx-arthur" element={<Navigate to="/comercial/crm_arthur" replace />} />
+          {/* Vendas e Contrato saíram de "Comercial" e viraram subpáginas de "Financeiro". */}
+          <Route path="/comercial/vendas" element={<Navigate to="/financeiro/vendas" replace />} />
+          <Route path="/comercial/contrato" element={<Navigate to="/financeiro/contrato" replace />} />
           <Route path="/comercial/:pageId" element={<ComercialPage />} />
+          <Route path="/financeiro/vendas" element={<FinanceiroVendasPage />} />
+          <Route path="/financeiro/contrato" element={<FinanceiroContratoPage />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           {/* Uma cópia do menu Suporte tem rota só dela — ver SupportViewPage. */}
           <Route path="/visao/:pageId" element={<SupportViewPage />} />

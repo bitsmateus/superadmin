@@ -12,6 +12,7 @@ import {
   Contact,
   Copy,
   FileSearch,
+  FileText,
   LayoutDashboard,
   LifeBuoy,
   ListTodo,
@@ -28,6 +29,7 @@ import {
   RotateCcw,
   Settings,
   ShieldCheck,
+  ShoppingBag,
   Star,
   Sun,
   Trash2,
@@ -45,6 +47,7 @@ import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadPages } from '@/hooks/useLeadPages'
+import { useLeadBoards } from '@/hooks/useLeadBoards'
 import { useSupportPages, useSupportPagesBooted } from '@/hooks/useSupportPages'
 import { MENU_KEY_BY_PATH, MENU_ACCESS_ITEMS } from '@/constants/menuAccess'
 import { leadPagesService } from '@/services/leadPages'
@@ -176,6 +179,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const [comercialOpen, setComercialOpen] = React.useState(() =>
     location.pathname.startsWith('/comercial'),
   )
+  const [financeiroOpen, setFinanceiroOpen] = React.useState(() =>
+    location.pathname.startsWith('/financeiro'),
+  )
   const [suporteOpen, setSuporteOpen] = React.useState(() =>
     SUPORTE_ROUTES.some((r) => (r === '/' ? location.pathname === '/' : location.pathname.startsWith(r))),
   )
@@ -190,8 +196,25 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     duplicatesByKey,
   )
   const leadPages = useLeadPages()
+  const leadBoards = useLeadBoards()
+  // Vendas e Contrato saíram do grupo "Comercial" e viraram subpáginas de "Financeiro" — a aba
+  // continua sendo uma lead_page comum por trás, só não aparece mais duas vezes no menu.
+  const financeiroPageIds = React.useMemo(
+    () => new Set(leadBoards.filter((b) => b.isVendas || b.isContrato).map((b) => b.page)),
+    [leadBoards],
+  )
   const visibleComercialItems = canSee('/comercial')
-    ? leadPages.map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact, page: p }))
+    ? leadPages
+        .filter((p) => !financeiroPageIds.has(p.id))
+        .map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact, page: p }))
+    : []
+  const hasVendasBoard = leadBoards.some((b) => b.isVendas)
+  const hasContratoBoard = leadBoards.some((b) => b.isContrato)
+  const visibleFinanceiroItems = canSee('/comercial')
+    ? [
+        ...(hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
+        ...(hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),
+      ]
     : []
   // Numa cópia a URL é /visao/<id>, que não diz nada sobre qual grupo do menu destacar/abrir —
   // quem decide é a TELA de origem dela. Sem isso, abrir "Pipeline (cópia)" deixava o grupo
@@ -454,6 +477,65 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             ))}
           </>
         )}
+        </>
+        )}
+
+        {/* Financeiro — grupo expansível com Vendas e Contrato */}
+        {visibleFinanceiroItems.length > 0 && (
+        <>
+        <button
+          type="button"
+          onClick={() => setFinanceiroOpen((o) => !o)}
+          className={cn(
+            'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+            location.pathname.startsWith('/financeiro')
+              ? 'text-foreground'
+              : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
+          )}
+        >
+          <Wallet
+            className={cn(
+              'h-4 w-4 shrink-0',
+              location.pathname.startsWith('/financeiro')
+                ? 'text-accent'
+                : 'text-foreground/50 group-hover:text-foreground/75',
+            )}
+          />
+          <span>Financeiro</span>
+          <ChevronDown
+            className={cn(
+              'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',
+              financeiroOpen ? '' : '-rotate-90',
+            )}
+          />
+        </button>
+        {financeiroOpen && visibleFinanceiroItems.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={closeOnMobile}
+            className={({ isActive }) =>
+              cn(
+                'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                isActive
+                  ? 'bg-elevate/[0.05] text-foreground'
+                  : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Icon
+                  className={cn(
+                    'h-4 w-4 shrink-0',
+                    isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                  )}
+                />
+                <span>{label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
         </>
         )}
 

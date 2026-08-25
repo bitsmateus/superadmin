@@ -182,6 +182,16 @@ function matchesSearch(row: LeadRow, term: string): boolean {
   return haystack.includes(term.toLowerCase())
 }
 
+/** Compara duas linhas por UMA coluna qualquer — valor em R$ ordena pelo número (não pelo texto
+ * "R$ 1.234,56"), o resto ordena como texto (mas "numeric" no localeCompare já lê "Lead 10" depois
+ * de "Lead 2" certinho, em vez de ordem alfabética pura). */
+function compareRowsByColumn(a: LeadRow, b: LeadRow, key: LeadRowField | 'createdAt'): number {
+  if (key === 'valorMrr' || key === 'valorImplementacao') {
+    return parseBRLCents(a[key]) - parseBRLCents(b[key])
+  }
+  return String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' })
+}
+
 function ToolbarButton({
   icon,
   children,
@@ -728,10 +738,13 @@ function BoardGroup({
 }: BoardGroupProps) {
   // Quadro nasce fechado — só mostra os leads quando a pessoa abre de propósito.
   const [open, setOpen] = React.useState(false)
-  // Ordenação é por QUADRO — cada um guarda a própria direção, ao contrário de antes (um botão só
-  // na barra de cima ordenando todos juntos). Disparada passando o mouse na coluna Nome, igual o
-  // Monday: aparece um ícone de ordenar, sem precisar de botão fixo ocupando espaço.
-  const [sortDesc, setSortDesc] = React.useState(false)
+  // Ordenação é por QUADRO — cada um guarda a própria coluna/direção, ao contrário de antes (um
+  // botão só na barra de cima ordenando todos juntos por data). Disparada passando o mouse em
+  // QUALQUER coluna, igual o Monday: aparece um ícone de ordenar, sem precisar de botão fixo.
+  const [sortBy, setSortBy] = React.useState<{ key: LeadRowField | 'createdAt'; desc: boolean }>({ key: 'createdAt', desc: false })
+  const toggleSort = (key: LeadRowField | 'createdAt') => {
+    setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
+  }
   const cols = columnsForSdrLock(sdrLock, board.isVendas)
   const tableWidth = CHECKBOX_COL_WIDTH
     + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
@@ -755,10 +768,11 @@ function BoardGroup({
     const filtered = allRows.filter((r) =>
       matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter) && matchesLeadFilters(r, filterRules),
     )
-    return [...filtered].sort((a, b) =>
-      sortDesc ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt),
-    )
-  }, [allRows, search, sdrFilter, filterRules, sortDesc])
+    return [...filtered].sort((a, b) => {
+      const cmp = compareRowsByColumn(a, b, sortBy.key)
+      return sortBy.desc ? -cmp : cmp
+    })
+  }, [allRows, search, sdrFilter, filterRules, sortBy])
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
   // Venda desfeita continua no quadro (pra não sumir o histórico) mas fica FORA dos totais —
   // senão o somatório de MRR contaria dinheiro que não entrou.
@@ -864,6 +878,7 @@ function BoardGroup({
                 </th>
                 {cols.map((col) => {
                   const width = columnWidth(col, columnWidths)
+                  const sortActive = sortBy.key === col.key
                   return (
                     <th
                       key={col.key}
@@ -873,18 +888,20 @@ function BoardGroup({
                       <span className="inline-flex items-center justify-center gap-1">
                         <span className="truncate">{col.label}</span>
                         {col.required && <span className="text-red-400" title="Obrigatório">*</span>}
-                        {/* Igual o Monday: passa o mouse na coluna Nome e aparece o ícone de ordenar
-                            — cada quadro guarda a própria direção (mais antigo/mais novo). */}
-                        {col.key === 'nome' && (
-                          <button
-                            type="button"
-                            onClick={() => setSortDesc((d) => !d)}
-                            title={sortDesc ? 'Ordenar do mais antigo para o mais novo' : 'Ordenar do mais novo para o mais antigo'}
-                            className="grid h-4 w-4 shrink-0 place-items-center rounded text-gray-300 opacity-0 transition-opacity hover:bg-black/5 hover:text-accent group-hover:opacity-100"
-                          >
-                            <ArrowUpDown className={cn('h-3 w-3 transition-transform', sortDesc && 'rotate-180')} />
-                          </button>
-                        )}
+                        {/* Igual o Monday: passa o mouse em QUALQUER coluna e aparece o ícone de
+                            ordenar — cada quadro guarda a própria coluna/direção ativa. A coluna
+                            que está ordenando agora fica com o ícone sempre visível (não só no hover). */}
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(col.key)}
+                          title={sortActive ? (sortBy.desc ? 'Ordenar crescente' : 'Ordenar decrescente') : 'Ordenar'}
+                          className={cn(
+                            'grid h-4 w-4 shrink-0 place-items-center rounded transition-opacity hover:bg-black/5 hover:text-accent',
+                            sortActive ? 'text-accent opacity-100' : 'text-gray-300 opacity-0 group-hover:opacity-100',
+                          )}
+                        >
+                          <ArrowUpDown className={cn('h-3 w-3 transition-transform', sortActive && sortBy.desc && 'rotate-180')} />
+                        </button>
                       </span>
                       {!col.widthLocked && (
                         <span

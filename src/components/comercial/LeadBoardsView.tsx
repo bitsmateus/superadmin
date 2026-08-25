@@ -1229,6 +1229,38 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
     [columnWidths, sdrLock, hideIanMateusCols],
   )
 
+  // Arrastar um lead perto da borda de cima/baixo da tela rola a página sozinha — sem isso, pra
+  // mover um lead pra um quadro fora da área visível era preciso soltar, rolar manualmente e
+  // arrastar de novo. Velocidade aumenta quanto mais perto da borda o ponteiro está.
+  const scrollDirRef = React.useRef(0)
+  React.useEffect(() => {
+    if (!draggingIds) return
+    const EDGE = 90
+    const MAX_SPEED = 22
+    const onDragOverWindow = (e: DragEvent) => {
+      const y = e.clientY
+      if (y < EDGE) {
+        scrollDirRef.current = -MAX_SPEED * (1 - y / EDGE)
+      } else if (y > window.innerHeight - EDGE) {
+        scrollDirRef.current = MAX_SPEED * (1 - (window.innerHeight - y) / EDGE)
+      } else {
+        scrollDirRef.current = 0
+      }
+    }
+    window.addEventListener('dragover', onDragOverWindow)
+    let raf = 0
+    const tick = () => {
+      if (scrollDirRef.current !== 0) window.scrollBy(0, scrollDirRef.current)
+      raf = window.requestAnimationFrame(tick)
+    }
+    raf = window.requestAnimationFrame(tick)
+    return () => {
+      window.removeEventListener('dragover', onDragOverWindow)
+      window.cancelAnimationFrame(raf)
+      scrollDirRef.current = 0
+    }
+  }, [draggingIds])
+
   const handleRowDragStart = React.useCallback((ids: string[]) => setDraggingIds(ids), [])
   const handleRowDragEnd = React.useCallback(() => {
     setDraggingIds(null)

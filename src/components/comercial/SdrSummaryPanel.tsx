@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { Calendar, ChevronRight, ShoppingBag, UserRound, UserX } from 'lucide-react'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
@@ -23,7 +24,11 @@ function initials(name: string): string {
 }
 
 /** Número clicável (total/agendadas/no-show/vendas) — abre o lead direto se só tiver 1, ou uma
- * lista pra escolher qual se tiver mais de 1, igual o painel do dia e o status por SDR. */
+ * lista pra escolher qual se tiver mais de 1, igual o painel do dia e o status por SDR. A lista
+ * abre num portal com posição calculada (não mais `absolute` centralizado no próprio botão) —
+ * senão, num pill perto da borda esquerda do card (ex.: "Agendadas", a primeira das três colunas),
+ * a lista de 256px centralizada embaixo dele estourava pra fora da tela / ficava atrás da barra
+ * lateral, cortando o texto. */
 function ClickableStat({
   matches,
   boards,
@@ -33,25 +38,51 @@ function ClickableStat({
   matches: LeadRow[]
   boards: LeadBoard[]
   onOpenLead: (id: string) => void
-  children: (onClick: () => void) => React.ReactNode
+  children: (onClick: () => void, ref: React.RefObject<HTMLButtonElement>) => React.ReactNode
 }) {
   const [open, setOpen] = React.useState(false)
-  const ref = React.useRef<HTMLDivElement>(null)
-  useOutsideClose(ref, open, () => setOpen(false))
+  const [coords, setCoords] = React.useState<{ top?: number; bottom?: number; left: number } | null>(null)
+  const btnRef = React.useRef<HTMLButtonElement>(null)
+  const popRef = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(popRef, open, () => setOpen(false))
 
   const boardName = (boardId: string) => boards.find((b) => b.id === boardId)?.name ?? ''
+
+  const POP_WIDTH = 256
 
   const handleClick = () => {
     if (matches.length === 0) return
     if (matches.length === 1) { onOpenLead(matches[0].id); return }
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) {
+      const left = Math.min(
+        Math.max(rect.left + rect.width / 2 - POP_WIDTH / 2, 8),
+        window.innerWidth - POP_WIDTH - 8,
+      )
+      const spaceBelow = window.innerHeight - rect.bottom
+      if (spaceBelow < 240 && rect.top > spaceBelow) {
+        setCoords({ bottom: window.innerHeight - rect.top + 4, left })
+      } else {
+        setCoords({ top: rect.bottom + 4, left })
+      }
+    }
     setOpen((o) => !o)
   }
 
   return (
-    <div ref={ref} className="relative">
-      {children(handleClick)}
-      {open && (
-        <div className="absolute left-1/2 top-full z-20 mt-1 w-64 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 text-left shadow-xl">
+    <>
+      {children(handleClick, btnRef)}
+      {open && coords && createPortal(
+        <div
+          ref={popRef}
+          style={{
+            position: 'fixed',
+            left: coords.left,
+            width: POP_WIDTH,
+            ...(coords.top !== undefined ? { top: coords.top } : { bottom: coords.bottom }),
+          }}
+          className="z-50 rounded-lg border border-line bg-card p-1.5 text-left shadow-xl"
+        >
           <ul className="max-h-56 overflow-y-auto">
             {matches.map((r) => (
               <li key={r.id}>
@@ -67,9 +98,10 @@ function ClickableStat({
               </li>
             ))}
           </ul>
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   )
 }
 
@@ -90,8 +122,9 @@ function StatPill({
 }) {
   return (
     <ClickableStat matches={matches} boards={boards} onOpenLead={onOpenLead}>
-      {(onClick) => (
+      {(onClick, ref) => (
         <button
+          ref={ref}
           type="button"
           onClick={onClick}
           disabled={matches.length === 0}
@@ -126,8 +159,9 @@ function SdrSummaryCard({ s, boards, onOpenLead }: { s: SdrSummary; boards: Lead
           <p className="text-[11px] text-foreground/40">{s.totalRows.length} lead{s.totalRows.length === 1 ? '' : 's'} no total</p>
         </div>
         <ClickableStat matches={s.totalRows} boards={boards} onOpenLead={onOpenLead}>
-          {(onClick) => (
+          {(onClick, ref) => (
             <button
+              ref={ref}
               type="button"
               onClick={onClick}
               disabled={s.totalRows.length === 0}

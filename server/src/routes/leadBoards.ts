@@ -527,17 +527,18 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   });
 
   // GET /api/lead-milestones — status "que conta" de cada lead (Reunião agendada / Reunião
-  // não comparecida / Vendido), pro Dashboard de SDR. "milestone" pega sempre o mais recente
-  // desses três na linha do tempo (se nunca teve evento, cai pro status atual). "ever_agendada"
-  // é à parte: verdadeiro se o lead JÁ passou por "Reunião agendada" em algum momento — precisa
-  // ser assim porque, quando o lead vira Vendido/No-show, isso vira o marco mais recente e o
-  // "agendada" deixa de ser o atual; sem esse flag, o funil (% de no-show, % de venda) ficaria
-  // sem denominador pra quem já converteu.
-  // "milestone_at" é a data do evento que gerou o "milestone" atual (quando virou no-show/vendido
-  // da forma como está agora) — usado pro Dashboard Comercial filtrar por período. "first_agendada_at"
-  // é a data do PRIMEIRO "Reunião agendada" da história do lead — fica fixa mesmo que ele tenha
-  // dado no-show e sido reagendado depois, porque reagendar não é um novo agendamento pro
-  // relatório, é o mesmo lead sendo retomado.
+  // não comparecida / Vendido), pro Dashboard de SDR. "milestone" é sempre o STATUS ATUAL do
+  // lead (só isso — se não for um dos três, não tem milestone) — NÃO o "último evento desse tipo
+  // na história". Um lead marcado Vendido e depois mudado pra outro status (ex.: "Disparo em
+  // massa") tem que SAIR da contagem de vendas: contar pelo último evento do tipo, ignorando
+  // mudanças posteriores pra status não-milestone, inflava vendas/no-show com gente que já foi
+  // corrigido/mudado de status depois.
+  // "ever_agendada" é à parte, e continua histórico de propósito: verdadeiro se o lead JÁ passou
+  // por qualquer status pós-agendamento em algum momento — reunião agendada é um fato que
+  // aconteceu, mudar a etiqueta depois não desfaz isso (denominador do funil).
+  // "milestone_at" é a data do evento de status mais recente do lead (se o status atual bate com
+  // o milestone, foi essa mudança que colocou ele lá). "first_agendada_at" é a data do PRIMEIRO
+  // "Reunião agendada" da história — fica fixa mesmo com reagendamento depois de um no-show.
   app.get('/api/lead-milestones', { onRequest: [app.authenticate] }, async (req) => {
     const { sub, role } = req.user as { sub: string; role: string };
     const allowed = await restrictedBoardFilter(sub, role);
@@ -549,8 +550,15 @@ export async function leadBoardRoutes(app: FastifyInstance) {
 
     return query(
       `SELECT lr.id, lr.board_id, lr.sdr,
-        COALESCE(m.milestone, CASE WHEN lr.status = ANY($1) THEN lr.status END) AS milestone,
-        COALESCE(m.milestone_at, CASE WHEN lr.status = ANY($1) THEN lr.created_at END) AS milestone_at,
+        CASE WHEN lr.status = ANY($1) THEN lr.status END AS milestone,
+        CASE WHEN lr.status = ANY($1) THEN
+          COALESCE(
+            (SELECT le.created_at FROM lead_events le
+             WHERE le.lead_row_id = lr.id AND le.type = 'status'
+             ORDER BY le.created_at DESC LIMIT 1),
+            lr.created_at
+          )
+        END AS milestone_at,
         (
           lr.status = ANY($3)
           OR EXISTS (
@@ -564,12 +572,6 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           CASE WHEN lr.status = $2 THEN lr.created_at END
         ) AS first_agendada_at
        FROM lead_rows lr
-       LEFT JOIN LATERAL (
-         SELECT le.to_value AS milestone, le.created_at AS milestone_at
-         FROM lead_events le
-         WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($1)
-         ORDER BY le.created_at DESC LIMIT 1
-       ) m ON true
        ${boardFilter}`,
       params
     );

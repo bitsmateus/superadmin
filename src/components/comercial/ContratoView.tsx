@@ -1,12 +1,14 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowRight, CalendarRange, CheckCircle2, ChevronDown, Clock, Download, Eye, FileText, ListTodo,
+  ArrowRight, CheckCircle2, ChevronDown, Clock, Download, Eye, FileText, ListTodo,
   Loader2, Pencil, Plus, Printer, Save, Search, Settings, Trash2, UserRound, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
+import { useMonthFilter, withinBounds } from '@/hooks/useMonthFilter'
 import { useAuth } from '@/hooks/useAuth'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 import { useClients } from '@/hooks/useClients'
@@ -33,74 +35,6 @@ import { cn } from '@/lib/utils'
 import type { Client } from '@/types/client'
 
 type Tab = 'boas-vindas' | 'pendentes-venda' | 'criar' | 'pendentes-contrato' | 'assinados'
-
-const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-
-function currentMonthId(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-function addMonthsToId(id: string, n: number): string {
-  const [y, m] = id.split('-').map(Number)
-  const d = new Date(y, m - 1 + n, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-function monthLabelPt(id: string): string {
-  const [y, m] = id.split('-').map(Number)
-  return `${MONTH_NAMES[m - 1] ?? id}/${y}`
-}
-function monthIdBounds(id: string): { from: string; to: string } {
-  const [y, m] = id.split('-').map(Number)
-  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  return { from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) }
-}
-function withinBounds(iso: string | null, bounds: { from: string; to: string }): boolean {
-  if (!iso) return false
-  const d = iso.slice(0, 10)
-  if (bounds.from && d < bounds.from) return false
-  if (bounds.to && d > bounds.to) return false
-  return true
-}
-
-/** Estado do filtro de período (mês/personalizado) de UMA lista — cada aba de contratos tem o
- * seu próprio, igual ao Painel do Mês: pills de mês + "Adicionar mês" (mês seguinte ao último
- * pill) + opção "Personalizado" com data de/até livre. */
-function useMonthFilter() {
-  const [months, setMonths] = React.useState<string[]>(() => [currentMonthId()])
-  const [selected, setSelected] = React.useState<string>(() => currentMonthId())
-  const [customMode, setCustomMode] = React.useState(false)
-  const [customFrom, setCustomFrom] = React.useState('')
-  const [customTo, setCustomTo] = React.useState('')
-
-  // Se o calendário virou de mês com a tela aberta (ou a pessoa volta depois de dias sem
-  // recarregar), adiciona sozinho o mês atual nos pills — sem tirar nem trocar o mês que já
-  // estava selecionado, então o que tinha no mês anterior (Boas-vindas, Pendente etc.) continua
-  // à vista até a pessoa clicar no novo mês por conta própria.
-  React.useEffect(() => {
-    const checkRollover = () => {
-      const now = currentMonthId()
-      setMonths((prev) => (prev.includes(now) ? prev : [...prev, now]))
-    }
-    const interval = window.setInterval(checkRollover, 5 * 60 * 1000)
-    window.addEventListener('focus', checkRollover)
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('focus', checkRollover)
-    }
-  }, [])
-
-  const addMonth = () => {
-    const next = addMonthsToId(months[months.length - 1] ?? currentMonthId(), 1)
-    setMonths((prev) => (prev.includes(next) ? prev : [...prev, next]))
-    setSelected(next)
-    setCustomMode(false)
-  }
-
-  const bounds = customMode ? { from: customFrom, to: customTo } : monthIdBounds(selected)
-
-  return { months, selected, setSelected, addMonth, customMode, setCustomMode, customFrom, setCustomFrom, customTo, setCustomTo, bounds }
-}
-type MonthFilter = ReturnType<typeof useMonthFilter>
 
 /**
  * Aba Contrato — organizada em seções: "Boas-vindas" (ficha preenchida, ainda não avançou pra
@@ -740,62 +674,6 @@ function TabPill({
   )
 }
 
-/** Barra de mês/período — mesmo espírito do Painel do Mês: pills de mês + "Adicionar mês" (o mês
- * seguinte ao último pill) + "Personalizado" com data de/até livre. */
-function MonthFilterBar({ filter }: { filter: MonthFilter }) {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-line bg-card p-2.5">
-      <CalendarRange className="h-4 w-4 shrink-0 text-foreground/40" />
-      {filter.months.map((m) => (
-        <button
-          key={m}
-          type="button"
-          onClick={() => { filter.setSelected(m); filter.setCustomMode(false) }}
-          className={cn(
-            'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-            !filter.customMode && filter.selected === m ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
-          )}
-        >
-          {monthLabelPt(m)}
-        </button>
-      ))}
-      <button
-        type="button"
-        onClick={filter.addMonth}
-        className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground/50 hover:bg-elevate/[0.04]"
-      >
-        <Plus className="h-3 w-3" /> Adicionar mês
-      </button>
-      <button
-        type="button"
-        onClick={() => filter.setCustomMode(true)}
-        className={cn(
-          'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-          filter.customMode ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
-        )}
-      >
-        Personalizado
-      </button>
-      {filter.customMode && (
-        <div className="ml-1 flex items-center gap-2">
-          <input
-            type="date"
-            value={filter.customFrom}
-            onChange={(e) => filter.setCustomFrom(e.target.value)}
-            className="h-8 rounded-lg border border-line px-2 text-xs text-foreground/70 outline-none focus:border-accent"
-          />
-          <span className="text-xs text-foreground/40">até</span>
-          <input
-            type="date"
-            value={filter.customTo}
-            onChange={(e) => filter.setCustomTo(e.target.value)}
-            className="h-8 rounded-lg border border-line px-2 text-xs text-foreground/70 outline-none focus:border-accent"
-          />
-        </div>
-      )}
-    </div>
-  )
-}
 
 /** Clientes que preencheram a ficha de cadastro pública (app/ficha) e ainda não têm nenhum
  * contrato gerado — fila de "falta fazer o contrato". Clicar no nome abre a ficha completa do

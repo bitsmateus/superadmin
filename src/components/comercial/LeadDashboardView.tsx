@@ -2,6 +2,8 @@ import * as React from 'react'
 import { BarChart3, Calendar, LayoutGrid, ShoppingBag, Tags, UserRound, UserX, Users } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useLeadMilestones } from '@/hooks/useLeadMilestones'
+import { useMonthFilter, withinBounds, addMonthsToId, currentMonthId } from '@/hooks/useMonthFilter'
+import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
@@ -209,20 +211,31 @@ export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: strin
   const milestones = useLeadMilestones()
   const sdrLabels = useLeadLabels('sdr')
   const milestoneById = React.useMemo(
-    () => new Map(milestones.map((m) => [m.id, { milestone: m.milestone, everAgendada: m.everAgendada }])),
+    () => new Map(milestones.map((m) => [
+      m.id,
+      { milestone: m.milestone, everAgendada: m.everAgendada, milestoneAt: m.milestoneAt, firstAgendadaAt: m.firstAgendadaAt },
+    ])),
     [milestones],
   )
+  // Nasce com o mês atual e o anterior já como pills (além de "Personalizado") — os dois recortes
+  // mais pedidos num painel de performance, sem precisar clicar em nada pra ver o mês passado.
+  const monthFilter = useMonthFilter(React.useMemo(() => [addMonthsToId(currentMonthId(), -1)], []))
 
   const bySdr = React.useMemo<SdrMetrics[]>(() => {
+    const bounds = monthFilter.bounds
     const buckets = new Map<string, { total: number; agendados: number; noShow: number; vendas: number }>()
     for (const r of rows) {
       const name = r.sdr || 'Sem SDR'
       const b = buckets.get(name) ?? { total: 0, agendados: 0, noShow: 0, vendas: 0 }
-      b.total += 1
       const info = milestoneById.get(r.id)
-      if (info?.everAgendada) b.agendados += 1
-      if (info?.milestone === MILESTONE_NO_SHOW) b.noShow += 1
-      else if (info?.milestone === MILESTONE_VENDIDO) b.vendas += 1
+      // Cada métrica usa a DATA DO PRÓPRIO EVENTO que ela representa (não a data de criação do
+      // lead) — "leads gerados" é sobre quando o lead entrou; "agendados/no-show/vendas" é sobre
+      // quando aquele marco aconteceu. Um lead antigo que só virou "Vendido" esse mês conta como
+      // venda desse mês, mesmo tendo sido criado antes.
+      if (withinBounds(r.createdAt, bounds)) b.total += 1
+      if (info?.everAgendada && withinBounds(info.firstAgendadaAt, bounds)) b.agendados += 1
+      if (info?.milestone === MILESTONE_NO_SHOW && withinBounds(info.milestoneAt, bounds)) b.noShow += 1
+      else if (info?.milestone === MILESTONE_VENDIDO && withinBounds(info.milestoneAt, bounds)) b.vendas += 1
       buckets.set(name, b)
     }
     return Array.from(buckets.entries())
@@ -238,18 +251,22 @@ export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: strin
         pctAgendamentoVenda: b.agendados > 0 ? b.vendas / b.agendados : (b.vendas > 0 ? 1 : 0),
       }))
       .sort((a, b) => b.total - a.total)
-  }, [rows, milestoneById, sdrLabels])
+  }, [rows, milestoneById, sdrLabels, monthFilter.bounds])
 
   if (bySdr.length === 0) {
     return (
-      <div className="rounded-2xl bg-card p-8 shadow-sm">
-        <p className="text-center text-xs text-foreground/40">Sem dados pra mostrar.</p>
+      <div className="space-y-4">
+        <MonthFilterBar filter={monthFilter} />
+        <div className="rounded-2xl bg-card p-8 shadow-sm">
+          <p className="text-center text-xs text-foreground/40">Sem dados nesse período.</p>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
+      <MonthFilterBar filter={monthFilter} />
       <SdrMetricsTable bySdr={bySdr} title={title} />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {bySdr.map((m) => <SdrCard key={m.sdr} metrics={m} />)}

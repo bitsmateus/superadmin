@@ -181,6 +181,14 @@ export function PainelMensalPage() {
     const entrouCents = mrrTotalCents + implTotalCents
     const clientesVendidos = vendasNoMes.length
 
+    // Mesma receita/MRR/ROI de cima, só que restrita às vendas que vieram do Funil de Vendas
+    // (vendasFechadas — mesmos leads que contam em "Vendas fechadas" ali em cima), sem as avulsas
+    // cadastradas direto na aba Vendas. O valor de MRR/Implementação já mora no próprio lead
+    // (é copiado pra aba Vendas quando vira "Vendido", ver syncVendaFromStatus no backend).
+    const mrrTotalFunilCents = vendasFechadas.reduce((s, r) => s + parseBRLCents(r.valorMrr), 0)
+    const implTotalFunilCents = vendasFechadas.reduce((s, r) => s + parseBRLCents(r.valorImplementacao), 0)
+    const entrouFunilCents = mrrTotalFunilCents + implTotalFunilCents
+
     const agendTotal = agendadosTotal.length
     const agendAteHoje = agendadosAteHoje.length
     const noShow = noShowAteHoje.length
@@ -205,6 +213,17 @@ export function PainelMensalPage() {
     const ltvCac = cacCents > 0 ? receitaProjetadaCents / cacCents : 0
     const paybackCac = mrrMedioCents > 0 ? cacCents / mrrMedioCents : 0
 
+    // cacCents já é do funil (investimento ÷ vendas fechadas do funil) — reaproveitado abaixo.
+    const ticketMedioFunilCents = vendas > 0 ? entrouFunilCents / vendas : 0
+    const mrrMedioFunilCents = vendas > 0 ? mrrTotalFunilCents / vendas : 0
+    const receitaProjetadaFunilCents = mrrTotalFunilCents * permanencia + implTotalFunilCents
+    const roasImediatoFunil = investimentoCents > 0 ? entrouFunilCents / investimentoCents : 0
+    const roiImediatoFunil = investimentoCents > 0 ? (entrouFunilCents - investimentoCents) / investimentoCents : 0
+    const roiProjetadoFunil = investimentoCents > 0 ? (receitaProjetadaFunilCents - investimentoCents) / investimentoCents : 0
+    const retornoProjetadoFunilCents = receitaProjetadaFunilCents - investimentoCents
+    const ltvCacFunil = cacCents > 0 ? receitaProjetadaFunilCents / cacCents : 0
+    const paybackCacFunil = mrrMedioFunilCents > 0 ? cacCents / mrrMedioFunilCents : 0
+
     return {
       investimentoCents, leadsGerados, cplCents,
       agendTotal, agendAteHoje, comparecimentos, vendas, noShow,
@@ -212,6 +231,10 @@ export function PainelMensalPage() {
       mrrTotalCents, implTotalCents, entrouCents, clientesVendidos, permanencia,
       ticketMedioCents, mrrMedioCents, receitaProjetadaCents, roasImediato, roiImediato,
       roiProjetado, retornoProjetadoCents, ltvCac, paybackCac,
+      mrrTotalFunilCents, implTotalFunilCents, entrouFunilCents,
+      ticketMedioFunilCents, mrrMedioFunilCents, receitaProjetadaFunilCents,
+      roasImediatoFunil, roiImediatoFunil, roiProjetadoFunil, retornoProjetadoFunilCents,
+      ltvCacFunil, paybackCacFunil,
     }
   }, [month, allRows, milestoneById, vendasBoard])
 
@@ -361,6 +384,25 @@ export function PainelMensalPage() {
                         </div>
                       </>
                     )}
+                  </SectionCard>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <SectionCard title="Receita, MRR & ROI (Funil de Vendas)">
+                    <MetricRow label="MRR total do mês (R$)" value={money(stats.mrrTotalFunilCents)} hint="só vendas do funil" />
+                    <MetricRow label="Implementação total (R$)" value={money(stats.implTotalFunilCents)} />
+                    <MetricRow label="Entrou no 1º mês (R$)" value={money(stats.entrouFunilCents)} hint="MRR + implementação" />
+                    <MetricRow label="Nº de clientes vendidos" value={stats.vendas} hint="Funil de Vendas do mês" />
+                    <MetricRow label="Permanência média (meses)" value={meses(stats.permanencia)} hint="mesma de cima" />
+                    <MetricRow label="Ticket médio de entrada (R$)" value={money(stats.ticketMedioFunilCents)} />
+                    <MetricRow label="MRR médio por cliente (R$)" value={money(stats.mrrMedioFunilCents)} />
+                    <MetricRow label="Receita projetada — LTV (R$)" value={money(stats.receitaProjetadaFunilCents)} hint="MRR × permanência + implementação" />
+                    <MetricRow label="ROAS imediato" value={mult(stats.roasImediatoFunil)} />
+                    <MetricRow label="ROI imediato — 1º mês" value={pct(stats.roiImediatoFunil)} />
+                    <MetricRow label="ROI projetado — LTV" value={pct(stats.roiProjetadoFunil)} />
+                    <MetricRow label="Retorno projetado (lucro, R$)" value={money(stats.retornoProjetadoFunilCents)} />
+                    <MetricRow label="LTV / CAC" value={mult(stats.ltvCacFunil)} />
+                    <MetricRow label="Payback do CAC" value={meses(stats.paybackCacFunil)} />
                   </SectionCard>
                 </div>
               </>

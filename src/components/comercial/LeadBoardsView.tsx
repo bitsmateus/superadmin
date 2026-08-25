@@ -126,7 +126,7 @@ function sdrLockForPageName(pageName: string, sdrLabels: { name: string }[]): st
 
 /** Aba "CRM Ian e Mateus" não usa esses campos — pedido direto do usuário pra tirar da tabela. */
 const IAN_MATEUS_HIDDEN_COLUMN_KEYS = new Set<string>([
-  'tipo', 'ligacao', 'sdr', 'dorCliente', 'numeroAtendentes', 'valorMrr', 'valorImplementacao',
+  'tipo', 'diaContato', 'ligacao', 'sdr', 'dorCliente', 'numeroAtendentes', 'valorMrr', 'valorImplementacao',
 ])
 
 /** true pra aba do Ian OU do Mateus (ex.: "CRM Ian", "CRM Mateus") — casa pelo nome, como

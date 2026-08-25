@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import { startRealtimeListener, onDbChange, runMigrations } from './db.js';
+import { isOriginAllowed } from './lib/corsOrigin.js';
 import { broadcast } from './sse.js';
 import { authRoutes } from './routes/auth.js';
 import { clientRoutes } from './routes/clients.js';
@@ -34,18 +35,11 @@ async function main() {
   const JWT_SECRET = process.env.JWT_SECRET;
   if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required');
 
-  const configuredOrigins = (process.env.CORS_ORIGIN ?? '')
-    .split(',')
-    .map((origin) => origin.trim().replace(/\/$/, ''))
-    .filter(Boolean);
   await app.register(cors, {
-    origin: configuredOrigins.length > 0
-      ? (origin, callback) => {
-          // Requisições sem Origin (health checks/server-to-server) continuam válidas.
-          const allowed = !origin || configuredOrigins.includes(origin.replace(/\/$/, ''));
-          callback(null, allowed);
-        }
-      : '*',
+    origin: (origin, callback) => {
+      // Requisições sem Origin (health checks/server-to-server) continuam válidas.
+      callback(null, isOriginAllowed(origin));
+    },
     credentials: true,
   });
 

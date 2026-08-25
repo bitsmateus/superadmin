@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { addSseClient, removeSseClient } from '../sse.js';
+import { isOriginAllowed } from '../lib/corsOrigin.js';
 
 export async function sseRoutes(app: FastifyInstance) {
   // GET /api/events?token=<jwt>
@@ -23,6 +24,15 @@ export async function sseRoutes(app: FastifyInstance) {
 
       const clientId = uuidv4();
 
+      // reply.raw é escrito direto (nunca passa por reply.send()), então pula os hooks
+      // automáticos do @fastify/cors — sem isso o navegador bloqueia o EventSource por falta
+      // do header Access-Control-Allow-Origin, mesmo com CORS_ORIGIN configurado certinho.
+      const origin = req.headers.origin;
+      if (origin && isOriginAllowed(origin)) {
+        reply.raw.setHeader('Access-Control-Allow-Origin', origin);
+        reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
+        reply.raw.setHeader('Vary', 'Origin');
+      }
       reply.raw.setHeader('Content-Type', 'text/event-stream');
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('Connection', 'keep-alive');

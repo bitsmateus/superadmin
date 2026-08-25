@@ -481,17 +481,28 @@ function MoveSubmenu({
   allBoards,
   allPages,
   onMove,
+  currentPageId,
+  sdrLock,
 }: {
   allBoards: LeadBoard[]
   allPages: LeadPage[]
   onMove: (boardId: string) => void
+  currentPageId: string
+  sdrLock: string | undefined
 }) {
   const [aba, setAba] = React.useState<LeadBoardPage | null>(null)
+
+  // Aba travada num SDR só (CRM Luis/Arthur): só pode mover pra dentro da própria aba ou pra
+  // Novos Leads — nunca pra outro SDR, Vendas ou Contrato. Sem trava (ex.: Novos Leads), continua
+  // podendo mover pra qualquer aba, como sempre foi.
+  const movablePages = sdrLock
+    ? allPages.filter((p) => p.id === currentPageId || p.name.trim().toLowerCase() === 'novos leads')
+    : allPages
 
   if (!aba) {
     return (
       <>
-        {allPages.map((p) => (
+        {movablePages.map((p) => (
           <button
             key={p.id}
             type="button"
@@ -601,12 +612,14 @@ function BulkActionBar({
   allPages,
   onClear,
   pageId,
+  sdrLock,
 }: {
   selectedIds: Set<string>
   allRows: LeadRow[]
   allBoards: LeadBoard[]
   allPages: LeadPage[]
   onClear: () => void
+  sdrLock: string | undefined
   pageId: string
 }) {
   const [moveOpen, setMoveOpen] = React.useState(false)
@@ -676,7 +689,7 @@ function BulkActionBar({
           <BulkActionButton icon={<ArrowRightLeft className="h-4 w-4" />} label="Mover" onClick={() => setMoveOpen((o) => !o)} />
           {moveOpen && (
             <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 shadow-xl">
-              <MoveSubmenu allBoards={allBoards} allPages={allPages} onMove={moveTo} />
+              <MoveSubmenu allBoards={allBoards} allPages={allPages} onMove={moveTo} currentPageId={pageId} sdrLock={sdrLock} />
             </div>
           )}
         </div>
@@ -1473,6 +1486,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   allPages={allPages}
                   onClear={() => setSelectedIds(new Set())}
                   pageId={page}
+                  sdrLock={sdrLock}
                 />
               </>
             )}

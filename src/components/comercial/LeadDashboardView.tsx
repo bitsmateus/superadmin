@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { BarChart3, Calendar, LayoutGrid, ShoppingBag, Tags, UserRound, UserX, Users } from 'lucide-react'
+import { BarChart3, Calendar, LayoutGrid, ShoppingBag, Tags, UserCheck, UserRound, Users } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useLeadMilestones } from '@/hooks/useLeadMilestones'
 import { useMonthFilter, withinBounds, addMonthsToId, currentMonthId } from '@/hooks/useMonthFilter'
@@ -70,11 +70,12 @@ interface SdrMetrics {
   noShow: number
   vendas: number
   pctAgendamento: number
-  pctNoShow: number
+  pctComparecimento: number
   pctAgendamentoVenda: number
   totalRows: LeadRow[]
   agendadosRows: LeadRow[]
   noShowRows: LeadRow[]
+  compareceuRows: LeadRow[]
   vendasRows: LeadRow[]
 }
 
@@ -175,7 +176,7 @@ function SdrCard({ metrics, boards, onOpenLead }: { metrics: SdrMetrics; boards:
       </div>
       <div className="grid grid-cols-3 gap-2">
         <RingStat icon={<Calendar className="h-3 w-3" />} label="Agendada" color="#4F8EF7" of={m.total} ratio={m.pctAgendamento} matches={m.agendadosRows} boards={boards} onOpenLead={onOpenLead} />
-        <RingStat icon={<UserX className="h-3 w-3" />} label="No-show" color="#EF4444" of={m.agendados} ratio={m.pctNoShow} matches={m.noShowRows} boards={boards} onOpenLead={onOpenLead} />
+        <RingStat icon={<UserCheck className="h-3 w-3" />} label="Comparecimento" color="#06B6D4" of={m.agendados} ratio={m.pctComparecimento} matches={m.compareceuRows} boards={boards} onOpenLead={onOpenLead} />
         <RingStat icon={<ShoppingBag className="h-3 w-3" />} label="Venda" color="#22C55E" of={m.agendados} ratio={m.pctAgendamentoVenda} matches={m.vendasRows} boards={boards} onOpenLead={onOpenLead} />
       </div>
     </div>
@@ -209,7 +210,7 @@ function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMet
               <th className="px-3 py-2 text-center">Reunião agendada</th>
               <th className="px-3 py-2 text-center">% de agendamento</th>
               <th className="px-3 py-2 text-center">Reunião não comparecida</th>
-              <th className="px-3 py-2 text-center">% de no show</th>
+              <th className="px-3 py-2 text-center">% de comparecimento</th>
               <th className="px-3 py-2 text-center">Total de vendas</th>
               <th className="px-3 py-2 text-center">% agend. p/ venda</th>
             </tr>
@@ -227,7 +228,7 @@ function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMet
                 <MetricCell value={m.agendados} />
                 <MetricCell value={pct(m.pctAgendamento)} />
                 <MetricCell value={m.noShow} />
-                <MetricCell value={pct(m.pctNoShow)} />
+                <MetricCell value={pct(m.pctComparecimento)} />
                 <MetricCell value={m.vendas} />
                 <MetricCell value={pct(m.pctAgendamentoVenda)} />
               </tr>
@@ -273,21 +274,28 @@ export function SdrMetricsGrid({ rows, boards, onOpenLead, title }: { rows: Lead
       buckets.set(name, b)
     }
     return Array.from(buckets.entries())
-      .map(([name, b]) => ({
-        sdr: name,
-        color: sdrLabels.find((l) => l.name === name)?.color ?? '#9CA3AF',
-        total: b.totalRows.length,
-        agendados: b.agendadosRows.length,
-        noShow: b.noShowRows.length,
-        vendas: b.vendasRows.length,
-        pctAgendamento: b.totalRows.length > 0 ? b.agendadosRows.length / b.totalRows.length : 0,
-        pctNoShow: b.agendadosRows.length > 0 ? b.noShowRows.length / b.agendadosRows.length : (b.noShowRows.length > 0 ? 1 : 0),
-        pctAgendamentoVenda: b.agendadosRows.length > 0 ? b.vendasRows.length / b.agendadosRows.length : (b.vendasRows.length > 0 ? 1 : 0),
-        totalRows: b.totalRows,
-        agendadosRows: b.agendadosRows,
-        noShowRows: b.noShowRows,
-        vendasRows: b.vendasRows,
-      }))
+      .map(([name, b]) => {
+        const noShowIds = new Set(b.noShowRows.map((r) => r.id))
+        // Comparecimento = quem agendou e NÃO ficou marcado como no-show (inclusive quem já
+        // seguiu pra proposta/follow-up/venda) — taxa de show, não de no-show.
+        const compareceuRows = b.agendadosRows.filter((r) => !noShowIds.has(r.id))
+        return {
+          sdr: name,
+          color: sdrLabels.find((l) => l.name === name)?.color ?? '#9CA3AF',
+          total: b.totalRows.length,
+          agendados: b.agendadosRows.length,
+          noShow: b.noShowRows.length,
+          vendas: b.vendasRows.length,
+          pctAgendamento: b.totalRows.length > 0 ? b.agendadosRows.length / b.totalRows.length : 0,
+          pctComparecimento: b.agendadosRows.length > 0 ? compareceuRows.length / b.agendadosRows.length : 0,
+          pctAgendamentoVenda: b.agendadosRows.length > 0 ? b.vendasRows.length / b.agendadosRows.length : (b.vendasRows.length > 0 ? 1 : 0),
+          totalRows: b.totalRows,
+          agendadosRows: b.agendadosRows,
+          noShowRows: b.noShowRows,
+          compareceuRows,
+          vendasRows: b.vendasRows,
+        }
+      })
       .sort((a, b) => b.total - a.total)
   }, [rows, milestoneById, sdrLabels, monthFilter.bounds])
 

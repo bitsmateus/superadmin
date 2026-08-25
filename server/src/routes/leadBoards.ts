@@ -83,6 +83,18 @@ const MILESTONE_AGENDADA = 'Reunião agendada';
 const MILESTONE_VENDIDO = 'Vendido';
 const MILESTONE_STATUSES = [MILESTONE_AGENDADA, 'Reunião não comparecida', MILESTONE_VENDIDO];
 
+/** Status que só existem DEPOIS de uma reunião ter sido agendada — um lead nesses status "prova"
+ * que passou por "Reunião agendada" em algum momento, mesmo sem um evento de mudança de status
+ * gravado pra isso (ex.: lead importado já com o status mais avançado, sem histórico completo).
+ * Usado só pra completar "ever_agendada" abaixo — não muda o "milestone" (marco mais recente). */
+const POST_AGENDAMENTO_STATUSES = [
+  MILESTONE_AGENDADA,
+  'Reunião não comparecida',
+  'Proposta Enviada',
+  'Follow-up Propostas',
+  MILESTONE_VENDIDO,
+];
+
 /**
  * Sincroniza o registro de venda quando o status de um lead muda.
  *
@@ -531,8 +543,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     const allowed = await restrictedBoardFilter(sub, role);
     if (allowed !== null && !allowed.length) return [];
 
-    const boardFilter = allowed !== null ? 'WHERE lr.board_id = ANY($3)' : '';
-    const params: unknown[] = [MILESTONE_STATUSES, MILESTONE_AGENDADA];
+    const boardFilter = allowed !== null ? 'WHERE lr.board_id = ANY($4)' : '';
+    const params: unknown[] = [MILESTONE_STATUSES, MILESTONE_AGENDADA, POST_AGENDAMENTO_STATUSES];
     if (allowed !== null) params.push(allowed);
 
     return query(
@@ -540,10 +552,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         COALESCE(m.milestone, CASE WHEN lr.status = ANY($1) THEN lr.status END) AS milestone,
         COALESCE(m.milestone_at, CASE WHEN lr.status = ANY($1) THEN lr.created_at END) AS milestone_at,
         (
-          lr.status = $2
+          lr.status = ANY($3)
           OR EXISTS (
             SELECT 1 FROM lead_events le
-            WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $2
+            WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($3)
           )
         ) AS ever_agendada,
         COALESCE(

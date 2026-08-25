@@ -71,6 +71,12 @@ export function VendasView({ pageId }: { pageId: string }) {
   const [registrarOpen, setRegistrarOpen] = React.useState(false)
   const [trashOpen, setTrashOpen] = React.useState(false)
 
+  // Seleção "estilo Excel" — marca várias linhas (ou todas) e vê o total de MRR/implementação só
+  // delas, sem precisar mudar o período. Some sozinha ao trocar de período (ids de outra janela
+  // de tempo não fazem sentido continuar marcados).
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  React.useEffect(() => { setSelectedIds(new Set()) }, [from, to])
+
   React.useEffect(() => {
     if (periodo === 'personalizado') return
     const r = monthRange(periodo === 'mes_atual' ? 0 : -1)
@@ -98,6 +104,31 @@ export function VendasView({ pageId }: { pageId: string }) {
   const totalImpl = React.useMemo(
     () => validas.reduce((sum, r) => sum + parseBRLCents(r.valorImplementacao), 0),
     [validas],
+  )
+
+  const allSelected = noPeriodo.length > 0 && noPeriodo.every((r) => selectedIds.has(r.id))
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? new Set() : new Set(noPeriodo.map((r) => r.id)))
+  }
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const selectedRows = React.useMemo(
+    () => noPeriodo.filter((r) => selectedIds.has(r.id)),
+    [noPeriodo, selectedIds],
+  )
+  const selMrr = React.useMemo(
+    () => selectedRows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0),
+    [selectedRows],
+  )
+  const selImpl = React.useMemo(
+    () => selectedRows.reduce((sum, r) => sum + parseBRLCents(r.valorImplementacao), 0),
+    [selectedRows],
   )
 
   // Mesmos 4 nomes do seletor "Quem fechou a venda" — sempre aparecem, mesmo zerados, pra dar
@@ -184,12 +215,47 @@ export function VendasView({ pageId }: { pageId: string }) {
           )}
         </div>
 
+        {/* Barra de seleção — some quando nada está marcado. */}
+        {selectedRows.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl bg-accent/10 px-4 py-3 ring-1 ring-accent/20">
+            <span className="text-sm font-semibold text-accent">
+              {selectedRows.length} selecionado{selectedRows.length === 1 ? '' : 's'}
+            </span>
+            <span className="text-sm text-foreground/70">
+              MRR: <strong className="tabular-nums text-foreground">{formatBRLCents(selMrr)}</strong>
+            </span>
+            <span className="text-sm text-foreground/70">
+              Implementação: <strong className="tabular-nums text-foreground">{formatBRLCents(selImpl)}</strong>
+            </span>
+            <span className="text-sm text-foreground/70">
+              Total: <strong className="tabular-nums text-foreground">{formatBRLCents(selMrr + selImpl)}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="ml-auto text-xs font-medium text-accent hover:underline"
+            >
+              Limpar seleção
+            </button>
+          </div>
+        )}
+
         {/* Lista */}
         <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px]">
+            <table className="w-full min-w-[660px]">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      disabled={noPeriodo.length === 0}
+                      title="Selecionar todos"
+                      className="h-4 w-4 rounded border-line accent-accent"
+                    />
+                  </th>
                   <th className="px-4 py-3">Nome</th>
                   <th className="w-28 px-4 py-3">SDR</th>
                   <th className="w-48 px-4 py-3 text-right">Valor MRR</th>
@@ -201,18 +267,19 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-foreground/40">
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-foreground/40">
                       Nenhuma venda neste período.
                     </td>
                   </tr>
                 )}
                 {noPeriodo.map((r) => (
-                  <VendaRow key={r.id} row={r} />
+                  <VendaRow key={r.id} row={r} selected={selectedIds.has(r.id)} onToggleSelect={() => toggleSelect(r.id)} />
                 ))}
               </tbody>
               {noPeriodo.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
+                    <td />
                     <td className="px-4 py-3">Total</td>
                     <td />
                     <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
@@ -367,7 +434,7 @@ function ObservacoesCell({ value, onSave }: { value: string; onSave: (next: stri
   )
 }
 
-function VendaRow({ row }: { row: LeadRow }) {
+function VendaRow({ row, selected, onToggleSelect }: { row: LeadRow; selected: boolean; onToggleSelect: () => void }) {
   const [excluirOpen, setExcluirOpen] = React.useState(false)
 
   // Corrige o valor "oficial" (ex.: desconto negociado no fechamento) — se essa venda veio de um
@@ -380,9 +447,18 @@ function VendaRow({ row }: { row: LeadRow }) {
     <tr
       className={cn(
         'group border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]',
+        selected && 'bg-accent/5',
         row.vendaRevertida && 'text-foreground/40',
       )}
     >
+      <td className="px-4 py-3">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          className="h-4 w-4 rounded border-line accent-accent"
+        />
+      </td>
       <td className="px-4 py-3">
         <span className={cn('text-sm', row.vendaRevertida && 'line-through decoration-foreground/30')}>
           {row.nome || 'Sem nome'}

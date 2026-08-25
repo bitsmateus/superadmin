@@ -678,7 +678,7 @@ function PendingClientsList({
                         type="button"
                         title="Avançar etapa"
                         onClick={(e) => { e.stopPropagation(); onAdvance(c) }}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 ring-1 ring-gray-200 transition-colors hover:bg-accent/10 hover:text-accent hover:ring-accent/30"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600 transition-colors hover:bg-green-200"
                       >
                         <ArrowRight className="h-3.5 w-3.5" />
                       </button>
@@ -688,7 +688,7 @@ function PendingClientsList({
                         type="button"
                         title="Arquivar cliente"
                         onClick={(e) => { e.stopPropagation(); onArchive(c) }}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 ring-1 ring-gray-200 transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-100 text-red-600 transition-colors hover:bg-red-200"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

@@ -124,14 +124,27 @@ function sdrLockForPageName(pageName: string, sdrLabels: { name: string }[]): st
   return sdrLabels.find((l) => lower.includes(l.name.toLowerCase()))?.name
 }
 
+/** Aba "CRM Ian e Mateus" não usa esses campos — pedido direto do usuário pra tirar da tabela. */
+const IAN_MATEUS_HIDDEN_COLUMN_KEYS = new Set<string>([
+  'tipo', 'ligacao', 'sdr', 'dorCliente', 'numeroAtendentes', 'valorMrr', 'valorImplementacao',
+])
+
+/** true só pra aba cujo nome cita os dois (ex.: "CRM Ian e Mateus") — casa pelo nome, como
+ * sdrLockForPageName já faz, pra sobreviver a uma renomeação de id. */
+function isIanMateusPage(pageName: string): boolean {
+  const lower = pageName.toLowerCase()
+  return lower.includes('ian') && lower.includes('mateus')
+}
+
 /** Colunas visíveis numa aba — a coluna SDR só faz sentido em Novos Leads (várias pessoas
  * cadastrando ali); numa aba travada num SDR só, a coluna vira redundante e some da tabela.
  * O quadro de vendas tem um conjunto próprio: lá o que importa é quem, quanto e quando. */
-function columnsForSdrLock(sdrLock: string | undefined, isVendas = false): ColumnDef[] {
+function columnsForSdrLock(sdrLock: string | undefined, isVendas = false, hideIanMateusCols = false): ColumnDef[] {
   if (isVendas) return COLUMNS.filter((c) => VENDAS_COLUMN_KEYS.has(c.key))
   // "Fechamento" só existe no contexto de venda — fora dele seria uma coluna vazia em todo lead.
   const base = COLUMNS.filter((c) => c.key !== 'fechamento')
-  return sdrLock ? base.filter((c) => c.key !== 'sdr') : base
+  const withoutSdr = sdrLock ? base.filter((c) => c.key !== 'sdr') : base
+  return hideIanMateusCols ? withoutSdr.filter((c) => !IAN_MATEUS_HIDDEN_COLUMN_KEYS.has(c.key)) : withoutSdr
 }
 
 function columnWidthsStorageKey(page: LeadBoardPage) {
@@ -724,13 +737,14 @@ interface BoardGroupProps {
   onResizeColumn: (key: string, width: number) => void
   sdrLock: string | undefined
   sdrPageBoards: Map<string, LeadBoard[]>
+  hideIanMateusCols: boolean
 }
 
 function BoardGroup({
   board, allBoards, search, sdrFilter, filterRules, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
   selectedIds, onToggleRow, onToggleAll,
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
-  columnWidths, onResizeColumn, sdrLock, sdrPageBoards,
+  columnWidths, onResizeColumn, sdrLock, sdrPageBoards, hideIanMateusCols,
 }: BoardGroupProps) {
   // Quadro nasce fechado — só mostra os leads quando a pessoa abre de propósito.
   const [open, setOpen] = React.useState(false)
@@ -741,7 +755,7 @@ function BoardGroup({
   const toggleSort = (key: LeadRowField | 'createdAt') => {
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
   }
-  const cols = columnsForSdrLock(sdrLock, board.isVendas)
+  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols)
   const tableWidth = CHECKBOX_COL_WIDTH
     + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
 
@@ -1138,6 +1152,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const subtitle = 'Comercial · quadros de captação de leads'
   const sdrLabelsForLock = useLeadLabels('sdr')
   const sdrLock = React.useMemo(() => sdrLockForPageName(title, sdrLabelsForLock), [title, sdrLabelsForLock])
+  const hideIanMateusCols = React.useMemo(() => isIanMateusPage(title), [title])
 
   const booted = useLeadBoardsBooted()
   const allBoards = useLeadBoards()
@@ -1194,8 +1209,8 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
 
   const tableWidth = React.useMemo(
     () => CHECKBOX_COL_WIDTH
-      + columnsForSdrLock(sdrLock).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0),
-    [columnWidths, sdrLock],
+      + columnsForSdrLock(sdrLock, false, hideIanMateusCols).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0),
+    [columnWidths, sdrLock, hideIanMateusCols],
   )
 
   const handleRowDragStart = React.useCallback((ids: string[]) => setDraggingIds(ids), [])
@@ -1415,6 +1430,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                       onResizeColumn={handleResizeColumn}
                       sdrLock={sdrLock}
                       sdrPageBoards={sdrPageBoards}
+                      hideIanMateusCols={hideIanMateusCols}
                     />
                   ))}
                   <button

@@ -31,7 +31,7 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
   const labels = useLeadLabels(field, pageId)
   const [open, setOpen] = React.useState(false)
   const [manageOpen, setManageOpen] = React.useState(false)
-  const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null)
+  const [coords, setCoords] = React.useState<{ top?: number; bottom?: number; left: number } | null>(null)
   const btnRef = React.useRef<HTMLButtonElement>(null)
   const popRef = React.useRef<HTMLDivElement>(null)
   useOutsideClose(popRef, open, () => setOpen(false))
@@ -43,7 +43,16 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
   const openPicker = () => {
     const rect = btnRef.current?.getBoundingClientRect()
     if (rect) {
-      setCoords({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 328) })
+      const left = Math.min(rect.left, window.innerWidth - 328)
+      // Linha perto do fim da tela: abre pra CIMA (ancorado por "bottom") em vez de sempre pra
+      // baixo — senão a lista de etiquetas nascia fora da área visível e só dava pra ver rolando
+      // a página. Mesmo mecanismo do Agendamento/Retornar.
+      const spaceBelow = window.innerHeight - rect.bottom
+      if (spaceBelow < 260 && rect.top > spaceBelow) {
+        setCoords({ bottom: window.innerHeight - rect.top + 4, left })
+      } else {
+        setCoords({ top: rect.bottom + 4, left })
+      }
     }
     setOpen(true)
   }
@@ -68,10 +77,14 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
       {open && coords && createPortal(
         <div
           ref={popRef}
-          style={{ position: 'fixed', top: coords.top, left: coords.left }}
-          className="z-50 w-72 rounded-xl border border-line bg-card p-2.5 shadow-xl"
+          style={{
+            position: 'fixed',
+            left: coords.left,
+            ...(coords.top !== undefined ? { top: coords.top } : { bottom: coords.bottom }),
+          }}
+          className="z-50 flex max-h-[60vh] w-72 flex-col rounded-xl border border-line bg-card p-2.5 shadow-xl"
         >
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-1.5 overflow-y-auto">
             {field !== 'ligacao' && (
               <button
                 type="button"

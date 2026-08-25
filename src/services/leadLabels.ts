@@ -2,12 +2,12 @@ import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
 import type { LeadLabel, LeadLabelField } from '@/types/leadBoard'
 
-type LabelRow = { id: string; field: string; name: string; color: string; position: number; created_at: string }
+type LabelRow = { id: string; field: string; name: string; color: string; position: number; page_id: string | null; created_at: string }
 function rowToLabel(r: LabelRow): LeadLabel {
   const field: LeadLabelField = r.field === 'dia_contato' ? 'diaContato' : (r.field as LeadLabelField)
   return {
     id: r.id, field,
-    name: r.name, color: r.color, position: r.position, createdAt: r.created_at,
+    name: r.name, color: r.color, position: r.position, pageId: r.page_id, createdAt: r.created_at,
   }
 }
 function fieldToColumn(field: LeadLabelField): string {
@@ -67,11 +67,15 @@ export const leadLabelsService = {
     return loadingPromise
   },
 
-  async createLabel(field: LeadLabelField, name: string, color: string): Promise<void> {
+  /** pageId: obrigatório pra tudo, exceto "sdr" (continua global — ver leadPages.ts). */
+  async createLabel(field: LeadLabelField, name: string, color: string, pageId: string | null): Promise<void> {
     const trimmed = name.trim()
     if (!trimmed) return
+    if (field !== 'sdr' && !pageId) { toast.error('Falha ao criar etiqueta: aba não identificada.'); return }
     try {
-      const row = await api.post<LabelRow>('/api/lead-labels', { field: fieldToColumn(field), name: trimmed, color })
+      const row = await api.post<LabelRow>('/api/lead-labels', {
+        field: fieldToColumn(field), name: trimmed, color, page_id: field === 'sdr' ? null : pageId,
+      })
       labels = [...labels, rowToLabel(row)]
       notify()
     } catch (err) {

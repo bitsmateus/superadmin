@@ -444,16 +444,20 @@ CREATE TRIGGER lead_notes_decrement_trigger AFTER DELETE ON lead_notes
   FOR EACH ROW EXECUTE FUNCTION decrement_lead_notes_count();
 
 -- ---------- lead_labels (etiquetas coloridas de "Tipo", "Dia de contato", "Status", "SDR" e "Ligação") ----------
+-- page_id: escopo por aba (cada CRM tem seu próprio conjunto) — NULL só pra "sdr", que continua
+-- global (é a lista de SDRs de verdade, usada pra travar/rotear leads entre abas).
 CREATE TABLE IF NOT EXISTS lead_labels (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   field TEXT NOT NULL CHECK (field IN ('tipo', 'dia_contato', 'status', 'sdr', 'ligacao')),
   name TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#9CA3AF',
   position INT NOT NULL DEFAULT 0,
+  page_id TEXT REFERENCES lead_pages(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS lead_labels_field_idx ON lead_labels(field);
+CREATE INDEX IF NOT EXISTS lead_labels_page_field_idx ON lead_labels(page_id, field);
 
 -- ---------- kb_articles ----------
 CREATE TABLE IF NOT EXISTS kb_articles (
@@ -814,58 +818,14 @@ SELECT s.name, s.color, next_pos.base + s.ord
 FROM seed s, next_pos
 WHERE NOT EXISTS (SELECT 1 FROM lead_boards lb WHERE lb.name = s.name);
 
--- ---------- Seed das etiquetas de Tipo, Dia de contato, Status e SDR ----------
+-- ---------- Seed das etiquetas de SDR ----------
+-- Só "sdr" é semeado aqui — é a lista global de SDRs de verdade (roteamento entre abas). As
+-- demais (tipo/dia_contato/ligacao/status) agora são por aba: cada CRM começa vazio e ganha as
+-- suas via "Editar etiquetas" (ver migração de backfill em db.ts pra quem já tinha as globais).
 INSERT INTO lead_labels (field, name, color, position)
 SELECT * FROM (VALUES
-  ('tipo', 'IA',                        '#10B981', 1),
-  ('tipo', 'CHATBOT',                   '#F97316', 2),
-  ('tipo', '01 - FRIO - LEADS 1-3-5 / ADVOCACIA',                                          '#3B82F6', 3),
-  ('tipo', '01 - FRIO - LEADS 1-3-5 / API OFICIAL',                                        '#8B5CF6', 4),
-  ('tipo', '01 - FRIO - LEADS 1-3-5 / GERAL',                                              '#06B6D4', 5),
-  ('tipo', '01 - FRIO - LEADS 1-3-5 / CRIATIVOS VALIDADOS',                                '#EC4899', 6),
-  ('tipo', 'rmkt - quente / QUENTE GERAL',                                                 '#EF4444', 7),
-  ('tipo', 'LEADS 02 - CHATBOT GERAL / CHATBOT - VALIDADO',                                '#F59E0B', 8),
-  ('tipo', 'CAMPANHA 01 - VALIDADO — Cópia / ADVTANGE ON + 3 assuntos',                     '#84CC16', 9),
-  ('tipo', 'CAMPANHA 01 - VALIDADO — Cópia / ADVTANGE ON + 3 assuntos — Cópia',              '#14B8A6', 10),
-  ('tipo', 'CAMPANHA 01 - VALIDADO — Cópia / VALIDADO + IMAGENS',                           '#6366F1', 11),
   ('sdr', 'Luis',                       '#4F8EF7', 1),
-  ('sdr', 'Arthur',                     '#8B5CF6', 2),
-  ('ligacao', '0',                      '#E5E5E5', 0),
-  ('ligacao', '1',                      '#C4C4C4', 1),
-  ('ligacao', '2',                      '#1BC47D', 2),
-  ('ligacao', '3',                      '#8DC63F', 3),
-  ('ligacao', '4',                      '#0E8A5B', 4),
-  ('ligacao', '5',                      '#FFC400', 5),
-  ('ligacao', '6',                      '#C9B458', 6),
-  ('ligacao', '7',                      '#FDA64B', 7),
-  ('ligacao', '8',                      '#FB6340', 8),
-  ('ligacao', '9',                      '#D6304A', 9),
-  ('ligacao', '10',                     '#F0047F', 10),
-  ('dia_contato', '1º Dia - ChatBot',   '#9CA3AF', 1),
-  ('dia_contato', '2º Dia - ChatBot',   '#60A5FA', 2),
-  ('dia_contato', '3º Dia - ChatBot',   '#3B82F6', 3),
-  ('dia_contato', '4º Dia - ChatBot',   '#1E3A8A', 4),
-  ('dia_contato', '5º Dia - ChatBot',   '#2563EB', 5),
-  ('dia_contato', '6º Dia - ChatBot',   '#4338CA', 6),
-  ('dia_contato', '7º Dia - ChatBot',   '#F97316', 7),
-  ('dia_contato', 'Sem contato',        '#DC2626', 8),
-  ('dia_contato', 'NoShow 1º Dia',      '#EAB308', 9),
-  ('dia_contato', 'NoShow 2º Dia',      '#FB923C', 10),
-  ('dia_contato', 'NoShow 3º Dia',      '#E11D48', 11),
-  ('dia_contato', 'NEUTRO',             '#92400E', 12),
-  ('status', 'Primeiro Contato',        '#5B9BD5', 1),
-  ('status', 'Reunião agendada',        '#D97706', 2),
-  ('status', 'Reunião não comparecida', '#DC2626', 3),
-  ('status', 'Proposta Enviada',        '#84CC16', 4),
-  ('status', 'Follow-up Propostas',     '#8B5CF6', 5),
-  ('status', 'Vendido',                 '#10B981', 6),
-  ('status', 'Follow-up Mensal',        '#F97316', 7),
-  ('status', 'Disparo em massa',        '#9F1239', 8),
-  ('status', 'Perdidos',                '#EC4899', 9),
-  ('status', 'Leads 3C',                '#78350F', 10),
-  ('status', 'Leads/Março',             '#047857', 11),
-  ('status', 'Leads Outbount',          '#7C3AED', 12),
-  ('status', 'Desqualificado',          '#374151', 13)
+  ('sdr', 'Arthur',                     '#8B5CF6', 2)
 ) AS v(field, name, color, position)
 WHERE NOT EXISTS (SELECT 1 FROM lead_labels ll WHERE ll.field = v.field AND ll.name = v.name);
 

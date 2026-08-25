@@ -133,5 +133,7 @@ export interface LeadLabel {
   name: string
   color: string
   position: number
+  /** Aba dona da etiqueta — null só pra "sdr", que continua global. */
+  pageId: string | null
   createdAt: string
 }

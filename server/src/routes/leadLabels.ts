@@ -18,23 +18,27 @@ export async function leadLabelRoutes(app: FastifyInstance) {
   );
 
   // POST /api/lead-labels
+  // "sdr" continua global (page_id sempre null — é a lista de SDRs de verdade, usada pra travar/
+  // rotear leads entre abas). As demais etiquetas são por aba: page_id é obrigatório pra elas.
   app.post<{ Body: Record<string, unknown> }>(
     '/api/lead-labels',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const b = req.body;
       if (!b.field || !b.name) return reply.status(400).send({ message: 'field e name são obrigatórios' });
+      const pageId = b.field === 'sdr' ? null : ((b.page_id as string | undefined) ?? null);
+      if (b.field !== 'sdr' && !pageId) return reply.status(400).send({ message: 'page_id é obrigatório' });
       let position = b.position as number | undefined;
       if (position === undefined) {
         const [row] = await query<{ max: number | null }>(
-          'SELECT MAX(position) as max FROM lead_labels WHERE field = $1',
-          [b.field]
+          'SELECT MAX(position) as max FROM lead_labels WHERE field = $1 AND page_id IS NOT DISTINCT FROM $2',
+          [b.field, pageId]
         );
         position = (row?.max ?? -1) + 1;
       }
       const [label] = await query(
-        `INSERT INTO lead_labels (field, name, color, position) VALUES ($1,$2,$3,$4) RETURNING *`,
-        [b.field, b.name, b.color ?? '#9CA3AF', position]
+        `INSERT INTO lead_labels (field, name, color, position, page_id) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [b.field, b.name, b.color ?? '#9CA3AF', position, pageId]
       );
       return reply.status(201).send(label);
     }

@@ -272,8 +272,10 @@ export interface LeadDashboardViewProps {
 /** Painel só de visualização — nada aqui é editável, é resumo de leitura dos leads filtrados. */
 export function LeadDashboardView({ rows, boards, sdrTabLabel = 'Dashboard do SDR', onlySdr = false }: LeadDashboardViewProps) {
   const [subView, setSubView] = React.useState<'geral' | 'sdr'>(onlySdr ? 'sdr' : 'geral')
-  const statusLabels = useLeadLabels('status')
-  const diaContatoLabels = useLeadLabels('diaContato')
+  // boards já vem filtrado pra UMA aba só (chamado de dentro de LeadBoardsView).
+  const pageId = boards[0]?.page
+  const statusLabels = useLeadLabels('status', pageId)
+  const diaContatoLabels = useLeadLabels('diaContato', pageId)
 
   const totalLeads = rows.length
   const totalMrr = React.useMemo(() => rows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0), [rows])

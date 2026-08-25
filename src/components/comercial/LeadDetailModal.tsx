@@ -121,16 +121,16 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               <BoxedField value={row.telefone} onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })} required />
             </FieldRow>
             <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Tipo">
-              <LeadLabelCell field="tipo" value={row.tipo} onChange={(v) => leadBoardsService.updateRow(row.id, { tipo: v })} />
+              <LeadLabelCell field="tipo" value={row.tipo} onChange={(v) => leadBoardsService.updateRow(row.id, { tipo: v })} pageId={board?.page} />
             </FieldRow>
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Dia de contato" required>
-              <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} required />
+              <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} required pageId={board?.page} />
             </FieldRow>
             <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Ligação">
-              <LeadLabelCell field="ligacao" value={row.ligacao} onChange={(v) => leadBoardsService.updateRow(row.id, { ligacao: v })} />
+              <LeadLabelCell field="ligacao" value={row.ligacao} onChange={(v) => leadBoardsService.updateRow(row.id, { ligacao: v })} pageId={board?.page} />
             </FieldRow>
             <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Status" required>
-              <LeadLabelCell field="status" value={row.status} onChange={(v) => leadBoardsService.updateRow(row.id, { status: v })} required />
+              <LeadLabelCell field="status" value={row.status} onChange={(v) => leadBoardsService.updateRow(row.id, { status: v })} required pageId={board?.page} />
             </FieldRow>
             <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="SDR">
               <LeadLabelCell field="sdr" value={row.sdr} onChange={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />
@@ -169,7 +169,7 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
             </FieldRow>
           </div>
 
-          <UpdatesPane leadRowId={row.id} />
+          <UpdatesPane leadRowId={row.id} pageId={board?.page} />
         </div>
       </div>
     </div>,
@@ -279,12 +279,12 @@ function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescription {
   }
 }
 
-function UpdatesPane({ leadRowId }: { leadRowId: string }) {
+function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string }) {
   const { profile } = useAuth()
   const notes = useLeadNotes(leadRowId)
   const events = useLeadEvents(leadRowId)
-  const statusLabels = useLeadLabels('status')
-  const diaContatoLabels = useLeadLabels('diaContato')
+  const statusLabels = useLeadLabels('status', pageId)
+  const diaContatoLabels = useLeadLabels('diaContato', pageId)
   const sdrLabels = useLeadLabels('sdr')
   const allBoards = useLeadBoards()
   const team = useTeam()

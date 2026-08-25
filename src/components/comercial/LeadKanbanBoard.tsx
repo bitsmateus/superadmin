@@ -56,7 +56,9 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
   }, [groupField])
 
   React.useEffect(() => { void leadLabelsService.ensureLoaded() }, [])
-  const labels = useLeadLabels(groupField)
+  // allBoards já vem filtrado pra UMA aba só (LeadBoardsView) — dá pra tirar a aba dali direto.
+  const pageId = allBoards[0]?.page
+  const labels = useLeadLabels(groupField, pageId)
 
   const [activeId, setActiveId] = React.useState<string | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))

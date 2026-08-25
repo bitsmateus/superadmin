@@ -543,9 +543,9 @@ const BULK_EDIT_FIELDS: { key: LeadLabelField; label: string }[] = [
   { key: 'sdr', label: 'SDR' },
 ]
 
-function BulkEditSubmenu({ onApply }: { onApply: (field: LeadLabelField, value: string) => void }) {
+function BulkEditSubmenu({ onApply, pageId }: { onApply: (field: LeadLabelField, value: string) => void; pageId: string }) {
   const [field, setField] = React.useState<LeadLabelField | null>(null)
-  const labels = useLeadLabels(field ?? 'status')
+  const labels = useLeadLabels(field ?? 'status', pageId)
 
   if (!field) {
     return (
@@ -600,12 +600,14 @@ function BulkActionBar({
   allBoards,
   allPages,
   onClear,
+  pageId,
 }: {
   selectedIds: Set<string>
   allRows: LeadRow[]
   allBoards: LeadBoard[]
   allPages: LeadPage[]
   onClear: () => void
+  pageId: string
 }) {
   const [moveOpen, setMoveOpen] = React.useState(false)
   const moveRef = React.useRef<HTMLDivElement>(null)
@@ -666,7 +668,7 @@ function BulkActionBar({
           <BulkActionButton icon={<Pencil className="h-4 w-4" />} label="Editar" onClick={() => setEditOpen((o) => !o)} />
           {editOpen && (
             <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
-              <BulkEditSubmenu onApply={applyBulkEdit} />
+              <BulkEditSubmenu onApply={applyBulkEdit} pageId={pageId} />
             </div>
           )}
         </div>
@@ -1003,6 +1005,7 @@ function BoardGroup({
                           field={col.key as LeadLabelField}
                           value={row[col.key as LeadRowField]}
                           required={col.required}
+                          pageId={board.page}
                           onChange={(next) => {
                             if (col.key === 'status') {
                               const target = allBoards.find(
@@ -1469,6 +1472,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   allBoards={allBoards}
                   allPages={allPages}
                   onClear={() => setSelectedIds(new Set())}
+                  pageId={page}
                 />
               </>
             )}
@@ -1497,6 +1501,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
         onChange={setFilterRules}
         visibleCount={visibleCount}
         totalCount={pageRows.length}
+        pageId={page}
       />
     </>
   )

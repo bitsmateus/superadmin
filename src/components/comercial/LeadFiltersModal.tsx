@@ -94,13 +94,15 @@ function FilterRuleRow({
   rule,
   onChange,
   onRemove,
+  pageId,
 }: {
   rule: FilterRule
   onChange: (patch: Partial<FilterRule>) => void
   onRemove: () => void
+  pageId: string
 }) {
   const kind = FIELD_KIND[rule.field]
-  const labels = useLeadLabels(kind === 'label' ? (rule.field as LeadLabelField) : 'status')
+  const labels = useLeadLabels(kind === 'label' ? (rule.field as LeadLabelField) : 'status', pageId)
   const operators = kind === 'label' ? LABEL_OPERATORS : DATE_OPERATORS
   const needsValue = rule.operator !== 'is_empty' && rule.operator !== 'is_not_empty'
   const needsValue2 = rule.operator === 'between'
@@ -170,9 +172,10 @@ export interface LeadFiltersModalProps {
   onChange: (rules: FilterRule[]) => void
   visibleCount: number
   totalCount: number
+  pageId: string
 }
 
-export function LeadFiltersModal({ open, onClose, rules, onChange, visibleCount, totalCount }: LeadFiltersModalProps) {
+export function LeadFiltersModal({ open, onClose, rules, onChange, visibleCount, totalCount, pageId }: LeadFiltersModalProps) {
   const addRule = () => onChange([...rules, newRule()])
   const updateRule = (id: string, patch: Partial<FilterRule>) => {
     onChange(rules.map((r) => (r.id === id ? { ...r, ...patch } : r)))
@@ -201,6 +204,7 @@ export function LeadFiltersModal({ open, onClose, rules, onChange, visibleCount,
             rule={rule}
             onChange={(patch) => updateRule(rule.id, patch)}
             onRemove={() => removeRule(rule.id)}
+            pageId={pageId}
           />
         ))}
         <Button variant="ghost" size="sm" onClick={addRule} leftIcon={<Plus className="h-3.5 w-3.5" />}>

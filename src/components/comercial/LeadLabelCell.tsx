@@ -23,10 +23,12 @@ export interface LeadLabelCellProps {
   onChange: (next: string) => void
   /** Marca a célula vazia como pendência obrigatória (borda/tom vermelho + "Obrigatório"). */
   required?: boolean
+  /** Aba dona das etiquetas — obrigatório pra tudo, exceto "sdr" (continua global). */
+  pageId?: string
 }
 
-export function LeadLabelCell({ field, value, onChange, required }: LeadLabelCellProps) {
-  const labels = useLeadLabels(field)
+export function LeadLabelCell({ field, value, onChange, required, pageId }: LeadLabelCellProps) {
+  const labels = useLeadLabels(field, pageId)
   const [open, setOpen] = React.useState(false)
   const [manageOpen, setManageOpen] = React.useState(false)
   const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null)
@@ -106,19 +108,21 @@ export function LeadLabelCell({ field, value, onChange, required }: LeadLabelCel
         document.body,
       )}
 
-      <ManageLabelsModal field={field} open={manageOpen} onClose={() => setManageOpen(false)} />
+      <ManageLabelsModal field={field} pageId={pageId} open={manageOpen} onClose={() => setManageOpen(false)} />
     </>
   )
 }
 
-function ManageLabelsModal({ field, open, onClose }: { field: LeadLabelField; open: boolean; onClose: () => void }) {
-  const labels = useLeadLabels(field)
+function ManageLabelsModal({
+  field, pageId, open, onClose,
+}: { field: LeadLabelField; pageId?: string; open: boolean; onClose: () => void }) {
+  const labels = useLeadLabels(field, pageId)
   const [newName, setNewName] = React.useState('')
   const [newColor, setNewColor] = React.useState('#4F8EF7')
 
   const addLabel = () => {
     if (!newName.trim()) return
-    void leadLabelsService.createLabel(field, newName, newColor)
+    void leadLabelsService.createLabel(field, newName, newColor, pageId ?? null)
     setNewName('')
     setNewColor('#4F8EF7')
   }

@@ -68,17 +68,43 @@ export function parseImportedDate(raw: string): string | null {
   return null
 }
 
+/** "Ã"/"Â" sozinho é raro de sobrar em português real, mas só isso daria falso positivo em texto
+ * já correto — exige o padrão completo (a letra + o byte de continuação UTF-8 típico logo depois)
+ * antes de considerar mojibake. Ex.: "Ã¡" (bytes 0xC3 0xA1) é literalmente os 2 bytes UTF-8 de "á"
+ * relidos como Latin-1; comparação por código numérico evita qualquer problema de caractere de
+ * controle "invisível" escondido dentro de uma regex. */
+function looksLikeMojibake(s: string): boolean {
+  for (let i = 0; i < s.length - 1; i++) {
+    const c1 = s.charCodeAt(i)
+    if (c1 !== 0xc3 && c1 !== 0xc2) continue
+    const c2 = s.charCodeAt(i + 1)
+    if (c2 >= 0x80 && c2 <= 0xbf) return true
+  }
+  return false
+}
+
 /** Corrige o mojibake clássico de um arquivo UTF-8 salvo/lido como Latin-1 (ex.: "FÃ¡veri" em vez
  * de "Fáveri", "nÃ£o" em vez de "não") — comum em planilha exportada de fora e colada/salva sem o
- * encoding certo. Só mexe se detectar o padrão (Ã/Â seguido de outro caractere), pra não estragar
- * texto que já está correto. */
+ * encoding certo. Só mexe se detectar o padrão específico de mojibake, e desiste por completo
+ * (devolve o texto original, sem tocar em nada) se achar QUALQUER caractere fora do Latin-1 —
+ * emoji e afins não são mojibake, e forçar a conversão neles corromperia o texto. */
 export function fixMojibake(s: string): string {
-  if (!s || !/[ÃÂ]/.test(s)) return s
+  if (!s || !looksLikeMojibake(s)) return s
+  const codePoints = Array.from(s).map((ch) => ch.codePointAt(0) ?? 0)
+  if (codePoints.some((code) => code > 0xff)) return s
   try {
-    const bytes = Uint8Array.from(Array.from(s).map((ch) => ch.charCodeAt(0)))
-    const fixed = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    const fixed = new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(codePoints))
     return fixed || s
   } catch {
     return s
   }
+}
+
+/** Escapa &, < e > antes de guardar texto solto num campo que é renderizado como HTML (ex.:
+ * conteúdo de anotação, que passa por dangerouslySetInnerHTML) — sem isso, um "<" ou "&" digitado
+ * de propósito vira início de tag/entidade em vez de aparecer como texto. Quebra de linha (\n)
+ * NÃO precisa virar `<br>`: o CSS que exibe a anotação já usa white-space:pre-wrap, então a quebra
+ * literal já renderiza certinho sozinha. */
+export function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }

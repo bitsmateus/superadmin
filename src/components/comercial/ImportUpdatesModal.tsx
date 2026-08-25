@@ -5,7 +5,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { leadNotesService } from '@/services/leadNotes'
-import { normalizeText, parseImportedDate, fixMojibake } from '@/lib/importDates'
+import { normalizeText, parseImportedDate, fixMojibake, escapeHtml } from '@/lib/importDates'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 interface ImportedUpdate {
@@ -14,15 +14,37 @@ interface ImportedUpdate {
   createdAt: string | null
 }
 
+/** Junta linha "órfã" (poucas colunas, sem cara de registro novo) na última coluna do registro
+ * anterior — é o que sobra quando o Texto de uma atualização tem quebra de linha de verdade dentro
+ * dele: o arquivo tab-separado não escapa isso, então a quebra vira uma "linha" solta no meio. */
+function splitLogicalRows(rawLines: string[], expectedCols: number): string[][] {
+  const rows: string[][] = []
+  let current: string[] | null = null
+  for (const rawLine of rawLines) {
+    if (rawLine.trim() === '') continue
+    const cols = rawLine.split('\t')
+    const looksLikeNewRow = cols.length >= expectedCols && cols[0].trim() !== ''
+    if (looksLikeNewRow || !current) {
+      if (current) rows.push(current)
+      current = cols
+    } else {
+      current[current.length - 1] = `${current[current.length - 1]}\n${rawLine}`
+    }
+  }
+  if (current) rows.push(current)
+  return rows
+}
+
 /** Uma linha por atualização: "Nº, Nome, Empresa, Telefone, Data, Autor, Texto" (é o formato que
  * o Monday exporta pra atualizações, uma linha por evento, mesmo nome repetido). Detecta as
  * colunas pelo cabeçalho em vez de fixar posição, pra aguentar pequenas variações de planilha. */
 function parseUpdatesTsv(text: string): { byName: Map<string, ImportedUpdate[]>; headerFound: boolean } {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0)
+  const rawLines = text.split(/\r?\n/)
   const byName = new Map<string, ImportedUpdate[]>()
-  if (!lines.length) return { byName, headerFound: false }
+  const firstNonBlankIdx = rawLines.findIndex((l) => l.trim().length > 0)
+  if (firstNonBlankIdx === -1) return { byName, headerFound: false }
 
-  const headerCols = lines[0].split('\t').map((h) => normalizeText(h))
+  const headerCols = rawLines[firstNonBlankIdx].split('\t').map((h) => normalizeText(h))
   const idx = {
     nome: headerCols.findIndex((h) => h.includes('nome')),
     data: headerCols.findIndex((h) => h === 'data' || h.includes('data')),
@@ -30,16 +52,19 @@ function parseUpdatesTsv(text: string): { byName: Map<string, ImportedUpdate[]>;
     texto: headerCols.findIndex((h) => h.includes('texto') || h.includes('conteudo') || h.includes('atualizacao') || h.includes('mensagem')),
   }
   const headerFound = idx.nome !== -1 && idx.data !== -1 && idx.texto !== -1
-  const dataLines = headerFound ? lines.slice(1) : lines
   // Sem cabeçalho reconhecido, chuta a ordem do exemplo (Nº, Nome, Empresa, Telefone, Data, Autor, Texto).
   const cols = headerFound ? idx : { nome: 1, data: 4, autor: 5, texto: 6 }
+  const expectedCols = headerFound ? headerCols.length : Math.max(cols.nome, cols.data, cols.autor, cols.texto) + 1
+  const dataRawLines = headerFound ? rawLines.slice(firstNonBlankIdx + 1) : rawLines
 
-  for (const line of dataLines) {
-    const parts = line.split('\t')
+  for (const parts of splitLogicalRows(dataRawLines, expectedCols)) {
     const nome = fixMojibake((parts[cols.nome] ?? '').trim())
     const data = (parts[cols.data] ?? '').trim()
     const autor = fixMojibake((parts[cols.autor] ?? '').trim())
-    const texto = fixMojibake((parts[cols.texto] ?? '').trim())
+    // escapeHtml por último — a anotação é exibida via dangerouslySetInnerHTML, então "<", ">" e
+    // "&" digitados de propósito no texto precisam virar entidade, senão viram HTML de verdade.
+    // Quebra de linha (\n) não precisa de tratamento: o CSS já usa white-space:pre-wrap.
+    const texto = escapeHtml(fixMojibake((parts[cols.texto] ?? '').trim()))
     if (!nome || !texto) continue
     const entry: ImportedUpdate = { authorName: autor || 'Importado', content: texto, createdAt: parseImportedDate(data) }
     const list = byName.get(nome) ?? []

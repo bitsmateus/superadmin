@@ -9,7 +9,7 @@ import { leadBoardsService } from '@/services/leadBoards'
 import { leadNotesService } from '@/services/leadNotes'
 import { parseCsv } from '@/lib/csv'
 import { sanitizeCurrencyRaw, prettifyCurrencyRaw } from '@/lib/currency'
-import { normalizeText, parseImportedDate } from '@/lib/importDates'
+import { normalizeText, parseImportedDate, escapeHtml } from '@/lib/importDates'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadBoardPage, LeadRowField } from '@/types/leadBoard'
 
@@ -83,7 +83,10 @@ function parseUpdatesCell(raw: string): ImportedUpdate[] {
   const s = raw.trim()
   if (!s) return []
   const matches = [...s.matchAll(UPDATE_HEADER_RE)]
-  if (!matches.length) return [{ authorName: 'Importado', content: s, createdAt: null }]
+  // escapeHtml por último — a anotação é exibida via dangerouslySetInnerHTML, então "<", ">" e "&"
+  // digitados de propósito no texto precisam virar entidade, senão viram HTML de verdade. Quebra
+  // de linha (\n) não precisa de tratamento: o CSS já usa white-space:pre-wrap.
+  if (!matches.length) return [{ authorName: 'Importado', content: escapeHtml(s), createdAt: null }]
 
   const entries: ImportedUpdate[] = []
   for (let i = 0; i < matches.length; i++) {
@@ -93,7 +96,7 @@ function parseUpdatesCell(raw: string): ImportedUpdate[] {
     const content = s.slice(start, end).trim()
     if (!content) continue
     const dateTime = m[2] ? `${m[1]} ${m[2]}` : m[1]
-    entries.push({ authorName: m[3].trim(), content, createdAt: parseImportedDate(dateTime) })
+    entries.push({ authorName: m[3].trim(), content: escapeHtml(content), createdAt: parseImportedDate(dateTime) })
   }
   return entries
 }

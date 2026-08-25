@@ -12,6 +12,12 @@ export function dateKey(iso: string): string {
 /** Acima disso, um "Dia de contato" parado conta como não atualizado. */
 export const STALE_MS = 24 * 60 * 60 * 1000
 
+/** "Atrasados" só considera a partir daqui — leads importados de antes do sistema entrar em uso
+ * (CRM Luis/Arthur) tinham "Retornar" com data antiga, inflando o contador com gente que nunca
+ * ia ser cobrada de verdade (170 "atrasados" que na prática eram quase todos histórico morto).
+ * Retornar de antes dessa data nunca conta como atrasado, não importa quão no passado esteja. */
+export const ATRASADO_CUTOFF = '2026-08-01'
+
 /** Classifica um lead nos 4 "status do dia" (não atualizado, atrasado, reunião hoje, proposta
  * hoje) — mesma lógica usada no painel do dia e no dashboard comercial, geral ou por SDR. */
 export function classifyLeadToday<T extends { id: string; retornar: string; retornado: boolean; agendamento: string }>(
@@ -21,7 +27,7 @@ export function classifyLeadToday<T extends { id: string; retornar: string; reto
 ): { naoAtualizado: boolean; atrasado: boolean; reuniaoHoje: boolean; propostaHoje: boolean } {
   const naoAtualizado = !!diaContatoUpdatedAt && Date.now() - new Date(diaContatoUpdatedAt).getTime() > STALE_MS
   const retornarKey = dateKey(row.retornar)
-  const atrasado = !!retornarKey && retornarKey < today && !row.retornado
+  const atrasado = !!retornarKey && retornarKey >= ATRASADO_CUTOFF && retornarKey < today && !row.retornado
   const reuniaoHoje = dateKey(row.agendamento) === today
   const propostaHoje = retornarKey === today && !row.retornado
   return { naoAtualizado, atrasado, reuniaoHoje, propostaHoje }

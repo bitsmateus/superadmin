@@ -1127,6 +1127,18 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
     const boardIds = new Set(boards.map((b) => b.id))
     return allRows.filter((r) => boardIds.has(r.boardId))
   }, [allRows, boards])
+  // "Status não atualizado/atrasados/etc" (Painel do dia) só faz sentido pra quem já está sendo
+  // trabalhado — leads ainda em "Leads Novos" (sem contato feito) inflam o contador à toa. Quando
+  // a aba tem um quadro "Primeiro Contato", o painel considera só ele; sem esse quadro, continua
+  // somando todos os quadros da aba como antes.
+  const primeiroContatoBoard = React.useMemo(
+    () => boards.find((b) => b.name.trim().toLowerCase() === 'primeiro contato'),
+    [boards],
+  )
+  const todayPanelRows = React.useMemo(
+    () => (primeiroContatoBoard ? pageRows.filter((r) => r.boardId === primeiroContatoBoard.id) : pageRows),
+    [pageRows, primeiroContatoBoard],
+  )
   const [search, setSearch] = React.useState('')
   const [sdrFilter, setSdrFilter] = React.useState<string | null>(null)
   const [filterRules, setFilterRules] = React.useState<FilterRule[]>([])
@@ -1356,7 +1368,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} />
             ) : (
               <>
-                <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} />
+                <LeadTodayPanel rows={todayPanelRows} boards={boards} onOpenLead={setOpenLeadId} />
                 <div className="flex-1">
                   {boards.map((board) => (
                     <BoardGroup

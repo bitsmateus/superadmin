@@ -1,11 +1,12 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarRange, CheckCircle2, Clock, Download, FileText, ListTodo, Loader2, Plus, Search, Settings, Trash2, X } from 'lucide-react'
+import { CalendarRange, CheckCircle2, Clock, Download, FileText, ListTodo, Loader2, Plus, Search, Settings, Trash2, UserRound, X } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 import { useClients } from '@/hooks/useClients'
+import { db } from '@/services/db'
 import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/useContracts'
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
@@ -17,7 +18,7 @@ import { formatDateShort } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { Client } from '@/types/client'
 
-type Tab = 'pendentes-venda' | 'criar' | 'pendentes-contrato' | 'assinados'
+type Tab = 'boas-vindas' | 'pendentes-venda' | 'criar' | 'pendentes-contrato' | 'assinados'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -94,24 +95,36 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const template = templates[0] ?? null
   const placeholders = React.useMemo(() => (template ? extractPlaceholders(template.conteudo) : []), [template])
 
-  // "Pendente de contrato" = clientes que preencheram a ficha (app/ficha) e ainda não têm nenhum
-  // contrato vinculado (contracts.client_id) — não depende mais de venda registrada manualmente.
+  // Mesma ideia do pipeline do Suporte: "Boas-vindas" = ficha preenchida, ainda na etapa inicial
+  // (o Suporte ainda não decidiu seguir com o contrato); "Pendente de contrato" = Suporte já
+  // avançou o cliente pra etapa "Contrato" e ainda não existe nenhum contrato gerado aqui.
   const contractedClientIds = React.useMemo(
     () => new Set(contracts.filter((c) => c.clientId).map((c) => c.clientId as string)),
     [contracts],
   )
+  const sortByFicha = (a: Client, b: Client) =>
+    new Date(b.fichaCadastro?.submittedAt ?? b.createdAt).getTime() - new Date(a.fichaCadastro?.submittedAt ?? a.createdAt).getTime()
+  const boasVindasClients = React.useMemo(
+    () => clients.filter((c) => c.fichaCadastro && (c.stage === 'welcome' || c.stage === 'lead')).sort(sortByFicha),
+    [clients],
+  )
   const pendingClients = React.useMemo(
     () => clients
-      .filter((c) => c.fichaCadastro && !contractedClientIds.has(c.id))
-      .sort((a, b) => new Date(b.fichaCadastro?.submittedAt ?? b.createdAt).getTime() - new Date(a.fichaCadastro?.submittedAt ?? a.createdAt).getTime()),
+      .filter((c) => c.fichaCadastro && c.stage === 'contract' && !contractedClientIds.has(c.id))
+      .sort(sortByFicha),
     [clients, contractedClientIds],
   )
   const pendingContracts = React.useMemo(() => contracts.filter((c) => c.status !== 'assinado'), [contracts])
   const signedContracts = React.useMemo(() => contracts.filter((c) => c.status === 'assinado'), [contracts])
 
+  const boasVindasFilter = useMonthFilter()
   const pendingClientsFilter = useMonthFilter()
   const pendingFilter = useMonthFilter()
   const signedFilter = useMonthFilter()
+  const boasVindasInRange = React.useMemo(
+    () => boasVindasClients.filter((c) => withinBounds(c.fichaCadastro?.submittedAt ?? c.createdAt, boasVindasFilter.bounds)),
+    [boasVindasClients, boasVindasFilter.bounds],
+  )
   const pendingClientsInRange = React.useMemo(
     () => pendingClients.filter((c) => withinBounds(c.fichaCadastro?.submittedAt ?? c.createdAt, pendingClientsFilter.bounds)),
     [pendingClients, pendingClientsFilter.bounds],
@@ -247,6 +260,15 @@ export function ContratoView({ pageId }: { pageId: string }) {
     if (!selected) return
     const next: ContractStatus = selected.status === 'assinado' ? 'pendente' : 'assinado'
     void contractsService.updateContract(selected.id, { status: next })
+    // Espelha o botão de avançar etapa do Pipeline do Suporte: "Contrato" -> "Briefing". Só avança
+    // (nunca regride) e só quando o cliente ainda está exatamente na etapa "Contrato", pra não
+    // atropelar um cliente que o Suporte já levou mais além por conta própria.
+    if (next === 'assinado' && selected.clientId) {
+      const client = clients.find((c) => c.id === selected.clientId)
+      if (client && client.stage === 'contract') {
+        db.updateClient(client.id, { stage: 'briefing', contractSignedAt: new Date().toISOString() })
+      }
+    }
   }
 
   const removeContract = (c: Contract) => {
@@ -294,16 +316,24 @@ export function ContratoView({ pageId }: { pageId: string }) {
         ) : (
           <>
             <div className="mb-4 flex flex-wrap gap-2 rounded-2xl bg-white p-3 shadow-sm">
+              <TabPill active={tab === 'boas-vindas'} onClick={() => changeTab('boas-vindas')} icon={<UserRound className="h-3.5 w-3.5" />} label="Boas-vindas" count={boasVindasClients.length} />
               <TabPill active={tab === 'pendentes-venda'} onClick={() => changeTab('pendentes-venda')} icon={<ListTodo className="h-3.5 w-3.5" />} label="Pendente de contrato" count={pendingClients.length} />
               <TabPill active={tab === 'criar'} onClick={() => { setDraftCampos({}); setDraftClientId(null); changeTab('criar') }} icon={<Plus className="h-3.5 w-3.5" />} label="Criar contrato" />
               <TabPill active={tab === 'pendentes-contrato'} onClick={() => changeTab('pendentes-contrato')} icon={<Clock className="h-3.5 w-3.5" />} label="Contratos pendentes" count={pendingContracts.length} />
               <TabPill active={tab === 'assinados'} onClick={() => changeTab('assinados')} icon={<CheckCircle2 className="h-3.5 w-3.5" />} label="Contratos assinados" count={signedContracts.length} />
             </div>
 
+            {tab === 'boas-vindas' && (
+              <>
+                <MonthFilterBar filter={boasVindasFilter} />
+                <PendingClientsList clients={boasVindasInRange} onCreate={startNew} emptyText="Nenhum cliente em Boas-vindas nesse período." />
+              </>
+            )}
+
             {tab === 'pendentes-venda' && (
               <>
                 <MonthFilterBar filter={pendingClientsFilter} />
-                <PendingClientsList clients={pendingClientsInRange} onCreate={startNew} />
+                <PendingClientsList clients={pendingClientsInRange} onCreate={startNew} emptyText="Nenhuma ficha pendente de contrato nesse período." />
               </>
             )}
 
@@ -527,11 +557,19 @@ function MonthFilterBar({ filter }: { filter: MonthFilter }) {
  * contrato gerado — fila de "falta fazer o contrato". "Criar contrato" já leva pro formulário com
  * o nome e o CNPJ pré-preenchidos (e já dispara a busca automática), pra sumir da fila assim que
  * o contrato for gerado. */
-function PendingClientsList({ clients, onCreate }: { clients: Client[]; onCreate: (client: Client) => void }) {
+function PendingClientsList({
+  clients,
+  onCreate,
+  emptyText = 'Nenhuma ficha pendente de contrato — tudo em dia.',
+}: {
+  clients: Client[]
+  onCreate: (client: Client) => void
+  emptyText?: string
+}) {
   if (clients.length === 0) {
     return (
       <div className="grid min-h-[30vh] place-items-center rounded-2xl bg-white text-center text-sm text-gray-400 shadow-sm">
-        Nenhuma ficha pendente de contrato — tudo em dia.
+        {emptyText}
       </div>
     )
   }

@@ -322,6 +322,20 @@ END $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, menu_key)
   )`);
+  // Notifica em tempo real quem teve a própria allowlist alterada (ver watchOwnAccessChanges no
+  // front) — sem isso, a pessoa restrita continua vendo aba/quadro que acabou de perder acesso
+  // até recarregar a aba por conta própria, já que essas duas tabelas não tocam em lead_pages/
+  // lead_boards (que já tem SSE próprio).
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_user_page_access ON user_page_access;
+      CREATE TRIGGER notify_user_page_access AFTER INSERT OR UPDATE OR DELETE ON user_page_access
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_user_menu_access ON user_menu_access;
+      CREATE TRIGGER notify_user_menu_access AFTER INSERT OR UPDATE OR DELETE ON user_menu_access
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
   // Quem já tinha permissão granular por sub-aba do Comercial (comercial_novos_leads etc.)
   // ganha a chave única "comercial" — a granularidade agora é só por quadro (user_board_access),
   // não mais por página, senão essas pessoas perderiam acesso do nada nessa migração.

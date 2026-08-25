@@ -283,19 +283,22 @@ export function ContratoView({ pageId }: { pageId: string }) {
     }
   }
 
-  const toggleSigned = () => {
-    if (!selected) return
-    const next: ContractStatus = selected.status === 'assinado' ? 'pendente' : 'assinado'
-    void contractsService.updateContract(selected.id, { status: next })
+  const setContractStatus = (c: Contract, next: ContractStatus) => {
+    void contractsService.updateContract(c.id, { status: next })
     // Espelha o botão de avançar etapa do Pipeline do Suporte: "Contrato" -> "Briefing". Só avança
     // (nunca regride) e só quando o cliente ainda está exatamente na etapa "Contrato", pra não
     // atropelar um cliente que o Suporte já levou mais além por conta própria.
-    if (next === 'assinado' && selected.clientId) {
-      const client = clients.find((c) => c.id === selected.clientId)
+    if (next === 'assinado' && c.clientId) {
+      const client = clients.find((cl) => cl.id === c.clientId)
       if (client && client.stage === 'contract') {
         db.updateClient(client.id, { stage: 'briefing', contractSignedAt: new Date().toISOString() })
       }
     }
+  }
+
+  const toggleSigned = () => {
+    if (!selected) return
+    setContractStatus(selected, selected.status === 'assinado' ? 'pendente' : 'assinado')
   }
 
   const removeContract = (c: Contract) => {
@@ -391,7 +394,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
             {tab === 'pendentes-venda' && (
               <>
                 <MonthFilterBar filter={pendingClientsFilter} />
-                <PendingClientsList clients={pendingClientsInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} emptyText="Nenhuma ficha pendente de contrato nesse período." />
+                <PendingClientsList clients={pendingClientsInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={advanceStage} emptyText="Nenhuma ficha pendente de contrato nesse período." />
               </>
             )}
 
@@ -438,15 +441,31 @@ export function ContratoView({ pageId }: { pageId: string }) {
                               type="button"
                               onClick={() => setSelectedId(c.id)}
                               className={cn(
-                                'group flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
+                                'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
                                 selectedId === c.id ? 'bg-accent/10 text-accent' : 'text-gray-600 hover:bg-gray-50',
                               )}
                             >
                               <span className="min-w-0 flex-1 truncate font-medium">{contractLabel(c)}</span>
-                              <Trash2
-                                className="h-3.5 w-3.5 shrink-0 text-gray-300 opacity-0 hover:text-danger group-hover:opacity-100"
-                                onClick={(e) => { e.stopPropagation(); removeContract(c) }}
-                              />
+                              <span className="flex shrink-0 items-center gap-1">
+                                {tab === 'pendentes-contrato' && (
+                                  <span
+                                    role="button"
+                                    title="Marcar como assinado"
+                                    onClick={(e) => { e.stopPropagation(); setContractStatus(c, 'assinado') }}
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-green-100 text-green-600 transition-colors hover:bg-green-200"
+                                  >
+                                    <ArrowRight className="h-3 w-3" />
+                                  </span>
+                                )}
+                                <span
+                                  role="button"
+                                  title="Excluir contrato"
+                                  onClick={(e) => { e.stopPropagation(); removeContract(c) }}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-red-100 text-red-600 transition-colors hover:bg-red-200"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </span>
+                              </span>
                             </button>
                           </li>
                         ))}

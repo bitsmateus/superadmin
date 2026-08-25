@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { api, setToken, clearToken, startSse, stopSse } from '@/services/api'
+import { api, setToken, clearToken, startSse, stopSse, onSseEvent } from '@/services/api'
 import type { Profile, UserRole } from '@/services/supabase'
 import { bootDb, setCurrentProfile, teardownDb } from '@/services/db'
 import { bootTickets, teardownTickets } from '@/services/tickets'
@@ -23,6 +23,20 @@ function setState(next: Partial<AuthState>) {
 }
 
 let initialized = false
+
+// Trocar as permissões de alguém (Equipe → Permissões) não muda nenhuma linha de lead_pages/
+// lead_boards, então o SSE normal dessas tabelas nunca avisa quem foi restrito — a pessoa
+// continuava vendo o que já tinha carregado até recarregar a aba por conta própria. Ouve
+// mudanças na PRÓPRIA allowlist (user_page_access/user_menu_access) e recarrega sozinho assim
+// que alguém mexe nas permissões dela, pra nunca ficar vendo aba/quadro que acabou de perder acesso.
+function watchOwnAccessChanges(userId: string) {
+  onSseEvent((table, _type, data) => {
+    if (table !== 'user_page_access' && table !== 'user_menu_access') return
+    if ((data as { user_id?: string }).user_id !== userId) return
+    toast.info('Suas permissões de acesso foram atualizadas — recarregando…')
+    window.setTimeout(() => window.location.reload(), 1200)
+  })
+}
 
 async function init() {
   if (initialized) return
@@ -49,6 +63,7 @@ async function init() {
     const profile = await api.get<Profile>('/api/auth/me')
     setCurrentProfile(profile)
     setState({ profile, loading: false })
+    watchOwnAccessChanges(profile.id)
   } catch {
     clearToken()
     setState({ loading: false })
@@ -88,6 +103,7 @@ export async function signIn(email: string, password: string) {
   setCurrentProfile(user)
   setState({ profile: user, loading: false })
   startSse()
+  watchOwnAccessChanges(user.id)
   void bootDb()
   void bootTickets()
   void bootAnalytics()

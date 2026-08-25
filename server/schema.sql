@@ -736,6 +736,14 @@ DROP TRIGGER IF EXISTS notify_profiles ON profiles;
 CREATE TRIGGER notify_profiles AFTER INSERT OR UPDATE OR DELETE ON profiles
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+DROP TRIGGER IF EXISTS notify_user_page_access ON user_page_access;
+CREATE TRIGGER notify_user_page_access AFTER INSERT OR UPDATE OR DELETE ON user_page_access
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_user_menu_access ON user_menu_access;
+CREATE TRIGGER notify_user_menu_access AFTER INSERT OR UPDATE OR DELETE ON user_menu_access
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 DROP TRIGGER IF EXISTS notify_tickets ON tickets;
 CREATE TRIGGER notify_tickets AFTER INSERT OR UPDATE OR DELETE ON tickets
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();

@@ -211,10 +211,7 @@ export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: strin
   const milestones = useLeadMilestones()
   const sdrLabels = useLeadLabels('sdr')
   const milestoneById = React.useMemo(
-    () => new Map(milestones.map((m) => [
-      m.id,
-      { milestone: m.milestone, everAgendada: m.everAgendada, milestoneAt: m.milestoneAt, firstAgendadaAt: m.firstAgendadaAt },
-    ])),
+    () => new Map(milestones.map((m) => [m.id, { milestone: m.milestone, everAgendada: m.everAgendada }])),
     [milestones],
   )
   // Nasce com o mês atual e o anterior já como pills (além de "Personalizado") — os dois recortes
@@ -225,17 +222,18 @@ export function SdrMetricsGrid({ rows, title }: { rows: LeadRow[]; title?: strin
     const bounds = monthFilter.bounds
     const buckets = new Map<string, { total: number; agendados: number; noShow: number; vendas: number }>()
     for (const r of rows) {
+      // O período filtra a LEVA de leads (quem nasceu nesse mês) — não cada marco individualmente.
+      // Uma vez que o lead entrou na leva do mês, ele carrega o funil inteiro dali: se agendou, fica
+      // contado em "Agendada" pra sempre, não importa se depois virou Vendido/No-show/qualquer outro
+      // status — mudar a etiqueta não tira ele da contagem de quem já agendou.
+      if (!withinBounds(r.createdAt, bounds)) continue
       const name = r.sdr || 'Sem SDR'
       const b = buckets.get(name) ?? { total: 0, agendados: 0, noShow: 0, vendas: 0 }
       const info = milestoneById.get(r.id)
-      // Cada métrica usa a DATA DO PRÓPRIO EVENTO que ela representa (não a data de criação do
-      // lead) — "leads gerados" é sobre quando o lead entrou; "agendados/no-show/vendas" é sobre
-      // quando aquele marco aconteceu. Um lead antigo que só virou "Vendido" esse mês conta como
-      // venda desse mês, mesmo tendo sido criado antes.
-      if (withinBounds(r.createdAt, bounds)) b.total += 1
-      if (info?.everAgendada && withinBounds(info.firstAgendadaAt, bounds)) b.agendados += 1
-      if (info?.milestone === MILESTONE_NO_SHOW && withinBounds(info.milestoneAt, bounds)) b.noShow += 1
-      else if (info?.milestone === MILESTONE_VENDIDO && withinBounds(info.milestoneAt, bounds)) b.vendas += 1
+      b.total += 1
+      if (info?.everAgendada) b.agendados += 1
+      if (info?.milestone === MILESTONE_NO_SHOW) b.noShow += 1
+      else if (info?.milestone === MILESTONE_VENDIDO) b.vendas += 1
       buckets.set(name, b)
     }
     return Array.from(buckets.entries())

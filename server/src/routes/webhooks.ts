@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { query, queryOne } from '../db.js';
+import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
 
 /**
  * Webhook do Autentique — o contrato é gerado aqui, mas enviado pra assinatura fora do sistema (a
@@ -99,10 +100,7 @@ export async function webhookRoutes(app: FastifyInstance) {
     );
 
     if (contract.client_id) {
-      const client = await queryOne<{ stage: string }>('SELECT stage FROM clients WHERE id = $1', [contract.client_id]);
-      if (client?.stage === 'contract') {
-        await query(`UPDATE clients SET stage = 'briefing', contract_signed_at = NOW() WHERE id = $1`, [contract.client_id]);
-      }
+      await advanceClientToBriefing(contract.client_id);
     }
 
     return reply.status(200).send({ ok: true, matched: true });

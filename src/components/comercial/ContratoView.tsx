@@ -287,17 +287,12 @@ export function ContratoView({ pageId }: { pageId: string }) {
     }
   }
 
+  // O avanço "Contrato -> Briefing" (e a cópia das Atualizações do CRM pra Mensagens registradas)
+  // agora acontece no servidor, dentro do próprio PATCH — mesmo caminho usado pelo webhook do
+  // Autentique (ver server/src/lib/briefingHandoff.ts), pra não ter duas implementações da mesma
+  // regra desencontradas.
   const setContractStatus = (c: Contract, next: ContractStatus) => {
     void contractsService.updateContract(c.id, { status: next })
-    // Espelha o botão de avançar etapa do Pipeline do Suporte: "Contrato" -> "Briefing". Só avança
-    // (nunca regride) e só quando o cliente ainda está exatamente na etapa "Contrato", pra não
-    // atropelar um cliente que o Suporte já levou mais além por conta própria.
-    if (next === 'assinado' && c.clientId) {
-      const client = clients.find((cl) => cl.id === c.clientId)
-      if (client && client.stage === 'contract') {
-        db.updateClient(client.id, { stage: 'briefing', contractSignedAt: new Date().toISOString() })
-      }
-    }
   }
 
   const toggleSigned = () => {

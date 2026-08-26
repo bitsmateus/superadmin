@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { query } from '../db.js';
 import { restrictedBoardFilter } from './leadBoards.js';
 import { renderContractPdf } from '../lib/contractPdf.js';
+import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
 
 /**
  * Aba Contrato (Dashboard Comercial) — modelo(s) padrão + contratos gerados por cliente. Reusa a
@@ -102,8 +103,16 @@ export async function contractRoutes(app: FastifyInstance) {
       sets.push(`updated_at = NOW()`);
 
       params.push(req.params.id);
-      const [contract] = await query(`UPDATE contracts SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
+      const [contract] = await query<{ id: string; client_id: string | null; status: string }>(
+        `UPDATE contracts SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params
+      );
       if (!contract) return reply.status(404).send({ message: 'Contrato não encontrado' });
+      // Mesma etapa "Contrato -> Briefing" que o webhook do Autentique dispara sozinho — aqui é o
+      // caminho manual ("Marcar como assinado" na tela), unificado no mesmo lugar pra não ter duas
+      // implementações da mesma regra (ver server/src/lib/briefingHandoff.ts).
+      if (req.body.status === 'assinado' && contract.client_id) {
+        await advanceClientToBriefing(contract.client_id);
+      }
       return contract;
     }
   );

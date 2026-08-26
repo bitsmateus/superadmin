@@ -2,9 +2,9 @@ import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
 import type { LeadPage } from '@/types/leadBoard'
 
-type PageRow = { id: string; name: string; position: number; archived_at: string | null; created_at: string }
+type PageRow = { id: string; name: string; position: number; archived_at: string | null; created_at: string; is_notas: boolean }
 function rowToPage(r: PageRow): LeadPage {
-  return { id: r.id, name: r.name, position: r.position, archivedAt: r.archived_at }
+  return { id: r.id, name: r.name, position: r.position, archivedAt: r.archived_at, isNotas: r.is_notas }
 }
 
 // ---------- Cache das abas ativas (mesmo padrão reativo de leadBoardsService) ----------
@@ -77,6 +77,15 @@ export const leadPagesService = {
       await reloadPages()
     } catch (err) {
       toast.error('Falha ao renomear a aba: ' + (err as Error).message)
+    }
+  },
+
+  async setIsNotas(id: string, isNotas: boolean): Promise<void> {
+    try {
+      await api.patch(`/api/lead-pages/${id}`, { isNotas })
+      await reloadPages()
+    } catch (err) {
+      toast.error('Falha ao atualizar a aba: ' + (err as Error).message)
     }
   },
 

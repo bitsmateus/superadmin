@@ -881,6 +881,27 @@ END $$`);
   // token emitido ANTES dessa marca é recusado, mesmo dentro do prazo normal de expiração (7 dias).
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS session_invalidated_at TIMESTAMPTZ`);
 
+  // Aba marcada is_notas vira um bloco de notas simples (sem quadros/kanban/métricas/SDR/filtro) —
+  // uma nota por dia, com formatação básica (negrito etc.), pra alguém anotar o que precisa fazer.
+  await pool.query(`ALTER TABLE lead_pages ADD COLUMN IF NOT EXISTS is_notas BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS page_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    page_id TEXT NOT NULL REFERENCES lead_pages(id) ON DELETE CASCADE,
+    note_date DATE NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (page_id, note_date)
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS page_notes_page_id_idx ON page_notes(page_id)`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_page_notes ON page_notes;
+      CREATE TRIGGER notify_page_notes AFTER INSERT OR UPDATE OR DELETE ON page_notes
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

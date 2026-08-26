@@ -291,7 +291,10 @@ CREATE TABLE IF NOT EXISTS lead_pages (
   name TEXT NOT NULL,
   position INT NOT NULL DEFAULT 0,
   archived_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- Aba marcada is_notas vira um bloco de notas simples (sem quadros/kanban/métricas/SDR/filtro),
+  -- uma nota por dia (ver page_notes) — em vez do quadro genérico de captação de leads.
+  is_notas BOOLEAN NOT NULL DEFAULT false
 );
 
 INSERT INTO lead_pages (id, name, position) VALUES
@@ -773,6 +776,10 @@ DROP TRIGGER IF EXISTS notify_lead_pages ON lead_pages;
 CREATE TRIGGER notify_lead_pages AFTER INSERT OR UPDATE OR DELETE ON lead_pages
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+DROP TRIGGER IF EXISTS notify_page_notes ON page_notes;
+CREATE TRIGGER notify_page_notes AFTER INSERT OR UPDATE OR DELETE ON page_notes
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 DROP TRIGGER IF EXISTS notify_lead_boards ON lead_boards;
 CREATE TRIGGER notify_lead_boards AFTER INSERT OR UPDATE OR DELETE ON lead_boards
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
@@ -876,6 +883,20 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE INDEX IF NOT EXISTS contracts_board_id_idx ON contracts(board_id);
 CREATE INDEX IF NOT EXISTS contracts_venda_lead_id_idx ON contracts(venda_lead_id);
 CREATE INDEX IF NOT EXISTS contracts_client_id_idx ON contracts(client_id);
+
+-- ---------- page_notes ----------
+-- Uma nota por dia (UNIQUE page_id+note_date) pra abas marcadas is_notas — bloco de notas simples,
+-- sem quadros/kanban, com formatação básica (negrito etc.) no corpo em HTML.
+CREATE TABLE IF NOT EXISTS page_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  page_id TEXT NOT NULL REFERENCES lead_pages(id) ON DELETE CASCADE,
+  note_date DATE NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (page_id, note_date)
+);
+CREATE INDEX IF NOT EXISTS page_notes_page_id_idx ON page_notes(page_id);
 
 -- ---------- commercial_months ----------
 -- Painel do Mês (Dashboard Comercial) — um registro por mês (id = 'YYYY-MM') só com os campos

@@ -58,7 +58,7 @@ async function hasComercialAccess(userId: string, role: string): Promise<boolean
  * enxerga "Novos Leads" e "CRM Luis", nunca "CRM Arthur". null = sem restrição (admin/supervisor,
  * ou usuário sem restrict_access) · [] = nenhuma aba marcada = não vê nenhuma (a pessoa que
  * gerencia Equipe precisa marcar manualmente o que cada um vê, sem abas marcadas por padrão). */
-async function allowedPageIds(userId: string, role: string): Promise<string[] | null> {
+export async function allowedPageIds(userId: string, role: string): Promise<string[] | null> {
   if (role !== 'suporte') return null;
   const profile = await queryOne<{ restrict_access: boolean }>(
     'SELECT restrict_access FROM profiles WHERE id = $1',
@@ -124,8 +124,8 @@ export async function leadPageRoutes(app: FastifyInstance) {
     }
   );
 
-  // PATCH /api/lead-pages/:id — admin only, renomear/reordenar
-  app.patch<{ Params: { id: string }; Body: { name?: string; position?: number } }>(
+  // PATCH /api/lead-pages/:id — admin only, renomear/reordenar/marcar como bloco de notas
+  app.patch<{ Params: { id: string }; Body: { name?: string; position?: number; isNotas?: boolean } }>(
     '/api/lead-pages/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -137,6 +137,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
       let i = 1;
       if (req.body.name !== undefined) { sets.push(`name = $${i++}`); params.push(req.body.name.trim()); }
       if (req.body.position !== undefined) { sets.push(`position = $${i++}`); params.push(req.body.position); }
+      if (req.body.isNotas !== undefined) { sets.push(`is_notas = $${i++}`); params.push(req.body.isNotas); }
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
 
       params.push(req.params.id);

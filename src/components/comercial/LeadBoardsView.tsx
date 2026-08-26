@@ -23,6 +23,7 @@ import {
   Rows3,
   ScrollText,
   Search,
+  StickyNote,
   Trash2,
   Upload,
   UserRound,
@@ -237,6 +238,8 @@ function ToolbarButton({
  * Arquivar não apaga nada: quadros e leads continuam intactos no banco até alguém restaurar. */
 function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageName: string; boards: LeadBoard[] }) {
   const navigate = useNavigate()
+  const pages = useLeadPages()
+  const isNotas = pages.find((p) => p.id === pageId)?.isNotas ?? false
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [duplicateOpen, setDuplicateOpen] = React.useState(false)
@@ -295,6 +298,20 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
     }
   }
 
+  const toggleNotas = async () => {
+    if (!isNotas && boards.length > 0) {
+      if (!window.confirm(`"${pageName}" tem ${boards.length} quadro(s) — eles continuam salvos, mas ficam inacessíveis por aqui enquanto a aba for um bloco de notas. Continuar?`)) return
+    }
+    setBusy(true)
+    try {
+      await leadPagesService.setIsNotas(pageId, !isNotas)
+      toast.success(isNotas ? `"${pageName}" voltou a ser um quadro normal.` : `"${pageName}" virou um bloco de notas.`)
+      setOpen(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div ref={ref} className="relative">
       <ToolbarButton icon={<MoreHorizontal className="h-3.5 w-3.5" />} onClick={() => setOpen((o) => !o)} title="Gerenciar esta aba">
@@ -309,6 +326,15 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
           >
             <Copy className="h-3.5 w-3.5" />
             Duplicar aba
+          </button>
+          <button
+            type="button"
+            onClick={toggleNotas}
+            disabled={busy}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04] disabled:opacity-50"
+          >
+            <StickyNote className="h-3.5 w-3.5" />
+            {isNotas ? 'Voltar a ser quadro normal' : 'Marcar como bloco de notas'}
           </button>
           <button
             type="button"

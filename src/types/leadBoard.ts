@@ -15,6 +15,9 @@ export interface LeadPage {
   name: string
   position: number
   archivedAt: string | null
+  /** Aba marcada como bloco de notas — renderiza NotasView (uma nota por dia, com formatação
+   * básica) em vez do quadro genérico de captação de leads. */
+  isNotas: boolean
 }
 
 export interface LeadBoard {

@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { LeadBoardsView } from '@/components/comercial/LeadBoardsView'
 import { VendasView } from '@/components/comercial/VendasView'
 import { ContratoView } from '@/components/comercial/ContratoView'
+import { NotasView } from '@/components/comercial/NotasView'
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 
@@ -22,6 +23,9 @@ export function ComercialPage() {
   // Mesma ideia da aba de Vendas: aba com um quadro marcado como is_contrato vira a tela de
   // geração de contrato (formulário por CNPJ + texto editável), não o quadro genérico.
   const isContratoPage = boards.some((b) => b.page === pageId && b.isContrato)
+  // Aba marcada is_notas (flag da própria lead_page, não de um quadro — pensada pra abas sem
+  // nenhum quadro) vira um bloco de notas simples em vez do quadro genérico.
+  const isNotasPage = pages.some((p) => p.id === pageId && p.isNotas)
 
   if (!booted) {
     return (
@@ -43,6 +47,7 @@ export function ComercialPage() {
 
   if (isVendasPage) return <VendasView pageId={pageId as string} />
   if (isContratoPage) return <ContratoView pageId={pageId as string} />
+  if (isNotasPage) return <NotasView pageId={pageId as string} />
 
   return <LeadBoardsView page={pageId as string} />
 }

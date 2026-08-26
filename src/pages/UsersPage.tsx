@@ -365,6 +365,68 @@ function ProfileRow({
 interface PageLite {
   id: string
   name: string
+  is_financeiro: boolean
+}
+
+/** Bloco "marcar todos" + lista de abas de uma área (Comercial ou Financeiro) — cada aba marcada
+ * direto, sem herdar de um checkbox "geral" por cima (nenhuma marcada = sem acesso à área). */
+function PageAccessGroup({
+  label,
+  emptyText,
+  pages,
+  pageIds,
+  setPageIds,
+  togglePageId,
+}: {
+  label: string
+  emptyText: string
+  pages: PageLite[]
+  pageIds: Set<string>
+  setPageIds: React.Dispatch<React.SetStateAction<Set<string>>>
+  togglePageId: (id: string) => void
+}) {
+  if (pages.length === 0 && label !== MENU_ACCESS_GROUP_LABEL.comercial) return null
+  const allChecked = pages.length > 0 && pages.every((p) => pageIds.has(p.id))
+  return (
+    <div>
+      <label className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-foreground/40">
+        <input
+          type="checkbox"
+          checked={allChecked}
+          onChange={() => {
+            setPageIds((prev) => {
+              const next = new Set(prev)
+              for (const p of pages) {
+                if (allChecked) next.delete(p.id)
+                else next.add(p.id)
+              }
+              return next
+            })
+          }}
+          className="h-3 w-3 rounded border-line"
+        />
+        {label}
+        <span className="font-normal normal-case text-foreground/30">— marcar todos</span>
+      </label>
+      {pages.length === 0 ? (
+        <p className="text-[11px] text-foreground/40">{emptyText}</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {pages.map((p) => (
+            <label key={p.id} className="flex items-center gap-2 rounded-md border border-line/60 bg-card px-2.5 py-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={pageIds.has(p.id)}
+                onChange={() => togglePageId(p.id)}
+                className="h-3.5 w-3.5 rounded border-line"
+              />
+              <span className="flex-1 text-foreground/85">{p.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function EditUserModal({
@@ -541,47 +603,27 @@ function EditUserModal({
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Comercial não tem um item "todas as abas" — cada aba é marcada direto, sem
-                    marcação por cima; nenhuma marcada = a pessoa não vê nada do Comercial. */}
-                <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-foreground/40">
-                    <input
-                      type="checkbox"
-                      checked={pages.length > 0 && pages.every((p) => pageIds.has(p.id))}
-                      onChange={() => {
-                        const allChecked = pages.length > 0 && pages.every((p) => pageIds.has(p.id))
-                        setPageIds((prev) => {
-                          const next = new Set(prev)
-                          for (const p of pages) {
-                            if (allChecked) next.delete(p.id)
-                            else next.add(p.id)
-                          }
-                          return next
-                        })
-                      }}
-                      className="h-3 w-3 rounded border-line"
-                    />
-                    {MENU_ACCESS_GROUP_LABEL.comercial}
-                    <span className="font-normal normal-case text-foreground/30">— marcar todos</span>
-                  </label>
-                  {pages.length === 0 ? (
-                    <p className="text-[11px] text-foreground/40">Nenhuma aba do Comercial cadastrada ainda.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                      {pages.map((p) => (
-                        <label key={p.id} className="flex items-center gap-2 rounded-md border border-line/60 bg-card px-2.5 py-1.5 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={pageIds.has(p.id)}
-                            onChange={() => togglePageId(p.id)}
-                            className="h-3.5 w-3.5 rounded border-line"
-                          />
-                          <span className="flex-1 text-foreground/85">{p.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {/* Comercial/Financeiro não têm um item "todas as abas" — cada aba é marcada
+                    direto, sem marcação por cima; nenhuma marcada = a pessoa não vê nada daquela
+                    área. Financeiro (Vendas/Contrato) tem seção própria — mesmo critério do
+                    Sidebar (board is_vendas/is_contrato) — pra dar pra liberar/restringir
+                    separado do resto do Comercial. */}
+                <PageAccessGroup
+                  label={MENU_ACCESS_GROUP_LABEL.comercial}
+                  emptyText="Nenhuma aba do Comercial cadastrada ainda."
+                  pages={pages.filter((p) => !p.is_financeiro)}
+                  pageIds={pageIds}
+                  setPageIds={setPageIds}
+                  togglePageId={togglePageId}
+                />
+                <PageAccessGroup
+                  label="Financeiro"
+                  emptyText="Nenhuma aba do Financeiro cadastrada ainda."
+                  pages={pages.filter((p) => p.is_financeiro)}
+                  pageIds={pageIds}
+                  setPageIds={setPageIds}
+                  togglePageId={togglePageId}
+                />
 
                 {(() => {
                   const groupItems = MENU_ACCESS_ITEMS.filter((item) => item.group === 'suporte')

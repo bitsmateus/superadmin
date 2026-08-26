@@ -85,16 +85,22 @@ export async function leadPageRoutes(app: FastifyInstance) {
       if (!wantsArchived && !(await hasComercialAccess(sub, role))) return [];
 
       const cond = wantsArchived ? 'archived_at IS NOT NULL' : 'archived_at IS NULL';
+      // is_financeiro: true se a aba tem algum quadro marcado is_vendas/is_contrato — mesmo
+      // critério que o Sidebar usa pra decidir o que entra no grupo "Financeiro" (ver
+      // src/components/layout/Sidebar.tsx), reusado aqui pra separar a seção de Permissões.
+      const financeiroExists = `EXISTS (
+        SELECT 1 FROM lead_boards lb WHERE lb.page = lead_pages.id AND (lb.is_vendas OR lb.is_contrato)
+      ) AS is_financeiro`;
       if (!wantsArchived) {
         const allowed = await allowedPageIds(sub, role);
         if (allowed !== null) {
           return query(
-            `SELECT * FROM lead_pages WHERE ${cond} AND id = ANY($1) ORDER BY position, created_at`,
+            `SELECT lead_pages.*, ${financeiroExists} FROM lead_pages WHERE ${cond} AND id = ANY($1) ORDER BY position, created_at`,
             [allowed]
           );
         }
       }
-      return query(`SELECT * FROM lead_pages WHERE ${cond} ORDER BY position, created_at`);
+      return query(`SELECT lead_pages.*, ${financeiroExists} FROM lead_pages WHERE ${cond} ORDER BY position, created_at`);
     }
   );
 

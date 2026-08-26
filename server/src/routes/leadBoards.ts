@@ -485,10 +485,13 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     }
   );
 
-  // GET /api/lead-events?page=xxx — log de tudo que aconteceu numa aba (todos os SDRs/leads dela),
-  // pro botão "Log" ao lado de Filtro. Mesmas 500 mais recentes, sem paginação (é uma conferência
-  // rápida, não uma auditoria completa — a linha do tempo por lead continua sendo a fonte completa).
-  app.get<{ Querystring: { lead_row_id?: string; page?: string } }>(
+  // GET /api/lead-events?page=xxx&from=iso&to=iso — log de tudo que aconteceu numa aba (todos os
+  // SDRs/leads dela), pro botão "Log" ao lado de Filtro. from/to são timestamps ISO já calculados
+  // no fuso do navegador (evita ambiguidade de "hoje"/"ontem" por fuso do servidor). Mesmas 500
+  // mais recentes DENTRO do período, sem paginação — o filtro de data entra na query, não só no
+  // front, senão um dia muito movimentado empurra dias mais antigos pra fora do LIMIT antes mesmo
+  // de filtrar.
+  app.get<{ Querystring: { lead_row_id?: string; page?: string; from?: string; to?: string } }>(
     '/api/lead-events',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -500,14 +503,17 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         let boardIds = boardRows.map((r) => r.id);
         if (allowed !== null) boardIds = boardIds.filter((id) => allowed.includes(id));
         if (!boardIds.length) return [];
+        const dateFilter = req.query.from && req.query.to ? 'AND le.created_at >= $2 AND le.created_at < $3' : '';
+        const params: unknown[] = [boardIds];
+        if (req.query.from && req.query.to) params.push(req.query.from, req.query.to);
         return query(
           `SELECT le.*, lr.nome AS lead_nome, lr.sdr AS lead_sdr
            FROM lead_events le
            JOIN lead_rows lr ON lr.id = le.lead_row_id
-           WHERE lr.board_id = ANY($1)
+           WHERE lr.board_id = ANY($1) ${dateFilter}
            ORDER BY le.created_at DESC
            LIMIT 500`,
-          [boardIds]
+          params
         );
       }
 

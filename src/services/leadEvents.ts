@@ -48,9 +48,12 @@ export const leadEventsService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
 
   /** Log de tudo que aconteceu numa aba (todos os leads/SDRs dela) — pro botão "Log" ao lado de
-   * Filtro. Busca sob demanda a cada abertura do modal, sem cache (é uma conferência pontual). */
-  async getPageEvents(page: string): Promise<PageLeadEvent[]> {
-    const rows = await api.get<PageEventRow[]>(`/api/lead-events?page=${encodeURIComponent(page)}`)
+   * Filtro. Busca sob demanda a cada abertura do modal, sem cache (é uma conferência pontual).
+   * from/to (opcionais) são timestamps ISO já no fuso local — o filtro de dia entra na query. */
+  async getPageEvents(page: string, range?: { from: string; to: string }): Promise<PageLeadEvent[]> {
+    const qs = new URLSearchParams({ page })
+    if (range) { qs.set('from', range.from); qs.set('to', range.to) }
+    const rows = await api.get<PageEventRow[]>(`/api/lead-events?${qs.toString()}`)
     return rows.map((r) => ({ ...rowToEvent(r), leadNome: r.lead_nome || 'Sem nome', leadSdr: r.lead_sdr || '' }))
   },
 

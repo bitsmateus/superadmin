@@ -39,6 +39,19 @@ function watchOwnAccessChanges(userId: string) {
   })
 }
 
+/** Um admin pode "deslogar" alguém em Equipe (ver UsersPage) — se essa sessão é a alvo, sai na
+ * hora, sem esperar a próxima chamada de API falhar pra perceber (ela também falharia, já que
+ * o servidor recusa o token a partir de session_invalidated_at, mas isso só aconteceria no
+ * próximo clique). */
+function watchForceLogout(userId: string) {
+  onSseEvent((table, type, data) => {
+    if (table !== 'auth' || type !== 'force_logout') return
+    if ((data as { user_id?: string }).user_id !== userId) return
+    toast.error('Sua sessão foi encerrada por um administrador.')
+    void signOut()
+  })
+}
+
 async function init() {
   if (initialized) return
   initialized = true
@@ -65,6 +78,7 @@ async function init() {
     setCurrentProfile(profile)
     setState({ profile, loading: false })
     watchOwnAccessChanges(profile.id)
+    watchForceLogout(profile.id)
     // Tema salvo na conta manda mais que o que já estava aplicado localmente nesse navegador —
     // assim a pessoa vê o mesmo tema dela em qualquer dispositivo que logar.
     if (profile.theme) setThemeGlobal(profile.theme)
@@ -108,6 +122,7 @@ export async function signIn(email: string, password: string) {
   setState({ profile: user, loading: false })
   startSse()
   watchOwnAccessChanges(user.id)
+  watchForceLogout(user.id)
   if (user.theme) setThemeGlobal(user.theme)
   void bootDb()
   void bootTickets()

@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import {
   CheckCircle2,
   Loader2,
+  LogOut,
   Pencil,
   ShieldCheck,
   Trash2,
@@ -90,11 +91,36 @@ const ROLE_TONE: Record<UserRole, 'info' | 'success' | 'warning'> = {
   suporte: 'warning',
 }
 
+/** "Quem está online agora" pra Equipe — estado inicial via GET, depois se atualiza sozinho pelos
+ * eventos de presence do SSE (ver server/src/sse.ts). Uma pessoa pode ter mais de uma aba/
+ * dispositivo aberto; só sai da lista quando a ÚLTIMA conexão dela cai. */
+function useOnlineUserIds(): Set<string> {
+  const [online, setOnline] = React.useState<Set<string>>(new Set())
+  React.useEffect(() => {
+    api.get<string[]>('/api/users/online').then((ids) => setOnline(new Set(ids))).catch(() => {})
+    const unsub = onSseEvent((table, type, data) => {
+      if (table !== 'presence') return
+      const userId = (data as { user_id?: string }).user_id
+      if (!userId) return
+      setOnline((prev) => {
+        const next = new Set(prev)
+        if (type === 'online') next.add(userId)
+        else next.delete(userId)
+        return next
+      })
+    })
+    return unsub
+  }, [])
+  return online
+}
+
 export function UsersPage() {
   const { profile, loading: authLoading } = useAuth()
   const [profiles, setProfiles] = React.useState<Profile[]>([])
   const [loading, setLoading] = React.useState(true)
   const [inviteOpen, setInviteOpen] = React.useState(false)
+  const onlineIds = useOnlineUserIds()
+  const canForceLogout = profile?.role === 'admin'
 
   const reload = React.useCallback(async () => {
     setLoading(true)
@@ -174,6 +200,7 @@ export function UsersPage() {
             <THead>
               <tr>
                 <TH>Usuário</TH>
+                <TH>Status</TH>
                 <TH>E-mail</TH>
                 <TH>Papel</TH>
                 <TH>Área</TH>
@@ -188,6 +215,8 @@ export function UsersPage() {
                   key={p.id}
                   profile={p}
                   isSelf={p.id === profile?.id}
+                  online={onlineIds.has(p.id)}
+                  canForceLogout={canForceLogout}
                   onChangeArea={(area) => changeArea(p.id, area)}
                   onSaved={() => reload()}
                   onDeleted={() => reload()}
@@ -222,12 +251,16 @@ export function UsersPage() {
 function ProfileRow({
   profile,
   isSelf,
+  online,
+  canForceLogout,
   onChangeArea,
   onSaved,
   onDeleted,
 }: {
   profile: Profile
   isSelf: boolean
+  online: boolean
+  canForceLogout: boolean
   onChangeArea: (area: TeamArea) => void | Promise<void>
   onSaved: () => void
   onDeleted: () => void
@@ -235,6 +268,20 @@ function ProfileRow({
   const [confirmRemoveOpen, setConfirmRemoveOpen] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
+  const [loggingOut, setLoggingOut] = React.useState(false)
+
+  const forceLogout = async () => {
+    if (!window.confirm(`Deslogar "${profile.name || profile.email}" agora? A sessão dela é encerrada imediatamente.`)) return
+    setLoggingOut(true)
+    try {
+      await api.post(`/api/users/${profile.id}/logout`)
+      toast.success('Usuário deslogado')
+    } catch (err) {
+      toast.error('Falha ao deslogar: ' + (err instanceof Error ? err.message : 'Erro'))
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   const removeProfile = async () => {
     setRemoving(true)
@@ -270,6 +317,15 @@ function ProfileRow({
             </div>
           </div>
         </div>
+      </TD>
+      <TD>
+        <span className="inline-flex items-center gap-1.5 text-xs text-foreground/60">
+          <span
+            className={cn('h-2 w-2 shrink-0 rounded-full', online ? 'bg-success' : 'bg-foreground/20')}
+            title={online ? 'Online agora' : 'Offline'}
+          />
+          {online ? 'Online' : 'Offline'}
+        </span>
       </TD>
       <TD className="text-foreground/70">{profile.email}</TD>
       <TD>
@@ -310,6 +366,18 @@ function ProfileRow({
             <Pencil className="h-3.5 w-3.5" />
             Editar
           </button>
+          {canForceLogout && !isSelf && online && (
+            <button
+              type="button"
+              onClick={forceLogout}
+              disabled={loggingOut}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50"
+              aria-label="Deslogar"
+            >
+              {loggingOut ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+              Deslogar
+            </button>
+          )}
           {!isSelf && (
             <button
               type="button"

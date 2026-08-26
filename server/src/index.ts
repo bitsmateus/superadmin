@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
-import { startRealtimeListener, onDbChange, runMigrations } from './db.js';
+import { startRealtimeListener, onDbChange, runMigrations, queryOne } from './db.js';
 import { isOriginAllowed } from './lib/corsOrigin.js';
 import { broadcast } from './sse.js';
 import { authRoutes } from './routes/auth.js';
@@ -51,6 +51,20 @@ async function main() {
       await req.jwtVerify();
     } catch (err) {
       reply.status(401).send({ message: 'Token inválido ou expirado' });
+      return;
+    }
+    // "Deslogar" alguém em Equipe marca profiles.session_invalidated_at — qualquer token emitido
+    // antes disso (iat, em segundos) já não vale mais, mesmo sem ter expirado de verdade ainda.
+    const { sub, iat } = req.user as { sub: string; iat?: number };
+    if (sub && iat) {
+      const profile = await queryOne<{ session_invalidated_at: string | null }>(
+        'SELECT session_invalidated_at FROM profiles WHERE id = $1',
+        [sub]
+      );
+      if (profile?.session_invalidated_at && new Date(profile.session_invalidated_at).getTime() > iat * 1000) {
+        reply.status(401).send({ message: 'Sessão encerrada por um administrador' });
+        return;
+      }
     }
   });
 

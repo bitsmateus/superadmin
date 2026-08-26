@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import { query, queryOne } from '../db.js';
+import { getOnlineUserIds, broadcastToUser } from '../sse.js';
 
 interface Profile {
   id: string;
@@ -157,6 +158,34 @@ export async function authRoutes(app: FastifyInstance) {
       );
       if (!updated) return reply.status(404).send({ message: 'Usuário não encontrado' });
       return updated;
+    }
+  );
+
+  // GET /api/users/online — admin only. Estado inicial de "quem está online" (ver sse.ts,
+  // presence) — depois disso a tela de Equipe se atualiza sozinha pelos eventos de presence.
+  app.get('/api/users/online', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { role } = req.user as { role: string };
+    if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
+    return getOnlineUserIds();
+  });
+
+  // POST /api/users/:id/logout — admin only. "Desloga" a pessoa: qualquer token dela emitido
+  // antes de agora vira inválido (ver session_invalidated_at em app.authenticate), e quem estiver
+  // com o app aberto agora é avisado na hora pelo SSE, sem precisar esperar a próxima requisição
+  // falhar pra perceber.
+  app.post<{ Params: { id: string } }>(
+    '/api/users/:id/logout',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { role } = req.user as { role: string };
+      if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
+      const [updated] = await query<{ id: string }>(
+        'UPDATE profiles SET session_invalidated_at = NOW() WHERE id = $1 RETURNING id',
+        [req.params.id]
+      );
+      if (!updated) return reply.status(404).send({ message: 'Usuário não encontrado' });
+      broadcastToUser(req.params.id, 'auth', 'force_logout', { user_id: req.params.id });
+      return reply.status(204).send();
     }
   );
 

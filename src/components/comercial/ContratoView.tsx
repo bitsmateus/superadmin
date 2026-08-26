@@ -606,13 +606,6 @@ function ContractsList({
   onArchive: (contract: Contract) => void
   emptyText: string
 }) {
-  if (contracts.length === 0) {
-    return (
-      <div className="grid min-h-[30vh] place-items-center rounded-2xl bg-card text-center text-sm text-foreground/40 shadow-sm">
-        {emptyText}
-      </div>
-    )
-  }
   return (
     <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
       <div className="overflow-x-auto">
@@ -627,6 +620,13 @@ function ContractsList({
             </tr>
           </thead>
           <tbody>
+            {contracts.length === 0 && (
+              <tr>
+                <td colSpan={showSignedAt ? 5 : 4} className="px-4 py-10 text-center text-sm text-foreground/40">
+                  {emptyText}
+                </td>
+              </tr>
+            )}
             {contracts.map((c) => (
               <tr
                 key={c.id}
@@ -732,13 +732,6 @@ function PendingClientsList({
   onRegress?: (client: Client) => void
   emptyText?: string
 }) {
-  if (clients.length === 0) {
-    return (
-      <div className="grid min-h-[30vh] place-items-center rounded-2xl bg-card text-center text-sm text-foreground/40 shadow-sm">
-        {emptyText}
-      </div>
-    )
-  }
   return (
     <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
       <div className="overflow-x-auto">
@@ -753,6 +746,13 @@ function PendingClientsList({
             </tr>
           </thead>
           <tbody>
+            {clients.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center text-sm text-foreground/40">
+                  {emptyText}
+                </td>
+              </tr>
+            )}
             {clients.map((c) => (
               <tr
                 key={c.id}

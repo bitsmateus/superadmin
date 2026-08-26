@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowRight, CheckCircle2, ChevronDown, Clock, Download, Eye, FileText, ListTodo,
+  ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Clock, Download, Eye, FileText, ListTodo,
   Loader2, Pencil, Plus, Printer, Save, Search, Settings, Trash2, UserRound, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
@@ -16,7 +16,7 @@ import { db } from '@/services/db'
 import { canDeleteClient } from '@/services/supabase'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { StageAgeBadge } from '@/components/crm/StageAgeBadge'
-import { NEXT_STAGE, STAGE_COLORS } from '@/constants/stageColors'
+import { NEXT_STAGE, PREV_STAGE, STAGE_COLORS } from '@/constants/stageColors'
 import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/useContracts'
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
@@ -330,6 +330,17 @@ export function ContratoView({ pageId }: { pageId: string }) {
     toast.success(`Etapa: ${STAGE_COLORS[next].label}`)
   }
 
+  // Botão de voltar etapa, ao lado do de avançar — "Pendente de contrato" volta pra "Boas-vindas".
+  // Em Boas-vindas não tem etapa anterior (PREV_STAGE não tem entrada pra "welcome"), então o botão
+  // fica ali mas não faz nada além de avisar, sem risco de mandar o cliente pra um estado inválido.
+  const regressStage = (client: Client) => {
+    const prev = PREV_STAGE[client.stage]
+    if (!prev) { toast.info('Cliente já está na primeira etapa'); return }
+    db.updateClient(client.id, { stage: prev })
+    db.addLog(client.id, 'Etapa revertida', `${STAGE_COLORS[client.stage].label} → ${STAGE_COLORS[prev].label}`)
+    toast.success(`Etapa: ${STAGE_COLORS[prev].label}`)
+  }
+
   const archiveClient = (client: Client) => {
     const label = client.company || client.name
     const ok = window.confirm(
@@ -409,14 +420,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
             {tab === 'boas-vindas' && (
               <>
                 <MonthFilterBar filter={boasVindasFilter} />
-                <PendingClientsList clients={boasVindasInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={advanceStage} emptyText="Nenhum cliente em Boas-vindas nesse período." />
+                <PendingClientsList clients={boasVindasInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={advanceStage} onRegress={regressStage} emptyText="Nenhum cliente em Boas-vindas nesse período." />
               </>
             )}
 
             {tab === 'pendentes-venda' && (
               <>
                 <MonthFilterBar filter={pendingClientsFilter} />
-                <PendingClientsList clients={pendingClientsInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={createContractFromDrawer} emptyText="Nenhuma ficha pendente de contrato nesse período." />
+                <PendingClientsList clients={pendingClientsInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={createContractFromDrawer} onRegress={regressStage} emptyText="Nenhuma ficha pendente de contrato nesse período." />
               </>
             )}
 
@@ -684,12 +695,14 @@ function PendingClientsList({
   onOpen,
   onArchive,
   onAdvance,
+  onRegress,
   emptyText = 'Nenhuma ficha pendente de contrato — tudo em dia.',
 }: {
   clients: Client[]
   onOpen: (client: Client) => void
   onArchive?: (client: Client) => void
   onAdvance?: (client: Client) => void
+  onRegress?: (client: Client) => void
   emptyText?: string
 }) {
   if (clients.length === 0) {
@@ -725,6 +738,16 @@ function PendingClientsList({
                 <td className="px-4 py-3 text-sm"><StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} /></td>
                 <td className="px-2 py-3">
                   <div className="flex items-center justify-end gap-1.5">
+                    {onRegress && (
+                      <button
+                        type="button"
+                        title="Voltar etapa"
+                        onClick={(e) => { e.stopPropagation(); onRegress(c) }}
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-elevate/[0.08] text-foreground/50 transition-colors hover:bg-elevate/[0.14] hover:text-foreground"
+                      >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     {onAdvance && (
                       <button
                         type="button"

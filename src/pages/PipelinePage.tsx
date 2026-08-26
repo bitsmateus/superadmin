@@ -56,6 +56,11 @@ import { asText, cn, formatDateShort, formatDateTimeShort, initials, normalizeTe
 import { daysSince, timeAgo } from '@/lib/time'
 import type { Client, PipelineStage } from '@/types/client'
 
+/** O Pipeline do Suporte não mostra "Boas-vindas" nem "Contrato" — essas duas ficam só na aba
+ * Contrato do Financeiro. O Suporte só passa a ver o cliente a partir de "Briefing", que é quando
+ * o Financeiro marca o contrato como assinado (sincroniza a etapa automaticamente). */
+const SUPPORT_VISIBLE_STAGES = PIPELINE_STAGES.filter((s) => s !== 'welcome' && s !== 'contract')
+
 /** Um bloco de linhas dentro de uma etapa (ex.: "Fazendo agora"). */
 interface RowGroup {
   key: string
@@ -497,7 +502,7 @@ export function PipelinePage() {
         </div>
 
         <div className="space-y-3">
-          {PIPELINE_STAGES.map((stage) => (
+          {SUPPORT_VISIBLE_STAGES.map((stage) => (
             <ListGroup
               key={stage}
               stage={stage}

@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { query } from '../db.js';
 import { restrictedBoardFilter } from './leadBoards.js';
+import { renderContractPdf } from '../lib/contractPdf.js';
 
 /**
  * Aba Contrato (Dashboard Comercial) — modelo(s) padrão + contratos gerados por cliente. Reusa a
@@ -100,6 +101,34 @@ export async function contractRoutes(app: FastifyInstance) {
       const [contract] = await query(`UPDATE contracts SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
       if (!contract) return reply.status(404).send({ message: 'Contrato não encontrado' });
       return contract;
+    }
+  );
+
+  // POST /api/contracts/:id/pdf — gera o PDF de verdade no servidor (Chromium headless), sem
+  // diálogo de impressão do navegador e sem o cabeçalho/rodapé que ele sempre adiciona. Recebe o
+  // HTML atual do corpo no body (em vez de reler do banco) pra pegar edição não salva ainda,
+  // exatamente igual `openContractSheet` já fazia com window.print().
+  app.post<{ Params: { id: string }; Body: { html?: string; title?: string } }>(
+    '/api/contracts/:id/pdf',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null) {
+        const [current] = await query<{ board_id: string }>('SELECT board_id FROM contracts WHERE id = $1', [req.params.id]);
+        if (!current || !allowed.includes(current.board_id)) return reply.status(403).send({ message: 'Acesso negado' });
+      }
+      const html = req.body.html;
+      if (!html) return reply.status(400).send({ message: 'html é obrigatório' });
+      try {
+        const pdf = await renderContractPdf(html, req.body.title ?? 'Contrato');
+        reply.header('Content-Type', 'application/pdf');
+        reply.header('Content-Disposition', 'attachment; filename="contrato.pdf"');
+        return reply.send(pdf);
+      } catch (err) {
+        app.log.error({ err }, 'Falha ao gerar PDF do contrato');
+        return reply.status(500).send({ message: 'Falha ao gerar o PDF — tenta de novo.' });
+      }
     }
   );
 

@@ -114,6 +114,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const [cepLoading, setCepLoading] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
   const [editTemplateOpen, setEditTemplateOpen] = React.useState(false)
+  const [pdfLoading, setPdfLoading] = React.useState<'baixar' | 'ver' | null>(null)
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
   const openClient = React.useMemo(() => clients.find((c) => c.id === openClientId) ?? null, [clients, openClientId])
 
@@ -355,9 +356,26 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
   const currentBodyHtml = () => (editingBody ? bodyRef.current?.innerHTML : undefined) ?? selected?.conteudo ?? ''
 
-  const download = () => {
+  // PDF de verdade, gerado no servidor — sem passar pelo diálogo de impressão do navegador (evita
+  // o cabeçalho/rodapé que o Chrome sempre adiciona ali e que nenhuma página consegue desligar).
+  const slugify = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+
+  const download = async () => {
     if (!selected) return
-    openContractSheet(currentBodyHtml(), `Contrato — ${contractLabel(selected)}`)
+    setPdfLoading('baixar')
+    try {
+      const blob = await contractsService.generatePdf(selected.id, currentBodyHtml(), `Contrato — ${contractLabel(selected)}`)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `contrato-${slugify(contractLabel(selected))}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error('Falha ao gerar o PDF: ' + (err as Error).message)
+    } finally {
+      setPdfLoading(null)
+    }
   }
 
   const printContract = () => {
@@ -365,9 +383,18 @@ export function ContratoView({ pageId }: { pageId: string }) {
     openContractSheet(currentBodyHtml(), `Contrato — ${contractLabel(selected)}`)
   }
 
-  const viewContractSheet = () => {
+  const viewContractSheet = async () => {
     if (!selected) return
-    openContractSheet(currentBodyHtml(), `Contrato — ${contractLabel(selected)}`, false)
+    setPdfLoading('ver')
+    try {
+      const blob = await contractsService.generatePdf(selected.id, currentBodyHtml(), `Contrato — ${contractLabel(selected)}`)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+    } catch (err) {
+      toast.error('Falha ao gerar o PDF: ' + (err as Error).message)
+    } finally {
+      setPdfLoading(null)
+    }
   }
 
   const saveNow = () => {
@@ -528,9 +555,9 @@ export function ContratoView({ pageId }: { pageId: string }) {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-foreground">Contrato</span>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button size="sm" onClick={download} leftIcon={<Download className="h-3.5 w-3.5" />}>Baixar PDF</Button>
+                  <Button size="sm" onClick={download} loading={pdfLoading === 'baixar'} leftIcon={<Download className="h-3.5 w-3.5" />}>Baixar PDF</Button>
                   <Button size="sm" variant="secondary" onClick={printContract} leftIcon={<Printer className="h-3.5 w-3.5" />}>Imprimir</Button>
-                  <Button size="sm" variant="secondary" onClick={viewContractSheet} leftIcon={<Eye className="h-3.5 w-3.5" />}>Ver PDF</Button>
+                  <Button size="sm" variant="secondary" onClick={viewContractSheet} loading={pdfLoading === 'ver'} leftIcon={<Eye className="h-3.5 w-3.5" />}>Ver PDF</Button>
                   {editingBody ? (
                     <Button size="sm" variant="secondary" onClick={saveNow} leftIcon={<Save className="h-3.5 w-3.5" />}>Salvar no histórico</Button>
                   ) : (

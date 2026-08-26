@@ -129,6 +129,12 @@ export const contractsService = {
     }
   },
 
+  /** PDF de verdade, renderizado no servidor (Chromium headless) — sem diálogo de impressão do
+   * navegador, então sem o cabeçalho/rodapé que ele sempre adiciona. */
+  async generatePdf(id: string, html: string, title: string): Promise<Blob> {
+    return api.postForBlob(`/api/contracts/${id}/pdf`, { html, title })
+  },
+
   async deleteContract(id: string): Promise<void> {
     try {
       await api.delete(`/api/contracts/${id}`)

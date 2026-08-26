@@ -68,6 +68,27 @@ export const api = {
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   delete: <T = void>(path: string, body?: unknown) =>
     request<T>(path, { method: 'DELETE', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }),
+
+  /** POST que devolve um arquivo binário (ex.: PDF gerado no servidor) em vez de JSON. */
+  async postForBlob(path: string, body?: unknown): Promise<Blob> {
+    const token = getToken()
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    })
+    if (res.status === 401 && handleSessionExpired(path)) {
+      throw new Error('Sessão expirada — faça login novamente.')
+    }
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({ message: res.statusText })) as { message?: string }
+      throw new Error(errBody.message ?? 'Erro na requisição')
+    }
+    return res.blob()
+  },
 }
 
 // SSE connection for realtime updates

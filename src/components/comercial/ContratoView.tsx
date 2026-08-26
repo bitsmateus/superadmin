@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ClipboardList, Clock, Download, Eye, FileText, ListTodo,
+  ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ClipboardList, Clock, Download, Eye, FileText,
   Loader2, Pencil, Plus, Printer, Save, Search, Settings, Trash2, UserRound, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
@@ -16,7 +16,7 @@ import { db } from '@/services/db'
 import { canDeleteClient } from '@/services/supabase'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { StageAgeBadge } from '@/components/crm/StageAgeBadge'
-import { NEXT_STAGE, PREV_STAGE, STAGE_COLORS } from '@/constants/stageColors'
+import { PREV_STAGE, STAGE_COLORS } from '@/constants/stageColors'
 import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/useContracts'
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
@@ -34,12 +34,11 @@ import { formatDateShort } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { Client } from '@/types/client'
 
-type Tab = 'boas-vindas' | 'pendentes-venda' | 'criar' | 'pendentes-contrato' | 'assinados'
+type Tab = 'boas-vindas' | 'criar' | 'pendentes-contrato' | 'assinados'
 
 /**
- * Aba Contrato — organizada em seções: "Boas-vindas" (ficha preenchida, ainda não avançou pra
- * etapa Contrato), "Pendente de contrato" (cliente já na etapa Contrato, sem nenhum contrato
- * gerado ainda — a geração acontece pela ficha, ver ClientDrawer/extraHeaderAction), "Pendente de
+ * Aba Contrato — organizada em seções: "Boas-vindas" (ficha preenchida, ainda não tem contrato —
+ * "avançar" já abre o formulário de gerar contrato direto, sem etapa intermediária), "Pendente de
  * assinatura" (contrato já gerado, aguardando o cliente devolver assinado) e "Contratos assinados"
  * (marcação manual, sem assinatura eletrônica — a pessoa marca quando o cliente devolve assinado;
  * as duas últimas têm filtro por mês/período, igual o Painel do Mês).
@@ -63,9 +62,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const template = templates[0] ?? null
   const placeholders = React.useMemo(() => (template ? extractPlaceholders(template.conteudo) : []), [template])
 
-  // Mesma ideia do pipeline do Suporte: "Boas-vindas" = ficha preenchida, ainda na etapa inicial
-  // (o Suporte ainda não decidiu seguir com o contrato); "Pendente de contrato" = Suporte já
-  // avançou o cliente pra etapa "Contrato" e ainda não existe nenhum contrato gerado aqui.
+  // "Boas-vindas" = ficha preenchida, ainda sem contrato gerado — "avançar" já abre o formulário
+  // de criar contrato direto (ver createContractFromDrawer), sem etapa intermediária pra esperar.
   const contractedClientIds = React.useMemo(
     () => new Set(contracts.filter((c) => c.clientId).map((c) => c.clientId as string)),
     [contracts],
@@ -73,12 +71,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const sortByFicha = (a: Client, b: Client) =>
     new Date(b.fichaCadastro?.submittedAt ?? b.createdAt).getTime() - new Date(a.fichaCadastro?.submittedAt ?? a.createdAt).getTime()
   const boasVindasClients = React.useMemo(
-    () => clients.filter((c) => c.fichaCadastro && (c.stage === 'welcome' || c.stage === 'lead')).sort(sortByFicha),
-    [clients],
-  )
-  const pendingClients = React.useMemo(
     () => clients
-      .filter((c) => c.fichaCadastro && c.stage === 'contract' && !contractedClientIds.has(c.id))
+      .filter((c) => c.fichaCadastro && (c.stage === 'welcome' || c.stage === 'lead' || c.stage === 'contract') && !contractedClientIds.has(c.id))
       .sort(sortByFicha),
     [clients, contractedClientIds],
   )
@@ -86,16 +80,11 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const signedContracts = React.useMemo(() => contracts.filter((c) => c.status === 'assinado'), [contracts])
 
   const boasVindasFilter = useMonthFilter()
-  const pendingClientsFilter = useMonthFilter()
   const pendingFilter = useMonthFilter()
   const signedFilter = useMonthFilter()
   const boasVindasInRange = React.useMemo(
     () => boasVindasClients.filter((c) => withinBounds(c.fichaCadastro?.submittedAt ?? c.createdAt, boasVindasFilter.bounds)),
     [boasVindasClients, boasVindasFilter.bounds],
-  )
-  const pendingClientsInRange = React.useMemo(
-    () => pendingClients.filter((c) => withinBounds(c.fichaCadastro?.submittedAt ?? c.createdAt, pendingClientsFilter.bounds)),
-    [pendingClients, pendingClientsFilter.bounds],
   )
   const pendingContractsInRange = React.useMemo(
     () => pendingContracts.filter((c) => withinBounds(c.createdAt, pendingFilter.bounds)),
@@ -106,7 +95,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
     [signedContracts, signedFilter.bounds],
   )
 
-  const [tab, setTab] = React.useState<Tab>('pendentes-venda')
+  const [tab, setTab] = React.useState<Tab>('boas-vindas')
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [draftCampos, setDraftCampos] = React.useState<Record<string, string>>({})
   const [draftClientId, setDraftClientId] = React.useState<string | null>(null)
@@ -217,6 +206,17 @@ export function ContratoView({ pageId }: { pageId: string }) {
     try {
       const conteudo = applyPlaceholders(applyServicesTable(template.conteudo, draftCampos), draftCampos)
       const created = await contractsService.createContract(board.id, template.id, draftCampos, conteudo, draftClientId)
+      // Sai de "Boas-vindas" só agora que o contrato existe de verdade — não no clique de
+      // "avançar" (senão, se a pessoa fechasse o formulário sem gerar, o cliente ficava perdido,
+      // sem contrato e sem aparecer em lugar nenhum). Também é o que libera o "Marcar como
+      // assinado" a avançar pra Briefing depois (aquele fluxo espera stage === 'contract').
+      if (draftClientId) {
+        const client = clients.find((cl) => cl.id === draftClientId)
+        if (client && client.stage !== 'contract') {
+          db.updateClient(draftClientId, { stage: 'contract' })
+          db.addLog(draftClientId, 'Etapa alterada', `${STAGE_COLORS[client.stage].label} → ${STAGE_COLORS.contract.label}`)
+        }
+      }
       setDraftCampos({})
       setDraftClientId(null)
       setTab('pendentes-contrato')
@@ -311,24 +311,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
     void contractsService.deleteContract(c.id)
   }
 
-  // Único jeito de chegar na aba "Criar contrato" agora: pela ficha do cliente, no drawer aberto
-  // pelo nome em Boas-vindas/Pendente de contrato — nunca direto (evita gerar contrato solto, sem
-  // ficha de cadastro vinculada).
+  // Único jeito de chegar na aba "Criar contrato": pela ficha do cliente, seja pelo botão
+  // "avançar" em Boas-vindas ou pelo drawer aberto ao clicar no nome — nunca direto (evita gerar
+  // contrato solto, sem ficha de cadastro vinculada). O stage só avança pra "contract" quando o
+  // contrato é gerado de verdade (ver generate()), não aqui — assim, se a pessoa fechar o
+  // formulário sem gerar, o cliente continua normalmente em Boas-vindas.
   const createContractFromDrawer = (client: Client) => {
     setOpenClientId(null)
     startNew(client)
-  }
-
-  // Atalho pra não precisar abrir o drawer só pra avançar — mesma lógica do botão "Avançar
-  // etapa" de lá (ClientDrawer.advance), só que direto na linha. Só em Boas-vindas (welcome ->
-  // contract): em Pendente de contrato isso pularia a pessoa direto pra Briefing sem nunca gerar
-  // o contrato, furando o próprio motivo dessa fila existir.
-  const advanceStage = (client: Client) => {
-    const next = NEXT_STAGE[client.stage]
-    if (!next) return
-    db.updateClient(client.id, { stage: next })
-    db.addLog(client.id, 'Etapa alterada', `${STAGE_COLORS[client.stage].label} → ${STAGE_COLORS[next].label}`)
-    toast.success(`Etapa: ${STAGE_COLORS[next].label}`)
   }
 
   // Botão de voltar etapa, ao lado do de avançar — "Pendente de contrato" volta pra "Boas-vindas".
@@ -439,7 +429,6 @@ export function ContratoView({ pageId }: { pageId: string }) {
           <>
             <div className="mb-4 flex flex-wrap gap-2 rounded-2xl bg-card p-3 shadow-sm">
               <TabPill active={tab === 'boas-vindas'} onClick={() => changeTab('boas-vindas')} icon={<UserRound className="h-3.5 w-3.5" />} label="Boas-vindas" count={boasVindasClients.length} />
-              <TabPill active={tab === 'pendentes-venda'} onClick={() => changeTab('pendentes-venda')} icon={<ListTodo className="h-3.5 w-3.5" />} label="Pendente de contrato" count={pendingClients.length} />
               <TabPill active={tab === 'pendentes-contrato'} onClick={() => changeTab('pendentes-contrato')} icon={<Clock className="h-3.5 w-3.5" />} label="Pendente de assinatura" count={pendingContracts.length} />
               <TabPill active={tab === 'assinados'} onClick={() => changeTab('assinados')} icon={<CheckCircle2 className="h-3.5 w-3.5" />} label="Contratos assinados" count={signedContracts.length} />
             </div>
@@ -447,14 +436,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
             {tab === 'boas-vindas' && (
               <>
                 <MonthFilterBar filter={boasVindasFilter} />
-                <PendingClientsList clients={boasVindasInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={advanceStage} onRegress={regressStage} emptyText="Nenhum cliente em Boas-vindas nesse período." />
-              </>
-            )}
-
-            {tab === 'pendentes-venda' && (
-              <>
-                <MonthFilterBar filter={pendingClientsFilter} />
-                <PendingClientsList clients={pendingClientsInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={createContractFromDrawer} onRegress={regressStage} emptyText="Nenhuma ficha pendente de contrato nesse período." />
+                <PendingClientsList clients={boasVindasInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={createContractFromDrawer} onRegress={regressStage} emptyText="Nenhum cliente em Boas-vindas nesse período." />
               </>
             )}
 

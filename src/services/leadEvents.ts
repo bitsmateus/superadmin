@@ -38,8 +38,21 @@ function ensureRealtime() {
   })
 }
 
+export interface PageLeadEvent extends LeadEvent {
+  leadNome: string
+  leadSdr: string
+}
+type PageEventRow = EventRow & { lead_nome: string; lead_sdr: string }
+
 export const leadEventsService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
+
+  /** Log de tudo que aconteceu numa aba (todos os leads/SDRs dela) — pro botão "Log" ao lado de
+   * Filtro. Busca sob demanda a cada abertura do modal, sem cache (é uma conferência pontual). */
+  async getPageEvents(page: string): Promise<PageLeadEvent[]> {
+    const rows = await api.get<PageEventRow[]>(`/api/lead-events?page=${encodeURIComponent(page)}`)
+    return rows.map((r) => ({ ...rowToEvent(r), leadNome: r.lead_nome || 'Sem nome', leadSdr: r.lead_sdr || '' }))
+  },
 
   /** Referência crua do cache — filtrar/ordenar por leadRowId fica por conta do hook (useMemo). */
   getAllEvents(): LeadEvent[] { return events },

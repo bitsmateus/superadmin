@@ -229,14 +229,14 @@ function BoxedCurrencyField({ value, onSave }: { value: string; onSave: (v: stri
   )
 }
 
-interface EventChip { label: string; color: string }
-interface EventDescription {
+export interface EventChip { label: string; color: string }
+export interface EventDescription {
   icon: React.ReactNode
   text: string
   from?: EventChip
   to?: EventChip
 }
-interface EventColorMaps {
+export interface EventColorMaps {
   status: Record<string, string>
   diaContato: Record<string, string>
   sdr: Record<string, string>
@@ -245,7 +245,7 @@ interface EventColorMaps {
 
 /** Traduz um evento automático (status/dia de contato/SDR/quadro/retornado/criação) pra texto +
  * etiquetas coloridas, usando as mesmas cores cadastradas em "Editar etiquetas" e nos quadros. */
-function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescription {
+export function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescription {
   const chip = (value: string | null, map: Record<string, string>): EventChip | undefined =>
     value ? { label: value, color: map[value] ?? '#9CA3AF' } : undefined
 

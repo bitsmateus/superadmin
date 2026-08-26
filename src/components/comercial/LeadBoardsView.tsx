@@ -21,6 +21,7 @@ import {
   Pencil,
   Plus,
   Rows3,
+  ScrollText,
   Search,
   Trash2,
   Upload,
@@ -33,6 +34,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
+import { PageActivityLogModal } from '@/components/comercial/PageActivityLogModal'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
@@ -1193,6 +1195,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const [sdrFilter, setSdrFilter] = React.useState<string | null>(null)
   const [filterRules, setFilterRules] = React.useState<FilterRule[]>([])
   const [filtersOpen, setFiltersOpen] = React.useState(false)
+  const [logOpen, setLogOpen] = React.useState(false)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [importModalOpen, setImportModalOpen] = React.useState(false)
   const [trashModalOpen, setTrashModalOpen] = React.useState(false)
@@ -1440,6 +1443,13 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               >
                 {filterRules.length > 0 ? `Filtro (${filterRules.length})` : 'Filtro'}
               </ToolbarButton>
+              <ToolbarButton
+                icon={<ScrollText className="h-3.5 w-3.5" />}
+                onClick={() => setLogOpen(true)}
+                title="Ver tudo que aconteceu nesta aba"
+              >
+                Log
+              </ToolbarButton>
             </div>
 
             {boards.length === 0 ? (
@@ -1546,6 +1556,12 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
       )}
       <LeadTrashModal open={trashModalOpen} onClose={() => setTrashModalOpen(false)} boards={boards} />
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
+      <PageActivityLogModal
+        open={logOpen}
+        onClose={() => setLogOpen(false)}
+        page={page}
+        onOpenLead={(id) => { setLogOpen(false); setOpenLeadId(id) }}
+      />
       <LeadFiltersModal
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}

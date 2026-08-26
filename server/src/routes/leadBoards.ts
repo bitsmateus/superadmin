@@ -485,14 +485,33 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     }
   );
 
-  // GET /api/lead-events?lead_row_id=xxx — linha do tempo automática do lead
-  app.get<{ Querystring: { lead_row_id?: string } }>(
+  // GET /api/lead-events?page=xxx — log de tudo que aconteceu numa aba (todos os SDRs/leads dela),
+  // pro botão "Log" ao lado de Filtro. Mesmas 500 mais recentes, sem paginação (é uma conferência
+  // rápida, não uma auditoria completa — a linha do tempo por lead continua sendo a fonte completa).
+  app.get<{ Querystring: { lead_row_id?: string; page?: string } }>(
     '/api/lead-events',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      if (!req.query.lead_row_id) return reply.status(400).send({ message: 'lead_row_id é obrigatório' });
       const { sub, role } = req.user as { sub: string; role: string };
       const allowed = await restrictedBoardFilter(sub, role);
+
+      if (req.query.page) {
+        const boardRows = await query<{ id: string }>('SELECT id FROM lead_boards WHERE page = $1', [req.query.page]);
+        let boardIds = boardRows.map((r) => r.id);
+        if (allowed !== null) boardIds = boardIds.filter((id) => allowed.includes(id));
+        if (!boardIds.length) return [];
+        return query(
+          `SELECT le.*, lr.nome AS lead_nome, lr.sdr AS lead_sdr
+           FROM lead_events le
+           JOIN lead_rows lr ON lr.id = le.lead_row_id
+           WHERE lr.board_id = ANY($1)
+           ORDER BY le.created_at DESC
+           LIMIT 500`,
+          [boardIds]
+        );
+      }
+
+      if (!req.query.lead_row_id) return reply.status(400).send({ message: 'lead_row_id ou page é obrigatório' });
       if (allowed !== null) {
         const row = await queryOne<{ board_id: string }>(
           'SELECT board_id FROM lead_rows WHERE id = $1',

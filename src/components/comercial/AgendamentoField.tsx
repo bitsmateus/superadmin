@@ -37,8 +37,6 @@ function formatDisplay(value: string): string {
   return time ? `${d}  ${time}` : d
 }
 
-const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => `${pad(Math.floor(i / 2))}:${i % 2 === 0 ? '00' : '30'}`)
-
 export interface AgendamentoFieldProps {
   value: string
   onChange: (next: string) => void
@@ -50,20 +48,14 @@ export interface AgendamentoFieldProps {
  * mas sem status de retornado/atrasado: Agendamento não tem essa noção de "feito". */
 export function AgendamentoField({ value, onChange, className, placeholder = 'Selecionar…' }: AgendamentoFieldProps) {
   const [open, setOpen] = React.useState(false)
-  const [timeOpen, setTimeOpen] = React.useState(false)
   const [coords, setCoords] = React.useState<{ top?: number; bottom?: number; left: number } | null>(null)
   const parsed = React.useMemo(() => parseValue(value), [value])
   const [viewYear, setViewYear] = React.useState(() => (parsed.date ?? new Date()).getFullYear())
   const [viewMonth, setViewMonth] = React.useState(() => (parsed.date ?? new Date()).getMonth())
   const btnRef = React.useRef<HTMLButtonElement>(null)
   const popRef = React.useRef<HTMLDivElement>(null)
-  const activeTimeRef = React.useRef<HTMLButtonElement>(null)
+  const timeInputRef = React.useRef<HTMLInputElement>(null)
   useOutsideClose(popRef, open, () => setOpen(false))
-
-  React.useEffect(() => { if (!open) setTimeOpen(false) }, [open])
-  React.useEffect(() => {
-    if (timeOpen) activeTimeRef.current?.scrollIntoView({ block: 'center' })
-  }, [timeOpen])
 
   const openPicker = () => {
     const rect = btnRef.current?.getBoundingClientRect()
@@ -85,17 +77,17 @@ export function AgendamentoField({ value, onChange, className, placeholder = 'Se
   }
 
   const pickDay = (d: Date) => {
+    const firstPick = !parsed.date
     onChange(toValue(d, parsed.time || '09:00'))
     if (d.getMonth() !== viewMonth || d.getFullYear() !== viewYear) {
       setViewYear(d.getFullYear())
       setViewMonth(d.getMonth())
     }
-    if (!parsed.date) setTimeOpen(true)
+    if (firstPick) window.setTimeout(() => timeInputRef.current?.focus(), 0)
   }
 
   const setTime = (time: string) => {
     onChange(toValue(parsed.date ?? new Date(viewYear, viewMonth, 1), time))
-    setTimeOpen(false)
   }
 
   const clear = () => { onChange(''); setOpen(false) }
@@ -190,36 +182,17 @@ export function AgendamentoField({ value, onChange, className, placeholder = 'Se
           </div>
 
           {parsed.date && (
-            <div className="relative mt-2.5 border-t border-line/60 pt-2.5">
-              <button
-                type="button"
-                onClick={() => setTimeOpen((o) => !o)}
-                className="flex h-8 w-full items-center gap-2 rounded-md border border-line bg-card px-2 text-sm text-foreground transition-colors hover:border-accent/60"
-              >
+            <div className="mt-2.5 border-t border-line/60 pt-2.5">
+              <label className="flex h-8 w-full items-center gap-2 rounded-md border border-line bg-card px-2 text-sm text-foreground transition-colors focus-within:border-accent/60">
                 <Clock className="h-4 w-4 shrink-0 text-accent" />
-                <span className="flex-1 text-left font-medium">{parsed.time || '09:00'}</span>
-              </button>
-              {timeOpen && (
-                <div className="absolute inset-x-0 top-full z-10 mt-1 max-h-40 overflow-y-auto rounded-md border border-line bg-card p-1 shadow-lg">
-                  {TIME_OPTIONS.map((t) => {
-                    const active = t === (parsed.time || '09:00')
-                    return (
-                      <button
-                        key={t}
-                        ref={active ? activeTimeRef : undefined}
-                        type="button"
-                        onClick={() => setTime(t)}
-                        className={cn(
-                          'block w-full rounded px-2 py-1 text-left text-xs',
-                          active ? 'bg-accent font-semibold text-white' : 'text-foreground/70 hover:bg-accent/10',
-                        )}
-                      >
-                        {t}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+                <input
+                  ref={timeInputRef}
+                  type="time"
+                  value={parsed.time || '09:00'}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="h-full flex-1 bg-transparent font-medium text-foreground outline-none"
+                />
+              </label>
             </div>
           )}
 

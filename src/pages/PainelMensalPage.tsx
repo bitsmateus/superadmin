@@ -182,34 +182,21 @@ export function PainelMensalPage() {
     const entrouCents = mrrTotalCents + implTotalCents
     const clientesVendidos = vendasNoMes.length
 
-    // Mesma receita/MRR/ROI de cima, só que restrita às vendas que vieram do Funil de Vendas
-    // (vendasFechadas — mesmos leads que contam em "Vendas fechadas" ali em cima), sem as avulsas
-    // cadastradas direto na aba Vendas. O valor de MRR/Implementação normalmente fica vazio no
-    // lead original do CRM (Arthur/Luis) — quem preenche de verdade é a cópia gerada na aba Vendas
-    // (syncVendaFromStatus, ligada pelo vendaOrigemId), então busca o valor de lá.
-    const vendaCopiaPorOrigemId = new Map(
-      vendasRows.filter((r) => r.vendaOrigemId).map((r) => [r.vendaOrigemId as string, r]),
-    )
-    const mrrTotalFunilCents = vendasFechadas.reduce((s, r) => {
-      const copia = vendaCopiaPorOrigemId.get(r.id)
-      return s + parseBRLCents(copia ? copia.valorMrr : r.valorMrr)
-    }, 0)
-    const implTotalFunilCents = vendasFechadas.reduce((s, r) => {
-      const copia = vendaCopiaPorOrigemId.get(r.id)
-      return s + parseBRLCents(copia ? copia.valorImplementacao : r.valorImplementacao)
-    }, 0)
+    // Mesma receita/MRR/ROI de cima, só que restrita às vendas marcadas manualmente como "veio do
+    // funil" na aba Vendas — o vínculo automático (vendaOrigemId) não dá conta disso sozinho: na
+    // prática quase toda venda é registrada à mão pelo botão "Registrar venda" mesmo vindo do
+    // funil, então o campo veioDoFunil é a fonte da verdade (ver server/src/db.ts). Usa a MESMA
+    // data de fechamento do painel de cima — é onde o valor de R$ realmente existe preenchido.
+    const vendasNoMesFunil = vendasNoMes.filter((r) => r.veioDoFunil)
+    const mrrTotalFunilCents = vendasNoMesFunil.reduce((s, r) => s + parseBRLCents(r.valorMrr), 0)
+    const implTotalFunilCents = vendasNoMesFunil.reduce((s, r) => s + parseBRLCents(r.valorImplementacao), 0)
     const entrouFunilCents = mrrTotalFunilCents + implTotalFunilCents
-    // Detalhe pra conferência visual (clicando em "Nº de clientes vendidos") — mostra de onde veio
-    // o valor de cada um: da cópia na aba Vendas, do próprio lead, ou nenhum valor preenchido ainda.
-    const vendasFechadasDetalhe = vendasFechadas.map((r) => {
-      const copia = vendaCopiaPorOrigemId.get(r.id)
-      return {
-        id: r.id, nome: r.nome || 'Sem nome', sdr: r.sdr,
-        mrrCents: parseBRLCents(copia ? copia.valorMrr : r.valorMrr),
-        implCents: parseBRLCents(copia ? copia.valorImplementacao : r.valorImplementacao),
-        fonte: copia ? 'cópia na aba Vendas' : 'sem cópia — valor do próprio lead',
-      }
-    })
+    const clientesVendidosFunil = vendasNoMesFunil.length
+    // Detalhe pra conferência visual (clicando em "Nº de clientes vendidos").
+    const vendasFechadasDetalhe = vendasNoMesFunil.map((r) => ({
+      id: r.id, nome: r.nome || 'Sem nome', sdr: r.sdr,
+      mrrCents: parseBRLCents(r.valorMrr), implCents: parseBRLCents(r.valorImplementacao),
+    }))
 
     const agendTotal = agendadosTotal.length
     const agendAteHoje = agendadosAteHoje.length
@@ -235,9 +222,10 @@ export function PainelMensalPage() {
     const ltvCac = cacCents > 0 ? receitaProjetadaCents / cacCents : 0
     const paybackCac = mrrMedioCents > 0 ? cacCents / mrrMedioCents : 0
 
-    // cacCents já é do funil (investimento ÷ vendas fechadas do funil) — reaproveitado abaixo.
-    const ticketMedioFunilCents = vendas > 0 ? entrouFunilCents / vendas : 0
-    const mrrMedioFunilCents = vendas > 0 ? mrrTotalFunilCents / vendas : 0
+    // cacCents já é do funil (investimento ÷ vendas fechadas do funil, card de cima) —
+    // reaproveitado abaixo: CAC é sobre custo de aquisição via o funil, não muda por essa aba.
+    const ticketMedioFunilCents = clientesVendidosFunil > 0 ? entrouFunilCents / clientesVendidosFunil : 0
+    const mrrMedioFunilCents = clientesVendidosFunil > 0 ? mrrTotalFunilCents / clientesVendidosFunil : 0
     const receitaProjetadaFunilCents = mrrTotalFunilCents * permanencia + implTotalFunilCents
     const roasImediatoFunil = investimentoCents > 0 ? entrouFunilCents / investimentoCents : 0
     const roiImediatoFunil = investimentoCents > 0 ? (entrouFunilCents - investimentoCents) / investimentoCents : 0
@@ -253,7 +241,7 @@ export function PainelMensalPage() {
       mrrTotalCents, implTotalCents, entrouCents, clientesVendidos, permanencia,
       ticketMedioCents, mrrMedioCents, receitaProjetadaCents, roasImediato, roiImediato,
       roiProjetado, retornoProjetadoCents, ltvCac, paybackCac,
-      mrrTotalFunilCents, implTotalFunilCents, entrouFunilCents, vendasFechadasDetalhe,
+      mrrTotalFunilCents, implTotalFunilCents, entrouFunilCents, vendasFechadasDetalhe, clientesVendidosFunil,
       ticketMedioFunilCents, mrrMedioFunilCents, receitaProjetadaFunilCents,
       roasImediatoFunil, roiImediatoFunil, roiProjetadoFunil, retornoProjetadoFunilCents,
       ltvCacFunil, paybackCacFunil,
@@ -411,7 +399,7 @@ export function PainelMensalPage() {
 
                 <div className="grid grid-cols-1 gap-4">
                   <SectionCard title="Receita, MRR & ROI (Funil de Vendas)">
-                    <MetricRow label="MRR total do mês (R$)" value={money(stats.mrrTotalFunilCents)} hint="só vendas do funil" />
+                    <MetricRow label="MRR total do mês (R$)" value={money(stats.mrrTotalFunilCents)} hint="vendas marcadas como Funil na aba Vendas" />
                     <MetricRow label="Implementação total (R$)" value={money(stats.implTotalFunilCents)} />
                     <MetricRow label="Entrou no 1º mês (R$)" value={money(stats.entrouFunilCents)} hint="MRR + implementação" />
                     <MetricRow
@@ -422,10 +410,10 @@ export function PainelMensalPage() {
                           onClick={() => setShowFunilDetalhe((v) => !v)}
                           className="underline decoration-dotted underline-offset-2 hover:text-accent"
                         >
-                          {stats.vendas}
+                          {stats.clientesVendidosFunil}
                         </button>
                       }
-                      hint="Funil de Vendas do mês — clique pra conferir"
+                      hint="aba Vendas, marcadas como Funil — clique pra conferir"
                     />
                     <MetricRow label="Permanência média (meses)" value={meses(stats.permanencia)} hint="mesma de cima" />
                     <MetricRow label="Ticket médio de entrada (R$)" value={money(stats.ticketMedioFunilCents)} />
@@ -448,19 +436,20 @@ export function PainelMensalPage() {
                               <th className="py-2 pr-3">Nome</th>
                               <th className="py-2 pr-3">SDR</th>
                               <th className="py-2 pr-3 text-right">MRR</th>
-                              <th className="py-2 pr-3 text-right">Implementação</th>
-                              <th className="py-2">Valor veio de</th>
+                              <th className="py-2">Implementação</th>
                             </tr>
                           </thead>
                           <tbody>
+                            {stats.vendasFechadasDetalhe.length === 0 && (
+                              <tr><td colSpan={4} className="py-4 text-center text-foreground/40">Nenhuma venda marcada como Funil neste período.</td></tr>
+                            )}
                             {stats.vendasFechadasDetalhe.map((d) => (
                               <tr key={d.id} className="border-b border-line/60 last:border-0">
                                 <td className="py-2 pr-3 font-medium text-foreground">{d.nome}</td>
                                 <td className="py-2 pr-3 text-foreground/70">{d.sdr || '—'}</td>
                                 <td className="py-2 pr-3 text-right tabular-nums">{money(d.mrrCents)}</td>
-                                <td className="py-2 pr-3 text-right tabular-nums">{money(d.implCents)}</td>
-                                <td className={cn('py-2', d.mrrCents === 0 && d.implCents === 0 ? 'text-warning' : 'text-foreground/50')}>
-                                  {d.fonte}
+                                <td className={cn('py-2 text-right tabular-nums', d.mrrCents === 0 && d.implCents === 0 && 'text-warning')}>
+                                  {money(d.implCents)}
                                 </td>
                               </tr>
                             ))}

@@ -157,8 +157,8 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
     await query(
       `INSERT INTO lead_rows (
         board_id, nome, empresa, telefone, sdr, status,
-        valor_mrr, valor_implementacao, fechamento, venda_origem_id, position
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        valor_mrr, valor_implementacao, fechamento, venda_origem_id, position, veio_do_funil
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true)`,
       [
         target.id, lead.nome, lead.empresa, lead.telefone, lead.sdr, MILESTONE_VENDIDO,
         lead.valor_mrr, lead.valor_implementacao,
@@ -320,14 +320,20 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         `INSERT INTO lead_rows (
           id, board_id, nome, tipo, empresa, telefone, dia_contato, ligacao, status,
           agendamento, retornar, responsavel, sdr, numero,
-          dor_cliente, numero_atendentes, valor_mrr, valor_implementacao, position, created_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19, COALESCE($20::timestamptz, NOW())) RETURNING *`,
+          dor_cliente, numero_atendentes, valor_mrr, valor_implementacao, position, created_at,
+          fechamento, venda_origem_id, mrr_pendente, impl_pendente, observacoes, veio_do_funil
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19, COALESCE($20::timestamptz, NOW()),
+          $21,$22,$23,$24,$25,$26
+        ) RETURNING *`,
         [
           id, b.board_id, b.nome ?? '', b.tipo ?? '', b.empresa ?? '', b.telefone ?? '',
           b.dia_contato ?? '', b.ligacao ?? '', b.status ?? '',
           b.agendamento ?? '', b.retornar ?? '', b.responsavel ?? '', b.sdr ?? '', b.numero ?? '',
           b.dor_cliente ?? '', b.numero_atendentes ?? '', b.valor_mrr ?? '', b.valor_implementacao ?? '',
           position, b.created_at ?? null,
+          b.fechamento ?? '', b.venda_origem_id ?? null, b.mrr_pendente ?? true, b.impl_pendente ?? true,
+          b.observacoes ?? '', b.veio_do_funil ?? false,
         ]
       );
       void getActorName(sub).then((actorName) => logLeadEvent(id, 'created', null, null, actorName));

@@ -230,13 +230,29 @@ export function VendasView({ pageId }: { pageId: string }) {
             <span className="text-sm text-foreground/70">
               Total: <strong className="tabular-nums text-foreground">{formatBRLCents(selMrr + selImpl)}</strong>
             </span>
-            <button
-              type="button"
-              onClick={() => setSelectedIds(new Set())}
-              className="ml-auto text-xs font-medium text-accent hover:underline"
-            >
-              Limpar seleção
-            </button>
+            <div className="ml-auto flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => { for (const r of selectedRows) leadBoardsService.updateRow(r.id, { veioDoFunil: true }) }}
+                className="text-xs font-medium text-accent hover:underline"
+              >
+                Marcar como Funil
+              </button>
+              <button
+                type="button"
+                onClick={() => { for (const r of selectedRows) leadBoardsService.updateRow(r.id, { veioDoFunil: false }) }}
+                className="text-xs font-medium text-foreground/60 hover:underline"
+              >
+                Marcar como Avulsa
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs font-medium text-accent hover:underline"
+              >
+                Limpar seleção
+              </button>
+            </div>
           </div>
         )}
 
@@ -258,6 +274,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   </th>
                   <th className="px-4 py-3">Nome</th>
                   <th className="w-28 px-4 py-3">SDR</th>
+                  <th className="w-24 px-4 py-3">Funil</th>
                   <th className="w-48 px-4 py-3 text-right">Valor MRR</th>
                   <th className="w-56 px-4 py-3 text-right">Valor de implementação</th>
                   <th className="w-56 px-4 py-3">Observações</th>
@@ -267,7 +284,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-foreground/40">
+                    <td colSpan={8} className="px-4 py-10 text-center text-sm text-foreground/40">
                       Nenhuma venda neste período.
                     </td>
                   </tr>
@@ -281,6 +298,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                     <td />
                     <td className="px-4 py-3">Total</td>
+                    <td />
                     <td />
                     <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
                       {formatBRLCents(totalMrr)}
@@ -472,6 +490,19 @@ function VendaRow({ row, selected, onToggleSelect }: { row: LeadRow; selected: b
       <td className={cn('px-4 py-3 text-sm text-foreground/70', row.vendaRevertida && 'line-through')}>
         {row.sdr || '—'}
       </td>
+      <td className="px-4 py-3">
+        <button
+          type="button"
+          onClick={() => leadBoardsService.updateRow(row.id, { veioDoFunil: !row.veioDoFunil })}
+          title={row.veioDoFunil ? 'Veio do funil — clique pra marcar como avulsa' : 'Avulsa — clique pra marcar como funil'}
+          className={cn(
+            'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+            row.veioDoFunil ? 'bg-accent/10 text-accent' : 'bg-elevate/[0.06] text-foreground/40 hover:bg-elevate/[0.1]',
+          )}
+        >
+          {row.veioDoFunil ? 'Funil' : 'Avulsa'}
+        </button>
+      </td>
       <PendenteValueCell
         value={row.valorMrr}
         onSave={saveMrr}
@@ -645,6 +676,7 @@ function RegistrarVendaModal({
   const [fechamento, setFechamento] = React.useState('')
   const [fechadoPor, setFechadoPor] = React.useState('')
   const [observacoes, setObservacoes] = React.useState('')
+  const [veioDoFunil, setVeioDoFunil] = React.useState(false)
 
   React.useEffect(() => {
     if (!open) return
@@ -654,6 +686,7 @@ function RegistrarVendaModal({
     setFechamento(isoDay(new Date()))
     setFechadoPor('')
     setObservacoes('')
+    setVeioDoFunil(false)
   }, [open])
 
   const submit = () => {
@@ -667,6 +700,7 @@ function RegistrarVendaModal({
       sdr: fechadoPor,
       status: 'Vendido',
       observacoes: observacoes.trim(),
+      veioDoFunil,
     })
     toast.success(`Venda de "${trimmed}" registrada.`)
     onClose()
@@ -727,6 +761,15 @@ function RegistrarVendaModal({
           onChange={(e) => setObservacoes(e.target.value)}
           placeholder="Ex.: paga metade/metade, condição especial..."
         />
+        <label className="flex items-center gap-2 text-sm text-foreground/70">
+          <input
+            type="checkbox"
+            checked={veioDoFunil}
+            onChange={(e) => setVeioDoFunil(e.target.checked)}
+            className="h-4 w-4 rounded border-line accent-accent"
+          />
+          Veio do funil (SDR agendou/trabalhou o lead) — deixe desmarcado se for avulsa de verdade
+        </label>
       </div>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>

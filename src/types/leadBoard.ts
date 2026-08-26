@@ -73,6 +73,11 @@ export interface LeadRow {
   /** Comentário livre pro controle manual — só aparece/edita na aba Vendas (ex.: "paga metade
    * metade", condição especial negociada). Não é uma coluna do quadro Monday-style. */
   observacoes: string
+  /** Marca manual (só a pessoa liga/desliga, na aba Vendas) se essa venda veio do funil (SDR
+   * agendou/trabalhou o lead) ou foi avulsa de verdade (indicação, cliente antigo voltando, etc).
+   * venda_origem_id sozinho não dá conta disso: na prática quase toda venda é registrada à mão
+   * pelo botão "Registrar venda" mesmo vindo do funil, então o vínculo automático fica vazio. */
+  veioDoFunil: boolean
 }
 
 /**
@@ -87,7 +92,7 @@ export type LeadRowField = Exclude<
   keyof LeadRow,
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
-  | 'observacoes'
+  | 'observacoes' | 'veioDoFunil'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

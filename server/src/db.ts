@@ -857,6 +857,13 @@ END $$`);
     END IF;
   END $$`);
 
+  // Marca se uma linha da aba Vendas veio do funil (SDR agendou/trabalhou o lead) ou foi avulsa de
+  // verdade (indicação, cliente antigo voltando, etc). O vínculo automático venda_origem_id não dá
+  // conta disso sozinho: na prática quase toda venda é registrada à mão pelo botão "Registrar
+  // venda" mesmo quando veio do funil, então o vínculo fica vazio mesmo sendo uma venda do funil —
+  // esse campo é a fonte da verdade, marcada manualmente por quem registra/revisa a venda.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS veio_do_funil BOOLEAN NOT NULL DEFAULT false`);
+
   console.log('[db] migrations applied');
 }
 

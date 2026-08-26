@@ -386,7 +386,10 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   impl_pendente BOOLEAN NOT NULL DEFAULT true,
   -- Comentário livre pro controle manual na aba Vendas (ex.: "paga metade metade", condição
   -- especial negociada). Só aparece/edita lá, não é uma coluna do quadro Monday-style.
-  observacoes TEXT NOT NULL DEFAULT ''
+  observacoes TEXT NOT NULL DEFAULT '',
+  -- Marca manual se a venda veio do funil (SDR agendou/trabalhou) vs avulsa de verdade — ver
+  -- comentário em db.ts, venda_origem_id sozinho não dá conta disso na prática.
+  veio_do_funil BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);

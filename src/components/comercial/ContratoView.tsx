@@ -907,33 +907,96 @@ function FieldSection({
             const isCep = name.trim().toLowerCase() === 'cep'
             const hint = hintFor(name)
             return (
-              <div key={name} className={isCnpj ? 'sm:col-span-2' : undefined}>
-                <label className="mb-1 block text-[11px] font-medium text-foreground/50">{name}</label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    value={campos[name] ?? ''}
-                    onChange={(e) => onChange(name, isCnpj ? formatCnpj(e.target.value) : isCep ? formatCep(e.target.value) : e.target.value)}
-                    onBlur={isCnpj ? onCnpjBlur : isCep ? onCepBlur : undefined}
-                    placeholder={isCnpj ? '00.000.000/0000-00' : isCep ? '00000-000' : undefined}
-                    className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
-                  />
-                  {(isCnpj || isCep) && (
-                    <button
-                      type="button"
-                      onClick={isCnpj ? onCnpjBlur : onCepBlur}
-                      title="Buscar"
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-foreground/40 transition-colors hover:bg-elevate/[0.04] hover:text-foreground"
-                    >
-                      {(isCnpj ? cnpjLoading : cepLoading) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                    </button>
-                  )}
-                </div>
-                {hint && <p className="mt-1 text-[10px] text-foreground/40">{hint}</p>}
-              </div>
+              <FieldInput
+                key={name}
+                name={name}
+                value={campos[name] ?? ''}
+                onChange={onChange}
+                isCnpj={isCnpj}
+                isCep={isCep}
+                hint={hint}
+                onCnpjBlur={onCnpjBlur}
+                cnpjLoading={cnpjLoading}
+                onCepBlur={onCepBlur}
+                cepLoading={cepLoading}
+              />
             )
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Campo de texto do formulário lateral — estado local + debounce antes de salvar. Sem isso, cada
+ * tecla disparava um PATCH pro servidor E recarregava a lista inteira de contratos ANTES do campo
+ * sequer atualizar visualmente (o input era 100% controlado por `campos[name]`, vindo do estado
+ * reativo) — digitar qualquer nome ficava visivelmente travado. Mesmo padrão do ObservacoesCell
+ * da aba Vendas. */
+function FieldInput({
+  name,
+  value,
+  onChange,
+  isCnpj,
+  isCep,
+  hint,
+  onCnpjBlur,
+  cnpjLoading,
+  onCepBlur,
+  cepLoading,
+}: {
+  name: string
+  value: string
+  onChange: (name: string, value: string) => void
+  isCnpj: boolean
+  isCep: boolean
+  hint?: string
+  onCnpjBlur: () => void
+  cnpjLoading: boolean
+  onCepBlur: () => void
+  cepLoading: boolean
+}) {
+  const [local, setLocal] = React.useState(value)
+  const focusedRef = React.useRef(false)
+  const debouncedSave = useDebouncedCallback((next: string) => onChange(name, next), 500)
+
+  React.useEffect(() => {
+    if (!focusedRef.current) setLocal(value)
+  }, [value])
+
+  return (
+    <div className={isCnpj ? 'sm:col-span-2' : undefined}>
+      <label className="mb-1 block text-[11px] font-medium text-foreground/50">{name}</label>
+      <div className="flex items-center gap-1.5">
+        <input
+          value={local}
+          onFocus={() => { focusedRef.current = true }}
+          onChange={(e) => {
+            const next = isCnpj ? formatCnpj(e.target.value) : isCep ? formatCep(e.target.value) : e.target.value
+            setLocal(next)
+            debouncedSave(next)
+          }}
+          onBlur={() => {
+            focusedRef.current = false
+            if (local !== value) onChange(name, local)
+            if (isCnpj) onCnpjBlur()
+            if (isCep) onCepBlur()
+          }}
+          placeholder={isCnpj ? '00.000.000/0000-00' : isCep ? '00000-000' : undefined}
+          className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+        />
+        {(isCnpj || isCep) && (
+          <button
+            type="button"
+            onClick={isCnpj ? onCnpjBlur : onCepBlur}
+            title="Buscar"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-foreground/40 transition-colors hover:bg-elevate/[0.04] hover:text-foreground"
+          >
+            {(isCnpj ? cnpjLoading : cepLoading) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          </button>
+        )}
+      </div>
+      {hint && <p className="mt-1 text-[10px] text-foreground/40">{hint}</p>}
     </div>
   )
 }

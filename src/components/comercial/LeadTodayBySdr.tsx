@@ -136,7 +136,7 @@ export function LeadTodayBySdr({ rows, boards, onOpenLead }: LeadTodayBySdrProps
             <thead>
               <tr className="border-b border-line text-[11px] font-semibold text-foreground/50">
                 <th className="px-3 py-2">SDR</th>
-                <th className="px-3 py-2 text-center">Não atualizado (24h+)</th>
+                <th className="px-3 py-2 text-center">Não atualizado hoje</th>
                 <th className="px-3 py-2 text-center">Atrasados</th>
                 <th className="px-3 py-2 text-center">Reuniões hoje</th>
                 <th className="px-3 py-2 text-center">Propostas hoje</th>

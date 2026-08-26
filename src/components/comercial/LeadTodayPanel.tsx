@@ -128,7 +128,7 @@ export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps
   }, [rows, today, activityById, primeiroContatoIds, reuniaoAgendadaIds])
 
   const cards: StatCard[] = [
-    { key: 'nao-atualizados', icon: <Clock className="h-4 w-4" />, label: 'Status não atualizado (24h+)', tone: 'text-warning bg-warning/10', matches: groups.naoAtualizados },
+    { key: 'nao-atualizados', icon: <Clock className="h-4 w-4" />, label: 'Status não atualizado hoje', tone: 'text-warning bg-warning/10', matches: groups.naoAtualizados },
     { key: 'atrasados', icon: <AlertTriangle className="h-4 w-4" />, label: 'Atrasados (não retornados)', tone: 'text-danger bg-danger/10', matches: groups.atrasados },
     { key: 'reunioes', icon: <CalendarCheck2 className="h-4 w-4" />, label: 'Reuniões de hoje', tone: 'text-accent bg-accent/10', matches: groups.reunioesHoje },
     { key: 'propostas', icon: <FileText className="h-4 w-4" />, label: 'Propostas p/ retornar hoje', tone: 'text-success bg-success/10', matches: groups.propostasHoje },

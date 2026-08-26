@@ -14,6 +14,9 @@
  *   números fixos no texto (12 meses / 12 meses / 30%) — viraram placeholders
  *   "<<Vigência (meses)>>" / "<<Reajuste (meses)>>" / "<<Multa Rescisória (%)>>", com esses mesmos
  *   valores como padrão (ver defaultValueFor) — só editáveis se o cliente negociar diferente.
+ * - "<<DATA>>" (Cláusula 5ª) era ambíguo — parecia data completa, mas o texto já continua "... de
+ *   2026" logo depois, então só cabe o DIA do mês (ex.: 10). Renomeado pra
+ *   "<<Data do Primeiro Vencimento>>" pro campo do formulário ficar claro (ver hintFor).
  */
 
 const P = 'style="text-align:justify;margin:0 0 12pt;line-height:1.5;"'
@@ -42,7 +45,7 @@ export const DEFAULT_CONTRACT_HTML = `
 <p ${P}>§ 2º: Alterações que impliquem em novas funcionalidades ou personalização não previstas neste instrumento serão objeto de orçamento específico e contratação à parte.</p>
 
 <h3 ${H3}>Título IV &ndash; Remuneração</h3>
-<p ${P}><strong>Cláusula 5ª:</strong> O <strong>CONTRATANTE</strong> se compromete a pagar ao(à) <strong>CONTRATADO(A)</strong>, o valor de instalação e mão de obra para configuração da plataforma, o valor de R$<strong>&lt;&lt;VALOR DE INSTALAÇÃO&gt;&gt;</strong> via PIX ou CARTÃO DE CRÉDITO (em até 10x c/juros) na mesma data da assinatura do presente contrato e, por meio de pagamento via PIX ou BOLETO, o valor de R$ <strong>&lt;&lt;VALOR MENSAL&gt;&gt;</strong> mensal, com o primeiro vencimento em <strong>&lt;&lt;DATA&gt;&gt;</strong> de 2026, e as demais no mesmo dia dos meses subsequentes, até que se finde esta obrigação.</p>
+<p ${P}><strong>Cláusula 5ª:</strong> O <strong>CONTRATANTE</strong> se compromete a pagar ao(à) <strong>CONTRATADO(A)</strong>, o valor de instalação e mão de obra para configuração da plataforma, o valor de R$<strong>&lt;&lt;VALOR DE INSTALAÇÃO&gt;&gt;</strong> via PIX ou CARTÃO DE CRÉDITO (em até 10x c/juros) na mesma data da assinatura do presente contrato e, por meio de pagamento via PIX ou BOLETO, o valor de R$ <strong>&lt;&lt;VALOR MENSAL&gt;&gt;</strong> mensal, com o primeiro vencimento em <strong>&lt;&lt;Data do Primeiro Vencimento&gt;&gt;</strong> de 2026, e as demais no mesmo dia dos meses subsequentes, até que se finde esta obrigação.</p>
 <p ${P}>§ 1º: Ocorrendo atraso no pagamento de qualquer importância ajustada no presente instrumento por prazo superior a 2 (dois) dias, o serviço será interrompido até que as pendências financeiras sejam regularizadas. Após 1 (um) mês de inadimplência, os serviços serão extintos sem possibilidade de retomada. Caso o atraso persista, a <strong>CONTRATADA</strong> poderá incluir o nome da <strong>CONTRATANTE</strong> nos cadastros de inadimplentes, como SERASA e/ou SPC, até que a dívida seja regularizada.</p>
 <p ${P}>§ 2º: Em caso de atraso no pagamento do boleto, incidirá multa equivalente a 2% (dois por cento) do valor devido, mais juros de mora de 1% (um por cento) ao mês.</p>
 <p ${P}>§ 3º: A <strong>CONTRATANTE</strong> deverá estar ciente de que a <strong>CONTRATADA</strong> somente realizará os serviços contratados que constarem no contrato. Qualquer pedido adicional será cobrado separadamente deste documento, mediante a prévia formulação de orçamento e aceite das partes.</p>

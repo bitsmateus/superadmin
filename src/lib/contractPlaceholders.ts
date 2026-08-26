@@ -128,7 +128,7 @@ const SECTION_ALIASES: Record<string, PlaceholderSection> = {
   'tabela de servicos': 'servicos',
   'valor de instalacao': 'valores',
   'valor mensal': 'valores',
-  'data': 'valores',
+  'data do primeiro vencimento': 'valores',
   'data de inicio': 'valores',
   'vigencia (meses)': 'vigencia',
   'reajuste (meses)': 'vigencia',
@@ -146,6 +146,8 @@ const HINT_ALIASES: Record<string, string> = {
   'vigencia (meses)': 'Cláusula 16ª. Os padrões já são os do contrato original — só mexa se o cliente negociou diferente.',
   'reajuste (meses)': 'Cláusula 6ª. Os padrões já são os do contrato original — só mexa se o cliente negociou diferente.',
   'multa rescisoria (%)': 'Cláusulas 14ª e § 1º. Os padrões já são os do contrato original — só mexa se o cliente negociou diferente.',
+  'data do primeiro vencimento': 'Cláusula 5ª. Só o DIA do mês em que a mensalidade vence (ex.: 10) — o texto já continua "...de 2026, e as demais no mesmo dia dos meses subsequentes".',
+  'data de inicio': 'Data no fim do contrato, junto da assinatura (ex.: "Tubarão, 26 de agosto de 2026") — normalmente a data em que o contrato é assinado.',
 }
 
 export function hintFor(placeholderName: string): string | undefined {

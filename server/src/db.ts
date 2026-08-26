@@ -795,6 +795,10 @@ END $$`);
       'vigência pelo prazo de 12 meses, com renovação',
       'vigência pelo prazo de &lt;&lt;Vigência (meses)&gt;&gt; meses, com renovação',
     ],
+    [
+      'o primeiro vencimento em <strong>&lt;&lt;DATA&gt;&gt;</strong> de 2026',
+      'o primeiro vencimento em <strong>&lt;&lt;Data do Primeiro Vencimento&gt;&gt;</strong> de 2026',
+    ],
   ];
   // Isolado do resto do boot: se alguma dessas trocas falhar por qualquer motivo, não pode
   // impedir as migrações seguintes (criação da tabela contracts etc.) de rodar.

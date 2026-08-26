@@ -25,6 +25,7 @@ import { leadLabelRoutes } from './routes/leadLabels.js';
 import { supportColumnRoutes } from './routes/supportColumns.js';
 import { supportPageRoutes } from './routes/supportPages.js';
 import { userPageAccessRoutes } from './routes/userPageAccess.js';
+import { webhookRoutes } from './routes/webhooks.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
@@ -74,6 +75,7 @@ async function main() {
   await app.register(supportColumnRoutes);
   await app.register(supportPageRoutes);
   await app.register(userPageAccessRoutes);
+  await app.register(webhookRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

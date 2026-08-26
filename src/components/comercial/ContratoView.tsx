@@ -532,6 +532,11 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   </Button>
                 </div>
               </div>
+              <AutentiqueField
+                contractId={selected.id}
+                value={selected.autentiqueDocumentId}
+                signed={selected.status === 'assinado'}
+              />
               <FieldForm
                 placeholders={placeholders}
                 campos={selected.campos}
@@ -989,6 +994,63 @@ function FieldInput({
         )}
       </div>
       {hint && <p className="mt-1 text-[10px] text-foreground/40">{hint}</p>}
+    </div>
+  )
+}
+
+/** Vínculo com o documento no Autentique — o contrato é gerado aqui, mas enviado pra assinatura
+ * lá fora (a pessoa sobe o PDF manualmente, não existe criação via API). Colar o ID (ou o link)
+ * do documento aqui é o que liga o webhook de "documento assinado" de volta a este contrato, pra
+ * marcar como assinado e avançar o cliente pra Briefing sozinho (ver server/src/routes/webhooks.ts). */
+function AutentiqueField({
+  contractId,
+  value,
+  signed,
+}: {
+  contractId: string
+  value: string | null
+  signed: boolean
+}) {
+  const [local, setLocal] = React.useState(value ?? '')
+  const focusedRef = React.useRef(false)
+  const debouncedSave = useDebouncedCallback((next: string) => {
+    void contractsService.updateContract(contractId, { autentiqueDocumentId: next.trim() || null })
+  }, 500)
+
+  React.useEffect(() => {
+    if (!focusedRef.current) setLocal(value ?? '')
+  }, [value])
+
+  // Aceita colar o link inteiro do documento (ex.: .../documentos/<id>) em vez do ID puro.
+  const extractId = (raw: string) => {
+    const trimmed = raw.trim()
+    const match = trimmed.match(/documentos?\/([a-zA-Z0-9-]+)/)
+    return match ? match[1] : trimmed
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-line/60 p-3">
+      <label className="mb-1 block text-[11px] font-medium text-foreground/50">ID do documento no Autentique</label>
+      <input
+        value={local}
+        onFocus={() => { focusedRef.current = true }}
+        onChange={(e) => { setLocal(e.target.value); debouncedSave(e.target.value) }}
+        onBlur={() => {
+          focusedRef.current = false
+          const extracted = extractId(local)
+          if (extracted !== (value ?? '')) void contractsService.updateContract(contractId, { autentiqueDocumentId: extracted.trim() || null })
+          if (extracted !== local) setLocal(extracted)
+        }}
+        placeholder="Cole o ID ou o link do documento depois de subir no Autentique"
+        className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+      />
+      <p className="mt-1 text-[10px] text-foreground/40">
+        {value
+          ? signed
+            ? '✓ Vinculado — assinatura detectada automaticamente pelo Autentique.'
+            : '✓ Vinculado — quando todo mundo assinar lá, esse contrato marca como assinado sozinho aqui.'
+          : 'Sem isso, "Marcar como assinado" continua manual — cole aqui pra automatizar.'}
+      </p>
     </div>
   )
 }

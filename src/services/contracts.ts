@@ -28,6 +28,11 @@ export interface Contract {
   clientId: string | null
   /** Data em que foi marcado como assinado — null se nunca assinado ou desmarcado depois. */
   signedAt: string | null
+  /** ID do documento no Autentique — colado à mão depois de subir o PDF lá pra assinatura. Quando
+   * preenchido, o webhook de "documento assinado" marca esse contrato sozinho quando o Autentique
+   * avisar (ver server/src/routes/webhooks.ts). null = ainda não vinculado, ou nunca foi mandado
+   * pro Autentique. */
+  autentiqueDocumentId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -36,7 +41,7 @@ type TemplateRow = { id: string; name: string; conteudo: string; created_at: str
 type ContractRow = {
   id: string; board_id: string; template_id: string | null; campos: Record<string, string>
   conteudo: string; status: ContractStatus; venda_lead_id: string | null; client_id: string | null
-  signed_at: string | null; created_at: string; updated_at: string
+  signed_at: string | null; autentique_document_id: string | null; created_at: string; updated_at: string
 }
 
 function rowToTemplate(r: TemplateRow): ContractTemplate {
@@ -47,6 +52,7 @@ function rowToContract(r: ContractRow): Contract {
     id: r.id, boardId: r.board_id, templateId: r.template_id, campos: r.campos ?? {},
     conteudo: r.conteudo, status: r.status ?? 'pendente', vendaLeadId: r.venda_lead_id ?? null,
     clientId: r.client_id ?? null, signedAt: r.signed_at ?? null,
+    autentiqueDocumentId: r.autentique_document_id ?? null,
     createdAt: r.created_at, updatedAt: r.updated_at,
   }
 }
@@ -120,7 +126,10 @@ export const contractsService = {
     return rowToContract(row)
   },
 
-  async updateContract(id: string, patch: { campos?: Record<string, string>; conteudo?: string; status?: ContractStatus }): Promise<void> {
+  async updateContract(id: string, patch: {
+    campos?: Record<string, string>; conteudo?: string; status?: ContractStatus
+    autentiqueDocumentId?: string | null
+  }): Promise<void> {
     try {
       await api.patch(`/api/contracts/${id}`, patch)
       await reload()

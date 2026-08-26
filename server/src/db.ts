@@ -868,6 +868,13 @@ END $$`);
   // esse campo é a fonte da verdade, marcada manualmente por quem registra/revisa a venda.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS veio_do_funil BOOLEAN NOT NULL DEFAULT false`);
 
+  // Integração com Autentique: o contrato é gerado aqui mas enviado pra assinatura lá fora (a
+  // pessoa sobe o PDF manualmente no Autentique, não tem criação via API). Esse campo guarda o ID
+  // do documento no Autentique, colado à mão depois de subir — é o que liga o webhook de "documento
+  // assinado" de volta a este contrato específico (ver server/src/routes/webhooks.ts).
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS autentique_document_id TEXT`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS contracts_autentique_document_id_idx ON contracts(autentique_document_id) WHERE autentique_document_id IS NOT NULL`);
+
   console.log('[db] migrations applied');
 }
 

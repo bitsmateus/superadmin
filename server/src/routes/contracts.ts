@@ -72,7 +72,10 @@ export async function contractRoutes(app: FastifyInstance) {
     }
   );
 
-  app.patch<{ Params: { id: string }; Body: { campos?: Record<string, string>; conteudo?: string; status?: 'pendente' | 'assinado' } }>(
+  app.patch<{ Params: { id: string }; Body: {
+    campos?: Record<string, string>; conteudo?: string; status?: 'pendente' | 'assinado'
+    autentiqueDocumentId?: string | null
+  } }>(
     '/api/contracts/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -88,6 +91,7 @@ export async function contractRoutes(app: FastifyInstance) {
       let i = 1;
       if (req.body.campos !== undefined) { sets.push(`campos = $${i++}`); params.push(JSON.stringify(req.body.campos)); }
       if (req.body.conteudo !== undefined) { sets.push(`conteudo = $${i++}`); params.push(req.body.conteudo); }
+      if (req.body.autentiqueDocumentId !== undefined) { sets.push(`autentique_document_id = $${i++}`); params.push(req.body.autentiqueDocumentId); }
       if (req.body.status !== undefined) {
         sets.push(`status = $${i++}`); params.push(req.body.status);
         // signed_at é derivada do status, não vem do cliente — evita relógio do navegador

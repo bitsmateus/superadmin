@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Clock, Download, Eye, FileText, ListTodo,
+  ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ClipboardList, Clock, Download, Eye, FileText, ListTodo,
   Loader2, Pencil, Plus, Printer, Save, Search, Settings, Trash2, UserRound, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
@@ -529,6 +529,16 @@ export function ContratoView({ pageId }: { pageId: string }) {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-foreground">Campos do cliente</span>
                 <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => selected.clientId && setOpenClientId(selected.clientId)}
+                    disabled={!selected.clientId}
+                    title={selected.clientId ? undefined : 'Este contrato não veio de uma ficha de cadastro (foi criado avulso)'}
+                    leftIcon={<ClipboardList className="h-3.5 w-3.5" />}
+                  >
+                    Ver ficha de cadastro
+                  </Button>
                   <Button size="sm" variant="secondary" onClick={regenerate}>Reaplicar no texto</Button>
                   <Button
                     size="sm"

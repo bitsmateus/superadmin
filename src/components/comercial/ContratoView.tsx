@@ -533,14 +533,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   contentEditable
                   suppressContentEditableWarning
                   onInput={(e) => debouncedSaveBody((e.target as HTMLDivElement).innerHTML)}
-                  className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[11.5pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
-                  style={{ fontFamily: '"Times New Roman", Georgia, serif' }}
+                  className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[12pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
+                  style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
                 />
               ) : (
                 <div
                   dangerouslySetInnerHTML={{ __html: selected.conteudo }}
-                  className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[11.5pt] leading-relaxed"
-                  style={{ fontFamily: '"Times New Roman", Georgia, serif' }}
+                  className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[12pt] leading-relaxed"
+                  style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
                 />
               )}
             </div>
@@ -973,8 +973,8 @@ function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose
         ref={bodyRef}
         contentEditable
         suppressContentEditableWarning
-        className="mx-auto max-h-[55vh] max-w-[800px] overflow-y-auto rounded-lg border border-line bg-card p-8 text-[11pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
-        style={{ fontFamily: '"Times New Roman", Georgia, serif' }}
+        className="mx-auto max-h-[55vh] max-w-[800px] overflow-y-auto rounded-lg border border-line bg-card p-8 text-[12pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
+        style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
       />
     </Modal>
   )

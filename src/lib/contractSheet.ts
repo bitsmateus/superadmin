@@ -40,9 +40,9 @@ function renderContractSheetHtml(bodyHtml: string, title: string): string {
 <style>
   * { box-sizing: border-box; }
   body {
-    font-family: "Times New Roman", Georgia, serif;
+    font-family: Arial, Helvetica, sans-serif;
     background: #E2E8F0;
-    color: #111;
+    color: #000;
     margin: 0;
     padding: 40px 20px;
   }
@@ -52,7 +52,8 @@ function renderContractSheetHtml(bodyHtml: string, title: string): string {
     background: #fff;
     padding: 56px 64px;
     box-shadow: 0 8px 40px rgba(0,0,0,0.12);
-    font-size: 11.5pt;
+    font-size: 12pt;
+    color: #000;
   }
   .print-btn {
     position: fixed; top: 16px; right: 16px;

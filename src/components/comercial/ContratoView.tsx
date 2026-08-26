@@ -1,8 +1,9 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ClipboardList, Clock, Download, Eye, FileText,
-  Loader2, Pencil, Plus, Printer, Save, Search, Settings, Trash2, UserRound, X,
+  ArrowLeft, ArrowRight, Bold, CheckCircle2, ChevronDown, ClipboardList, Clock, Download, Eraser, Eye,
+  FileText, Italic, Loader2, Palette, Pencil, Plus, Printer, Save, Search, Settings, Trash2, Underline,
+  UserRound, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -235,8 +236,23 @@ export function ContratoView({ pageId }: { pageId: string }) {
     void contractsService.updateContract(selected.id, { conteudo })
   }
 
+  // Enquanto o contrato ainda não foi assinado, mudar um campo já reaplica sozinho no texto —
+  // sem isso a pessoa precisava lembrar de clicar em "Reaplicar no texto" toda vez que corrigia
+  // algo (ex.: número de telas errado), e o contrato ficava mostrando um valor antigo até alguém
+  // notar. Depois de assinado, o texto já foi pro cliente/Autentique — aí só o campo muda, o corpo
+  // fica intocado (evita reescrever um documento que já pode ter sido baixado/assinado).
+  const applyFieldsToContract = (contract: Contract, nextCampos: Record<string, string>) => {
+    if (!template || contract.status === 'assinado') {
+      void contractsService.updateContract(contract.id, { campos: nextCampos })
+      return
+    }
+    const conteudo = applyPlaceholders(applyServicesTable(template.conteudo, nextCampos), nextCampos)
+    if (editingBody && bodyRef.current && selected?.id === contract.id) bodyRef.current.innerHTML = conteudo
+    void contractsService.updateContract(contract.id, { campos: nextCampos, conteudo })
+  }
+
   const saveField = (contract: Contract, name: string, value: string) => {
-    void contractsService.updateContract(contract.id, { campos: { ...contract.campos, [name]: value } })
+    applyFieldsToContract(contract, { ...contract.campos, [name]: value })
   }
 
   const fillSelectedFromCnpj = async () => {
@@ -254,8 +270,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
           if (value) next[name] = value
         }
       }
-      await contractsService.updateContract(selected.id, { campos: next })
-      toast.success('Dados do CNPJ preenchidos — clique em "Reaplicar no texto" pra atualizar o corpo.')
+      applyFieldsToContract(selected, next)
+      toast.success(selected.status === 'assinado' ? 'Dados do CNPJ preenchidos.' : 'Dados do CNPJ preenchidos e aplicados no contrato.')
     } catch (err) {
       toast.error((err as Error).message || 'Falha ao consultar o CNPJ.')
     } finally {
@@ -278,8 +294,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
           if (value) next[name] = value
         }
       }
-      await contractsService.updateContract(selected.id, { campos: next })
-      toast.success('Endereço preenchido — clique em "Reaplicar no texto" pra atualizar o corpo.')
+      applyFieldsToContract(selected, next)
+      toast.success(selected.status === 'assinado' ? 'Endereço preenchido.' : 'Endereço preenchido e aplicado no contrato.')
     } catch (err) {
       toast.error((err as Error).message || 'Falha ao consultar o CEP.')
     } finally {
@@ -1100,10 +1116,33 @@ function ServicesTableField({ value, onChange }: { value: string; onChange: (nex
 function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose: () => void; template: ContractTemplate | null }) {
   const bodyRef = React.useRef<HTMLDivElement>(null)
   const [saving, setSaving] = React.useState(false)
+  // O <input type="color"> nativo rouba o foco do contentEditable assim que abre, o que apaga a
+  // seleção de texto antes do usuário escolher a cor — guarda o range aqui no mousedown (antes do
+  // picker abrir) e restaura no onChange, senão "foreColor" aplicaria sem nada selecionado.
+  const savedRange = React.useRef<Range | null>(null)
 
   React.useEffect(() => {
     if (open && bodyRef.current && template) bodyRef.current.innerHTML = template.conteudo
   }, [open, template])
+
+  const exec = (command: string, value?: string) => {
+    bodyRef.current?.focus()
+    document.execCommand(command, false, value)
+  }
+
+  const saveSelection = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) savedRange.current = sel.getRangeAt(0).cloneRange()
+  }
+
+  const applyColor = (color: string) => {
+    const sel = window.getSelection()
+    if (sel && savedRange.current) {
+      sel.removeAllRanges()
+      sel.addRange(savedRange.current)
+    }
+    exec('foreColor', color)
+  }
 
   const save = async () => {
     if (!template || !bodyRef.current) return
@@ -1131,6 +1170,24 @@ function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose
         </>
       }
     >
+      <div className="mx-auto mb-2 flex max-w-[800px] flex-wrap items-center gap-1.5 rounded-lg border border-line/60 bg-elevate/[0.02] p-1.5">
+        <ToolbarButton onClick={() => exec('bold')} title="Negrito"><Bold className="h-3.5 w-3.5" /></ToolbarButton>
+        <ToolbarButton onClick={() => exec('italic')} title="Itálico"><Italic className="h-3.5 w-3.5" /></ToolbarButton>
+        <ToolbarButton onClick={() => exec('underline')} title="Sublinhado"><Underline className="h-3.5 w-3.5" /></ToolbarButton>
+        <label
+          onMouseDown={saveSelection}
+          title="Cor do texto"
+          className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-line px-2 text-foreground/60 transition-colors hover:bg-elevate/[0.06] hover:text-foreground"
+        >
+          <Palette className="h-3.5 w-3.5" />
+          <input
+            type="color"
+            onChange={(e) => applyColor(e.target.value)}
+            className="h-4 w-4 cursor-pointer border-0 bg-transparent p-0"
+          />
+        </label>
+        <ToolbarButton onClick={() => exec('removeFormat')} title="Limpar formatação"><Eraser className="h-3.5 w-3.5" /></ToolbarButton>
+      </div>
       <div
         ref={bodyRef}
         contentEditable
@@ -1139,5 +1196,19 @@ function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose
         style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
       />
     </Modal>
+  )
+}
+
+function ToolbarButton({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      title={title}
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line text-foreground/60 transition-colors hover:bg-elevate/[0.06] hover:text-foreground"
+    >
+      {children}
+    </button>
   )
 }

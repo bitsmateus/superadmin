@@ -763,8 +763,9 @@ function BoardGroup({
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
   columnWidths, onResizeColumn, sdrLock, sdrPageBoards, hideIanMateusCols,
 }: BoardGroupProps) {
-  // Quadro nasce fechado — só mostra os leads quando a pessoa abre de propósito.
-  const [open, setOpen] = React.useState(false)
+  // Quadro nasce fechado — só mostra os leads quando a pessoa abre de propósito. Exceto em "Novos
+  // Leads": ali entra já aberto, sem precisar clicar, pedido específico dessa aba.
+  const [open, setOpen] = React.useState(board.page === 'novos_leads')
   // Ordenação é por QUADRO — cada um guarda a própria coluna/direção, ao contrário de antes (um
   // botão só na barra de cima ordenando todos juntos por data). Disparada passando o mouse em
   // QUALQUER coluna, igual o Monday: aparece um ícone de ordenar, sem precisar de botão fixo.

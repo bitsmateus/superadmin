@@ -256,10 +256,9 @@ export function SupportWorkspacePage() {
             <Chip active={filterKind === 'all'} onClick={() => setFilterKind('all')}>
               Tudo
             </Chip>
-            {/* "Pendência" tirado da barra de filtro por pedido — continua existindo como tipo
-                (tarefas antigas e o seletor "Tipo" ao criar/editar não mudam), só não tem mais
-                chip dedicado aqui. */}
-            {(Object.keys(KIND_META) as ReminderKind[]).filter((k) => k !== 'pending').map((k) => (
+            {/* Só "Tarefa" fica na barra de filtro por pedido — Pendência/Reunião/Anotação
+                continuam existindo como tipo (dado antigo intacto), só sem chip dedicado aqui. */}
+            {(Object.keys(KIND_META) as ReminderKind[]).filter((k) => k === 'task').map((k) => (
               <Chip key={k} active={filterKind === k} onClick={() => setFilterKind(k)}>
                 <span className="inline-flex items-center gap-1">
                   {KIND_META[k].icon}
@@ -738,22 +737,10 @@ function TaskModal({
       }
     >
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
-        {/* Coluna esquerda: os mesmos campos de sempre, só reorganizados numa coluna fixa. */}
+        {/* Coluna esquerda: os mesmos campos de sempre, só reorganizados numa coluna fixa.
+            Seletor de "Tipo" removido por pedido — toda tarefa nova nasce como "Tarefa"; uma
+            tarefa antiga de outro tipo mantém o kind que já tinha, só sem controle pra trocar. */}
         <div className="space-y-4">
-          <div>
-            <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">Tipo</div>
-            <div className="flex flex-wrap gap-1.5">
-              {(Object.keys(KIND_META) as ReminderKind[]).map((k) => (
-                <Chip key={k} active={kind === k} onClick={() => setKind(k)}>
-                  <span className="inline-flex items-center gap-1">
-                    {KIND_META[k].icon}
-                    {KIND_META[k].label}
-                  </span>
-                </Chip>
-              ))}
-            </div>
-          </div>
-
           <Input label="Título *" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Retornar erro de envio para o cliente" />
 
           <Field label="Empresa">

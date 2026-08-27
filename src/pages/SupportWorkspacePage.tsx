@@ -522,7 +522,12 @@ function TaskRow({
           <span className={prio.header}>{prio.label}</span>
         </span>
 
-        <p className={cn('mt-1 text-sm font-semibold leading-snug', done ? 'text-foreground/40 line-through' : 'text-foreground')}>
+        <p
+          className={cn(
+            'mt-1 inline-block rounded-md border border-line px-2 py-1 text-sm font-semibold leading-snug',
+            done ? 'text-foreground/40 line-through' : 'text-foreground/70',
+          )}
+        >
           {r.title}
         </p>
 

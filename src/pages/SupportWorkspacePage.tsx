@@ -689,10 +689,6 @@ function TaskModal({
       toast.error('Dê um título para a tarefa')
       return
     }
-    if (!clientId) {
-      toast.error('Selecione a empresa')
-      return
-    }
     if (!assignee) {
       toast.error('Selecione um responsável')
       return
@@ -757,7 +753,7 @@ function TaskModal({
 
           <Input label="Título *" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Retornar erro de envio para o cliente" />
 
-          <Field label="Empresa *">
+          <Field label="Empresa">
             <ClientCombobox clients={clients} value={clientId} onChange={setClientId} />
           </Field>
 

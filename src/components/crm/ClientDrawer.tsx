@@ -172,7 +172,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                   Avançar etapa
                 </Button>
                 {stageMenu && (
-                  <div className="absolute left-0 z-10 mt-1 w-56 rounded-lg border border-line bg-card shadow-xl animate-fade-in">
+                  <div className="absolute left-0 z-10 mt-1 w-80 rounded-lg border border-line bg-card shadow-xl animate-fade-in">
                     <ul className="py-1">
                       {NEXT_STAGE[client.stage] && (
                         <li>
@@ -181,7 +181,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                             onClick={() => advance(NEXT_STAGE[client.stage]!)}
                             className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm text-foreground hover:bg-elevate/[0.05]"
                           >
-                            Próxima
+                            <span className="whitespace-nowrap">Próxima</span>
                             <StageBadge
                               stage={NEXT_STAGE[client.stage]!}
                               size="sm"
@@ -198,7 +198,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                               onClick={() => advance(s)}
                               className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm text-foreground/70 hover:bg-elevate/[0.05] hover:text-foreground"
                             >
-                              {STAGE_COLORS[s].label}
+                              <span className="whitespace-nowrap">{STAGE_COLORS[s].label}</span>
                               <StageBadge stage={s} size="sm" />
                             </button>
                           </li>

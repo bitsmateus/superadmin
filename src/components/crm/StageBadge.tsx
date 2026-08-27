@@ -15,7 +15,7 @@ export function StageBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border font-medium leading-5',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border font-medium leading-5',
         size === 'sm'
           ? 'px-1.5 py-0 text-[10px]'
           : 'px-2 py-0.5 text-[11px]',

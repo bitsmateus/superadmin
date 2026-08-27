@@ -190,7 +190,12 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                         </li>
                       )}
                       <li className="my-1 border-t border-line" />
-                      {PIPELINE_STAGES.filter((s) => s !== client.stage).map(
+                      {/* Só etapas À FRENTE da atual — "Avançar etapa" não é pra voltar (ex.:
+                          cliente em "Iniciar Configuração" não pode ver "Boas-vindas"/"Contrato"
+                          aqui, isso já ficou pra trás). */}
+                      {PIPELINE_STAGES.filter(
+                        (s) => PIPELINE_STAGES.indexOf(s) > PIPELINE_STAGES.indexOf(client.stage),
+                      ).map(
                         (s) => (
                           <li key={s}>
                             <button

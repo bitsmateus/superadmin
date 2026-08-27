@@ -91,6 +91,11 @@ function LeadPickerModal({
     if (needle.length < 2) return []
     const needleDigits = needle.replace(/\D/g, '')
     return allRows
+      // vendaOrigemId marca a CÓPIA que o sistema cria sozinho na aba Vendas quando um lead vira
+      // "Vendido" (mesmo nome/telefone do original) — ela nunca tem Atualizações (ficam só no
+      // original), então nunca deve aparecer como opção de vínculo, senão a busca "acha" e a
+      // pessoa vincula errado sem perceber que é uma cópia vazia.
+      .filter((r) => !r.vendaOrigemId)
       .filter((r) => {
         if (r.nome.toLowerCase().includes(needle)) return true
         if (r.empresa.toLowerCase().includes(needle)) return true

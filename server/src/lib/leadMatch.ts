@@ -17,10 +17,16 @@ export async function findMatchingLeadRowId(
   name: string | null | undefined,
   company: string | null | undefined,
 ): Promise<string | null> {
+  // venda_origem_id IS NULL exclui as CÓPIAS que o sistema cria sozinho na aba Vendas quando um
+  // lead vira "Vendido" (mesmo nome/telefone do original, mas nunca têm Atualizações — elas ficam
+  // só no lead original). Sem esse filtro, telefone/nome "achavam" 2 candidatos (original + cópia)
+  // e a regra de match inequívoco desistia (0 ou 2+ = null) mesmo quando o original existia certinho.
   const key = phoneKey(phone);
   if (key) {
     const byPhone = await query<{ id: string }>(
-      `SELECT id FROM lead_rows WHERE deleted_at IS NULL AND right(regexp_replace(telefone, '\\D', '', 'g'), 8) = $1`,
+      `SELECT id FROM lead_rows
+       WHERE deleted_at IS NULL AND venda_origem_id IS NULL
+         AND right(regexp_replace(telefone, '\\D', '', 'g'), 8) = $1`,
       [key]
     );
     if (byPhone.length === 1) return byPhone[0].id;
@@ -30,7 +36,8 @@ export async function findMatchingLeadRowId(
   if (!needle) return null;
 
   const candidates = await query<{ id: string; nome: string; empresa: string }>(
-    `SELECT id, nome, empresa FROM lead_rows WHERE deleted_at IS NULL AND (nome <> '' OR empresa <> '')`
+    `SELECT id, nome, empresa FROM lead_rows
+     WHERE deleted_at IS NULL AND venda_origem_id IS NULL AND (nome <> '' OR empresa <> '')`
   );
   // Nome/empresa curto ou genérico ("D", "Brasil") vira falso positivo por containment contra
   // quase qualquer texto — exige os DOIS lados com pelo menos MIN_LEN caracteres normalizados pra

@@ -2,6 +2,8 @@ import { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { query, queryOne } from '../db.js';
 import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
+import { restrictedBoardFilter } from './leadBoards.js';
+import { sendPushToUsers } from '../lib/webPush.js';
 
 /**
  * Webhook do Autentique — o contrato é gerado aqui, mas enviado pra assinatura fora do sistema (a
@@ -241,6 +243,25 @@ export async function webhookRoutes(app: FastifyInstance) {
         `INSERT INTO lead_events (lead_row_id, type, from_value, to_value, actor_name) VALUES ($1,$2,$3,$4,$5)`,
         [leadRow.id, 'created', null, null, 'Meta Ads (n8n)']
       );
+
+      // Push notification (PWA) pra quem tem acesso ao quadro — em background, não atrasa nem
+      // derruba a resposta pro n8n se o envio falhar (assinatura vencida, VAPID não configurado
+      // ainda, etc). Recipiente é decidido igual ao GET /api/lead-rows: mesma restrictedBoardFilter.
+      void (async () => {
+        const profiles = await query<{ id: string; role: string }>('SELECT id, role FROM profiles');
+        const recipientIds: string[] = [];
+        for (const p of profiles) {
+          const allowed = await restrictedBoardFilter(p.id, p.role);
+          if (allowed === null || allowed.includes(board.id)) recipientIds.push(p.id);
+        }
+        const subtitle = [empresa, origemCampanha].filter(Boolean).join(' — ');
+        await sendPushToUsers(recipientIds, {
+          title: `Novo lead: ${req.body.nome || 'sem nome'}`,
+          body: subtitle || 'Lead novo do Meta Ads',
+          url: '/comercial/novos_leads',
+          tag: `lead-${leadRow.id}`,
+        });
+      })().catch((err) => app.log.error({ err, leadId }, '[meta-leads] falha ao enviar push'));
 
       app.log.info({ leadId, id: leadRow.id }, '[meta-leads] lead criado');
       return reply.status(201).send({ success: true, id: leadRow.id });

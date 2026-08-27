@@ -6,6 +6,7 @@ import { PageFallback } from './PageFallback'
 import { cn } from '@/lib/utils'
 import { useAsaasAutoSync } from '@/hooks/useAsaasAutoSync'
 import { useTicketNotifications } from '@/hooks/useTicketNotifications'
+import { usePushSubscription } from '@/hooks/usePushSubscription'
 
 const isDesktop = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -13,6 +14,7 @@ const isDesktop = () =>
 export function Layout() {
   useAsaasAutoSync()
   useTicketNotifications()
+  usePushSubscription()
 
   // Aberto por padrão no desktop, fechado no celular/tablet.
   const [open, setOpen] = React.useState(isDesktop)

@@ -914,6 +914,22 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS qualificacao JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS lead_raw JSONB`);
 
+  // Assinaturas de Web Push (PWA) — um dispositivo assina automaticamente ao logar (ver
+  // usePushSubscription no front), sem botão de opt-in. Quem de fato recebe cada notificação é
+  // decidido na hora do envio (ex.: só quem tem acesso ao quadro do lead), não aqui — por isso
+  // guarda a assinatura de QUALQUER usuário logado, mesmo sem acesso ao Comercial ainda.
+  // endpoint é único por navegador/dispositivo: reassinar do mesmo aparelho faz UPSERT (troca de
+  // usuário no mesmo device, ex. computador compartilhado, atualiza o dono da assinatura).
+  await pool.query(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id)`);
+
   console.log('[db] migrations applied');
 }
 

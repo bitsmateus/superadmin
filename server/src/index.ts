@@ -27,6 +27,7 @@ import { supportPageRoutes } from './routes/supportPages.js';
 import { userPageAccessRoutes } from './routes/userPageAccess.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { pageNoteRoutes } from './routes/pageNotes.js';
+import { pushRoutes } from './routes/push.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
@@ -92,6 +93,7 @@ async function main() {
   await app.register(userPageAccessRoutes);
   await app.register(webhookRoutes);
   await app.register(pageNoteRoutes);
+  await app.register(pushRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

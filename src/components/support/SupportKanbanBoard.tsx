@@ -20,7 +20,6 @@ import {
   Pencil,
   Plus,
   Trash2,
-  Users2,
   X,
 } from 'lucide-react'
 import { ticketsService } from '@/services/tickets'
@@ -28,7 +27,7 @@ import { supportColumnsService } from '@/services/supportColumns'
 import { useSupportColumns } from '@/hooks/useSupportColumns'
 import { accessClientSystem, accessUrlFor, hasSupportEmail } from '@/lib/accessSystem'
 import { KIND_META, PRIORITY_META, PRIORITY_ORDER, dueChipCls, fmtDue } from '@/lib/supportMeta'
-import { cn } from '@/lib/utils'
+import { cn, initials } from '@/lib/utils'
 import { COLUMN_COLORS, type SupportColumn } from '@/types/supportColumn'
 import type { Reminder } from '@/types/ticket'
 import type { Client } from '@/types/client'
@@ -487,33 +486,42 @@ function KanbanCard({
       // sem arrastar, chega aqui; um drag de verdade nunca aciona isso.
       onClick={overlay ? undefined : onEdit}
       className={cn(
-        'select-none rounded-lg border border-line p-2.5 shadow-sm',
+        'select-none rounded-xl border border-line/70 bg-card p-3 shadow-sm transition-all duration-150',
         // O fantasma precisa de fundo opaco (bg-card) pra não deixar os cartões
         // de baixo aparecerem através dele — por isso os fundos são exclusivos.
         overlay
-          ? 'cursor-grabbing bg-card shadow-xl ring-1 ring-accent/40'
-          : 'cursor-grab bg-elevate/[0.02] active:cursor-grabbing',
+          ? 'cursor-grabbing shadow-xl ring-1 ring-accent/40'
+          : 'cursor-grab hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-md active:cursor-grabbing',
         isDragging && 'opacity-30',
       )}
     >
-      {/* Etiquetas: prioridade (mesmas cores da lista) + tipo */}
-      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-        <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1', prio.chip)}>
-          {prio.label}
+      {/* Prioridade (ponto + texto, mais discreto que um selo cheio) + tipo */}
+      <div className="mb-2 flex items-center justify-between gap-1.5">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
+          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', prio.dot)} />
+          <span className={prio.header}>{prio.label}</span>
         </span>
-        <span className="inline-flex items-center gap-1 rounded bg-elevate/[0.05] px-1.5 py-0.5 text-[10px] text-foreground/55">
+        <span className="inline-flex items-center gap-1 rounded-full bg-elevate/[0.06] px-2 py-0.5 text-[10px] font-medium text-foreground/50">
           {kind.icon}
           {kind.label}
         </span>
       </div>
 
-      {/* Empresa como texto simples + ação dedicada "Acessar sistema" */}
+      {/* Título — texto principal do cartão */}
+      <p
+        className={cn(
+          'text-sm font-semibold leading-snug',
+          isDone ? 'text-foreground/40 line-through' : 'text-foreground',
+        )}
+      >
+        {r.title}
+      </p>
+
+      {/* Empresa, como linha secundária + atalho pra "Acessar sistema" */}
       {company && (
-        <div className="mb-1.5 flex items-center gap-1.5">
-          <span className="inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-foreground/70">
-            <Building2 className="h-3 w-3 shrink-0 text-foreground/40" />
-            <span className="truncate">{company}</span>
-          </span>
+        <div className="mt-1 flex items-center gap-1.5">
+          <Building2 className="h-3 w-3 shrink-0 text-foreground/35" />
+          <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/55">{company}</span>
           <button
             type="button"
             title={accessTitle}
@@ -521,50 +529,44 @@ function KanbanCard({
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); if (client) void accessClientSystem(client) }}
             className={cn(
-              'ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 transition-colors',
+              'grid h-5 w-5 shrink-0 place-items-center rounded transition-colors',
               canAccess
-                ? 'bg-accent/10 text-accent ring-accent/20 hover:bg-accent/20'
-                : 'cursor-not-allowed bg-elevate/[0.03] text-foreground/25 ring-line',
+                ? 'text-accent hover:bg-accent/10'
+                : 'cursor-not-allowed text-foreground/20',
             )}
           >
             <ExternalLink className="h-3 w-3" />
-            Acessar
           </button>
         </div>
       )}
 
-      <p
-        className={cn(
-          'text-xs leading-snug',
-          isDone ? 'text-foreground/40 line-through' : 'text-foreground/85',
-        )}
-      >
-        {r.title}
-      </p>
+      {r.notes && <p className="mt-2 line-clamp-2 text-[11px] text-foreground/45">{r.notes}</p>}
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-foreground/45">
-        {r.dueAt && (
-          <span
-            className={cn(
-              'inline-flex items-center gap-1 rounded px-1 py-0.5 font-medium ring-1',
-              dueChipCls(r.dueAt),
-            )}
-          >
-            <Clock className="h-2.5 w-2.5" />
-            Até {fmtDue(r.dueAt)}
-          </span>
-        )}
-        <span className="inline-flex items-center gap-1">
-          <Users2 className="h-2.5 w-2.5" />
-          {assignee ?? '—'}
-        </span>
-      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-line/60 pt-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {r.dueAt && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1',
+                dueChipCls(r.dueAt),
+              )}
+            >
+              <Clock className="h-2.5 w-2.5" />
+              {fmtDue(r.dueAt)}
+            </span>
+          )}
+          {assignee && (
+            <span
+              title={assignee}
+              className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-elevate/[0.08] text-[8px] font-semibold text-foreground/60 ring-1 ring-line"
+            >
+              {initials(assignee)}
+            </span>
+          )}
+        </div>
 
-      {r.notes && <p className="mt-1.5 line-clamp-2 text-[10px] text-foreground/45">{r.notes}</p>}
-
-      <div className="mt-2 flex items-center justify-between">
-        {/* Fallback ao drag-and-drop (mobile / toque): move de coluna. */}
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5">
+          {/* Fallback ao drag-and-drop (mobile / toque): move de coluna. */}
           <MiniBtn
             title="Mover para a coluna anterior"
             disabled={!canMoveLeft}
@@ -579,8 +581,6 @@ function KanbanCard({
           >
             <ChevronRight className="h-3 w-3" />
           </MiniBtn>
-        </div>
-        <div className="flex items-center gap-1">
           <MiniBtn title="Editar" onClick={onEdit}>
             <Pencil className="h-3 w-3" />
           </MiniBtn>

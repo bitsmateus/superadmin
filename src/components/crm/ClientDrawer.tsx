@@ -66,7 +66,9 @@ export interface ClientDrawerProps {
 }
 
 export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLeadTab }: ClientDrawerProps) {
-  const tabDefs = showCrmLeadTab ? [...TAB_DEFS, CRM_LEAD_TAB_DEF] : TAB_DEFS
+  const tabDefs = showCrmLeadTab
+    ? [TAB_DEFS[0], CRM_LEAD_TAB_DEF, ...TAB_DEFS.slice(1)]
+    : TAB_DEFS
   const client = useClient(clientId ?? undefined)
   // Carrega os campos pesados (ex.: contract_file) que a listagem em massa
   // omite pra aliviar o boot.

@@ -63,7 +63,7 @@ export const STAGE_COLORS: Record<PipelineStage, StageStyle> = {
     text: '#FB923C',
     ring: 'rgba(251,146,60,0.30)',
     dot: '#FB923C',
-    label: 'Entrega',
+    label: 'Entrega Marcado',
   },
   delivered: {
     bg: 'rgba(34,211,238,0.15)',

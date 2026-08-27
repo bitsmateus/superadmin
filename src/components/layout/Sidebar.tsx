@@ -15,7 +15,6 @@ import {
   FileText,
   LayoutDashboard,
   LifeBuoy,
-  ListTodo,
   LogOut,
   MessageCircle,
   MessageSquare,
@@ -62,9 +61,11 @@ import { Input } from '@/components/ui/Input'
 import type { LeadPage } from '@/types/leadBoard'
 import { ServerSwitcher } from './ServerSwitcher'
 
+// "Tarefas" (/tarefas) saiu daqui de propósito — agora só se chega lá pela aba dentro de
+// Pipeline (ver PipelineSectionTabs), não mais como item próprio do menu. A rota continua
+// funcionando normal (por isso segue em SUPORTE_ROUTES, pra "Suporte" acender como seção ativa).
 const suporteItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/tarefas', label: 'Tarefas', icon: ListTodo, badgeKey: 'tasks' as const },
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/canais', label: 'Canais', icon: Radio },

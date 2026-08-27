@@ -256,7 +256,10 @@ export function SupportWorkspacePage() {
             <Chip active={filterKind === 'all'} onClick={() => setFilterKind('all')}>
               Tudo
             </Chip>
-            {(Object.keys(KIND_META) as ReminderKind[]).map((k) => (
+            {/* "Pendência" tirado da barra de filtro por pedido — continua existindo como tipo
+                (tarefas antigas e o seletor "Tipo" ao criar/editar não mudam), só não tem mais
+                chip dedicado aqui. */}
+            {(Object.keys(KIND_META) as ReminderKind[]).filter((k) => k !== 'pending').map((k) => (
               <Chip key={k} active={filterKind === k} onClick={() => setFilterKind(k)}>
                 <span className="inline-flex items-center gap-1">
                   {KIND_META[k].icon}

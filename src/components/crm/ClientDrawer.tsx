@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ClipboardList,
   ExternalLink,
+  Link2,
   ListChecks,
   Loader2,
   MessageSquare,
@@ -25,6 +26,7 @@ import { ChatbotTab } from './tabs/ChatbotTab'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
 import { FichaTab } from './tabs/FichaTab'
+import { CrmLeadTab } from './tabs/CrmLeadTab'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
@@ -49,15 +51,22 @@ const TAB_DEFS: TabDef[] = [
   { value: 'ficha', label: 'Ficha de cadastro', icon: <ClipboardList className="h-3.5 w-3.5" /> },
 ]
 
+const CRM_LEAD_TAB_DEF: TabDef = { value: 'crmLead', label: 'Lead do CRM', icon: <Link2 className="h-3.5 w-3.5" /> }
+
 export interface ClientDrawerProps {
   clientId: string | null
   onClose: () => void
   /** Ação extra no cabeçalho, ao lado de "Avançar etapa"/"Acessar sistema" — ex.: "Criar
    * contrato" quando o drawer é aberto a partir da tela de Contrato. */
   extraHeaderAction?: React.ReactNode
+  /** Aba extra "Lead do CRM" (ver CrmLeadTab) — só no Pipeline do Suporte, de propósito: é onde o
+   * atendimento precisa entender o histórico do SDR com o cliente; em outras telas (Clientes,
+   * Contrato) esse mesmo vínculo já aparece de outro jeito, então fica de fora pra não duplicar. */
+  showCrmLeadTab?: boolean
 }
 
-export function ClientDrawer({ clientId, onClose, extraHeaderAction }: ClientDrawerProps) {
+export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLeadTab }: ClientDrawerProps) {
+  const tabDefs = showCrmLeadTab ? [...TAB_DEFS, CRM_LEAD_TAB_DEF] : TAB_DEFS
   const client = useClient(clientId ?? undefined)
   // Carrega os campos pesados (ex.: contract_file) que a listagem em massa
   // omite pra aliviar o boot.
@@ -227,7 +236,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction }: ClientDra
             setTab(v)
             setStageMenu(false)
           }}
-          items={TAB_DEFS.map((t) => ({
+          items={tabDefs.map((t) => ({
             value: t.value,
             label: (
               <span className="inline-flex items-center gap-1.5">
@@ -245,6 +254,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction }: ClientDra
           {tab === 'delivery' && <DeliveryTab client={client} />}
           {tab === 'followup' && <FollowUpTab client={client} />}
           {tab === 'ficha' && <FichaTab client={client} />}
+          {tab === 'crmLead' && showCrmLeadTab && <CrmLeadTab client={client} />}
         </div>
       </Drawer>
 

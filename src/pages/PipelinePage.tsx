@@ -533,6 +533,7 @@ export function PipelinePage() {
       <ClientDrawer
         clientId={openClientId}
         onClose={() => setOpenClientId(null)}
+        showCrmLeadTab
       />
 
       {copyPageId && (

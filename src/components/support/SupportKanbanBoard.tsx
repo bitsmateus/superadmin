@@ -482,6 +482,10 @@ function KanbanCard({
       ref={setNodeRef}
       {...(overlay ? {} : listeners)}
       {...(overlay ? {} : attributes)}
+      // Clicar no cartão (fora dos botões, que já param a propagação) abre a mesma tela de
+      // "Editar" — o distanceConstraint dos sensores (6px) garante que só um clique de verdade,
+      // sem arrastar, chega aqui; um drag de verdade nunca aciona isso.
+      onClick={overlay ? undefined : onEdit}
       className={cn(
         'select-none rounded-lg border border-line p-2.5 shadow-sm',
         // O fantasma precisa de fundo opaco (bg-card) pra não deixar os cartões
@@ -515,7 +519,7 @@ function KanbanCard({
             title={accessTitle}
             disabled={!canAccess}
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => client && void accessClientSystem(client)}
+            onClick={(e) => { e.stopPropagation(); if (client) void accessClientSystem(client) }}
             className={cn(
               'ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 transition-colors',
               canAccess
@@ -607,9 +611,10 @@ function MiniBtn({
       type="button"
       title={title}
       disabled={disabled}
-      // Impede que o clique nos botões inicie o arrasto do cartão.
+      // Impede que o clique nos botões inicie o arrasto do cartão E que o clique "suba" pro
+      // cartão (que agora abre "Editar" sozinho ao ser clicado).
       onPointerDown={(e) => e.stopPropagation()}
-      onClick={onClick}
+      onClick={(e) => { e.stopPropagation(); onClick() }}
       className={cn(
         'inline-flex h-6 w-6 items-center justify-center rounded-lg text-sm ring-1 ring-line transition-colors',
         disabled

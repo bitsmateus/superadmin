@@ -517,19 +517,20 @@ function TaskRow({
       {/* Só o essencial: prioridade, nome da demanda, empresa e prazo — o resto (tipo,
           responsável, anotação) fica pra quem abrir "Editar". */}
       <div className="min-w-0 flex-1">
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
-          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', prio.dot)} />
-          <span className={prio.header}>{prio.label}</span>
-        </span>
-
-        <p
-          className={cn(
-            'mt-1 inline-block rounded-md border border-line px-2 py-1 text-sm font-semibold leading-snug',
-            done ? 'text-foreground/40 line-through' : 'text-foreground/70',
-          )}
-        >
-          {r.title}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p
+            className={cn(
+              'inline-block rounded-md border border-line px-2 py-1 text-sm font-semibold leading-snug',
+              done ? 'text-foreground/40 line-through' : 'text-foreground/70',
+            )}
+          >
+            {r.title}
+          </p>
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
+            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', prio.dot)} />
+            <span className={prio.header}>{prio.label}</span>
+          </span>
+        </div>
 
         {company && (
           <div className="mt-1 flex items-center gap-1.5">

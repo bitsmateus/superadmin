@@ -597,6 +597,29 @@ CREATE TABLE IF NOT EXISTS reminders (
   priority TEXT
 );
 
+-- Atualizações/anexos e linha do tempo de uma tarefa (mesmo padrão de lead_notes/lead_events).
+CREATE TABLE IF NOT EXISTS reminder_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  reminder_id UUID NOT NULL REFERENCES reminders(id) ON DELETE CASCADE,
+  author_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  author_name TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  attachments JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS reminder_notes_reminder_id_idx ON reminder_notes(reminder_id);
+
+CREATE TABLE IF NOT EXISTS reminder_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  reminder_id UUID NOT NULL REFERENCES reminders(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  from_value TEXT,
+  to_value TEXT,
+  actor_name TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS reminder_events_reminder_id_idx ON reminder_events(reminder_id);
+
 -- Itens fixos do menu Suporte — admin pode arquivar (some do menu, fica salvo pra restaurar).
 -- As URLs continuam fixas (/pipeline, /tickets…), só a visibilidade no menu é gerenciável.
 -- source_key = id pro item original; numa cópia ("Duplicar"), aponta pro id do item de origem —
@@ -790,6 +813,14 @@ CREATE TRIGGER notify_lead_rows AFTER INSERT OR UPDATE OR DELETE ON lead_rows
 
 DROP TRIGGER IF EXISTS notify_lead_notes ON lead_notes;
 CREATE TRIGGER notify_lead_notes AFTER INSERT OR UPDATE OR DELETE ON lead_notes
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_reminder_notes ON reminder_notes;
+CREATE TRIGGER notify_reminder_notes AFTER INSERT OR UPDATE OR DELETE ON reminder_notes
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_reminder_events ON reminder_events;
+CREATE TRIGGER notify_reminder_events AFTER INSERT ON reminder_events
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 DROP TRIGGER IF EXISTS notify_lead_events ON lead_events;

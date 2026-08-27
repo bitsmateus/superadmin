@@ -930,6 +930,42 @@ END $$`);
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id)`);
 
+  // Atualizações/anexos e linha do tempo pras tarefas do Suporte (mesmo padrão de lead_notes/
+  // lead_events do Comercial) — antes disso a tarefa só tinha um campo "notes" de texto único, sem
+  // autor nem data por entrada.
+  await pool.query(`CREATE TABLE IF NOT EXISTS reminder_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reminder_id UUID NOT NULL REFERENCES reminders(id) ON DELETE CASCADE,
+    author_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    author_name TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    attachments JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS reminder_notes_reminder_id_idx ON reminder_notes(reminder_id)`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS reminder_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reminder_id UUID NOT NULL REFERENCES reminders(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    from_value TEXT,
+    to_value TEXT,
+    actor_name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS reminder_events_reminder_id_idx ON reminder_events(reminder_id)`);
+
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_reminder_notes ON reminder_notes;
+      CREATE TRIGGER notify_reminder_notes AFTER INSERT OR UPDATE OR DELETE ON reminder_notes
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_reminder_events ON reminder_events;
+      CREATE TRIGGER notify_reminder_events AFTER INSERT ON reminder_events
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

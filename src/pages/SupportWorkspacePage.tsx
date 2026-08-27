@@ -47,6 +47,7 @@ import type {
 import type { TeamMember } from '@/hooks/useTeam'
 import type { PipelineStage } from '@/types/client'
 import { SupportKanbanBoard } from '@/components/support/SupportKanbanBoard'
+import { TaskUpdatesPane } from '@/components/support/TaskUpdatesPane'
 import {
   KIND_META,
   PRIORITY_META,
@@ -671,7 +672,6 @@ function TaskModal({
   const [kind, setKind] = React.useState<ReminderKind>(initial?.kind ?? 'task')
   const [title, setTitle] = React.useState(initial?.title ?? '')
   const [clientId, setClientId] = React.useState(initial?.clientId ?? '')
-  const [notes, setNotes] = React.useState(initial?.notes ?? '')
   // Nova tarefa já vem com a data de hoje como prazo (editável).
   const [due, setDue] = React.useState(
     initial?.dueAt ? toLocalInput(initial.dueAt) : toLocalInput(new Date().toISOString()),
@@ -709,7 +709,6 @@ function TaskModal({
       userId: assignee,
       clientId: clientId || null,
       title: title.trim(),
-      notes: notes.trim() || undefined,
       dueAt: fromLocalInput(due),
       kind,
       status,
@@ -815,16 +814,25 @@ function TaskModal({
           </div>
         </div>
 
-        {/* Coluna direita: mesmo campo de notas de sempre (texto simples), só bem maior e com
-            mais destaque — o espaço pra anotar o que for acontecendo na tarefa. */}
-        <div className="flex flex-col">
-          <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">Atualizações</div>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Contexto, o que perguntar pra equipe técnica, links, andamento…"
-            className="min-h-[320px] w-full flex-1 resize-y rounded-xl border border-line bg-elevate/[0.03] px-4 py-3 text-sm leading-relaxed text-foreground outline-none focus:border-accent/40"
-          />
+        {/* Coluna direita: Atualizações de verdade (negrito, anexos, uma entrada por pessoa) +
+            Arquivos + Linha do tempo — mesmo padrão do card do CRM. Só existe depois de a tarefa
+            já ter sido salva (precisa de um id de verdade pra guardar as atualizações). */}
+        <div className="flex min-h-[420px] flex-col">
+          {editing && initial?.notes && (
+            <div className="mb-3 rounded-lg border border-line/60 bg-elevate/[0.02] px-3 py-2">
+              <p className="mb-1 text-[10px] uppercase tracking-wider text-foreground/35">
+                Anotação anterior (antes desse sistema de atualizações)
+              </p>
+              <p className="whitespace-pre-wrap text-xs text-foreground/60">{initial.notes}</p>
+            </div>
+          )}
+          {editing && initial ? (
+            <TaskUpdatesPane reminderId={initial.id} columns={columns} />
+          ) : (
+            <div className="grid flex-1 place-items-center rounded-xl border border-dashed border-line px-4 text-center text-sm text-foreground/40">
+              Salve a tarefa pra poder registrar atualizações.
+            </div>
+          )}
         </div>
       </div>
     </Modal>

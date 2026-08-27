@@ -158,6 +158,41 @@ export interface Reminder {
   priority?: ReminderPriority
 }
 
+/** Arquivo anexado a uma atualização de tarefa (imagem/PDF), guardado como data URL. */
+export interface ReminderNoteAttachment {
+  id: string
+  name: string
+  type: string
+  size: number
+  dataUrl: string
+}
+
+/** Anotação/atualização do bloco lateral de uma tarefa (mesmo padrão de LeadNote). */
+export interface ReminderNote {
+  id: string
+  reminderId: string
+  authorId: string | null
+  authorName: string
+  content: string
+  attachments: ReminderNoteAttachment[]
+  createdAt: string
+}
+
+/** Só "status" por enquanto (mudança de coluna no Kanban) — o único campo de tarefa que já tinha
+ * uma forma dedicada de mudar antes dessa linha do tempo existir. */
+export type ReminderEventType = 'status'
+
+/** Entrada da linha do tempo automática de uma tarefa. */
+export interface ReminderEvent {
+  id: string
+  reminderId: string
+  type: ReminderEventType
+  fromValue: string | null
+  toValue: string | null
+  actorName: string
+  createdAt: string
+}
+
 export type NpsClassification = 'detractor' | 'neutral' | 'promoter'
 
 export interface NpsResponse {

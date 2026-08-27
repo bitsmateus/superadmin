@@ -308,7 +308,17 @@ export async function ticketRoutes(app: FastifyInstance) {
     '/api/reminders/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const { sub } = req.user as { sub: string };
       const patch = req.body;
+
+      // Loga a mudança de coluna (status) na linha do tempo da tarefa — é o único campo que já
+      // tinha uma forma dedicada de mudar (arrastar no Kanban) antes de reminder_events existir.
+      let statusChange: { from: string | null; to: string } | null = null;
+      if (typeof patch.status === 'string') {
+        const current = await queryOne<{ status: string | null }>('SELECT status FROM reminders WHERE id = $1', [req.params.id]);
+        if (current && current.status !== patch.status) statusChange = { from: current.status, to: patch.status };
+      }
+
       const sets: string[] = [];
       const params: unknown[] = [];
       let i = 1;
@@ -322,6 +332,14 @@ export async function ticketRoutes(app: FastifyInstance) {
         params
       );
       if (!rem) return reply.status(404).send({ message: 'Lembrete não encontrado' });
+
+      if (statusChange) {
+        const actor = await queryOne<{ name: string | null; email: string }>('SELECT name, email FROM profiles WHERE id = $1', [sub]);
+        await query(
+          `INSERT INTO reminder_events (reminder_id, type, from_value, to_value, actor_name) VALUES ($1,'status',$2,$3,$4)`,
+          [req.params.id, statusChange.from, statusChange.to, actor?.name || actor?.email || 'Alguém']
+        );
+      }
       return rem;
     }
   );
@@ -333,6 +351,82 @@ export async function ticketRoutes(app: FastifyInstance) {
     async (req, reply) => {
       await query('DELETE FROM reminders WHERE id = $1', [req.params.id]);
       return reply.status(204).send();
+    }
+  );
+
+  // ---------- Atualizações/anexos e linha do tempo de uma tarefa (mesmo padrão de lead_notes/
+  // lead_events do Comercial) — /api/reminders já é o "espaço compartilhado do time", sem
+  // allowlist por quadro, então essas rotas também não checam nada além de estar autenticado.
+
+  // GET /api/reminder-notes?reminder_id=xxx
+  app.get<{ Querystring: { reminder_id?: string } }>(
+    '/api/reminder-notes',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      if (!req.query.reminder_id) return reply.status(400).send({ message: 'reminder_id é obrigatório' });
+      return query(
+        'SELECT * FROM reminder_notes WHERE reminder_id = $1 ORDER BY created_at DESC',
+        [req.query.reminder_id]
+      );
+    }
+  );
+
+  // POST /api/reminder-notes
+  app.post<{ Body: Record<string, unknown> }>(
+    '/api/reminder-notes',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const b = req.body;
+      const hasAttachments = Array.isArray(b.attachments) && b.attachments.length > 0;
+      if (!b.reminder_id || (!b.content && !hasAttachments)) {
+        return reply.status(400).send({ message: 'reminder_id é obrigatório, e content ou attachments também' });
+      }
+      const { sub: authorId } = req.user as { sub: string };
+      const [note] = await query(
+        `INSERT INTO reminder_notes (reminder_id, author_id, author_name, content, attachments)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [b.reminder_id, authorId ?? null, b.author_name ?? 'Alguém', b.content ?? '', JSON.stringify(b.attachments ?? [])]
+      );
+      return reply.status(201).send(note);
+    }
+  );
+
+  // PATCH /api/reminder-notes/:id — edita o texto de uma atualização
+  app.patch<{ Params: { id: string }; Body: { content?: string } }>(
+    '/api/reminder-notes/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const content = req.body.content?.trim();
+      if (!content) return reply.status(400).send({ message: 'content é obrigatório' });
+      const [note] = await query(
+        `UPDATE reminder_notes SET content = $1 WHERE id = $2 RETURNING *`,
+        [content, req.params.id]
+      );
+      if (!note) return reply.status(404).send({ message: 'Anotação não encontrada' });
+      return note;
+    }
+  );
+
+  // DELETE /api/reminder-notes/:id
+  app.delete<{ Params: { id: string } }>(
+    '/api/reminder-notes/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      await query('DELETE FROM reminder_notes WHERE id = $1', [req.params.id]);
+      return reply.status(204).send();
+    }
+  );
+
+  // GET /api/reminder-events?reminder_id=xxx — linha do tempo automática (só leitura)
+  app.get<{ Querystring: { reminder_id?: string } }>(
+    '/api/reminder-events',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      if (!req.query.reminder_id) return reply.status(400).send({ message: 'reminder_id é obrigatório' });
+      return query(
+        'SELECT * FROM reminder_events WHERE reminder_id = $1 ORDER BY created_at DESC',
+        [req.query.reminder_id]
+      );
     }
   );
 

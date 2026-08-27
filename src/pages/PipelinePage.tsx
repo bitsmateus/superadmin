@@ -22,7 +22,6 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
-  FileEdit,
   Link as LinkIcon,
   ListChecks,
   Lock,
@@ -39,7 +38,6 @@ import { PipelineSectionTabs } from '@/components/support/PipelineSectionTabs'
 import { useSupportView, useSupportViewText } from '@/components/support/SupportViewContext'
 import { supportPagesService } from '@/services/supportPages'
 import { AddClientsToPageModal } from '@/components/support/AddClientsToPageModal'
-import { BriefingTemplateModal } from '@/components/comercial/BriefingTemplateModal'
 import { onSseEvent } from '@/services/api'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -48,7 +46,6 @@ import { ListKanbanToggle } from '@/components/ui/ListKanbanToggle'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { StageBadge } from '@/components/crm/StageBadge'
 import { StageAgeBadge } from '@/components/crm/StageAgeBadge'
-import { useAuth } from '@/hooks/useAuth'
 import { useClients, useCurrentUser, useSettings } from '@/hooks/useClients'
 import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
 import type { TeamArea } from '@/services/supabase'
@@ -144,8 +141,6 @@ export function PipelinePage() {
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
   const [openNew, setOpenNew] = React.useState(false)
   const [addToCopyOpen, setAddToCopyOpen] = React.useState(false)
-  const [briefingTemplateOpen, setBriefingTemplateOpen] = React.useState(false)
-  const { profile } = useAuth()
   // Filtros separados: quem vendeu x quem está entregando. Ver só a própria
   // carga de entrega é o caso de uso principal da fila de configuração.
   const [filterComercial, setFilterComercial] = React.useState(useSupportViewText('filterComercial'))
@@ -461,15 +456,6 @@ export function PipelinePage() {
             >
               Link de cadastro
             </Button>
-            {profile?.role === 'admin' && (
-              <Button
-                variant="secondary"
-                onClick={() => setBriefingTemplateOpen(true)}
-                leftIcon={<FileEdit className="h-4 w-4" />}
-              >
-                Briefing
-              </Button>
-            )}
             <Button
               onClick={() => setOpenNew(true)}
               leftIcon={<PlusCircle className="h-4 w-4" />}
@@ -589,11 +575,6 @@ export function PipelinePage() {
         clientId={openClientId}
         onClose={() => setOpenClientId(null)}
         showCrmLeadTab
-      />
-
-      <BriefingTemplateModal
-        open={briefingTemplateOpen}
-        onClose={() => setBriefingTemplateOpen(false)}
       />
 
       {copyPageId && (

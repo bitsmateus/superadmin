@@ -2300,9 +2300,10 @@ function RoleInfoPopover() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="grid h-5 w-5 place-items-center rounded-full border border-slate-300 text-slate-400 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
+        className="inline-flex items-center gap-1 text-xs font-medium text-[#4F8EF7] hover:text-[#3B7AE0] hover:underline"
       >
         <HelpCircle className="h-3.5 w-3.5" />
+        Saiba mais aqui
       </button>
       {open && (
         <div className="absolute left-0 top-7 z-50 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl text-xs text-slate-700 space-y-3">

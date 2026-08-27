@@ -37,7 +37,7 @@ import { api } from '@/services/api'
 import { canManageUsers } from '@/services/supabase'
 import { computeAlerts } from '@/lib/crmAlerts'
 import { STAGE_SLA_DAYS } from '@/constants/stageColors'
-import { cn, initials } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import type {
   Reminder,
   ReminderKind,
@@ -49,7 +49,6 @@ import type { PipelineStage } from '@/types/client'
 import { SupportKanbanBoard, DONE_LIMIT, columnKeyOf } from '@/components/support/SupportKanbanBoard'
 import { TaskUpdatesPane } from '@/components/support/TaskUpdatesPane'
 import {
-  KIND_META,
   PRIORITY_META,
   PRIORITY_ORDER,
   bucketOf,
@@ -286,7 +285,6 @@ export function SupportWorkspacePage() {
                 tasks={filtered}
                 columns={columns}
                 companyOf={companyOf}
-                teamMap={teamMap}
                 onEdit={setEditing}
                 onOpenClient={(id) => navigate(`/clients?open=${id}`)}
               />
@@ -335,14 +333,12 @@ function ListView({
   tasks,
   columns,
   companyOf,
-  teamMap,
   onEdit,
   onOpenClient,
 }: {
   tasks: Reminder[]
   columns: SupportColumn[]
   companyOf: (id?: string | null) => string | undefined
-  teamMap: Map<string, string>
   onEdit: (r: Reminder) => void
   onOpenClient: (id: string) => void
 }) {
@@ -407,7 +403,6 @@ function ListView({
             column={c}
             tasks={all}
             companyOf={companyOf}
-            teamMap={teamMap}
             onEdit={onEdit}
             onOpenClient={onOpenClient}
           />
@@ -421,14 +416,12 @@ function TaskSection({
   column,
   tasks,
   companyOf,
-  teamMap,
   onEdit,
   onOpenClient,
 }: {
   column: SupportColumn
   tasks: Reminder[]
   companyOf: (id?: string | null) => string | undefined
-  teamMap: Map<string, string>
   onEdit: (r: Reminder) => void
   onOpenClient: (id: string) => void
 }) {
@@ -467,7 +460,6 @@ function TaskSection({
                 key={r.id}
                 r={r}
                 company={companyOf(r.clientId)}
-                assignee={teamMap.get(r.userId)}
                 onEdit={() => onEdit(r)}
                 onOpenClient={onOpenClient}
                 done={column.isDone}
@@ -488,19 +480,16 @@ function TaskSection({
 function TaskRow({
   r,
   company,
-  assignee,
   onEdit,
   onOpenClient,
   done,
 }: {
   r: Reminder
   company?: string
-  assignee?: string
   onEdit: () => void
   onOpenClient: (id: string) => void
   done?: boolean
 }) {
-  const kind = KIND_META[r.kind ?? 'task']
   const prio = PRIORITY_META[r.priority ?? 'normal']
   return (
     <li
@@ -525,25 +514,18 @@ function TaskRow({
         <CheckCircle2 className="h-3.5 w-3.5" />
       </button>
 
+      {/* Só o essencial: prioridade, nome da demanda, empresa e prazo — o resto (tipo,
+          responsável, anotação) fica pra quem abrir "Editar". */}
       <div className="min-w-0 flex-1">
-        {/* Prioridade (ponto + texto) + tipo — mesmo estilo do cartão do Kanban */}
-        <div className="mb-1 flex items-center justify-between gap-1.5">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
-            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', prio.dot)} />
-            <span className={prio.header}>{prio.label}</span>
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-elevate/[0.06] px-2 py-0.5 text-[10px] font-medium text-foreground/50">
-            {kind.icon}
-            {kind.label}
-          </span>
-        </div>
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
+          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', prio.dot)} />
+          <span className={prio.header}>{prio.label}</span>
+        </span>
 
-        {/* Título — texto principal */}
-        <p className={cn('text-sm font-semibold leading-snug', done ? 'text-foreground/40 line-through' : 'text-foreground')}>
+        <p className={cn('mt-1 text-sm font-semibold leading-snug', done ? 'text-foreground/40 line-through' : 'text-foreground')}>
           {r.title}
         </p>
 
-        {/* Empresa, como linha secundária + atalho pra abrir o cliente */}
         {company && (
           <div className="mt-1 flex items-center gap-1.5">
             <Building2 className="h-3 w-3 shrink-0 text-foreground/35" />
@@ -559,10 +541,8 @@ function TaskRow({
           </div>
         )}
 
-        {r.notes && <p className="mt-2 line-clamp-2 text-[11px] text-foreground/45">{r.notes}</p>}
-
-        <div className="mt-2 flex items-center gap-1.5 border-t border-line/60 pt-2">
-          {r.dueAt && (
+        {r.dueAt && (
+          <div className="mt-2 border-t border-line/60 pt-2">
             <span
               className={cn(
                 'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1',
@@ -572,16 +552,8 @@ function TaskRow({
               <Clock className="h-2.5 w-2.5" />
               {fmtDue(r.dueAt)}
             </span>
-          )}
-          {assignee && (
-            <span
-              title={assignee}
-              className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-elevate/[0.08] text-[8px] font-semibold text-foreground/60 ring-1 ring-line"
-            >
-              {initials(assignee)}
-            </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* stopPropagation aqui em cima (não dá pra fazer isso dentro do IconBtn, que não repassa o

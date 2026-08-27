@@ -17,7 +17,6 @@ import {
   Settings2,
   StickyNote,
   Trash2,
-  Users2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
@@ -37,7 +36,7 @@ import { api } from '@/services/api'
 import { canManageUsers } from '@/services/supabase'
 import { computeAlerts } from '@/lib/crmAlerts'
 import { STAGE_SLA_DAYS } from '@/constants/stageColors'
-import { cn } from '@/lib/utils'
+import { cn, initials } from '@/lib/utils'
 import type {
   Reminder,
   ReminderKind,
@@ -46,7 +45,7 @@ import type {
 } from '@/types/ticket'
 import type { TeamMember } from '@/hooks/useTeam'
 import type { PipelineStage } from '@/types/client'
-import { SupportKanbanBoard } from '@/components/support/SupportKanbanBoard'
+import { SupportKanbanBoard, DONE_LIMIT, columnKeyOf } from '@/components/support/SupportKanbanBoard'
 import { TaskUpdatesPane } from '@/components/support/TaskUpdatesPane'
 import {
   KIND_META,
@@ -55,9 +54,8 @@ import {
   bucketOf,
   dueChipCls,
   fmtDue,
-  statusLabel,
 } from '@/lib/supportMeta'
-import { useSupportColumns, useSupportColumnLabels } from '@/hooks/useSupportColumns'
+import { useSupportColumns } from '@/hooks/useSupportColumns'
 import type { SupportColumn } from '@/types/supportColumn'
 
 /** Modo de visualização escolhido (lista ou kanban) — lembrado no navegador. */
@@ -120,7 +118,6 @@ export function SupportWorkspacePage() {
   // fica salva no navegador pra não ter que alternar a cada visita.
   // As colunas do quadro também nomeiam o status na lista e no modal.
   const columns = useSupportColumns()
-  const statusLabels = useSupportColumnLabels()
 
   // Numa cópia do menu ("Duplicar") a preferência de Lista/Kanban é dela, não do Suporte inteiro:
   // a chave do localStorage leva o id da cópia, senão alternar aqui mudaria a tela original também.
@@ -179,20 +176,6 @@ export function SupportWorkspacePage() {
     for (const t of team) m.set(t.id, teamMemberLabel(t))
     return m
   }, [team])
-
-  // Agrupado por prioridade (Alta / Média / Baixa), cada grupo por prazo.
-  const byPriority = React.useMemo(() => {
-    const map: Record<ReminderPriority, Reminder[]> = { high: [], normal: [], low: [] }
-    for (const r of openTasks) map[r.priority ?? 'normal'].push(r)
-    const dueTime = (r: Reminder) => (r.dueAt ? new Date(r.dueAt).getTime() : Number.MAX_SAFE_INTEGER)
-    for (const p of PRIORITY_ORDER) map[p].sort((a, c) => dueTime(a) - dueTime(c))
-    return map
-  }, [openTasks])
-
-  const doneTasks = React.useMemo(
-    () => filtered.filter((r) => r.completedAt).slice(0, 30),
-    [filtered],
-  )
 
   // Base p/ as contagens dos chips: abertas, filtradas só por tipo/pessoa (não
   // pelo filtro rápido) — assim "Atrasadas (N)" não zera ao escolher "Hoje".
@@ -299,11 +282,10 @@ export function SupportWorkspacePage() {
           <div>
             {view === 'list' ? (
               <ListView
-                byPriority={byPriority}
-                doneTasks={doneTasks}
+                tasks={filtered}
+                columns={columns}
                 companyOf={companyOf}
                 teamMap={teamMap}
-                statusLabels={statusLabels}
                 onEdit={setEditing}
                 onOpenClient={(id) => navigate(`/clients?open=${id}`)}
               />
@@ -347,80 +329,108 @@ export function SupportWorkspacePage() {
   )
 }
 
-// ── Lista agrupada por prioridade ─────────────────────────────────────────────
+// ── Lista agrupada por coluna (Pendentes/Iniciado/Fazendo/Feito) ─────────────
 function ListView({
-  byPriority,
-  doneTasks,
+  tasks,
+  columns,
   companyOf,
   teamMap,
-  statusLabels,
   onEdit,
   onOpenClient,
 }: {
-  byPriority: Record<ReminderPriority, Reminder[]>
-  doneTasks: Reminder[]
+  tasks: Reminder[]
+  columns: SupportColumn[]
   companyOf: (id?: string | null) => string | undefined
   teamMap: Map<string, string>
-  statusLabels: Map<string, string>
   onEdit: (r: Reminder) => void
   onOpenClient: (id: string) => void
 }) {
-  const hasAny = PRIORITY_ORDER.some((p) => byPriority[p].length > 0)
+  // Prioridade agora é filtro (clicável, some se clicar de novo), não agrupamento — o agrupamento
+  // virou por coluna (Pendentes/Iniciado/Fazendo/Feito, as mesmas do Kanban), pra bater com o que
+  // já aparece lá.
+  const [priorityFilter, setPriorityFilter] = React.useState<'all' | ReminderPriority>('all')
+
+  const filteredTasks = React.useMemo(
+    () => (priorityFilter === 'all' ? tasks : tasks.filter((r) => (r.priority ?? 'normal') === priorityFilter)),
+    [tasks, priorityFilter],
+  )
+
+  const byColumn = React.useMemo(() => {
+    const map = new Map<string, Reminder[]>()
+    for (const c of columns) map.set(c.key, [])
+    for (const r of filteredTasks) map.get(columnKeyOf(r, columns))?.push(r)
+
+    const dueTime = (r: Reminder) => (r.dueAt ? new Date(r.dueAt).getTime() : Number.MAX_SAFE_INTEGER)
+    const prioRank = (r: Reminder) => PRIORITY_ORDER.indexOf(r.priority ?? 'normal')
+    const doneTime = (r: Reminder) => (r.completedAt ? new Date(r.completedAt).getTime() : 0)
+    for (const c of columns) {
+      const list = map.get(c.key)!
+      if (c.isDone) list.sort((a, b) => doneTime(b) - doneTime(a))
+      else list.sort((a, b) => prioRank(a) - prioRank(b) || dueTime(a) - dueTime(b))
+    }
+    return map
+  }, [filteredTasks, columns])
+
+  const hasAny = columns.some((c) => (byColumn.get(c.key)?.length ?? 0) > 0)
+
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-0.5 text-[11px] font-medium text-foreground/40">Prioridade:</span>
+        {PRIORITY_ORDER.map((p) => (
+          <Chip
+            key={p}
+            active={priorityFilter === p}
+            onClick={() => setPriorityFilter((cur) => (cur === p ? 'all' : p))}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <span className={cn('h-1.5 w-1.5 rounded-full', PRIORITY_META[p].dot)} />
+              {PRIORITY_META[p].label}
+            </span>
+          </Chip>
+        ))}
+      </div>
+
       {!hasAny && (
         <div className="rounded-2xl border border-line bg-card px-4 py-10 text-center text-sm text-foreground/45">
-          Nenhuma tarefa aberta. Crie a primeira em “Nova tarefa”. 🎯
+          Nenhuma tarefa aqui. Crie a primeira em “Nova tarefa”. 🎯
         </div>
       )}
-      {PRIORITY_ORDER.map((p) =>
-        byPriority[p].length === 0 ? null : (
-          <section key={p}>
+
+      {columns.map((c) => {
+        const all = byColumn.get(c.key) ?? []
+        if (all.length === 0) return null
+        const shown = c.isDone ? all.slice(0, DONE_LIMIT) : all
+        return (
+          <section key={c.id}>
             <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
-              <span className={cn('h-2 w-2 rounded-full', PRIORITY_META[p].dot)} />
-              <span className={PRIORITY_META[p].header}>Prioridade {PRIORITY_META[p].label}</span>
+              <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
+              <span className="text-foreground/70">{c.name}</span>
               <span className="rounded-full bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] text-foreground/50">
-                {byPriority[p].length}
+                {all.length}
               </span>
             </h3>
             <ul className="space-y-2">
-              {byPriority[p].map((r) => (
+              {shown.map((r) => (
                 <TaskRow
                   key={r.id}
                   r={r}
                   company={companyOf(r.clientId)}
                   assignee={teamMap.get(r.userId)}
-                  statusLabels={statusLabels}
                   onEdit={() => onEdit(r)}
                   onOpenClient={onOpenClient}
+                  done={c.isDone}
                 />
               ))}
             </ul>
+            {all.length > shown.length && (
+              <p className="mt-2 text-[11px] text-foreground/40">
+                +{all.length - shown.length} concluída(s) mais antiga(s)
+              </p>
+            )}
           </section>
-        ),
-      )}
-
-      {doneTasks.length > 0 && (
-        <details className="rounded-xl border border-line bg-card">
-          <summary className="cursor-pointer px-4 py-2.5 text-xs font-medium text-foreground/55">
-            Concluídas recentemente ({doneTasks.length})
-          </summary>
-          <ul className="divide-y divide-line p-2">
-            {doneTasks.map((r) => (
-              <TaskRow
-                key={r.id}
-                r={r}
-                company={companyOf(r.clientId)}
-                assignee={teamMap.get(r.userId)}
-                statusLabels={statusLabels}
-                onEdit={() => onEdit(r)}
-                onOpenClient={onOpenClient}
-                done
-              />
-            ))}
-          </ul>
-        </details>
-      )}
+        )
+      })}
     </div>
   )
 }
@@ -429,7 +439,6 @@ function TaskRow({
   r,
   company,
   assignee,
-  statusLabels,
   onEdit,
   onOpenClient,
   done,
@@ -437,7 +446,6 @@ function TaskRow({
   r: Reminder
   company?: string
   assignee?: string
-  statusLabels: Map<string, string>
   onEdit: () => void
   onOpenClient: (id: string) => void
   done?: boolean
@@ -445,11 +453,18 @@ function TaskRow({
   const kind = KIND_META[r.kind ?? 'task']
   const prio = PRIORITY_META[r.priority ?? 'normal']
   return (
-    <li className="flex items-start gap-3 rounded-xl border border-line bg-card px-3.5 py-3">
+    <li
+      onClick={onEdit}
+      className="group flex cursor-pointer items-start gap-3 rounded-xl border border-line/70 bg-card px-3.5 py-3 shadow-sm transition-all duration-150 hover:border-accent/30 hover:shadow-md"
+    >
       <button
         type="button"
         title={done ? 'Reabrir' : 'Concluir'}
-        onClick={() => (done ? ticketsService.reopenReminder(r.id) : ticketsService.completeReminder(r.id))}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (done) void ticketsService.reopenReminder(r.id)
+          else void ticketsService.completeReminder(r.id)
+        }}
         className={cn(
           'mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ring-1 transition-colors',
           done
@@ -461,62 +476,71 @@ function TaskRow({
       </button>
 
       <div className="min-w-0 flex-1">
-        {/* Empresa em destaque + botão de abrir (igual abrir um cliente) */}
-        {company && (
-          <button
-            type="button"
-            onClick={() => r.clientId && onOpenClient(r.clientId)}
-            title="Abrir cliente"
-            className="mb-1 inline-flex max-w-full items-center gap-1.5 rounded-lg bg-accent/10 px-2 py-1 text-xs font-semibold text-accent ring-1 ring-accent/20 transition-colors hover:bg-accent/15"
-          >
-            <Building2 className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{company}</span>
-            <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
-          </button>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded bg-elevate/[0.05] px-1.5 py-0.5 text-[10px] text-foreground/55">
+        {/* Prioridade (ponto + texto) + tipo — mesmo estilo do cartão do Kanban */}
+        <div className="mb-1 flex items-center justify-between gap-1.5">
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
+            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', prio.dot)} />
+            <span className={prio.header}>{prio.label}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-elevate/[0.06] px-2 py-0.5 text-[10px] font-medium text-foreground/50">
             {kind.icon}
             {kind.label}
           </span>
-          {!done && (
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1', prio.chip)}>
-              {prio.label}
-            </span>
-          )}
-          <span className={cn('text-sm', done ? 'text-foreground/40 line-through' : 'font-medium text-foreground')}>
-            {r.title}
-          </span>
         </div>
 
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
+        {/* Título — texto principal */}
+        <p className={cn('text-sm font-semibold leading-snug', done ? 'text-foreground/40 line-through' : 'text-foreground')}>
+          {r.title}
+        </p>
+
+        {/* Empresa, como linha secundária + atalho pra abrir o cliente */}
+        {company && (
+          <div className="mt-1 flex items-center gap-1.5">
+            <Building2 className="h-3 w-3 shrink-0 text-foreground/35" />
+            <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/55">{company}</span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); if (r.clientId) onOpenClient(r.clientId) }}
+              title="Abrir cliente"
+              className="grid h-5 w-5 shrink-0 place-items-center rounded text-accent transition-colors hover:bg-accent/10"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
+        {r.notes && <p className="mt-2 line-clamp-2 text-[11px] text-foreground/45">{r.notes}</p>}
+
+        <div className="mt-2 flex items-center gap-1.5 border-t border-line/60 pt-2">
           {r.dueAt && (
             <span
               className={cn(
-                'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium ring-1',
+                'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1',
                 dueChipCls(r.dueAt),
               )}
             >
-              <Clock className="h-3 w-3" />
-              Até {fmtDue(r.dueAt)}
+              <Clock className="h-2.5 w-2.5" />
+              {fmtDue(r.dueAt)}
             </span>
           )}
-          <span className="inline-flex items-center gap-1 text-foreground/45">
-            <Users2 className="h-3 w-3" />
-            {assignee ?? '—'}
-          </span>
-          <span className="text-foreground/35">· {statusLabel(r.status, statusLabels)}</span>
+          {assignee && (
+            <span
+              title={assignee}
+              className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-elevate/[0.08] text-[8px] font-semibold text-foreground/60 ring-1 ring-line"
+            >
+              {initials(assignee)}
+            </span>
+          )}
         </div>
-
-        {r.notes && <p className="mt-1.5 line-clamp-2 text-[11px] text-foreground/50">{r.notes}</p>}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
+      {/* stopPropagation aqui em cima (não dá pra fazer isso dentro do IconBtn, que não repassa o
+          evento) — senão clicar em Editar/Excluir também dispararia o onClick do <li>. */}
+      <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
         <IconBtn title="Editar" onClick={onEdit}>
           <Pencil className="h-3.5 w-3.5" />
         </IconBtn>
-        <IconBtn title="Excluir" danger onClick={() => ticketsService.deleteReminder(r.id)}>
+        <IconBtn title="Excluir" danger onClick={() => void ticketsService.deleteReminder(r.id)}>
           <Trash2 className="h-3.5 w-3.5" />
         </IconBtn>
       </div>

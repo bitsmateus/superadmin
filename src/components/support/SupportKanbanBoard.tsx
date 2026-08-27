@@ -32,11 +32,12 @@ import type { Client } from '@/types/client'
 
 /** Quantas concluídas mostrar numa coluna de conclusão (equivale à antiga seção
  *  "Concluídas recentemente" da visão em lista). */
-const DONE_LIMIT = 30
+export const DONE_LIMIT = 30
 
 /** Em qual coluna o cartão está hoje. Status desconhecido (coluna apagada, dado
- *  antigo) cai na primeira coluna, pra nenhuma tarefa sumir do quadro. */
-function columnKeyOf(r: Reminder, columns: SupportColumn[]): string {
+ *  antigo) cai na primeira coluna, pra nenhuma tarefa sumir do quadro. Exportada — a visão em
+ *  Lista (ListView, SupportWorkspacePage.tsx) agrupa pelas mesmas colunas do Kanban. */
+export function columnKeyOf(r: Reminder, columns: SupportColumn[]): string {
   if (r.completedAt) return (columns.find((c) => c.isDone) ?? columns[columns.length - 1])?.key ?? ''
   const hit = columns.find((c) => c.key === r.status)
   return (hit ?? columns[0])?.key ?? ''

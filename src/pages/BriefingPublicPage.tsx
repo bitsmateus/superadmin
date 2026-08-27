@@ -34,13 +34,7 @@ import type {
   BriefingUser,
   BriefingUserRole,
   AiTone,
-  MetaVerificationStatus,
-  PartnerAccessStatus,
 } from '@/types/client'
-import {
-  META_VERIFICATION_LABELS,
-  PARTNER_ACCESS_LABELS,
-} from '@/constants/configProgress'
 
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
 
@@ -191,11 +185,6 @@ function validateBriefing(
       errs.push({ section: 'integracoes', key: 'facebookEmail', message: 'Informe o e-mail do Facebook/Meta.' })
     if (!state.facebookPassword.trim())
       errs.push({ section: 'integracoes', key: 'facebookPassword', message: 'Informe a senha do Facebook/Meta.' })
-    // Nome do portfólio empresarial é OPCIONAL (o cliente pode não saber).
-    if (!state.officialApi.numeroDedicado.trim())
-      errs.push({ section: 'integracoes', key: 'oaNumeroDedicado', message: 'Informe o número dedicado à API Oficial.' })
-    if (!state.officialApi.displayNamePretendido.trim())
-      errs.push({ section: 'integracoes', key: 'oaDisplayName', message: 'Informe o nome que aparecerá no WhatsApp para os clientes.' })
   }
 
   // ── Condicional: IA (básica ou avançada) ──
@@ -276,13 +265,6 @@ interface BriefingFormState {
   whatsappNumbers: string[]
   facebookEmail: string
   facebookPassword: string
-  officialApi: {
-    businessPortfolioName: string
-    numeroDedicado: string
-    displayNamePretendido: string
-    verificacaoNegocioStatus: MetaVerificationStatus
-    partnerAccessStatus: PartnerAccessStatus
-  }
   wavoipInfo: string
   emailConfig: string
   channelAccess: Record<string, { email?: string; password?: string; notes?: string }>
@@ -351,13 +333,6 @@ function initialFormState(company: string): BriefingFormState {
     whatsappNumbers: padWhatsappNumbers([]),
     facebookEmail: '',
     facebookPassword: '',
-    officialApi: {
-      businessPortfolioName: '',
-      numeroDedicado: '',
-      displayNamePretendido: '',
-      verificacaoNegocioStatus: 'nao_iniciada',
-      partnerAccessStatus: 'pendente',
-    },
     wavoipInfo: '',
     emailConfig: '',
     channelAccess: {},
@@ -466,16 +441,6 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     whatsappNumbers: bd.whatsappNumbers?.length ? padWhatsappNumbers(bd.whatsappNumbers) : base.whatsappNumbers,
     facebookEmail: bd.facebookEmail ?? base.facebookEmail,
     facebookPassword: bd.facebookPassword ?? base.facebookPassword,
-    officialApi: {
-      businessPortfolioName: bd.officialApi?.businessPortfolioName ?? base.officialApi.businessPortfolioName,
-      numeroDedicado: bd.officialApi?.numeroDedicado ?? base.officialApi.numeroDedicado,
-      displayNamePretendido:
-        bd.officialApi?.displayNamePretendido ?? base.officialApi.displayNamePretendido,
-      verificacaoNegocioStatus:
-        bd.officialApi?.verificacaoNegocioStatus ?? base.officialApi.verificacaoNegocioStatus,
-      partnerAccessStatus:
-        bd.officialApi?.partnerAccessStatus ?? base.officialApi.partnerAccessStatus,
-    },
     wavoipInfo: bd.wavoipInfo ?? base.wavoipInfo,
     emailConfig: bd.emailConfig ?? base.emailConfig,
     channelAccess: bd.channelAccess ?? base.channelAccess,
@@ -753,15 +718,6 @@ export function BriefingPublicPage() {
       useFacebook: Boolean(state.facebookEmail.trim()),
       facebookEmail: state.facebookEmail.trim() || undefined,
       facebookPassword: state.facebookPassword.trim() || undefined,
-      officialApi: cfg?.connectionTypes.includes('api_oficial')
-        ? {
-            businessPortfolioName: state.officialApi.businessPortfolioName.trim() || undefined,
-            numeroDedicado: state.officialApi.numeroDedicado.trim() || undefined,
-            displayNamePretendido: state.officialApi.displayNamePretendido.trim() || undefined,
-            verificacaoNegocioStatus: state.officialApi.verificacaoNegocioStatus,
-            partnerAccessStatus: state.officialApi.partnerAccessStatus,
-          }
-        : undefined,
       mainFlow: '',
       chatbotFlow: sections.includes('chatbot')
         ? {
@@ -1337,80 +1293,12 @@ export function BriefingPublicPage() {
                     conectar a API Oficial. Você pode trocar a senha depois que a conexão estiver pronta.
                   </p>
 
-                  {/* Dados estruturados da Meta / Business Manager */}
                   <div className="mt-4 border-t border-blue-100 pt-3">
-                    <p className="mb-2 text-xs text-slate-600">
+                    <p className="text-xs text-slate-600">
                       Prefira nos dar acesso <strong>compartilhando o seu Business Manager</strong>{' '}
-                      (partner access) a passar senha ou AnyDesk — é mais seguro e você mantém o
+                      (partner access) a passar senha ou TeamViewer — é mais seguro e você mantém o
                       controle. Basta adicionar nossa agência como parceira nas configurações do BM.
                     </p>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <Field label={L('Nome do portfólio empresarial (Meta) — opcional')}>
-                        <PlainInput
-                          value={state.officialApi.businessPortfolioName}
-                          onChange={(v) =>
-                            setState({ ...state, officialApi: { ...state.officialApi, businessPortfolioName: v } })
-                          }
-                          placeholder="Nome do portfólio/negócio no Meta Business (se souber)"
-                        />
-                      </Field>
-                      <Field label={L('Número dedicado à API Oficial *')}>
-                        <PlainInput
-                          value={state.officialApi.numeroDedicado}
-                          onChange={(v) => {
-                            setState({ ...state, officialApi: { ...state.officialApi, numeroDedicado: v } })
-                            clearError('oaNumeroDedicado')
-                          }}
-                          placeholder="(11) 99999-9999"
-                        />
-                        {errors.oaNumeroDedicado && (
-                          <p className="mt-1 text-xs font-medium text-rose-600">{errors.oaNumeroDedicado}</p>
-                        )}
-                      </Field>
-                      <Field label={L('Nome que aparecerá no WhatsApp (para os clientes verem) *')}>
-                        <PlainInput
-                          value={state.officialApi.displayNamePretendido}
-                          onChange={(v) => {
-                            setState({ ...state, officialApi: { ...state.officialApi, displayNamePretendido: v } })
-                            clearError('oaDisplayName')
-                          }}
-                          placeholder="Ex: Clínica Sorriso"
-                        />
-                        {errors.oaDisplayName && (
-                          <p className="mt-1 text-xs font-medium text-rose-600">{errors.oaDisplayName}</p>
-                        )}
-                      </Field>
-                      <Field label={L('Verificação do negócio (Meta)')}>
-                        <PlainSelect
-                          value={state.officialApi.verificacaoNegocioStatus}
-                          onChange={(v) =>
-                            setState({
-                              ...state,
-                              officialApi: { ...state.officialApi, verificacaoNegocioStatus: v as MetaVerificationStatus },
-                            })
-                          }
-                          options={(Object.keys(META_VERIFICATION_LABELS) as MetaVerificationStatus[]).map((k) => ({
-                            value: k,
-                            label: META_VERIFICATION_LABELS[k],
-                          }))}
-                        />
-                      </Field>
-                      <Field label={L('Acesso de parceiro (partner access)')}>
-                        <PlainSelect
-                          value={state.officialApi.partnerAccessStatus}
-                          onChange={(v) =>
-                            setState({
-                              ...state,
-                              officialApi: { ...state.officialApi, partnerAccessStatus: v as PartnerAccessStatus },
-                            })
-                          }
-                          options={(Object.keys(PARTNER_ACCESS_LABELS) as PartnerAccessStatus[]).map((k) => ({
-                            value: k,
-                            label: PARTNER_ACCESS_LABELS[k],
-                          }))}
-                        />
-                      </Field>
-                    </div>
                   </div>
                 </div>
               )}
@@ -1458,16 +1346,6 @@ export function BriefingPublicPage() {
                           value={acc.password ?? ''}
                           onChange={(v) => setAcc({ password: v })}
                           placeholder="••••••••"
-                        />
-                      </Field>
-                    </div>
-                    <div className="mt-3">
-                      <Field label={L('Outras informações (opcional)')}>
-                        <PlainTextarea
-                          value={acc.notes ?? ''}
-                          onChange={(v) => setAcc({ notes: v })}
-                          placeholder="Página, token, observações…"
-                          rows={2}
                         />
                       </Field>
                     </div>

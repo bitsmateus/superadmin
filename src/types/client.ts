@@ -143,6 +143,10 @@ export interface BriefingData {
 
   extraNotes?: string
 
+  /** Respostas de perguntas de texto livre novas adicionadas pelo admin (ver
+   * src/services/briefingTemplate.ts) — chave = fieldKey de briefing_custom_questions. */
+  customAnswers?: Record<string, string>
+
   // Channel-specific info (populated when client submits the public form)
   wavoipInfo?: string
   olxInfo?: string

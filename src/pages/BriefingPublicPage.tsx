@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/services/api'
+import { fetchPublicBriefingTemplate, type BriefingCustomQuestion } from '@/services/briefingTemplate'
 import { asText, cn } from '@/lib/utils'
 import type {
   BriefingData,
@@ -315,6 +316,9 @@ interface BriefingFormState {
   aiExternalExamples: string
   externalAutomationInfo: string
   extraNotes: string
+  // Respostas das perguntas de texto livre novas, adicionadas pelo admin (ver
+  // src/services/briefingTemplate.ts). Chave = fieldKey de briefing_custom_questions.
+  customAnswers: Record<string, string>
 }
 
 function initialFormState(company: string): BriefingFormState {
@@ -384,6 +388,7 @@ function initialFormState(company: string): BriefingFormState {
     aiExternalExamples: '',
     externalAutomationInfo: '',
     extraNotes: '',
+    customAnswers: {},
   }
 }
 
@@ -505,6 +510,7 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     aiExternalExamples: bd.aiExternalExamples ?? base.aiExternalExamples,
     externalAutomationInfo: bd.externalAutomationInfo ?? base.externalAutomationInfo,
     extraNotes: bd.extraNotes ?? base.extraNotes,
+    customAnswers: bd.customAnswers ?? base.customAnswers,
   }
 }
 
@@ -512,6 +518,9 @@ export function BriefingPublicPage() {
   const { token } = useParams<{ token: string }>()
   const [client, setClient] = React.useState<PublicClient | null | undefined>(undefined)
   const [state, setState] = React.useState<BriefingFormState>(initialFormState(''))
+  // Perguntas de texto livre novas, adicionadas pelo admin — renderizadas ao final da
+  // seção "Observações" (ver src/services/briefingTemplate.ts).
+  const [customQuestions, setCustomQuestions] = React.useState<BriefingCustomQuestion[]>([])
   const [section, setSection] = React.useState(0)
   const [submittedData, setSubmittedData] = React.useState<{ greeting: string; offHours: string } | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
@@ -568,6 +577,14 @@ export function BriefingPublicPage() {
     })()
     return () => { cancelled = true }
   }, [token])
+
+  React.useEffect(() => {
+    let cancelled = false
+    fetchPublicBriefingTemplate()
+      .then(({ customQuestions }) => { if (!cancelled) setCustomQuestions(customQuestions) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   // Autosave do rascunho a cada mudança (depois de hidratado).
   React.useEffect(() => {
@@ -778,6 +795,8 @@ export function BriefingPublicPage() {
       channelAccess: cleanChannelAccess(state.channelAccess),
       externalAutomationInfo: state.externalAutomationInfo.trim() || undefined,
       extraNotes: state.extraNotes.trim() || undefined,
+      customAnswers:
+        Object.keys(state.customAnswers).length > 0 ? state.customAnswers : undefined,
       submittedAt: new Date().toISOString(),
     }
     setSubmitting(true)
@@ -2108,6 +2127,30 @@ export function BriefingPublicPage() {
                 placeholder="Informações adicionais, preferências, dúvidas…"
               />
             </Field>
+            {customQuestions.map((q) => (
+              <div key={q.id} className="mt-4">
+                <Field label={q.label}>
+                  {q.type === 'textarea' ? (
+                    <PlainTextarea
+                      value={state.customAnswers[q.fieldKey] ?? ''}
+                      onChange={(v) =>
+                        setState({ ...state, customAnswers: { ...state.customAnswers, [q.fieldKey]: v } })
+                      }
+                      rows={4}
+                      placeholder={q.placeholder ?? undefined}
+                    />
+                  ) : (
+                    <PlainInput
+                      value={state.customAnswers[q.fieldKey] ?? ''}
+                      onChange={(v) =>
+                        setState({ ...state, customAnswers: { ...state.customAnswers, [q.fieldKey]: v } })
+                      }
+                      placeholder={q.placeholder ?? undefined}
+                    />
+                  )}
+                </Field>
+              </div>
+            ))}
           </SectionBlock>
         )}
       </main>

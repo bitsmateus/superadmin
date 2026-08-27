@@ -620,6 +620,25 @@ CREATE TABLE IF NOT EXISTS reminder_events (
 );
 CREATE INDEX IF NOT EXISTS reminder_events_reminder_id_idx ON reminder_events(reminder_id);
 
+-- Modelo editável do Briefing público: overrides de rótulo/placeholder pros campos já
+-- existentes + perguntas de texto livre novas adicionadas pelo admin.
+CREATE TABLE IF NOT EXISTS briefing_field_overrides (
+  field_key TEXT PRIMARY KEY,
+  label TEXT,
+  placeholder TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS briefing_custom_questions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  field_key TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  placeholder TEXT,
+  type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'textarea')),
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Itens fixos do menu Suporte — admin pode arquivar (some do menu, fica salvo pra restaurar).
 -- As URLs continuam fixas (/pipeline, /tickets…), só a visibilidade no menu é gerenciável.
 -- source_key = id pro item original; numa cópia ("Duplicar"), aponta pro id do item de origem —

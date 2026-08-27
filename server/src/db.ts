@@ -966,6 +966,37 @@ END $$`);
     END IF;
   END $$`);
 
+  // Modelo editável do Briefing público: overrides de rótulo/placeholder pros campos
+  // já existentes (Fase B, ainda não usada pelo front) + perguntas de texto livre novas
+  // adicionadas pelo admin (Fase A) — renderizadas dinamicamente em BriefingPublicPage.
+  await pool.query(`CREATE TABLE IF NOT EXISTS briefing_field_overrides (
+    field_key TEXT PRIMARY KEY,
+    label TEXT,
+    placeholder TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS briefing_custom_questions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    field_key TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    placeholder TEXT,
+    type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'textarea')),
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_briefing_field_overrides ON briefing_field_overrides;
+      CREATE TRIGGER notify_briefing_field_overrides AFTER INSERT OR UPDATE OR DELETE ON briefing_field_overrides
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_briefing_custom_questions ON briefing_custom_questions;
+      CREATE TRIGGER notify_briefing_custom_questions AFTER INSERT OR UPDATE OR DELETE ON briefing_custom_questions
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

@@ -76,6 +76,17 @@ export async function publicRoutes(app: FastifyInstance) {
     }
   );
 
+  // GET /api/public/briefing-template — overrides de rótulo/placeholder + perguntas de
+  // texto livre novas do admin, pro form público renderizar (sem autenticação: é o mesmo
+  // form aberto por token que já lê os dados do cliente acima).
+  app.get('/api/public/briefing-template', async () => {
+    const [overrides, customQuestions] = await Promise.all([
+      query('SELECT field_key, label, placeholder FROM briefing_field_overrides'),
+      query('SELECT id, field_key, label, placeholder, type, position FROM briefing_custom_questions ORDER BY position, created_at'),
+    ]);
+    return { overrides, customQuestions };
+  });
+
   // Gera a abertura do menu sem expor a chave da Anthropic no navegador.
   app.post<{
     Params: { token: string };

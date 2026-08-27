@@ -4,15 +4,20 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
+import { SupportLeadCard } from '@/components/comercial/SupportLeadCard'
 import { useAllLeadRows, useLeadRow } from '@/hooks/useLeadBoards'
 import { suggestCrmLead } from '@/services/crmLeadLookup'
+import { fetchSupportLeadView, type SupportLeadInfo } from '@/services/leadRowLookup'
 
 /** Vínculo do contrato com o card do CRM (SDR) do mesmo prospect — não existe ligação automática
  * garantida entre a ficha de cadastro e o CRM (cadastros separados, às vezes sem telefone
  * preenchido no CRM), então: sugere um vínculo por telefone/nome quando possível, mas SEMPRE deixa
  * a pessoa confirmar/trocar/remover à mão (contract.vendaLeadId) — inclusive pra contrato avulso,
  * sem lead nenhuma vindo do funil. "Ver dados do lead" abre o card completo de verdade
- * (LeadDetailModal, o mesmo do quadro), não um resumo à parte. */
+ * (LeadDetailModal, o mesmo do quadro) pra quem tem acesso ao Comercial; quem não tem (ex.: o
+ * Suporte, no Pipeline) cai automaticamente pra um card de leitura pontual (SupportLeadCard) —
+ * sem isso, o painel inteiro ficava mostrando "nenhuma lead vinculada" pro Suporte mesmo quando
+ * existia um vínculo de verdade, só porque useLeadRow depende da allowlist de quadros. */
 export function LeadLinkPanel({
   clientId,
   vendaLeadId,
@@ -25,6 +30,7 @@ export function LeadLinkPanel({
   const [suggestedId, setSuggestedId] = React.useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [detailLeadId, setDetailLeadId] = React.useState<string | null>(null)
+  const [fallbackLead, setFallbackLead] = React.useState<SupportLeadInfo | null>(null)
 
   React.useEffect(() => {
     if (vendaLeadId || !clientId) { setSuggestedId(null); return }
@@ -37,23 +43,36 @@ export function LeadLinkPanel({
 
   const effectiveId = vendaLeadId ?? suggestedId
   const row = useLeadRow(effectiveId)
+
+  React.useEffect(() => {
+    if (!effectiveId || row) { setFallbackLead(null); return }
+    let cancelled = false
+    fetchSupportLeadView(effectiveId)
+      .then((res) => { if (!cancelled) setFallbackLead(res.lead) })
+      .catch(() => { if (!cancelled) setFallbackLead(null) })
+    return () => { cancelled = true }
+  }, [effectiveId, row])
+
   const isSuggestion = !vendaLeadId && !!suggestedId
+  const displayName = row?.nome || row?.empresa || fallbackLead?.nome || fallbackLead?.empresa
+  const displaySdr = row?.sdr || fallbackLead?.sdr
+  const hasLead = !!effectiveId && !!(row || fallbackLead)
 
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line/60 p-3">
       <div className="flex min-w-0 items-center gap-2 text-xs">
         <ClipboardList className="h-3.5 w-3.5 shrink-0 text-accent" />
-        {effectiveId && row ? (
+        {hasLead ? (
           <span className="truncate">
-            <span className="font-medium text-foreground">{row.nome || row.empresa || 'Lead do CRM'}</span>
-            <span className="text-foreground/40"> {row.sdr ? `— SDR ${row.sdr}` : ''}{isSuggestion ? ' (sugestão automática)' : ''}</span>
+            <span className="font-medium text-foreground">{displayName || 'Lead do CRM'}</span>
+            <span className="text-foreground/40"> {displaySdr ? `— SDR ${displaySdr}` : ''}{isSuggestion ? ' (sugestão automática)' : ''}</span>
           </span>
         ) : (
           <span className="text-foreground/40">Nenhuma lead do CRM vinculada.</span>
         )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {effectiveId && row && (
+        {hasLead && (
           <Button size="sm" variant="secondary" onClick={() => setDetailLeadId(effectiveId)}>Ver dados do lead</Button>
         )}
         <Button size="sm" variant="secondary" onClick={() => setPickerOpen(true)} leftIcon={<Link2 className="h-3.5 w-3.5" />}>
@@ -67,7 +86,11 @@ export function LeadLinkPanel({
       </div>
 
       <LeadPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={(id) => onLink(id)} />
-      <LeadDetailModal leadRowId={detailLeadId} onClose={() => setDetailLeadId(null)} />
+      {row ? (
+        <LeadDetailModal leadRowId={detailLeadId} onClose={() => setDetailLeadId(null)} />
+      ) : (
+        <SupportLeadCard leadId={detailLeadId} onClose={() => setDetailLeadId(null)} />
+      )}
     </div>
   )
 }

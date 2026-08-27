@@ -173,6 +173,31 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
 }
 
 export async function leadBoardRoutes(app: FastifyInstance) {
+  // GET /api/lead-rows/:id/support-view — card de leitura de UMA lead específica (dados + as
+  // Atualizações), SEM checar restrictedBoardFilter de propósito: é o que deixa o Suporte ver o
+  // histórico do SDR com o cliente (aba Pipeline > "Lead do CRM", ver LeadLinkPanel) mesmo sem
+  // nenhum acesso ao Comercial como um todo. Não é uma brecha de busca livre — só devolve dado de
+  // um ID que a pessoa já tem em mãos por um vínculo que o próprio app já validou
+  // (contracts.venda_lead_id ou a sugestão automática por telefone/nome), nunca uma listagem.
+  app.get<{ Params: { id: string } }>(
+    '/api/lead-rows/:id/support-view',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const lead = await queryOne(
+        `SELECT id, nome, empresa, telefone, tipo, dia_contato, status, sdr, dor_cliente,
+                numero_atendentes, valor_mrr, valor_implementacao, created_at
+         FROM lead_rows WHERE id = $1`,
+        [req.params.id]
+      );
+      if (!lead) return reply.status(404).send({ message: 'Lead não encontrada' });
+      const notes = await query(
+        'SELECT id, author_name, content, attachments, created_at FROM lead_notes WHERE lead_row_id = $1 ORDER BY created_at DESC',
+        [req.params.id]
+      );
+      return { lead, notes };
+    }
+  );
+
   // GET /api/lead-boards
   app.get('/api/lead-boards', { onRequest: [app.authenticate] }, async (req) => {
     const { sub, role } = req.user as { sub: string; role: string };

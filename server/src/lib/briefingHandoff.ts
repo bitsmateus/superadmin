@@ -2,8 +2,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
 
 /** Só os últimos 8 dígitos — tolera diferença de DDI (55) e o "9" extra que nem todo cadastro
- * tem, sem exigir que os dois números estejam no formato exatamente igual. */
-function phoneKey(raw: string | null | undefined): string | null {
+ * tem, sem exigir que os dois números estejam no formato exatamente igual. Exportada porque a
+ * mesma heurística é reusada em GET /api/clients/:id/crm-lead (ver routes/clients.ts). */
+export function phoneKey(raw: string | null | undefined): string | null {
   const digits = (raw ?? '').replace(/\D/g, '');
   return digits.length >= 8 ? digits.slice(-8) : null;
 }

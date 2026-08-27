@@ -31,6 +31,7 @@ import { formatCnpj, isValidCnpjLength } from '@/lib/cnpj'
 import { formatCep, isValidCepLength } from '@/lib/cep'
 import { openContractSheet } from '@/lib/contractSheet'
 import { RichTextToolbar } from '@/components/comercial/RichTextToolbar'
+import { SdrLeadPanel } from '@/components/comercial/SdrLeadPanel'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { formatDateShort } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -465,6 +466,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     </span>
                   )}
                 </div>
+                <SdrLeadPanel clientId={draftClientId} />
                 <FieldForm
                   placeholders={placeholders}
                   campos={draftCampos}
@@ -549,6 +551,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                 value={selected.autentiqueDocumentId}
                 signed={selected.status === 'assinado'}
               />
+              <SdrLeadPanel clientId={selected.clientId} />
               <FieldForm
                 placeholders={placeholders}
                 campos={selected.campos}
@@ -1046,13 +1049,16 @@ function AutentiqueField({
       <input
         value={local}
         onFocus={() => { focusedRef.current = true }}
-        onChange={(e) => { setLocal(e.target.value); debouncedSave(e.target.value) }}
-        onBlur={() => {
-          focusedRef.current = false
-          const extracted = extractId(local)
-          if (extracted !== (value ?? '')) void contractsService.updateContract(contractId, { autentiqueDocumentId: extracted.trim() || null })
-          if (extracted !== local) setLocal(extracted)
+        onChange={(e) => {
+          // Extrai NA HORA (não só no blur) — colar um link inteiro e fechar o modal antes de
+          // desfocar o campo salvava a URL crua (com "https://.../documentos/"), o que nunca bate
+          // com o ID que o Autentique manda no webhook — o contrato ficava "vinculado" mas o
+          // "documento assinado" nunca era reconhecido, exigindo marcar manual toda vez.
+          const extracted = extractId(e.target.value)
+          setLocal(extracted)
+          debouncedSave(extracted)
         }}
+        onBlur={() => { focusedRef.current = false }}
         placeholder="Cole o ID ou o link do documento depois de subir no Autentique"
         className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
       />

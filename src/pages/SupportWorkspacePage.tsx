@@ -11,6 +11,7 @@ import {
   ListTodo,
   MessageCircle,
   Pencil,
+  Phone,
   Plus,
   Send,
   Settings2,
@@ -719,12 +720,14 @@ function TaskModal({
     onClose()
   }
 
+  const selectedClient = clients.find((c) => c.id === clientId)
+
   return (
     <Modal
       open
       onClose={onClose}
       title={editing ? 'Editar tarefa' : 'Nova tarefa'}
-      size="md"
+      size="xl"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={saving}>
@@ -736,27 +739,40 @@ function TaskModal({
         </>
       }
     >
-      <div className="space-y-4">
-        <div>
-          <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">Tipo</div>
-          <div className="flex flex-wrap gap-1.5">
-            {(Object.keys(KIND_META) as ReminderKind[]).map((k) => (
-              <Chip key={k} active={kind === k} onClick={() => setKind(k)}>
-                <span className="inline-flex items-center gap-1">
-                  {KIND_META[k].icon}
-                  {KIND_META[k].label}
-                </span>
-              </Chip>
-            ))}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
+        {/* Coluna esquerda: os mesmos campos de sempre, só reorganizados numa coluna fixa. */}
+        <div className="space-y-4">
+          <div>
+            <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">Tipo</div>
+            <div className="flex flex-wrap gap-1.5">
+              {(Object.keys(KIND_META) as ReminderKind[]).map((k) => (
+                <Chip key={k} active={kind === k} onClick={() => setKind(k)}>
+                  <span className="inline-flex items-center gap-1">
+                    {KIND_META[k].icon}
+                    {KIND_META[k].label}
+                  </span>
+                </Chip>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <Input label="Título *" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Retornar erro de envio para o cliente" />
+          <Input label="Título *" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Retornar erro de envio para o cliente" />
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Empresa *">
             <ClientCombobox clients={clients} value={clientId} onChange={setClientId} />
           </Field>
+
+          {/* Telefone não é um campo da tarefa — vem do cadastro da empresa selecionada, só pra
+              consulta rápida sem precisar abrir a ficha do cliente em outra tela. */}
+          {selectedClient?.phone && (
+            <Field label="Telefone">
+              <div className="flex h-9 items-center gap-2 rounded-lg border border-line bg-elevate/[0.04] px-2.5 text-sm text-foreground/70">
+                <Phone className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+                <span className="truncate">{selectedClient.phone}</span>
+              </div>
+            </Field>
+          )}
+
           <Field label="Responsável *">
             <Select value={assignee} onChange={setAssignee}>
               <option value="">— Selecionar —</option>
@@ -767,9 +783,7 @@ function TaskModal({
               ))}
             </Select>
           </Field>
-        </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Prazo de entrega">
             <input
               type="datetime-local"
@@ -778,35 +792,40 @@ function TaskModal({
               className="h-9 w-full rounded-lg border border-line bg-elevate/[0.04] px-2.5 text-sm text-foreground outline-none focus:border-accent/40"
             />
           </Field>
-          <Field label="Prioridade">
-            <Select value={priority} onChange={(v) => setPriority(v as ReminderPriority)}>
-              {(Object.keys(PRIORITY_META) as ReminderPriority[]).map((p) => (
-                <option key={p} value={p}>
-                  {PRIORITY_META[p].label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Status">
-            <Select value={status} onChange={(v) => setStatus(v as ReminderStatus)}>
-              {columns.map((c) => (
-                <option key={c.id} value={c.key}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Prioridade">
+              <Select value={priority} onChange={(v) => setPriority(v as ReminderPriority)}>
+                {(Object.keys(PRIORITY_META) as ReminderPriority[]).map((p) => (
+                  <option key={p} value={p}>
+                    {PRIORITY_META[p].label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Status">
+              <Select value={status} onChange={(v) => setStatus(v as ReminderStatus)}>
+                {columns.map((c) => (
+                  <option key={c.id} value={c.key}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
         </div>
 
-        <Field label="Detalhes / infos">
+        {/* Coluna direita: mesmo campo de notas de sempre (texto simples), só bem maior e com
+            mais destaque — o espaço pra anotar o que for acontecendo na tarefa. */}
+        <div className="flex flex-col">
+          <div className="mb-1.5 text-[11px] uppercase tracking-wider text-foreground/45">Atualizações</div>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            rows={4}
-            placeholder="Contexto, o que perguntar pra equipe técnica, links…"
-            className="w-full rounded-lg border border-line bg-elevate/[0.04] px-3 py-2 text-sm text-foreground outline-none focus:border-accent/40"
+            placeholder="Contexto, o que perguntar pra equipe técnica, links, andamento…"
+            className="min-h-[320px] w-full flex-1 resize-y rounded-xl border border-line bg-elevate/[0.03] px-4 py-3 text-sm leading-relaxed text-foreground outline-none focus:border-accent/40"
           />
-        </Field>
+        </div>
       </div>
     </Modal>
   )

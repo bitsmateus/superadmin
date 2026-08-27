@@ -902,6 +902,18 @@ END $$`);
     END IF;
   END $$`);
 
+  // Webhook de leads do Meta Ads (via n8n) — ver server/src/routes/webhooks.ts. meta_lead_id é o
+  // id do lead lá no Meta, usado só pra deduplicar reenvios do n8n (índice único parcial: várias
+  // linhas com NULL continuam permitidas, só não pode repetir um id do Meta já processado).
+  // origem_campanha/qualificacao guardam campos já tratados do formulário pra aparecerem na UI;
+  // lead_raw guarda o payload bruto inteiro (histórico/auditoria caso precise investigar depois).
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS meta_lead_id TEXT`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_meta_lead_id_uniq
+    ON lead_rows(meta_lead_id) WHERE meta_lead_id IS NOT NULL`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS origem_campanha TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS qualificacao JSONB NOT NULL DEFAULT '{}'`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS lead_raw JSONB`);
+
   console.log('[db] migrations applied');
 }
 

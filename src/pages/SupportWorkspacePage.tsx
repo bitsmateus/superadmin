@@ -4,6 +4,7 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   Clock,
   ExternalLink,
@@ -400,38 +401,83 @@ function ListView({
       {columns.map((c) => {
         const all = byColumn.get(c.key) ?? []
         if (all.length === 0) return null
-        const shown = c.isDone ? all.slice(0, DONE_LIMIT) : all
         return (
-          <section key={c.id}>
-            <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
-              <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
-              <span className="text-foreground/70">{c.name}</span>
-              <span className="rounded-full bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] text-foreground/50">
-                {all.length}
-              </span>
-            </h3>
-            <ul className="space-y-2">
-              {shown.map((r) => (
-                <TaskRow
-                  key={r.id}
-                  r={r}
-                  company={companyOf(r.clientId)}
-                  assignee={teamMap.get(r.userId)}
-                  onEdit={() => onEdit(r)}
-                  onOpenClient={onOpenClient}
-                  done={c.isDone}
-                />
-              ))}
-            </ul>
-            {all.length > shown.length && (
-              <p className="mt-2 text-[11px] text-foreground/40">
-                +{all.length - shown.length} concluída(s) mais antiga(s)
-              </p>
-            )}
-          </section>
+          <TaskSection
+            key={c.id}
+            column={c}
+            tasks={all}
+            companyOf={companyOf}
+            teamMap={teamMap}
+            onEdit={onEdit}
+            onOpenClient={onOpenClient}
+          />
         )
       })}
     </div>
+  )
+}
+
+function TaskSection({
+  column,
+  tasks,
+  companyOf,
+  teamMap,
+  onEdit,
+  onOpenClient,
+}: {
+  column: SupportColumn
+  tasks: Reminder[]
+  companyOf: (id?: string | null) => string | undefined
+  teamMap: Map<string, string>
+  onEdit: (r: Reminder) => void
+  onOpenClient: (id: string) => void
+}) {
+  // "Feito" nasce fechada (clica no cabeçalho pra ver o que já foi feito) — o resto continua
+  // sempre aberto, igual antes.
+  const [open, setOpen] = React.useState(!column.isDone)
+  const shown = column.isDone ? tasks.slice(0, DONE_LIMIT) : tasks
+
+  return (
+    <section>
+      <h3
+        onClick={column.isDone ? () => setOpen((o) => !o) : undefined}
+        className={cn(
+          'mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider',
+          column.isDone && 'cursor-pointer select-none',
+        )}
+      >
+        <span className="h-2 w-2 rounded-full" style={{ background: column.color }} />
+        <span className="text-foreground/70">{column.name}</span>
+        <span className="rounded-full bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] text-foreground/50">
+          {tasks.length}
+        </span>
+        {column.isDone && (
+          <ChevronDown className={cn('h-3.5 w-3.5 text-foreground/35 transition-transform', !open && '-rotate-90')} />
+        )}
+      </h3>
+      {open && (
+        <>
+          <ul className="space-y-2">
+            {shown.map((r) => (
+              <TaskRow
+                key={r.id}
+                r={r}
+                company={companyOf(r.clientId)}
+                assignee={teamMap.get(r.userId)}
+                onEdit={() => onEdit(r)}
+                onOpenClient={onOpenClient}
+                done={column.isDone}
+              />
+            ))}
+          </ul>
+          {tasks.length > shown.length && (
+            <p className="mt-2 text-[11px] text-foreground/40">
+              +{tasks.length - shown.length} concluída(s) mais antiga(s)
+            </p>
+          )}
+        </>
+      )}
+    </section>
   )
 }
 

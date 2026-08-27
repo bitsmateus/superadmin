@@ -125,9 +125,6 @@ export function SupportWorkspacePage() {
   React.useEffect(() => {
     localStorage.setItem(viewStorageKey, view)
   }, [view, viewStorageKey])
-  const [filterKind, setFilterKind] = React.useState<ReminderKind | 'all'>(
-    useSupportViewValue<ReminderKind | 'all'>('filterKind', 'all'),
-  )
   // Filtros rápidos (uma dimensão) + seletor de pessoa específica (outra).
   const [quick, setQuick] = React.useState<'all' | 'mine' | 'unassigned' | 'overdue' | 'today'>(
     useSupportViewValue<'all' | 'mine' | 'unassigned' | 'overdue' | 'today'>('quick', 'all'),
@@ -155,7 +152,6 @@ export function SupportWorkspacePage() {
 
   const filtered = React.useMemo(() => {
     return reminders.filter((r) => {
-      if (filterKind !== 'all' && (r.kind ?? 'task') !== filterKind) return false
       if (filterPerson && r.userId !== filterPerson) return false
       if (quick === 'mine' && r.userId !== myId) return false
       if (quick === 'unassigned' && r.userId && knownOwnerIds.has(r.userId)) return false
@@ -163,7 +159,7 @@ export function SupportWorkspacePage() {
       if (quick === 'today' && bucketOf(r.dueAt) !== 'today') return false
       return true
     })
-  }, [reminders, filterKind, filterPerson, quick, myId, knownOwnerIds])
+  }, [reminders, filterPerson, quick, myId, knownOwnerIds])
 
   const openTasks = React.useMemo(() => filtered.filter((r) => !r.completedAt), [filtered])
 
@@ -192,13 +188,8 @@ export function SupportWorkspacePage() {
   // pelo filtro rápido) — assim "Atrasadas (N)" não zera ao escolher "Hoje".
   const scopedOpen = React.useMemo(
     () =>
-      reminders.filter(
-        (r) =>
-          !r.completedAt &&
-          (filterKind === 'all' || (r.kind ?? 'task') === filterKind) &&
-          (!filterPerson || r.userId === filterPerson),
-      ),
-    [reminders, filterKind, filterPerson],
+      reminders.filter((r) => !r.completedAt && (!filterPerson || r.userId === filterPerson)),
+    [reminders, filterPerson],
   )
   const overdueCount = React.useMemo(
     () => scopedOpen.filter((r) => bucketOf(r.dueAt) === 'overdue').length,
@@ -253,20 +244,6 @@ export function SupportWorkspacePage() {
         {/* Barra de filtros + alternância de visão */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip active={filterKind === 'all'} onClick={() => setFilterKind('all')}>
-              Tudo
-            </Chip>
-            {/* Só "Tarefa" fica na barra de filtro por pedido — Pendência/Reunião/Anotação
-                continuam existindo como tipo (dado antigo intacto), só sem chip dedicado aqui. */}
-            {(Object.keys(KIND_META) as ReminderKind[]).filter((k) => k === 'task').map((k) => (
-              <Chip key={k} active={filterKind === k} onClick={() => setFilterKind(k)}>
-                <span className="inline-flex items-center gap-1">
-                  {KIND_META[k].icon}
-                  {KIND_META[k].label}
-                </span>
-              </Chip>
-            ))}
-            <span className="mx-1 h-4 w-px bg-line" />
             <Chip active={quick === 'all'} onClick={() => setQuick('all')}>
               Todas
             </Chip>

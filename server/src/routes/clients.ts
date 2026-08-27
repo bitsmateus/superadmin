@@ -35,12 +35,12 @@ export async function clientRoutes(app: FastifyInstance) {
     }
   );
 
-  // GET /api/clients/:id/crm-lead — dados do card do CRM (SDR) que provavelmente é o mesmo
+  // GET /api/clients/:id/crm-lead — sugere qual lead_row (card do CRM) provavelmente é o mesmo
   // prospect (não existe vínculo direto entre clients e lead_rows — são cadastros separados; ver
   // findMatchingLeadRowId, lib/leadMatch.ts, pra heurística telefone→nome/empresa e a garantia de
-  // só devolver algo em caso de match INEQUÍVOCO). Usado na aba Contrato pra quem está gerando o
-  // contrato ver de relance o que o SDR já registrou (valores combinados, atualizações etc.) sem
-  // precisar abrir o CRM.
+  // só sugerir em caso de match INEQUÍVOCO). Só uma SUGESTÃO — a aba Contrato deixa a pessoa
+  // confirmar/trocar esse vínculo à mão (contracts.venda_lead_id), pra contrato avulso (sem lead
+  // nenhuma no funil) ou quando a heurística erra.
   app.get<{ Params: { id: string } }>(
     '/api/clients/:id/crm-lead',
     { onRequest: [app.authenticate] },
@@ -52,19 +52,7 @@ export async function clientRoutes(app: FastifyInstance) {
       if (!client) return reply.status(404).send({ message: 'Cliente não encontrado' });
 
       const leadId = await findMatchingLeadRowId(client.phone, client.name, client.company);
-      if (!leadId) return { lead: null, notes: [] };
-
-      const lead = await queryOne(
-        `SELECT id, nome, empresa, telefone, status, sdr, tipo, dia_contato, dor_cliente,
-                numero_atendentes, valor_mrr, valor_implementacao, created_at
-         FROM lead_rows WHERE id = $1`,
-        [leadId]
-      );
-      const notes = await query(
-        'SELECT id, author_name, content, created_at FROM lead_notes WHERE lead_row_id = $1 ORDER BY created_at DESC',
-        [leadId]
-      );
-      return { lead, notes };
+      return { leadId };
     }
   );
 

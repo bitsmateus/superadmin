@@ -31,7 +31,7 @@ import { formatCnpj, isValidCnpjLength } from '@/lib/cnpj'
 import { formatCep, isValidCepLength } from '@/lib/cep'
 import { openContractSheet } from '@/lib/contractSheet'
 import { RichTextToolbar } from '@/components/comercial/RichTextToolbar'
-import { SdrLeadPanel } from '@/components/comercial/SdrLeadPanel'
+import { LeadLinkPanel } from '@/components/comercial/LeadLinkPanel'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { formatDateShort } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -102,6 +102,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [draftCampos, setDraftCampos] = React.useState<Record<string, string>>({})
   const [draftClientId, setDraftClientId] = React.useState<string | null>(null)
+  const [draftVendaLeadId, setDraftVendaLeadId] = React.useState<string | null>(null)
   const [cnpjLoading, setCnpjLoading] = React.useState(false)
   const [cepLoading, setCepLoading] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
@@ -198,6 +199,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
     }
     setDraftCampos(campos)
     setDraftClientId(client?.id ?? null)
+    setDraftVendaLeadId(null)
     setTab('criar')
     // Já veio da ficha com o CNPJ — dispara a busca sozinho, sem esperar o blur do campo.
     if (client?.fichaCadastro?.cnpj) void fillFromCnpj(client.fichaCadastro.cnpj)
@@ -208,7 +210,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
     setCreating(true)
     try {
       const conteudo = applyPlaceholders(applyServicesTable(template.conteudo, draftCampos), draftCampos)
-      const created = await contractsService.createContract(board.id, template.id, draftCampos, conteudo, draftClientId)
+      const created = await contractsService.createContract(board.id, template.id, draftCampos, conteudo, draftClientId, draftVendaLeadId)
       // Sai de "Boas-vindas" só agora que o contrato existe de verdade — não no clique de
       // "avançar" (senão, se a pessoa fechasse o formulário sem gerar, o cliente ficava perdido,
       // sem contrato e sem aparecer em lugar nenhum). Também é o que libera o "Marcar como
@@ -222,6 +224,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
       }
       setDraftCampos({})
       setDraftClientId(null)
+      setDraftVendaLeadId(null)
       setTab('pendentes-contrato')
       setSelectedId(created.id)
       toast.success('Contrato gerado.')
@@ -466,7 +469,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     </span>
                   )}
                 </div>
-                <SdrLeadPanel clientId={draftClientId} />
+                <LeadLinkPanel clientId={draftClientId} vendaLeadId={draftVendaLeadId} onLink={setDraftVendaLeadId} />
                 <FieldForm
                   placeholders={placeholders}
                   campos={draftCampos}
@@ -551,7 +554,11 @@ export function ContratoView({ pageId }: { pageId: string }) {
                 value={selected.autentiqueDocumentId}
                 signed={selected.status === 'assinado'}
               />
-              <SdrLeadPanel clientId={selected.clientId} />
+              <LeadLinkPanel
+                clientId={selected.clientId}
+                vendaLeadId={selected.vendaLeadId}
+                onLink={(id) => void contractsService.updateContract(selected.id, { vendaLeadId: id })}
+              />
               <FieldForm
                 placeholders={placeholders}
                 campos={selected.campos}

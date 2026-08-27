@@ -20,8 +20,9 @@ export interface Contract {
   conteudo: string
   /** Marcação manual — a pessoa marca quando o cliente devolve assinado. */
   status: ContractStatus
-  /** Linha de origem no quadro de Vendas — legado, não é mais usado pra alimentar "Pendente de
-   * contrato" (isso agora vem de `clientId`), mas fica pra contratos antigos que já tinham. */
+  /** Lead do CRM (card do SDR) vinculada a este contrato — sugerida automaticamente por telefone/
+   * nome (ver crmLeadLookup.ts), mas confirmável/trocável à mão em LeadLinkPanel (útil pra
+   * contrato avulso, sem lead nenhuma no funil, ou quando a sugestão erra). null = sem vínculo. */
   vendaLeadId: string | null
   /** Cliente que preencheu a ficha de cadastro pública, quando o contrato nasceu da fila
    * "Pendente de contrato" — null se foi criado direto (contrato avulso). */
@@ -120,15 +121,16 @@ export const contractsService = {
     campos: Record<string, string>,
     conteudo: string,
     clientId?: string | null,
+    vendaLeadId?: string | null,
   ): Promise<Contract> {
-    const row = await api.post<ContractRow>('/api/contracts', { boardId, templateId, campos, conteudo, clientId })
+    const row = await api.post<ContractRow>('/api/contracts', { boardId, templateId, campos, conteudo, clientId, vendaLeadId })
     await reload()
     return rowToContract(row)
   },
 
   async updateContract(id: string, patch: {
     campos?: Record<string, string>; conteudo?: string; status?: ContractStatus
-    autentiqueDocumentId?: string | null
+    autentiqueDocumentId?: string | null; vendaLeadId?: string | null
   }): Promise<void> {
     try {
       await api.patch(`/api/contracts/${id}`, patch)

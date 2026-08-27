@@ -771,7 +771,7 @@ function TaskModal({
       open
       onClose={onClose}
       title={editing ? 'Editar tarefa' : 'Nova tarefa'}
-      size="xl"
+      size="2xl"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={saving}>

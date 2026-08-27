@@ -2,10 +2,10 @@ import { FastifyInstance } from 'fastify';
 import { query } from '../db.js';
 
 /**
- * Edição do "modelo padrão" do Briefing público (admin-only): overrides de rótulo/
- * placeholder pros campos já existentes (briefing_field_overrides) e perguntas de texto
- * livre novas (briefing_custom_questions), consumidas sem autenticação pelo formulário
- * público em GET /api/public/briefing-template (ver public.ts).
+ * Edição do "modelo padrão" do Briefing público (admin-only): overrides de rótulo pros
+ * campos já existentes (briefing_field_overrides, chave = texto original do rótulo) e
+ * perguntas de texto livre novas (briefing_custom_questions), consumidas sem autenticação
+ * pelo formulário público em GET /api/public/briefing-template (ver public.ts).
  */
 export async function briefingTemplateRoutes(app: FastifyInstance) {
   // GET /api/briefing-field-overrides — admin only

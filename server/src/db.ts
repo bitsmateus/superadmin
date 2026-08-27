@@ -966,9 +966,9 @@ END $$`);
     END IF;
   END $$`);
 
-  // Modelo editável do Briefing público: overrides de rótulo/placeholder pros campos
-  // já existentes (Fase B, ainda não usada pelo front) + perguntas de texto livre novas
-  // adicionadas pelo admin (Fase A) — renderizadas dinamicamente em BriefingPublicPage.
+  // Modelo editável do Briefing público: overrides de rótulo pros campos já existentes
+  // + perguntas de texto livre novas adicionadas pelo admin — ambos renderizados
+  // dinamicamente em BriefingPublicPage (editor em BriefingTemplateModal).
   await pool.query(`CREATE TABLE IF NOT EXISTS briefing_field_overrides (
     field_key TEXT PRIMARY KEY,
     label TEXT,

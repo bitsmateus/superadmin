@@ -20,7 +20,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/services/api'
-import { fetchPublicBriefingTemplate, type BriefingCustomQuestion } from '@/services/briefingTemplate'
+import {
+  fetchPublicBriefingTemplate,
+  type BriefingCustomQuestion,
+  type BriefingFieldOverride,
+} from '@/services/briefingTemplate'
 import { asText, cn } from '@/lib/utils'
 import type {
   BriefingData,
@@ -521,6 +525,15 @@ export function BriefingPublicPage() {
   // Perguntas de texto livre novas, adicionadas pelo admin — renderizadas ao final da
   // seção "Observações" (ver src/services/briefingTemplate.ts).
   const [customQuestions, setCustomQuestions] = React.useState<BriefingCustomQuestion[]>([])
+  // Overrides de rótulo dos campos já existentes — chave = texto ORIGINAL do rótulo
+  // (não um id artificial), pra não precisar manter uma lista de "field keys" separada.
+  const [fieldOverrides, setFieldOverrides] = React.useState<BriefingFieldOverride[]>([])
+  const overridesByText = React.useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const o of fieldOverrides) if (o.label) map[o.fieldKey] = o.label
+    return map
+  }, [fieldOverrides])
+  const L = React.useCallback((text: string) => overridesByText[text] ?? text, [overridesByText])
   const [section, setSection] = React.useState(0)
   const [submittedData, setSubmittedData] = React.useState<{ greeting: string; offHours: string } | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
@@ -581,7 +594,11 @@ export function BriefingPublicPage() {
   React.useEffect(() => {
     let cancelled = false
     fetchPublicBriefingTemplate()
-      .then(({ customQuestions }) => { if (!cancelled) setCustomQuestions(customQuestions) })
+      .then(({ overrides, customQuestions }) => {
+        if (cancelled) return
+        setFieldOverrides(overrides)
+        setCustomQuestions(customQuestions)
+      })
       .catch(() => {})
     return () => { cancelled = true }
   }, [])
@@ -907,7 +924,7 @@ export function BriefingPublicPage() {
               {/* Site — only for API Oficial or IA */}
               {needsSite && (
                 <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-                  <Field label="Site da empresa">
+                  <Field label={L('Site da empresa')}>
                     <PlainInput
                       value={state.site}
                       onChange={(v) => setState({ ...state, site: v })}
@@ -1001,7 +1018,7 @@ export function BriefingPublicPage() {
                     >
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
                         <div className="sm:col-span-3">
-                          <Field label="Nome">
+                          <Field label={L('Nome')}>
                             <PlainInput
                               value={u.name}
                               onChange={(v) => {
@@ -1015,7 +1032,7 @@ export function BriefingPublicPage() {
                           </Field>
                         </div>
                         <div className="sm:col-span-4">
-                          <Field label="E-mail">
+                          <Field label={L('E-mail')}>
                             <PlainInput
                               type="email"
                               value={u.email}
@@ -1045,7 +1062,7 @@ export function BriefingPublicPage() {
                           </Field>
                         </div>
                         <div className="sm:col-span-3">
-                          <Field label="Setor(es)">
+                          <Field label={L('Setor(es)')}>
                             {state.sectors.length > 0 ? (
                               <MultiSelectBar
                                 options={state.sectors}
@@ -1079,7 +1096,7 @@ export function BriefingPublicPage() {
                           </Field>
                         </div>
                         <div className="sm:col-span-2">
-                          <Field label="Perfil">
+                          <Field label={L('Perfil')}>
                             <PlainSelect
                               value={u.role}
                               onChange={(v) => {
@@ -1205,7 +1222,7 @@ export function BriefingPublicPage() {
                 <p className="mt-1 text-xs font-medium text-rose-600">{errors.schedule}</p>
               )}
               <div className="mt-2">
-                <Field label="Fuso horário">
+                <Field label={L('Fuso horário')}>
                   <PlainSelect
                     value={state.timezone}
                     onChange={(v) => setState({ ...state, timezone: v })}
@@ -1235,7 +1252,7 @@ export function BriefingPublicPage() {
               {/* WhatsApp */}
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h3 className="mb-3 text-sm font-semibold text-slate-800">WhatsApp</h3>
-                <Field label="Número(s) que vamos conectar">
+                <Field label={L('Número(s) que vamos conectar')}>
                   <PlainTextarea
                     value={state.whatsappNumbers}
                     onChange={(v) => setState({ ...state, whatsappNumbers: v })}
@@ -1267,7 +1284,7 @@ export function BriefingPublicPage() {
                     a página/WhatsApp da empresa.
                   </p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Field label="E-mail do Facebook / Meta *">
+                    <Field label={L('E-mail do Facebook / Meta *')}>
                       <PlainInput
                         type="email"
                         value={state.facebookEmail}
@@ -1278,7 +1295,7 @@ export function BriefingPublicPage() {
                         <p className="mt-1 text-xs font-medium text-rose-600">{errors.facebookEmail}</p>
                       )}
                     </Field>
-                    <Field label="Senha do Facebook / Meta *">
+                    <Field label={L('Senha do Facebook / Meta *')}>
                       <PlainInput
                         type="password"
                         value={state.facebookPassword}
@@ -1303,7 +1320,7 @@ export function BriefingPublicPage() {
                       controle. Basta adicionar nossa agência como parceira nas configurações do BM.
                     </p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <Field label="Nome do portfólio empresarial (Meta) — opcional">
+                      <Field label={L('Nome do portfólio empresarial (Meta) — opcional')}>
                         <PlainInput
                           value={state.officialApi.businessPortfolioName}
                           onChange={(v) =>
@@ -1312,7 +1329,7 @@ export function BriefingPublicPage() {
                           placeholder="Nome do portfólio/negócio no Meta Business (se souber)"
                         />
                       </Field>
-                      <Field label="Número dedicado à API Oficial *">
+                      <Field label={L('Número dedicado à API Oficial *')}>
                         <PlainInput
                           value={state.officialApi.numeroDedicado}
                           onChange={(v) => {
@@ -1325,7 +1342,7 @@ export function BriefingPublicPage() {
                           <p className="mt-1 text-xs font-medium text-rose-600">{errors.oaNumeroDedicado}</p>
                         )}
                       </Field>
-                      <Field label="Nome que aparecerá no WhatsApp (para os clientes verem) *">
+                      <Field label={L('Nome que aparecerá no WhatsApp (para os clientes verem) *')}>
                         <PlainInput
                           value={state.officialApi.displayNamePretendido}
                           onChange={(v) => {
@@ -1338,7 +1355,7 @@ export function BriefingPublicPage() {
                           <p className="mt-1 text-xs font-medium text-rose-600">{errors.oaDisplayName}</p>
                         )}
                       </Field>
-                      <Field label="Verificação do negócio (Meta)">
+                      <Field label={L('Verificação do negócio (Meta)')}>
                         <PlainSelect
                           value={state.officialApi.verificacaoNegocioStatus}
                           onChange={(v) =>
@@ -1353,7 +1370,7 @@ export function BriefingPublicPage() {
                           }))}
                         />
                       </Field>
-                      <Field label="Acesso de parceiro (partner access)">
+                      <Field label={L('Acesso de parceiro (partner access)')}>
                         <PlainSelect
                           value={state.officialApi.partnerAccessStatus}
                           onChange={(v) =>
@@ -1377,7 +1394,7 @@ export function BriefingPublicPage() {
               {cfg?.channels.includes('wavoip') && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <h3 className="mb-3 text-sm font-semibold text-slate-800">WaVoip</h3>
-                  <Field label="Informações da conta WaVoip">
+                  <Field label={L('Informações da conta WaVoip')}>
                     <PlainTextarea
                       value={state.wavoipInfo}
                       onChange={(v) => setState({ ...state, wavoipInfo: v })}
@@ -1403,14 +1420,14 @@ export function BriefingPublicPage() {
                   <div key={ch.key} className="rounded-xl border border-slate-200 bg-white p-4">
                     <h3 className="mb-3 text-sm font-semibold text-slate-800">{ch.label}</h3>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <Field label="E-mail / usuário de acesso">
+                      <Field label={L('E-mail / usuário de acesso')}>
                         <PlainInput
                           value={acc.email ?? ''}
                           onChange={(v) => setAcc({ email: v })}
                           placeholder="login@exemplo.com"
                         />
                       </Field>
-                      <Field label="Senha de acesso">
+                      <Field label={L('Senha de acesso')}>
                         <PlainInput
                           type="password"
                           value={acc.password ?? ''}
@@ -1420,7 +1437,7 @@ export function BriefingPublicPage() {
                       </Field>
                     </div>
                     <div className="mt-3">
-                      <Field label="Outras informações (opcional)">
+                      <Field label={L('Outras informações (opcional)')}>
                         <PlainTextarea
                           value={acc.notes ?? ''}
                           onChange={(v) => setAcc({ notes: v })}
@@ -1440,7 +1457,7 @@ export function BriefingPublicPage() {
               {cfg?.channels.includes('email') && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <h3 className="mb-3 text-sm font-semibold text-slate-800">E-mail</h3>
-                  <Field label="Configurações de e-mail">
+                  <Field label={L('Configurações de e-mail')}>
                     <PlainTextarea
                       value={state.emailConfig}
                       onChange={(v) => setState({ ...state, emailConfig: v })}
@@ -1471,7 +1488,7 @@ export function BriefingPublicPage() {
                   Comece pelo menu principal. Se uma opção precisar abrir novas escolhas, adicione um submenu.
                 </p>
                 <div className="space-y-4">
-                  <Field label="Resumo do atendimento *">
+                  <Field label={L('Resumo do atendimento *')}>
                     <PlainTextarea
                       value={state.chatbotDescription}
                       onChange={(v) => {
@@ -1593,7 +1610,7 @@ export function BriefingPublicPage() {
                     )}
                   </div>
 
-                  <Field label="Dados que o bot deve coletar antes de transferir (um por linha)">
+                  <Field label={L('Dados que o bot deve coletar antes de transferir (um por linha)')}>
                     <PlainTextarea
                       value={state.chatbotCollect}
                       onChange={(v) => setState({ ...state, chatbotCollect: v })}
@@ -1655,7 +1672,7 @@ export function BriefingPublicPage() {
                     </button>
                   </div>
 
-                  <Field label="Mensagem de encerramento">
+                  <Field label={L('Mensagem de encerramento')}>
                     <PlainTextarea
                       value={state.chatbotClosing}
                       onChange={(v) => setState({ ...state, chatbotClosing: v })}
@@ -1781,7 +1798,7 @@ export function BriefingPublicPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h3 className="mb-3 text-sm font-semibold text-slate-800">Identidade da IA</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Nome da IA (ex: Ana, Max, Bia) *">
+                  <Field label={L('Nome da IA (ex: Ana, Max, Bia) *')}>
                     <PlainInput
                       value={state.aiAgentName}
                       onChange={(v) => { setState({ ...state, aiAgentName: v }); clearError('aiAgentName') }}
@@ -1791,7 +1808,7 @@ export function BriefingPublicPage() {
                       <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiAgentName}</p>
                     )}
                   </Field>
-                  <Field label="Tom de comunicação">
+                  <Field label={L('Tom de comunicação')}>
                     <PlainSelect
                       value={state.aiTone}
                       onChange={(v) => setState({ ...state, aiTone: v as AiTone })}
@@ -1809,7 +1826,7 @@ export function BriefingPublicPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h3 className="mb-3 text-sm font-semibold text-slate-800">Sobre a empresa</h3>
                 <div className="space-y-3">
-                  <Field label="Descreva o que a empresa faz e para quem atende *">
+                  <Field label={L('Descreva o que a empresa faz e para quem atende *')}>
                     <PlainTextarea
                       value={state.aiCompanyDescription}
                       onChange={(v) => { setState({ ...state, aiCompanyDescription: v }); clearError('aiCompanyDescription') }}
@@ -1820,14 +1837,14 @@ export function BriefingPublicPage() {
                       <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiCompanyDescription}</p>
                     )}
                   </Field>
-                  <Field label="Localização (cidade, estado ou região de atendimento)">
+                  <Field label={L('Localização (cidade, estado ou região de atendimento)')}>
                     <PlainInput
                       value={state.aiLocation}
                       onChange={(v) => setState({ ...state, aiLocation: v })}
                       placeholder="Ex: São Paulo, SP — ou atendimento nacional"
                     />
                   </Field>
-                  <Field label="Redes sociais (Instagram, Facebook, TikTok…)">
+                  <Field label={L('Redes sociais (Instagram, Facebook, TikTok…)')}>
                     <PlainInput
                       value={state.aiSocialMedia}
                       onChange={(v) => setState({ ...state, aiSocialMedia: v })}
@@ -1841,7 +1858,7 @@ export function BriefingPublicPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h3 className="mb-3 text-sm font-semibold text-slate-800">Serviços e valores</h3>
                 <div className="space-y-3">
-                  <Field label="Liste os principais serviços/produtos *">
+                  <Field label={L('Liste os principais serviços/produtos *')}>
                     <PlainTextarea
                       value={state.aiServices}
                       onChange={(v) => { setState({ ...state, aiServices: v }); clearError('aiServices') }}
@@ -1871,7 +1888,7 @@ export function BriefingPublicPage() {
                     </div>
                   </div>
                   {state.aiHasPrices && (
-                    <Field label="Informe a tabela de preços">
+                    <Field label={L('Informe a tabela de preços')}>
                       <PlainTextarea
                         value={state.aiPrices}
                         onChange={(v) => setState({ ...state, aiPrices: v })}
@@ -1887,7 +1904,7 @@ export function BriefingPublicPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h3 className="mb-3 text-sm font-semibold text-slate-800">Fluxo de atendimento</h3>
                 <div className="space-y-3">
-                  <Field label="Como a IA deve conduzir a conversa? *">
+                  <Field label={L('Como a IA deve conduzir a conversa? *')}>
                     <PlainTextarea
                       value={state.aiAttendanceFlow}
                       onChange={(v) => { setState({ ...state, aiAttendanceFlow: v }); clearError('aiAttendanceFlow') }}
@@ -1898,7 +1915,7 @@ export function BriefingPublicPage() {
                       <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiAttendanceFlow}</p>
                     )}
                   </Field>
-                  <Field label="Quando a IA deve transferir para um atendente humano? *">
+                  <Field label={L('Quando a IA deve transferir para um atendente humano? *')}>
                     <PlainTextarea
                       value={state.aiTransferConditions}
                       onChange={(v) => { setState({ ...state, aiTransferConditions: v }); clearError('aiTransferConditions') }}
@@ -1909,7 +1926,7 @@ export function BriefingPublicPage() {
                       <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiTransferConditions}</p>
                     )}
                   </Field>
-                  <Field label="O que a IA NÃO deve fazer ou dizer?">
+                  <Field label={L('O que a IA NÃO deve fazer ou dizer?')}>
                     <PlainTextarea
                       value={state.aiRestrictions}
                       onChange={(v) => setState({ ...state, aiRestrictions: v })}
@@ -1917,7 +1934,7 @@ export function BriefingPublicPage() {
                       placeholder={'Ex:\n- Não citar concorrentes\n- Não dar desconto sem autorização\n- Não confirmar agendamentos sem verificar disponibilidade'}
                     />
                   </Field>
-                  <Field label="O que a IA responde quando NÃO souber algo?">
+                  <Field label={L('O que a IA responde quando NÃO souber algo?')}>
                     <PlainTextarea
                       value={state.aiWhenUnknown}
                       onChange={(v) => setState({ ...state, aiWhenUnknown: v })}
@@ -1937,7 +1954,7 @@ export function BriefingPublicPage() {
                   Quanto mais completo, melhor a IA atende. Tudo aqui é opcional.
                 </p>
                 <div className="space-y-3">
-                  <Field label="Endereço de cada unidade (com ponto de referência)">
+                  <Field label={L('Endereço de cada unidade (com ponto de referência)')}>
                     <PlainTextarea
                       value={state.aiAddress}
                       onChange={(v) => setState({ ...state, aiAddress: v })}
@@ -1945,14 +1962,14 @@ export function BriefingPublicPage() {
                       placeholder="Ex: Rua X, 123 — ao lado do mercado Y (Centro)"
                     />
                   </Field>
-                  <Field label="Frase ou bordão da empresa que a IA deva usar">
+                  <Field label={L('Frase ou bordão da empresa que a IA deva usar')}>
                     <PlainInput
                       value={state.aiSlogan}
                       onChange={(v) => setState({ ...state, aiSlogan: v })}
                       placeholder="Ex: “Seu sorriso é a nossa marca!”"
                     />
                   </Field>
-                  <Field label="Serviços/produtos mais procurados">
+                  <Field label={L('Serviços/produtos mais procurados')}>
                     <PlainTextarea
                       value={state.aiMostSought}
                       onChange={(v) => setState({ ...state, aiMostSought: v })}
@@ -1960,7 +1977,7 @@ export function BriefingPublicPage() {
                       placeholder="Ex: Limpeza de pele, clareamento, botox"
                     />
                   </Field>
-                  <Field label="Convênios, planos ou parcerias (e o que cobrem)">
+                  <Field label={L('Convênios, planos ou parcerias (e o que cobrem)')}>
                     <PlainTextarea
                       value={state.aiPartnerships}
                       onChange={(v) => setState({ ...state, aiPartnerships: v })}
@@ -1968,7 +1985,7 @@ export function BriefingPublicPage() {
                       placeholder="Ex: Convênio Z — cobre consultas e limpeza"
                     />
                   </Field>
-                  <Field label="Formas de pagamento (dinheiro, PIX, cartão, parcelamento)">
+                  <Field label={L('Formas de pagamento (dinheiro, PIX, cartão, parcelamento)')}>
                     <PlainTextarea
                       value={state.aiPaymentMethods}
                       onChange={(v) => setState({ ...state, aiPaymentMethods: v })}
@@ -1976,7 +1993,7 @@ export function BriefingPublicPage() {
                       placeholder="Ex: PIX, dinheiro, cartão em até 6x sem juros"
                     />
                   </Field>
-                  <Field label="Promoções ou condições especiais">
+                  <Field label={L('Promoções ou condições especiais')}>
                     <PlainTextarea
                       value={state.aiPromotions}
                       onChange={(v) => setState({ ...state, aiPromotions: v })}
@@ -1984,7 +2001,7 @@ export function BriefingPublicPage() {
                       placeholder="Ex: 1ª avaliação gratuita"
                     />
                   </Field>
-                  <Field label="Mensagem que a IA manda no PRIMEIRO contato">
+                  <Field label={L('Mensagem que a IA manda no PRIMEIRO contato')}>
                     <PlainTextarea
                       value={state.aiFirstMessage}
                       onChange={(v) => setState({ ...state, aiFirstMessage: v })}
@@ -1992,7 +2009,7 @@ export function BriefingPublicPage() {
                       placeholder="Ex: “Olá! Seja bem-vindo(a) à Clínica X 😊 Como posso te ajudar?”"
                     />
                   </Field>
-                  <Field label="Quais dados a IA deve pedir para agendar?">
+                  <Field label={L('Quais dados a IA deve pedir para agendar?')}>
                     <PlainTextarea
                       value={state.aiSchedulingData}
                       onChange={(v) => setState({ ...state, aiSchedulingData: v })}
@@ -2000,7 +2017,7 @@ export function BriefingPublicPage() {
                       placeholder="Ex: nome, telefone, unidade, dia e horário"
                     />
                   </Field>
-                  <Field label="Mensagem depois que o cliente passa os dados">
+                  <Field label={L('Mensagem depois que o cliente passa os dados')}>
                     <PlainTextarea
                       value={state.aiPostDataMessage}
                       onChange={(v) => setState({ ...state, aiPostDataMessage: v })}
@@ -2008,7 +2025,7 @@ export function BriefingPublicPage() {
                       placeholder="Ex: “Perfeito! Seu horário está reservado. Qualquer coisa, é só chamar.”"
                     />
                   </Field>
-                  <Field label="O que a IA faz quando é um cliente que já é atendido por vocês?">
+                  <Field label={L('O que a IA faz quando é um cliente que já é atendido por vocês?')}>
                     <PlainTextarea
                       value={state.aiExistingClient}
                       onChange={(v) => setState({ ...state, aiExistingClient: v })}
@@ -2016,7 +2033,7 @@ export function BriefingPublicPage() {
                       placeholder="Ex: Cumprimentar pelo nome, puxar histórico, oferecer retorno"
                     />
                   </Field>
-                  <Field label="Perguntas frequentes dos clientes (pergunta + resposta certa)">
+                  <Field label={L('Perguntas frequentes dos clientes (pergunta + resposta certa)')}>
                     <PlainTextarea
                       value={state.aiFaq}
                       onChange={(v) => setState({ ...state, aiFaq: v })}
@@ -2037,14 +2054,14 @@ export function BriefingPublicPage() {
                     A IA avançada pode consultar seu sistema interno (CRM, ERP, plataforma própria) em tempo real. Preencha os dados abaixo.
                   </p>
                   <div className="space-y-3">
-                    <Field label="Qual sistema será integrado? (nome do sistema)">
+                    <Field label={L('Qual sistema será integrado? (nome do sistema)')}>
                       <PlainInput
                         value={state.aiExternalSystem}
                         onChange={(v) => setState({ ...state, aiExternalSystem: v })}
                         placeholder="Ex: Protheus, Sales Force, sistema próprio, plataforma da loja…"
                       />
                     </Field>
-                    <Field label="O que a IA precisa consultar neste sistema? *">
+                    <Field label={L('O que a IA precisa consultar neste sistema? *')}>
                       <PlainTextarea
                         value={state.aiExternalWhatToQuery}
                         onChange={(v) => { setState({ ...state, aiExternalWhatToQuery: v }); clearError('aiExternalWhatToQuery') }}
@@ -2055,14 +2072,14 @@ export function BriefingPublicPage() {
                         <p className="mt-1 text-xs font-medium text-rose-600">{errors.aiExternalWhatToQuery}</p>
                       )}
                     </Field>
-                    <Field label="URL da API ou webhook (se já tiver)">
+                    <Field label={L('URL da API ou webhook (se já tiver)')}>
                       <PlainInput
                         value={state.aiExternalApiUrl}
                         onChange={(v) => setState({ ...state, aiExternalApiUrl: v })}
                         placeholder="https://api.suaempresa.com.br/v1/..."
                       />
                     </Field>
-                    <Field label="Como autenticar na API? (token, usuário/senha, chave…)">
+                    <Field label={L('Como autenticar na API? (token, usuário/senha, chave…)')}>
                       <PlainTextarea
                         value={state.aiExternalAuth}
                         onChange={(v) => setState({ ...state, aiExternalAuth: v })}
@@ -2070,7 +2087,7 @@ export function BriefingPublicPage() {
                         placeholder="Ex: Bearer token no header Authorization, ou usuário admin + senha…"
                       />
                     </Field>
-                    <Field label="Descreva exemplos de situações em que a IA consultaria o sistema">
+                    <Field label={L('Descreva exemplos de situações em que a IA consultaria o sistema')}>
                       <PlainTextarea
                         value={state.aiExternalExamples}
                         onChange={(v) => setState({ ...state, aiExternalExamples: v })}
@@ -2097,7 +2114,7 @@ export function BriefingPublicPage() {
               'Precisamos de algumas informações sobre a automação externa que será integrada.'
             }
           >
-            <Field label="Informações necessárias para a automação *">
+            <Field label={L('Informações necessárias para a automação *')}>
               <PlainTextarea
                 value={state.externalAutomationInfo}
                 onChange={(v) => { setState({ ...state, externalAutomationInfo: v }); clearError('externalAutomationInfo') }}
@@ -2119,7 +2136,7 @@ export function BriefingPublicPage() {
             title="Observações finais"
             icon={<StickyNote className="h-5 w-5 text-[#4F8EF7]" />}
           >
-            <Field label="Algo mais que devemos saber?">
+            <Field label={L('Algo mais que devemos saber?')}>
               <PlainTextarea
                 value={state.extraNotes}
                 onChange={(v) => setState({ ...state, extraNotes: v })}

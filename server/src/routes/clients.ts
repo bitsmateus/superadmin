@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
-import { phoneKey } from '../lib/briefingHandoff.js';
+import { findMatchingLeadRowId } from '../lib/leadMatch.js';
 
 const FINANCE_COLS = [
   'contract_url','contract_sent_at','contract_signed_at',
@@ -36,36 +36,35 @@ export async function clientRoutes(app: FastifyInstance) {
   );
 
   // GET /api/clients/:id/crm-lead — dados do card do CRM (SDR) que provavelmente é o mesmo
-  // prospect, achado por telefone (não existe vínculo direto entre clients e lead_rows — são
-  // cadastros separados). Mesma heurística conservadora do advanceClientToBriefing: só devolve
-  // alguma coisa se achar EXATAMENTE 1 lead com esse telefone; 0 ou 2+ = null (evita mostrar dado
-  // de gente errada). Usado na aba Contrato pra quem está gerando o contrato ver de relance o que
-  // o SDR já registrou (valores combinados, atualizações etc.) sem precisar abrir o CRM.
+  // prospect (não existe vínculo direto entre clients e lead_rows — são cadastros separados; ver
+  // findMatchingLeadRowId, lib/leadMatch.ts, pra heurística telefone→nome/empresa e a garantia de
+  // só devolver algo em caso de match INEQUÍVOCO). Usado na aba Contrato pra quem está gerando o
+  // contrato ver de relance o que o SDR já registrou (valores combinados, atualizações etc.) sem
+  // precisar abrir o CRM.
   app.get<{ Params: { id: string } }>(
     '/api/clients/:id/crm-lead',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const client = await queryOne<{ phone: string | null }>('SELECT phone FROM clients WHERE id = $1', [req.params.id]);
+      const client = await queryOne<{ phone: string | null; name: string | null; company: string | null }>(
+        'SELECT phone, name, company FROM clients WHERE id = $1',
+        [req.params.id]
+      );
       if (!client) return reply.status(404).send({ message: 'Cliente não encontrado' });
 
-      const key = phoneKey(client.phone);
-      if (!key) return { lead: null, notes: [] };
+      const leadId = await findMatchingLeadRowId(client.phone, client.name, client.company);
+      if (!leadId) return { lead: null, notes: [] };
 
-      const candidates = await query<Record<string, unknown>>(
+      const lead = await queryOne(
         `SELECT id, nome, empresa, telefone, status, sdr, tipo, dia_contato, dor_cliente,
                 numero_atendentes, valor_mrr, valor_implementacao, created_at
-         FROM lead_rows
-         WHERE deleted_at IS NULL AND right(regexp_replace(telefone, '\\D', '', 'g'), 8) = $1
-         ORDER BY created_at DESC`,
-        [key]
+         FROM lead_rows WHERE id = $1`,
+        [leadId]
       );
-      if (candidates.length !== 1) return { lead: null, notes: [] };
-
       const notes = await query(
         'SELECT id, author_name, content, created_at FROM lead_notes WHERE lead_row_id = $1 ORDER BY created_at DESC',
-        [candidates[0].id]
+        [leadId]
       );
-      return { lead: candidates[0], notes };
+      return { lead, notes };
     }
   );
 

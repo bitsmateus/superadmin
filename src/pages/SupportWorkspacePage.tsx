@@ -100,6 +100,16 @@ export function SupportWorkspacePage() {
   const reminders = useAllReminders()
   const clients = useClients()
   const team = useTeam()
+  // Arthur e Luis são SDR do Comercial, não do Suporte — saem só dos seletores de "Responsável"
+  // dessa página (filtro e atribuição de tarefa); continuam valendo normalmente em qualquer lugar
+  // que já tinha tarefa atribuída a eles (knownOwnerIds abaixo usa a lista completa, não essa).
+  const supportTeam = React.useMemo(
+    () => team.filter((m) => {
+      const n = (m.name ?? '').toLowerCase()
+      return !n.includes('arthur') && !n.includes('luis')
+    }),
+    [team],
+  )
   const { profile } = useAuth()
   const settings = useSettings()
   const navigate = useNavigate()
@@ -259,14 +269,14 @@ export function SupportWorkspacePage() {
             <Chip active={quick === 'today'} onClick={() => setQuick('today')}>
               Hoje{todayCount > 0 ? ` (${todayCount})` : ''}
             </Chip>
-            {team.length > 0 && (
+            {supportTeam.length > 0 && (
               <select
                 value={filterPerson}
                 onChange={(e) => setFilterPerson(e.target.value)}
                 className="h-7 rounded-lg border border-line bg-elevate/[0.04] px-2 text-xs text-foreground/70 outline-none focus:border-accent/40"
               >
                 <option value="">Responsável…</option>
-                {team.map((m) => (
+                {supportTeam.map((m) => (
                   <option key={m.id} value={m.id}>
                     {teamMemberLabel(m)}
                   </option>
@@ -316,19 +326,9 @@ export function SupportWorkspacePage() {
               teamMap={teamMap}
               companyOf={companyOf}
             />
-            <MeetingsPanel
-              meetings={meetings}
-              companyOf={companyOf}
-              onOpenClient={(id) => navigate(`/clients?open=${id}`)}
-            />
-            <PipelinePanel
-              clients={clients}
-              team={team}
-              reminders={reminders}
-              myId={myId}
-              slaByStage={settings.slaByStage}
-              onConvert={(r) => setEditing(r)}
-            />
+            {/* "Reuniões" e "Do pipeline" tirados dessa tela por pedido — os componentes
+                (MeetingsPanel/PipelinePanel) continuam existindo no arquivo, prontos pra voltar
+                em outro lugar quando decidir onde. */}
           </div>
         </div>
       </div>
@@ -337,7 +337,7 @@ export function SupportWorkspacePage() {
         <TaskModal
           initial={editing}
           clients={clients}
-          team={team}
+          team={supportTeam}
           columns={columns}
           defaultAssignee={myId}
           onClose={() => setEditing(undefined)}

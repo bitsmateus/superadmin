@@ -3,6 +3,17 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
+import {
   AlertTriangle,
   ArrowDownCircle,
   ArrowUpCircle,
@@ -31,6 +42,7 @@ import { onSseEvent } from '@/services/api'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { ListKanbanToggle } from '@/components/ui/ListKanbanToggle'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { StageBadge } from '@/components/crm/StageBadge'
 import { StageAgeBadge } from '@/components/crm/StageAgeBadge'
@@ -110,6 +122,18 @@ export function PipelinePage() {
     () => onSseEvent((table) => { if (table === 'support_page_clients') void reloadMembership() }),
     [reloadMembership],
   )
+  // Lista continua padrão; Kanban é opcional e a escolha fica salva no navegador (mesmo padrão de
+  // Tarefas) — numa cópia do menu a chave leva o id dela, senão trocar aqui mudaria o Pipeline
+  // original também.
+  const viewStorageKey = copyPageId ? `pipeline_view_mode:${copyPageId}` : 'pipeline_view_mode'
+  const [view, setView] = React.useState<'list' | 'kanban'>(() => {
+    const saved = localStorage.getItem(viewStorageKey)
+    return saved === 'kanban' ? 'kanban' : 'list'
+  })
+  React.useEffect(() => {
+    localStorage.setItem(viewStorageKey, view)
+  }, [view, viewStorageKey])
+
   const [currentUser] = useCurrentUser()
   // Numa cópia do menu ("Duplicar"), o filtro já abre no recorte salvo dela; na rota fixa
   // /pipeline, useSupportViewValue devolve o padrão e nada muda.
@@ -501,35 +525,50 @@ export function PipelinePage() {
               )}
             </>
           )}
+          <div className="ml-auto">
+            <ListKanbanToggle value={view} onChange={setView} />
+          </div>
         </div>
 
-        <div className="space-y-3">
-          {SUPPORT_VISIBLE_STAGES.map((stage) => (
-            <ListGroup
-              key={stage}
-              stage={stage}
-              defaultOpen={stage !== 'delivered' && stage !== 'active' && stage !== 'churned'}
-              clients={byStage[stage]}
-              groups={groupsFor(stage)}
-              onRowClick={(id) => setOpenClientId(id)}
-              onAdvance={advanceStage}
-              onRegress={regressStage}
-              onStartSetup={startSetup}
-              onPauseSetup={pauseSetup}
-              headerAction={
-                stage === 'setup_start' ? (
-                  <Button
-                    size="sm"
-                    onClick={(e) => { e.stopPropagation(); pullNext() }}
-                    leftIcon={<Play className="h-3.5 w-3.5" />}
-                  >
-                    Puxar próximo
-                  </Button>
-                ) : undefined
-              }
-            />
-          ))}
-        </div>
+        {view === 'list' ? (
+          <div className="space-y-3">
+            {SUPPORT_VISIBLE_STAGES.map((stage) => (
+              <ListGroup
+                key={stage}
+                stage={stage}
+                defaultOpen={stage !== 'delivered' && stage !== 'active' && stage !== 'churned'}
+                clients={byStage[stage]}
+                groups={groupsFor(stage)}
+                onRowClick={(id) => setOpenClientId(id)}
+                onAdvance={advanceStage}
+                onRegress={regressStage}
+                onStartSetup={startSetup}
+                onPauseSetup={pauseSetup}
+                headerAction={
+                  stage === 'setup_start' ? (
+                    <Button
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); pullNext() }}
+                      leftIcon={<Play className="h-3.5 w-3.5" />}
+                    >
+                      Puxar próximo
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ))}
+          </div>
+        ) : (
+          <PipelineKanban
+            stages={SUPPORT_VISIBLE_STAGES}
+            byStage={byStage}
+            onRowClick={(id) => setOpenClientId(id)}
+            onAdvance={advanceStage}
+            onRegress={regressStage}
+            onStartSetup={startSetup}
+            onPauseSetup={pauseSetup}
+          />
+        )}
       </div>
 
       <ClientDrawer
@@ -1076,4 +1115,327 @@ function computeAlerts(c: Client): CardAlert[] {
       })
   }
   return alerts
+}
+
+// ── Kanban ────────────────────────────────────────────────────────────────────
+/** Mesmo padrão do Kanban de Tarefas (dnd-kit, sensor com distanceConstraint pra não confundir
+ * clique com arrasto) — só que arrastar aqui só é aceito pra etapa ADJACENTE (a mesma regra das
+ * setas ▲▼ da lista): soltar em qualquer outra coluna não faz nada, pra nunca pular a fila de
+ * configuração (WIP/prioridade) nem os outros efeitos colaterais que advanceStage/regressStage já
+ * tratam sozinhos (ex.: entrar em "setup" passa pelo limite de simultâneas). */
+function PipelineKanban({
+  stages,
+  byStage,
+  onRowClick,
+  onAdvance,
+  onRegress,
+  onStartSetup,
+  onPauseSetup,
+}: {
+  stages: PipelineStage[]
+  byStage: Record<PipelineStage, Client[]>
+  onRowClick: (id: string) => void
+  onAdvance: (c: Client) => void
+  onRegress: (c: Client) => void
+  onStartSetup: (c: Client) => void
+  onPauseSetup: (c: Client) => void
+}) {
+  const [dragging, setDragging] = React.useState<{ client: Client; fromStage: PipelineStage } | null>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+
+  const onDragEnd = (e: DragEndEvent) => {
+    setDragging(null)
+    const data = e.active.data.current as { client: Client; fromStage: PipelineStage } | undefined
+    const target = e.over?.data.current as { stage: PipelineStage } | undefined
+    if (!data || !target || target.stage === data.fromStage) return
+    if (target.stage === NEXT_STAGE[data.fromStage]) { onAdvance(data.client); return }
+    if (target.stage === PREV_STAGE[data.fromStage]) { onRegress(data.client); return }
+    toast.info('Só dá pra mover uma etapa por vez — use as setas do cartão pra pular mais.')
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      onDragStart={(e: DragStartEvent) =>
+        setDragging((e.active.data.current as { client: Client; fromStage: PipelineStage } | undefined) ?? null)
+      }
+      onDragEnd={onDragEnd}
+      onDragCancel={() => setDragging(null)}
+    >
+      <div className="flex items-start gap-3 overflow-x-auto pb-2">
+        {stages.map((stage) => (
+          <PipelineKanbanColumn
+            key={stage}
+            stage={stage}
+            clients={byStage[stage]}
+            onRowClick={onRowClick}
+            onAdvance={onAdvance}
+            onRegress={onRegress}
+            onStartSetup={onStartSetup}
+            onPauseSetup={onPauseSetup}
+          />
+        ))}
+      </div>
+
+      <DragOverlay dropAnimation={null}>
+        {dragging ? (
+          <div className="w-[280px] rotate-2">
+            <PipelineKanbanCard
+              client={dragging.client}
+              stage={dragging.fromStage}
+              onRowClick={() => {}}
+              onAdvance={() => {}}
+              onRegress={() => {}}
+              onStartSetup={() => {}}
+              onPauseSetup={() => {}}
+              overlay
+            />
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  )
+}
+
+function PipelineKanbanColumn({
+  stage,
+  clients,
+  onRowClick,
+  onAdvance,
+  onRegress,
+  onStartSetup,
+  onPauseSetup,
+}: {
+  stage: PipelineStage
+  clients: Client[]
+  onRowClick: (id: string) => void
+  onAdvance: (c: Client) => void
+  onRegress: (c: Client) => void
+  onStartSetup: (c: Client) => void
+  onPauseSetup: (c: Client) => void
+}) {
+  const style = STAGE_COLORS[stage]
+  const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage}`, data: { stage } })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'flex w-[300px] shrink-0 flex-col rounded-xl border bg-card transition-colors',
+        isOver ? 'border-accent/50 bg-accent/[0.04]' : 'border-line',
+      )}
+      style={{ borderLeft: `3px solid ${style.dot}` }}
+    >
+      <header className="flex items-center gap-1.5 border-b border-line px-3 py-2">
+        <span
+          className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wider"
+          style={{ color: style.text }}
+        >
+          {style.label}
+        </span>
+        <span className="shrink-0 rounded-full bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] text-foreground/50">
+          {clients.length}
+        </span>
+      </header>
+      {/* Altura limitada — coluna longa rola por dentro dela mesma, mesmo ajuste feito em Tarefas. */}
+      <ul className="min-h-[120px] max-h-[640px] flex-1 space-y-2 overflow-y-auto p-2 pr-1.5">
+        {clients.length === 0 ? (
+          <li
+            className={cn(
+              'grid h-[88px] place-items-center rounded-lg border border-dashed text-[11px] transition-colors',
+              isOver ? 'border-accent/50 text-accent/70' : 'border-line/70 text-foreground/25',
+            )}
+          >
+            {isOver ? 'Solte aqui' : 'Nenhum cliente'}
+          </li>
+        ) : (
+          clients.map((c) => (
+            <PipelineKanbanCard
+              key={c.id}
+              client={c}
+              stage={stage}
+              onRowClick={onRowClick}
+              onAdvance={onAdvance}
+              onRegress={onRegress}
+              onStartSetup={onStartSetup}
+              onPauseSetup={onPauseSetup}
+            />
+          ))
+        )}
+      </ul>
+    </div>
+  )
+}
+
+function PipelineKanbanCard({
+  client: c,
+  stage,
+  onRowClick,
+  onAdvance,
+  onRegress,
+  onStartSetup,
+  onPauseSetup,
+  overlay,
+}: {
+  client: Client
+  stage: PipelineStage
+  onRowClick: (id: string) => void
+  onAdvance: (c: Client) => void
+  onRegress: (c: Client) => void
+  onStartSetup: (c: Client) => void
+  onPauseSetup: (c: Client) => void
+  /** Render dentro do DragOverlay: sem listeners e sem ficar semitransparente. */
+  overlay?: boolean
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: c.id,
+    data: { client: c, fromStage: stage },
+    disabled: overlay,
+  })
+
+  const alerts = computeAlerts(c)
+  const next = NEXT_STAGE[stage]
+  const prev = PREV_STAGE[stage]
+  const showReadiness = stage === 'briefing' || stage === 'setup_start' || stage === 'setup'
+  const readiness = showReadiness ? computeReadiness(c) : null
+  const doing = isDoingNow(c)
+
+  return (
+    <li
+      ref={setNodeRef}
+      {...(overlay ? {} : listeners)}
+      {...(overlay ? {} : attributes)}
+      onClick={overlay ? undefined : () => onRowClick(c.id)}
+      className={cn(
+        'select-none rounded-xl border border-line/70 bg-card p-3 shadow-sm transition-all duration-150',
+        overlay
+          ? 'cursor-grabbing shadow-xl ring-1 ring-accent/40'
+          : 'cursor-grab hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-md active:cursor-grabbing',
+        isDragging && 'opacity-30',
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.05] text-[10px] font-medium text-foreground/85 ring-1 ring-line">
+          {initials(c.name) || '?'}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">{asText(c.name, '—')}</p>
+          <p className="truncate text-[11px] text-foreground/55">{asText(c.company, '—')}</p>
+        </div>
+        {alerts.length > 0 && (
+          <span
+            title={alerts.map((a) => a.title).join(' · ')}
+            className={cn(
+              'grid h-5 w-5 shrink-0 place-items-center rounded-full',
+              alerts.some((a) => a.tone === 'red') ? 'bg-danger/15 text-danger' : 'bg-warning/15 text-warning',
+            )}
+          >
+            <AlertTriangle className="h-3 w-3" />
+          </span>
+        )}
+      </div>
+
+      {(c.responsavelComercial || c.responsavelEntrega || c.responsavel) && (
+        <p className="mt-1.5 truncate text-[10.5px] text-foreground/40">
+          {[
+            c.responsavelComercial && `Com.: ${c.responsavelComercial}`,
+            c.responsavelEntrega && `Ent.: ${c.responsavelEntrega}`,
+          ]
+            .filter(Boolean)
+            .join(' · ') || c.responsavel}
+        </p>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <StageAgeBadge stage={stage} since={c.stageUpdatedAt ?? c.createdAt} />
+        {doing && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-medium text-success ring-1 ring-success/25">
+            <Play className="h-2.5 w-2.5" />
+            fazendo
+          </span>
+        )}
+        {readiness && readiness.blockers.length > 0 && (
+          <span
+            title={readiness.blockers.map((b) => `• ${b.label}`).join('\n')}
+            className="inline-flex items-center gap-1 rounded-md border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning"
+          >
+            <Lock className="h-2.5 w-2.5" />
+            {readiness.blockers.length} pendência{readiness.blockers.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-1.5 border-t border-line/60 pt-2">
+        <div>
+          {stage === 'setup_start' && (
+            <MiniActionBtn
+              title={
+                readiness && !readiness.ready
+                  ? 'Cliente com pendências — cobre antes de configurar'
+                  : 'Começar a configurar agora'
+              }
+              disabled={Boolean(readiness && !readiness.ready)}
+              onClick={() => onStartSetup(c)}
+            >
+              <Play className="h-3 w-3" />
+            </MiniActionBtn>
+          )}
+          {stage === 'setup' && (
+            <MiniActionBtn
+              title={doing ? 'Pausar (volta pra aguardando vez)' : 'Começar agora'}
+              onClick={() => (doing ? onPauseSetup(c) : onStartSetup(c))}
+            >
+              {doing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+            </MiniActionBtn>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <MiniActionBtn
+            title={prev ? `Voltar para ${STAGE_COLORS[prev].label}` : 'Sem etapa anterior'}
+            disabled={!prev}
+            onClick={() => onRegress(c)}
+          >
+            <ArrowUpCircle className="h-3.5 w-3.5" />
+          </MiniActionBtn>
+          <MiniActionBtn
+            title={next ? `Avançar para ${STAGE_COLORS[next].label}` : 'Já está na etapa final'}
+            disabled={!next}
+            onClick={() => onAdvance(c)}
+          >
+            <ArrowDownCircle className="h-3.5 w-3.5" />
+          </MiniActionBtn>
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function MiniActionBtn({
+  title,
+  onClick,
+  disabled,
+  children,
+}: {
+  title: string
+  onClick: () => void
+  disabled?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      className={cn(
+        'inline-flex h-6 w-6 items-center justify-center rounded-lg ring-1 transition-colors',
+        disabled
+          ? 'cursor-not-allowed bg-elevate/[0.03] text-foreground/20 ring-line'
+          : 'bg-elevate/[0.06] text-foreground/50 ring-line hover:bg-accent/10 hover:text-accent hover:ring-accent/30',
+      )}
+    >
+      {children}
+    </button>
+  )
 }

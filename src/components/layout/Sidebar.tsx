@@ -64,7 +64,7 @@ import { ServerSwitcher } from './ServerSwitcher'
 
 const suporteItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/tarefas', label: 'Suporte', icon: ListTodo, badgeKey: 'tasks' as const },
+  { to: '/tarefas', label: 'Tarefas', icon: ListTodo, badgeKey: 'tasks' as const },
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/canais', label: 'Canais', icon: Radio },

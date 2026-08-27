@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { useSupportView, useSupportViewValue } from '@/components/support/SupportViewContext'
+import { PipelineSectionTabs } from '@/components/support/PipelineSectionTabs'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
@@ -224,7 +225,7 @@ export function SupportWorkspacePage() {
   return (
     <>
       <TopBar
-        title="Suporte"
+        title="Tarefas"
         subtitle={`${openTasks.length} aberta(s) · ${overdueCount} atrasada(s) · ${todayCount} hoje`}
         rightSlot={
           <Button onClick={() => setEditing(null)} leftIcon={<Plus className="h-4 w-4" />}>
@@ -232,6 +233,7 @@ export function SupportWorkspacePage() {
           </Button>
         }
       />
+      {!supportView && <PipelineSectionTabs />}
 
       <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {/* Barra de filtros + alternância de visão */}

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
+import { PipelineSectionTabs } from '@/components/support/PipelineSectionTabs'
 import { useSupportView, useSupportViewText } from '@/components/support/SupportViewContext'
 import { supportPagesService } from '@/services/supportPages'
 import { AddClientsToPageModal } from '@/components/support/AddClientsToPageModal'
@@ -440,6 +441,7 @@ export function PipelinePage() {
           </div>
         }
       />
+      {!supportView && <PipelineSectionTabs />}
 
       <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="mb-4 flex flex-wrap items-center gap-2">

@@ -18,9 +18,7 @@ import {
   Clock,
   ExternalLink,
   Pencil,
-  Plus,
   Trash2,
-  X,
 } from 'lucide-react'
 import { ticketsService } from '@/services/tickets'
 import { supportColumnsService } from '@/services/supportColumns'
@@ -146,8 +144,6 @@ export function SupportKanbanBoard({ tasks, clientOf, teamMap, onEdit }: Support
             </Column>
           )
         })}
-
-        <AddColumnTile />
       </div>
 
       {/* Cartão "fantasma" que segue o cursor durante o arrasto. */}
@@ -312,7 +308,10 @@ function Column({
         )}
       </header>
 
-      <ul className="min-h-[120px] flex-1 space-y-2 p-2">
+      {/* Altura limitada a ~5 cartões — coluna com mais do que isso rola por dentro dela mesma,
+          em vez de esticar a página inteira (era preciso descer quase até o fim da tela pra ver
+          o fim de uma coluna longa, tipo "Feito"). */}
+      <ul className="min-h-[120px] max-h-[640px] flex-1 space-y-2 overflow-y-auto p-2 pr-1.5">
         {count === 0 ? (
           <li
             className={cn(
@@ -330,73 +329,6 @@ function Column({
       {footer && (
         <div className="border-t border-line px-3 py-1.5 text-[10px] text-foreground/35">{footer}</div>
       )}
-    </div>
-  )
-}
-
-/** Tile no fim do quadro pra criar uma coluna nova. */
-function AddColumnTile() {
-  const [open, setOpen] = React.useState(false)
-  const [name, setName] = React.useState('')
-
-  const create = () => {
-    const trimmed = name.trim()
-    if (trimmed) void supportColumnsService.createColumn(trimmed)
-    setName('')
-    setOpen(false)
-  }
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex w-[220px] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-dashed border-line py-3 text-xs font-medium text-foreground/45 transition-colors hover:border-accent/40 hover:bg-accent/[0.04] hover:text-accent"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Adicionar coluna
-      </button>
-    )
-  }
-
-  return (
-    <div className="w-[240px] shrink-0 rounded-xl border border-line bg-card p-2">
-      <input
-        autoFocus
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Nome da coluna…"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') create()
-          if (e.key === 'Escape') {
-            setName('')
-            setOpen(false)
-          }
-        }}
-        className="h-8 w-full rounded-lg border border-line bg-elevate/[0.04] px-2 text-xs text-foreground outline-none focus:border-accent/40"
-      />
-      <div className="mt-1.5 flex items-center gap-1">
-        <button
-          type="button"
-          onClick={create}
-          disabled={!name.trim()}
-          className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-accent/10 px-2 py-1 text-[11px] font-medium text-accent ring-1 ring-accent/20 transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Check className="h-3 w-3" />
-          Criar
-        </button>
-        <button
-          type="button"
-          title="Cancelar"
-          onClick={() => {
-            setName('')
-            setOpen(false)
-          }}
-          className="grid h-6 w-6 place-items-center rounded-lg text-foreground/45 ring-1 ring-line hover:text-foreground/80"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </div>
     </div>
   )
 }

@@ -438,15 +438,19 @@ function TaskSection({
   const shown = column.isDone ? tasks.slice(0, DONE_LIMIT) : tasks
 
   return (
-    <section>
+    // Faixa colorida à esquerda (cor da coluna) separando os quadros — mesmo estilo já usado nas
+    // etapas do Pipeline (STAGE_COLORS, borderLeft de 3px).
+    <section
+      className="overflow-hidden rounded-xl border border-line bg-card"
+      style={{ borderLeft: `3px solid ${column.color}` }}
+    >
       <h3
         onClick={column.isDone ? () => setOpen((o) => !o) : undefined}
         className={cn(
-          'mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider',
+          'flex items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wider',
           column.isDone && 'cursor-pointer select-none',
         )}
       >
-        <span className="h-2 w-2 rounded-full" style={{ background: column.color }} />
         <span className="text-foreground/70">{column.name}</span>
         <span className="rounded-full bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] text-foreground/50">
           {tasks.length}
@@ -456,7 +460,7 @@ function TaskSection({
         )}
       </h3>
       {open && (
-        <>
+        <div className="border-t border-line/60 p-3">
           <ul className="space-y-2">
             {shown.map((r) => (
               <TaskRow
@@ -475,7 +479,7 @@ function TaskSection({
               +{tasks.length - shown.length} concluída(s) mais antiga(s)
             </p>
           )}
-        </>
+        </div>
       )}
     </section>
   )

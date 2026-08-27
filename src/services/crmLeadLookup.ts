@@ -7,3 +7,10 @@ import { api } from '@/services/api'
 export function suggestCrmLead(clientId: string): Promise<{ leadId: string | null }> {
   return api.get<{ leadId: string | null }>(`/api/clients/${clientId}/crm-lead`)
 }
+
+/** Resumo do contrato desse cliente (id + vínculo já confirmado) — sem passar pela allowlist de
+ * quadros (GET /api/contracts filtra por lá e fica vazio pra quem não tem acesso ao Comercial,
+ * ex.: Suporte). Usado por CrmLeadTab em vez do useContracts() reativo normal. */
+export function fetchClientContract(clientId: string): Promise<{ contractId: string | null; vendaLeadId: string | null }> {
+  return api.get<{ contractId: string | null; vendaLeadId: string | null }>(`/api/clients/${clientId}/contract`)
+}

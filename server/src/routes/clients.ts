@@ -35,6 +35,24 @@ export async function clientRoutes(app: FastifyInstance) {
     }
   );
 
+  // GET /api/clients/:id/contract — resumo do contrato desse cliente (id + venda_lead_id já
+  // confirmado), SEM checar restrictedBoardFilter de propósito: GET /api/contracts filtra por
+  // quadro, então voltava sempre vazio pro Suporte (aba Pipeline > "Lead do CRM", ver CrmLeadTab) —
+  // mesmo com o contrato já existindo e assinado, a aba dizia "cliente ainda não tem contrato".
+  app.get<{ Params: { id: string } }>(
+    '/api/clients/:id/contract',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const client = await queryOne<{ id: string }>('SELECT id FROM clients WHERE id = $1', [req.params.id]);
+      if (!client) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      const contract = await queryOne<{ id: string; venda_lead_id: string | null }>(
+        'SELECT id, venda_lead_id FROM contracts WHERE client_id = $1 ORDER BY created_at DESC LIMIT 1',
+        [req.params.id]
+      );
+      return { contractId: contract?.id ?? null, vendaLeadId: contract?.venda_lead_id ?? null };
+    }
+  );
+
   // GET /api/clients/:id/crm-lead — sugere qual lead_row (card do CRM) provavelmente é o mesmo
   // prospect (não existe vínculo direto entre clients e lead_rows — são cadastros separados; ver
   // findMatchingLeadRowId, lib/leadMatch.ts, pra heurística telefone→nome/empresa e a garantia de

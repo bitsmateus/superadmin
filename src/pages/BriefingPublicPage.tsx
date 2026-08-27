@@ -44,6 +44,15 @@ import {
 
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
 
+// Quantidade fixa de "caixinhas" pra números de WhatsApp — padrão do formulário,
+// caixinhas vazias simplesmente não entram no envio.
+const WHATSAPP_NUMBER_SLOTS = 6
+function padWhatsappNumbers(numbers: string[]): string[] {
+  const padded = numbers.slice(0, WHATSAPP_NUMBER_SLOTS)
+  while (padded.length < WHATSAPP_NUMBER_SLOTS) padded.push('')
+  return padded
+}
+
 const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
 function numberEmoji(i: number): string {
   return NUMBER_EMOJIS[i] ?? `${i + 1}.`
@@ -263,7 +272,8 @@ interface BriefingFormState {
   users: BriefingUser[]
   schedule: { day: string; active: boolean; start: string; end: string }[]
   timezone: string
-  whatsappNumbers: string
+  // Sempre 6 posições fixas (caixinha por número) — vazias = não preenchidas.
+  whatsappNumbers: string[]
   facebookEmail: string
   facebookPassword: string
   officialApi: {
@@ -338,7 +348,7 @@ function initialFormState(company: string): BriefingFormState {
       end: '18:00',
     })),
     timezone: 'America/Sao_Paulo',
-    whatsappNumbers: '',
+    whatsappNumbers: padWhatsappNumbers([]),
     facebookEmail: '',
     facebookPassword: '',
     officialApi: {
@@ -453,7 +463,7 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
         ? bd.schedule.map((s) => ({ day: s.day, active: s.active, start: s.start, end: s.end }))
         : base.schedule,
     timezone: bd.timezone ?? base.timezone,
-    whatsappNumbers: (bd.whatsappNumbers ?? []).join('\n'),
+    whatsappNumbers: bd.whatsappNumbers?.length ? padWhatsappNumbers(bd.whatsappNumbers) : base.whatsappNumbers,
     facebookEmail: bd.facebookEmail ?? base.facebookEmail,
     facebookPassword: bd.facebookPassword ?? base.facebookPassword,
     officialApi: {
@@ -576,7 +586,17 @@ export function BriefingPublicPage() {
         const base = initialFormState(row.company)
         const draft = loadDraft(token)
         if (draft) {
-          setState({ ...base, ...draft })
+          // Rascunhos salvos antes da mudança pra "caixinhas" guardavam
+          // whatsappNumbers como texto único — normaliza pro formato em array.
+          const draftNumbers = draft.whatsappNumbers as unknown
+          const whatsappNumbers = Array.isArray(draftNumbers)
+            ? padWhatsappNumbers(draftNumbers)
+            : padWhatsappNumbers(
+                typeof draftNumbers === 'string'
+                  ? draftNumbers.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean)
+                  : [],
+              )
+          setState({ ...base, ...draft, whatsappNumbers })
         } else if (row.briefing_status === 'revision' && row.briefing_data) {
           setState(formStateFromBriefing(row.briefing_data, base))
         } else {
@@ -728,10 +748,7 @@ export function BriefingPublicPage() {
         })),
       schedule: state.schedule,
       timezone: state.timezone,
-      whatsappNumbers: state.whatsappNumbers
-        .split(/[\n,;]+/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      whatsappNumbers: state.whatsappNumbers.map((s) => s.trim()).filter(Boolean),
       whatsappType: 'baileys',
       useFacebook: Boolean(state.facebookEmail.trim()),
       facebookEmail: state.facebookEmail.trim() || undefined,
@@ -1253,14 +1270,22 @@ export function BriefingPublicPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h3 className="mb-3 text-sm font-semibold text-slate-800">WhatsApp</h3>
                 <Field label={L('Número(s) que vamos conectar')}>
-                  <PlainTextarea
-                    value={state.whatsappNumbers}
-                    onChange={(v) => setState({ ...state, whatsappNumbers: v })}
-                    placeholder={'(11) 99999-9999\n(11) 3333-4444'}
-                    rows={3}
-                  />
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {state.whatsappNumbers.map((num, i) => (
+                      <PlainInput
+                        key={i}
+                        value={num}
+                        onChange={(v) => {
+                          const next = state.whatsappNumbers.slice()
+                          next[i] = v
+                          setState({ ...state, whatsappNumbers: next })
+                        }}
+                        placeholder="(11) 99999-9999"
+                      />
+                    ))}
+                  </div>
                   <p className="mt-1 text-xs text-slate-400">
-                    Um número por linha ou separados por vírgula. Inclua o DDD.
+                    Preencha uma caixinha por número. Inclua o DDD.
                   </p>
                 </Field>
               </div>

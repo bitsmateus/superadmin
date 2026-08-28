@@ -134,6 +134,15 @@ function validateBriefing(
   const isAdvancedAI = Boolean(cfg?.automationTypes.includes('ia_avancada'))
   const isApiOficial = Boolean(cfg?.connectionTypes.includes('api_oficial'))
 
+  // ── Sempre: setores ──
+  if (state.sectors.length === 0) {
+    errs.push({
+      section: 'usuarios',
+      key: 'sectors',
+      message: 'Crie ao menos um setor — mesmo que seja só um time cuidando de tudo.',
+    })
+  }
+
   // ── Sempre: usuários ──
   // Qualquer linha com algum dado preenchido precisa de e-mail válido.
   const badEmail = state.users.find(
@@ -852,6 +861,7 @@ export function BriefingPublicPage() {
       }
       return { ...prev, sectors: next, newSectorInput: '' }
     })
+    clearError('sectors')
   }
 
   const removeSector = (idx: number) => {
@@ -916,9 +926,10 @@ export function BriefingPublicPage() {
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
                     {state.sectors.length} criado(s)
                   </span>
+                  <SectorInfoPopover />
                 </div>
                 <p className="mb-3 text-xs text-slate-500">
-                  Adicione os departamentos que terão filas de atendimento (ex: Comercial, Suporte, Financeiro).
+                  Adicione os departamentos que terão filas de atendimento (ex: Comercial, Suporte, Financeiro). Crie ao menos um.
                 </p>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {state.sectors.map((s, i) => (
@@ -950,6 +961,7 @@ export function BriefingPublicPage() {
                             for (const p of parts) if (!next.includes(p)) next.push(p)
                             return { ...prev, sectors: next, newSectorInput: '' }
                           })
+                          clearError('sectors')
                           return
                         }
                       }
@@ -967,6 +979,9 @@ export function BriefingPublicPage() {
                     <Plus className="h-4 w-4" /> Adicionar
                   </button>
                 </div>
+                {errors.sectors && (
+                  <p className="mt-1 text-xs font-medium text-rose-600">{errors.sectors}</p>
+                )}
               </div>
 
               {/* Usuários */}
@@ -1386,7 +1401,10 @@ export function BriefingPublicPage() {
             <div className="space-y-6">
               {/* Roteiro do chatbot (base da geração automática) */}
               <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <h3 className="mb-1 text-sm font-semibold text-slate-800">Monte o fluxo do chatbot</h3>
+                <div className="mb-1 flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-800">Monte o fluxo do chatbot</h3>
+                  <ChatbotFlowInfoPopover />
+                </div>
                 <p className="mb-3 text-xs text-slate-500">
                   Comece pelo menu principal. Se uma opção precisar abrir novas escolhas, adicione um submenu.
                 </p>
@@ -2185,8 +2203,9 @@ export function BriefingPublicPage() {
   )
 }
 
-// ── Info popover para perfis de usuário ──
-function RoleInfoPopover() {
+// ── Popover genérico "Saiba mais aqui", reaproveitado em vários campos do
+// formulário público pra explicar conceitos sem poluir a tela com texto fixo. ──
+function InfoPopover({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
 
@@ -2210,32 +2229,80 @@ function RoleInfoPopover() {
       </button>
       {open && (
         <div className="absolute left-0 top-7 z-50 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl text-xs text-slate-700 space-y-3">
-          <p className="font-semibold text-slate-900 text-sm">Sobre os campos</p>
-          <div className="space-y-1.5">
-            <p><strong>Nome:</strong> nome do usuário que vai utilizar a ferramenta</p>
-            <p><strong>E-mail:</strong> e-mail de acesso ao sistema</p>
-            <p><strong>Senha:</strong> será definida pela nossa equipe — o usuário poderá alterar após o primeiro acesso</p>
-            <p><strong>Setor:</strong> qual fila de atendimento o usuário terá acesso</p>
-          </div>
-          <hr className="border-slate-100" />
-          <div className="space-y-2">
-            <p className="font-semibold text-slate-900">Perfis de acesso</p>
-            <div>
-              <span className="font-medium text-slate-800">Atendente —</span>{' '}
-              acesso somente aos próprios atendimentos do setor. Acesso restrito a configurações.
-            </div>
-            <div>
-              <span className="font-medium text-slate-800">Supervisor —</span>{' '}
-              acesso geral a conversas e relatórios, mas não pode gerenciar usuários nem alterar configurações gerais.
-            </div>
-            <div>
-              <span className="font-medium text-slate-800">Administrador —</span>{' '}
-              acesso total: todas as conversas, números, configurações e usuários.
-            </div>
-          </div>
+          <p className="font-semibold text-slate-900 text-sm">{title}</p>
+          {children}
         </div>
       )}
     </div>
+  )
+}
+
+function RoleInfoPopover() {
+  return (
+    <InfoPopover title="Sobre os campos">
+      <div className="space-y-1.5">
+        <p><strong>Nome:</strong> nome do usuário que vai utilizar a ferramenta</p>
+        <p><strong>E-mail:</strong> e-mail de acesso ao sistema</p>
+        <p><strong>Senha:</strong> será definida pela nossa equipe — o usuário poderá alterar após o primeiro acesso</p>
+        <p><strong>Setor:</strong> qual fila de atendimento o usuário terá acesso</p>
+      </div>
+      <hr className="border-slate-100" />
+      <div className="space-y-2">
+        <p className="font-semibold text-slate-900">Perfis de acesso</p>
+        <div>
+          <span className="font-medium text-slate-800">Atendente —</span>{' '}
+          acesso somente aos próprios atendimentos do setor. Acesso restrito a configurações.
+        </div>
+        <div>
+          <span className="font-medium text-slate-800">Supervisor —</span>{' '}
+          acesso geral a conversas e relatórios, mas não pode gerenciar usuários nem alterar configurações gerais.
+        </div>
+        <div>
+          <span className="font-medium text-slate-800">Administrador —</span>{' '}
+          acesso total: todas as conversas, números, configurações e usuários.
+        </div>
+      </div>
+    </InfoPopover>
+  )
+}
+
+function SectorInfoPopover() {
+  return (
+    <InfoPopover title="Sobre os setores">
+      <p>
+        Setor é uma <strong>fila de atendimento</strong> — cada usuário cadastrado é vinculado a um
+        ou mais setores, e só enxerga as conversas daquele setor. É assim que dividimos o que cada
+        pessoa tem acesso a ver e responder.
+      </p>
+      <p>
+        <strong>Empresa com vários departamentos</strong> (ex: Comercial, Suporte, Financeiro)? Crie
+        um setor pra cada um.
+      </p>
+      <p>
+        <strong>Empresa sem departamentos separados</strong>, um time só cuidando de tudo? Crie
+        mesmo assim pelo menos um setor (ex: "Atendimento" ou o nome da empresa) — é obrigatório
+        pra representar o time, mesmo que seja um só.
+      </p>
+    </InfoPopover>
+  )
+}
+
+function ChatbotFlowInfoPopover() {
+  return (
+    <InfoPopover title="Sobre o fluxo do chatbot">
+      <p>
+        É o <strong>menu que o cliente vê</strong> assim que manda mensagem no WhatsApp — um resumo
+        de como o atendimento se divide, que vira as opções do bot automaticamente.
+      </p>
+      <p>
+        Comece pelo <strong>menu principal</strong> (ex: "1. Comercial, 2. Suporte, 3. Financeiro").
+        Se uma opção precisar abrir novas escolhas dentro dela, adicione um <strong>submenu</strong>.
+      </p>
+      <p>
+        Depois que o cliente escolhe uma opção, ele é direcionado ao setor responsável — por isso
+        os setores da Seção 1 e as opções do menu aqui costumam conversar entre si.
+      </p>
+    </InfoPopover>
   )
 }
 

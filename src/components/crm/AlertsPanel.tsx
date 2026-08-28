@@ -4,6 +4,7 @@ import {
   Bot,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   Copy,
   FileText,
   MessageSquare,
@@ -28,6 +29,7 @@ interface PanelDef {
   kinds: AlertKind[]
   icon: React.ReactNode
   tone: 'info' | 'warning' | 'danger' | 'success'
+  collapsible?: boolean
 }
 
 const PANELS: PanelDef[] = [
@@ -86,6 +88,7 @@ const PANELS: PanelDef[] = [
     kinds: ['impl_api_oficial'],
     icon: <Zap className="h-3.5 w-3.5" />,
     tone: 'info',
+    collapsible: true,
   },
   {
     key: 'impl_ia',
@@ -94,6 +97,7 @@ const PANELS: PanelDef[] = [
     kinds: ['impl_ia'],
     icon: <Bot className="h-3.5 w-3.5" />,
     tone: 'info',
+    collapsible: true,
   },
   {
     key: 'impl_automacao',
@@ -102,6 +106,7 @@ const PANELS: PanelDef[] = [
     kinds: ['impl_automacao_externa'],
     icon: <Settings2 className="h-3.5 w-3.5" />,
     tone: 'info',
+    collapsible: true,
   },
 ]
 
@@ -172,10 +177,32 @@ const PanelCard = React.memo(function PanelCard({
   }[panel.tone]
 
   const badgeTone = alerts.length === 0 ? 'neutral' : panel.tone
+  const [open, setOpen] = React.useState(!panel.collapsible)
+  const showList = panel.collapsible ? open : true
 
   return (
     <section className="flex flex-col rounded-2xl border border-line bg-card">
-      <header className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+      <header
+        role={panel.collapsible ? 'button' : undefined}
+        tabIndex={panel.collapsible ? 0 : undefined}
+        onClick={panel.collapsible ? () => setOpen((v) => !v) : undefined}
+        onKeyDown={
+          panel.collapsible
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setOpen((v) => !v)
+                }
+              }
+            : undefined
+        }
+        className={cn(
+          'flex items-start justify-between gap-3 px-4 py-3',
+          showList && 'border-b border-line',
+          panel.collapsible &&
+            'cursor-pointer select-none transition-colors hover:bg-elevate/[0.03]',
+        )}
+      >
         <div className="flex items-start gap-2.5">
           <span
             className={cn(
@@ -190,27 +217,38 @@ const PanelCard = React.memo(function PanelCard({
             <p className="text-[11px] text-foreground/45">{panel.description}</p>
           </div>
         </div>
-        <Badge tone={badgeTone} dot={alerts.length > 0}>
-          {alerts.length}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge tone={badgeTone} dot={alerts.length > 0}>
+            {alerts.length}
+          </Badge>
+          {panel.collapsible && (
+            <ChevronDown
+              className={cn(
+                'h-4 w-4 text-foreground/35 transition-transform',
+                open && 'rotate-180',
+              )}
+            />
+          )}
+        </div>
       </header>
 
-      {alerts.length === 0 ? (
-        <p className="px-4 py-5 text-center text-xs text-foreground/35">
-          Nenhum cliente nesta situação
-        </p>
-      ) : (
-        <ul className="divide-y divide-line">
-          {alerts.map((a) => (
-            <AlertRow
-              key={`${panel.key}-${a.client.id}-${a.kind}-${a.followUp?.id ?? a.whenAt ?? ''}`}
-              alert={a}
-              onOpen={() => onOpen(a.client.id)}
-              showStage={panel.key.startsWith('impl_')}
-            />
-          ))}
-        </ul>
-      )}
+      {showList &&
+        (alerts.length === 0 ? (
+          <p className="px-4 py-5 text-center text-xs text-foreground/35">
+            Nenhum cliente nesta situação
+          </p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {alerts.map((a) => (
+              <AlertRow
+                key={`${panel.key}-${a.client.id}-${a.kind}-${a.followUp?.id ?? a.whenAt ?? ''}`}
+                alert={a}
+                onOpen={() => onOpen(a.client.id)}
+                showStage={panel.key.startsWith('impl_')}
+              />
+            ))}
+          </ul>
+        ))}
     </section>
   )
 })

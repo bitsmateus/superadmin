@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
 import { findMatchingLeadRowId } from '../lib/leadMatch.js';
 import { sendMail } from '../lib/mailer.js';
+import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 
 const FINANCE_COLS = [
   'contract_url','contract_sent_at','contract_signed_at',
@@ -75,24 +76,59 @@ export async function clientRoutes(app: FastifyInstance) {
     }
   );
 
+  // POST /api/clients/:id/access-pdf — gera o PDF de acessos de verdade (Chromium headless), sem
+  // passar pelo diálogo de impressão do navegador. O front manda o HTML já pronto (renderAccessSheetHtml,
+  // com a senha de cada usuário) e só usa essa rota pra transformar em PDF — mesmo padrão de
+  // /api/contracts/:id/pdf (ver server/src/lib/contractPdf.ts).
+  app.post<{ Params: { id: string }; Body: { html?: string } }>(
+    '/api/clients/:id/access-pdf',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const client = await queryOne<{ id: string }>('SELECT id FROM clients WHERE id = $1', [req.params.id]);
+      if (!client) return reply.status(404).send({ message: 'Cliente não encontrado' });
+
+      const html = req.body?.html;
+      if (!html?.trim()) return reply.status(400).send({ message: 'html é obrigatório' });
+
+      try {
+        const pdf = await renderFullHtmlToPdf(html);
+        reply.header('Content-Type', 'application/pdf');
+        reply.header('Content-Disposition', 'attachment; filename="acessos.pdf"');
+        return reply.send(pdf);
+      } catch (err) {
+        return reply.status(500).send({ message: `Falha ao gerar PDF: ${(err as Error).message}` });
+      }
+    }
+  );
+
   // POST /api/clients/:id/send-access-email — envio automático (SMTP) do e-mail de acessos, disparado
-  // em background ao clicar "Baixar acessos" (ver DeliveryTab.tsx). O front já monta o assunto/HTML
-  // (mesmo conteúdo do PDF, com a senha de cada usuário) e só manda pra cá enviar de verdade — assim
-  // o e-mail é sempre idêntico ao que a pessoa baixou, sem duplicar a lógica de montagem no backend.
-  app.post<{ Params: { id: string }; Body: { to?: string; subject?: string; html?: string } }>(
+  // em background ao clicar "Baixar acessos" (ver DeliveryTab.tsx). O front monta a mensagem curta
+  // (buildAccessDeliveryEmail) e manda o PDF já gerado (ver /access-pdf acima) como anexo em base64 —
+  // assim o e-mail sempre carrega o mesmo PDF que a pessoa acabou de baixar.
+  app.post<{
+    Params: { id: string };
+    Body: { to?: string; subject?: string; html?: string; attachmentBase64?: string; attachmentFilename?: string };
+  }>(
     '/api/clients/:id/send-access-email',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const client = await queryOne<{ id: string }>('SELECT id FROM clients WHERE id = $1', [req.params.id]);
       if (!client) return reply.status(404).send({ message: 'Cliente não encontrado' });
 
-      const { to, subject, html } = req.body ?? {};
+      const { to, subject, html, attachmentBase64, attachmentFilename } = req.body ?? {};
       if (!to?.trim() || !subject?.trim() || !html?.trim()) {
         return reply.status(400).send({ message: 'to, subject e html são obrigatórios' });
       }
 
       try {
-        await sendMail({ to: to.trim(), subject, html });
+        await sendMail({
+          to: to.trim(),
+          subject,
+          html,
+          attachments: attachmentBase64
+            ? [{ filename: attachmentFilename || 'acessos.pdf', content: Buffer.from(attachmentBase64, 'base64') }]
+            : undefined,
+        });
         return { ok: true };
       } catch (err) {
         return reply.status(400).send({ message: err instanceof Error ? err.message : 'Falha ao enviar e-mail' });

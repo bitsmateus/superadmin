@@ -142,12 +142,21 @@ function isIanMateusPage(pageName: string): boolean {
 /** Colunas visíveis numa aba — a coluna SDR só faz sentido em Novos Leads (várias pessoas
  * cadastrando ali); numa aba travada num SDR só, a coluna vira redundante e some da tabela.
  * O quadro de vendas tem um conjunto próprio: lá o que importa é quem, quanto e quando. */
-function columnsForSdrLock(sdrLock: string | undefined, isVendas = false, hideIanMateusCols = false): ColumnDef[] {
+function columnsForSdrLock(
+  sdrLock: string | undefined,
+  isVendas = false,
+  hideIanMateusCols = false,
+  boardName = '',
+): ColumnDef[] {
   if (isVendas) return COLUMNS.filter((c) => VENDAS_COLUMN_KEYS.has(c.key))
   // "Fechamento" só existe no contexto de venda — fora dele seria uma coluna vazia em todo lead.
   const base = COLUMNS.filter((c) => c.key !== 'fechamento')
   const withoutSdr = sdrLock ? base.filter((c) => c.key !== 'sdr') : base
-  return hideIanMateusCols ? withoutSdr.filter((c) => !IAN_MATEUS_HIDDEN_COLUMN_KEYS.has(c.key)) : withoutSdr
+  const visible = hideIanMateusCols ? withoutSdr.filter((c) => !IAN_MATEUS_HIDDEN_COLUMN_KEYS.has(c.key)) : withoutSdr
+  // Agendamento só é obrigatório dentro do quadro "Reunião agendada" — nos outros quadros o
+  // lead ainda nem chegou nessa etapa, então não faz sentido cobrar a data aqui.
+  if (boardName.trim().toLowerCase() !== 'reunião agendada') return visible
+  return visible.map((c) => (c.key === 'agendamento' ? { ...c, required: true } : c))
 }
 
 function columnWidthsStorageKey(page: LeadBoardPage) {
@@ -799,7 +808,7 @@ function BoardGroup({
   const toggleSort = (key: LeadRowField | 'createdAt') => {
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
   }
-  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols)
+  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name)
   const tableWidth = CHECKBOX_COL_WIDTH
     + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
 
@@ -1086,7 +1095,13 @@ function BoardGroup({
                         <AgendamentoField
                           value={row.agendamento}
                           onChange={(next) => leadBoardsService.updateRow(row.id, { agendamento: next })}
-                          className="justify-center bg-transparent px-2.5 py-1.5 text-sm text-foreground"
+                          placeholder={col.required ? 'Obrigatório' : undefined}
+                          className={cn(
+                            'justify-center px-2.5 py-1.5 text-sm text-foreground',
+                            col.required && !row.agendamento
+                              ? 'bg-danger/10 ring-1 ring-inset ring-danger/30'
+                              : 'bg-transparent',
+                          )}
                         />
                       ) : (
                         <EditableField

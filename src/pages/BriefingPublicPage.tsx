@@ -12,6 +12,7 @@ import {
   Lightbulb,
   MessageSquare,
   MoreVertical,
+  Pencil,
   Phone,
   Plus,
   Send,
@@ -230,14 +231,18 @@ function validateBriefing(
   }
 
   // ── Condicional: chatbot (roteiro) ──
-  if (sections.includes('chatbot')) {
+  if (sections.includes('chatbot') && state.chatbotFlowMode !== 'none') {
     if (!state.chatbotDescription.trim())
       errs.push({ section: 'chatbot', key: 'chatbotDescription', message: 'Descreva como o atendimento do chatbot deve funcionar.' })
-    const hasMenu = state.chatbotMenus.some(
-      (m) => m.question.trim() && m.options.split('\n').some((o) => o.trim()),
-    )
-    if (!hasMenu)
-      errs.push({ section: 'chatbot', key: 'chatbotMenus', message: 'Adicione ao menos 1 menu com pergunta e opções.' })
+    if (state.chatbotFlowMode === 'menu') {
+      const hasMenu = state.chatbotMenus.some(
+        (m) => m.question.trim() && m.options.split('\n').some((o) => o.trim()),
+      )
+      if (!hasMenu)
+        errs.push({ section: 'chatbot', key: 'chatbotMenus', message: 'Adicione ao menos 1 menu com pergunta e opções.' })
+    } else if (!state.chatbotMenus[0]?.question.trim()) {
+      errs.push({ section: 'chatbot', key: 'chatbotMenus', message: 'Escreva a mensagem de boas-vindas.' })
+    }
   }
 
   return errs
@@ -262,19 +267,34 @@ function scheduleSummary(schedule: { day: string; active: boolean; start: string
   const active = schedule.filter((s) => s.active)
   if (active.length === 0) return 'No momento não temos atendimento configurado.'
 
-  const sameHours = active.every((s) => s.start === active[0].start && s.end === active[0].end)
   const dayIndexes = active.map((s) => DAYS.indexOf(s.day))
   const isContiguous = dayIndexes.every((idx, i) => i === 0 || idx === dayIndexes[i - 1] + 1)
-  const dayLabel =
-    isContiguous && active.length > 1
-      ? `${active[0].day} a ${active[active.length - 1].day}`
-      : active.map((s) => s.day).join(', ')
 
-  if (sameHours) {
-    return `Nosso atendimento acontece de ${dayLabel}, das ${active[0].start} às ${active[0].end}.`
+  // Dias abertos não formam um intervalo seguido (ex.: Segunda, Quarta e Sexta) —
+  // um "de X a Y" sugeriria dias fechados como abertos, então lista um a um.
+  if (!isContiguous) {
+    const lines = active.map((s) => `${s.day}: ${s.start} às ${s.end}`).join('\n')
+    return `Nosso atendimento acontece nos seguintes horários:\n${lines}`
   }
-  const lines = active.map((s) => `${s.day}: ${s.start} às ${s.end}`).join('\n')
-  return `Nosso atendimento acontece nos seguintes horários:\n${lines}`
+
+  const dayLabel = active.length > 1 ? `${active[0].day} a ${active[active.length - 1].day}` : active[0].day
+
+  // Horário mais comum dentro do intervalo — quem foge disso vira "exceto" em vez de
+  // quebrar o intervalo (ex.: "de Segunda a Sexta, das 08:00 às 18:00, exceto terça-feira").
+  const counts = new Map<string, number>()
+  for (const s of active) {
+    const key = `${s.start}|${s.end}`
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const [modeKey] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
+  const [modeStart, modeEnd] = modeKey.split('|')
+  const exceptions = active.filter((s) => `${s.start}|${s.end}` !== modeKey)
+
+  const base = `Nosso atendimento acontece de ${dayLabel}, das ${modeStart} às ${modeEnd}`
+  if (exceptions.length === 0) return `${base}.`
+
+  const exceptionText = exceptions.map((s) => `${s.day} (${s.start} às ${s.end})`).join(', ')
+  return `${base}, exceto ${exceptionText}.`
 }
 
 function buildOffHours(
@@ -312,6 +332,9 @@ interface BriefingFormState {
   greetingGenerated: boolean
   // Roteiro do chatbot (base da geração automática do fluxo)
   chatbotDescription: string
+  // Como o primeiro contato funciona: menu de opções, só uma mensagem de boas-vindas
+  // (sem opções), ou nenhuma mensagem automática.
+  chatbotFlowMode: 'menu' | 'greeting_only' | 'none'
   // Preferência de interação do menu: opções digitadas por número, ou botões clicáveis.
   chatbotMenuStyle: 'numbered' | 'buttons'
   chatbotMenus: { question: string; options: string; parentOption?: string }[] // options: uma por linha
@@ -386,6 +409,7 @@ function initialFormState(
     greetingEditing: false,
     greetingGenerated: false,
     chatbotDescription: '',
+    chatbotFlowMode: 'menu',
     chatbotMenuStyle: 'numbered',
     chatbotMenus: [{ question: '', options: '' }],
     chatbotCollect: '',
@@ -496,6 +520,7 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     offHoursEnabled: bd.offHoursEnabled ?? base.offHoursEnabled,
     offHoursCustomized: Boolean(bd.offHoursMessage) || base.offHoursCustomized,
     chatbotDescription: bd.chatbotFlow?.description ?? base.chatbotDescription,
+    chatbotFlowMode: bd.chatbotFlow?.mode ?? base.chatbotFlowMode,
     chatbotMenuStyle: bd.chatbotFlow?.menuStyle ?? base.chatbotMenuStyle,
     chatbotMenus:
       bd.chatbotFlow?.menus && bd.chatbotFlow.menus.length > 0
@@ -767,17 +792,25 @@ export function BriefingPublicPage() {
       chatbotFlow: sections.includes('chatbot')
         ? {
             description: state.chatbotDescription.trim(),
+            mode: state.chatbotFlowMode,
             menuStyle: state.chatbotMenuStyle,
-            menus: state.chatbotMenus
-              .map((m) => ({
-                question: m.question.trim(),
-                parentOption: m.parentOption?.trim() || undefined,
-                options: m.options
-                  .split('\n')
-                  .map((o) => o.trim())
-                  .filter(Boolean),
-              }))
-              .filter((m) => m.question || m.options.length > 0),
+            menus:
+              state.chatbotFlowMode === 'none'
+                ? []
+                : state.chatbotFlowMode === 'greeting_only'
+                  ? [{ question: state.chatbotMenus[0]?.question.trim() ?? '', options: [] as string[] }].filter(
+                      (m) => m.question,
+                    )
+                  : state.chatbotMenus
+                      .map((m) => ({
+                        question: m.question.trim(),
+                        parentOption: m.parentOption?.trim() || undefined,
+                        options: m.options
+                          .split('\n')
+                          .map((o) => o.trim())
+                          .filter(Boolean),
+                      }))
+                      .filter((m) => m.question || m.options.length > 0),
             collectFields: state.chatbotCollect
               .split('\n')
               .map((s) => s.trim())
@@ -1205,9 +1238,10 @@ export function BriefingPublicPage() {
                     <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
                       <WaBubbleIn>{state.offHoursMessage}</WaBubbleIn>
                     </WhatsAppMockup>
+                    <PersonalizavelBadge />
                   </div>
                 ) : (
-                  <div className="mx-auto flex aspect-[9/19.5] max-w-[240px] items-center justify-center rounded-[2.25rem] border-2 border-dashed border-slate-300 bg-slate-50 px-6 text-center text-xs text-slate-400">
+                  <div className="mx-auto flex aspect-[9/19.5] max-w-[280px] items-center justify-center rounded-[2.25rem] border-2 border-dashed border-slate-300 bg-slate-50 px-6 text-center text-xs text-slate-400">
                     Nenhuma mensagem automática será enviada fora do horário.
                   </div>
                 )}
@@ -1538,12 +1572,86 @@ export function BriefingPublicPage() {
                       Menu de atendimento *
                     </label>
                     <p className="mb-3 text-xs text-slate-500">
+                      Escolha como o primeiro contato funciona: um menu com opções, só uma mensagem
+                      de boas-vindas, ou nenhuma mensagem automática.
+                    </p>
+
+                    <div className="mb-4 inline-flex flex-wrap rounded-lg border border-slate-200 bg-white p-1 text-xs font-medium">
+                      {(
+                        [
+                          { v: 'menu', l: 'Menu de opções' },
+                          { v: 'greeting_only', l: 'Só boas-vindas' },
+                          { v: 'none', l: 'Nenhuma mensagem' },
+                        ] as const
+                      ).map(({ v, l }) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setState({ ...state, chatbotFlowMode: v })}
+                          className={cn(
+                            'rounded-md px-3 py-1.5 transition',
+                            state.chatbotFlowMode === v
+                              ? 'bg-[#4F8EF7] text-white'
+                              : 'text-slate-500 hover:text-slate-700',
+                          )}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+
+                    {state.chatbotFlowMode === 'none' && (
+                      <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-xs text-slate-500">
+                        Ok — nenhuma mensagem automática será enviada. O cliente será atendido
+                        diretamente por um atendente assim que entrar em contato.
+                      </p>
+                    )}
+
+                    {state.chatbotFlowMode === 'greeting_only' && (
+                      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
+                        <div className="lg:sticky lg:top-4">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
+                              <WaBubbleIn>
+                                {state.chatbotMenus[0]?.question.trim() || 'Olá! Como podemos te ajudar hoje?'}
+                              </WaBubbleIn>
+                            </WhatsAppMockup>
+                            <PersonalizavelBadge />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-slate-600">
+                            Mensagem de boas-vindas
+                          </label>
+                          <p className="mb-2 text-xs text-slate-500">
+                            Sem menu de opções — o cliente cai direto na conversa com um atendente
+                            depois dessa mensagem.
+                          </p>
+                          <PlainInput
+                            value={state.chatbotMenus[0]?.question ?? ''}
+                            onChange={(v) => {
+                              const menus = [...state.chatbotMenus]
+                              menus[0] = { ...(menus[0] ?? { options: '' }), question: v }
+                              setState({ ...state, chatbotMenus: menus })
+                              clearError('chatbotMenus')
+                            }}
+                            placeholder="Ex: Olá! Seja bem-vindo(a). Em instantes um atendente vai continuar por aqui."
+                          />
+                          {errors.chatbotMenus && (
+                            <p className="mt-1 text-xs font-medium text-rose-600">{errors.chatbotMenus}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {state.chatbotFlowMode === 'menu' && (
+                    <>
+                    <p className="mb-3 text-xs text-slate-500">
                       Escreva a mensagem que o cliente verá e coloque uma opção em cada linha. Os números serão
                       adicionados no fluxo. Ao escolher uma opção do menu, o cliente é transferido direto para o
                       setor responsável.
                     </p>
-
-                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[240px_1fr] lg:items-start">
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
                       {/* Coluna esquerda: prévia ao vivo do menu principal, atualiza
                           conforme o cliente digita ou usa "Usar exemplo". */}
                       <div className="lg:sticky lg:top-4">
@@ -1580,6 +1688,7 @@ export function BriefingPublicPage() {
                               style={state.chatbotMenuStyle}
                             />
                           </WhatsAppMockup>
+                          <PersonalizavelBadge />
                         </div>
                         <p className="mt-2 text-[11px] text-slate-400">
                           {state.chatbotMenuStyle === 'numbered'
@@ -1688,6 +1797,8 @@ export function BriefingPublicPage() {
                         )}
                       </div>
                     </div>
+                    </>
+                    )}
                   </div>
 
                   <Field label={L('Dados que o bot deve coletar antes de transferir (um por linha)')}>
@@ -1763,57 +1874,6 @@ export function BriefingPublicPage() {
                 </div>
               </div>
 
-              {/* Mensagem de saudação — a de "fora do horário" fica na Seção 2 (Horários),
-                  já que é diretamente ligada aos dias/horas configurados lá. */}
-              <div className="max-w-sm">
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-medium text-slate-600">
-                    Mensagem de saudação
-                  </label>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                    {state.greetingGenerated ? 'Versão final gerada' : 'Demonstrativo — será configurado pelo nosso time'}
-                  </span>
-                </div>
-
-                {!state.greetingEditing ? (
-                  <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-4">
-                    <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
-                      <WaBubbleIn>{state.greetingMessage}</WaBubbleIn>
-                    </WhatsAppMockup>
-                    <div className="mt-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setState({ ...state, greetingEditing: true })}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
-                      >
-                        Personalizar mensagem
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <PlainTextarea
-                      value={state.greetingMessage}
-                      onChange={(v) => setState({ ...state, greetingMessage: v })}
-                      rows={8}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setState({
-                          ...state,
-                          greetingEditing: false,
-                          greetingGenerated: false,
-                          greetingMessage: buildGreeting(client.company, state.sectors),
-                        })
-                      }}
-                      className="mt-2 text-xs text-[#4F8EF7] hover:underline"
-                    >
-                      Restaurar mensagem padrão
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </SectionBlock>
         )}
@@ -2317,11 +2377,27 @@ export function BriefingPublicPage() {
   )
 }
 
+/** Selo bem visível deixando claro que a prévia é só uma ideia — o texto final é
+ * ajustado com o cliente numa reunião, não precisa "acertar" aqui. */
+function PersonalizavelBadge() {
+  return (
+    <div className="mt-3 text-center">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-600 px-3 py-1 text-xs font-bold text-white shadow-sm">
+        <Pencil className="h-3.5 w-3.5" />
+        100% Personalizável
+      </span>
+      <p className="mt-1.5 text-[11px] text-slate-500">
+        Isso é só uma ideia — você ajusta tudo em reunião com a nossa equipe.
+      </p>
+    </div>
+  )
+}
+
 // ── Mockup de iPhone simulando o WhatsApp, pra prévia de "Mensagem de saudação"/
 // "Fora do horário" ficar mais próxima do que o cliente final vai realmente ver. ──
 function WhatsAppMockup({ contactName, children }: { contactName: string; children: React.ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-[240px]">
+    <div className="mx-auto w-full max-w-[280px]">
       <div className="relative rounded-[2.25rem] bg-slate-900 p-[6px] shadow-xl">
         <div className="absolute left-1/2 top-[6px] z-10 h-5 w-24 -translate-x-1/2 rounded-b-2xl bg-slate-900" />
         {/* Proporção de tela de iPhone (9:19.5) — a mensagem rola dentro da área de

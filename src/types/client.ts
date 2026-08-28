@@ -188,6 +188,9 @@ export interface OfficialApiAccess {
 export interface ChatbotFlowBriefing {
   /** Descrição livre de como o atendimento deve funcionar. */
   description: string
+  /** Como o primeiro contato funciona: menu de opções, só boas-vindas (sem opções),
+   *  ou nenhuma mensagem automática. Default 'menu'. */
+  mode?: 'menu' | 'greeting_only' | 'none'
   /** Preferência do cliente: opções digitadas por número ou botões clicáveis. Default 'numbered'. */
   menuStyle?: 'numbered' | 'buttons'
   /** Menu principal e submenus. `parentOption` informa qual opção abre o submenu. */

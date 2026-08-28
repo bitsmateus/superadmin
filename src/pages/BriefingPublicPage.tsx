@@ -1595,105 +1595,107 @@ export function BriefingPublicPage() {
                 </div>
               </div>
 
-              {/* Mensagem de saudação */}
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-medium text-slate-600">
-                    Mensagem de saudação
-                  </label>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                    {state.greetingGenerated ? 'Versão final gerada' : 'Demonstrativo — será configurado pelo nosso time'}
-                  </span>
-                </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {/* Mensagem de saudação */}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-xs font-medium text-slate-600">
+                      Mensagem de saudação
+                    </label>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                      {state.greetingGenerated ? 'Versão final gerada' : 'Demonstrativo — será configurado pelo nosso time'}
+                    </span>
+                  </div>
 
-                {!state.greetingEditing ? (
-                  <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-4">
-                    <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
-                      {state.greetingMessage}
-                    </WhatsAppMockup>
-                    <div className="mt-3 text-center">
+                  {!state.greetingEditing ? (
+                    <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-4">
+                      <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
+                        {state.greetingMessage}
+                      </WhatsAppMockup>
+                      <div className="mt-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setState({ ...state, greetingEditing: true })}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
+                        >
+                          Personalizar mensagem
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <PlainTextarea
+                        value={state.greetingMessage}
+                        onChange={(v) => setState({ ...state, greetingMessage: v })}
+                        rows={8}
+                      />
                       <button
                         type="button"
-                        onClick={() => setState({ ...state, greetingEditing: true })}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
+                        onClick={() => {
+                          setState({
+                            ...state,
+                            greetingEditing: false,
+                            greetingGenerated: false,
+                            greetingMessage: buildGreeting(client.company, state.sectors),
+                          })
+                        }}
+                        className="mt-2 text-xs text-[#4F8EF7] hover:underline"
                       >
-                        Personalizar mensagem
+                        Restaurar mensagem padrão
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <div>
-                    <PlainTextarea
-                      value={state.greetingMessage}
-                      onChange={(v) => setState({ ...state, greetingMessage: v })}
-                      rows={8}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setState({
-                          ...state,
-                          greetingEditing: false,
-                          greetingGenerated: false,
-                          greetingMessage: buildGreeting(client.company, state.sectors),
-                        })
-                      }}
-                      className="mt-2 text-xs text-[#4F8EF7] hover:underline"
-                    >
-                      Restaurar mensagem padrão
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Mensagem fora do horário */}
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-medium text-slate-600">
-                    Mensagem fora do horário de atendimento
-                  </label>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                    Demonstrativo
-                  </span>
+                  )}
                 </div>
 
-                {!state.offHoursEditing ? (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
-                      {state.offHoursMessage}
-                    </WhatsAppMockup>
-                    <div className="mt-3 text-center">
+                {/* Mensagem fora do horário */}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-xs font-medium text-slate-600">
+                      Mensagem fora do horário de atendimento
+                    </label>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                      Demonstrativo
+                    </span>
+                  </div>
+
+                  {!state.offHoursEditing ? (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
+                        {state.offHoursMessage}
+                      </WhatsAppMockup>
+                      <div className="mt-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setState({ ...state, offHoursEditing: true })}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
+                        >
+                          Personalizar mensagem
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <PlainTextarea
+                        value={state.offHoursMessage}
+                        onChange={(v) => setState({ ...state, offHoursMessage: v })}
+                        rows={6}
+                      />
                       <button
                         type="button"
-                        onClick={() => setState({ ...state, offHoursEditing: true })}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
+                        onClick={() => {
+                          setState({
+                            ...state,
+                            offHoursEditing: false,
+                            offHoursMessage: buildOffHours(client.company),
+                          })
+                        }}
+                        className="mt-2 text-xs text-[#4F8EF7] hover:underline"
                       >
-                        Personalizar mensagem
+                        Restaurar mensagem padrão
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <div>
-                    <PlainTextarea
-                      value={state.offHoursMessage}
-                      onChange={(v) => setState({ ...state, offHoursMessage: v })}
-                      rows={6}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setState({
-                          ...state,
-                          offHoursEditing: false,
-                          offHoursMessage: buildOffHours(client.company),
-                        })
-                      }}
-                      className="mt-2 text-xs text-[#4F8EF7] hover:underline"
-                    >
-                      Restaurar mensagem padrão
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           </SectionBlock>
@@ -2202,12 +2204,14 @@ export function BriefingPublicPage() {
 // "Fora do horário" ficar mais próxima do que o cliente final vai realmente ver. ──
 function WhatsAppMockup({ contactName, children }: { contactName: string; children: React.ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-[300px]">
+    <div className="mx-auto w-full max-w-[240px]">
       <div className="relative rounded-[2.25rem] bg-slate-900 p-[6px] shadow-xl">
-        <div className="absolute left-1/2 top-[6px] z-10 h-5 w-28 -translate-x-1/2 rounded-b-2xl bg-slate-900" />
-        <div className="overflow-hidden rounded-[1.85rem] bg-[#ECE5DD]">
+        <div className="absolute left-1/2 top-[6px] z-10 h-5 w-24 -translate-x-1/2 rounded-b-2xl bg-slate-900" />
+        {/* Proporção de tela de iPhone (9:19.5) — a mensagem rola dentro da área de
+            conversa, o "aparelho" não estica com mensagens mais longas. */}
+        <div className="flex aspect-[9/19.5] flex-col overflow-hidden rounded-[1.85rem] bg-[#ECE5DD]">
           {/* Barra de status */}
-          <div className="flex items-center justify-between bg-[#075E54] px-4 pb-1 pt-2 text-white">
+          <div className="flex shrink-0 items-center justify-between bg-[#075E54] px-4 pb-1 pt-2 text-white">
             <span className="text-[10px] font-medium">9:41</span>
             <div className="flex items-center gap-1">
               <SignalHigh className="h-3 w-3" />
@@ -2216,7 +2220,7 @@ function WhatsAppMockup({ contactName, children }: { contactName: string; childr
             </div>
           </div>
           {/* Cabeçalho do contato (WhatsApp) */}
-          <div className="flex items-center gap-2 bg-[#075E54] px-3 pb-2 pt-1 text-white">
+          <div className="flex shrink-0 items-center gap-2 bg-[#075E54] px-3 pb-2 pt-1 text-white">
             <ArrowLeft className="h-4 w-4 shrink-0" />
             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/20 text-[10px] font-semibold">
               {initials(contactName)}
@@ -2231,7 +2235,7 @@ function WhatsAppMockup({ contactName, children }: { contactName: string; childr
           </div>
           {/* Área de conversa */}
           <div
-            className="min-h-[220px] space-y-2 px-3 py-3"
+            className="flex-1 space-y-2 overflow-y-auto px-3 py-3"
             style={{
               backgroundImage:
                 'radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px), radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px)',
@@ -2245,7 +2249,7 @@ function WhatsAppMockup({ contactName, children }: { contactName: string; childr
             </div>
           </div>
           {/* Barra de digitação */}
-          <div className="flex items-center gap-2 bg-[#F0F0F0] px-3 py-2">
+          <div className="flex shrink-0 items-center gap-2 bg-[#F0F0F0] px-3 py-2">
             <div className="flex-1 truncate rounded-full bg-white px-3 py-1.5 text-[10px] text-slate-400">
               Mensagem
             </div>

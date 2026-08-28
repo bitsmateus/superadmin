@@ -3,6 +3,7 @@ import {
   Activity,
   Bot,
   ChevronDown,
+  ChevronLeft,
   ClipboardList,
   ExternalLink,
   Link2,
@@ -32,7 +33,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { canDeleteClient } from '@/services/supabase'
 import { db } from '@/services/db'
-import { NEXT_STAGE, PIPELINE_STAGES, STAGE_COLORS } from '@/constants/stageColors'
+import { NEXT_STAGE, PIPELINE_STAGES, PREV_STAGE, STAGE_COLORS } from '@/constants/stageColors'
 import { asText, cn, initials } from '@/lib/utils'
 import type { PipelineStage } from '@/types/client'
 
@@ -117,6 +118,18 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
     )
     toast.success(`Etapa: ${STAGE_COLORS[next].label}`)
     setStageMenu(false)
+  }
+
+  const regress = () => {
+    const prevStage = PREV_STAGE[client.stage]
+    if (!prevStage) return
+    db.updateClient(client.id, { stage: prevStage })
+    db.addLog(
+      client.id,
+      'Etapa revertida',
+      `${STAGE_COLORS[client.stage].label} → ${STAGE_COLORS[prevStage].label}`,
+    )
+    toast.success(`Etapa: ${STAGE_COLORS[prevStage].label}`)
   }
 
   const archive = () => {
@@ -213,6 +226,17 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                   </div>
                 )}
               </div>
+              {PREV_STAGE[client.stage] && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={regress}
+                  leftIcon={<ChevronLeft className="h-3.5 w-3.5" />}
+                  title={`Voltar para ${STAGE_COLORS[PREV_STAGE[client.stage]!].label}`}
+                >
+                  Voltar etapa
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="secondary"

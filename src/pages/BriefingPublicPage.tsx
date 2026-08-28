@@ -1414,12 +1414,13 @@ export function BriefingPublicPage() {
 
                   <div className="mt-4 border-t border-blue-100 pt-3">
                     <p className="text-xs text-slate-600">
-                      Prefira nos dar acesso <strong>compartilhando o seu Business Manager</strong>{' '}
-                      (partner access) a passar sua senha — é mais seguro e você mantém o controle.
-                      Basta adicionar nossa agência como parceira nas configurações do BM. Com esse
-                      acesso, nossa equipe entra depois pra fazer a configuração via{' '}
-                      <strong>TeamViewer</strong>, direto na tela do seu computador — deixa tudo mais
-                      rápido e fácil.
+                      Nossa equipe vai acessar seu computador remotamente pelo{' '}
+                      <strong>TeamViewer</strong> pra fazer toda a configuração por lá. Por isso é
+                      importante preencher certinho o e-mail e a senha acima — assim, na hora de
+                      entrarmos, já temos tudo em mãos e não perdemos tempo esperando você lembrar ou
+                      buscar a senha, o que atrasa bastante o processo. Se preferir, você também pode
+                      nos dar acesso <strong>compartilhando o seu Business Manager</strong> (partner
+                      access) — basta adicionar nossa agência como parceira nas configurações do BM.
                     </p>
                   </div>
                 </div>

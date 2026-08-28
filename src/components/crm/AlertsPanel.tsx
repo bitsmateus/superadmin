@@ -1,16 +1,12 @@
 import * as React from 'react'
 import {
-  Bot,
   Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Copy,
   FileText,
-  MessageSquare,
   Settings2,
-  Sparkles,
-  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
@@ -19,7 +15,6 @@ import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { useClients, useSettings } from '@/hooks/useClients'
 import { computeAlerts, type AlertKind, type CrmAlert } from '@/lib/crmAlerts'
 import { db } from '@/services/db'
-import { STAGE_COLORS } from '@/constants/stageColors'
 import { cn } from '@/lib/utils'
 
 interface PanelDef {
@@ -34,23 +29,15 @@ interface PanelDef {
 
 const PANELS: PanelDef[] = [
   {
-    key: 'briefing_sent_waiting',
-    title: 'Briefing enviado aguardando preenchimento',
-    description: 'Link enviado ao cliente · aguardando resposta',
-    kinds: ['briefing_sent_waiting'],
+    key: 'briefing_pendente',
+    title: 'Briefing pendente',
+    description: 'Aguardando envio, preenchimento ou início da configuração',
+    kinds: ['briefing_pending_send', 'briefing_sent_waiting', 'briefing_filled_no_setup'],
     icon: <FileText className="h-3.5 w-3.5" />,
     tone: 'warning',
   },
   {
-    key: 'briefing_done',
-    title: 'Briefing preenchido aguardando configuração',
-    description: 'Briefing respondido — aguardando início da configuração',
-    kinds: ['briefing_filled_no_setup'],
-    icon: <Sparkles className="h-3.5 w-3.5" />,
-    tone: 'info',
-  },
-  {
-    key: 'setup',
+    key: 'em_configuracao',
     title: 'Em configuração',
     description: 'Clientes na etapa de configuração',
     kinds: ['setup_in_progress', 'setup_ready_for_delivery'],
@@ -58,55 +45,20 @@ const PANELS: PanelDef[] = [
     tone: 'info',
   },
   {
-    key: 'delivery',
-    title: 'Reunião de entrega agendada',
-    description: 'Reuniões e datas de entrega marcadas',
+    key: 'pendente_entrega',
+    title: 'Pendente de entrega',
+    description: 'Reunião de entrega agendada, ainda não concluída',
     kinds: ['delivery_scheduled'],
     icon: <Calendar className="h-3.5 w-3.5" />,
     tone: 'info',
   },
   {
-    key: 'delivered',
-    title: 'Reunião entregue',
-    description: 'Clientes entregues nos últimos 7 dias',
+    key: 'entregas_feitas',
+    title: 'Entregas feitas',
+    description: 'Entregues nos últimos 7 dias',
     kinds: ['delivery_done_this_week'],
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
     tone: 'success',
-  },
-  {
-    key: 'followup',
-    title: 'Follow-up de mensagem',
-    description: 'Clientes ativos com follow-ups pendentes',
-    kinds: ['followup_pending'],
-    icon: <MessageSquare className="h-3.5 w-3.5" />,
-    tone: 'warning',
-  },
-  {
-    key: 'impl_api_oficial',
-    title: 'API Oficial',
-    description: 'Clientes com integração de API oficial',
-    kinds: ['impl_api_oficial'],
-    icon: <Zap className="h-3.5 w-3.5" />,
-    tone: 'info',
-    collapsible: true,
-  },
-  {
-    key: 'impl_ia',
-    title: 'IA',
-    description: 'Clientes com inteligência artificial',
-    kinds: ['impl_ia'],
-    icon: <Bot className="h-3.5 w-3.5" />,
-    tone: 'info',
-    collapsible: true,
-  },
-  {
-    key: 'impl_automacao',
-    title: 'Automação',
-    description: 'Clientes com automação externa',
-    kinds: ['impl_automacao_externa'],
-    icon: <Settings2 className="h-3.5 w-3.5" />,
-    tone: 'info',
-    collapsible: true,
   },
 ]
 
@@ -131,7 +83,7 @@ export function AlertsPanel() {
       }
     }
     // Sort delivery by date
-    const delivery = map.get('delivery')
+    const delivery = map.get('pendente_entrega')
     if (delivery) {
       delivery.sort((a, b) => {
         const ta = a.whenAt ? new Date(a.whenAt).getTime() : 0
@@ -144,7 +96,7 @@ export function AlertsPanel() {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {PANELS.map((panel) => (
           <PanelCard
             key={panel.key}
@@ -249,7 +201,6 @@ const PanelCard = React.memo(function PanelCard({
                 key={`${panel.key}-${a.client.id}-${a.kind}-${a.followUp?.id ?? a.whenAt ?? ''}`}
                 alert={a}
                 onOpen={() => onOpen(a.client.id)}
-                showStage={panel.key.startsWith('impl_')}
               />
             ))}
           </ul>
@@ -261,11 +212,9 @@ const PanelCard = React.memo(function PanelCard({
 const AlertRow = React.memo(function AlertRow({
   alert,
   onOpen,
-  showStage,
 }: {
   alert: CrmAlert
   onOpen: () => void
-  showStage?: boolean
 }) {
   const markSent = () => {
     if (!alert.followUp) return
@@ -293,8 +242,6 @@ const AlertRow = React.memo(function AlertRow({
     }
   }
 
-  const stageStyle = showStage ? STAGE_COLORS[alert.client.stage] : null
-
   return (
     <li>
       <div
@@ -307,17 +254,7 @@ const AlertRow = React.memo(function AlertRow({
         className="flex w-full cursor-pointer items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-elevate/[0.03]"
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium text-foreground">{alert.title}</p>
-            {stageStyle && (
-              <span
-                className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                style={{ background: stageStyle.bg, color: stageStyle.text }}
-              >
-                {stageStyle.label}
-              </span>
-            )}
-          </div>
+          <p className="truncate text-sm font-medium text-foreground">{alert.title}</p>
           <p className="truncate text-[11px] text-foreground/55">{alert.subtitle}</p>
           {alert.message && (
             <p className="mt-1 line-clamp-2 text-[11px] text-foreground/45">

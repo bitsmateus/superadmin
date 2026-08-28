@@ -109,7 +109,7 @@ export function TodayActions() {
             <ListTodo className="h-3.5 w-3.5" />
           </span>
           <div>
-            <h3 className="text-sm font-medium text-foreground">Minhas ações de hoje</h3>
+            <h3 className="text-sm font-medium text-foreground">Minhas tarefas</h3>
             <p className="text-[11px] text-foreground/45">
               O que precisa de atenção, por ordem de urgência
             </p>

@@ -257,10 +257,33 @@ ${menuItems}
 Clique em uma opção ou digite o número correspondente para continuar.`
 }
 
-function buildOffHours(company: string): string {
+/** Resumo dos dias/horários ativos, pro corpo da mensagem de fora do horário. */
+function scheduleSummary(schedule: { day: string; active: boolean; start: string; end: string }[]): string {
+  const active = schedule.filter((s) => s.active)
+  if (active.length === 0) return 'No momento não temos atendimento configurado.'
+
+  const sameHours = active.every((s) => s.start === active[0].start && s.end === active[0].end)
+  const dayIndexes = active.map((s) => DAYS.indexOf(s.day))
+  const isContiguous = dayIndexes.every((idx, i) => i === 0 || idx === dayIndexes[i - 1] + 1)
+  const dayLabel =
+    isContiguous && active.length > 1
+      ? `${active[0].day} a ${active[active.length - 1].day}`
+      : active.map((s) => s.day).join(', ')
+
+  if (sameHours) {
+    return `Nosso atendimento acontece de ${dayLabel}, das ${active[0].start} às ${active[0].end}.`
+  }
+  const lines = active.map((s) => `${s.day}: ${s.start} às ${s.end}`).join('\n')
+  return `Nosso atendimento acontece nos seguintes horários:\n${lines}`
+}
+
+function buildOffHours(
+  company: string,
+  schedule: { day: string; active: boolean; start: string; end: string }[],
+): string {
   return `Olá! Obrigado por entrar em contato com a ${company || 'nossa empresa'}! ✨
 
-No momento, nossa equipe está fora do horário de expediente. Nosso atendimento acontece de Segunda a Sexta, das 08h às 18h.
+No momento, nossa equipe está fora do horário de expediente. ${scheduleSummary(schedule)}
 
 Assim que nossa equipe retornar, entraremos em contato com você com total prioridade! 🗓️👋`
 }
@@ -282,6 +305,9 @@ interface BriefingFormState {
   greetingMessage: string
   offHoursMessage: string
   offHoursEnabled: boolean
+  // true depois que o cliente edita a mensagem manualmente — nesse ponto ela para de
+  // se regenerar sozinha quando os dias/horários da Seção 2 mudam.
+  offHoursCustomized: boolean
   greetingEditing: boolean
   greetingGenerated: boolean
   // Roteiro do chatbot (base da geração automática do fluxo)
@@ -334,17 +360,18 @@ function initialFormState(
   company: string,
   whatsappNumberSlots: number = DEFAULT_WHATSAPP_NUMBER_SLOTS,
 ): BriefingFormState {
+  const defaultSchedule = DAYS.map((day) => ({
+    day,
+    active: day !== 'Sábado' && day !== 'Domingo',
+    start: '08:00',
+    end: '18:00',
+  }))
   return {
     site: '',
     sectors: [],
     newSectorInput: '',
     users: [{ name: '', email: '', sectors: [], role: 'atendente' }],
-    schedule: DAYS.map((day) => ({
-      day,
-      active: day !== 'Sábado' && day !== 'Domingo',
-      start: '08:00',
-      end: '18:00',
-    })),
+    schedule: defaultSchedule,
     timezone: 'America/Sao_Paulo',
     whatsappNumbers: padWhatsappNumbers([], whatsappNumberSlots),
     facebookEmail: '',
@@ -353,8 +380,9 @@ function initialFormState(
     emailConfig: '',
     channelAccess: {},
     greetingMessage: buildGreeting(company, []),
-    offHoursMessage: buildOffHours(company),
+    offHoursMessage: buildOffHours(company, defaultSchedule),
     offHoursEnabled: true,
+    offHoursCustomized: false,
     greetingEditing: false,
     greetingGenerated: false,
     chatbotDescription: '',
@@ -466,7 +494,9 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     greetingMessage: bd.greetingMessage || base.greetingMessage,
     offHoursMessage: bd.offHoursMessage || base.offHoursMessage,
     offHoursEnabled: bd.offHoursEnabled ?? base.offHoursEnabled,
+    offHoursCustomized: Boolean(bd.offHoursMessage) || base.offHoursCustomized,
     chatbotDescription: bd.chatbotFlow?.description ?? base.chatbotDescription,
+    chatbotMenuStyle: bd.chatbotFlow?.menuStyle ?? base.chatbotMenuStyle,
     chatbotMenus:
       bd.chatbotFlow?.menus && bd.chatbotFlow.menus.length > 0
         ? bd.chatbotFlow.menus.map((m) => ({
@@ -625,6 +655,17 @@ export function BriefingPublicPage() {
     }
   }, [state.sectors, state.greetingEditing, state.greetingGenerated, client?.company])
 
+  // Regenera a mensagem de fora do horário quando dias/horários mudam — só enquanto
+  // o cliente não tiver personalizado o texto manualmente.
+  React.useEffect(() => {
+    if (!state.offHoursCustomized && client?.company) {
+      setState((s) => ({
+        ...s,
+        offHoursMessage: buildOffHours(client.company, s.schedule),
+      }))
+    }
+  }, [state.schedule, state.offHoursCustomized, client?.company])
+
   const cfg = client?.briefing_config ?? null
   const sections = React.useMemo(() => buildSections(cfg), [cfg])
   const totalSections = sections.length
@@ -726,6 +767,7 @@ export function BriefingPublicPage() {
       chatbotFlow: sections.includes('chatbot')
         ? {
             description: state.chatbotDescription.trim(),
+            menuStyle: state.chatbotMenuStyle,
             menus: state.chatbotMenus
               .map((m) => ({
                 question: m.question.trim(),
@@ -868,7 +910,7 @@ export function BriefingPublicPage() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <BriefingHeader companyName={client.company} />
 
-      <main className="mx-auto max-w-3xl px-4 pb-32 pt-8 sm:px-6">
+      <main className="mx-auto max-w-5xl px-4 pb-32 pt-8 sm:px-6">
         {client.briefing_revision_note && (
           <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <strong>Solicitação de revisão:</strong>{' '}
@@ -1154,12 +1196,14 @@ export function BriefingPublicPage() {
             icon={<Clock className="h-5 w-5 text-[#4F8EF7]" />}
           >
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
-              {/* Coluna esquerda: prévia ao vivo da mensagem de fora do horário */}
+              {/* Coluna esquerda: prévia ao vivo da mensagem de fora do horário — atualiza
+                  em tempo real conforme os dias/horários à direita mudam, até o cliente
+                  personalizar o texto manualmente (ver useEffect que chama buildOffHours). */}
               <div className="lg:sticky lg:top-4">
                 {state.offHoursEnabled ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
-                      {state.offHoursMessage}
+                      <WaBubbleIn>{state.offHoursMessage}</WaBubbleIn>
                     </WhatsAppMockup>
                   </div>
                 ) : (
@@ -1167,9 +1211,19 @@ export function BriefingPublicPage() {
                     Nenhuma mensagem automática será enviada fora do horário.
                   </div>
                 )}
+                <label className="mt-3 flex items-start gap-2 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={!state.offHoursEnabled}
+                    onChange={(e) => setState({ ...state, offHoursEnabled: !e.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#4F8EF7]"
+                  />
+                  Não quero que meus clientes recebam uma mensagem automática fora do horário de
+                  atendimento.
+                </label>
               </div>
 
-              {/* Coluna direita: dias/horas + mensagem de fora do horário */}
+              {/* Coluna direita: dias/horas + edição da mensagem de fora do horário */}
               <div className="space-y-2">
                 {state.schedule.map((s, i) => (
                   <div
@@ -1237,47 +1291,36 @@ export function BriefingPublicPage() {
                   </Field>
                 </div>
 
-                {/* Mensagem automática fora do horário — edição inline, a prévia à
-                    esquerda atualiza em tempo real conforme o cliente digita. */}
-                <div className="mt-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="text-xs font-medium text-slate-600">
-                      Mensagem automática fora do horário
-                    </label>
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                      Demonstrativo
-                    </span>
-                  </div>
-                  <label className="mb-2 flex items-start gap-2 text-xs text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={!state.offHoursEnabled}
-                      onChange={(e) => setState({ ...state, offHoursEnabled: !e.target.checked })}
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-[#4F8EF7]"
-                    />
-                    Não quero que meus clientes recebam uma mensagem automática fora do horário de
-                    atendimento.
-                  </label>
-
-                  {state.offHoursEnabled && (
-                    <div>
-                      <PlainTextarea
-                        value={state.offHoursMessage}
-                        onChange={(v) => setState({ ...state, offHoursMessage: v })}
-                        rows={6}
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setState({ ...state, offHoursMessage: buildOffHours(client.company) })
-                        }
-                        className="mt-2 text-xs text-[#4F8EF7] hover:underline"
-                      >
-                        Restaurar mensagem padrão
-                      </button>
+                {state.offHoursEnabled && (
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="text-xs font-medium text-slate-600">
+                        Mensagem automática fora do horário
+                      </label>
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                        Demonstrativo
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <PlainTextarea
+                      value={state.offHoursMessage}
+                      onChange={(v) => setState({ ...state, offHoursMessage: v, offHoursCustomized: true })}
+                      rows={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setState({
+                          ...state,
+                          offHoursMessage: buildOffHours(client.company, state.schedule),
+                          offHoursCustomized: false,
+                        })
+                      }
+                      className="mt-2 text-xs text-[#4F8EF7] hover:underline"
+                    >
+                      Restaurar mensagem padrão
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </SectionBlock>
@@ -1493,107 +1536,157 @@ export function BriefingPublicPage() {
                     <label className="mb-1 block text-xs font-medium text-slate-600">
                       Menu de atendimento *
                     </label>
-                    <p className="mb-2 text-xs text-slate-500">
+                    <p className="mb-3 text-xs text-slate-500">
                       Escreva a mensagem que o cliente verá e coloque uma opção em cada linha. Os números serão
                       adicionados no fluxo. Ao escolher uma opção do menu, o cliente é transferido direto para o
                       setor responsável.
                     </p>
-                    <div className="space-y-3">
-                      {state.chatbotMenus.map((m, i) => (
-                        <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                          <div className="mb-3 flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">
-                                {i === 0 ? 'Menu principal' : `Submenu ${i}`}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {i === 0
-                                  ? 'Primeira mensagem que o cliente recebe. As opções devem bater com os setores cadastrados na Seção 1.'
-                                  : 'Só aparece depois que o cliente clica em uma das opções de outro menu (o principal ou outro submenu) — é um segundo nível de escolha antes de transferir para o setor responsável.'}
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => fillMenuExample(i)}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
-                              >
-                                <Lightbulb className="h-3.5 w-3.5" />
-                                Usar exemplo
-                              </button>
+
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[240px_1fr] lg:items-start">
+                      {/* Coluna esquerda: prévia ao vivo do menu principal, atualiza
+                          conforme o cliente digita ou usa "Usar exemplo". */}
+                      <div className="lg:sticky lg:top-4">
+                        <div className="mb-3 inline-flex rounded-lg border border-slate-200 bg-white p-1 text-xs font-medium">
+                          <button
+                            type="button"
+                            onClick={() => setState({ ...state, chatbotMenuStyle: 'numbered' })}
+                            className={cn(
+                              'rounded-md px-3 py-1.5 transition',
+                              state.chatbotMenuStyle === 'numbered'
+                                ? 'bg-[#4F8EF7] text-white'
+                                : 'text-slate-500 hover:text-slate-700',
+                            )}
+                          >
+                            Numerado
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setState({ ...state, chatbotMenuStyle: 'buttons' })}
+                            className={cn(
+                              'rounded-md px-3 py-1.5 transition',
+                              state.chatbotMenuStyle === 'buttons'
+                                ? 'bg-[#4F8EF7] text-white'
+                                : 'text-slate-500 hover:text-slate-700',
+                            )}
+                          >
+                            Botões
+                          </button>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
+                            <ChatbotMenuPreview
+                              menu={state.chatbotMenus[0] ?? { question: '', options: '' }}
+                              style={state.chatbotMenuStyle}
+                            />
+                          </WhatsAppMockup>
+                        </div>
+                        <p className="mt-2 text-[11px] text-slate-400">
+                          {state.chatbotMenuStyle === 'numbered'
+                            ? 'Cliente digita o número da opção desejada.'
+                            : 'Cliente toca no botão da opção. O WhatsApp permite até 3 botões por mensagem — com mais opções, vira uma lista deslizante.'}
+                        </p>
+                      </div>
+
+                      {/* Coluna direita: edição do menu principal e submenus */}
+                      <div>
+                        <div className="space-y-3">
+                          {state.chatbotMenus.map((m, i) => (
+                            <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <div className="mb-3 flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-800">
+                                    {i === 0 ? 'Menu principal' : `Submenu ${i}`}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    {i === 0
+                                      ? 'Primeira mensagem que o cliente recebe. As opções devem bater com os setores cadastrados na Seção 1.'
+                                      : 'Só aparece depois que o cliente clica em uma das opções de outro menu (o principal ou outro submenu) — é um segundo nível de escolha antes de transferir para o setor responsável.'}
+                                  </p>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => fillMenuExample(i)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
+                                  >
+                                    <Lightbulb className="h-3.5 w-3.5" />
+                                    Usar exemplo
+                                  </button>
+                                  {i > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setState({ ...state, chatbotMenus: state.chatbotMenus.filter((_, x) => x !== i) })
+                                      }
+                                      className="inline-flex items-center gap-1 text-xs text-rose-500 hover:underline"
+                                    >
+                                      <Trash2 className="h-3 w-3" /> Remover
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                               {i > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setState({ ...state, chatbotMenus: state.chatbotMenus.filter((_, x) => x !== i) })
-                                  }
-                                  className="inline-flex items-center gap-1 text-xs text-rose-500 hover:underline"
-                                >
-                                  <Trash2 className="h-3 w-3" /> Remover
-                                </button>
+                                <div className="mb-2">
+                                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                                    Qual opção abre este submenu?
+                                  </label>
+                                  <PlainInput
+                                    value={m.parentOption ?? ''}
+                                    onChange={(v) => {
+                                      const menus = [...state.chatbotMenus]
+                                      menus[i] = { ...menus[i], parentOption: v }
+                                      setState({ ...state, chatbotMenus: menus })
+                                    }}
+                                    placeholder="Ex: Suporte"
+                                  />
+                                </div>
                               )}
-                            </div>
-                          </div>
-                          {i > 0 && (
-                            <div className="mb-2">
                               <label className="mb-1 block text-xs font-medium text-slate-600">
-                                Qual opção abre este submenu?
+                                Mensagem exibida
                               </label>
                               <PlainInput
-                                value={m.parentOption ?? ''}
+                                value={m.question}
                                 onChange={(v) => {
                                   const menus = [...state.chatbotMenus]
-                                  menus[i] = { ...menus[i], parentOption: v }
+                                  menus[i] = { ...menus[i], question: v }
                                   setState({ ...state, chatbotMenus: menus })
+                                  clearError('chatbotMenus')
                                 }}
-                                placeholder="Ex: Suporte"
+                                placeholder={i === 0 ? 'Ex: Olá! Como podemos ajudar?' : 'Ex: Sobre qual assunto você precisa de suporte?'}
                               />
+                              <div className="mt-2">
+                                <label className="mb-1 block text-xs font-medium text-slate-600">
+                                  Opções (uma por linha)
+                                </label>
+                                <PlainTextarea
+                                  value={m.options}
+                                  onChange={(v) => {
+                                    const menus = [...state.chatbotMenus]
+                                    menus[i] = { ...menus[i], options: v }
+                                    setState({ ...state, chatbotMenus: menus })
+                                    clearError('chatbotMenus')
+                                  }}
+                                  rows={3}
+                                  placeholder={i === 0 ? 'Comercial\nSuporte\nFinanceiro' : 'Problema técnico\nDúvida sobre acesso\nFalar com atendente'}
+                                />
+                              </div>
                             </div>
-                          )}
-                          <label className="mb-1 block text-xs font-medium text-slate-600">
-                            Mensagem exibida
-                          </label>
-                          <PlainInput
-                            value={m.question}
-                            onChange={(v) => {
-                              const menus = [...state.chatbotMenus]
-                              menus[i] = { ...menus[i], question: v }
-                              setState({ ...state, chatbotMenus: menus })
-                              clearError('chatbotMenus')
-                            }}
-                            placeholder={i === 0 ? 'Ex: Olá! Como podemos ajudar?' : 'Ex: Sobre qual assunto você precisa de suporte?'}
-                          />
-                          <div className="mt-2">
-                            <label className="mb-1 block text-xs font-medium text-slate-600">
-                              Opções (uma por linha)
-                            </label>
-                            <PlainTextarea
-                              value={m.options}
-                              onChange={(v) => {
-                                const menus = [...state.chatbotMenus]
-                                menus[i] = { ...menus[i], options: v }
-                                setState({ ...state, chatbotMenus: menus })
-                                clearError('chatbotMenus')
-                              }}
-                              rows={3}
-                              placeholder={i === 0 ? 'Comercial\nSuporte\nFinanceiro' : 'Problema técnico\nDúvida sobre acesso\nFalar com atendente'}
-                            />
-                          </div>
+                          ))}
                         </div>
-                      ))}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setState({ ...state, chatbotMenus: [...state.chatbotMenus, { question: '', options: '', parentOption: '' }] })
+                          }
+                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
+                        >
+                          <Plus className="h-4 w-4" /> Adicionar submenu
+                        </button>
+                        {errors.chatbotMenus && (
+                          <p className="mt-1 text-xs font-medium text-rose-600">{errors.chatbotMenus}</p>
+                        )}
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setState({ ...state, chatbotMenus: [...state.chatbotMenus, { question: '', options: '', parentOption: '' }] })
-                      }
-                      className="mt-2 inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
-                    >
-                      <Plus className="h-4 w-4" /> Adicionar submenu
-                    </button>
-                    {errors.chatbotMenus && (
-                      <p className="mt-1 text-xs font-medium text-rose-600">{errors.chatbotMenus}</p>
-                    )}
                   </div>
 
                   <Field label={L('Dados que o bot deve coletar antes de transferir (um por linha)')}>
@@ -1684,7 +1777,7 @@ export function BriefingPublicPage() {
                 {!state.greetingEditing ? (
                   <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-4">
                     <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
-                      {state.greetingMessage}
+                      <WaBubbleIn>{state.greetingMessage}</WaBubbleIn>
                     </WhatsAppMockup>
                     <div className="mt-3 text-center">
                       <button
@@ -2177,7 +2270,7 @@ export function BriefingPublicPage() {
       )}
 
       <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex flex-col">
             <span className="text-xs uppercase tracking-wider text-slate-400">Briefing</span>
             <span className="text-sm font-medium text-slate-900">
@@ -2266,10 +2359,7 @@ function WhatsAppMockup({ contactName, children }: { contactName: string; childr
               backgroundPosition: '0 0, 9px 9px',
             }}
           >
-            <div className="relative max-w-[88%] rounded-lg rounded-tl-none bg-white px-2.5 py-2 shadow-sm">
-              <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-slate-800">{children}</p>
-              <p className="mt-1 text-right text-[9px] text-slate-400">9:41</p>
-            </div>
+            {children}
           </div>
           {/* Barra de digitação */}
           <div className="flex shrink-0 items-center gap-2 bg-[#F0F0F0] px-3 py-2">
@@ -2280,6 +2370,83 @@ function WhatsAppMockup({ contactName, children }: { contactName: string; childr
         </div>
       </div>
     </div>
+  )
+}
+
+/** Balão de mensagem RECEBIDA (do negócio/bot) no mockup do WhatsApp. */
+function WaBubbleIn({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative max-w-[88%] rounded-lg rounded-tl-none bg-white px-2.5 py-2 shadow-sm">
+      <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-slate-800">{children}</p>
+      <p className="mt-1 text-right text-[9px] text-slate-400">9:41</p>
+    </div>
+  )
+}
+
+/** Balão de mensagem ENVIADA (pelo cliente final) no mockup do WhatsApp. */
+function WaBubbleOut({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative ml-auto max-w-[88%] rounded-lg rounded-tr-none bg-[#DCF8C6] px-2.5 py-2 shadow-sm">
+      <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-slate-800">{children}</p>
+      <p className="mt-1 text-right text-[9px] text-slate-400">9:41</p>
+    </div>
+  )
+}
+
+/** Opções como botões clicáveis (estilo "reply buttons" do WhatsApp), pro mockup. */
+function WaButtonOptions({ options }: { options: string[] }) {
+  return (
+    <div className="max-w-[88%] space-y-1">
+      {options.map((o, i) => (
+        <div
+          key={i}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-center text-[11px] font-medium text-[#128C7E] shadow-sm"
+        >
+          {o}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Simula, no mockup do WhatsApp, como o menu principal do chatbot vai se comportar —
+ * atualiza ao vivo conforme o cliente digita a mensagem/opções ou clica em "Usar
+ * exemplo", nos dois estilos possíveis (numerado ou botões) pra ele comparar e escolher.
+ */
+function ChatbotMenuPreview({
+  menu,
+  style,
+}: {
+  menu: { question: string; options: string }
+  style: 'numbered' | 'buttons'
+}) {
+  const typedOptions = menu.options.split('\n').map((o) => o.trim()).filter(Boolean)
+  const options = typedOptions.length > 0 ? typedOptions : ['Comercial', 'Suporte', 'Financeiro']
+  const question = menu.question.trim() || 'Olá! Como podemos te ajudar hoje?'
+  const first = options[0]
+  const confirmation = `Perfeito! Já estou te transferindo para o time de ${first}. Um atendente vai continuar por aqui. 👍`
+
+  if (style === 'buttons') {
+    return (
+      <>
+        <WaBubbleOut>Bom dia! 👋</WaBubbleOut>
+        <WaBubbleIn>{question}</WaBubbleIn>
+        <WaButtonOptions options={options} />
+        <WaBubbleOut>{first}</WaBubbleOut>
+        <WaBubbleIn>{confirmation}</WaBubbleIn>
+      </>
+    )
+  }
+
+  const numbered = options.map((o, i) => `${numberEmoji(i)} ${o}`).join('\n')
+  return (
+    <>
+      <WaBubbleOut>Bom dia! 👋</WaBubbleOut>
+      <WaBubbleIn>{`${question}\n\n${numbered}\n\nDigite o número da opção desejada.`}</WaBubbleIn>
+      <WaBubbleOut>1</WaBubbleOut>
+      <WaBubbleIn>{confirmation}</WaBubbleIn>
+    </>
   )
 }
 
@@ -2401,7 +2568,7 @@ function WhatsappNumbersInfoPopover() {
 function BriefingHeader({ companyName }: { companyName: string }) {
   return (
     <header className="border-b border-slate-200 bg-white shadow-sm">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2">
           <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#4F8EF7] text-[11px] font-extrabold text-white">
             NX

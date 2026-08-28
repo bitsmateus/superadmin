@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { queryOne, query } from '../db.js';
 import { sendSupportGroupMessage, sendWhatsAppToNumber } from '../lib/supportGroup.js';
 import { createEvolutionInstance } from '../lib/evolution.js';
+import { sendMail } from '../lib/mailer.js';
 
 export async function settingsRoutes(app: FastifyInstance) {
   // GET /api/settings — token dos servers é mascarado (nunca vai pro front).
@@ -31,6 +32,11 @@ export async function settingsRoutes(app: FastifyInstance) {
         token: '',
         tokenSet: Boolean(u.token),
       }));
+    }
+    // Mascara a senha do SMTP.
+    if (row && row.smtp && typeof row.smtp === 'object') {
+      const sm = row.smtp as Record<string, unknown>;
+      row.smtp = { ...sm, password: '', passwordSet: Boolean(sm.password) };
     }
     return row ?? {};
   });
@@ -119,6 +125,21 @@ export async function settingsRoutes(app: FastifyInstance) {
         uazapiParam = JSON.stringify(merged);
       }
 
+      // Merge do SMTP preservando a senha quando vier vazia (mascarada) — mesmo padrão da Evolution.
+      let smtpParam: string | null = null;
+      if (b.smtp && typeof b.smtp === 'object') {
+        const sm = b.smtp as Record<string, unknown>;
+        const existing = await queryOne<{ smtp: Record<string, unknown> | null }>(
+          'SELECT smtp FROM settings WHERE id = true'
+        );
+        const prev = (existing?.smtp ?? {}) as Record<string, unknown>;
+        const rest: Record<string, unknown> = { ...sm };
+        delete rest.passwordSet;
+        const password = typeof sm.password === 'string' ? sm.password.trim() : '';
+        rest.password = password || (prev.password as string) || '';
+        smtpParam = JSON.stringify(rest);
+      }
+
       const [row] = await query(
         `INSERT INTO settings (
           id, asaas_api_key, asaas_environment, asaas_sync_interval_min,
@@ -127,9 +148,9 @@ export async function settingsRoutes(app: FastifyInstance) {
           nps_delay_days, nps_enabled, notify_edge_function_url, notify_enabled,
           goal_new_clients_monthly, goal_mrr_monthly, goal_nps_monthly, goals_enabled,
           last_backup_at, backup_remind_days, servers, support_group, evolution, uazapi, sla_by_stage,
-          setup_wip_limit, updated_at
+          setup_wip_limit, smtp, updated_at
         ) VALUES (
-          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW()
+          true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           asaas_api_key = EXCLUDED.asaas_api_key,
@@ -156,6 +177,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           uazapi = COALESCE(EXCLUDED.uazapi, settings.uazapi),
           sla_by_stage = COALESCE(EXCLUDED.sla_by_stage, settings.sla_by_stage),
           setup_wip_limit = EXCLUDED.setup_wip_limit,
+          smtp = COALESCE(EXCLUDED.smtp, settings.smtp),
           updated_at = NOW()
         RETURNING *`,
         [
@@ -176,6 +198,7 @@ export async function settingsRoutes(app: FastifyInstance) {
           uazapiParam,
           b.sla_by_stage ? JSON.stringify(b.sla_by_stage) : null,
           b.setup_wip_limit ?? 2,
+          smtpParam,
         ]
       );
       return row;
@@ -218,6 +241,24 @@ export async function settingsRoutes(app: FastifyInstance) {
         .send({ message: `Falha ao criar instância${res.status ? ` (${res.status})` : ''}`, detail: res.detail });
     }
   );
+
+  // POST /api/settings/test-smtp — admin only. Manda um e-mail de teste pro próprio e-mail de quem
+  // está logado, usando o SMTP JÁ SALVO (não o rascunho do form) — assim dá pra validar a config
+  // sem precisar esperar o próximo "Baixar acessos" de um cliente de verdade.
+  app.post('/api/settings/test-smtp', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { role, email } = req.user as { role: string; email: string };
+    if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
+    try {
+      await sendMail({
+        to: email,
+        subject: 'Teste de SMTP — TenantHub',
+        html: '<p>Se você recebeu este e-mail, o SMTP configurado em Configurações está funcionando. ✅</p>',
+      });
+      return { ok: true };
+    } catch (err) {
+      return reply.status(400).send({ message: err instanceof Error ? err.message : 'Falha ao enviar e-mail de teste' });
+    }
+  });
 
   // POST /api/whatsapp/send — envia mensagem a um número pessoal (com 55+DDD).
   app.post<{ Body: { number?: string; text?: string } }>(

@@ -264,6 +264,7 @@ type SettingsRow = {
   uazapi: AppSettings['uazapi'] | null
   sla_by_stage: AppSettings['slaByStage'] | null
   setup_wip_limit: number | null
+  smtp: AppSettings['smtp'] | null
 }
 
 function rowToSettings(r: SettingsRow | null): AppSettings {
@@ -292,6 +293,7 @@ function rowToSettings(r: SettingsRow | null): AppSettings {
     uazapi: r.uazapi ?? undefined,
     slaByStage: r.sla_by_stage ?? undefined,
     setupWipLimit: r.setup_wip_limit ?? undefined,
+    smtp: r.smtp ?? undefined,
   }
 }
 
@@ -321,6 +323,7 @@ function settingsToRow(s: AppSettings): Record<string, unknown> {
     uazapi: s.uazapi ?? null,
     sla_by_stage: s.slaByStage ?? null,
     setup_wip_limit: s.setupWipLimit ?? null,
+    smtp: s.smtp ?? null,
   }
 }
 

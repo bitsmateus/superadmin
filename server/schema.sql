@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS settings (
   evolution JSONB,
   uazapi JSONB,
   sla_by_stage JSONB,
+  smtp JSONB,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT settings_singleton CHECK (id = TRUE)
 );
@@ -100,6 +101,7 @@ ALTER TABLE settings ADD COLUMN IF NOT EXISTS support_group JSONB;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS evolution JSONB;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS uazapi JSONB;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS sla_by_stage JSONB;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp JSONB;
 
 -- ---------- channel_alerts (config de aviso por canal) ----------
 CREATE TABLE IF NOT EXISTS channel_alerts (

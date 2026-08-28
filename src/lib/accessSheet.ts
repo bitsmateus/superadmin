@@ -6,6 +6,19 @@ export const DEFAULT_CLIENT_PASSWORD = '12345678'
 /** Senha padrão com que os usuários do briefing são criados no tenant. */
 export const DEFAULT_TENANT_PASSWORD = 'Nxim01@!'
 export const SUPPORT_PHONE = '48 93618-0186'
+export const HELP_LINK = 'ajuda.nxsystems.com.br'
+
+/** Senha inicial de um usuário: primeiro nome em minúsculo (sem acento) + "1234".
+ *  Ex.: "João Pedro Silva" → "joao1234". Sem nome utilizável, cai na senha padrão do tenant. */
+export function generateUserPassword(fullName: string): string {
+  const first = (fullName || '').trim().split(/\s+/)[0] || ''
+  const normalized = first
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+  return normalized ? `${normalized}1234` : DEFAULT_TENANT_PASSWORD
+}
 
 /** E-mails dos usuários cadastrados no briefing (login do cliente, sem suporte).
  *  Em ordem alfabética por nome — casa com a listagem da plataforma NX. */
@@ -51,7 +64,8 @@ export function buildAccessEmail({ client, server, password }: AccessSheetParams
   const company = client.company || client.name || ''
   const loginUrl = server?.loginUrl || ''
   const settings = db.getSettings()
-  // Senha padrão com que os usuários do briefing foram criados no tenant.
+  // Senha padrão com que os usuários do briefing foram criados no tenant — só usada quando não há
+  // usuário do briefing pra gerar uma senha individual (ver generateUserPassword).
   const effectivePassword = password || settings.defaultTenantPassword || DEFAULT_TENANT_PASSWORD
   const users = briefingUserEmails(client)
   const supportPhone = settings.supportPhone ?? SUPPORT_PHONE
@@ -64,11 +78,12 @@ export function buildAccessEmail({ client, server, password }: AccessSheetParams
   if (loginUrl) lines.push(`Endereço: ${loginUrl}`)
   if (users.length > 0) {
     lines.push('')
-    lines.push('Usuários (login = e-mail):')
-    for (const u of users) lines.push(`• ${u.name}: ${u.email}`)
+    lines.push('Usuários (login = e-mail, senha própria de cada um):')
+    for (const u of users) lines.push(`• ${u.name}: ${u.email} — senha: ${generateUserPassword(u.name)}`)
+  } else {
+    lines.push('')
+    lines.push(`Senha inicial: ${effectivePassword}`)
   }
-  lines.push('')
-  lines.push(`Senha inicial (todos): ${effectivePassword}`)
   lines.push('')
   lines.push('⚠️ Por segurança, troque a senha no primeiro acesso (Perfil > Alterar senha).')
   if (accesses.length > 0) {
@@ -86,6 +101,28 @@ export function buildAccessEmail({ client, server, password }: AccessSheetParams
   lines.push('NX Digital')
 
   return { subject: `Acessos do sistema — ${company}`, body: lines.join('\n') }
+}
+
+/** Monta a mensagem de boas-vindas (texto, formatação estilo WhatsApp com *negrito*) pra copiar e
+ *  colar pro cliente quando a entrega é concluída — separada do e-mail de acessos. */
+export function buildWelcomeMessage(client: Client): string {
+  const company = client.company || client.name || ''
+  const settings = db.getSettings()
+  const supportPhone = settings.supportPhone ?? SUPPORT_PHONE
+  const firstContact = briefingUserEmails(client)[0]?.name?.trim().split(/\s+/)[0]
+
+  const lines: string[] = []
+  lines.push(`Olá${firstContact ? `, ${firstContact}` : ''}! 👋`)
+  lines.push('')
+  lines.push(`Seja bem-vindo(a)! A entrega do sistema de atendimento da *${company}* foi concluída. 🎉`)
+  lines.push('')
+  lines.push(`Nosso suporte principal é por este número: *${supportPhone}*`)
+  lines.push(`E temos todas as informações e vídeos de ajuda em: *${HELP_LINK}*`)
+  lines.push('')
+  lines.push('Qualquer dúvida, estamos à disposição!')
+  lines.push('Equipe NX Digital')
+
+  return lines.join('\n')
 }
 
 /** Abre o cliente de e-mail (mailto) com os acessos prontos para enviar. */
@@ -122,17 +159,30 @@ function row(label: string, value: string, highlight = false): string {
     </div>`
 }
 
-function renderAccessSheetHtml({ client, server, password, supportPhone }: AccessSheetParams): string {
+/** Linha "Nome — e-mail — senha do usuário" (senha própria de cada um, ver generateUserPassword). */
+function userRow(name: string, email: string, password: string): string {
+  return `
+    <div class="field">
+      <span class="field-label">${escapeHtml(name)}</span>
+      <span class="field-value">${escapeHtml(email)}</span>
+      <span class="password-box user-password">${escapeHtml(password)}</span>
+    </div>`
+}
+
+/** Renderiza o HTML da folha de acessos — usado tanto pra abrir a janela de impressão quanto como
+ *  corpo do e-mail automático via SMTP (ver DeliveryTab.tsx), pra ficar sempre idêntico ao PDF. */
+export function renderAccessSheetHtml({ client, server, password, supportPhone }: AccessSheetParams): string {
   const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
   const company = client.company || client.name || '—'
   const loginUrl = server?.loginUrl || '—'
   const settings = db.getSettings()
-  // Senha padrão com que os usuários do briefing foram criados no tenant.
+  // Senha padrão com que os usuários do briefing foram criados no tenant — só usada quando não há
+  // usuário do briefing pra gerar uma senha individual (ver generateUserPassword).
   const effectivePassword = password || settings.defaultTenantPassword || DEFAULT_TENANT_PASSWORD
   const effectiveSupportPhone = supportPhone ?? settings.supportPhone ?? SUPPORT_PHONE
-  // Logins do cliente = e-mails do briefing (sem o acesso de suporte).
+  // Logins do cliente = e-mails do briefing (sem o acesso de suporte). Cada um com sua própria senha.
   const users = briefingUserEmails(client)
-  const userRows = users.map((u) => row(u.name, u.email)).join('')
+  const userRows = users.map((u) => userRow(u.name, u.email, generateUserPassword(u.name))).join('')
 
   // Extra accesses from client.accesses
   const accesses = (client.accesses ?? []).filter((a) => a.name?.trim())
@@ -270,6 +320,13 @@ function renderAccessSheetHtml({ client, server, password, supportPhone }: Acces
     font-size: 17px; font-weight: 800; color: #C2410C;
     letter-spacing: 3px;
   }
+  /* Senha individual por usuário (uma por linha) — menor que o destaque de senha única. */
+  .password-box.user-password {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+  }
 
   /* ── Notice ── */
   .notice {
@@ -356,10 +413,9 @@ function renderAccessSheetHtml({ client, server, password, supportPhone }: Acces
       users.length > 0
         ? `<div class="section-label">Usuários do cliente</div>
     <div class="card">
-      <div class="card-header">Login = e-mail · senha inicial igual para todos</div>
+      <div class="card-header">Login = e-mail · cada usuário tem sua própria senha inicial</div>
       <div class="card-body">
         ${userRows}
-        ${row('Senha inicial', effectivePassword, true)}
       </div>
     </div>`
         : `<div class="card">
@@ -372,7 +428,7 @@ function renderAccessSheetHtml({ client, server, password, supportPhone }: Acces
     <div class="notice">
       <div class="notice-icon">🔒</div>
       <div>
-        <strong>Segurança:</strong> Cada usuário entra com o próprio e-mail e a senha inicial acima.
+        <strong>Segurança:</strong> Cada usuário entra com o próprio e-mail e a senha indicada ao lado do nome.
         Recomendamos alterar a senha no primeiro acesso em <em>Perfil → Alterar senha</em>.
       </div>
     </div>

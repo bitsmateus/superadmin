@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
 import { findMatchingLeadRowId } from '../lib/leadMatch.js';
+import { sendMail } from '../lib/mailer.js';
 
 const FINANCE_COLS = [
   'contract_url','contract_sent_at','contract_signed_at',
@@ -71,6 +72,31 @@ export async function clientRoutes(app: FastifyInstance) {
 
       const leadId = await findMatchingLeadRowId(client.phone, client.name, client.company);
       return { leadId };
+    }
+  );
+
+  // POST /api/clients/:id/send-access-email — envio automático (SMTP) do e-mail de acessos, disparado
+  // em background ao clicar "Baixar acessos" (ver DeliveryTab.tsx). O front já monta o assunto/HTML
+  // (mesmo conteúdo do PDF, com a senha de cada usuário) e só manda pra cá enviar de verdade — assim
+  // o e-mail é sempre idêntico ao que a pessoa baixou, sem duplicar a lógica de montagem no backend.
+  app.post<{ Params: { id: string }; Body: { to?: string; subject?: string; html?: string } }>(
+    '/api/clients/:id/send-access-email',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const client = await queryOne<{ id: string }>('SELECT id FROM clients WHERE id = $1', [req.params.id]);
+      if (!client) return reply.status(404).send({ message: 'Cliente não encontrado' });
+
+      const { to, subject, html } = req.body ?? {};
+      if (!to?.trim() || !subject?.trim() || !html?.trim()) {
+        return reply.status(400).send({ message: 'to, subject e html são obrigatórios' });
+      }
+
+      try {
+        await sendMail({ to: to.trim(), subject, html });
+        return { ok: true };
+      } catch (err) {
+        return reply.status(400).send({ message: err instanceof Error ? err.message : 'Falha ao enviar e-mail' });
+      }
     }
   );
 

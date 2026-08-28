@@ -1,6 +1,7 @@
 ﻿import * as React from 'react'
 import {
   CheckCircle2,
+  Copy,
   Download,
   Handshake,
   ListChecks,
@@ -14,6 +15,7 @@ import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
+import { api } from '@/services/api'
 import { useServerById } from '@/store/authStore'
 import {
   buildHandoffChecklist,
@@ -21,7 +23,13 @@ import {
   toggleChecklistItem,
 } from '@/constants/checklist'
 import { buildFollowUps, DEFAULT_FOLLOWUP_TEMPLATES } from '@/constants/followup'
-import { openAccessSheet, openAccessEmail } from '@/lib/accessSheet'
+import {
+  openAccessSheet,
+  openAccessEmail,
+  buildAccessEmail,
+  buildWelcomeMessage,
+  renderAccessSheetHtml,
+} from '@/lib/accessSheet'
 import { asText, cn, formatDate } from '@/lib/utils'
 import type { Client, ChecklistItem } from '@/types/client'
 
@@ -68,6 +76,37 @@ export function DeliveryTab({ client }: { client: Client }) {
       db.addLog(client.id, 'Acessos enviados', 'Folha de acessos gerada para impressão/PDF')
     }
     toast.success('Folha de acessos aberta — salve como PDF')
+    void sendAccessEmailAutomatically()
+  }
+
+  // Ao baixar os acessos, manda automaticamente por SMTP também (se o cliente tiver e-mail e o
+  // servidor tiver SMTP configurado em Configurações) — não bloqueia nem falha o download: é um
+  // "bônus" em segundo plano, avisado por um toast separado.
+  const sendAccessEmailAutomatically = async () => {
+    if (!client.email?.trim()) return
+    try {
+      const { subject } = buildAccessEmail({ client, server: tenantServer })
+      const html = renderAccessSheetHtml({ client, server: tenantServer })
+      await api.post(`/api/clients/${client.id}/send-access-email`, {
+        to: client.email.trim(),
+        subject,
+        html,
+      })
+      toast.success(`E-mail de acessos enviado automaticamente para ${client.email}`)
+    } catch (err) {
+      toast.message(
+        `Acessos baixados, mas o envio automático por e-mail falhou (${(err as Error).message}).`,
+      )
+    }
+  }
+
+  const copyWelcomeMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(buildWelcomeMessage(client))
+      toast.success('Mensagem de boas-vindas copiada')
+    } catch {
+      toast.error('Não foi possível copiar — copie manualmente')
+    }
   }
 
   const emailAccess = () => {
@@ -181,6 +220,14 @@ export function DeliveryTab({ client }: { client: Client }) {
         }
         action={
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={copyWelcomeMessage}
+              leftIcon={<Copy className="h-3.5 w-3.5" />}
+            >
+              Copiar mensagem
+            </Button>
             <Button
               size="sm"
               variant="secondary"

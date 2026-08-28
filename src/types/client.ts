@@ -478,6 +478,23 @@ export interface AppSettings {
   /** Quantas configurações simultâneas cada responsável de entrega pode ter
    *  em "fazendo agora". Default DEFAULT_SETUP_WIP_LIMIT (2). */
   setupWipLimit?: number
+  /** SMTP próprio — usado pro envio automático do e-mail de acessos ao clicar em "Baixar acessos"
+   *  (ver DeliveryTab.tsx). Senha fica só no backend. */
+  smtp?: SmtpConfig
+}
+
+export interface SmtpConfig {
+  host?: string
+  port?: number
+  user?: string
+  /** Senha — só vai pro backend; no front vem vazia. */
+  password?: string
+  /** Indica que há senha salva (preenchido pelo GET). */
+  passwordSet?: boolean
+  /** TLS/SSL direto na conexão (porta 465). Deixe desligado para STARTTLS (porta 587, mais comum). */
+  secure?: boolean
+  fromEmail?: string
+  fromName?: string
 }
 
 export interface EvolutionConfig {

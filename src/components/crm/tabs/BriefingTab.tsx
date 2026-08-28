@@ -2,27 +2,34 @@ import * as React from 'react'
 import {
   AlertCircle,
   Bot,
+  Building2,
   CalendarClock,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Clock,
   Copy,
   Eye,
   FileText,
+  Globe,
   Link2,
   ListChecks,
   Loader2,
   MessageSquare,
   PenLine,
+  Plug,
   Plus,
   RefreshCw,
   Search,
   Send,
   SlidersHorizontal,
   Sparkles,
+  StickyNote,
   UserPlus,
+  Users,
   Wand2,
   X,
+  Zap,
   Server as ServerIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -56,7 +63,7 @@ import {
   buildSessionSteps,
   type SessionPhase,
 } from '@/constants/sessionScript'
-import { asText, cn, formatDate, normalizeWhatsappNumber } from '@/lib/utils'
+import { asText, cn, formatDate, initials, normalizeWhatsappNumber } from '@/lib/utils'
 import type {
   Client,
   BriefingStatus,
@@ -1744,48 +1751,74 @@ function BriefingViewer({
 
   return (
     <div className="space-y-2">
-      <Accordion title="1. Empresa" defaultOpen>
+      <Accordion title={<SectionTitle icon={<Building2 className="h-3.5 w-3.5" />}>1. Empresa</SectionTitle>} defaultOpen>
         <Row k="Razão social" v={data.razaoSocial} />
         <Row k="Nome fantasia" v={data.nomeFantasia} />
         <Row k="CNPJ" v={data.cnpj} />
         <Row k="Site" v={data.site} />
       </Accordion>
 
-      <Accordion title={`2. Usuários (${data.users.length})`} defaultOpen>
-        <ul className="space-y-1">
-          {sortUsersByName(data.users).map((u, i) => (
-            <li
-              key={i}
-              className="rounded-md border border-line bg-elevate/[0.02] px-3 py-1.5 text-xs"
-            >
-              <span className="font-medium text-foreground">{asText(u.name)}</span>
-              <span className="text-foreground/45"> · {asText(u.email)} · </span>
-              <span className="text-foreground/55">
-                {asText(
-                  (u.sectors ?? (u.sector ? [u.sector] : [])).join(', '),
-                )}{' '}
-                · {asText(u.role)}
-              </span>
-            </li>
-          ))}
+      <Accordion
+        title={<SectionTitle icon={<Users className="h-3.5 w-3.5" />}>2. Usuários ({data.users.length})</SectionTitle>}
+        defaultOpen
+      >
+        <ul className="space-y-1.5">
+          {sortUsersByName(data.users).map((u, i) => {
+            const userSectors = u.sectors ?? (u.sector ? [u.sector] : [])
+            return (
+              <li
+                key={i}
+                className="flex items-center gap-2.5 rounded-md border border-line bg-elevate/[0.02] px-3 py-2"
+              >
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/15 text-[10px] font-semibold text-accent">
+                  {initials(u.name)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="text-xs font-medium text-foreground">{asText(u.name)}</span>
+                    <span className="truncate text-[11px] text-foreground/45">{asText(u.email)}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {userSectors.map((s, si) => (
+                      <span
+                        key={si}
+                        className="rounded-full bg-elevate/[0.06] px-2 py-0.5 text-[10px] text-foreground/60"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                    <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
+                      {asText(u.role)}
+                    </span>
+                  </div>
+                </div>
+              </li>
+            )
+          })}
         </ul>
       </Accordion>
 
-      <Accordion title="3. Horários" defaultOpen>
+      <Accordion title={<SectionTitle icon={<Clock className="h-3.5 w-3.5" />}>3. Horários</SectionTitle>} defaultOpen>
         <Row k="Fuso" v={data.timezone} />
-        <ul className="mt-2 space-y-1 text-xs">
+        <ul className="mt-1 divide-y divide-line/50 text-xs">
           {data.schedule.map((s) => (
-            <li key={s.day} className="flex items-center justify-between">
+            <li key={s.day} className="flex items-center justify-between py-1.5">
               <span className="text-foreground/85">{asText(s.day)}</span>
-              <span className="text-foreground/55">
-                {s.active ? `${s.start} - ${s.end}` : 'fechado'}
-              </span>
+              {s.active ? (
+                <span className="font-medium tabular-nums text-foreground/70">
+                  {s.start} – {s.end}
+                </span>
+              ) : (
+                <span className="rounded-full bg-elevate/[0.06] px-2 py-0.5 text-[10px] uppercase tracking-wider text-foreground/40">
+                  Fechado
+                </span>
+              )}
             </li>
           ))}
         </ul>
       </Accordion>
 
-      <Accordion title="4. Integrações" defaultOpen>
+      <Accordion title={<SectionTitle icon={<Plug className="h-3.5 w-3.5" />}>4. Integrações</SectionTitle>} defaultOpen>
         <Row k="WhatsApp" v={data.whatsappNumbers.join(', ')} />
         <Row k="Tipo" v={data.whatsappType} />
         {data.facebookEmail || data.facebookPassword ? (
@@ -1822,19 +1855,37 @@ function BriefingViewer({
         data.mainFlow ||
         data.chatbotFlow ||
         data.departments.length > 0) && (
-        <Accordion title="5. Chatbot" defaultOpen>
+        <Accordion title={<SectionTitle icon={<MessageSquare className="h-3.5 w-3.5" />}>5. Chatbot</SectionTitle>} defaultOpen>
           {data.chatbotFlow && (
-            <div className="mb-2 space-y-1.5 rounded-lg border border-line bg-elevate/[0.02] p-3">
+            <div className="mb-2 space-y-2 rounded-lg border border-line bg-elevate/[0.02] p-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-foreground/40">
                 Roteiro do chatbot
               </div>
               <Row k="Como funciona" v={data.chatbotFlow.description} />
               {(data.chatbotFlow.menus ?? []).map((m, i) => (
-                <Row
-                  key={i}
-                  k={i === 0 ? 'Menu principal' : `Submenu ${i}`}
-                  v={`${m.parentOption ? `Após escolher “${m.parentOption}” — ` : ''}${m.question} — ${(m.options ?? []).join(', ')}`}
-                />
+                <div key={i} className="rounded-md border border-line/70 bg-surface px-2.5 py-2 text-xs">
+                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                      {i === 0 ? 'Menu principal' : `Submenu ${i}`}
+                    </span>
+                    {m.parentOption && (
+                      <span className="text-[10px] text-foreground/40">após “{m.parentOption}”</span>
+                    )}
+                  </div>
+                  <p className="text-foreground/85">{asText(m.question)}</p>
+                  {(m.options ?? []).length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {(m.options ?? []).map((o, oi) => (
+                        <span
+                          key={oi}
+                          className="rounded-full bg-elevate/[0.06] px-2 py-0.5 text-[10px] text-foreground/60"
+                        >
+                          {o}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
               {(data.chatbotFlow.collectFields ?? []).length > 0 && (
                 <Row k="Coletar" v={data.chatbotFlow.collectFields.join(', ')} />
@@ -1843,7 +1894,7 @@ function BriefingViewer({
                 <Row key={`t${i}`} k="Transferir" v={`${t.option} → ${t.department}`} />
               ))}
               {data.chatbotFlow.closingMessage && (
-                <Row k="Encerramento" v={data.chatbotFlow.closingMessage} />
+                <Row k="Encaminhamento" v={data.chatbotFlow.closingMessage} />
               )}
             </div>
           )}
@@ -1867,7 +1918,7 @@ function BriefingViewer({
         data.siteHasLogo !== undefined ||
         data.siteColors ||
         data.siteHasDomain !== undefined) && (
-        <Accordion title="Site" defaultOpen>
+        <Accordion title={<SectionTitle icon={<Globe className="h-3.5 w-3.5" />}>Site</SectionTitle>} defaultOpen>
           <Row k="Nome da empresa" v={data.siteCompanyName} />
           <Row k="Redes sociais (referência)" v={data.siteSocialMedia} />
           {(data.siteGoals?.length ?? 0) > 0 && (
@@ -1895,13 +1946,13 @@ function BriefingViewer({
       )}
 
       {data.externalAutomationInfo && (
-        <Accordion title="7. Automação externa" defaultOpen>
+        <Accordion title={<SectionTitle icon={<Zap className="h-3.5 w-3.5" />}>7. Automação externa</SectionTitle>} defaultOpen>
           <Row k="" v={data.externalAutomationInfo} />
         </Accordion>
       )}
 
       {data.extraNotes && (
-        <Accordion title="Observações">
+        <Accordion title={<SectionTitle icon={<StickyNote className="h-3.5 w-3.5" />}>Observações</SectionTitle>}>
           <Row k="" v={data.extraNotes} />
         </Accordion>
       )}
@@ -2553,18 +2604,32 @@ function EditSelect({
   )
 }
 
+/** Linha rótulo/valor — some sozinha quando o cliente não respondeu, em vez de
+ * poluir a tela com traços. Coluna do rótulo em largura fixa pra alinhar os
+ * valores de todas as linhas na mesma posição, mesmo com rótulos de tamanhos
+ * diferentes. */
 function Row({ k, v }: { k: string; v?: string | null }) {
+  if (!v) return null
   return (
-    <div className="grid grid-cols-3 gap-3 py-1 text-xs">
+    <div className="grid grid-cols-[minmax(110px,160px)_1fr] gap-3 py-1.5 text-xs">
       {k && (
-        <span className="col-span-1 text-foreground/45 uppercase tracking-wider">
-          {k}
-        </span>
+        <span className="text-foreground/45 uppercase tracking-wider">{k}</span>
       )}
-      <span className={cn('whitespace-pre-wrap text-foreground/85', k ? 'col-span-2' : 'col-span-3')}>
-        {v ? asText(v) : '—'}
+      <span className={cn('whitespace-pre-wrap text-foreground/85', !k && 'col-span-2')}>
+        {asText(v)}
       </span>
     </div>
+  )
+}
+
+/** Ícone + texto pro título de um Accordion, pra facilitar identificar a seção
+ * de relance ao rolar a lista. */
+function SectionTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="text-accent">{icon}</span>
+      {children}
+    </span>
   )
 }
 
@@ -2579,21 +2644,21 @@ function Accordion({
 }) {
   const [open, setOpen] = React.useState(Boolean(defaultOpen))
   return (
-    <div className="rounded-lg border border-line bg-elevate/[0.02]">
+    <div className="overflow-hidden rounded-lg border border-line bg-elevate/[0.02]">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-foreground/85 hover:bg-elevate/[0.04]"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-foreground/85 hover:bg-elevate/[0.04]"
       >
         <span>{title}</span>
         <ChevronDown
           className={cn(
-            'h-4 w-4 text-foreground/40 transition-transform',
+            'h-4 w-4 shrink-0 text-foreground/40 transition-transform',
             open && 'rotate-180',
           )}
         />
       </button>
-      {open && <div className="px-3 pb-3 pt-1">{children}</div>}
+      {open && <div className="border-t border-line/60 px-3 pb-3 pt-2">{children}</div>}
     </div>
   )
 }

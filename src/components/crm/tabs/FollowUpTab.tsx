@@ -7,6 +7,7 @@ import { Input, Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { db } from '@/services/db'
+import { DEFAULT_FOLLOWUP_TEMPLATES, buildFollowUps } from '@/constants/followup'
 import { useCurrentUser } from '@/hooks/useClients'
 import { timeAgo } from '@/lib/time'
 import { cn, formatDate } from '@/lib/utils'
@@ -17,6 +18,29 @@ export function FollowUpTab({ client }: { client: Client }) {
   const [editing, setEditing] = React.useState<string | null>(null)
   const [draft, setDraft] = React.useState('')
   const [manualOpen, setManualOpen] = React.useState(false)
+
+  // Autocura: clientes que chegaram a "Entregas Recentes" por um caminho antigo (antes da geração
+  // automática existir em qualquer avanço de etapa) ficaram sem follow-ups — gera assim que a aba
+  // é aberta, usando a data de entrega já registrada (ou agora, se nem essa existir).
+  React.useEffect(() => {
+    if (client.stage !== 'delivered') return
+    if (client.followUps && client.followUps.length > 0) return
+    const baseline = client.deliveryCompletedAt
+      ? new Date(client.deliveryCompletedAt)
+      : new Date()
+    const followUps = buildFollowUps(
+      client,
+      baseline,
+      db.getSettings().followUpTemplates
+        ? { ...DEFAULT_FOLLOWUP_TEMPLATES, ...db.getSettings().followUpTemplates }
+        : DEFAULT_FOLLOWUP_TEMPLATES,
+    )
+    db.updateClient(client.id, {
+      followUpActive: true,
+      followUps,
+      ...(client.deliveryCompletedAt ? {} : { deliveryCompletedAt: baseline.toISOString() }),
+    })
+  }, [client.id, client.stage, client.followUps, client.deliveryCompletedAt])
 
   const update = (next: FollowUp[]) => {
     db.updateClient(client.id, { followUps: next })

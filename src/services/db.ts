@@ -3,6 +3,7 @@ import {
   buildDefaultChecklist,
   buildHandoffChecklist,
 } from '@/constants/checklist'
+import { DEFAULT_FOLLOWUP_TEMPLATES, buildFollowUps } from '@/constants/followup'
 import type { Profile } from '@/services/supabase'
 import { api, onSseEvent } from '@/services/api'
 import { DEFAULT_SERVERS, useAuthStore } from '@/store/authStore'
@@ -612,6 +613,31 @@ export const db = {
     const idx = clientsCache.findIndex((c) => c.id === id)
     if (idx === -1) return undefined
     const prev = clientsCache[idx]
+
+    // Qualquer caminho que leve o cliente a "delivered" (Kanban, "Avançar etapa" no drawer, ou o
+    // botão "Concluir entrega") já deixa os 4 follow-ups (dia 3/7/15/30) prontos pra copiar — não
+    // depende só do fluxo dedicado da aba Entrega.
+    if (
+      patch.stage === 'delivered' &&
+      prev.stage !== 'delivered' &&
+      !patch.followUps &&
+      !(prev.followUps && prev.followUps.length > 0)
+    ) {
+      const now = new Date()
+      patch = {
+        ...patch,
+        deliveryCompletedAt: patch.deliveryCompletedAt ?? now.toISOString(),
+        followUpActive: true,
+        followUps: buildFollowUps(
+          { ...prev, ...patch },
+          now,
+          settingsCache.followUpTemplates
+            ? { ...DEFAULT_FOLLOWUP_TEMPLATES, ...settingsCache.followUpTemplates }
+            : DEFAULT_FOLLOWUP_TEMPLATES,
+        ),
+      }
+    }
+
     const next: Client = { ...prev, ...patch }
     if (patch.stage && patch.stage !== prev.stage) next.stageUpdatedAt = new Date().toISOString()
     const copy = clientsCache.slice(); copy[idx] = next; clientsCache = copy

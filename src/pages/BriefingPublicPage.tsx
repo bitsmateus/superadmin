@@ -1217,7 +1217,10 @@ export function BriefingPublicPage() {
             <div className="space-y-4">
               {/* WhatsApp */}
               <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <h3 className="mb-3 text-sm font-semibold text-slate-800">WhatsApp</h3>
+                <div className="mb-3 flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-800">WhatsApp</h3>
+                  <WhatsappNumbersInfoPopover />
+                </div>
                 <Field label={L('Número(s) que vamos conectar')}>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {state.whatsappNumbers.map((num, i) => (
@@ -1289,8 +1292,11 @@ export function BriefingPublicPage() {
                   <div className="mt-4 border-t border-blue-100 pt-3">
                     <p className="text-xs text-slate-600">
                       Prefira nos dar acesso <strong>compartilhando o seu Business Manager</strong>{' '}
-                      (partner access) a passar senha ou TeamViewer — é mais seguro e você mantém o
-                      controle. Basta adicionar nossa agência como parceira nas configurações do BM.
+                      (partner access) a passar sua senha — é mais seguro e você mantém o controle.
+                      Basta adicionar nossa agência como parceira nas configurações do BM. Com esse
+                      acesso, nossa equipe entra depois pra fazer a configuração via{' '}
+                      <strong>TeamViewer</strong>, direto na tela do seu computador — deixa tudo mais
+                      rápido e fácil.
                     </p>
                   </div>
                 </div>
@@ -2280,6 +2286,18 @@ function ChatbotFlowInfoPopover() {
       <p>
         Depois que o cliente escolhe uma opção, ele é direcionado ao setor responsável — por isso
         os setores da Seção 1 e as opções do menu aqui costumam conversar entre si.
+      </p>
+    </InfoPopover>
+  )
+}
+
+function WhatsappNumbersInfoPopover() {
+  return (
+    <InfoPopover title="Sobre os números">
+      <p>
+        Esses serão os <strong>números conectados na plataforma</strong>. A partir da conexão, as
+        conversas que chegarem nesses WhatsApps vão passar a aparecer direto na <strong>NX</strong>,
+        pra seu time atender por lá.
       </p>
     </InfoPopover>
   )

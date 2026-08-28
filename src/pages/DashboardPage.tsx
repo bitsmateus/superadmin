@@ -9,14 +9,13 @@ import { useClients } from '@/hooks/useClients'
 import { isBooted } from '@/services/db'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useMonthFilter, withinBounds } from '@/hooks/useMonthFilter'
+import { PAST_BRIEFING_STAGES } from '@/lib/crmAlerts'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
-import type { Client, PipelineStage } from '@/types/client'
-
-const NOT_YET_SETUP: PipelineStage[] = ['setup_start', 'setup', 'setup_done', 'delivery', 'active']
+import type { Client } from '@/types/client'
 
 function isBriefingPendente(c: Client): boolean {
-  if (c.stage === 'churned' || NOT_YET_SETUP.includes(c.stage)) return false
+  if (c.stage === 'churned' || PAST_BRIEFING_STAGES.includes(c.stage)) return false
   if (c.briefingSentAt && (c.briefingStatus === 'sent' || c.briefingStatus === 'revision')) return true
   if (c.contractSignedAt && !c.briefingSentAt && c.briefingStatus !== 'filled' && c.briefingStatus !== 'approved') return true
   if (c.briefingStatus === 'filled' || c.briefingStatus === 'approved') return true
@@ -28,7 +27,13 @@ function isEmConfiguracao(c: Client): boolean {
 }
 
 function isPendenteEntrega(c: Client): boolean {
-  return c.stage !== 'churned' && Boolean(c.deliveryDate) && !c.deliveryCompletedAt
+  return (
+    c.stage !== 'churned' &&
+    c.stage !== 'delivered' &&
+    c.stage !== 'active' &&
+    Boolean(c.deliveryDate) &&
+    !c.deliveryCompletedAt
+  )
 }
 
 function isEntregaFeita(c: Client): boolean {

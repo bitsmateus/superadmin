@@ -35,6 +35,18 @@ export interface CrmAlert {
 const SETUP_DEADLINE_DAYS = 3
 const DAY_MS = 24 * 60 * 60 * 1000
 
+// Estágios em que o briefing já deixou de ser pendência — configuração em qualquer sub-etapa,
+// entrega agendada/concluída ou já ativo. Sem "delivered" aqui, cliente já entregue voltava a
+// aparecer como "briefing pendente" (o campo briefingStatus não é limpo ao avançar de etapa).
+export const PAST_BRIEFING_STAGES: PipelineStage[] = [
+  'setup_start',
+  'setup',
+  'setup_done',
+  'delivery',
+  'delivered',
+  'active',
+]
+
 export function computeAlerts(
   clients: Client[],
   slaByStage?: Partial<Record<PipelineStage, number>>,
@@ -54,11 +66,7 @@ export function computeAlerts(
     if (
       c.briefingSentAt &&
       (c.briefingStatus === 'sent' || c.briefingStatus === 'revision') &&
-      c.stage !== 'setup_start' &&
-      c.stage !== 'setup' &&
-      c.stage !== 'setup_done' &&
-      c.stage !== 'delivery' &&
-      c.stage !== 'active'
+      !PAST_BRIEFING_STAGES.includes(c.stage)
     ) {
       const days = daysSince(c.briefingSentAt)
       out.push({
@@ -84,11 +92,7 @@ export function computeAlerts(
       !c.briefingSentAt &&
       c.briefingStatus !== 'filled' &&
       c.briefingStatus !== 'approved' &&
-      c.stage !== 'setup_start' &&
-      c.stage !== 'setup' &&
-      c.stage !== 'setup_done' &&
-      c.stage !== 'delivery' &&
-      c.stage !== 'active'
+      !PAST_BRIEFING_STAGES.includes(c.stage)
     ) {
       const days = daysSince(c.contractSignedAt)
       out.push({
@@ -109,11 +113,7 @@ export function computeAlerts(
     // movido pra etapa 'setup'.
     if (
       (c.briefingStatus === 'filled' || c.briefingStatus === 'approved') &&
-      c.stage !== 'setup_start' &&
-      c.stage !== 'setup' &&
-      c.stage !== 'setup_done' &&
-      c.stage !== 'delivery' &&
-      c.stage !== 'active'
+      !PAST_BRIEFING_STAGES.includes(c.stage)
     ) {
       const ref =
         c.briefingApprovedAt ?? c.briefingSentAt ?? c.stageUpdatedAt
@@ -193,8 +193,12 @@ export function computeAlerts(
     }
 
     // ===== 4. Entrega agendada =====
-    // Reunião/data de entrega marcada e ainda não concluída.
+    // Reunião/data de entrega marcada e ainda não concluída. Checagem de estágio explícita (além
+    // de !deliveryCompletedAt) — cliente já em "delivered"/"active" nunca deve reaparecer aqui,
+    // mesmo se deliveryCompletedAt ficou inconsistente por algum motivo.
     if (
+      c.stage !== 'delivered' &&
+      c.stage !== 'active' &&
       c.deliveryDate &&
       !c.deliveryCompletedAt &&
       new Date(c.deliveryDate).getTime() >= todayStart

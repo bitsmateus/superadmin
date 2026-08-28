@@ -1,10 +1,10 @@
 import * as React from 'react'
 import {
-  ArrowRight,
   Bot,
   Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Copy,
   FileText,
   MessageSquare,
@@ -238,7 +238,12 @@ const PanelCard = React.memo(function PanelCard({
             Nenhum cliente nesta situação
           </p>
         ) : (
-          <ul className="divide-y divide-line">
+          <ul
+            className={cn(
+              'divide-y divide-line',
+              alerts.length > 6 && 'max-h-96 overflow-y-auto',
+            )}
+          >
             {alerts.map((a) => (
               <AlertRow
                 key={`${panel.key}-${a.client.id}-${a.kind}-${a.followUp?.id ?? a.whenAt ?? ''}`}
@@ -291,31 +296,39 @@ const AlertRow = React.memo(function AlertRow({
   const stageStyle = showStage ? STAGE_COLORS[alert.client.stage] : null
 
   return (
-    <li className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-elevate/[0.02]">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium text-foreground">{alert.title}</p>
-          {stageStyle && (
-            <span
-              className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
-              style={{ background: stageStyle.bg, color: stageStyle.text }}
-            >
-              {stageStyle.label}
-            </span>
+    <li>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() }
+        }}
+        className="flex w-full cursor-pointer items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-elevate/[0.03]"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-foreground">{alert.title}</p>
+            {stageStyle && (
+              <span
+                className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                style={{ background: stageStyle.bg, color: stageStyle.text }}
+              >
+                {stageStyle.label}
+              </span>
+            )}
+          </div>
+          <p className="truncate text-[11px] text-foreground/55">{alert.subtitle}</p>
+          {alert.message && (
+            <p className="mt-1 line-clamp-2 text-[11px] text-foreground/45">
+              {alert.message.length > 110
+                ? alert.message.slice(0, 110) + '…'
+                : alert.message}
+            </p>
           )}
         </div>
-        <p className="truncate text-[11px] text-foreground/55">{alert.subtitle}</p>
-        {alert.message && (
-          <p className="mt-1 line-clamp-2 text-[11px] text-foreground/45">
-            {alert.message.length > 110
-              ? alert.message.slice(0, 110) + '…'
-              : alert.message}
-          </p>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
         {alert.followUp && (
-          <>
+          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <Button
               size="sm"
               variant="ghost"
@@ -332,16 +345,9 @@ const AlertRow = React.memo(function AlertRow({
             >
               Enviado
             </Button>
-          </>
+          </div>
         )}
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={onOpen}
-          rightIcon={<ArrowRight className="h-3.5 w-3.5" />}
-        >
-          Abrir
-        </Button>
+        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-foreground/25" />
       </div>
     </li>
   )

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ArrowRight, CheckCircle2, Copy, ListTodo } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Copy, ListTodo } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -146,7 +146,12 @@ export function TodayActions() {
           Nada pendente para {filter === 'mine' ? 'você' : 'este filtro'} agora. 🎉
         </p>
       ) : (
-        <ul className="divide-y divide-line">
+        <ul
+          className={cn(
+            'divide-y divide-line',
+            actions.length > 6 && 'max-h-[26rem] overflow-y-auto',
+          )}
+        >
           {actions.slice(0, 30).map((a) => (
             <ActionRow
               key={`${a.kind}-${a.client.id}-${a.followUp?.id ?? a.whenAt ?? ''}`}
@@ -191,42 +196,49 @@ function ActionRow({ alert, onOpen }: { alert: CrmAlert; onOpen: () => void }) {
     success: 'bg-success',
   }[alert.tone]
 
+  const owners = clientOwners(alert.client)
+
   return (
-    <li className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-elevate/[0.02]">
-      <span className={cn('h-2 w-2 shrink-0 rounded-full', dotCls)} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-foreground">
+    <li>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() }
+        }}
+        className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elevate/[0.03]"
+      >
+        <span className={cn('h-2 w-2 shrink-0 rounded-full', dotCls)} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">
             {ACTION_LABEL[alert.kind] ?? alert.title}
-          </span>
-          <span className="truncate text-[11px] text-foreground/45">· {alert.title}</span>
+          </p>
+          <p className="truncate text-[11px] text-foreground/50">{alert.title}</p>
         </div>
-        <p className="truncate text-[11px] text-foreground/50">
-          {alert.subtitle}
-          {clientOwners(alert.client).length > 0
-            ? ` · ${clientOwners(alert.client).join(' / ')}`
-            : ''}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
-        {alert.followUp && (
-          <>
-            <Button size="sm" variant="ghost" onClick={copyMessage} leftIcon={<Copy className="h-3.5 w-3.5" />}>
-              Copiar
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={markSent}
-              leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
-            >
-              Enviado
-            </Button>
-          </>
+        {owners.length > 0 && (
+          <span className="hidden shrink-0 truncate rounded-full bg-elevate/[0.05] px-2 py-0.5 text-[10px] text-foreground/45 sm:block">
+            {owners.join(' / ')}
+          </span>
         )}
-        <Button size="sm" variant="secondary" onClick={onOpen} rightIcon={<ArrowRight className="h-3.5 w-3.5" />}>
-          Abrir
-        </Button>
+        <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          {alert.followUp && (
+            <>
+              <Button size="sm" variant="ghost" onClick={copyMessage} leftIcon={<Copy className="h-3.5 w-3.5" />}>
+                Copiar
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={markSent}
+                leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
+              >
+                Enviado
+              </Button>
+            </>
+          )}
+        </div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-foreground/25" />
       </div>
     </li>
   )

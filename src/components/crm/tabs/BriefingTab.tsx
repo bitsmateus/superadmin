@@ -336,21 +336,43 @@ export function BriefingTab({ client }: { client: Client }) {
             ))}
           </ConfigGroup>
 
-          <div>
-            <div className="text-[11px] uppercase tracking-wider text-foreground/40 mb-1.5">
-              Máx. de usuários *
+          <div className="flex flex-wrap gap-6">
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-foreground/40 mb-1.5">
+                Máx. de usuários *
+              </div>
+              <input
+                type="number"
+                min="1"
+                max="999"
+                value={config.maxUsers || ''}
+                onChange={(e) =>
+                  updateConfig({ maxUsers: Math.max(0, parseInt(e.target.value) || 0) })
+                }
+                placeholder="Ex.: 5"
+                className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+              />
             </div>
-            <input
-              type="number"
-              min="1"
-              max="999"
-              value={config.maxUsers || ''}
-              onChange={(e) =>
-                updateConfig({ maxUsers: Math.max(0, parseInt(e.target.value) || 0) })
-              }
-              placeholder="Ex.: 5"
-              className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
-            />
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-foreground/40 mb-1.5">
+                Caixinhas de WhatsApp
+              </div>
+              <input
+                type="number"
+                min="0"
+                max="20"
+                value={config.maxWhatsappNumbers ?? 6}
+                onChange={(e) =>
+                  updateConfig({ maxWhatsappNumbers: Math.max(0, parseInt(e.target.value) || 0) })
+                }
+                placeholder="Ex.: 6"
+                className="w-28 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+              />
+              <p className="mt-1 text-[11px] text-foreground/40">
+                Quantos campos de número aparecem no briefing. 0 = esconde a seção.
+              </p>
+            </div>
           </div>
 
           <div>

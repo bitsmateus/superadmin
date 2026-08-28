@@ -45,12 +45,12 @@ import type {
 
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
 
-// Quantidade fixa de "caixinhas" pra números de WhatsApp — padrão do formulário,
-// caixinhas vazias simplesmente não entram no envio.
-const WHATSAPP_NUMBER_SLOTS = 6
-function padWhatsappNumbers(numbers: string[]): string[] {
-  const padded = numbers.slice(0, WHATSAPP_NUMBER_SLOTS)
-  while (padded.length < WHATSAPP_NUMBER_SLOTS) padded.push('')
+// Quantidade de "caixinhas" pra números de WhatsApp — configurável por cliente
+// (briefingConfig.maxWhatsappNumbers, default 6). Caixinhas vazias não entram no envio.
+const DEFAULT_WHATSAPP_NUMBER_SLOTS = 6
+function padWhatsappNumbers(numbers: string[], slots: number = DEFAULT_WHATSAPP_NUMBER_SLOTS): string[] {
+  const padded = numbers.slice(0, slots)
+  while (padded.length < slots) padded.push('')
   return padded
 }
 
@@ -330,7 +330,10 @@ interface BriefingFormState {
   customAnswers: Record<string, string>
 }
 
-function initialFormState(company: string): BriefingFormState {
+function initialFormState(
+  company: string,
+  whatsappNumberSlots: number = DEFAULT_WHATSAPP_NUMBER_SLOTS,
+): BriefingFormState {
   return {
     site: '',
     sectors: [],
@@ -343,7 +346,7 @@ function initialFormState(company: string): BriefingFormState {
       end: '18:00',
     })),
     timezone: 'America/Sao_Paulo',
-    whatsappNumbers: padWhatsappNumbers([]),
+    whatsappNumbers: padWhatsappNumbers([], whatsappNumberSlots),
     facebookEmail: '',
     facebookPassword: '',
     wavoipInfo: '',
@@ -452,7 +455,9 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
         ? bd.schedule.map((s) => ({ day: s.day, active: s.active, start: s.start, end: s.end }))
         : base.schedule,
     timezone: bd.timezone ?? base.timezone,
-    whatsappNumbers: bd.whatsappNumbers?.length ? padWhatsappNumbers(bd.whatsappNumbers) : base.whatsappNumbers,
+    whatsappNumbers: bd.whatsappNumbers?.length
+      ? padWhatsappNumbers(bd.whatsappNumbers, base.whatsappNumbers.length)
+      : base.whatsappNumbers,
     facebookEmail: bd.facebookEmail ?? base.facebookEmail,
     facebookPassword: bd.facebookPassword ?? base.facebookPassword,
     wavoipInfo: bd.wavoipInfo ?? base.wavoipInfo,
@@ -562,18 +567,20 @@ export function BriefingPublicPage() {
         // 1) Rascunho local (autosave) tem prioridade — sobrevive a refresh/
         //    fechar a aba. 2) Em revisão, pré-preenche com o que já foi enviado.
         //    3) Senão, começa em branco.
-        const base = initialFormState(row.company)
+        const whatsappSlots = row.briefing_config?.maxWhatsappNumbers ?? DEFAULT_WHATSAPP_NUMBER_SLOTS
+        const base = initialFormState(row.company, whatsappSlots)
         const draft = loadDraft(token)
         if (draft) {
           // Rascunhos salvos antes da mudança pra "caixinhas" guardavam
           // whatsappNumbers como texto único — normaliza pro formato em array.
           const draftNumbers = draft.whatsappNumbers as unknown
           const whatsappNumbers = Array.isArray(draftNumbers)
-            ? padWhatsappNumbers(draftNumbers)
+            ? padWhatsappNumbers(draftNumbers, whatsappSlots)
             : padWhatsappNumbers(
                 typeof draftNumbers === 'string'
                   ? draftNumbers.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean)
                   : [],
+                whatsappSlots,
               )
           setState({ ...base, ...draft, whatsappNumbers })
         } else if (row.briefing_status === 'revision' && row.briefing_data) {
@@ -1286,32 +1293,34 @@ export function BriefingPublicPage() {
             description="Informe quais números de WhatsApp vamos conectar ao sistema."
           >
             <div className="space-y-4">
-              {/* WhatsApp */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-800">WhatsApp</h3>
-                  <WhatsappNumbersInfoPopover />
-                </div>
-                <Field label={L('Número(s) que vamos conectar')}>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {state.whatsappNumbers.map((num, i) => (
-                      <PlainInput
-                        key={i}
-                        value={num}
-                        onChange={(v) => {
-                          const next = state.whatsappNumbers.slice()
-                          next[i] = v
-                          setState({ ...state, whatsappNumbers: next })
-                        }}
-                        placeholder="(11) 99999-9999"
-                      />
-                    ))}
+              {/* WhatsApp — escondido quando o admin configura 0 caixinhas */}
+              {state.whatsappNumbers.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-800">WhatsApp</h3>
+                    <WhatsappNumbersInfoPopover />
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">
-                    Preencha uma caixinha por número. Inclua o DDD.
-                  </p>
-                </Field>
-              </div>
+                  <Field label={L('Número(s) que vamos conectar')}>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {state.whatsappNumbers.map((num, i) => (
+                        <PlainInput
+                          key={i}
+                          value={num}
+                          onChange={(v) => {
+                            const next = state.whatsappNumbers.slice()
+                            next[i] = v
+                            setState({ ...state, whatsappNumbers: next })
+                          }}
+                          placeholder="(11) 99999-9999"
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Preencha uma caixinha por número. Inclua o DDD.
+                    </p>
+                  </Field>
+                </div>
+              )}
 
               {/* Facebook — obrigatório para API Oficial */}
               {cfg?.connectionTypes.includes('api_oficial') && (

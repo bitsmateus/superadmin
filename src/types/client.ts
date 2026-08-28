@@ -209,6 +209,8 @@ export interface BriefingConfig {
   automationTypes: AutomationType[]
   channels: BriefingChannel[]
   maxUsers: number
+  /** Quantas caixinhas de número de WhatsApp aparecem no briefing público. Default 6. */
+  maxWhatsappNumbers?: number
   hasExternalAutomation: boolean
   externalAutomationNotes?: string
 }

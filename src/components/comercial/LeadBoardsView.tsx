@@ -206,7 +206,8 @@ function matchesSearch(row: LeadRow, term: string): boolean {
 /** Compara duas linhas por UMA coluna qualquer — valor em R$ ordena pelo número (não pelo texto
  * "R$ 1.234,56"), o resto ordena como texto (mas "numeric" no localeCompare já lê "Lead 10" depois
  * de "Lead 2" certinho, em vez de ordem alfabética pura). */
-function compareRowsByColumn(a: LeadRow, b: LeadRow, key: LeadRowField | 'createdAt'): number {
+function compareRowsByColumn(a: LeadRow, b: LeadRow, key: LeadRowField | 'createdAt' | 'position'): number {
+  if (key === 'position') return a.position - b.position
   if (key === 'valorMrr' || key === 'valorImplementacao') {
     return parseBRLCents(a[key]) - parseBRLCents(b[key])
   }
@@ -804,7 +805,7 @@ function BoardGroup({
   // Ordenação é por QUADRO — cada um guarda a própria coluna/direção, ao contrário de antes (um
   // botão só na barra de cima ordenando todos juntos por data). Disparada passando o mouse em
   // QUALQUER coluna, igual o Monday: aparece um ícone de ordenar, sem precisar de botão fixo.
-  const [sortBy, setSortBy] = React.useState<{ key: LeadRowField | 'createdAt'; desc: boolean }>({ key: 'createdAt', desc: false })
+  const [sortBy, setSortBy] = React.useState<{ key: LeadRowField | 'createdAt' | 'position'; desc: boolean }>({ key: 'createdAt', desc: false })
   const toggleSort = (key: LeadRowField | 'createdAt') => {
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
   }
@@ -874,6 +875,26 @@ function BoardGroup({
     e.dataTransfer.setDragImage(ghost, 14, 14)
     window.setTimeout(() => { document.body.removeChild(ghost) }, 0)
     onRowDragStart(ids)
+  }
+
+  /** Reordena manualmente dentro do MESMO quadro (arrastar um lead pra cima/baixo de outro).
+   * Só regrava o "position" de quem realmente mudou de lugar entre o ponto de origem e o de
+   * destino — não reindexa o quadro inteiro, importante pros quadros com centenas de leads. */
+  const reorderRow = (draggedId: string, targetId: string) => {
+    const sorted = allRows.slice().sort((a, b) => a.position - b.position)
+    const positions = sorted.map((r) => r.position)
+    const fromIdx = sorted.findIndex((r) => r.id === draggedId)
+    let toIdx = sorted.findIndex((r) => r.id === targetId)
+    if (fromIdx === -1 || toIdx === -1) return
+    const [moved] = sorted.splice(fromIdx, 1)
+    if (toIdx > fromIdx) toIdx -= 1
+    sorted.splice(toIdx, 0, moved)
+    sorted.forEach((r, i) => {
+      if (r.position !== positions[i]) leadBoardsService.updateRow(r.id, { position: positions[i] })
+    })
+    // Sem isso, o drop pode não parecer ter feito nada — a lista só reflete a nova ordem
+    // visualmente quando ordenada por posição (é literalmente a ordem que acabou de ser definida).
+    setSortBy({ key: 'position', desc: false })
   }
 
   return (
@@ -987,6 +1008,16 @@ function BoardGroup({
                   draggable
                   onDragStart={(e) => startDrag(e, row.id, row.nome)}
                   onDragEnd={onRowDragEnd}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    const draggedId = e.dataTransfer.getData('text/plain')
+                    // Se o lead arrastado não é deste quadro, deixa o evento borbulhar pro
+                    // onDrop do quadro (comportamento já existente: move de quadro).
+                    if (!draggedId || draggedId === row.id || !allRows.some((r) => r.id === draggedId)) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    reorderRow(draggedId, row.id)
+                  }}
                   // Venda desfeita: fica visível (o histórico importa) mas apagada, pra ninguém
                   // ler como negócio fechado ao bater o olho. Já está fora dos totais.
                   title={row.vendaRevertida ? 'Venda revertida — o lead saiu de "Vendido"' : undefined}
@@ -1003,7 +1034,7 @@ function BoardGroup({
                         draggable
                         onDragStart={(e) => startDrag(e, row.id, row.nome)}
                         onDragEnd={onRowDragEnd}
-                        title="Arrastar para outro quadro"
+                        title="Arrastar para reordenar aqui ou mover para outro quadro"
                         className="grid h-5 w-4 shrink-0 cursor-grab place-items-center text-foreground/30 hover:text-foreground/50 active:cursor-grabbing"
                       >
                         <GripVertical className="h-3.5 w-3.5" />

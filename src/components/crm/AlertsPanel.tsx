@@ -53,7 +53,7 @@ const PANELS: PanelDef[] = [
     key: 'setup',
     title: 'Em configuração',
     description: 'Clientes na etapa de configuração',
-    kinds: ['setup_in_progress'],
+    kinds: ['setup_in_progress', 'setup_ready_for_delivery'],
     icon: <Settings2 className="h-3.5 w-3.5" />,
     tone: 'info',
   },

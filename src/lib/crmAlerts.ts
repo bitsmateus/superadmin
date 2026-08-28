@@ -11,6 +11,7 @@ export type AlertKind =
   | 'briefing_pending_send'
   | 'briefing_filled_no_setup'
   | 'setup_in_progress'
+  | 'setup_ready_for_delivery'
   | 'delivery_scheduled'
   | 'delivery_done_this_week'
   | 'followup_pending'
@@ -132,7 +133,12 @@ export function computeAlerts(
 
     // ===== 3. Configuração em andamento =====
     // Clientes em qualquer sub-etapa de configuração. Mostra prazo limite e
-    // qual etapa do checklist está pendente.
+    // qual etapa do checklist está pendente. Só entra como "tarefa de hoje"
+    // quando de fato precisa de ação agora: prazo já vencido/vence hoje, OU
+    // o checklist já terminou (não sobrou nada "a continuar" — só falta
+    // avançar a etapa, o que não depende de esperar dia nenhum). Cliente com
+    // prazo ainda em dias futuros e checklist incompleto não aparece — ainda
+    // não é uma ação de hoje.
     if (c.stage === 'setup_start' || c.stage === 'setup' || c.stage === 'setup_done') {
       const startedAt = c.stageUpdatedAt
         ? new Date(c.stageUpdatedAt).getTime()
@@ -148,6 +154,7 @@ export function computeAlerts(
       const total = items.length
       const done = items.filter((i) => i.checked).length
       const next = items.find((i) => !i.checked)
+      const checklistComplete = total > 0 && done === total
 
       const deadlineLabel = overdue
         ? `Atrasado ${Math.abs(daysToDeadline)} dia(s) · prazo era ${formatDate(deadlineDate)}`
@@ -162,15 +169,27 @@ export function computeAlerts(
             : `${done}/${total} concluídos`
           : 'sem checklist'
 
-      out.push({
-        kind: 'setup_in_progress',
-        client: c,
-        daysLate: overdue ? Math.abs(daysToDeadline) : undefined,
-        tone: overdue ? 'danger' : daysToDeadline <= 1 ? 'warning' : 'info',
-        title: `${c.company || c.name}`,
-        subtitle: `${stepLabel} · ${deadlineLabel}`,
-        whenAt: new Date(deadlineMs).toISOString(),
-      })
+      if (checklistComplete) {
+        out.push({
+          kind: 'setup_ready_for_delivery',
+          client: c,
+          daysLate: overdue ? Math.abs(daysToDeadline) : undefined,
+          tone: overdue ? 'danger' : 'warning',
+          title: `${c.company || c.name}`,
+          subtitle: `Checklist concluído (${done}/${total}) · falta avançar para Entrega`,
+          whenAt: new Date(deadlineMs).toISOString(),
+        })
+      } else if (overdue || daysToDeadline <= 0) {
+        out.push({
+          kind: 'setup_in_progress',
+          client: c,
+          daysLate: overdue ? Math.abs(daysToDeadline) : undefined,
+          tone: overdue ? 'danger' : 'warning',
+          title: `${c.company || c.name}`,
+          subtitle: `${stepLabel} · ${deadlineLabel}`,
+          whenAt: new Date(deadlineMs).toISOString(),
+        })
+      }
     }
 
     // ===== 4. Entrega agendada =====

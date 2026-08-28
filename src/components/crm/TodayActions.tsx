@@ -16,6 +16,7 @@ const ACTIONABLE: AlertKind[] = [
   'briefing_sent_waiting',
   'briefing_filled_no_setup',
   'setup_in_progress',
+  'setup_ready_for_delivery',
   'delivery_scheduled',
   'followup_pending',
 ]
@@ -25,6 +26,7 @@ const ACTION_LABEL: Record<string, string> = {
   briefing_sent_waiting: 'Cobrar briefing do cliente',
   briefing_filled_no_setup: 'Iniciar configuração',
   setup_in_progress: 'Continuar configuração',
+  setup_ready_for_delivery: 'Avançar para Entrega',
   delivery_scheduled: 'Reunião de entrega',
   followup_pending: 'Enviar follow-up',
 }

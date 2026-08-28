@@ -81,7 +81,9 @@ export const leadNotesService = {
         lead_row_id: leadRowId, content: trimmed, author_name: authorName, attachments,
       })
       const note = rowToNote(row)
-      notes = [note, ...notes]
+      // O SSE (notify_lead_notes) pode entregar esse mesmo INSERT antes desse POST
+      // resolver — sem essa checagem, a nota entrava duplicada no cache local.
+      if (!notes.some((n) => n.id === note.id)) notes = [note, ...notes]
       notify()
       leadBoardsService.bumpNotesCount(leadRowId, 1)
       return note
@@ -102,7 +104,7 @@ export const leadNotesService = {
         ...(createdAt ? { created_at: createdAt } : {}),
       })
       const note = rowToNote(row)
-      notes = [note, ...notes]
+      if (!notes.some((n) => n.id === note.id)) notes = [note, ...notes]
       notify()
       leadBoardsService.bumpNotesCount(leadRowId, 1)
     } catch (err) {

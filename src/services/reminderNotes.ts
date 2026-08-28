@@ -74,7 +74,9 @@ export const reminderNotesService = {
         reminder_id: reminderId, content: trimmed, author_name: authorName, attachments,
       })
       const note = rowToNote(row)
-      notes = [note, ...notes]
+      // O SSE (notify_reminder_notes) pode entregar esse mesmo INSERT antes desse POST
+      // resolver — sem essa checagem, a nota entrava duplicada no cache local.
+      if (!notes.some((n) => n.id === note.id)) notes = [note, ...notes]
       notify()
       return note
     } catch (err) {

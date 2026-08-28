@@ -215,6 +215,16 @@ export const ticketsService = {
     return this.updateTicket(id, { assigneeId, status: 'open' })
   },
 
+  async deleteTicket(id: string): Promise<void> {
+    try {
+      await api.delete(`/api/tickets/${id}`)
+      tickets = tickets.filter((t) => t.id !== id)
+      notify()
+    } catch (err) {
+      toast.error('Falha ao excluir ticket: ' + (err as Error).message)
+    }
+  },
+
   getTemplates(): MessageTemplate[] { return templates },
 
   async upsertTemplate(input: Partial<MessageTemplate> & { name: string; content: string }): Promise<void> {

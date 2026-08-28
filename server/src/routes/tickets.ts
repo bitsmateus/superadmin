@@ -31,6 +31,16 @@ export async function ticketRoutes(app: FastifyInstance) {
     }
   );
 
+  // DELETE /api/tickets/:id — mensagens (ticket_messages) saem junto via ON DELETE CASCADE.
+  app.delete<{ Params: { id: string } }>(
+    '/api/tickets/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      await query('DELETE FROM tickets WHERE id = $1', [req.params.id]);
+      return reply.status(204).send();
+    }
+  );
+
   // GET /api/tickets/:id/messages
   app.get<{ Params: { id: string }; Querystring: { public_only?: string } }>(
     '/api/tickets/:id/messages',

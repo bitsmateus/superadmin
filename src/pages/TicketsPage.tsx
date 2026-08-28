@@ -15,6 +15,7 @@ import {
   Send,
   Sparkles,
   StickyNote,
+  Trash2,
   User as UserIcon,
   X,
 } from 'lucide-react'
@@ -316,6 +317,7 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
   const [isInternal, setIsInternal] = React.useState(false)
   const [posting, setPosting] = React.useState(false)
   const [linkOpen, setLinkOpen] = React.useState(false)
+  const [confirmDelete, setConfirmDelete] = React.useState(false)
   const { profile } = useAuth()
 
   React.useEffect(() => {
@@ -397,6 +399,13 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
     await ticketsService.updateTicket(ticketId, { priority })
   }
 
+  const remove = async () => {
+    await ticketsService.deleteTicket(ticketId)
+    toast.success('Ticket excluído')
+    setConfirmDelete(false)
+    onClose()
+  }
+
   return (
     <>
       <TopBar
@@ -425,9 +434,40 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
               ]}
               className="!h-8 !text-xs"
             />
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="Excluir ticket"
+              title="Excluir ticket"
+              className="rounded-md p-2 text-foreground/40 transition-colors hover:bg-danger/10 hover:text-danger"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           </div>
         }
       />
+
+      <Modal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Excluir ticket"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmDelete(false)}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={remove}>
+              Excluir
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-foreground/70">
+          Excluir o ticket #{ticket.number} · {ticket.subject}? As mensagens da conversa também
+          serão apagadas. Essa ação não pode ser desfeita.
+        </p>
+      </Modal>
 
       <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">

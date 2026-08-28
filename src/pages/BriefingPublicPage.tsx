@@ -7,6 +7,7 @@ import {
   Clock,
   Globe,
   HelpCircle,
+  Lightbulb,
   MessageSquare,
   Phone,
   Plus,
@@ -248,11 +249,6 @@ function buildGreeting(company: string, sectors: string[]): string {
 ${menuItems}
 
 Clique em uma opção ou digite o número correspondente para continuar.`
-}
-
-function buildChatbotPreview(message: string, sectors: string[]): string {
-  const options = sectors.map((sector, index) => `${numberEmoji(index)} ${sector}`).join('\n')
-  return `${message.trim()}\n\n${options}\n\nClique em uma opção ou digite o número correspondente para continuar.`
 }
 
 function buildOffHours(company: string): string {
@@ -521,7 +517,6 @@ export function BriefingPublicPage() {
   const [section, setSection] = React.useState(0)
   const [submittedData, setSubmittedData] = React.useState<{ greeting: string; offHours: string } | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
-  const [generatingWelcome, setGeneratingWelcome] = React.useState(false)
   const [chatbotConfirmOpen, setChatbotConfirmOpen] = React.useState(false)
   // Erros de validação por campo (chave -> mensagem). Preenchido ao avançar/enviar.
   const [errors, setErrors] = React.useState<Record<string, string>>({})
@@ -623,43 +618,26 @@ export function BriefingPublicPage() {
     cfg.connectionTypes.includes('api_oficial') ||
     cfg.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada')
 
-  const generateWelcomeWithAI = async () => {
-    if (!state.chatbotDescription.trim()) {
-      toast.error('Preencha o resumo do atendimento primeiro.')
-      return
-    }
-    if (state.sectors.length === 0) {
-      toast.error('Cadastre ao menos um setor no início do briefing.')
-      return
-    }
-    setGeneratingWelcome(true)
-    try {
-      const result = await api.post<{ message: string }>(
-        `/api/public/briefing/${token}/generate-welcome`,
-        { description: state.chatbotDescription, sectors: state.sectors },
-      )
-      setState((current) => {
-        const menus = [...current.chatbotMenus]
-        menus[0] = {
-          ...(menus[0] ?? { parentOption: undefined }),
-          question: result.message,
-          options: current.sectors.join('\n'),
-        }
-        return {
-          ...current,
-          chatbotMenus: menus,
-          greetingMessage: buildChatbotPreview(result.message, current.sectors),
-          greetingEditing: false,
-          greetingGenerated: true,
-        }
-      })
-      clearError('chatbotMenus')
-      toast.success('Mensagem e setores adicionados ao menu principal.')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível gerar a mensagem.')
-    } finally {
-      setGeneratingWelcome(false)
-    }
+  // Preenche um menu (principal ou submenu) com um exemplo pronto — dá uma base
+  // pro cliente entender o formato e ajustar em cima, sem depender de IA. No menu
+  // principal, usa os setores já cadastrados na Seção 1 como opções (se houver).
+  const fillMenuExample = (i: number) => {
+    const example =
+      i === 0
+        ? {
+            question: 'Olá! 👋 Como podemos te ajudar hoje?',
+            options: state.sectors.length > 0 ? state.sectors.join('\n') : 'Comercial\nSuporte\nFinanceiro',
+          }
+        : {
+            question: 'Sobre qual assunto você precisa de ajuda?',
+            options: 'Problema técnico\nDúvida sobre cobrança\nFalar com atendente',
+          }
+    setState((current) => {
+      const menus = [...current.chatbotMenus]
+      menus[i] = { ...menus[i], question: example.question, options: example.options }
+      return { ...current, chatbotMenus: menus }
+    })
+    clearError('chatbotMenus')
   }
 
   if (client === undefined) {
@@ -1430,7 +1408,9 @@ export function BriefingPublicPage() {
                       Menu de atendimento *
                     </label>
                     <p className="mb-2 text-xs text-slate-500">
-                      Escreva a mensagem que o cliente verá e coloque uma opção em cada linha. Os números serão adicionados no fluxo.
+                      Escreva a mensagem que o cliente verá e coloque uma opção em cada linha. Os números serão
+                      adicionados no fluxo. Ao escolher uma opção do menu, o cliente é transferido direto para o
+                      setor responsável.
                     </p>
                     <div className="space-y-3">
                       {state.chatbotMenus.map((m, i) => (
@@ -1442,32 +1422,31 @@ export function BriefingPublicPage() {
                               </p>
                               <p className="text-xs text-slate-500">
                                 {i === 0
-                                  ? 'A IA usa o resumo acima e adiciona automaticamente os setores cadastrados.'
-                                  : 'Aparece somente depois que o cliente escolhe uma opção específica.'}
+                                  ? 'Primeira mensagem que o cliente recebe. As opções devem bater com os setores cadastrados na Seção 1.'
+                                  : 'Só aparece depois que o cliente clica em uma das opções de outro menu (o principal ou outro submenu) — é um segundo nível de escolha antes de transferir para o setor responsável.'}
                               </p>
                             </div>
-                            {i === 0 && (
+                            <div className="flex shrink-0 items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => void generateWelcomeWithAI()}
-                                disabled={generatingWelcome}
-                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-violet-700 disabled:cursor-wait disabled:opacity-60"
+                                onClick={() => fillMenuExample(i)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
                               >
-                                <Sparkles className={cn('h-3.5 w-3.5', generatingWelcome && 'animate-pulse')} />
-                                {generatingWelcome ? 'Gerando…' : 'Gerar com IA'}
+                                <Lightbulb className="h-3.5 w-3.5" />
+                                Usar exemplo
                               </button>
-                            )}
-                            {i > 0 && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setState({ ...state, chatbotMenus: state.chatbotMenus.filter((_, x) => x !== i) })
-                                }
-                                className="inline-flex shrink-0 items-center gap-1 text-xs text-rose-500 hover:underline"
-                              >
-                                <Trash2 className="h-3 w-3" /> Remover
-                              </button>
-                            )}
+                              {i > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setState({ ...state, chatbotMenus: state.chatbotMenus.filter((_, x) => x !== i) })
+                                  }
+                                  className="inline-flex items-center gap-1 text-xs text-rose-500 hover:underline"
+                                >
+                                  <Trash2 className="h-3 w-3" /> Remover
+                                </button>
+                              )}
+                            </div>
                           </div>
                           {i > 0 && (
                             <div className="mb-2">

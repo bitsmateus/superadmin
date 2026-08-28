@@ -92,6 +92,17 @@ const CREDENTIAL_CHANNELS: { key: BriefingChannel; label: string }[] = [
   { key: 'mercadolivre', label: 'Mercado Livre' },
 ]
 
+// Rótulos legíveis de todos os canais, pro resumo final antes do envio.
+const CHANNEL_LABELS: Record<BriefingChannel, string> = {
+  whatsapp: 'WhatsApp',
+  instagram: 'Instagram',
+  messenger: 'Facebook / Messenger',
+  wavoip: 'WaVoip',
+  olx: 'OLX',
+  mercadolivre: 'Mercado Livre',
+  email: 'E-mail',
+}
+
 /** Remove canais sem nenhum dado preenchido antes de enviar. */
 function cleanChannelAccess(
   raw: Record<string, { email?: string; password?: string; notes?: string }>,
@@ -633,9 +644,9 @@ export function BriefingPublicPage() {
   }, [fieldOverrides])
   const L = React.useCallback((text: string) => overridesByText[text] ?? text, [overridesByText])
   const [section, setSection] = React.useState(0)
-  const [submittedData, setSubmittedData] = React.useState<{ greeting: string; offHours: string } | null>(null)
+  const [submitted, setSubmitted] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
-  const [chatbotConfirmOpen, setChatbotConfirmOpen] = React.useState(false)
+  const [reviewOpen, setReviewOpen] = React.useState(false)
   // Tela de boas-vindas antes do wizard — só aparece de fato num começo novo (se já
   // existe um rascunho salvo, o cliente já passou por ela e volta direto pro formulário).
   const [showWelcome, setShowWelcome] = React.useState(true)
@@ -791,13 +802,7 @@ export function BriefingPublicPage() {
   }
 
   if (!token || !client) return <BriefingErrorPage />
-  if (submittedData) return (
-    <BriefingSuccessPage
-      company={client.company}
-      greeting={submittedData.greeting}
-      offHours={submittedData.offHours}
-    />
-  )
+  if (submitted) return <BriefingSuccessPage />
   if (showWelcome) return <BriefingWelcomePage onStart={() => setShowWelcome(false)} />
 
   // Leva o usuário até a seção do primeiro erro, marca os campos e avisa.
@@ -937,10 +942,7 @@ export function BriefingPublicPage() {
     try {
       await api.post(`/api/public/briefing/${token}`, { data })
       if (token) clearDraft(token)
-      setSubmittedData({
-        greeting: state.greetingMessage,
-        offHours: state.offHoursMessage,
-      })
+      setSubmitted(true)
     } catch (err) {
       toast.error('Falha ao enviar: ' + (err instanceof Error ? err.message : 'Erro'))
     } finally {
@@ -967,9 +969,9 @@ export function BriefingPublicPage() {
       focusErrors(sectionErrs)
       return
     }
-    // On chatbot section show confirmation before advancing
-    if (currentKey === 'chatbot') {
-      setChatbotConfirmOpen(true)
+    // Na última seção, mostra um resumo geral de tudo antes de enviar de verdade.
+    if (section === totalSections - 1) {
+      setReviewOpen(true)
       return
     }
     advanceSection()
@@ -2439,64 +2441,103 @@ export function BriefingPublicPage() {
         )}
       </main>
 
-      {/* ── Modal de confirmação das mensagens do chatbot ── */}
-      {chatbotConfirmOpen && (
+      {/* ── Modal de resumo geral, antes do envio final ── */}
+      {reviewOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
             <div className="border-b border-slate-200 px-6 py-4">
-              <h2 className="text-base font-semibold text-slate-900">
-                Resumo das mensagens do chatbot
-              </h2>
+              <h2 className="text-base font-semibold text-slate-900">Resumo do seu briefing</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Dá uma olhada rápida no que você configurou.
+                Dá uma última olhada no que você preencheu antes de enviar.
               </p>
             </div>
 
-            <div className="space-y-4 px-6 py-4 max-h-[60vh] overflow-y-auto">
-              <div>
-                <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Saudação
-                </p>
-                <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-3">
-                  {state.chatbotFlowMode === 'none' ? (
-                    <p className="text-sm text-slate-500">
-                      Você optou por não ter nenhuma mensagem automática de chatbot.
-                    </p>
-                  ) : (
-                    <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
-                      {state.greetingMessage}
-                    </pre>
-                  )}
-                </div>
-              </div>
-              <div>
-                <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Fora do horário
-                </p>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  {!state.offHoursEnabled ? (
-                    <p className="text-sm text-slate-500">
-                      Você optou por não receber uma mensagem automática fora do horário.
-                    </p>
-                  ) : (
-                    <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
-                      {state.offHoursMessage}
-                    </pre>
-                  )}
-                </div>
-              </div>
+            <div className="space-y-1 px-6 py-4 max-h-[60vh] overflow-y-auto">
+              <SummaryRow label="Setores" value={state.sectors.join(', ')} />
+              <SummaryRow
+                label="Usuários"
+                value={
+                  state.users.filter((u) => u.name.trim() && u.email.trim()).length > 0
+                    ? state.users
+                        .filter((u) => u.name.trim() && u.email.trim())
+                        .map((u) => u.name)
+                        .join(', ')
+                    : ''
+                }
+              />
+              <SummaryRow label="Horários" value={scheduleSummary(state.schedule)} />
+              {state.whatsappNumbers.some(Boolean) && (
+                <SummaryRow
+                  label="WhatsApp"
+                  value={`${state.whatsappNumbers.filter(Boolean).length} número(s) informado(s)`}
+                />
+              )}
+              {(cfg?.channels.length ?? 0) > 0 && (
+                <SummaryRow
+                  label="Canais"
+                  value={cfg!.channels.map((c) => CHANNEL_LABELS[c] ?? c).join(', ')}
+                />
+              )}
 
-              <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 px-4 py-3 text-xs text-slate-600">
+              {sections.includes('site') && (
+                <SummaryRow
+                  label="Site"
+                  value={
+                    state.siteGoals.length > 0
+                      ? state.siteGoals.map((g) => SITE_GOAL_OPTIONS.find((o) => o.v === g)?.l ?? g).join(', ')
+                      : ''
+                  }
+                />
+              )}
+
+              <SummaryRow
+                label="Chatbot"
+                value={
+                  state.chatbotFlowMode === 'none'
+                    ? 'Sem mensagem automática'
+                    : state.chatbotFlowMode === 'greeting_only'
+                      ? `Só boas-vindas: "${state.chatbotMenus[0]?.question || '—'}"`
+                      : `Menu de opções (${state.chatbotMenuStyle === 'buttons' ? 'botões' : 'numerado'}): ${
+                          state.chatbotMenus[0]?.options
+                            .split('\n')
+                            .map((o) => o.trim())
+                            .filter(Boolean)
+                            .join(', ') || '—'
+                        }`
+                }
+              />
+              <SummaryRow
+                label="Fora do horário"
+                value={state.offHoursEnabled ? 'Mensagem automática ativada' : 'Sem mensagem automática'}
+              />
+
+              {sections.includes('ia') && (
+                <SummaryRow
+                  label="IA"
+                  value={`Agente ${state.aiAgentName || '—'} — ${
+                    { formal: 'tom formal', casual: 'tom casual', tecnico: 'tom técnico' }[state.aiTone]
+                  }`}
+                />
+              )}
+              {sections.includes('automacao_externa') && (
+                <SummaryRow
+                  label="Automação externa"
+                  value={state.externalAutomationInfo.trim() ? 'Informações preenchidas' : ''}
+                />
+              )}
+              <SummaryRow label="Observações" value={state.extraNotes.trim()} />
+
+              <div className="mt-3 rounded-xl border-2 border-[#4F8EF7]/30 bg-[#4F8EF7]/5 px-4 py-4 text-sm font-medium text-slate-700">
                 💬 Fique tranquilo(a): você tem nosso suporte durante todo o processo. Se algo não
                 ficar do jeito que você imaginou, é só nos chamar — durante a entrega ainda dá tempo
-                de ajustar ou personalizar qualquer mensagem.
+                de ajustar ou personalizar qualquer coisa.
               </div>
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4">
               <button
                 type="button"
-                onClick={() => setChatbotConfirmOpen(false)}
+                onClick={() => setReviewOpen(false)}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 Voltar e editar
@@ -2504,12 +2545,13 @@ export function BriefingPublicPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setChatbotConfirmOpen(false)
+                  setReviewOpen(false)
                   advanceSection()
                 }}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-5 py-2 text-sm font-medium text-white hover:bg-[#6BA0F9]"
+                disabled={submitting}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-5 py-2 text-sm font-medium text-white hover:bg-[#6BA0F9] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Check className="h-4 w-4" /> Confirmar e continuar
+                <Check className="h-4 w-4" /> Confirmar e enviar
               </button>
             </div>
           </div>
@@ -2725,6 +2767,17 @@ function ChatbotMenuPreview({
 // formulário público pra explicar conceitos sem poluir a tela com texto fixo. ──
 /** Botão "Usar exemplo" do menu principal — oferece um exemplo fictício ou um
  * exemplo montado com os setores já cadastrados pelo cliente na Seção 1. */
+/** Uma linha do resumo geral antes do envio — some sozinha se não tiver valor. */
+function SummaryRow({ label, value }: { label: string; value?: string }) {
+  if (!value?.trim()) return null
+  return (
+    <div className="grid grid-cols-3 gap-3 border-b border-slate-100 py-2 text-xs last:border-b-0">
+      <span className="col-span-1 font-medium text-slate-500">{label}</span>
+      <span className="col-span-2 whitespace-pre-wrap text-slate-700">{value}</span>
+    </div>
+  )
+}
+
 function ExampleMenuButton({
   sectors,
   onPick,
@@ -2976,61 +3029,18 @@ function BriefingErrorPage() {
   )
 }
 
-function BriefingSuccessPage({
-  company,
-  greeting,
-  offHours,
-}: {
-  company: string
-  greeting: string
-  offHours: string
-}) {
+function BriefingSuccessPage() {
   return (
-    <div className="min-h-screen p-6" style={{ background: BRIEFING_GRADIENT }}>
-      <div className="mx-auto max-w-2xl space-y-6">
-        {/* Confirmação */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
-          <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-green-50 text-green-500">
-            <Check className="h-7 w-7" />
+    <div className="min-h-screen w-full px-4 py-10" style={{ background: BRIEFING_GRADIENT }}>
+      <div className="mx-auto max-w-2xl">
+        <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
+          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-green-100 text-3xl">
+            ✅
           </div>
-          <h1 className="text-lg font-semibold text-slate-900">Recebemos suas informações!</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Obrigado por preencher o briefing, {company || 'cliente'}. Nossa equipe revisará
-            tudo e entrará em contato em breve.
-          </p>
-        </div>
-
-        {/* Mensagens enviadas */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
-          <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-[#4F8EF7]" />
-            Mensagens configuradas
-          </h2>
-
-          <div>
-            <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">
-              Saudação
-            </p>
-            <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-4">
-              <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
-                {greeting}
-              </pre>
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wider">
-              Fora do horário de atendimento
-            </p>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
-                {offHours}
-              </pre>
-            </div>
-          </div>
-
-          <p className="text-xs text-slate-400">
-            Essas mensagens serão configuradas pelo nosso time durante a implementação. Você poderá personalizá-las depois.
+          <h1 className="text-2xl font-bold text-slate-800">Briefing enviado!</h1>
+          <p className="mt-3 text-sm text-slate-500">
+            Recebemos seus dados. Vamos iniciar as configurações e, em breve, nosso time entra em
+            contato. Obrigado! 🚀
           </p>
         </div>
       </div>

@@ -143,6 +143,17 @@ export interface BriefingData {
   aiExternalAuth?: string
   aiExternalExamples?: string
 
+  // Briefing do site (quando automationTypes inclui 'site')
+  siteCompanyName?: string
+  siteSocialMedia?: string
+  siteGoals?: SiteGoal[]
+  siteGoalsOther?: string
+  siteTargetAudience?: string
+  siteHasLogo?: boolean
+  siteColors?: string
+  siteHasDomain?: boolean
+  siteDomain?: string
+
   extraNotes?: string
 
   /** Respostas de perguntas de texto livre novas adicionadas pelo admin (ver
@@ -204,7 +215,15 @@ export interface ChatbotFlowBriefing {
 }
 
 export type ConnectionType = 'api_oficial' | 'api_comum'
-export type AutomationType = 'chatbot' | 'ia_basica' | 'ia_avancada'
+export type AutomationType = 'chatbot' | 'ia_basica' | 'ia_avancada' | 'site'
+
+export type SiteGoal =
+  | 'apresentar_empresa'
+  | 'vender_produtos'
+  | 'gerar_contatos'
+  | 'divulgar_portfolio'
+  | 'agendar_servicos'
+  | 'outros'
 export type BriefingChannel = 'whatsapp' | 'instagram' | 'messenger' | 'wavoip' | 'olx' | 'mercadolivre' | 'email'
 
 export interface BriefingConfig {

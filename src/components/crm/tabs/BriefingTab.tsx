@@ -69,7 +69,17 @@ import type {
   BriefingUserRole,
   BriefingScheduleSlot,
   AiTone,
+  SiteGoal,
 } from '@/types/client'
+
+const SITE_GOAL_LABELS: Record<SiteGoal, string> = {
+  apresentar_empresa: 'Apresentar empresa',
+  vender_produtos: 'Vender produtos',
+  gerar_contatos: 'Gerar contatos',
+  divulgar_portfolio: 'Divulgar portfólio',
+  agendar_servicos: 'Agendar serviços',
+  outros: 'Outros',
+}
 
 type SubView = 'briefing' | 'automation' | 'sessao'
 
@@ -90,6 +100,7 @@ const AUTOMATION_OPTIONS: { value: AutomationType; label: string }[] = [
   { value: 'chatbot', label: 'Chatbot' },
   { value: 'ia_basica', label: 'IA Básica' },
   { value: 'ia_avancada', label: 'IA Avançada' },
+  { value: 'site', label: 'Site' },
 ]
 
 const CHANNEL_OPTIONS: { value: BriefingChannel; label: string }[] = [
@@ -1845,6 +1856,34 @@ function BriefingViewer({
           )}
           {data.departments.length > 0 && (
             <Row k="Departamentos" v={data.departments.join(', ')} />
+          )}
+        </Accordion>
+      )}
+
+      {(data.siteCompanyName ||
+        data.siteSocialMedia ||
+        (data.siteGoals?.length ?? 0) > 0 ||
+        data.siteTargetAudience ||
+        data.siteHasLogo !== undefined ||
+        data.siteColors ||
+        data.siteHasDomain !== undefined) && (
+        <Accordion title="Site" defaultOpen>
+          <Row k="Nome da empresa" v={data.siteCompanyName} />
+          <Row k="Redes sociais (referência)" v={data.siteSocialMedia} />
+          {(data.siteGoals?.length ?? 0) > 0 && (
+            <Row k="Objetivo do site" v={data.siteGoals!.map((g) => SITE_GOAL_LABELS[g] ?? g).join(', ')} />
+          )}
+          {data.siteGoalsOther && <Row k="Outro objetivo" v={data.siteGoalsOther} />}
+          <Row k="Público-alvo" v={data.siteTargetAudience} />
+          {data.siteHasLogo !== undefined && (
+            <Row k="Já tem logo?" v={data.siteHasLogo ? 'Sim (cliente vai enviar pelo WhatsApp)' : 'Não'} />
+          )}
+          <Row k="Cores da marca" v={data.siteColors} />
+          {data.siteHasDomain !== undefined && (
+            <Row
+              k="Já tem domínio?"
+              v={data.siteHasDomain ? data.siteDomain || 'Sim' : 'Não — nosso time avalia domínios disponíveis'}
+            />
           )}
         </Accordion>
       )}

@@ -27,6 +27,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import logoNx from '@/assets/logo-nx.jpg'
 import { api } from '@/services/api'
 import {
   fetchPublicBriefingTemplate,
@@ -42,9 +43,23 @@ import type {
   BriefingUser,
   BriefingUserRole,
   AiTone,
+  SiteGoal,
 } from '@/types/client'
 
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+
+// Mesmo gradiente da Ficha de cadastro (FichaPublicPage) — identidade visual
+// consistente entre os formulários públicos.
+const BRIEFING_GRADIENT = 'linear-gradient(135deg, #1E1B6B 0%, #2B2FB5 55%, #2F5BFF 100%)'
+
+const SITE_GOAL_OPTIONS: { v: SiteGoal; l: string }[] = [
+  { v: 'apresentar_empresa', l: 'Apresentar empresa' },
+  { v: 'vender_produtos', l: 'Vender produtos' },
+  { v: 'gerar_contatos', l: 'Gerar contatos' },
+  { v: 'divulgar_portfolio', l: 'Divulgar portfólio' },
+  { v: 'agendar_servicos', l: 'Agendar serviços' },
+  { v: 'outros', l: 'Outros' },
+]
 
 // Quantidade de "caixinhas" pra números de WhatsApp — configurável por cliente
 // (briefingConfig.maxWhatsappNumbers, default 6). Caixinhas vazias não entram no envio.
@@ -101,6 +116,7 @@ type SectionKey =
   | 'usuarios'
   | 'horarios'
   | 'integracoes'
+  | 'site'
   | 'chatbot'
   | 'ia'
   | 'automacao_externa'
@@ -112,6 +128,7 @@ function buildSections(cfg: BriefingConfig | null): SectionKey[] {
     sections.push('chatbot', 'ia', 'observacoes')
     return sections
   }
+  if (cfg.automationTypes.includes('site')) sections.push('site')
   if (cfg.automationTypes.includes('chatbot')) sections.push('chatbot')
   if (cfg.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada'))
     sections.push('ia')
@@ -202,6 +219,14 @@ function validateBriefing(
       errs.push({ section: 'integracoes', key: 'facebookEmail', message: 'Informe o e-mail do Facebook/Meta.' })
     if (!state.facebookPassword.trim())
       errs.push({ section: 'integracoes', key: 'facebookPassword', message: 'Informe a senha do Facebook/Meta.' })
+  }
+
+  // ── Condicional: Site ──
+  if (sections.includes('site')) {
+    if (state.siteGoals.length === 0)
+      errs.push({ section: 'site', key: 'siteGoals', message: 'Selecione ao menos um objetivo para o site.' })
+    if (!state.siteTargetAudience.trim())
+      errs.push({ section: 'site', key: 'siteTargetAudience', message: 'Descreva o público-alvo do site.' })
   }
 
   // ── Condicional: IA (básica ou avançada) ──
@@ -338,8 +363,7 @@ interface BriefingFormState {
   // Preferência de interação do menu: opções digitadas por número, ou botões clicáveis.
   chatbotMenuStyle: 'numbered' | 'buttons'
   chatbotMenus: { question: string; options: string; parentOption?: string }[] // options: uma por linha
-  chatbotCollect: string // uma por linha
-  chatbotTransfers: { option: string; department: string }[]
+  // Mensagem de encaminhamento pro setor escolhido — {setor} vira o nome do setor.
   chatbotClosing: string
   useAI: boolean
   aiTone: AiTone
@@ -372,6 +396,16 @@ interface BriefingFormState {
   aiExternalWhatToQuery: string
   aiExternalAuth: string
   aiExternalExamples: string
+  // Briefing do site (só aparece quando o admin habilita 'site' na automação)
+  siteCompanyName: string
+  siteSocialMedia: string
+  siteGoals: SiteGoal[]
+  siteGoalsOther: string
+  siteTargetAudience: string
+  siteHasLogo: boolean | null
+  siteColors: string
+  siteHasDomain: boolean | null
+  siteDomain: string
   externalAutomationInfo: string
   extraNotes: string
   // Respostas das perguntas de texto livre novas, adicionadas pelo admin (ver
@@ -412,9 +446,7 @@ function initialFormState(
     chatbotFlowMode: 'menu',
     chatbotMenuStyle: 'numbered',
     chatbotMenus: [{ question: '', options: '' }],
-    chatbotCollect: '',
-    chatbotTransfers: [],
-    chatbotClosing: '',
+    chatbotClosing: 'Perfeito! Já estou te transferindo para o time de {setor}. Um atendente vai continuar por aqui. 👍',
     useAI: false,
     aiTone: 'casual',
     aiAgentName: '',
@@ -444,6 +476,15 @@ function initialFormState(
     aiExternalWhatToQuery: '',
     aiExternalAuth: '',
     aiExternalExamples: '',
+    siteCompanyName: company,
+    siteSocialMedia: '',
+    siteGoals: [],
+    siteGoalsOther: '',
+    siteTargetAudience: '',
+    siteHasLogo: null,
+    siteColors: '',
+    siteHasDomain: null,
+    siteDomain: '',
     externalAutomationInfo: '',
     extraNotes: '',
     customAnswers: {},
@@ -530,8 +571,6 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
             parentOption: m.parentOption,
           }))
         : base.chatbotMenus,
-    chatbotCollect: (bd.chatbotFlow?.collectFields ?? []).join('\n') || base.chatbotCollect,
-    chatbotTransfers: bd.chatbotFlow?.transfers ?? base.chatbotTransfers,
     chatbotClosing: bd.chatbotFlow?.closingMessage ?? base.chatbotClosing,
     useAI: bd.useAI ?? base.useAI,
     aiTone: bd.aiTone ?? base.aiTone,
@@ -562,6 +601,15 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     aiExternalWhatToQuery: bd.aiExternalWhatToQuery ?? base.aiExternalWhatToQuery,
     aiExternalAuth: bd.aiExternalAuth ?? base.aiExternalAuth,
     aiExternalExamples: bd.aiExternalExamples ?? base.aiExternalExamples,
+    siteCompanyName: bd.siteCompanyName ?? base.siteCompanyName,
+    siteSocialMedia: bd.siteSocialMedia ?? base.siteSocialMedia,
+    siteGoals: bd.siteGoals ?? base.siteGoals,
+    siteGoalsOther: bd.siteGoalsOther ?? base.siteGoalsOther,
+    siteTargetAudience: bd.siteTargetAudience ?? base.siteTargetAudience,
+    siteHasLogo: bd.siteHasLogo ?? base.siteHasLogo,
+    siteColors: bd.siteColors ?? base.siteColors,
+    siteHasDomain: bd.siteHasDomain ?? base.siteHasDomain,
+    siteDomain: bd.siteDomain ?? base.siteDomain,
     externalAutomationInfo: bd.externalAutomationInfo ?? base.externalAutomationInfo,
     extraNotes: bd.extraNotes ?? base.extraNotes,
     customAnswers: bd.customAnswers ?? base.customAnswers,
@@ -588,6 +636,9 @@ export function BriefingPublicPage() {
   const [submittedData, setSubmittedData] = React.useState<{ greeting: string; offHours: string } | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const [chatbotConfirmOpen, setChatbotConfirmOpen] = React.useState(false)
+  // Tela de boas-vindas antes do wizard — só aparece de fato num começo novo (se já
+  // existe um rascunho salvo, o cliente já passou por ela e volta direto pro formulário).
+  const [showWelcome, setShowWelcome] = React.useState(true)
   // Erros de validação por campo (chave -> mensagem). Preenchido ao avançar/enviar.
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const clearError = React.useCallback((key: string) => {
@@ -625,6 +676,7 @@ export function BriefingPublicPage() {
         const whatsappSlots = row.briefing_config?.maxWhatsappNumbers ?? DEFAULT_WHATSAPP_NUMBER_SLOTS
         const base = initialFormState(row.company, whatsappSlots)
         const draft = loadDraft(token)
+        setShowWelcome(!draft)
         if (draft) {
           // Rascunhos salvos antes da mudança pra "caixinhas" guardavam
           // whatsappNumbers como texto único — normaliza pro formato em array.
@@ -725,7 +777,10 @@ export function BriefingPublicPage() {
 
   if (client === undefined) {
     return (
-      <div className="grid min-h-screen place-items-center bg-slate-50 text-sm text-slate-500">
+      <div
+        className="grid min-h-screen place-items-center text-sm text-white"
+        style={{ background: BRIEFING_GRADIENT }}
+      >
         Carregando…
       </div>
     )
@@ -739,6 +794,7 @@ export function BriefingPublicPage() {
       offHours={submittedData.offHours}
     />
   )
+  if (showWelcome) return <BriefingWelcomePage onStart={() => setShowWelcome(false)} />
 
   // Leva o usuário até a seção do primeiro erro, marca os campos e avisa.
   const focusErrors = (problems: BriefingFieldError[]) => {
@@ -811,13 +867,8 @@ export function BriefingPublicPage() {
                           .filter(Boolean),
                       }))
                       .filter((m) => m.question || m.options.length > 0),
-            collectFields: state.chatbotCollect
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean),
-            transfers: state.chatbotTransfers
-              .map((t) => ({ option: t.option.trim(), department: t.department.trim() }))
-              .filter((t) => t.option && t.department),
+            collectFields: [],
+            transfers: [],
             closingMessage: state.chatbotClosing.trim(),
           }
         : undefined,
@@ -863,6 +914,15 @@ export function BriefingPublicPage() {
       wavoipInfo: state.wavoipInfo.trim() || undefined,
       emailConfig: state.emailConfig.trim() || undefined,
       channelAccess: cleanChannelAccess(state.channelAccess),
+      siteCompanyName: state.siteCompanyName.trim() || undefined,
+      siteSocialMedia: state.siteSocialMedia.trim() || undefined,
+      siteGoals: state.siteGoals.length > 0 ? state.siteGoals : undefined,
+      siteGoalsOther: state.siteGoals.includes('outros') ? state.siteGoalsOther.trim() || undefined : undefined,
+      siteTargetAudience: state.siteTargetAudience.trim() || undefined,
+      siteHasLogo: state.siteHasLogo ?? undefined,
+      siteColors: state.siteColors.trim() || undefined,
+      siteHasDomain: state.siteHasDomain ?? undefined,
+      siteDomain: state.siteHasDomain ? state.siteDomain.trim() || undefined : undefined,
       externalAutomationInfo: state.externalAutomationInfo.trim() || undefined,
       extraNotes: state.extraNotes.trim() || undefined,
       customAnswers:
@@ -940,7 +1000,7 @@ export function BriefingPublicPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen text-slate-900" style={{ background: BRIEFING_GRADIENT }}>
       <BriefingHeader companyName={client.company} />
 
       <main className="mx-auto max-w-5xl px-4 pb-32 pt-8 sm:px-6">
@@ -1241,7 +1301,7 @@ export function BriefingPublicPage() {
                     <PersonalizavelBadge />
                   </div>
                 ) : (
-                  <div className="mx-auto flex aspect-[9/19.5] max-w-[280px] items-center justify-center rounded-[2.25rem] border-2 border-dashed border-slate-300 bg-slate-50 px-6 text-center text-xs text-slate-400">
+                  <div className="mx-auto flex aspect-[9/19.5] max-w-[300px] items-center justify-center rounded-[2.25rem] border-2 border-dashed border-slate-300 bg-slate-50 px-6 text-center text-xs text-slate-400">
                     Nenhuma mensagem automática será enviada fora do horário.
                   </div>
                 )}
@@ -1531,6 +1591,164 @@ export function BriefingPublicPage() {
           </SectionBlock>
         )}
 
+        {/* ── Seção: Site ── */}
+        {currentKey === 'site' && (
+          <SectionBlock
+            number={section + 1}
+            total={totalSections}
+            title="Site"
+            icon={<Globe className="h-5 w-5 text-[#4F8EF7]" />}
+            description="Algumas informações pra gente já começar a pensar no site."
+          >
+            <div className="space-y-5">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={L('Nome da empresa (como deve aparecer no site)')}>
+                    <PlainInput
+                      value={state.siteCompanyName}
+                      onChange={(v) => setState({ ...state, siteCompanyName: v })}
+                      placeholder="Ex: Mídia Fachadas"
+                    />
+                  </Field>
+                  <Field label={L('Redes sociais (nos dá uma ideia do que vocês gostam)')}>
+                    <PlainInput
+                      value={state.siteSocialMedia}
+                      onChange={(v) => setState({ ...state, siteSocialMedia: v })}
+                      placeholder="Ex: Instagram @suaempresa"
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  Objetivo do site *
+                </label>
+                <p className="mb-2 text-xs text-slate-500">Pode marcar mais de um.</p>
+                <div className="flex flex-wrap gap-2">
+                  {SITE_GOAL_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => {
+                        const next = state.siteGoals.includes(opt.v)
+                          ? state.siteGoals.filter((g) => g !== opt.v)
+                          : [...state.siteGoals, opt.v]
+                        setState({ ...state, siteGoals: next })
+                        clearError('siteGoals')
+                      }}
+                      className={cn(
+                        'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+                        state.siteGoals.includes(opt.v)
+                          ? 'border-[#4F8EF7] bg-[#4F8EF7]/10 text-[#4F8EF7]'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300',
+                      )}
+                    >
+                      {opt.l}
+                    </button>
+                  ))}
+                </div>
+                {state.siteGoals.includes('outros') && (
+                  <PlainInput
+                    value={state.siteGoalsOther}
+                    onChange={(v) => setState({ ...state, siteGoalsOther: v })}
+                    placeholder="Qual outro objetivo?"
+                    className="mt-2"
+                  />
+                )}
+                {errors.siteGoals && (
+                  <p className="mt-1 text-xs font-medium text-rose-600">{errors.siteGoals}</p>
+                )}
+              </div>
+
+              <Field label={L('Público-alvo — quem são seus clientes?')}>
+                <PlainTextarea
+                  value={state.siteTargetAudience}
+                  onChange={(v) => {
+                    setState({ ...state, siteTargetAudience: v })
+                    clearError('siteTargetAudience')
+                  }}
+                  rows={3}
+                  placeholder="Ex: mulheres de 25 a 45 anos, região metropolitana de São Paulo, interessadas em estética — ou &quot;todos&quot;, se não tiver um público específico"
+                />
+                {errors.siteTargetAudience && (
+                  <p className="mt-1 text-xs font-medium text-rose-600">{errors.siteTargetAudience}</p>
+                )}
+              </Field>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Identidade visual</h3>
+                <div className="space-y-3">
+                  <div>
+                    <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                      Já tem logo?
+                    </span>
+                    <div className="flex items-center gap-3">
+                      {[{ v: true, l: 'Sim' }, { v: false, l: 'Não' }].map(({ v, l }) => (
+                        <label key={String(v)} className="inline-flex items-center gap-1.5 cursor-pointer text-sm">
+                          <input
+                            type="radio"
+                            checked={state.siteHasLogo === v}
+                            onChange={() => setState({ ...state, siteHasLogo: v })}
+                            className="h-4 w-4 accent-[#4F8EF7]"
+                          />
+                          {l}
+                        </label>
+                      ))}
+                    </div>
+                    {state.siteHasLogo && (
+                      <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        📎 Manda a logo pra gente pelo WhatsApp da nossa equipe — aqui no formulário não
+                        dá pra anexar arquivo.
+                      </p>
+                    )}
+                  </div>
+                  <Field label={L('Cores da marca/site (se já tiver)')}>
+                    <PlainInput
+                      value={state.siteColors}
+                      onChange={(v) => setState({ ...state, siteColors: v })}
+                      placeholder="Ex: azul e branco, ou os códigos das cores se souber"
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Domínio</h3>
+                <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Já tem um domínio registrado?
+                </span>
+                <div className="flex items-center gap-3">
+                  {[{ v: true, l: 'Sim' }, { v: false, l: 'Não' }].map(({ v, l }) => (
+                    <label key={String(v)} className="inline-flex items-center gap-1.5 cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        checked={state.siteHasDomain === v}
+                        onChange={() => setState({ ...state, siteHasDomain: v })}
+                        className="h-4 w-4 accent-[#4F8EF7]"
+                      />
+                      {l}
+                    </label>
+                  ))}
+                </div>
+                {state.siteHasDomain === true && (
+                  <PlainInput
+                    value={state.siteDomain}
+                    onChange={(v) => setState({ ...state, siteDomain: v })}
+                    placeholder="Ex: suaempresa.com.br"
+                    className="mt-2"
+                  />
+                )}
+                {state.siteHasDomain === false && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Sem problemas — nossa equipe avalia domínios disponíveis pra vocês.
+                  </p>
+                )}
+              </div>
+            </div>
+          </SectionBlock>
+        )}
+
         {/* ── Seção: Chatbot ── */}
         {currentKey === 'chatbot' && (
           <SectionBlock
@@ -1608,7 +1826,7 @@ export function BriefingPublicPage() {
                     )}
 
                     {state.chatbotFlowMode === 'greeting_only' && (
-                      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
+                      <div className="grid grid-cols-1 gap-6 lg:max-w-3xl lg:grid-cols-[300px_1fr] lg:items-start">
                         <div className="lg:sticky lg:top-4">
                           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                             <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
@@ -1651,7 +1869,7 @@ export function BriefingPublicPage() {
                       adicionados no fluxo. Ao escolher uma opção do menu, o cliente é transferido direto para o
                       setor responsável.
                     </p>
-                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
+                    <div className="grid grid-cols-1 gap-6 lg:max-w-3xl lg:grid-cols-[300px_1fr] lg:items-start">
                       {/* Coluna esquerda: prévia ao vivo do menu principal, atualiza
                           conforme o cliente digita ou usa "Usar exemplo". */}
                       <div className="lg:sticky lg:top-4">
@@ -1686,6 +1904,7 @@ export function BriefingPublicPage() {
                             <ChatbotMenuPreview
                               menu={state.chatbotMenus[0] ?? { question: '', options: '' }}
                               style={state.chatbotMenuStyle}
+                              closingMessage={state.chatbotClosing}
                             />
                           </WhatsAppMockup>
                           <PersonalizavelBadge />
@@ -1801,75 +2020,17 @@ export function BriefingPublicPage() {
                     )}
                   </div>
 
-                  <Field label={L('Dados que o bot deve coletar antes de transferir (um por linha)')}>
-                    <PlainTextarea
-                      value={state.chatbotCollect}
-                      onChange={(v) => setState({ ...state, chatbotCollect: v })}
-                      rows={3}
-                      placeholder={'Ex: Nome\nCNPJ/CPF\nProduto e quantidade'}
-                    />
-                  </Field>
-
-                  {/* Transferências dinâmicas */}
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600">
-                      Transferências (opção → setor que atende)
-                    </label>
-                    <div className="space-y-2">
-                      {state.chatbotTransfers.map((t, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <PlainInput
-                            value={t.option}
-                            onChange={(v) => {
-                              const arr = [...state.chatbotTransfers]
-                              arr[i] = { ...arr[i], option: v }
-                              setState({ ...state, chatbotTransfers: arr })
-                            }}
-                            placeholder="Opção (ex: Falar com atendente)"
-                            className="flex-1"
-                          />
-                          <span className="text-slate-400">→</span>
-                          <PlainInput
-                            value={t.department}
-                            onChange={(v) => {
-                              const arr = [...state.chatbotTransfers]
-                              arr[i] = { ...arr[i], department: v }
-                              setState({ ...state, chatbotTransfers: arr })
-                            }}
-                            placeholder="Setor (ex: Comercial)"
-                            className="flex-1"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setState({ ...state, chatbotTransfers: state.chatbotTransfers.filter((_, x) => x !== i) })
-                            }
-                            className="rounded p-1 text-rose-500 hover:bg-rose-50"
-                            aria-label="Remover"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setState({ ...state, chatbotTransfers: [...state.chatbotTransfers, { option: '', department: '' }] })
-                      }
-                      className="mt-2 inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
-                    >
-                      <Plus className="h-4 w-4" /> Adicionar transferência
-                    </button>
-                  </div>
-
-                  <Field label={L('Mensagem de encerramento')}>
+                  <Field label={L('Mensagem de encaminhamento para o setor')}>
                     <PlainTextarea
                       value={state.chatbotClosing}
                       onChange={(v) => setState({ ...state, chatbotClosing: v })}
                       rows={2}
-                      placeholder="Ex: Obrigado! Em instantes um atendente falará com você."
+                      placeholder="Ex: Perfeito! Já estou te transferindo para o time de {setor}. Um atendente vai continuar por aqui. 👍"
                     />
+                    <p className="mt-1 text-xs text-slate-400">
+                      Use <code className="rounded bg-slate-100 px-1">{'{setor}'}</code> onde quiser que
+                      entre o nome do setor escolhido pelo cliente.
+                    </p>
                   </Field>
                 </div>
               </div>
@@ -2286,9 +2447,15 @@ export function BriefingPublicPage() {
                   Saudação
                 </p>
                 <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-3">
-                  <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
-                    {state.greetingMessage}
-                  </pre>
+                  {state.chatbotFlowMode === 'none' ? (
+                    <p className="text-sm text-slate-500">
+                      Você optou por não ter nenhuma mensagem automática de chatbot.
+                    </p>
+                  ) : (
+                    <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                      {state.greetingMessage}
+                    </pre>
+                  )}
                 </div>
               </div>
               <div>
@@ -2296,9 +2463,15 @@ export function BriefingPublicPage() {
                   Fora do horário
                 </p>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
-                    {state.offHoursMessage}
-                  </pre>
+                  {!state.offHoursEnabled ? (
+                    <p className="text-sm text-slate-500">
+                      Você optou por não receber uma mensagem automática fora do horário.
+                    </p>
+                  ) : (
+                    <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                      {state.offHoursMessage}
+                    </pre>
+                  )}
                 </div>
               </div>
 
@@ -2397,7 +2570,7 @@ function PersonalizavelBadge() {
 // "Fora do horário" ficar mais próxima do que o cliente final vai realmente ver. ──
 function WhatsAppMockup({ contactName, children }: { contactName: string; children: React.ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-[280px]">
+    <div className="mx-auto w-full max-w-[300px]">
       <div className="relative rounded-[2.25rem] bg-slate-900 p-[6px] shadow-xl">
         <div className="absolute left-1/2 top-[6px] z-10 h-5 w-24 -translate-x-1/2 rounded-b-2xl bg-slate-900" />
         {/* Proporção de tela de iPhone (9:19.5) — a mensagem rola dentro da área de
@@ -2494,15 +2667,20 @@ function WaButtonOptions({ options }: { options: string[] }) {
 function ChatbotMenuPreview({
   menu,
   style,
+  closingMessage,
 }: {
   menu: { question: string; options: string }
   style: 'numbered' | 'buttons'
+  closingMessage: string
 }) {
   const typedOptions = menu.options.split('\n').map((o) => o.trim()).filter(Boolean)
   const options = typedOptions.length > 0 ? typedOptions : ['Comercial', 'Suporte', 'Financeiro']
   const question = menu.question.trim() || 'Olá! Como podemos te ajudar hoje?'
   const first = options[0]
-  const confirmation = `Perfeito! Já estou te transferindo para o time de ${first}. Um atendente vai continuar por aqui. 👍`
+  const confirmation = (closingMessage.trim() || 'Perfeito! Já estou te transferindo para o time de {setor}. Um atendente vai continuar por aqui. 👍').replace(
+    /\{setor\}/g,
+    first,
+  )
 
   if (style === 'buttons') {
     return (
@@ -2647,9 +2825,7 @@ function BriefingHeader({ companyName }: { companyName: string }) {
     <header className="border-b border-slate-200 bg-white shadow-sm">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#4F8EF7] text-[11px] font-extrabold text-white">
-            NX
-          </div>
+          <img src={logoNx} alt="Grupo NX Digital" className="h-9 w-9 rounded-lg object-cover shadow-sm" />
           <div className="leading-tight">
             <p className="text-sm font-semibold text-slate-900">Grupo NX Digital</p>
             <p className="text-xs text-slate-400">Briefing de onboarding</p>
@@ -2663,9 +2839,48 @@ function BriefingHeader({ companyName }: { companyName: string }) {
   )
 }
 
+/** Tela de boas-vindas antes do wizard — mesmo estilo/gradiente da Ficha de cadastro
+ * (FichaPublicPage), avisando o tempo médio de preenchimento e reforçando que esses
+ * dados viram a base de todo o atendimento configurado depois. */
+function BriefingWelcomePage({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="min-h-screen w-full px-4 py-10" style={{ background: BRIEFING_GRADIENT }}>
+      <div className="mx-auto max-w-2xl">
+        <div className="rounded-2xl bg-white p-8 shadow-xl">
+          <img src={logoNx} alt="Grupo NX Digital" className="mb-4 h-14 w-14 rounded-2xl object-cover shadow-sm" />
+          <h1 className="text-3xl font-bold text-slate-800">Boas-vindas ao seu Briefing</h1>
+          <p className="mt-4 text-sm font-semibold text-slate-700">
+            Esse formulário leva, em média, de 5 a 15 minutos para ser preenchido. 🕐
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-slate-500">
+            Preencha com calma. Se precisar parar no meio e continuar depois, sem problema — suas
+            respostas ficam salvas automaticamente neste link, e você retoma de onde parou.
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-slate-500">
+            As informações que você preenche aqui vão ser a base de todo o atendimento que vamos
+            configurar pra você — quanto mais completo e cuidadoso for o preenchimento, melhor vai
+            ficar o resultado final.
+          </p>
+          <p className="mt-3 text-sm font-semibold text-slate-700">Vamos juntos!</p>
+          <button
+            type="button"
+            onClick={onStart}
+            className="mt-6 rounded-lg bg-[#2F5BFF] px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8]"
+          >
+            Iniciar briefing
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BriefingErrorPage() {
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center">
+    <div
+      className="grid min-h-screen place-items-center p-6 text-center"
+      style={{ background: BRIEFING_GRADIENT }}
+    >
       <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-xl bg-rose-50 text-rose-500">
           <Trash2 className="h-6 w-6" />
@@ -2690,7 +2905,7 @@ function BriefingSuccessPage({
   offHours: string
 }) {
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
+    <div className="min-h-screen p-6" style={{ background: BRIEFING_GRADIENT }}>
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Confirmação */}
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
@@ -2963,5 +3178,4 @@ function MultiSelectBar({
 }
 
 // Unused-import safety net
-export const _globe = Globe
 export const _chevronDown = ChevronDown

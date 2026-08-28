@@ -1816,7 +1816,11 @@ function BriefingViewer({
           )}
           {data.mainFlow && <Row k="Fluxo principal" v={data.mainFlow} />}
           <Row k="Saudação" v={data.greetingMessage} />
-          <Row k="Fora do horário" v={data.offHoursMessage} />
+          {data.offHoursEnabled === false ? (
+            <Row k="Fora do horário" v="Cliente optou por não enviar mensagem automática" />
+          ) : (
+            <Row k="Fora do horário" v={data.offHoursMessage} />
+          )}
           {data.departments.length > 0 && (
             <Row k="Departamentos" v={data.departments.join(', ')} />
           )}

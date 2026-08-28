@@ -103,6 +103,8 @@ export interface BriefingData {
   chatbotFlow?: ChatbotFlowBriefing
   greetingMessage: string
   offHoursMessage: string
+  /** false = cliente optou por NÃO enviar mensagem automática fora do horário. Default true. */
+  offHoursEnabled?: boolean
   departments: string[]
 
   useAI: boolean

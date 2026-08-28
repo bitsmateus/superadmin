@@ -281,6 +281,7 @@ interface BriefingFormState {
   channelAccess: Record<string, { email?: string; password?: string; notes?: string }>
   greetingMessage: string
   offHoursMessage: string
+  offHoursEnabled: boolean
   greetingEditing: boolean
   greetingGenerated: boolean
   offHoursEditing: boolean
@@ -349,6 +350,7 @@ function initialFormState(company: string): BriefingFormState {
     channelAccess: {},
     greetingMessage: buildGreeting(company, []),
     offHoursMessage: buildOffHours(company),
+    offHoursEnabled: true,
     greetingEditing: false,
     greetingGenerated: false,
     offHoursEditing: false,
@@ -457,6 +459,7 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     channelAccess: bd.channelAccess ?? base.channelAccess,
     greetingMessage: bd.greetingMessage || base.greetingMessage,
     offHoursMessage: bd.offHoursMessage || base.offHoursMessage,
+    offHoursEnabled: bd.offHoursEnabled ?? base.offHoursEnabled,
     chatbotDescription: bd.chatbotFlow?.description ?? base.chatbotDescription,
     chatbotMenus:
       bd.chatbotFlow?.menus && bd.chatbotFlow.menus.length > 0
@@ -736,7 +739,8 @@ export function BriefingPublicPage() {
           }
         : undefined,
       greetingMessage: state.greetingMessage.trim(),
-      offHoursMessage: state.offHoursMessage.trim(),
+      offHoursMessage: state.offHoursEnabled ? state.offHoursMessage.trim() : '',
+      offHoursEnabled: state.offHoursEnabled,
       departments: state.sectors,
       useAI: aiEnabled,
       aiTone: aiEnabled ? state.aiTone : undefined,
@@ -1207,6 +1211,70 @@ export function BriefingPublicPage() {
                   />
                 </Field>
               </div>
+
+              {/* Mensagem automática fora do horário — ligada aos dias/horas acima */}
+              <div className="mt-4 max-w-sm">
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-xs font-medium text-slate-600">
+                    Mensagem automática fora do horário
+                  </label>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    Demonstrativo
+                  </span>
+                </div>
+                <label className="mb-3 flex items-start gap-2 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={!state.offHoursEnabled}
+                    onChange={(e) => setState({ ...state, offHoursEnabled: !e.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#4F8EF7]"
+                  />
+                  Não quero que meus clientes recebam uma mensagem automática fora do horário de
+                  atendimento.
+                </label>
+
+                {!state.offHoursEnabled ? (
+                  <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-xs text-slate-400">
+                    Ok — nenhuma mensagem automática será enviada fora do horário.
+                  </p>
+                ) : !state.offHoursEditing ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
+                      {state.offHoursMessage}
+                    </WhatsAppMockup>
+                    <div className="mt-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setState({ ...state, offHoursEditing: true })}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
+                      >
+                        Personalizar mensagem
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <PlainTextarea
+                      value={state.offHoursMessage}
+                      onChange={(v) => setState({ ...state, offHoursMessage: v })}
+                      rows={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setState({
+                          ...state,
+                          offHoursEditing: false,
+                          offHoursMessage: buildOffHours(client.company),
+                        })
+                      }}
+                      className="mt-2 text-xs text-[#4F8EF7] hover:underline"
+                    >
+                      Restaurar mensagem padrão
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </SectionBlock>
         )}
@@ -1595,107 +1663,56 @@ export function BriefingPublicPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {/* Mensagem de saudação */}
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="text-xs font-medium text-slate-600">
-                      Mensagem de saudação
-                    </label>
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                      {state.greetingGenerated ? 'Versão final gerada' : 'Demonstrativo — será configurado pelo nosso time'}
-                    </span>
-                  </div>
-
-                  {!state.greetingEditing ? (
-                    <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-4">
-                      <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
-                        {state.greetingMessage}
-                      </WhatsAppMockup>
-                      <div className="mt-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setState({ ...state, greetingEditing: true })}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
-                        >
-                          Personalizar mensagem
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <PlainTextarea
-                        value={state.greetingMessage}
-                        onChange={(v) => setState({ ...state, greetingMessage: v })}
-                        rows={8}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setState({
-                            ...state,
-                            greetingEditing: false,
-                            greetingGenerated: false,
-                            greetingMessage: buildGreeting(client.company, state.sectors),
-                          })
-                        }}
-                        className="mt-2 text-xs text-[#4F8EF7] hover:underline"
-                      >
-                        Restaurar mensagem padrão
-                      </button>
-                    </div>
-                  )}
+              {/* Mensagem de saudação — a de "fora do horário" fica na Seção 2 (Horários),
+                  já que é diretamente ligada aos dias/horas configurados lá. */}
+              <div className="max-w-sm">
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-xs font-medium text-slate-600">
+                    Mensagem de saudação
+                  </label>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    {state.greetingGenerated ? 'Versão final gerada' : 'Demonstrativo — será configurado pelo nosso time'}
+                  </span>
                 </div>
 
-                {/* Mensagem fora do horário */}
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="text-xs font-medium text-slate-600">
-                      Mensagem fora do horário de atendimento
-                    </label>
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                      Demonstrativo
-                    </span>
-                  </div>
-
-                  {!state.offHoursEditing ? (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
-                        {state.offHoursMessage}
-                      </WhatsAppMockup>
-                      <div className="mt-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setState({ ...state, offHoursEditing: true })}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
-                        >
-                          Personalizar mensagem
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <PlainTextarea
-                        value={state.offHoursMessage}
-                        onChange={(v) => setState({ ...state, offHoursMessage: v })}
-                        rows={6}
-                      />
+                {!state.greetingEditing ? (
+                  <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 p-4">
+                    <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
+                      {state.greetingMessage}
+                    </WhatsAppMockup>
+                    <div className="mt-3 text-center">
                       <button
                         type="button"
-                        onClick={() => {
-                          setState({
-                            ...state,
-                            offHoursEditing: false,
-                            offHoursMessage: buildOffHours(client.company),
-                          })
-                        }}
-                        className="mt-2 text-xs text-[#4F8EF7] hover:underline"
+                        onClick={() => setState({ ...state, greetingEditing: true })}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
                       >
-                        Restaurar mensagem padrão
+                        Personalizar mensagem
                       </button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div>
+                    <PlainTextarea
+                      value={state.greetingMessage}
+                      onChange={(v) => setState({ ...state, greetingMessage: v })}
+                      rows={8}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setState({
+                          ...state,
+                          greetingEditing: false,
+                          greetingGenerated: false,
+                          greetingMessage: buildGreeting(client.company, state.sectors),
+                        })
+                      }}
+                      className="mt-2 text-xs text-[#4F8EF7] hover:underline"
+                    >
+                      Restaurar mensagem padrão
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </SectionBlock>

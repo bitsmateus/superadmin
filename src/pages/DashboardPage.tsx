@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Calendar, CheckCircle2, ChevronRight, FileText, Settings2 } from 'lucide-react'
+import { Calendar, CheckCircle2, ChevronRight, FileText, MessageSquare, Settings2 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { AlertsPanel } from '@/components/crm/AlertsPanel'
 import { TodayActions } from '@/components/crm/TodayActions'
@@ -40,11 +40,23 @@ function isEntregaFeita(c: Client): boolean {
   return Boolean(c.deliveryCompletedAt)
 }
 
+// Data do follow-up pendente mais antigo (dia 3/7/15/30 já vencido e ainda não enviado) — só conta
+// depois que a entrega foi marcada (followUpActive liga junto com "Entregas Recentes").
+function dueFollowupDate(c: Client): string | undefined {
+  if (!c.followUpActive || (c.stage !== 'active' && c.stage !== 'delivered')) return undefined
+  const now = Date.now()
+  const due = (c.followUps ?? [])
+    .filter((f) => !f.sentAt && new Date(f.scheduledFor).getTime() <= now)
+    .sort((a, b) => new Date(a.scheduledFor).getTime() - new Date(b.scheduledFor).getTime())
+  return due[0]?.scheduledFor
+}
+
 /**
  * Dashboard principal — visão do suporte:
- *  - 4 cards de pipeline (Briefing pendente/Em configuração/Pendente de entrega/Entregas feitas),
- *    filtráveis por mês (a data usada por card: stageUpdatedAt para os 2 primeiros — quando o
- *    cliente entrou nesse estado —, deliveryDate/deliveryCompletedAt para os 2 últimos)
+ *  - 5 cards de pipeline (Briefing pendente/Em configuração/Pendente de entrega/Entregas feitas/
+ *    Follow-up pendente), filtráveis por mês (a data usada por card: stageUpdatedAt para os 2
+ *    primeiros — quando o cliente entrou nesse estado —, deliveryDate/deliveryCompletedAt para os
+ *    2 seguintes, e a data do follow-up vencido mais antigo para o último)
  *  - "Minhas tarefas" com o que precisa de ação hoje
  *  - AlertsPanel com os mesmos 4 recortes, sempre-atual (sem filtro de mês) — fila de trabalho
  *
@@ -60,7 +72,11 @@ export function DashboardPage() {
     const config = clients.filter((c) => isEmConfiguracao(c) && withinBounds(c.stageUpdatedAt, filter.bounds))
     const pendenteEntrega = clients.filter((c) => isPendenteEntrega(c) && withinBounds(c.deliveryDate, filter.bounds))
     const entregasFeitas = clients.filter((c) => isEntregaFeita(c) && withinBounds(c.deliveryCompletedAt, filter.bounds))
-    return { briefing, config, pendenteEntrega, entregasFeitas }
+    const followup = clients.filter((c) => {
+      const due = dueFollowupDate(c)
+      return due !== undefined && withinBounds(due, filter.bounds)
+    })
+    return { briefing, config, pendenteEntrega, entregasFeitas, followup }
   }, [clients, filter.bounds])
 
   const [openId, setOpenId] = React.useState<string | null>(null)
@@ -75,7 +91,7 @@ export function DashboardPage() {
       <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <MonthFilterBar filter={filter} />
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
           <MetricCard
             icon={<FileText className="h-4 w-4" />}
             label="Briefing pendente"
@@ -102,6 +118,13 @@ export function DashboardPage() {
             label="Entregas feitas"
             clients={booted ? metrics.entregasFeitas : null}
             tone="success"
+            onOpen={setOpenId}
+          />
+          <MetricCard
+            icon={<MessageSquare className="h-4 w-4" />}
+            label="Follow-up pendente"
+            clients={booted ? metrics.followup : null}
+            tone="warning"
             onOpen={setOpenId}
           />
         </div>

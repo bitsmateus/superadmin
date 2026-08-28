@@ -2823,15 +2823,15 @@ function WhatsappNumbersInfoPopover() {
 function BriefingHeader({ companyName }: { companyName: string }) {
   return (
     <header className="border-b border-slate-200 bg-white shadow-sm">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
-        <div className="flex items-center gap-2">
-          <img src={logoNx} alt="Grupo NX Digital" className="h-9 w-9 rounded-lg object-cover shadow-sm" />
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <div className="flex shrink-0 items-center gap-2">
+          <img src={logoNx} alt="Grupo NX Digital" className="h-9 w-9 shrink-0 rounded-lg object-cover shadow-sm" />
           <div className="leading-tight">
             <p className="text-sm font-semibold text-slate-900">Grupo NX Digital</p>
             <p className="text-xs text-slate-400">Briefing de onboarding</p>
           </div>
         </div>
-        <div className="text-right text-xs text-slate-500">
+        <div className="min-w-0 truncate text-right text-xs text-slate-500">
           {asText(companyName, '—')}
         </div>
       </div>

@@ -755,13 +755,17 @@ export function BriefingPublicPage() {
 
   // Preenche um menu (principal ou submenu) com um exemplo pronto — dá uma base
   // pro cliente entender o formato e ajustar em cima, sem depender de IA. No menu
-  // principal, usa os setores já cadastrados na Seção 1 como opções (se houver).
-  const fillMenuExample = (i: number) => {
+  // principal, o cliente escolhe entre um exemplo fictício ou um exemplo montado
+  // com os setores que ele já cadastrou na Seção 1.
+  const fillMenuExample = (i: number, variant: 'generic' | 'sectors' = 'generic') => {
     const example =
       i === 0
         ? {
             question: 'Olá! 👋 Como podemos te ajudar hoje?',
-            options: state.sectors.length > 0 ? state.sectors.join('\n') : 'Comercial\nSuporte\nFinanceiro',
+            options:
+              variant === 'sectors' && state.sectors.length > 0
+                ? state.sectors.join('\n')
+                : 'Comercial\nSuporte\nFinanceiro',
           }
         : {
             question: 'Sobre qual assunto você precisa de ajuda?',
@@ -1933,14 +1937,21 @@ export function BriefingPublicPage() {
                                   </p>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => fillMenuExample(i)}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
-                                  >
-                                    <Lightbulb className="h-3.5 w-3.5" />
-                                    Usar exemplo
-                                  </button>
+                                  {i === 0 ? (
+                                    <ExampleMenuButton
+                                      sectors={state.sectors}
+                                      onPick={(variant) => fillMenuExample(0, variant)}
+                                    />
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => fillMenuExample(i)}
+                                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
+                                    >
+                                      <Lightbulb className="h-3.5 w-3.5" />
+                                      Usar exemplo
+                                    </button>
+                                  )}
                                   {i > 0 && (
                                     <button
                                       type="button"
@@ -2434,10 +2445,10 @@ export function BriefingPublicPage() {
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
             <div className="border-b border-slate-200 px-6 py-4">
               <h2 className="text-base font-semibold text-slate-900">
-                Confirmar mensagens do chatbot
+                Resumo das mensagens do chatbot
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                Revise as mensagens abaixo. Elas serão configuradas exatamente como estão.
+                Dá uma olhada rápida no que você configurou.
               </p>
             </div>
 
@@ -2475,8 +2486,10 @@ export function BriefingPublicPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-                ⚠️ <strong>Atenção:</strong> essas mensagens serão instaladas no seu sistema exatamente como exibidas acima. Você poderá solicitar ajustes futuramente ao nosso time.
+              <div className="rounded-xl border border-[#4F8EF7]/20 bg-[#4F8EF7]/5 px-4 py-3 text-xs text-slate-600">
+                💬 Fique tranquilo(a): você tem nosso suporte durante todo o processo. Se algo não
+                ficar do jeito que você imaginou, é só nos chamar — durante a entrega ainda dá tempo
+                de ajustar ou personalizar qualquer mensagem.
               </div>
             </div>
 
@@ -2503,16 +2516,19 @@ export function BriefingPublicPage() {
         </div>
       )}
 
-      <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
+      {/* bg sólido (não transparente) de propósito: por ser "fixed", o rodapé fica por
+          cima do que estiver na tela ao rolar — inclusive o card branco da seção — então
+          não pode depender do gradiente da página aparecer "por trás" pra ter contraste. */}
+      <footer className="fixed inset-x-0 bottom-0 z-30 bg-[#1E1B6B]/95 shadow-[0_-4px_16px_rgba(0,0,0,0.15)] backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex flex-col">
-            <span className="text-xs uppercase tracking-wider text-slate-400">Briefing</span>
-            <span className="text-sm font-medium text-slate-900">
+            <span className="text-xs uppercase tracking-wider text-white/50">Briefing</span>
+            <span className="text-sm font-medium text-white">
               Seção {section + 1} de {totalSections}
             </span>
-            <div className="mt-1 h-1 w-32 overflow-hidden rounded-full bg-slate-200">
+            <div className="mt-1 h-1 w-32 overflow-hidden rounded-full bg-white/20">
               <div
-                className="h-full bg-[#4F8EF7] transition-all"
+                className="h-full bg-white transition-all"
                 style={{ width: `${((section + 1) / totalSections) * 100}%` }}
               />
             </div>
@@ -2522,7 +2538,7 @@ export function BriefingPublicPage() {
               <button
                 type="button"
                 onClick={prev}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-lg border border-white/30 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-sm backdrop-blur-sm hover:bg-white/20"
               >
                 Voltar
               </button>
@@ -2531,7 +2547,7 @@ export function BriefingPublicPage() {
               type="button"
               onClick={next}
               disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#4F8EF7] px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#6BA0F9] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2 text-sm font-semibold text-[#1E1B6B] shadow-lg hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {section === totalSections - 1 ? (
                 <>
@@ -2707,6 +2723,67 @@ function ChatbotMenuPreview({
 
 // ── Popover genérico "Saiba mais aqui", reaproveitado em vários campos do
 // formulário público pra explicar conceitos sem poluir a tela com texto fixo. ──
+/** Botão "Usar exemplo" do menu principal — oferece um exemplo fictício ou um
+ * exemplo montado com os setores já cadastrados pelo cliente na Seção 1. */
+function ExampleMenuButton({
+  sectors,
+  onPick,
+}: {
+  sectors: string[]
+  onPick: (variant: 'generic' | 'sectors') => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  const hasSectors = sectors.length > 0
+
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-[#4F8EF7] hover:text-[#4F8EF7]"
+      >
+        <Lightbulb className="h-3.5 w-3.5" />
+        Usar exemplo
+      </button>
+      {open && (
+        <div className="absolute right-0 top-9 z-20 w-60 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          <button
+            type="button"
+            onClick={() => { onPick('generic'); setOpen(false) }}
+            className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+          >
+            Exemplo fictício
+            <span className="block text-[10px] text-slate-400">Comercial, Suporte, Financeiro</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { if (hasSectors) { onPick('sectors'); setOpen(false) } }}
+            disabled={!hasSectors}
+            className={cn(
+              'block w-full px-3 py-2 text-left text-xs',
+              hasSectors ? 'text-slate-700 hover:bg-slate-50' : 'cursor-not-allowed text-slate-300',
+            )}
+          >
+            Usar meus setores
+            <span className="block text-[10px] text-slate-400">
+              {hasSectors ? sectors.join(', ') : 'Crie setores na Seção 1 primeiro'}
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function InfoPopover({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
@@ -2822,16 +2899,20 @@ function WhatsappNumbersInfoPopover() {
 
 function BriefingHeader({ companyName }: { companyName: string }) {
   return (
-    <header className="border-b border-slate-200 bg-white shadow-sm">
+    <header className="bg-transparent">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <div className="flex shrink-0 items-center gap-2">
-          <img src={logoNx} alt="Grupo NX Digital" className="h-9 w-9 shrink-0 rounded-lg object-cover shadow-sm" />
+          <img
+            src={logoNx}
+            alt="Grupo NX Digital"
+            className="h-9 w-9 shrink-0 rounded-lg object-cover shadow-md ring-1 ring-white/20"
+          />
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-slate-900">Grupo NX Digital</p>
-            <p className="text-xs text-slate-400">Briefing de onboarding</p>
+            <p className="text-sm font-semibold text-white">Grupo NX Digital</p>
+            <p className="text-xs text-white/60">Briefing de onboarding</p>
           </div>
         </div>
-        <div className="min-w-0 truncate text-right text-xs text-slate-500">
+        <div className="min-w-0 truncate text-right text-xs font-medium text-white/70">
           {asText(companyName, '—')}
         </div>
       </div>

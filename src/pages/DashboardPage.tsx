@@ -8,7 +8,6 @@ import {
 import { TopBar } from '@/components/layout/TopBar'
 import { AlertsPanel } from '@/components/crm/AlertsPanel'
 import { TodayActions } from '@/components/crm/TodayActions'
-import { ContractsPendingPanel } from '@/components/crm/ContractsPendingPanel'
 import { useTickets, useTicketsBooted } from '@/hooks/useTickets'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
@@ -58,7 +57,7 @@ export function DashboardPage() {
   return (
     <>
       <TopBar
-        title="Dashboard"
+        title="Dashboard Suporte"
         subtitle="Painel do suporte — alertas e follow-ups do dia"
       />
 
@@ -90,9 +89,8 @@ export function DashboardPage() {
           />
         </div>
 
-        <section className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <section className="mt-6">
           <TodayActions />
-          <ContractsPendingPanel />
         </section>
 
         <section className="mt-6">

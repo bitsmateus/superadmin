@@ -36,26 +36,6 @@ export interface AccessSheetParams {
   supportPhone?: string
 }
 
-/**
- * Opens a print-ready window with the client access sheet. The user prints to
- * PDF from the browser dialog — this avoids adding a PDF lib dependency and
- * keeps the layout fully editable via plain HTML/CSS.
- */
-export function openAccessSheet({ client, server }: AccessSheetParams): boolean {
-  const html = renderAccessSheetHtml({ client, server })
-  // NOTE: noopener/noreferrer make window.open return null per spec — omit them
-  // so we can write to the new window's document.
-  const w = window.open('', '_blank', 'width=900,height=1000')
-  if (!w) return false
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  w.setTimeout(() => {
-    try { w.focus(); w.print() } catch { /* ignore */ }
-  }, 250)
-  return true
-}
-
 /** Monta assunto + corpo (texto) do e-mail de acessos pro cliente. */
 export function buildAccessEmail({ client, server, password }: AccessSheetParams): {
   subject: string
@@ -123,6 +103,36 @@ export function buildWelcomeMessage(client: Client): string {
   lines.push('Equipe NX Digital')
 
   return lines.join('\n')
+}
+
+/**
+ * E-mail curto (HTML) que acompanha o PDF de acessos em anexo — enviado automaticamente por SMTP
+ * ao clicar "Baixar acessos" (ver DeliveryTab.tsx). Diferente de buildAccessEmail (usado no mailto
+ * manual, que não consegue anexar arquivo e por isso lista tudo inline): aqui os dados completos
+ * (usuários e senhas) ficam só no PDF anexado, e a mensagem só avisa + dá o link de acesso.
+ */
+export function buildAccessDeliveryEmail({ client, server }: AccessSheetParams): {
+  subject: string
+  html: string
+} {
+  const company = client.company || client.name || ''
+  const loginUrl = server?.loginUrl || ''
+  const settings = db.getSettings()
+  const supportPhone = settings.supportPhone ?? SUPPORT_PHONE
+  const firstContact = briefingUserEmails(client)[0]?.name?.trim().split(/\s+/)[0]
+
+  const paragraphs = [
+    `<p>Olá${firstContact ? `, ${escapeHtml(firstContact)}` : ''}!</p>`,
+    `<p>Seguem os acessos do sistema de atendimento da <strong>${escapeHtml(company)}</strong> — os usuários e senhas completos estão no documento em anexo.</p>`,
+    loginUrl
+      ? `<p>Link de acesso: <a href="${escapeHtml(loginUrl)}">${escapeHtml(loginUrl)}</a></p>`
+      : '',
+    `<p>⚠️ Por segurança, troque a senha no primeiro acesso (Perfil &gt; Alterar senha).</p>`,
+    `<p>Qualquer dúvida, fale com o nosso suporte: ${escapeHtml(supportPhone)}</p>`,
+    `<p>NX Digital</p>`,
+  ].filter(Boolean)
+
+  return { subject: `Acessos do sistema — ${company}`, html: paragraphs.join('\n') }
 }
 
 /** Abre o cliente de e-mail (mailto) com os acessos prontos para enviar. */
@@ -358,26 +368,13 @@ export function renderAccessSheetHtml({ client, server, password, supportPhone }
   .footer-support { font-size: 12px; color: #475569; font-weight: 500; }
   .footer-note { font-size: 10px; color: #94A3B8; margin-top: 2px; }
 
-  /* ── Print button ── */
-  .print-btn {
-    position: fixed; top: 16px; right: 16px;
-    background: #4F8EF7; color: #fff; border: none;
-    padding: 10px 20px; border-radius: 8px; cursor: pointer;
-    font-size: 13px; font-weight: 700;
-    box-shadow: 0 4px 14px rgba(79,142,247,0.45);
-    display: flex; align-items: center; gap: 6px;
-  }
-  .print-btn:hover { background: #3b7de8; }
-
   @media print {
-    .print-btn { display: none; }
     body { background: #fff; padding: 0; }
     .page { box-shadow: none; border-radius: 0; max-width: 100%; }
   }
 </style>
 </head>
 <body>
-<button class="print-btn" onclick="window.print()">⬇&nbsp; Salvar como PDF</button>
 
 <div class="page">
 

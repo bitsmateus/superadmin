@@ -20,7 +20,12 @@ async function getSmtpConfig(): Promise<SmtpConfig | null> {
 
 /** Manda um e-mail via SMTP configurado em Configurações > E-mail (SMTP). Lança se não estiver
  * configurado ou se o envio falhar — quem chama decide como avisar o usuário. */
-export async function sendMail(opts: { to: string; subject: string; html: string }): Promise<void> {
+export async function sendMail(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  attachments?: { filename: string; content: Buffer }[];
+}): Promise<void> {
   const smtp = await getSmtpConfig();
   if (!smtp) {
     throw new Error('SMTP não configurado — configure em Configurações > E-mail (SMTP)');
@@ -38,5 +43,6 @@ export async function sendMail(opts: { to: string; subject: string; html: string
     to: opts.to,
     subject: opts.subject,
     html: opts.html,
+    attachments: opts.attachments,
   });
 }

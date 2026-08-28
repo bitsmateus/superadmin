@@ -24,17 +24,27 @@ import {
 } from '@/constants/checklist'
 import { buildFollowUps, DEFAULT_FOLLOWUP_TEMPLATES } from '@/constants/followup'
 import {
-  openAccessSheet,
   openAccessEmail,
   buildAccessEmail,
+  buildAccessDeliveryEmail,
   buildWelcomeMessage,
   renderAccessSheetHtml,
 } from '@/lib/accessSheet'
-import { asText, cn, formatDate } from '@/lib/utils'
+import { asText, cn, formatDate, slugify } from '@/lib/utils'
 import type { Client, ChecklistItem } from '@/types/client'
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(((reader.result as string) || '').split(',')[1] ?? '')
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
 
 export function DeliveryTab({ client }: { client: Client }) {
   const [user] = useCurrentUser()
+  const [downloadingAccess, setDownloadingAccess] = React.useState(false)
   const [deliveryDate, setDeliveryDate] = React.useState(
     client.deliveryDate ?? '',
   )
@@ -64,33 +74,51 @@ export function DeliveryTab({ client }: { client: Client }) {
     persistHandoff(next, `${item.label}: ${!item.checked ? 'concluído' : 'desmarcado'}`)
   }
 
-  const downloadAccess = () => {
-    const ok = openAccessSheet({ client, server: tenantServer })
-    if (!ok) {
-      toast.error('Pop-up bloqueado — libere para baixar os acessos')
+  const downloadAccess = async () => {
+    setDownloadingAccess(true)
+    let blob: Blob
+    try {
+      const html = renderAccessSheetHtml({ client, server: tenantServer })
+      blob = await api.postForBlob(`/api/clients/${client.id}/access-pdf`, { html })
+    } catch (err) {
+      toast.error(`Falha ao gerar o PDF de acessos: ${(err as Error).message}`)
       return
+    } finally {
+      setDownloadingAccess(false)
     }
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `acessos-${slugify(client.company || client.name || 'cliente')}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+
     if (!handoff.find((i) => i.id === 'handoff_access_sent')?.checked) {
       const next = setChecklistItem(handoff, 'handoff_access_sent', true, user)
       db.updateClient(client.id, { deliveryHandoffChecklist: next })
-      db.addLog(client.id, 'Acessos enviados', 'Folha de acessos gerada para impressão/PDF')
+      db.addLog(client.id, 'Acessos enviados', 'PDF de acessos baixado')
     }
-    toast.success('Folha de acessos aberta — salve como PDF')
-    void sendAccessEmailAutomatically()
+    toast.success('PDF de acessos baixado')
+
+    void sendAccessEmailAutomatically(blob)
   }
 
   // Ao baixar os acessos, manda automaticamente por SMTP também (se o cliente tiver e-mail e o
-  // servidor tiver SMTP configurado em Configurações) — não bloqueia nem falha o download: é um
-  // "bônus" em segundo plano, avisado por um toast separado.
-  const sendAccessEmailAutomatically = async () => {
+  // servidor tiver SMTP configurado em Configurações), com o mesmo PDF que acabou de baixar em
+  // anexo — não bloqueia nem falha o download: é um "bônus" em segundo plano, avisado por um toast
+  // separado.
+  const sendAccessEmailAutomatically = async (pdfBlob: Blob) => {
     if (!client.email?.trim()) return
     try {
-      const { subject } = buildAccessEmail({ client, server: tenantServer })
-      const html = renderAccessSheetHtml({ client, server: tenantServer })
+      const { subject, html } = buildAccessDeliveryEmail({ client, server: tenantServer })
+      const attachmentBase64 = await blobToBase64(pdfBlob)
       await api.post(`/api/clients/${client.id}/send-access-email`, {
         to: client.email.trim(),
         subject,
         html,
+        attachmentBase64,
+        attachmentFilename: 'acessos.pdf',
       })
       toast.success(`E-mail de acessos enviado automaticamente para ${client.email}`)
     } catch (err) {
@@ -240,7 +268,8 @@ export function DeliveryTab({ client }: { client: Client }) {
               size="sm"
               variant="secondary"
               onClick={downloadAccess}
-              leftIcon={<Download className="h-3.5 w-3.5" />}
+              loading={downloadingAccess}
+              leftIcon={!downloadingAccess ? <Download className="h-3.5 w-3.5" /> : undefined}
             >
               Baixar acessos
             </Button>

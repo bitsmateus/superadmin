@@ -8,10 +8,10 @@ export interface FollowUpTemplates {
 }
 
 export const DEFAULT_FOLLOWUP_TEMPLATES: FollowUpTemplates = {
-  day3: `Olá {nome}! Tudo certo com o sistema? Já passaram 3 dias desde a entrega. Se tiver qualquer dúvida, estou à disposição!`,
-  day7: `Oi {nome}, passando para ver como está sendo a experiência com a plataforma. Alguma dificuldade ou sugestão até agora?`,
-  day15: `{nome}, já são 15 dias desde que vocês começaram a usar o sistema! Como está o time se adaptando? Precisam de algum ajuste?`,
-  day30: `{nome}, completamos 1 mês juntos! Quero entender como foi essa primeira experiência e se há algo que possamos melhorar para vocês.`,
+  day3: `Olá pessoal, tudo bem? Já passaram 3 dias desde a entrega, como está o uso? estão com alguma dúvida? Ficamos a disposição!`,
+  day7: `Olá! Passando por aqui para ver como está a experiência com a plataforma. Alguma dificuldade ou sugestão até agora?`,
+  day15: `Opaa! tudo bem?  já são 15 dias desde que vocês começaram a usar o sistema! Como está o time se adaptando? Precisam de algum ajuste?`,
+  day30: `Olá time! completamos 1 mês juntos! Quero entender como foi essa primeira experiência e se há algo que possamos melhorar para vocês.`,
 }
 
 export const FOLLOWUP_DAYS = [3, 7, 15, 30] as const

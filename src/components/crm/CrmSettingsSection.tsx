@@ -12,6 +12,7 @@ import {
   Mail,
   Phone,
   Save,
+  Send,
   Smartphone,
   Star,
   Trophy,
@@ -27,6 +28,7 @@ import { Input, Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { db } from '@/services/db'
+import { api } from '@/services/api'
 import {
   DEFAULT_FOLLOWUP_TEMPLATES,
   FOLLOWUP_DAYS,
@@ -50,6 +52,7 @@ export function CrmSettingsSection() {
       <AsaasBlock />
       <CredentialsBlock />
       <EvolutionBlock />
+      <SmtpBlock />
       <UazapiBlock />
       <FollowUpBlock />
       <BackupBlock />
@@ -1014,6 +1017,169 @@ function EvolutionBlock() {
         <div className="flex justify-end">
           <Button onClick={save} disabled={!dirty} leftIcon={<Save className="h-4 w-4" />}>
             Salvar Evolution
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SmtpBlock() {
+  const settings = useSettings()
+  const smtp = settings.smtp
+  const [host, setHost] = React.useState(smtp?.host ?? '')
+  const [port, setPort] = React.useState(String(smtp?.port ?? 587))
+  const [user, setUser] = React.useState(smtp?.user ?? '')
+  const [password, setPassword] = React.useState('')
+  const [showPassword, setShowPassword] = React.useState(false)
+  const [secure, setSecure] = React.useState(Boolean(smtp?.secure))
+  const [fromEmail, setFromEmail] = React.useState(smtp?.fromEmail ?? '')
+  const [fromName, setFromName] = React.useState(smtp?.fromName ?? '')
+  const [testing, setTesting] = React.useState(false)
+  const passwordSet = Boolean(smtp?.passwordSet)
+
+  React.useEffect(() => {
+    setHost(smtp?.host ?? '')
+    setPort(String(smtp?.port ?? 587))
+    setUser(smtp?.user ?? '')
+    setPassword('')
+    setSecure(Boolean(smtp?.secure))
+    setFromEmail(smtp?.fromEmail ?? '')
+    setFromName(smtp?.fromName ?? '')
+  }, [smtp?.host, smtp?.port, smtp?.user, smtp?.passwordSet, smtp?.secure, smtp?.fromEmail, smtp?.fromName])
+
+  const dirty =
+    host.trim() !== (smtp?.host ?? '') ||
+    port.trim() !== String(smtp?.port ?? 587) ||
+    user.trim() !== (smtp?.user ?? '') ||
+    password.trim() !== '' ||
+    secure !== Boolean(smtp?.secure) ||
+    fromEmail.trim() !== (smtp?.fromEmail ?? '') ||
+    fromName.trim() !== (smtp?.fromName ?? '')
+
+  const save = () => {
+    db.saveSettings({
+      ...db.getSettings(),
+      smtp: {
+        host: host.trim() || undefined,
+        port: Number(port) || 587,
+        user: user.trim() || undefined,
+        // Vazio = mantém a senha atual no backend (merge preserva).
+        password: password.trim() || undefined,
+        secure,
+        fromEmail: fromEmail.trim() || undefined,
+        fromName: fromName.trim() || undefined,
+      },
+    })
+    setPassword('')
+    toast.success('SMTP salvo')
+  }
+
+  const sendTest = async () => {
+    setTesting(true)
+    try {
+      await api.post('/api/settings/test-smtp')
+      toast.success('E-mail de teste enviado — confira sua caixa de entrada')
+    } catch (err) {
+      toast.error((err as Error).message || 'Falha ao enviar e-mail de teste')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <section>
+      <header className="mb-3 flex items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+          <Mail className="h-3.5 w-3.5" />
+        </span>
+        <div>
+          <h2 className="text-sm font-medium text-foreground">E-mail (SMTP)</h2>
+          <p className="text-xs text-foreground/45">
+            Usado pro envio automático do e-mail de acessos ao clicar em "Baixar acessos" na aba
+            Entrega. A senha fica só no servidor.
+          </p>
+        </div>
+      </header>
+
+      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px]">
+          <Input
+            label="Host SMTP"
+            placeholder="smtp.seudominio.com.br"
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
+          />
+          <Input
+            label="Porta"
+            type="number"
+            placeholder="587"
+            value={port}
+            onChange={(e) => setPort(e.target.value)}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input
+            label="Usuário"
+            autoComplete="off"
+            placeholder="contato@seudominio.com.br"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+          />
+          <Input
+            label="Senha"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={passwordSet ? '•••••••• (salva — deixe vazio para manter)' : 'Senha do e-mail/SMTP'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            rightIcon={
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="pointer-events-auto text-foreground/40 hover:text-foreground/80"
+                aria-label={showPassword ? 'Ocultar' : 'Mostrar'}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            }
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input
+            label="E-mail remetente"
+            placeholder="contato@seudominio.com.br"
+            value={fromEmail}
+            onChange={(e) => setFromEmail(e.target.value)}
+          />
+          <Input
+            label="Nome remetente (opcional)"
+            placeholder="NX Digital"
+            value={fromName}
+            onChange={(e) => setFromName(e.target.value)}
+          />
+        </div>
+        <label className="flex items-center gap-2 text-xs text-foreground/70">
+          <input
+            type="checkbox"
+            checked={secure}
+            onChange={(e) => setSecure(e.target.checked)}
+            className="h-4 w-4 accent-[#4F8EF7]"
+          />
+          Conexão SSL/TLS direta (porta 465) — deixe desmarcado para STARTTLS (porta 587, mais comum)
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="secondary"
+            onClick={sendTest}
+            disabled={testing || !passwordSet}
+            leftIcon={<Send className="h-4 w-4" />}
+          >
+            {testing ? 'Enviando…' : 'Enviar teste'}
+          </Button>
+          <Button onClick={save} disabled={!dirty} leftIcon={<Save className="h-4 w-4" />}>
+            Salvar SMTP
           </Button>
         </div>
       </div>

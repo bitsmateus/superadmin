@@ -33,7 +33,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      // Só manda Content-Type: application/json quando tem corpo de verdade — chamadas tipo
+      // api.post(path) sem body (ex.: "gerar fluxo com IA", "enviar teste de SMTP") viram
+      // JSON.stringify(undefined) === undefined, e o Fastify recusa (400
+      // FST_ERR_CTP_EMPTY_JSON_BODY) uma requisição com esse header mas sem corpo nenhum.
+      ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers as Record<string, string> ?? {}),
     },

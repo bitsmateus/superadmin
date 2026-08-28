@@ -997,6 +997,11 @@ END $$`);
     END IF;
   END $$`);
 
+  // SMTP próprio (Configurações > E-mail) — usado pro envio automático do e-mail de acessos ao
+  // clicar em "Baixar acessos" (ver server/src/lib/mailer.ts). Senha mascarada no GET/merge no PUT,
+  // mesmo padrão do bloco `evolution` acima.
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp JSONB`);
+
   console.log('[db] migrations applied');
 }
 

@@ -1,23 +1,14 @@
 ﻿import * as React from 'react'
-import {
-  Bell,
-  CheckCircle2,
-  Clock,
-  Phone,
-  PlusCircle,
-  Send,
-  Smile,
-} from 'lucide-react'
+import { Bell, Check, Clock, Copy, PlusCircle, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Section } from '../ClientDrawer'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
-import { Badge } from '@/components/ui/Badge'
 import { db } from '@/services/db'
 import { useCurrentUser } from '@/hooks/useClients'
-import { isPast, isSameDay, timeAgo } from '@/lib/time'
+import { timeAgo } from '@/lib/time'
 import { cn, formatDate } from '@/lib/utils'
 import type { Client, FollowUp } from '@/types/client'
 
@@ -40,11 +31,20 @@ export function FollowUpTab({ client }: { client: Client }) {
     toast.success(`Dia ${fu.dayNumber} marcado como enviado`)
   }
 
-  const toggleResponded = (fu: FollowUp) => {
+  const unmarkSent = (fu: FollowUp) => {
     const next = client.followUps.map((f) =>
-      f.id === fu.id ? { ...f, responded: !f.responded } : f,
+      f.id === fu.id ? { ...f, sentAt: undefined } : f,
     )
     update(next)
+  }
+
+  const copyMessage = async (fu: FollowUp) => {
+    try {
+      await navigator.clipboard.writeText(fu.message)
+      toast.success('Mensagem copiada!')
+    } catch {
+      toast.error('Não foi possível copiar. Selecione o texto manualmente.')
+    }
   }
 
   const saveMessage = (fu: FollowUp) => {
@@ -62,9 +62,10 @@ export function FollowUpTab({ client }: { client: Client }) {
       <div className="flex items-start gap-2 rounded-lg border border-accent/20 bg-accent/[0.05] px-3 py-2.5 text-sm text-foreground/85">
         <Bell className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
         <span>
-          Os alertas de follow-up aparecem no <strong>Dashboard</strong> nos
-          dias 3, 7, 15 e 30 após a entrega, lembrando você de entrar em
-          contato com o cliente.
+          Checklist de follow-up nos dias 3, 7, 15 e 30 após a entrega
+          (contando a partir da data marcada em <strong>Entregas recentes</strong>).
+          Copie a mensagem, envie manualmente pelo WhatsApp e marque como
+          enviado.
         </span>
       </div>
 
@@ -76,95 +77,108 @@ export function FollowUpTab({ client }: { client: Client }) {
           </p>
         </Section>
       ) : (
-        <ol className="relative space-y-3 border-l border-line pl-5">
+        <ol className="space-y-3">
           {(client.followUps ?? []).map((fu) => {
-            const state = fuState(fu)
+            const sent = Boolean(fu.sentAt)
             const isEditing = editing === fu.id
             return (
-              <li key={fu.id} className="relative">
-                <span
-                  className={cn(
-                    'absolute -left-[27px] top-1 grid h-4 w-4 place-items-center rounded-full ring-4 ring-card',
-                    state === 'sent'
-                      ? 'bg-success'
-                      : state === 'today'
-                        ? 'bg-accent animate-pulse'
-                        : state === 'late'
-                          ? 'bg-danger'
-                          : 'bg-elevate/30',
-                  )}
-                />
-                <div className="rounded-xl border border-line bg-elevate/[0.02] p-3">
-                  <header className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">
-                        Dia {fu.dayNumber}
-                      </span>
-                      <span className="text-[11px] text-foreground/45">
-                        {formatDate(fu.scheduledFor)}
-                      </span>
-                    </div>
-                    <StateBadge state={state} fu={fu} />
-                  </header>
+              <li
+                key={fu.id}
+                className={cn(
+                  'rounded-xl border p-3 transition-colors',
+                  sent
+                    ? 'border-success/30 bg-success/[0.04]'
+                    : 'border-danger/25 bg-danger/[0.03]',
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <button
+                    type="button"
+                    onClick={() => (sent ? unmarkSent(fu) : markSent(fu))}
+                    title={sent ? 'Desfazer envio' : 'Marcar como enviado'}
+                    className={cn(
+                      'mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ring-2 transition-colors',
+                      sent
+                        ? 'bg-success text-white ring-success'
+                        : 'text-danger ring-danger/50 hover:bg-danger/10',
+                    )}
+                  >
+                    {sent ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <X className="h-3.5 w-3.5" />
+                    )}
+                  </button>
 
-                  {isEditing ? (
-                    <div className="mt-2 space-y-2">
-                      <Textarea
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                      />
-                      <div className="flex justify-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <header className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">
+                          Dia {fu.dayNumber}
+                        </span>
+                        <span className="text-[11px] text-foreground/45">
+                          {formatDate(fu.scheduledFor)}
+                        </span>
+                      </div>
+                      <span
+                        className={cn(
+                          'text-[11px] font-medium',
+                          sent ? 'text-success' : 'text-danger',
+                        )}
+                      >
+                        {sent ? `Enviado · ${timeAgo(fu.sentAt)}` : 'Não enviado'}
+                      </span>
+                    </header>
+
+                    {isEditing ? (
+                      <div className="mt-2 space-y-2">
+                        <Textarea
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              setEditing(null)
+                              setDraft('')
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button size="sm" onClick={() => saveMessage(fu)}>
+                            Salvar mensagem
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1.5 whitespace-pre-wrap rounded-lg border border-line/60 bg-card px-2.5 py-2 text-sm text-foreground/85">
+                        {fu.message}
+                      </p>
+                    )}
+
+                    {!isEditing && (
+                      <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditing(fu.id)
+                            setDraft(fu.message)
+                          }}
+                        >
+                          Editar mensagem
+                        </Button>
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => {
-                            setEditing(null)
-                            setDraft('')
-                          }}
+                          onClick={() => copyMessage(fu)}
+                          leftIcon={<Copy className="h-3.5 w-3.5" />}
                         >
-                          Cancelar
-                        </Button>
-                        <Button size="sm" onClick={() => saveMessage(fu)}>
-                          Salvar mensagem
+                          Copiar mensagem
                         </Button>
                       </div>
-                    </div>
-                  ) : (
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/85">
-                      {fu.message}
-                    </p>
-                  )}
-
-                  <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                    <label className="mr-auto inline-flex items-center gap-1.5 text-[11px] text-foreground/55">
-                      <input
-                        type="checkbox"
-                        className="h-3.5 w-3.5 accent-[#4F8EF7]"
-                        checked={Boolean(fu.responded)}
-                        onChange={() => toggleResponded(fu)}
-                      />
-                      Cliente respondeu
-                    </label>
-                    {!isEditing && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditing(fu.id)
-                          setDraft(fu.message)
-                        }}
-                      >
-                        Editar mensagem
-                      </Button>
-                    )}
-                    {!fu.sentAt && (
-                      <Button
-                        size="sm"
-                        onClick={() => markSent(fu)}
-                        leftIcon={<Send className="h-3.5 w-3.5" />}
-                      >
-                        Marcar como enviado
-                      </Button>
                     )}
                   </div>
                 </div>
@@ -192,43 +206,6 @@ export function FollowUpTab({ client }: { client: Client }) {
         author={user}
       />
     </div>
-  )
-}
-
-type FuState = 'scheduled' | 'today' | 'late' | 'sent'
-
-function fuState(fu: FollowUp): FuState {
-  if (fu.sentAt) return 'sent'
-  const scheduled = new Date(fu.scheduledFor)
-  const now = new Date()
-  if (isSameDay(scheduled, now)) return 'today'
-  if (isPast(fu.scheduledFor)) return 'late'
-  return 'scheduled'
-}
-
-function StateBadge({ state, fu }: { state: FuState; fu: FollowUp }) {
-  if (state === 'sent')
-    return (
-      <Badge tone="success" dot>
-        Enviado · {timeAgo(fu.sentAt)}
-      </Badge>
-    )
-  if (state === 'today')
-    return (
-      <Badge tone="info" dot>
-        Hoje!
-      </Badge>
-    )
-  if (state === 'late')
-    return (
-      <Badge tone="danger" dot>
-        Atrasado
-      </Badge>
-    )
-  return (
-    <Badge tone="neutral" dot>
-      Agendado
-    </Badge>
   )
 }
 
@@ -310,6 +287,3 @@ function ManualContactModal({
     </Modal>
   )
 }
-
-// Unused-import suppressor (icons referenced only as types in tests)
-export const _icons = [Smile, Phone, CheckCircle2]

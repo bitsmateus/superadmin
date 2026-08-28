@@ -188,6 +188,8 @@ export interface OfficialApiAccess {
 export interface ChatbotFlowBriefing {
   /** Descrição livre de como o atendimento deve funcionar. */
   description: string
+  /** Preferência do cliente: opções digitadas por número ou botões clicáveis. Default 'numbered'. */
+  menuStyle?: 'numbered' | 'buttons'
   /** Menu principal e submenus. `parentOption` informa qual opção abre o submenu. */
   menus: { question: string; options: string[]; parentOption?: string }[]
   /** Dados que o bot deve coletar antes de passar pro time. */

@@ -284,9 +284,10 @@ interface BriefingFormState {
   offHoursEnabled: boolean
   greetingEditing: boolean
   greetingGenerated: boolean
-  offHoursEditing: boolean
   // Roteiro do chatbot (base da geração automática do fluxo)
   chatbotDescription: string
+  // Preferência de interação do menu: opções digitadas por número, ou botões clicáveis.
+  chatbotMenuStyle: 'numbered' | 'buttons'
   chatbotMenus: { question: string; options: string; parentOption?: string }[] // options: uma por linha
   chatbotCollect: string // uma por linha
   chatbotTransfers: { option: string; department: string }[]
@@ -353,8 +354,8 @@ function initialFormState(company: string): BriefingFormState {
     offHoursEnabled: true,
     greetingEditing: false,
     greetingGenerated: false,
-    offHoursEditing: false,
     chatbotDescription: '',
+    chatbotMenuStyle: 'numbered',
     chatbotMenus: [{ question: '', options: '' }],
     chatbotCollect: '',
     chatbotTransfers: [],
@@ -1145,135 +1146,131 @@ export function BriefingPublicPage() {
             title="Horários de atendimento"
             icon={<Clock className="h-5 w-5 text-[#4F8EF7]" />}
           >
-            <div className="space-y-2">
-              {state.schedule.map((s, i) => (
-                <div
-                  key={s.day}
-                  className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5"
-                >
-                  <label className="inline-flex w-32 items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={s.active}
-                      onChange={(e) => {
-                        const sched = [...state.schedule]
-                        sched[i] = { ...sched[i], active: e.target.checked }
-                        setState({ ...state, schedule: sched })
-                        clearError('schedule')
-                      }}
-                      className="h-4 w-4 accent-[#4F8EF7]"
-                    />
-                    <span className="font-medium">{s.day}</span>
-                  </label>
-                  {s.active ? (
-                    <div className="flex items-center gap-2 text-sm">
-                      <PlainInput
-                        type="time"
-                        value={s.start}
-                        onChange={(v) => {
-                          const sched = [...state.schedule]
-                          sched[i] = { ...sched[i], start: v }
-                          setState({ ...state, schedule: sched })
-                        }}
-                        className="w-28"
-                      />
-                      <span className="text-slate-400">—</span>
-                      <PlainInput
-                        type="time"
-                        value={s.end}
-                        onChange={(v) => {
-                          const sched = [...state.schedule]
-                          sched[i] = { ...sched[i], end: v }
-                          setState({ ...state, schedule: sched })
-                        }}
-                        className="w-28"
-                      />
-                    </div>
-                  ) : (
-                    <span className="text-xs text-slate-400">Fechado</span>
-                  )}
-                </div>
-              ))}
-              {errors.schedule && (
-                <p className="mt-1 text-xs font-medium text-rose-600">{errors.schedule}</p>
-              )}
-              <div className="mt-2">
-                <Field label={L('Fuso horário')}>
-                  <PlainSelect
-                    value={state.timezone}
-                    onChange={(v) => setState({ ...state, timezone: v })}
-                    options={[
-                      { value: 'America/Sao_Paulo', label: 'São Paulo (GMT-3)' },
-                      { value: 'America/Manaus', label: 'Manaus (GMT-4)' },
-                      { value: 'America/Rio_Branco', label: 'Rio Branco (GMT-5)' },
-                      { value: 'America/Noronha', label: 'Fernando de Noronha (GMT-2)' },
-                    ]}
-                  />
-                </Field>
-              </div>
-
-              {/* Mensagem automática fora do horário — ligada aos dias/horas acima */}
-              <div className="mt-4 max-w-sm">
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-medium text-slate-600">
-                    Mensagem automática fora do horário
-                  </label>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                    Demonstrativo
-                  </span>
-                </div>
-                <label className="mb-3 flex items-start gap-2 text-xs text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={!state.offHoursEnabled}
-                    onChange={(e) => setState({ ...state, offHoursEnabled: !e.target.checked })}
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#4F8EF7]"
-                  />
-                  Não quero que meus clientes recebam uma mensagem automática fora do horário de
-                  atendimento.
-                </label>
-
-                {!state.offHoursEnabled ? (
-                  <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-xs text-slate-400">
-                    Ok — nenhuma mensagem automática será enviada fora do horário.
-                  </p>
-                ) : !state.offHoursEditing ? (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+              {/* Coluna esquerda: prévia ao vivo da mensagem de fora do horário */}
+              <div className="lg:sticky lg:top-4">
+                {state.offHoursEnabled ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <WhatsAppMockup contactName={asText(client.company, 'Sua empresa')}>
                       {state.offHoursMessage}
                     </WhatsAppMockup>
-                    <div className="mt-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setState({ ...state, offHoursEditing: true })}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
-                      >
-                        Personalizar mensagem
-                      </button>
-                    </div>
                   </div>
                 ) : (
-                  <div>
-                    <PlainTextarea
-                      value={state.offHoursMessage}
-                      onChange={(v) => setState({ ...state, offHoursMessage: v })}
-                      rows={6}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setState({
-                          ...state,
-                          offHoursEditing: false,
-                          offHoursMessage: buildOffHours(client.company),
-                        })
-                      }}
-                      className="mt-2 text-xs text-[#4F8EF7] hover:underline"
-                    >
-                      Restaurar mensagem padrão
-                    </button>
+                  <div className="mx-auto flex aspect-[9/19.5] max-w-[240px] items-center justify-center rounded-[2.25rem] border-2 border-dashed border-slate-300 bg-slate-50 px-6 text-center text-xs text-slate-400">
+                    Nenhuma mensagem automática será enviada fora do horário.
                   </div>
                 )}
+              </div>
+
+              {/* Coluna direita: dias/horas + mensagem de fora do horário */}
+              <div className="space-y-2">
+                {state.schedule.map((s, i) => (
+                  <div
+                    key={s.day}
+                    className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5"
+                  >
+                    <label className="inline-flex w-32 items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={s.active}
+                        onChange={(e) => {
+                          const sched = [...state.schedule]
+                          sched[i] = { ...sched[i], active: e.target.checked }
+                          setState({ ...state, schedule: sched })
+                          clearError('schedule')
+                        }}
+                        className="h-4 w-4 accent-[#4F8EF7]"
+                      />
+                      <span className="font-medium">{s.day}</span>
+                    </label>
+                    {s.active ? (
+                      <div className="flex items-center gap-2 text-sm">
+                        <PlainInput
+                          type="time"
+                          value={s.start}
+                          onChange={(v) => {
+                            const sched = [...state.schedule]
+                            sched[i] = { ...sched[i], start: v }
+                            setState({ ...state, schedule: sched })
+                          }}
+                          className="w-28"
+                        />
+                        <span className="text-slate-400">—</span>
+                        <PlainInput
+                          type="time"
+                          value={s.end}
+                          onChange={(v) => {
+                            const sched = [...state.schedule]
+                            sched[i] = { ...sched[i], end: v }
+                            setState({ ...state, schedule: sched })
+                          }}
+                          className="w-28"
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">Fechado</span>
+                    )}
+                  </div>
+                ))}
+                {errors.schedule && (
+                  <p className="mt-1 text-xs font-medium text-rose-600">{errors.schedule}</p>
+                )}
+                <div className="mt-2">
+                  <Field label={L('Fuso horário')}>
+                    <PlainSelect
+                      value={state.timezone}
+                      onChange={(v) => setState({ ...state, timezone: v })}
+                      options={[
+                        { value: 'America/Sao_Paulo', label: 'São Paulo (GMT-3)' },
+                        { value: 'America/Manaus', label: 'Manaus (GMT-4)' },
+                        { value: 'America/Rio_Branco', label: 'Rio Branco (GMT-5)' },
+                        { value: 'America/Noronha', label: 'Fernando de Noronha (GMT-2)' },
+                      ]}
+                    />
+                  </Field>
+                </div>
+
+                {/* Mensagem automática fora do horário — edição inline, a prévia à
+                    esquerda atualiza em tempo real conforme o cliente digita. */}
+                <div className="mt-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-xs font-medium text-slate-600">
+                      Mensagem automática fora do horário
+                    </label>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                      Demonstrativo
+                    </span>
+                  </div>
+                  <label className="mb-2 flex items-start gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={!state.offHoursEnabled}
+                      onChange={(e) => setState({ ...state, offHoursEnabled: !e.target.checked })}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[#4F8EF7]"
+                    />
+                    Não quero que meus clientes recebam uma mensagem automática fora do horário de
+                    atendimento.
+                  </label>
+
+                  {state.offHoursEnabled && (
+                    <div>
+                      <PlainTextarea
+                        value={state.offHoursMessage}
+                        onChange={(v) => setState({ ...state, offHoursMessage: v })}
+                        rows={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setState({ ...state, offHoursMessage: buildOffHours(client.company) })
+                        }
+                        className="mt-2 text-xs text-[#4F8EF7] hover:underline"
+                      >
+                        Restaurar mensagem padrão
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </SectionBlock>

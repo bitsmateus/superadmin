@@ -20,6 +20,7 @@ import { addMonthsToId, currentMonthId, monthLabelPt, useMonthFilter } from '@/h
 import { cn, initials } from '@/lib/utils'
 
 const ROLE_LABEL: Record<CommissionRole, string> = { sdr: 'SDR', suporte: 'Suporte' }
+const TOTAL_NAMES = ['Luis', 'Jean', 'Arthur', 'Joao']
 
 function rateLabel(t: Pick<CommissionType, 'kind' | 'rateCents' | 'ratePercent'>): string {
   return t.kind === 'fixed' ? formatBRLCents(t.rateCents ?? 0) : `${t.ratePercent ?? 0}%`
@@ -43,6 +44,16 @@ export function FinanceiroGestaoInternaPage() {
   const entriesInMonth = React.useMemo(() => entries.filter((e) => e.month === month), [entries, month])
   const bySdr = entriesInMonth.filter((e) => e.role === 'sdr')
   const bySuporte = entriesInMonth.filter((e) => e.role === 'suporte')
+
+  // Total do mês por pessoa — só essas 4, na ordem pedida (soma SDR + Suporte, tanto faz o papel).
+  const totalsByPerson = React.useMemo(() => {
+    const totals = new Map<string, number>(TOTAL_NAMES.map((n) => [n, 0]))
+    for (const e of entriesInMonth) {
+      const match = TOTAL_NAMES.find((n) => n.toLowerCase() === e.person.trim().toLowerCase())
+      if (match) totals.set(match, (totals.get(match) ?? 0) + e.amountCents)
+    }
+    return totals
+  }, [entriesInMonth])
 
   const toggleStatus = (entry: CommissionEntry) => {
     void commissionsService.setEntryStatus(entry.id, entry.status === 'pago' ? 'pendente' : 'pago')
@@ -90,6 +101,22 @@ export function FinanceiroGestaoInternaPage() {
 
         <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} />
         <EntriesTable title="Comissão Suporte" entries={bySuporte} onToggle={toggleStatus} types={types} />
+
+        <div className="overflow-hidden rounded-2xl border border-line bg-card">
+          <div className="border-b border-line px-4 py-3">
+            <p className="text-sm font-semibold text-foreground">Total por pessoa — {monthLabelPt(month)}</p>
+          </div>
+          <ul className="divide-y divide-line/60">
+            {TOTAL_NAMES.map((name) => (
+              <li key={name} className="flex items-center justify-between px-4 py-2.5">
+                <span className="text-sm font-medium text-foreground">{name}</span>
+                <span className="text-sm font-semibold tabular-nums text-foreground">
+                  {formatBRLCents(totalsByPerson.get(name) ?? 0)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         <p className="text-[11px] text-foreground/40">
           Registro manual — cada venda/entrega/indicação é lançada aqui escolhendo um dos tipos

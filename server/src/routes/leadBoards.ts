@@ -385,6 +385,22 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       }
 
       const patch = req.body;
+
+      // Nunca deixa um lead ir pra um quadro de página ARQUIVADA — travado aqui no servidor (não só
+      // escondendo a opção no front) porque uma página arquivada some da navegação normal e o lead
+      // vira invisível pro SDR, mesmo com o dado intacto no banco. Vale pra qualquer caminho que
+      // troque board_id (drag-and-drop, menu "Mover", mudança de status que arrasta o quadro junto).
+      if (typeof patch.board_id === 'string') {
+        const targetBoard = await queryOne<{ page_archived: string | null }>(
+          `SELECT lp.archived_at as page_archived FROM lead_boards lb
+           JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1`,
+          [patch.board_id]
+        );
+        if (targetBoard?.page_archived) {
+          return reply.status(400).send({ message: 'Não é possível mover o lead para um quadro de uma página arquivada.' });
+        }
+      }
+
       const sets: string[] = [];
       const params: unknown[] = [];
       let i = 1;

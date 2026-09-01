@@ -611,9 +611,27 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     const allowed = await restrictedBoardFilter(sub, role);
     if (allowed !== null && !allowed.length) return [];
 
-    const boardFilter = allowed !== null ? 'AND lr.board_id = ANY($3)' : '';
-    const params: unknown[] = [MILESTONE_STATUSES, POST_AGENDAMENTO_STATUSES];
+    const boardFilter = allowed !== null ? 'AND lr.board_id = ANY($4)' : '';
+    const params: unknown[] = [MILESTONE_STATUSES, POST_AGENDAMENTO_STATUSES, MILESTONE_AGENDADA];
     if (allowed !== null) params.push(allowed);
+
+    // "ever_agendada" exige as DUAS coisas: o status atual estar no caminho válido pós-agendamento
+    // (evita contar quem teve "Reunião agendada" corrigida por engano depois pra fora do caminho,
+    // ver comentário acima) E o lead ter passado de verdade por "Reunião agendada" em algum
+    // momento — current status = $3 (setado direto, sem evento — ex.: importado assim) OU um
+    // evento real de status -> "Reunião agendada" no histórico. Sem essa segunda checagem, um lead
+    // que pulou direto de "Primeiro contato" pra "Proposta Enviada" (nunca passou por Agendada)
+    // contava como agendado só por o status atual estar no caminho — inflava a métrica de
+    // agendamentos com lead que nunca foi agendado de verdade.
+    const everAgendadaSql = `(
+      lr.status = ANY($2) AND (
+        lr.status = $3
+        OR EXISTS (
+          SELECT 1 FROM lead_events le
+          WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $3
+        )
+      )
+    )`;
 
     return query(
       `SELECT lr.id, lr.board_id, lr.sdr,
@@ -626,11 +644,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
             lr.created_at
           )
         END AS milestone_at,
-        (lr.status = ANY($2)) AS ever_agendada,
-        CASE WHEN lr.status = ANY($2) THEN
+        ${everAgendadaSql} AS ever_agendada,
+        CASE WHEN ${everAgendadaSql} THEN
           COALESCE(
             (SELECT MIN(le.created_at) FROM lead_events le
-             WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($2)),
+             WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $3),
             lr.created_at
           )
         END AS first_agendada_at

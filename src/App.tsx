@@ -56,6 +56,9 @@ const FinanceiroVendasPage = React.lazy(() =>
 const FinanceiroContratoPage = React.lazy(() =>
   import('./pages/FinanceiroContratoPage').then((m) => ({ default: m.FinanceiroContratoPage })),
 )
+const FinanceiroGestaoInternaPage = React.lazy(() =>
+  import('./pages/FinanceiroGestaoInternaPage').then((m) => ({ default: m.FinanceiroGestaoInternaPage })),
+)
 const TicketsPage = React.lazy(() =>
   import('./pages/TicketsPage').then((m) => ({ default: m.TicketsPage })),
 )
@@ -136,6 +139,7 @@ export default function App() {
           <Route path="/comercial/:pageId" element={<ComercialPage />} />
           <Route path="/financeiro/vendas" element={<FinanceiroVendasPage />} />
           <Route path="/financeiro/contrato" element={<FinanceiroContratoPage />} />
+          <Route path="/financeiro/gestao-interna" element={<FinanceiroGestaoInternaPage />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           {/* Uma cópia do menu Suporte tem rota só dela — ver SupportViewPage. */}
           <Route path="/visao/:pageId" element={<SupportViewPage />} />

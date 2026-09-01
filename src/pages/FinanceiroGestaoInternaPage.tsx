@@ -165,6 +165,14 @@ function ClassificarVendasCard() {
                 >
                   Tráfego
                 </button>
+                <button
+                  type="button"
+                  onClick={() => leadBoardsService.updateRow(r.id, { origemVenda: 'nenhum' })}
+                  title="Dispensar — não gera comissão de SDR pra essa venda"
+                  className="border-l border-line px-2.5 py-1 text-foreground/40 transition-colors hover:bg-elevate/[0.06] hover:text-foreground"
+                >
+                  Ignorar
+                </button>
               </div>
             )}
             {!r.veioDoFunil && r.tipoVendaSuporte === null && (

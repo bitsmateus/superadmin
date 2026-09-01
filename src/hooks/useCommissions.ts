@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { commissionsService, isCommissionsLoaded, type CommissionPayment, type CommissionRates } from '@/services/commissions'
+import { commissionsService, isCommissionsLoaded, type CommissionEntry, type CommissionType } from '@/services/commissions'
 
 function useSnapshot<T>(getter: () => T): T {
   React.useEffect(() => { void commissionsService.ensureLoaded() }, [])
@@ -10,10 +10,10 @@ export function useCommissionsLoaded(): boolean {
   return useSnapshot(isCommissionsLoaded)
 }
 
-export function useCommissionRates(): CommissionRates {
-  return useSnapshot(commissionsService.getRates)
+export function useCommissionTypes(): CommissionType[] {
+  return useSnapshot(commissionsService.getTypes)
 }
 
-export function useCommissionPayments(): CommissionPayment[] {
-  return useSnapshot(commissionsService.getPayments)
+export function useCommissionEntries(): CommissionEntry[] {
+  return useSnapshot(commissionsService.getEntries)
 }

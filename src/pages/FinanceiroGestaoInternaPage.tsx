@@ -1,81 +1,70 @@
 import * as React from 'react'
-import { Check, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { Check, ChevronDown, Loader2, Plus, Settings2, Trash2, X } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
+import { Modal } from '@/components/ui/Modal'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
-import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
-import { useClients } from '@/hooks/useClients'
-import { useCommissionPayments, useCommissionRates } from '@/hooks/useCommissions'
-import { commissionsService, type CommissionRole, type CommissionStatus } from '@/services/commissions'
+import { useCommissionEntries, useCommissionTypes } from '@/hooks/useCommissions'
+import {
+  commissionsService,
+  type CommissionEntry,
+  type CommissionKind,
+  type CommissionRole,
+  type CommissionType,
+} from '@/services/commissions'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { addMonthsToId, currentMonthId, monthLabelPt, useMonthFilter } from '@/hooks/useMonthFilter'
 import { cn, initials } from '@/lib/utils'
-import { Plus } from 'lucide-react'
 
-// Mesma lista usada em Vendas ("Quem fechou a venda") — é a única fonte de nomes disponível hoje
-// pra atribuir comissão. Sem separação formal entre "quem é SDR" e "quem é Suporte" no sistema:
-// as duas tabelas abaixo usam o mesmo grupo de nomes, cada uma com sua própria conta.
-const NAMES = ['Arthur', 'Luis', 'Ian', 'Mateus']
+const ROLE_LABEL: Record<CommissionRole, string> = { sdr: 'SDR', suporte: 'Suporte' }
 
-/** Comissões — aba "Gestão Interna" (Financeiro). Só LÊ vendas (quadro is_vendas) e entregas
- * (clients.deliveryCompletedAt) que já existem — não escreve nelas, não muda nada nas outras
- * abas. O que essa tela grava é só: os valores de comissão configurados, e o status
- * pago/pendente por pessoa+papel+mês (granularidade pessoa-mês, não por venda individual). */
+function rateLabel(t: Pick<CommissionType, 'kind' | 'rateCents' | 'ratePercent'>): string {
+  return t.kind === 'fixed' ? formatBRLCents(t.rateCents ?? 0) : `${t.ratePercent ?? 0}%`
+}
+
+/** Comissões — aba "Gestão Interna" (Financeiro). Registro MANUAL por enquanto: cada
+ * venda/entrega/indicação vira um lançamento escolhido de um cardápio de tipos configurável.
+ * Não lê nem escreve em lead_rows/clients/contracts — automação puxando dados de lá fica pra
+ * depois, quando o layout já estiver validado. */
 export function FinanceiroGestaoInternaPage() {
-  const boards = useLeadBoards()
-  const vendasBoard = React.useMemo(() => boards.find((b) => b.isVendas), [boards])
-  const vendasRows = useLeadRows(vendasBoard?.id ?? '')
-  const clients = useClients()
-  const rates = useCommissionRates()
-  const payments = useCommissionPayments()
+  const types = useCommissionTypes()
+  const entries = useCommissionEntries()
 
-  // Só mês atual + mês passado por padrão, com "Adicionar mês" pra ir além — mesmo hook usado em
-  // Contrato/Vendas, mas sem o modo "Personalizado" (não faz sentido aqui: comissão é sempre
-  // pessoa-MÊS, um intervalo livre de datas não vira uma chave de mês única).
+  // Só mês atual + passado por padrão, "Adicionar mês" pra ir além — mesmo hook de Contrato/Vendas,
+  // sem "Personalizado" (comissão é sempre pessoa-lançamento-MÊS, não intervalo livre).
   const filter = useMonthFilter([addMonthsToId(currentMonthId(), -1)])
   const month = filter.selected
 
-  const sdrCounts = React.useMemo(() => {
-    const map = new Map<string, number>(NAMES.map((n) => [n, 0]))
-    for (const r of vendasRows) {
-      if (r.vendaRevertida) continue
-      if ((r.fechamento || r.createdAt).slice(0, 7) !== month) continue
-      if (map.has(r.sdr)) map.set(r.sdr, (map.get(r.sdr) ?? 0) + 1)
-    }
-    return map
-  }, [vendasRows, month])
+  const [registerOpen, setRegisterOpen] = React.useState(false)
+  const [typesOpen, setTypesOpen] = React.useState(false)
 
-  const suporteDeliveryCounts = React.useMemo(() => {
-    const map = new Map<string, number>(NAMES.map((n) => [n, 0]))
-    for (const c of clients) {
-      if (!c.deliveryCompletedAt) continue
-      if (c.deliveryCompletedAt.slice(0, 7) !== month) continue
-      const name = c.responsavelEntrega ?? ''
-      if (map.has(name)) map.set(name, (map.get(name) ?? 0) + 1)
-    }
-    return map
-  }, [clients, month])
+  const entriesInMonth = React.useMemo(() => entries.filter((e) => e.month === month), [entries, month])
+  const bySdr = entriesInMonth.filter((e) => e.role === 'sdr')
+  const bySuporte = entriesInMonth.filter((e) => e.role === 'suporte')
 
-  const suporteAvulsaCounts = React.useMemo(() => {
-    const map = new Map<string, number>(NAMES.map((n) => [n, 0]))
-    for (const r of vendasRows) {
-      if (r.vendaRevertida || r.veioDoFunil) continue
-      if ((r.fechamento || r.createdAt).slice(0, 7) !== month) continue
-      if (map.has(r.sdr)) map.set(r.sdr, (map.get(r.sdr) ?? 0) + 1)
-    }
-    return map
-  }, [vendasRows, month])
-
-  const statusFor = (person: string, role: CommissionRole): CommissionStatus =>
-    payments.find((p) => p.person === person && p.role === role && p.month === month)?.status ?? 'pendente'
-
-  const togglePayment = (person: string, role: CommissionRole) => {
-    const next = statusFor(person, role) === 'pago' ? 'pendente' : 'pago'
-    void commissionsService.setPaymentStatus(person, role, month, next)
+  const toggleStatus = (entry: CommissionEntry) => {
+    void commissionsService.setEntryStatus(entry.id, entry.status === 'pago' ? 'pendente' : 'pago')
   }
 
   return (
     <>
-      <TopBar title="Gestão Interna" subtitle="Financeiro" />
+      <TopBar
+        title="Gestão Interna"
+        subtitle="Financeiro"
+        rightSlot={
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setTypesOpen(true)} leftIcon={<Settings2 className="h-4 w-4" />}>
+              Tipos de comissão
+            </Button>
+            <Button onClick={() => setRegisterOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
+              Registrar comissão
+            </Button>
+          </div>
+        }
+      />
       <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-line bg-card p-3">
           {filter.months.map((m) => (
@@ -100,162 +89,466 @@ export function FinanceiroGestaoInternaPage() {
           </button>
         </div>
 
-        <RatesCard rates={rates} />
-
-        <CommissionTable
-          title="Comissão SDR"
-          description={`R$ por venda fechada no mês × ${formatBRLCents(rates.sdrPerSaleCents)}`}
-          rows={NAMES.map((person) => {
-            const count = sdrCounts.get(person) ?? 0
-            return { person, count, valueCents: count * rates.sdrPerSaleCents }
-          })}
-          role="sdr"
-          statusFor={statusFor}
-          onToggle={togglePayment}
-          countLabel="vendas"
-        />
-
-        <CommissionTable
-          title="Comissão Suporte"
-          description={`Entregas × ${formatBRLCents(rates.suportePerDeliveryCents)} + vendas avulsas × ${formatBRLCents(rates.suportePerVendaAvulsaCents)}`}
-          rows={NAMES.map((person) => {
-            const deliveries = suporteDeliveryCounts.get(person) ?? 0
-            const avulsas = suporteAvulsaCounts.get(person) ?? 0
-            return {
-              person,
-              count: deliveries + avulsas,
-              valueCents: deliveries * rates.suportePerDeliveryCents + avulsas * rates.suportePerVendaAvulsaCents,
-              detail: `${deliveries} entrega(s) · ${avulsas} venda(s) avulsa(s)`,
-            }
-          })}
-          role="suporte"
-          statusFor={statusFor}
-          onToggle={togglePayment}
-          countLabel="itens"
-        />
+        <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} />
+        <EntriesTable title="Comissão Suporte" entries={bySuporte} onToggle={toggleStatus} />
 
         <p className="text-[11px] text-foreground/40">
-          Contagem sempre ao vivo em cima das vendas e entregas já registradas no sistema — essa
-          tela não cria nem move nada nas outras abas, só lê. O que fica salvo aqui é o valor de
-          comissão configurado e o status pago/pendente de cada pessoa no mês.
+          Registro manual — cada venda/entrega/indicação é lançada aqui escolhendo um dos tipos
+          configurados. Puxar isso automático de Vendas/Entregas fica pra uma próxima etapa.
         </p>
       </div>
+
+      <RegisterEntryModal open={registerOpen} onClose={() => setRegisterOpen(false)} types={types} month={month} />
+      <TypesModal open={typesOpen} onClose={() => setTypesOpen(false)} types={types} />
     </>
   )
 }
 
-function RatesCard({ rates }: { rates: ReturnType<typeof useCommissionRates> }) {
-  return (
-    <div className="rounded-2xl border border-line bg-card p-4">
-      <p className="mb-3 text-sm font-semibold text-foreground">Valores de comissão</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <RateField
-          label="Por venda (SDR)"
-          value={rates.sdrPerSaleCents}
-          onSave={(cents) => void commissionsService.updateRates({ sdrPerSaleCents: cents })}
-        />
-        <RateField
-          label="Por entrega (Suporte)"
-          value={rates.suportePerDeliveryCents}
-          onSave={(cents) => void commissionsService.updateRates({ suportePerDeliveryCents: cents })}
-        />
-        <RateField
-          label="Por venda avulsa (Suporte)"
-          value={rates.suportePerVendaAvulsaCents}
-          onSave={(cents) => void commissionsService.updateRates({ suportePerVendaAvulsaCents: cents })}
-        />
-      </div>
-    </div>
-  )
-}
-
-function RateField({ label, value, onSave }: { label: string; value: number; onSave: (cents: number) => void }) {
-  return (
-    <div>
-      <label className="mb-1 block text-[11px] font-medium text-foreground/50">{label}</label>
-      <CurrencyField
-        value={formatBRLCents(value)}
-        onSave={(next) => onSave(parseBRLCents(next))}
-        className="h-9 rounded-lg border border-line px-3 text-sm text-foreground/70 focus:border-accent"
-      />
-    </div>
-  )
-}
-
-function CommissionTable({
+function EntriesTable({
   title,
-  description,
-  rows,
-  role,
-  statusFor,
+  entries,
   onToggle,
-  countLabel,
 }: {
   title: string
-  description: string
-  rows: { person: string; count: number; valueCents: number; detail?: string }[]
-  role: CommissionRole
-  statusFor: (person: string, role: CommissionRole) => CommissionStatus
-  onToggle: (person: string, role: CommissionRole) => void
-  countLabel: string
+  entries: CommissionEntry[]
+  onToggle: (entry: CommissionEntry) => void
 }) {
+  const total = entries.reduce((sum, e) => sum + e.amountCents, 0)
+  const [deleting, setDeleting] = React.useState<CommissionEntry | null>(null)
+
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-card">
-      <div className="border-b border-line px-4 py-3">
+      <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <p className="text-sm font-semibold text-foreground">{title}</p>
-        <p className="text-[11px] text-foreground/45">{description}</p>
+        <span className="text-sm font-semibold tabular-nums text-foreground">{formatBRLCents(total)}</span>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px]">
-          <thead>
-            <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
-              <th className="px-4 py-3">Pessoa</th>
-              <th className="w-32 px-4 py-3 text-right">{countLabel}</th>
-              <th className="w-40 px-4 py-3 text-right">Comissão</th>
-              <th className="w-36 px-4 py-3 text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const status = statusFor(r.person, role)
-              const paid = status === 'pago'
-              return (
-                <tr key={r.person} className="border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
-                        {initials(r.person)}
-                      </span>
-                      <div>
-                        <div className="text-sm font-medium text-foreground">{r.person}</div>
-                        {r.detail && <div className="text-[11px] text-foreground/40">{r.detail}</div>}
+      {entries.length === 0 ? (
+        <p className="px-4 py-6 text-center text-xs text-foreground/40">Nenhum lançamento nesse período.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px]">
+            <thead>
+              <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+                <th className="px-4 py-3">Pessoa</th>
+                <th className="px-4 py-3">Tipo</th>
+                <th className="px-4 py-3">Referência</th>
+                <th className="w-32 px-4 py-3 text-right">Valor</th>
+                <th className="w-32 px-4 py-3 text-center">Status</th>
+                <th className="w-10 px-2 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e) => {
+                const paid = e.status === 'pago'
+                return (
+                  <tr key={e.id} className="border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
+                          {initials(e.person)}
+                        </span>
+                        <span className="text-sm font-medium text-foreground">{e.person}</span>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm tabular-nums">{r.count}</td>
-                  <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-foreground">
-                    {formatBRLCents(r.valueCents)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => onToggle(r.person, role)}
-                      disabled={r.valueCents === 0}
-                      className={cn(
-                        'mx-auto flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-40',
-                        paid ? 'bg-success/15 text-success hover:bg-success/25' : 'bg-warning/20 text-warning hover:bg-warning/30',
-                      )}
-                    >
-                      {paid ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                      {paid ? 'Pago' : 'Pendente'}
-                    </button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-foreground/70">{e.typeLabel}</td>
+                    <td className="px-4 py-3 text-sm text-foreground/55">{e.reference || '—'}</td>
+                    <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-foreground">
+                      {formatBRLCents(e.amountCents)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => onToggle(e)}
+                        className={cn(
+                          'mx-auto flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                          paid ? 'bg-success/15 text-success hover:bg-success/25' : 'bg-warning/20 text-warning hover:bg-warning/30',
+                        )}
+                      >
+                        {paid ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                        {paid ? 'Pago' : 'Pendente'}
+                      </button>
+                    </td>
+                    <td className="px-2 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setDeleting(e)}
+                        title="Excluir lançamento"
+                        className="grid h-7 w-7 place-items-center rounded text-foreground/30 hover:bg-danger/10 hover:text-danger"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Modal
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        title="Excluir lançamento"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleting(null)}>Cancelar</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (deleting) void commissionsService.deleteEntry(deleting.id)
+                setDeleting(null)
+              }}
+            >
+              Excluir
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-foreground/70">
+          Excluir a comissão de <strong>{deleting?.person}</strong> ({deleting?.typeLabel},{' '}
+          {deleting && formatBRLCents(deleting.amountCents)})?
+        </p>
+      </Modal>
     </div>
+  )
+}
+
+function RegisterEntryModal({
+  open,
+  onClose,
+  types,
+  month,
+}: {
+  open: boolean
+  onClose: () => void
+  types: CommissionType[]
+  month: string
+}) {
+  const [role, setRole] = React.useState<CommissionRole>('sdr')
+  const [person, setPerson] = React.useState('')
+  const [typeId, setTypeId] = React.useState('')
+  const [reference, setReference] = React.useState('')
+  const [baseValue, setBaseValue] = React.useState('')
+  const [amount, setAmount] = React.useState('')
+  const [amountTouched, setAmountTouched] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+
+  const typesForRole = React.useMemo(
+    () => types.filter((t) => t.role === role && !t.archived).sort((a, b) => a.position - b.position),
+    [types, role],
+  )
+  const selectedType = typesForRole.find((t) => t.id === typeId) ?? null
+
+  React.useEffect(() => {
+    if (!open) return
+    setRole('sdr')
+    setPerson('')
+    setTypeId('')
+    setReference('')
+    setBaseValue('')
+    setAmount('')
+    setAmountTouched(false)
+  }, [open])
+
+  // Troca de papel invalida o tipo escolhido (cardápio é diferente).
+  React.useEffect(() => { setTypeId(''); setAmountTouched(false) }, [role])
+
+  // Recalcula o valor sozinho a partir do tipo/valor base — só enquanto a pessoa não mexeu no
+  // campo de valor à mão (edição manual sempre vence, pra permitir ajuste caso a caso).
+  React.useEffect(() => {
+    if (!selectedType || amountTouched) return
+    if (selectedType.kind === 'fixed') {
+      setAmount(formatBRLCents(selectedType.rateCents ?? 0))
+    } else {
+      const baseCents = parseBRLCents(baseValue)
+      const cents = Math.round((baseCents * (selectedType.ratePercent ?? 0)) / 100)
+      setAmount(baseCents > 0 ? formatBRLCents(cents) : '')
+    }
+  }, [selectedType, baseValue, amountTouched])
+
+  const submit = async () => {
+    if (!person.trim()) { toast.error('Informe a pessoa.'); return }
+    if (!selectedType) { toast.error('Escolha o tipo de comissão.'); return }
+    const amountCents = parseBRLCents(amount)
+    if (amountCents <= 0) { toast.error('Informe o valor da comissão.'); return }
+    setSaving(true)
+    try {
+      await commissionsService.createEntry({
+        person: person.trim(),
+        role,
+        typeId: selectedType.id,
+        typeLabel: selectedType.label,
+        reference: reference.trim(),
+        baseValueCents: selectedType.kind === 'percent' ? parseBRLCents(baseValue) : null,
+        amountCents,
+        month,
+      })
+      toast.success('Comissão registrada.')
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Registrar comissão"
+      description={`Mês: ${monthLabelPt(month)}`}
+      size="md"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={submit} loading={saving}>Registrar</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          {(['sdr', 'suporte'] as const).map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRole(r)}
+              className={cn(
+                'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                role === r ? 'border-accent/40 bg-accent/10 text-accent' : 'border-line text-foreground/60 hover:bg-elevate/[0.03]',
+              )}
+            >
+              {ROLE_LABEL[r]}
+            </button>
+          ))}
+        </div>
+
+        <Input label="Pessoa" value={person} onChange={(e) => setPerson(e.target.value)} placeholder="Ex.: Arthur" autoFocus />
+
+        <Select
+          label="Tipo de comissão"
+          value={typeId}
+          onChange={(e) => setTypeId(e.target.value)}
+          options={[
+            { value: '', label: 'Selecionar…' },
+            ...typesForRole.map((t) => ({ value: t.id, label: `${t.label} (${rateLabel(t)})` })),
+          ]}
+        />
+
+        {selectedType?.kind === 'percent' && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-foreground/70">
+              Valor da venda/mensalidade (base do {selectedType.ratePercent}%)
+            </label>
+            <CurrencyField
+              value={baseValue}
+              onSave={setBaseValue}
+              className="h-10 rounded-lg border border-line bg-surface px-3 text-foreground"
+            />
+          </div>
+        )}
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-foreground/70">
+            Valor da comissão {selectedType?.kind === 'percent' ? '(calculado — pode ajustar)' : ''}
+          </label>
+          <CurrencyField
+            value={amount}
+            onSave={(v) => { setAmount(v); setAmountTouched(true) }}
+            className="h-10 rounded-lg border border-line bg-surface px-3 text-foreground"
+          />
+        </div>
+
+        <Input
+          label="Referência (opcional)"
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+          placeholder="Ex.: nome do cliente/venda"
+        />
+      </div>
+    </Modal>
+  )
+}
+
+function TypesModal({ open, onClose, types }: { open: boolean; onClose: () => void; types: CommissionType[] }) {
+  const [adding, setAdding] = React.useState<CommissionRole | null>(null)
+
+  return (
+    <Modal open={open} onClose={onClose} title="Tipos de comissão" size="lg">
+      <div className="space-y-5">
+        {(['sdr', 'suporte'] as const).map((role) => (
+          <div key={role}>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">{ROLE_LABEL[role]}</p>
+              <Button size="sm" variant="ghost" onClick={() => setAdding(role)} leftIcon={<Plus className="h-3.5 w-3.5" />}>
+                Novo tipo
+              </Button>
+            </div>
+            <ul className="space-y-1.5">
+              {types
+                .filter((t) => t.role === role)
+                .sort((a, b) => a.position - b.position)
+                .map((t) => (
+                  <TypeRow key={t.id} type={t} />
+                ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      <NewTypeModal open={!!adding} role={adding} onClose={() => setAdding(null)} />
+    </Modal>
+  )
+}
+
+function TypeRow({ type }: { type: CommissionType }) {
+  const [editing, setEditing] = React.useState(false)
+  const [label, setLabel] = React.useState(type.label)
+  const [kind, setKind] = React.useState<CommissionKind>(type.kind)
+  const [rateValue, setRateValue] = React.useState(
+    type.kind === 'fixed' ? formatBRLCents(type.rateCents ?? 0) : String(type.ratePercent ?? 0),
+  )
+  const [saving, setSaving] = React.useState(false)
+
+  const startEdit = () => {
+    setLabel(type.label)
+    setKind(type.kind)
+    setRateValue(type.kind === 'fixed' ? formatBRLCents(type.rateCents ?? 0) : String(type.ratePercent ?? 0))
+    setEditing(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await commissionsService.updateType(type.id, {
+        label,
+        kind,
+        rateCents: kind === 'fixed' ? parseBRLCents(rateValue) : null,
+        ratePercent: kind === 'percent' ? Number(rateValue.replace(',', '.')) || 0 : null,
+      })
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <li className="rounded-lg border border-accent/30 bg-accent/[0.03] p-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            className="h-8 flex-1 rounded-md border border-line px-2 text-sm outline-none focus:border-accent"
+          />
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as CommissionKind)}
+            className="h-8 rounded-md border border-line px-2 text-xs text-foreground/70 outline-none"
+          >
+            <option value="fixed">R$ fixo</option>
+            <option value="percent">%</option>
+          </select>
+          <input
+            value={rateValue}
+            onChange={(e) => setRateValue(e.target.value)}
+            placeholder={kind === 'fixed' ? 'R$ 0,00' : '0'}
+            className="h-8 w-24 rounded-md border border-line px-2 text-sm outline-none focus:border-accent"
+          />
+          <Button size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={saving}>Cancelar</Button>
+          <Button size="sm" onClick={save} loading={saving}>Salvar</Button>
+        </div>
+      </li>
+    )
+  }
+
+  return (
+    <li
+      className={cn(
+        'flex items-center justify-between gap-2 rounded-lg border px-3 py-2',
+        type.archived ? 'border-line/50 opacity-50' : 'border-line/60',
+      )}
+    >
+      <button type="button" onClick={startEdit} className="min-w-0 flex-1 text-left text-sm text-foreground/85 hover:text-foreground">
+        {type.label}
+      </button>
+      <span className="shrink-0 text-xs font-medium text-foreground/50">{rateLabel(type)}</span>
+      <button
+        type="button"
+        onClick={() => void commissionsService.updateType(type.id, { archived: !type.archived })}
+        title={type.archived ? 'Reativar' : 'Arquivar'}
+        className="shrink-0 text-[11px] font-medium text-foreground/40 hover:text-danger"
+      >
+        {type.archived ? 'Reativar' : 'Arquivar'}
+      </button>
+    </li>
+  )
+}
+
+function NewTypeModal({ open, role, onClose }: { open: boolean; role: CommissionRole | null; onClose: () => void }) {
+  const [label, setLabel] = React.useState('')
+  const [kind, setKind] = React.useState<CommissionKind>('fixed')
+  const [rateValue, setRateValue] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!open) return
+    setLabel('')
+    setKind('fixed')
+    setRateValue('')
+  }, [open])
+
+  const submit = async () => {
+    if (!role || !label.trim()) { toast.error('Informe o nome do tipo.'); return }
+    setSaving(true)
+    try {
+      await commissionsService.createType({
+        role,
+        label: label.trim(),
+        kind,
+        rateCents: kind === 'fixed' ? parseBRLCents(rateValue) : null,
+        ratePercent: kind === 'percent' ? Number(rateValue.replace(',', '.')) || 0 : null,
+      })
+      toast.success('Tipo criado.')
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Novo tipo — ${role ? ROLE_LABEL[role] : ''}`}
+      size="sm"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={submit} loading={saving}>Criar</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <Input label="Nome" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Ex.: Venda cross-sell" autoFocus />
+        <Select
+          label="Formato"
+          value={kind}
+          onChange={(e) => setKind(e.target.value as CommissionKind)}
+          options={[
+            { value: 'fixed', label: 'Valor fixo (R$)' },
+            { value: 'percent', label: 'Percentual (%)' },
+          ]}
+        />
+        {kind === 'fixed' ? (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-foreground/70">Valor fixo</label>
+            <CurrencyField value={rateValue} onSave={setRateValue} className="h-10 rounded-lg border border-line bg-surface px-3 text-foreground" />
+          </div>
+        ) : (
+          <Input label="Percentual (%)" value={rateValue} onChange={(e) => setRateValue(e.target.value)} placeholder="Ex.: 10" />
+        )}
+      </div>
+    </Modal>
   )
 }

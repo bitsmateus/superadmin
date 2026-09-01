@@ -1,42 +1,62 @@
 import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
 
-export interface CommissionRates {
-  sdrPerSaleCents: number
-  suportePerDeliveryCents: number
-  suportePerVendaAvulsaCents: number
-}
-
 export type CommissionRole = 'sdr' | 'suporte'
+export type CommissionKind = 'fixed' | 'percent'
 export type CommissionStatus = 'pendente' | 'pago'
 
-export interface CommissionPayment {
+export interface CommissionType {
+  id: string
+  role: CommissionRole
+  label: string
+  kind: CommissionKind
+  rateCents: number | null
+  ratePercent: number | null
+  position: number
+  archived: boolean
+}
+
+export interface CommissionEntry {
   id: string
   person: string
   role: CommissionRole
-  /** 'YYYY-MM' */
+  typeId: string | null
+  typeLabel: string
+  reference: string
+  baseValueCents: number | null
+  amountCents: number
   month: string
   status: CommissionStatus
+  createdAt: string
 }
 
-type RatesRow = {
-  sdr_per_sale_cents: number; suporte_per_delivery_cents: number; suporte_per_venda_avulsa_cents: number
+type TypeRow = {
+  id: string; role: CommissionRole; label: string; kind: CommissionKind
+  rate_cents: number | null; rate_percent: string | null; position: number; archived: boolean
 }
-type PaymentRow = { id: string; person: string; role: CommissionRole; month: string; status: CommissionStatus }
+type EntryRow = {
+  id: string; person: string; role: CommissionRole; type_id: string | null; type_label: string
+  reference: string; base_value_cents: number | null; amount_cents: number; month: string
+  status: CommissionStatus; created_at: string
+}
 
-function rowToRates(r: RatesRow): CommissionRates {
+function rowToType(r: TypeRow): CommissionType {
   return {
-    sdrPerSaleCents: r.sdr_per_sale_cents,
-    suportePerDeliveryCents: r.suporte_per_delivery_cents,
-    suportePerVendaAvulsaCents: r.suporte_per_venda_avulsa_cents,
+    id: r.id, role: r.role, label: r.label, kind: r.kind,
+    rateCents: r.rate_cents ?? null, ratePercent: r.rate_percent !== null ? Number(r.rate_percent) : null,
+    position: r.position, archived: r.archived,
   }
 }
-function rowToPayment(r: PaymentRow): CommissionPayment {
-  return { id: r.id, person: r.person, role: r.role, month: r.month, status: r.status }
+function rowToEntry(r: EntryRow): CommissionEntry {
+  return {
+    id: r.id, person: r.person, role: r.role, typeId: r.type_id, typeLabel: r.type_label,
+    reference: r.reference ?? '', baseValueCents: r.base_value_cents ?? null, amountCents: r.amount_cents,
+    month: r.month, status: r.status, createdAt: r.created_at,
+  }
 }
 
-let rates: CommissionRates = { sdrPerSaleCents: 10000, suportePerDeliveryCents: 0, suportePerVendaAvulsaCents: 0 }
-let payments: CommissionPayment[] = []
+let types: CommissionType[] = []
+let entries: CommissionEntry[] = []
 let loaded = false
 let loadingPromise: Promise<void> | null = null
 
@@ -47,19 +67,19 @@ let unsubSse: (() => void) | null = null
 function ensureRealtime() {
   if (unsubSse) return
   unsubSse = onSseEvent((table) => {
-    if (table !== 'commission_rates' && table !== 'commission_payments') return
+    if (table !== 'commission_types' && table !== 'commission_entries') return
     void reload()
   })
 }
 
 async function reload(): Promise<void> {
   try {
-    const [ratesRow, paymentRows] = await Promise.all([
-      api.get<RatesRow>('/api/commission-rates'),
-      api.get<PaymentRow[]>('/api/commission-payments'),
+    const [typeRows, entryRows] = await Promise.all([
+      api.get<TypeRow[]>('/api/commission-types'),
+      api.get<EntryRow[]>('/api/commission-entries'),
     ])
-    rates = rowToRates(ratesRow)
-    payments = paymentRows.map(rowToPayment)
+    types = typeRows.map(rowToType)
+    entries = entryRows.map(rowToEntry)
     loaded = true
     notify()
   } catch (err) {
@@ -72,8 +92,8 @@ export function isCommissionsLoaded(): boolean { return loaded }
 export const commissionsService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
 
-  getRates(): CommissionRates { return rates },
-  getPayments(): CommissionPayment[] { return payments },
+  getTypes(): CommissionType[] { return types },
+  getEntries(): CommissionEntry[] { return entries },
 
   async ensureLoaded(): Promise<void> {
     ensureRealtime()
@@ -83,26 +103,58 @@ export const commissionsService = {
     return loadingPromise
   },
 
-  async updateRates(patch: Partial<CommissionRates>): Promise<void> {
+  async createType(input: {
+    role: CommissionRole; label: string; kind: CommissionKind; rateCents?: number | null; ratePercent?: number | null
+  }): Promise<void> {
     try {
-      const row = await api.put<RatesRow>('/api/commission-rates', patch)
-      rates = rowToRates(row)
-      notify()
+      await api.post('/api/commission-types', input)
+      await reload()
     } catch (err) {
-      toast.error('Falha ao salvar comissão: ' + (err as Error).message)
+      toast.error('Falha ao criar tipo de comissão: ' + (err as Error).message)
     }
   },
 
-  async setPaymentStatus(person: string, role: CommissionRole, month: string, status: CommissionStatus): Promise<void> {
+  async updateType(id: string, patch: {
+    label?: string; kind?: CommissionKind; rateCents?: number | null; ratePercent?: number | null; archived?: boolean
+  }): Promise<void> {
     try {
-      const row = await api.put<PaymentRow>('/api/commission-payments', { person, role, month, status })
-      const full = rowToPayment(row)
-      const idx = payments.findIndex((p) => p.person === person && p.role === role && p.month === month)
-      if (idx === -1) payments = [...payments, full]
-      else { const copy = payments.slice(); copy[idx] = full; payments = copy }
-      notify()
+      await api.patch(`/api/commission-types/${id}`, patch)
+      await reload()
+    } catch (err) {
+      toast.error('Falha ao salvar tipo de comissão: ' + (err as Error).message)
+    }
+  },
+
+  async createEntry(input: {
+    person: string; role: CommissionRole; typeId: string | null; typeLabel: string
+    reference?: string; baseValueCents?: number | null; amountCents: number; month: string
+  }): Promise<void> {
+    try {
+      await api.post('/api/commission-entries', input)
+      await reload()
+    } catch (err) {
+      toast.error('Falha ao registrar comissão: ' + (err as Error).message)
+    }
+  },
+
+  async setEntryStatus(id: string, status: CommissionStatus): Promise<void> {
+    try {
+      const row = await api.patch<EntryRow>(`/api/commission-entries/${id}`, { status })
+      const full = rowToEntry(row)
+      const idx = entries.findIndex((e) => e.id === id)
+      if (idx !== -1) { const copy = entries.slice(); copy[idx] = full; entries = copy; notify() }
     } catch (err) {
       toast.error('Falha ao salvar status: ' + (err as Error).message)
+    }
+  },
+
+  async deleteEntry(id: string): Promise<void> {
+    try {
+      await api.delete(`/api/commission-entries/${id}`)
+      entries = entries.filter((e) => e.id !== id)
+      notify()
+    } catch (err) {
+      toast.error('Falha ao excluir lançamento: ' + (err as Error).message)
     }
   },
 }

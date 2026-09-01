@@ -1013,33 +1013,59 @@ END $$`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS smtp JSONB`);
 
   // Comissões (aba "Gestão Interna", em Financeiro) — feature isolada, tabelas próprias, não
-  // mexe em lead_rows/clients/contracts. Ver comentário completo em schema.sql.
-  await pool.query(`CREATE TABLE IF NOT EXISTS commission_rates (
-    id BOOLEAN PRIMARY KEY DEFAULT true,
-    sdr_per_sale_cents INT NOT NULL DEFAULT 10000,
-    suporte_per_delivery_cents INT NOT NULL DEFAULT 0,
-    suporte_per_venda_avulsa_cents INT NOT NULL DEFAULT 0,
+  // mexe em lead_rows/clients/contracts. Registro manual por enquanto (cardápio de tipos +
+  // lançamento individual por venda/entrega) — automação puxando de outras telas fica pra depois.
+  // Ver comentário completo em schema.sql. As tabelas commission_rates/commission_payments de uma
+  // versão anterior (sem uso real ainda) ficam paradas no banco, sem migração de dados.
+  await pool.query(`CREATE TABLE IF NOT EXISTS commission_types (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    role TEXT NOT NULL CHECK (role IN ('sdr', 'suporte')),
+    label TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('fixed', 'percent')),
+    rate_cents INT,
+    rate_percent NUMERIC(5,2),
+    position INT NOT NULL DEFAULT 0,
+    archived BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT commission_rates_singleton CHECK (id)
+    UNIQUE (role, label)
   )`);
-  await pool.query(`INSERT INTO commission_rates (id) VALUES (true) ON CONFLICT (id) DO NOTHING`);
-  await pool.query(`CREATE TABLE IF NOT EXISTS commission_payments (
+  await pool.query(`INSERT INTO commission_types (role, label, kind, rate_cents, position) VALUES
+    ('sdr', 'Venda sistema', 'fixed', 10000, 0),
+    ('sdr', 'Venda tráfego', 'fixed', 15000, 1),
+    ('suporte', 'Entrega API comum', 'fixed', 800, 0),
+    ('suporte', 'Entrega API oficial', 'fixed', 1400, 1),
+    ('suporte', 'Entrega IA Básica', 'fixed', 2500, 2),
+    ('suporte', 'Entrega IA Avançada', 'fixed', 4500, 3)
+  ON CONFLICT (role, label) DO NOTHING`);
+  await pool.query(`INSERT INTO commission_types (role, label, kind, rate_percent, position) VALUES
+    ('suporte', 'Venda IA Avançada', 'percent', 10.00, 4),
+    ('suporte', 'Venda IA Básica', 'percent', 10.00, 5),
+    ('suporte', 'Venda API Oficial', 'percent', 10.00, 6),
+    ('suporte', 'Indicação externa da base (1ª mensalidade)', 'percent', 100.00, 7)
+  ON CONFLICT (role, label) DO NOTHING`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS commission_entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     person TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('sdr', 'suporte')),
+    type_id UUID REFERENCES commission_types(id) ON DELETE SET NULL,
+    type_label TEXT NOT NULL,
+    reference TEXT NOT NULL DEFAULT '',
+    base_value_cents INT,
+    amount_cents INT NOT NULL,
     month TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'pago')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (person, role, month)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS commission_entries_month_idx ON commission_entries(month)`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
-      DROP TRIGGER IF EXISTS notify_commission_rates ON commission_rates;
-      CREATE TRIGGER notify_commission_rates AFTER INSERT OR UPDATE ON commission_rates
+      DROP TRIGGER IF EXISTS notify_commission_types ON commission_types;
+      CREATE TRIGGER notify_commission_types AFTER INSERT OR UPDATE OR DELETE ON commission_types
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
-      DROP TRIGGER IF EXISTS notify_commission_payments ON commission_payments;
-      CREATE TRIGGER notify_commission_payments AFTER INSERT OR UPDATE OR DELETE ON commission_payments
+      DROP TRIGGER IF EXISTS notify_commission_entries ON commission_entries;
+      CREATE TRIGGER notify_commission_entries AFTER INSERT OR UPDATE OR DELETE ON commission_entries
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);

@@ -970,40 +970,67 @@ CREATE TABLE IF NOT EXISTS commercial_months (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ---------- commission_rates ----------
--- Linha única (igual settings) com os valores de comissão — separado de propósito do resto do
--- sistema (feature isolada da aba "Gestão Interna", em Financeiro, não mexe em mais nada).
-CREATE TABLE IF NOT EXISTS commission_rates (
-  id BOOLEAN PRIMARY KEY DEFAULT true,
-  sdr_per_sale_cents INT NOT NULL DEFAULT 10000,
-  suporte_per_delivery_cents INT NOT NULL DEFAULT 0,
-  suporte_per_venda_avulsa_cents INT NOT NULL DEFAULT 0,
+-- ---------- commission_types ----------
+-- Cardápio de comissões configurável (feature isolada da aba "Gestão Interna", em Financeiro —
+-- não mexe em lead_rows/clients/contracts). "fixed" = valor fixo por unidade (ex.: R$8 por
+-- entrega de API comum); "percent" = percentual sobre um valor base informado na hora do registro
+-- (ex.: 10% sobre a venda de IA avançada). "archived" desativa da lista de novos registros sem
+-- apagar o histórico de quem já usou esse tipo (commission_entries.type_label é uma cópia do
+-- nome, não muda se o tipo for editado/arquivado depois).
+CREATE TABLE IF NOT EXISTS commission_types (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role TEXT NOT NULL CHECK (role IN ('sdr', 'suporte')),
+  label TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('fixed', 'percent')),
+  rate_cents INT,
+  rate_percent NUMERIC(5,2),
+  position INT NOT NULL DEFAULT 0,
+  archived BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT commission_rates_singleton CHECK (id)
+  UNIQUE (role, label)
 );
-INSERT INTO commission_rates (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
+INSERT INTO commission_types (role, label, kind, rate_cents, position) VALUES
+  ('sdr', 'Venda sistema', 'fixed', 10000, 0),
+  ('sdr', 'Venda tráfego', 'fixed', 15000, 1),
+  ('suporte', 'Entrega API comum', 'fixed', 800, 0),
+  ('suporte', 'Entrega API oficial', 'fixed', 1400, 1),
+  ('suporte', 'Entrega IA Básica', 'fixed', 2500, 2),
+  ('suporte', 'Entrega IA Avançada', 'fixed', 4500, 3)
+ON CONFLICT (role, label) DO NOTHING;
+INSERT INTO commission_types (role, label, kind, rate_percent, position) VALUES
+  ('suporte', 'Venda IA Avançada', 'percent', 10.00, 4),
+  ('suporte', 'Venda IA Básica', 'percent', 10.00, 5),
+  ('suporte', 'Venda API Oficial', 'percent', 10.00, 6),
+  ('suporte', 'Indicação externa da base (1ª mensalidade)', 'percent', 100.00, 7)
+ON CONFLICT (role, label) DO NOTHING;
 
--- ---------- commission_payments ----------
--- Status pendente/pago por pessoa+papel+mês (granularidade "pessoa-mês", não por venda
--- individual) — a contagem de vendas/entregas em si é sempre calculada ao vivo em cima de
--- lead_rows/clients, essa tabela só guarda o clique manual de "já paguei".
-CREATE TABLE IF NOT EXISTS commission_payments (
+-- ---------- commission_entries ----------
+-- Um registro manual por comissão (não por pessoa-mês agregada) — cada venda/entrega/indicação
+-- vira uma linha própria, ligada a um tipo do cardápio acima. type_label/amount_cents ficam
+-- congelados no momento do registro (não recalculam se o tipo mudar de valor depois).
+CREATE TABLE IF NOT EXISTS commission_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   person TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('sdr', 'suporte')),
+  type_id UUID REFERENCES commission_types(id) ON DELETE SET NULL,
+  type_label TEXT NOT NULL,
+  reference TEXT NOT NULL DEFAULT '',
+  base_value_cents INT,
+  amount_cents INT NOT NULL,
   month TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'pago')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (person, role, month)
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS commission_entries_month_idx ON commission_entries(month);
 
-DROP TRIGGER IF EXISTS notify_commission_rates ON commission_rates;
-CREATE TRIGGER notify_commission_rates AFTER INSERT OR UPDATE ON commission_rates
+DROP TRIGGER IF EXISTS notify_commission_types ON commission_types;
+CREATE TRIGGER notify_commission_types AFTER INSERT OR UPDATE OR DELETE ON commission_types
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
-DROP TRIGGER IF EXISTS notify_commission_payments ON commission_payments;
-CREATE TRIGGER notify_commission_payments AFTER INSERT OR UPDATE OR DELETE ON commission_payments
+DROP TRIGGER IF EXISTS notify_commission_entries ON commission_entries;
+CREATE TRIGGER notify_commission_entries AFTER INSERT OR UPDATE OR DELETE ON commission_entries
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 -- =====================================================================

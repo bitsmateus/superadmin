@@ -1061,6 +1061,7 @@ END $$`);
     amount_cents INT NOT NULL,
     month TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'pago')),
+    contrato_assinado BOOLEAN NOT NULL DEFAULT false,
     source_type TEXT,
     source_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1069,6 +1070,8 @@ END $$`);
   await pool.query(`CREATE INDEX IF NOT EXISTS commission_entries_month_idx ON commission_entries(month)`);
   // Nome do cliente/venda (mesmo nome da aba Vendas) — separado de "reference" (campo livre à parte).
   await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
+  // Mesmo padrão de contrato_assinado na aba Vendas — cópia independente, não sincroniza sozinha.
+  await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS contrato_assinado BOOLEAN NOT NULL DEFAULT false`);
   // source_type/source_id: sobras de uma automação de comissão removida — todo lançamento hoje é
   // manual. Colunas paradas, sem uso pelo app.
   await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS source_type TEXT`);

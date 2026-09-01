@@ -132,6 +132,7 @@ function EntriesTable({
               <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">Pessoa</th>
+                <th className="w-28 px-4 py-3">Contrato</th>
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Referência</th>
                 <th className="w-32 px-4 py-3 text-right">Valor</th>
@@ -152,12 +153,20 @@ function EntriesTable({
                       <NomeCell entry={e} />
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
-                          {initials(e.person)}
-                        </span>
-                        <span className="text-sm font-medium text-foreground">{e.person}</span>
-                      </div>
+                      <PersonCell entry={e} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => void commissionsService.updateEntry(e.id, { contratoAssinado: !e.contratoAssinado })}
+                        title={e.contratoAssinado ? 'Assinado — clique pra marcar como pendente' : 'Pendente — clique pra marcar como assinado'}
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+                          e.contratoAssinado ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning hover:bg-warning/15',
+                        )}
+                      >
+                        {e.contratoAssinado ? 'Assinado' : 'Pendente'}
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <TypeCell entry={e} types={types} />
@@ -253,6 +262,39 @@ function NomeCell({ entry }: { entry: CommissionEntry }) {
       className={cn('rounded px-1.5 py-0.5 text-left font-medium hover:bg-elevate/[0.06]', entry.nome ? 'text-foreground' : 'text-warning')}
     >
       {entry.nome || 'Definir nome…'}
+    </button>
+  )
+}
+
+/** Pessoa (quem recebe a comissão), editável no lugar — pra corrigir se registrou com o nome
+ * errado, sem precisar apagar e recriar o lançamento inteiro. */
+function PersonCell({ entry }: { entry: CommissionEntry }) {
+  const [editing, setEditing] = React.useState(false)
+  const [value, setValue] = React.useState(entry.person)
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={value}
+        onChange={(ev) => setValue(ev.target.value)}
+        onBlur={() => { setEditing(false); if (value.trim() && value !== entry.person) void commissionsService.updateEntry(entry.id, { person: value }) }}
+        onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
+        className="h-8 w-32 rounded-md border border-accent/40 bg-surface px-2 text-xs text-foreground outline-none"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => { setValue(entry.person); setEditing(true) }}
+      className="flex items-center gap-2.5 rounded px-1 py-0.5 hover:bg-elevate/[0.06]"
+    >
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
+        {initials(entry.person)}
+      </span>
+      <span className="text-sm font-medium text-foreground">{entry.person}</span>
     </button>
   )
 }

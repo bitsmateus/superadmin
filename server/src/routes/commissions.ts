@@ -68,26 +68,27 @@ export async function commissionRoutes(app: FastifyInstance) {
   app.post<{ Body: {
     nome?: string; person?: string; role?: 'sdr' | 'suporte'; typeId?: string | null; typeLabel?: string
     reference?: string; baseValueCents?: number | null; amountCents?: number; month?: string
+    contratoAssinado?: boolean
   } }>(
     '/api/commission-entries',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const { nome, person, role, typeId, typeLabel, reference, baseValueCents, amountCents, month } = req.body;
+      const { nome, person, role, typeId, typeLabel, reference, baseValueCents, amountCents, month, contratoAssinado } = req.body;
       if (!person?.trim() || !role || !typeLabel?.trim() || amountCents === undefined || !month) {
         return reply.status(400).send({ message: 'person, role, typeLabel, amountCents e month são obrigatórios' });
       }
       const [entry] = await query(
-        `INSERT INTO commission_entries (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [nome?.trim() ?? '', person.trim(), role, typeId ?? null, typeLabel.trim(), reference?.trim() ?? '', baseValueCents ?? null, amountCents, month]
+        `INSERT INTO commission_entries (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month, contrato_assinado)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [nome?.trim() ?? '', person.trim(), role, typeId ?? null, typeLabel.trim(), reference?.trim() ?? '', baseValueCents ?? null, amountCents, month, contratoAssinado ?? false]
       );
       return reply.status(201).send(entry);
     }
   );
 
   app.patch<{ Params: { id: string }; Body: {
-    status?: 'pendente' | 'pago'; amountCents?: number; reference?: string; nome?: string
-    typeId?: string | null; typeLabel?: string; baseValueCents?: number | null
+    status?: 'pendente' | 'pago'; amountCents?: number; reference?: string; nome?: string; person?: string
+    typeId?: string | null; typeLabel?: string; baseValueCents?: number | null; contratoAssinado?: boolean
   } }>(
     '/api/commission-entries/:id',
     { onRequest: [app.authenticate] },
@@ -99,9 +100,11 @@ export async function commissionRoutes(app: FastifyInstance) {
       if (req.body.amountCents !== undefined) { sets.push(`amount_cents = $${i++}`); params.push(req.body.amountCents); }
       if (req.body.reference !== undefined) { sets.push(`reference = $${i++}`); params.push(req.body.reference.trim()); }
       if (req.body.nome !== undefined) { sets.push(`nome = $${i++}`); params.push(req.body.nome.trim()); }
+      if (req.body.person !== undefined) { sets.push(`person = $${i++}`); params.push(req.body.person.trim()); }
       if (req.body.typeId !== undefined) { sets.push(`type_id = $${i++}`); params.push(req.body.typeId); }
       if (req.body.typeLabel !== undefined) { sets.push(`type_label = $${i++}`); params.push(req.body.typeLabel); }
       if (req.body.baseValueCents !== undefined) { sets.push(`base_value_cents = $${i++}`); params.push(req.body.baseValueCents); }
+      if (req.body.contratoAssinado !== undefined) { sets.push(`contrato_assinado = $${i++}`); params.push(req.body.contratoAssinado); }
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       sets.push(`updated_at = NOW()`);
 

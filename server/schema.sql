@@ -1027,6 +1027,9 @@ CREATE TABLE IF NOT EXISTS commission_entries (
   amount_cents INT NOT NULL,
   month TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'pago')),
+  -- Mesmo padrão de contrato_assinado na aba Vendas (toggle manual, sem checklist/data) — cópia
+  -- independente aqui, não sincroniza sozinho se o status mudar do lado de Vendas depois.
+  contrato_assinado BOOLEAN NOT NULL DEFAULT false,
   -- source_type/source_id: sobras de uma automação de comissão removida — todo lançamento hoje é
   -- manual, registrado à mão na tela ("Registrar comissão"). Colunas paradas, sem uso pelo app.
   source_type TEXT,

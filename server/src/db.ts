@@ -868,6 +868,10 @@ END $$`);
   // esse campo é a fonte da verdade, marcada manualmente por quem registra/revisa a venda.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS veio_do_funil BOOLEAN NOT NULL DEFAULT false`);
 
+  // Marca manual (toggle) se o contrato da venda já foi assinado — só usada na aba Vendas, mesmo
+  // padrão de veio_do_funil (sem checklist, sem data associada, só liga/desliga).
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS contrato_assinado BOOLEAN NOT NULL DEFAULT false`);
+
   // Integração com Autentique: o contrato é gerado aqui mas enviado pra assinatura lá fora (a
   // pessoa sobe o PDF manualmente no Autentique, não tem criação via API). Esse campo guarda o ID
   // do documento no Autentique, colado à mão depois de subir — é o que liga o webhook de "documento

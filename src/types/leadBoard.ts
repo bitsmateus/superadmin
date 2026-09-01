@@ -81,6 +81,9 @@ export interface LeadRow {
    * venda_origem_id sozinho não dá conta disso: na prática quase toda venda é registrada à mão
    * pelo botão "Registrar venda" mesmo vindo do funil, então o vínculo automático fica vazio. */
   veioDoFunil: boolean
+  /** Marca manual (só a pessoa liga/desliga, na aba Vendas) se o contrato dessa venda já foi
+   * assinado ou ainda está pendente — mesmo padrão de veioDoFunil, sem data nem checklist. */
+  contratoAssinado: boolean
 }
 
 /**
@@ -95,7 +98,7 @@ export type LeadRowField = Exclude<
   keyof LeadRow,
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
-  | 'observacoes' | 'veioDoFunil'
+  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

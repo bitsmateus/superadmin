@@ -394,7 +394,10 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   observacoes TEXT NOT NULL DEFAULT '',
   -- Marca manual se a venda veio do funil (SDR agendou/trabalhou) vs avulsa de verdade — ver
   -- comentário em db.ts, venda_origem_id sozinho não dá conta disso na prática.
-  veio_do_funil BOOLEAN NOT NULL DEFAULT false
+  veio_do_funil BOOLEAN NOT NULL DEFAULT false,
+  -- Marca manual se o contrato já foi assinado — usada só na aba Vendas, mesmo padrão de
+  -- veio_do_funil (toggle, sem checklist nem data associada).
+  contrato_assinado BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);

@@ -52,6 +52,7 @@ type LeadRowRow = {
   mrr_pendente?: boolean; impl_pendente?: boolean
   observacoes?: string
   veio_do_funil?: boolean
+  contrato_assinado?: boolean
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
@@ -71,6 +72,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     implPendente: r.impl_pendente ?? true,
     observacoes: r.observacoes ?? '',
     veioDoFunil: r.veio_do_funil ?? false,
+    contratoAssinado: r.contrato_assinado ?? false,
   }
 }
 function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
@@ -98,6 +100,7 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('implPendente' in patch) row.impl_pendente = patch.implPendente
   if ('observacoes' in patch) row.observacoes = patch.observacoes
   if ('veioDoFunil' in patch) row.veio_do_funil = patch.veioDoFunil
+  if ('contratoAssinado' in patch) row.contrato_assinado = patch.contratoAssinado
   if ('boardId' in patch) row.board_id = patch.boardId
   if ('position' in patch) row.position = patch.position
   if ('createdAt' in patch) row.created_at = patch.createdAt
@@ -225,7 +228,8 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
     dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
     fechamento: '', vendaOrigemId: null, vendaRevertida: false,
     position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
-    mrrPendente: true, implPendente: true, observacoes: '', veioDoFunil: false, ...initial,
+    mrrPendente: true, implPendente: true, observacoes: '', veioDoFunil: false,
+    contratoAssinado: false, ...initial,
   }
   rows = [...rows, row]
   notify()

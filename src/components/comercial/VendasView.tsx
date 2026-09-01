@@ -307,6 +307,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <th className="px-4 py-3">Nome</th>
                   <th className="w-28 px-4 py-3">SDR</th>
                   <th className="w-24 px-4 py-3">Funil</th>
+                  <th className="w-28 px-4 py-3">Contrato</th>
                   <th className="w-48 px-4 py-3 text-right">Valor MRR</th>
                   <th className="w-56 px-4 py-3 text-right">Valor de implementação</th>
                   <th className="w-56 px-4 py-3">Observações</th>
@@ -316,7 +317,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-sm text-foreground/40">
+                    <td colSpan={9} className="px-4 py-10 text-center text-sm text-foreground/40">
                       Nenhuma venda neste período.
                     </td>
                   </tr>
@@ -330,6 +331,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                     <td />
                     <td className="px-4 py-3">Total</td>
+                    <td />
                     <td />
                     <td />
                     <td className="px-4 py-3 text-right tabular-nums text-success">
@@ -591,6 +593,19 @@ function VendaRow({ row, selected, onToggleSelect }: { row: LeadRow; selected: b
           )}
         >
           {row.veioDoFunil ? 'Funil' : 'Avulsa'}
+        </button>
+      </td>
+      <td className="px-4 py-3">
+        <button
+          type="button"
+          onClick={() => leadBoardsService.updateRow(row.id, { contratoAssinado: !row.contratoAssinado })}
+          title={row.contratoAssinado ? 'Assinado — clique pra marcar como pendente' : 'Pendente — clique pra marcar como assinado'}
+          className={cn(
+            'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+            row.contratoAssinado ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning hover:bg-warning/15',
+          )}
+        >
+          {row.contratoAssinado ? 'Assinado' : 'Pendente'}
         </button>
       </td>
       <PendenteValueCell

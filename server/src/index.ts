@@ -20,6 +20,7 @@ import { leadBoardRoutes } from './routes/leadBoards.js';
 import { leadPageRoutes } from './routes/leadPages.js';
 import { commercialMonthRoutes } from './routes/commercialMonths.js';
 import { contractRoutes } from './routes/contracts.js';
+import { commissionRoutes } from './routes/commissions.js';
 import { cnpjRoutes } from './routes/cnpj.js';
 import { leadLabelRoutes } from './routes/leadLabels.js';
 import { supportColumnRoutes } from './routes/supportColumns.js';
@@ -89,6 +90,7 @@ async function main() {
   await app.register(leadPageRoutes);
   await app.register(commercialMonthRoutes);
   await app.register(contractRoutes);
+  await app.register(commissionRoutes);
   await app.register(cnpjRoutes);
   await app.register(leadLabelRoutes);
   await app.register(supportColumnRoutes);

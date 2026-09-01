@@ -970,6 +970,42 @@ CREATE TABLE IF NOT EXISTS commercial_months (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ---------- commission_rates ----------
+-- Linha única (igual settings) com os valores de comissão — separado de propósito do resto do
+-- sistema (feature isolada da aba "Gestão Interna", em Financeiro, não mexe em mais nada).
+CREATE TABLE IF NOT EXISTS commission_rates (
+  id BOOLEAN PRIMARY KEY DEFAULT true,
+  sdr_per_sale_cents INT NOT NULL DEFAULT 10000,
+  suporte_per_delivery_cents INT NOT NULL DEFAULT 0,
+  suporte_per_venda_avulsa_cents INT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT commission_rates_singleton CHECK (id)
+);
+INSERT INTO commission_rates (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
+
+-- ---------- commission_payments ----------
+-- Status pendente/pago por pessoa+papel+mês (granularidade "pessoa-mês", não por venda
+-- individual) — a contagem de vendas/entregas em si é sempre calculada ao vivo em cima de
+-- lead_rows/clients, essa tabela só guarda o clique manual de "já paguei".
+CREATE TABLE IF NOT EXISTS commission_payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  person TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('sdr', 'suporte')),
+  month TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'pago')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (person, role, month)
+);
+
+DROP TRIGGER IF EXISTS notify_commission_rates ON commission_rates;
+CREATE TRIGGER notify_commission_rates AFTER INSERT OR UPDATE ON commission_rates
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_commission_payments ON commission_payments;
+CREATE TRIGGER notify_commission_payments AFTER INSERT OR UPDATE OR DELETE ON commission_payments
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:
 -- Crie o primeiro usuário admin com:

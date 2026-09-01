@@ -332,6 +332,17 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         return reply.status(403).send({ message: 'Acesso negado' });
       }
 
+      // Mesma trava do PATCH: nunca cria lead direto num quadro de página arquivada (ex.: um front
+      // com a lista de quadros em cache desatualizado, de antes da página ter sido arquivada).
+      const targetBoard = await queryOne<{ page_archived: string | null }>(
+        `SELECT lp.archived_at as page_archived FROM lead_boards lb
+         JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1`,
+        [b.board_id]
+      );
+      if (targetBoard?.page_archived) {
+        return reply.status(400).send({ message: 'Não é possível criar o lead num quadro de uma página arquivada.' });
+      }
+
       const id = (b.id as string) || uuidv4();
       let position = b.position as number | undefined;
       if (position === undefined) {

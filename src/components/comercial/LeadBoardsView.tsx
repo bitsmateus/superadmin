@@ -1090,9 +1090,16 @@ function BoardGroup({
                           pageId={board.page}
                           onChange={(next) => {
                             if (col.key === 'status') {
-                              const target = allBoards.find(
-                                (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === next.trim().toLowerCase(),
-                              )
+                              // "Vendido" tem sincronização própria (cria a oportunidade na aba
+                              // Vendas, ver syncVendaFromStatus no backend) que já promete manter o
+                              // lead onde está no CRM — não pode também mover de quadro aqui, senão
+                              // o lead some de onde o SDR está acompanhando (ex.: vai parar sozinho
+                              // num quadro "Vendido", se existir um com esse nome na página).
+                              const target = next.trim().toLowerCase() === 'vendido'
+                                ? undefined
+                                : allBoards.find(
+                                    (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === next.trim().toLowerCase(),
+                                  )
                               applyFieldChange(row, target ? { status: next, boardId: target.id } : { status: next })
                             } else if (col.key === 'sdr') {
                               // Marcar o SDR aqui (só existe em abas sem dono, ex.: Novos Leads) já

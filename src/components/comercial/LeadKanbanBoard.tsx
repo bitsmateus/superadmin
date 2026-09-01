@@ -99,11 +99,15 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
     if (!row || row[groupField] === columnKey) return
 
     // Arrastar pra uma coluna de Status move o lead pro quadro com o mesmo nome — igual à
-    // lista, onde mudar o Status já leva o lead pro quadro correspondente.
+    // lista, onde mudar o Status já leva o lead pro quadro correspondente. Exceto "Vendido": tem
+    // sincronização própria (cria a oportunidade na aba Vendas) que promete manter o lead onde
+    // está no CRM — mover de quadro aqui também faria ele sumir de onde o SDR está acompanhando.
     if (groupField === 'status') {
-      const target = allBoards.find(
-        (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === columnKey.trim().toLowerCase(),
-      )
+      const target = columnKey.trim().toLowerCase() === 'vendido'
+        ? undefined
+        : allBoards.find(
+            (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === columnKey.trim().toLowerCase(),
+          )
       leadBoardsService.updateRow(rowId, target ? { status: columnKey, boardId: target.id } : { status: columnKey })
     } else {
       leadBoardsService.updateRow(rowId, { [groupField]: columnKey })

@@ -33,7 +33,7 @@ import { openContractSheet } from '@/lib/contractSheet'
 import { RichTextToolbar } from '@/components/comercial/RichTextToolbar'
 import { LeadLinkPanel } from '@/components/comercial/LeadLinkPanel'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
-import { formatDateShort } from '@/lib/utils'
+import { formatDateShort, initials } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { Client } from '@/types/client'
 
@@ -443,10 +443,34 @@ export function ContratoView({ pageId }: { pageId: string }) {
           <p className="py-10 text-center text-sm text-foreground/40">Nenhum modelo de contrato cadastrado.</p>
         ) : (
           <>
-            <div className="mb-4 flex flex-wrap gap-2 rounded-2xl bg-card p-3 shadow-sm">
-              <TabPill active={tab === 'boas-vindas'} onClick={() => changeTab('boas-vindas')} icon={<UserRound className="h-3.5 w-3.5" />} label="Boas-vindas" count={boasVindasClients.length} />
-              <TabPill active={tab === 'pendentes-contrato'} onClick={() => changeTab('pendentes-contrato')} icon={<Clock className="h-3.5 w-3.5" />} label="Pendente de assinatura" count={pendingContracts.length} />
-              <TabPill active={tab === 'assinados'} onClick={() => changeTab('assinados')} icon={<CheckCircle2 className="h-3.5 w-3.5" />} label="Contratos assinados" count={signedContracts.length} />
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <StageTabCard
+                active={tab === 'boas-vindas'}
+                onClick={() => changeTab('boas-vindas')}
+                icon={<UserRound className="h-4 w-4" />}
+                label="Boas-vindas"
+                description="Ficha preenchida, falta gerar o contrato"
+                count={boasVindasClients.length}
+                tone="info"
+              />
+              <StageTabCard
+                active={tab === 'pendentes-contrato'}
+                onClick={() => changeTab('pendentes-contrato')}
+                icon={<Clock className="h-4 w-4" />}
+                label="Pendente de assinatura"
+                description="Contrato gerado, aguardando o cliente assinar"
+                count={pendingContracts.length}
+                tone="warning"
+              />
+              <StageTabCard
+                active={tab === 'assinados'}
+                onClick={() => changeTab('assinados')}
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                label="Contratos assinados"
+                description="Cliente já devolveu assinado"
+                count={signedContracts.length}
+                tone="success"
+              />
             </div>
 
             {tab === 'boas-vindas' && (
@@ -458,7 +482,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
             {tab === 'criar' && (
               <div className="rounded-2xl bg-card p-4 shadow-sm">
-                <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-foreground">Novo contrato</span>
                   {draftClientId && (
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-medium text-accent">
@@ -469,6 +493,22 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     </span>
                   )}
                 </div>
+                {placeholders.length > 0 && (() => {
+                  const filled = placeholders.filter((p) => (draftCampos[p] ?? '').trim() !== '').length
+                  return (
+                    <div className="mb-3 flex items-center gap-2.5">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-elevate/[0.08]">
+                        <div
+                          className="h-full rounded-full bg-accent transition-all"
+                          style={{ width: `${Math.round((filled / placeholders.length) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="shrink-0 text-[11px] font-medium text-foreground/45">
+                        {filled}/{placeholders.length} campos preenchidos
+                      </span>
+                    </div>
+                  )
+                })()}
                 <LeadLinkPanel clientId={draftClientId} vendaLeadId={draftVendaLeadId} onLink={setDraftVendaLeadId} />
                 <FieldForm
                   placeholders={placeholders}
@@ -480,6 +520,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   cepLoading={cepLoading}
                 />
                 <div className="mt-4 flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => changeTab('boas-vindas')}>Cancelar</Button>
                   <Button onClick={generate} loading={creating}>Gerar contrato</Button>
                 </div>
               </div>
@@ -652,7 +693,14 @@ function ContractsList({
                 onClick={() => onOpen(c)}
                 className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]"
               >
-                <td className="px-4 py-3 text-sm font-medium text-accent">{contractLabel(c)}</td>
+                <td className="px-4 py-3 text-sm font-medium text-accent">
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
+                      {initials(contractLabel(c))}
+                    </span>
+                    {contractLabel(c)}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-sm text-foreground/70">{c.campos['CNPJ'] || '—'}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-foreground/70">{formatDateShort(c.createdAt)}</td>
                 {showSignedAt && (
@@ -695,38 +743,52 @@ function contractLabel(c: Contract): string {
   return c.campos['Nome Fantasia'] || c.campos['Razão Social'] || c.campos['CNPJ'] || 'Sem nome'
 }
 
-function TabPill({
+/** Card grande e colorido por estágio — dobra como seletor de aba E resumo (bate o olho no que
+ * tem de cada coisa sem precisar entrar em nenhuma). Cor por estágio: Boas-vindas (info) ainda
+ * não tem contrato, Pendente (warning) já foi gerado mas falta o cliente assinar, Assinados
+ * (success) já fechou. */
+function StageTabCard({
   active,
   onClick,
   icon,
   label,
+  description,
   count,
+  tone,
 }: {
   active: boolean
   onClick: () => void
   icon: React.ReactNode
   label: string
-  count?: number
+  description: string
+  count: number
+  tone: 'info' | 'warning' | 'success'
 }) {
+  const tones = {
+    info: 'bg-accent/10 text-accent ring-accent/20',
+    warning: 'bg-warning/10 text-warning ring-warning/20',
+    success: 'bg-success/10 text-success ring-success/20',
+  }
+  const activeRing = {
+    info: 'ring-accent/30 border-accent/40',
+    warning: 'ring-warning/30 border-warning/40',
+    success: 'ring-success/30 border-success/40',
+  }
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-        active ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
+        'rounded-2xl border bg-card p-4 text-left shadow-sm transition-all',
+        active ? cn('ring-1', activeRing[tone]) : 'border-line hover:border-elevate/20 hover:shadow-md',
       )}
     >
-      {icon}
-      {label}
-      {count !== undefined && (
-        <span className={cn(
-          'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
-          active ? 'bg-accent/20 text-accent' : 'bg-elevate/[0.08] text-foreground/50',
-        )}>
-          {count}
-        </span>
-      )}
+      <div className="flex items-center justify-between">
+        <span className={cn('grid h-8 w-8 place-items-center rounded-lg ring-1', tones[tone])}>{icon}</span>
+        <span className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">{count}</span>
+      </div>
+      <p className="mt-2.5 text-sm font-semibold text-foreground">{label}</p>
+      <p className="text-[11px] text-foreground/45">{description}</p>
     </button>
   )
 }
@@ -778,7 +840,14 @@ function PendingClientsList({
                 onClick={() => onOpen(c)}
                 className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]"
               >
-                <td className="px-4 py-3 text-sm font-medium text-accent">{c.company || c.name}</td>
+                <td className="px-4 py-3 text-sm font-medium text-accent">
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
+                      {initials(c.company || c.name)}
+                    </span>
+                    {c.company || c.name}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-sm text-foreground/70">{c.fichaCadastro?.cnpj ? formatCnpj(c.fichaCadastro.cnpj) : '—'}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-foreground/70">{formatDateShort(c.createdAt)}</td>
                 <td className="px-4 py-3 text-sm"><StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} /></td>

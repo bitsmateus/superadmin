@@ -9,7 +9,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
-import { useMonthFilter, withinBounds } from '@/hooks/useMonthFilter'
+import { addMonthsToId, currentMonthId, useMonthFilter, withinBounds } from '@/hooks/useMonthFilter'
 import { useAuth } from '@/hooks/useAuth'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 import { useClients } from '@/hooks/useClients'
@@ -82,9 +82,12 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const pendingContracts = React.useMemo(() => contracts.filter((c) => c.status !== 'assinado'), [contracts])
   const signedContracts = React.useMemo(() => contracts.filter((c) => c.status === 'assinado'), [contracts])
 
-  const boasVindasFilter = useMonthFilter()
-  const pendingFilter = useMonthFilter()
-  const signedFilter = useMonthFilter()
+  // Mostra o mês passado junto do atual de cara — sem isso só aparecia o mês corrente e a pessoa
+  // precisava clicar em "Adicionar mês" toda vez que quisesse conferir o mês anterior.
+  const lastMonthId = React.useMemo(() => addMonthsToId(currentMonthId(), -1), [])
+  const boasVindasFilter = useMonthFilter([lastMonthId])
+  const pendingFilter = useMonthFilter([lastMonthId])
+  const signedFilter = useMonthFilter([lastMonthId])
   const boasVindasInRange = React.useMemo(
     () => boasVindasClients.filter((c) => withinBounds(c.fichaCadastro?.submittedAt ?? c.createdAt, boasVindasFilter.bounds)),
     [boasVindasClients, boasVindasFilter.bounds],

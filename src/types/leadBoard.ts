@@ -87,10 +87,11 @@ export interface LeadRow {
   /** Classificação manual da venda (aba Vendas) — dispara sozinho o lançamento de comissão fixa
    * do SDR (Gestão Interna, Financeiro) assim que marcada. null = ainda não classificada. */
   origemVenda: 'sistema' | 'trafego' | null
-  /** Classificação manual da venda avulsa (aba Vendas, só quando veioDoFunil = false) — dispara
-   * sozinho o lançamento de comissão % do Suporte sobre o Valor de implementação da venda.
-   * null = venda avulsa comum, fora do cardápio especial. */
-  tipoVendaSuporte: 'ia_avancada' | 'ia_basica' | 'api_oficial' | 'indicacao_externa' | null
+  /** Classificação manual da venda avulsa (Gestão Interna > Financeiro, só quando veioDoFunil =
+   * false) — dispara sozinho o lançamento de comissão % do Suporte sobre o Valor de implementação
+   * da venda. 'nenhum' = revisado e confirmado que não é nenhum dos tipos especiais (sai da lista
+   * de pendentes sem gerar comissão) — null = ainda não revisado. */
+  tipoVendaSuporte: 'ia_avancada' | 'ia_basica' | 'api_oficial' | 'indicacao_externa' | 'nenhum' | null
 }
 
 /**

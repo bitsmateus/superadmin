@@ -317,16 +317,10 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             )}
           />
           <span>Suporte</span>
-          {myTasks > 0 && (
-            <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-semibold text-white">
-              {myTasks > 99 ? '99+' : myTasks}
-            </span>
-          )}
           <ChevronDown
             className={cn(
-              'h-3.5 w-3.5 shrink-0 transition-transform',
+              'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',
               suporteOpen ? '' : '-rotate-90',
-              myTasks > 0 ? '' : 'ml-auto',
             )}
           />
         </button>

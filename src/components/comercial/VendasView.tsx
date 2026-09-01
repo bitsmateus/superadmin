@@ -330,7 +330,11 @@ export function VendasView({ pageId }: { pageId: string }) {
                     row={r}
                     selected={selectedIds.has(r.id)}
                     onToggleSelect={() => toggleSelect(r.id)}
-                    onOpenLead={() => setOpenLeadId(r.id)}
+                    // A linha daqui é uma CÓPIA que o sistema cria sozinho ao marcar "Vendido" —
+                    // ela nunca tem Atualizações/linha do tempo (ficam só no lead original do CRM).
+                    // Com vendaOrigemId, abre o original de verdade; sem ele (venda avulsa, sem
+                    // lead de origem), abre a própria linha — não tem outro lugar com mais dado.
+                    onOpenLead={() => setOpenLeadId(r.vendaOrigemId || r.id)}
                   />
                 ))}
               </tbody>

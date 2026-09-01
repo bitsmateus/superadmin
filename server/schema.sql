@@ -932,6 +932,11 @@ CREATE TABLE IF NOT EXISTS contracts (
   -- Data em que foi marcado como assinado (null = nunca assinado ou desmarcado depois) -- usada
   -- pro filtro por mes da aba "Contratos assinados".
   signed_at TIMESTAMPTZ,
+  autentique_document_id TEXT,
+  -- Contrato anexado pronto (gerado por fora) — data URL em base64, mesmo padrão dos anexos de
+  -- Atualizações do lead. Sem geração/edição de texto aqui, só anexar e baixar.
+  pdf_data TEXT,
+  pdf_filename TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

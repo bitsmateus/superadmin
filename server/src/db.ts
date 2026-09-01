@@ -879,6 +879,12 @@ END $$`);
   await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS autentique_document_id TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS contracts_autentique_document_id_idx ON contracts(autentique_document_id) WHERE autentique_document_id IS NOT NULL`);
 
+  // Contrato gerado por fora e só anexado aqui — data URL em base64, mesmo padrão dos anexos de
+  // Atualizações do lead (ver lead_notes). Substitui a geração automática por template como fluxo
+  // principal da aba Contrato.
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS pdf_data TEXT`);
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS pdf_filename TEXT`);
+
   // "Deslogar" alguém de Equipe: como o JWT é stateless (sem sessão guardada), não dá pra apagar
   // um token específico — em vez disso, guarda A PARTIR DE QUANDO todo token dessa pessoa vira
   // inválido. app.authenticate compara com o "iat" (data de emissão) do token a cada requisição;

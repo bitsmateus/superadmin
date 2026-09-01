@@ -34,7 +34,9 @@ import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
 
 async function main() {
-  const app = Fastify({ logger: true });
+  // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
+  // Atualizações do lead). 20MB de corpo dá espaço pra um PDF de ~14MB (base64 soma ~33%).
+  const app = Fastify({ logger: true, bodyLimit: 20 * 1024 * 1024 });
 
   const JWT_SECRET = process.env.JWT_SECRET;
   if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required');

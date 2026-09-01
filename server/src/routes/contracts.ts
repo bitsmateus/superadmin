@@ -38,19 +38,40 @@ export async function contractRoutes(app: FastifyInstance) {
 
   // ---------- Contratos ----------
 
+  // GET /api/contracts — lista. Remove pdf_data (base64 pesado) pra não deixar a listagem gigante
+  // com vários contratos anexados — o corpo completo só é buscado sob demanda (GET /:id), mesmo
+  // padrão de GET /api/clients com contract_file.
   app.get('/api/contracts', { onRequest: [app.authenticate] }, async (req) => {
     const { sub, role } = req.user as { sub: string; role: string };
     const allowed = await restrictedBoardFilter(sub, role);
     if (allowed !== null && !allowed.length) return [];
-    if (allowed !== null) {
-      return query('SELECT * FROM contracts WHERE board_id = ANY($1) ORDER BY created_at DESC', [allowed]);
-    }
-    return query('SELECT * FROM contracts ORDER BY created_at DESC');
+    const rows = allowed !== null
+      ? await query('SELECT * FROM contracts WHERE board_id = ANY($1) ORDER BY created_at DESC', [allowed])
+      : await query('SELECT * FROM contracts ORDER BY created_at DESC');
+    for (const r of rows as Record<string, unknown>[]) delete r.pdf_data;
+    return rows;
   });
+
+  // GET /api/contracts/:id — registro completo, com pdf_data — buscado sob demanda ao abrir o
+  // detalhe de um contrato específico.
+  app.get<{ Params: { id: string } }>(
+    '/api/contracts/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const allowed = await restrictedBoardFilter(sub, role);
+      const row = await query('SELECT * FROM contracts WHERE id = $1', [req.params.id]);
+      const contract = row[0] as { board_id: string } | undefined;
+      if (!contract) return reply.status(404).send({ message: 'Contrato não encontrado' });
+      if (allowed !== null && !allowed.includes(contract.board_id)) return reply.status(403).send({ message: 'Acesso negado' });
+      return contract;
+    }
+  );
 
   app.post<{ Body: {
     boardId?: string; templateId?: string | null; campos?: Record<string, string>; conteudo?: string
     vendaLeadId?: string | null; clientId?: string | null
+    pdfData?: string | null; pdfFilename?: string | null
   } }>(
     '/api/contracts',
     { onRequest: [app.authenticate] },
@@ -63,10 +84,12 @@ export async function contractRoutes(app: FastifyInstance) {
       if (allowed !== null && !allowed.includes(boardId)) return reply.status(403).send({ message: 'Acesso negado' });
 
       const [contract] = await query(
-        `INSERT INTO contracts (board_id, template_id, campos, conteudo, venda_lead_id, client_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        `INSERT INTO contracts (board_id, template_id, campos, conteudo, venda_lead_id, client_id, pdf_data, pdf_filename)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
         [
           boardId, req.body.templateId ?? null, JSON.stringify(req.body.campos ?? {}), req.body.conteudo ?? '',
           req.body.vendaLeadId ?? null, req.body.clientId ?? null,
+          req.body.pdfData ?? null, req.body.pdfFilename ?? null,
         ]
       );
       return reply.status(201).send(contract);
@@ -76,6 +99,7 @@ export async function contractRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string }; Body: {
     campos?: Record<string, string>; conteudo?: string; status?: 'pendente' | 'assinado'
     autentiqueDocumentId?: string | null; vendaLeadId?: string | null
+    pdfData?: string | null; pdfFilename?: string | null
   } }>(
     '/api/contracts/:id',
     { onRequest: [app.authenticate] },
@@ -94,6 +118,8 @@ export async function contractRoutes(app: FastifyInstance) {
       if (req.body.conteudo !== undefined) { sets.push(`conteudo = $${i++}`); params.push(req.body.conteudo); }
       if (req.body.autentiqueDocumentId !== undefined) { sets.push(`autentique_document_id = $${i++}`); params.push(req.body.autentiqueDocumentId); }
       if (req.body.vendaLeadId !== undefined) { sets.push(`venda_lead_id = $${i++}`); params.push(req.body.vendaLeadId); }
+      if (req.body.pdfData !== undefined) { sets.push(`pdf_data = $${i++}`); params.push(req.body.pdfData); }
+      if (req.body.pdfFilename !== undefined) { sets.push(`pdf_filename = $${i++}`); params.push(req.body.pdfFilename); }
       if (req.body.status !== undefined) {
         sets.push(`status = $${i++}`); params.push(req.body.status);
         // signed_at é derivada do status, não vem do cliente — evita relógio do navegador

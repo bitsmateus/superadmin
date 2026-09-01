@@ -15,7 +15,9 @@ export interface Contract {
   id: string
   boardId: string
   templateId: string | null
-  /** Valor preenchido pra cada placeholder do modelo (chave = nome exato do placeholder). */
+  /** Valor preenchido pra cada placeholder do modelo (chave = nome exato do placeholder). Hoje só
+   * usado pra "Nome Fantasia" (identificação do contrato na lista) — geração automática do corpo
+   * a partir do modelo ficou desativada, ver pdfData abaixo. */
   campos: Record<string, string>
   conteudo: string
   /** Marcação manual — a pessoa marca quando o cliente devolve assinado. */
@@ -34,6 +36,11 @@ export interface Contract {
    * avisar (ver server/src/routes/webhooks.ts). null = ainda não vinculado, ou nunca foi mandado
    * pro Autentique. */
   autentiqueDocumentId: string | null
+  /** Contrato pronto (gerado por fora) anexado aqui — data URL em base64. null = nada anexado
+   * ainda. Campo pesado: a listagem (GET /api/contracts) não traz isso, só o detalhe de UM
+   * contrato (GET /api/contracts/:id) — ver loadFullContract. */
+  pdfData: string | null
+  pdfFilename: string | null
   createdAt: string
   updatedAt: string
 }
@@ -42,18 +49,25 @@ type TemplateRow = { id: string; name: string; conteudo: string; created_at: str
 type ContractRow = {
   id: string; board_id: string; template_id: string | null; campos: Record<string, string>
   conteudo: string; status: ContractStatus; venda_lead_id: string | null; client_id: string | null
-  signed_at: string | null; autentique_document_id: string | null; created_at: string; updated_at: string
+  signed_at: string | null; autentique_document_id: string | null
+  pdf_data?: string | null; pdf_filename: string | null
+  created_at: string; updated_at: string
 }
 
 function rowToTemplate(r: TemplateRow): ContractTemplate {
   return { id: r.id, name: r.name, conteudo: r.conteudo, createdAt: r.created_at, updatedAt: r.updated_at }
 }
-function rowToContract(r: ContractRow): Contract {
+// `prevPdfData` é o valor já em cache (se algum) — usado quando a linha vem da LISTAGEM, que
+// nunca traz pdf_data (chave ausente, não null): sem isso, todo reload() apagava da tela o PDF
+// de um contrato que já tinha sido aberto/carregado por completo.
+function rowToContract(r: ContractRow, prevPdfData?: string | null): Contract {
   return {
     id: r.id, boardId: r.board_id, templateId: r.template_id, campos: r.campos ?? {},
     conteudo: r.conteudo, status: r.status ?? 'pendente', vendaLeadId: r.venda_lead_id ?? null,
     clientId: r.client_id ?? null, signedAt: r.signed_at ?? null,
     autentiqueDocumentId: r.autentique_document_id ?? null,
+    pdfData: 'pdf_data' in r ? (r.pdf_data ?? null) : (prevPdfData ?? null),
+    pdfFilename: r.pdf_filename ?? null,
     createdAt: r.created_at, updatedAt: r.updated_at,
   }
 }
@@ -82,7 +96,8 @@ async function reload(): Promise<void> {
       api.get<ContractRow[]>('/api/contracts'),
     ])
     templates = tplRows.map(rowToTemplate)
-    contracts = contractRows.map(rowToContract)
+    const prevById = new Map(contracts.map((c) => [c.id, c]))
+    contracts = contractRows.map((r) => rowToContract(r, prevById.get(r.id)?.pdfData))
     loaded = true
     notify()
   } catch (err) {
@@ -106,6 +121,19 @@ export const contractsService = {
     return loadingPromise
   },
 
+  /** Registro completo (com pdfData) de UM contrato — chamado ao abrir o detalhe, já que a
+   * listagem vem sem esse campo pesado (ver rowToContract). */
+  async loadFullContract(id: string): Promise<void> {
+    try {
+      const row = await api.get<ContractRow>(`/api/contracts/${id}`)
+      const full = rowToContract(row)
+      const idx = contracts.findIndex((c) => c.id === id)
+      if (idx === -1) contracts = [full, ...contracts]
+      else { const copy = contracts.slice(); copy[idx] = full; contracts = copy }
+      notify()
+    } catch { /* mantém a versão da cache */ }
+  },
+
   async updateTemplate(id: string, patch: { name?: string; conteudo?: string }): Promise<void> {
     try {
       await api.patch(`/api/contract-templates/${id}`, patch)
@@ -122,19 +150,30 @@ export const contractsService = {
     conteudo: string,
     clientId?: string | null,
     vendaLeadId?: string | null,
+    pdfData?: string | null,
+    pdfFilename?: string | null,
   ): Promise<Contract> {
-    const row = await api.post<ContractRow>('/api/contracts', { boardId, templateId, campos, conteudo, clientId, vendaLeadId })
-    await reload()
-    return rowToContract(row)
+    const row = await api.post<ContractRow>('/api/contracts', {
+      boardId, templateId, campos, conteudo, clientId, vendaLeadId, pdfData, pdfFilename,
+    })
+    const full = rowToContract(row)
+    contracts = [full, ...contracts]
+    notify()
+    void reload()
+    return full
   },
 
   async updateContract(id: string, patch: {
     campos?: Record<string, string>; conteudo?: string; status?: ContractStatus
     autentiqueDocumentId?: string | null; vendaLeadId?: string | null
+    pdfData?: string | null; pdfFilename?: string | null
   }): Promise<void> {
     try {
-      await api.patch(`/api/contracts/${id}`, patch)
-      await reload()
+      const row = await api.patch<ContractRow>(`/api/contracts/${id}`, patch)
+      const full = rowToContract(row)
+      const idx = contracts.findIndex((c) => c.id === id)
+      if (idx !== -1) { const copy = contracts.slice(); copy[idx] = full; contracts = copy; notify() }
+      void reload()
     } catch (err) {
       toast.error('Falha ao salvar o contrato: ' + (err as Error).message)
     }

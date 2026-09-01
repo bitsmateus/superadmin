@@ -106,6 +106,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const [draftCampos, setDraftCampos] = React.useState<Record<string, string>>({})
   const [draftClientId, setDraftClientId] = React.useState<string | null>(null)
   const [draftVendaLeadId, setDraftVendaLeadId] = React.useState<string | null>(null)
+  const [draftPdfData, setDraftPdfData] = React.useState<string | null>(null)
+  const [draftPdfFilename, setDraftPdfFilename] = React.useState<string | null>(null)
   const [cnpjLoading, setCnpjLoading] = React.useState(false)
   const [cepLoading, setCepLoading] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
@@ -118,6 +120,12 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
   const listForTab = tab === 'assinados' ? signedContractsInRange : tab === 'pendentes-contrato' ? pendingContractsInRange : []
   const selected = listForTab.find((c) => c.id === selectedId) ?? null
+
+  // O pdfData completo (base64) não vem na listagem (campo pesado) — busca sob demanda ao abrir
+  // o detalhe de um contrato específico, mesmo padrão do ClientDrawer com loadFullClient.
+  React.useEffect(() => {
+    if (selectedId) void contractsService.loadFullContract(selectedId)
+  }, [selectedId])
 
   const bodyRef = React.useRef<HTMLDivElement>(null)
   const detailOpen = !!selected
@@ -189,23 +197,12 @@ export function ContratoView({ pageId }: { pageId: string }) {
   }
 
   const startNew = (client?: Client) => {
-    const campos: Record<string, string> = {}
-    for (const name of placeholders) {
-      const def = defaultValueFor(name)
-      if (def) campos[name] = def
-    }
-    if (placeholders.includes('Tabela de Serviços')) campos['Tabela de Serviços'] = JSON.stringify(DEFAULT_SERVICE_ROWS)
-    if (client) {
-      if (placeholders.includes('Nome Fantasia')) campos['Nome Fantasia'] = client.company || client.name
-      const cnpj = client.fichaCadastro?.cnpj
-      if (cnpj && placeholders.includes('CNPJ')) campos['CNPJ'] = formatCnpj(cnpj)
-    }
-    setDraftCampos(campos)
+    setDraftCampos(client ? { 'Nome Fantasia': client.company || client.name } : {})
     setDraftClientId(client?.id ?? null)
     setDraftVendaLeadId(null)
+    setDraftPdfData(null)
+    setDraftPdfFilename(null)
     setTab('criar')
-    // Já veio da ficha com o CNPJ — dispara a busca sozinho, sem esperar o blur do campo.
-    if (client?.fichaCadastro?.cnpj) void fillFromCnpj(client.fichaCadastro.cnpj)
   }
 
   const generate = async () => {
@@ -236,6 +233,36 @@ export function ContratoView({ pageId }: { pageId: string }) {
     }
   }
 
+  // Fluxo atual: o contrato é gerado por fora e só anexado aqui em PDF — sem geração automática a
+  // partir de modelo/campos (ver generate() acima, mantida pra quando isso voltar a ficar completo).
+  const registerContract = async () => {
+    if (!board) return
+    setCreating(true)
+    try {
+      const created = await contractsService.createContract(
+        board.id, null, draftCampos, '', draftClientId, draftVendaLeadId, draftPdfData, draftPdfFilename,
+      )
+      // Mesmo gatilho de etapa que generate() já fazia — ver comentário ali.
+      if (draftClientId) {
+        const client = clients.find((cl) => cl.id === draftClientId)
+        if (client && client.stage !== 'contract') {
+          db.updateClient(draftClientId, { stage: 'contract' })
+          db.addLog(draftClientId, 'Etapa alterada', `${STAGE_COLORS[client.stage].label} → ${STAGE_COLORS.contract.label}`)
+        }
+      }
+      setDraftCampos({})
+      setDraftClientId(null)
+      setDraftVendaLeadId(null)
+      setDraftPdfData(null)
+      setDraftPdfFilename(null)
+      setTab('pendentes-contrato')
+      setSelectedId(created.id)
+      toast.success('Contrato registrado.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const regenerate = () => {
     if (!selected || !template) return
     if (!window.confirm('Isso reaplica os campos preenchidos no texto do modelo, sobrescrevendo o corpo atual do contrato (inclusive edições manuais). Continuar?')) return
@@ -259,8 +286,11 @@ export function ContratoView({ pageId }: { pageId: string }) {
     void contractsService.updateContract(contract.id, { campos: nextCampos, conteudo })
   }
 
+  // Só o campo "Nome Fantasia" (identificação na lista) fica editável aqui agora — sem geração
+  // automática de texto, não precisa passar por applyFieldsToContract (mantida acima pra quando o
+  // fluxo completo de modelo voltar).
   const saveField = (contract: Contract, name: string, value: string) => {
-    applyFieldsToContract(contract, { ...contract.campos, [name]: value })
+    void contractsService.updateContract(contract.id, { campos: { ...contract.campos, [name]: value } })
   }
 
   const fillSelectedFromCnpj = async () => {
@@ -429,12 +459,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
     <>
       <TopBar
         title="Contrato"
-        subtitle={`${contracts.length} contrato(s) gerado(s)`}
-        rightSlot={
-          <Button variant="secondary" onClick={() => setEditTemplateOpen(true)} leftIcon={<Settings className="h-4 w-4" />}>
-            Editar modelo padrão
-          </Button>
-        }
+        subtitle={`${contracts.length} contrato(s) registrado(s)`}
       />
 
       <div className="px-1 pb-8">
@@ -442,8 +467,6 @@ export function ContratoView({ pageId }: { pageId: string }) {
           <div className="grid min-h-[30vh] place-items-center text-sm text-foreground/50">
             <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</span>
           </div>
-        ) : !template ? (
-          <p className="py-10 text-center text-sm text-foreground/40">Nenhum modelo de contrato cadastrado.</p>
         ) : (
           <>
             <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -485,7 +508,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
             {tab === 'criar' && (
               <div className="rounded-2xl bg-card p-4 shadow-sm">
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-foreground">Novo contrato</span>
                   {draftClientId && (
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-medium text-accent">
@@ -496,35 +519,28 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     </span>
                   )}
                 </div>
-                {placeholders.length > 0 && (() => {
-                  const filled = placeholders.filter((p) => (draftCampos[p] ?? '').trim() !== '').length
-                  return (
-                    <div className="mb-3 flex items-center gap-2.5">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-elevate/[0.08]">
-                        <div
-                          className="h-full rounded-full bg-accent transition-all"
-                          style={{ width: `${Math.round((filled / placeholders.length) * 100)}%` }}
-                        />
-                      </div>
-                      <span className="shrink-0 text-[11px] font-medium text-foreground/45">
-                        {filled}/{placeholders.length} campos preenchidos
-                      </span>
-                    </div>
-                  )
-                })()}
                 <LeadLinkPanel clientId={draftClientId} vendaLeadId={draftVendaLeadId} onLink={setDraftVendaLeadId} />
-                <FieldForm
-                  placeholders={placeholders}
-                  campos={draftCampos}
-                  onChange={(name, value) => setDraftCampos((prev) => ({ ...prev, [name]: value }))}
-                  onCnpjBlur={() => fillFromCnpj()}
-                  cnpjLoading={cnpjLoading}
-                  onCepBlur={() => fillFromCep()}
-                  cepLoading={cepLoading}
+                <div className="mb-4">
+                  <label className="mb-1 block text-[11px] font-medium text-foreground/50">
+                    Nome (identificação do contrato)
+                  </label>
+                  <input
+                    value={draftCampos['Nome Fantasia'] ?? ''}
+                    onChange={(e) => setDraftCampos((prev) => ({ ...prev, 'Nome Fantasia': e.target.value }))}
+                    placeholder="Ex.: Empresa Cliente Ltda"
+                    className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+                  />
+                </div>
+                <ContractPdfField
+                  data={draftPdfData}
+                  filename={draftPdfFilename}
+                  onChange={(data, filename) => { setDraftPdfData(data); setDraftPdfFilename(filename) }}
                 />
                 <div className="mt-4 flex justify-end gap-2">
                   <Button variant="ghost" onClick={() => changeTab('boas-vindas')}>Cancelar</Button>
-                  <Button onClick={generate} loading={creating}>Gerar contrato</Button>
+                  <Button onClick={registerContract} loading={creating} disabled={!draftPdfData}>
+                    Registrar contrato
+                  </Button>
                 </div>
               </div>
             )}
@@ -570,7 +586,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
           <div className="space-y-4">
             <div className="rounded-2xl bg-elevate/[0.03] p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-foreground">Campos do cliente</span>
+                <span className="text-sm font-semibold text-foreground">Dados do contrato</span>
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
@@ -582,7 +598,6 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   >
                     Ver ficha de cadastro
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={regenerate}>Reaplicar no texto</Button>
                   <Button
                     size="sm"
                     variant={selected.status === 'assinado' ? 'secondary' : 'primary'}
@@ -603,47 +618,26 @@ export function ContratoView({ pageId }: { pageId: string }) {
                 vendaLeadId={selected.vendaLeadId}
                 onLink={(id) => void contractsService.updateContract(selected.id, { vendaLeadId: id })}
               />
-              <FieldForm
-                placeholders={placeholders}
-                campos={selected.campos}
-                onChange={(name, value) => saveField(selected, name, value)}
-                onCnpjBlur={fillSelectedFromCnpj}
-                cnpjLoading={cnpjLoading}
-                onCepBlur={fillSelectedFromCep}
-                cepLoading={cepLoading}
-              />
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-foreground/50">
+                  Nome (identificação do contrato)
+                </label>
+                <input
+                  value={selected.campos['Nome Fantasia'] ?? ''}
+                  onChange={(e) => saveField(selected, 'Nome Fantasia', e.target.value)}
+                  placeholder="Ex.: Empresa Cliente Ltda"
+                  className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+                />
+              </div>
             </div>
 
             <div className="rounded-2xl bg-elevate/[0.03] p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-foreground">Contrato</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button size="sm" onClick={download} loading={pdfLoading === 'baixar'} leftIcon={<Download className="h-3.5 w-3.5" />}>Baixar PDF</Button>
-                  <Button size="sm" variant="secondary" onClick={printContract} leftIcon={<Printer className="h-3.5 w-3.5" />}>Imprimir</Button>
-                  <Button size="sm" variant="secondary" onClick={viewContractSheet} loading={pdfLoading === 'ver'} leftIcon={<Eye className="h-3.5 w-3.5" />}>Ver PDF</Button>
-                  {editingBody ? (
-                    <Button size="sm" variant="secondary" onClick={saveNow} leftIcon={<Save className="h-3.5 w-3.5" />}>Salvar no histórico</Button>
-                  ) : (
-                    <Button size="sm" variant="secondary" onClick={() => setEditingBody(true)} leftIcon={<Pencil className="h-3.5 w-3.5" />}>Editar texto</Button>
-                  )}
-                </div>
-              </div>
-              {editingBody ? (
-                <div
-                  ref={bodyRef}
-                  contentEditable
-                  suppressContentEditableWarning
-                  onInput={(e) => debouncedSaveBody((e.target as HTMLDivElement).innerHTML)}
-                  className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[12pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
-                  style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
-                />
-              ) : (
-                <div
-                  dangerouslySetInnerHTML={{ __html: selected.conteudo }}
-                  className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[12pt] leading-relaxed"
-                  style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
-                />
-              )}
+              <span className="mb-3 block text-sm font-semibold text-foreground">Contrato (PDF)</span>
+              <ContractPdfField
+                data={selected.pdfData}
+                filename={selected.pdfFilename}
+                onChange={(data, filename) => void contractsService.updateContract(selected.id, { pdfData: data, pdfFilename: filename })}
+              />
             </div>
           </div>
         )}
@@ -1088,6 +1082,130 @@ function FieldInput({
         )}
       </div>
       {hint && <p className="mt-1 text-[10px] text-foreground/40">{hint}</p>}
+    </div>
+  )
+}
+
+const MAX_PDF_BYTES = 15 * 1024 * 1024
+
+/** Anexa o contrato pronto (gerado por fora) em PDF — arrasta ou clica pra escolher. Fica salvo
+ * como data URL (mesmo padrão dos anexos de Atualizações do lead), sem geração/edição de texto
+ * aqui — só anexar, ver/baixar e trocar. */
+function ContractPdfField({
+  data,
+  filename,
+  onChange,
+}: {
+  data: string | null
+  filename: string | null
+  onChange: (data: string | null, filename: string | null) => void
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const [dragOver, setDragOver] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
+
+  const handleFile = async (file: File) => {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    if (!isPdf) {
+      toast.error('Só é possível anexar arquivos PDF.')
+      return
+    }
+    if (file.size > MAX_PDF_BYTES) {
+      toast.error(`"${file.name}" passa de ${Math.round(MAX_PDF_BYTES / 1024 / 1024)}MB.`)
+      return
+    }
+    setLoading(true)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      onChange(dataUrl, file.name)
+      toast.success('Contrato anexado.')
+    } catch {
+      toast.error('Falha ao ler o arquivo — tenta de novo.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const pickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file) void handleFile(file)
+  }
+
+  const download = () => {
+    if (!data) return
+    const a = document.createElement('a')
+    a.href = data
+    a.download = filename || 'contrato.pdf'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  if (data) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line/60 bg-card p-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <FileText className="h-5 w-5 shrink-0 text-accent" />
+          <span className="min-w-0 truncate text-sm font-medium text-foreground">
+            {filename || 'contrato.pdf'}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={download} leftIcon={<Download className="h-3.5 w-3.5" />}>
+            Baixar
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => window.open(data, '_blank')} leftIcon={<Eye className="h-3.5 w-3.5" />}>
+            Ver
+          </Button>
+          <Button size="sm" variant="ghost" loading={loading} onClick={() => inputRef.current?.click()}>
+            Trocar
+          </Button>
+          <button
+            type="button"
+            onClick={() => onChange(null, null)}
+            title="Remover contrato anexado"
+            className="rounded-md p-1.5 text-foreground/40 hover:bg-danger/10 hover:text-danger"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <input ref={inputRef} type="file" accept="application/pdf" className="hidden" onChange={pickFile} />
+      </div>
+    )
+  }
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragOver(false)
+        const file = e.dataTransfer.files?.[0]
+        if (file) void handleFile(file)
+      }}
+      onClick={() => inputRef.current?.click()}
+      className={cn(
+        'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 text-center transition-colors',
+        dragOver ? 'border-accent bg-accent/5' : 'border-line hover:border-accent/40 hover:bg-elevate/[0.02]',
+      )}
+    >
+      {loading ? (
+        <Loader2 className="h-6 w-6 animate-spin text-foreground/40" />
+      ) : (
+        <FileText className="h-6 w-6 text-foreground/30" />
+      )}
+      <p className="text-sm font-medium text-foreground/70">
+        Arraste o PDF do contrato aqui, ou clique pra escolher
+      </p>
+      <p className="text-xs text-foreground/40">Gere o contrato por fora e anexe o arquivo pronto aqui.</p>
+      <input ref={inputRef} type="file" accept="application/pdf" className="hidden" onChange={pickFile} />
     </div>
   )
 }

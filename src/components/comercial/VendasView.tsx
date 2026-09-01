@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Loader2, Plus, RotateCcw, ShoppingBag, Trash2 } from 'lucide-react'
+import { Award, Loader2, Plus, RotateCcw, ShoppingBag, Trash2, TrendingUp, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -11,7 +11,7 @@ import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
 import { leadBoardsService } from '@/services/leadBoards'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
-import { cn } from '@/lib/utils'
+import { cn, initials } from '@/lib/utils'
 import type { LeadRow } from '@/types/leadBoard'
 
 /**
@@ -149,6 +149,10 @@ export function VendasView({ pageId }: { pageId: string }) {
     return [...nomes, ...(buckets.has('Outros') ? ['Outros'] : [])]
       .map((nome) => ({ nome, ...buckets.get(nome)! }))
   }, [validas])
+  const maxSdrTotal = React.useMemo(
+    () => Math.max(1, ...resumoPorSdr.map((r) => r.mrr + r.impl)),
+    [resumoPorSdr],
+  )
 
   if (!board) {
     return (
@@ -184,6 +188,34 @@ export function VendasView({ pageId }: { pageId: string }) {
       />
 
       <div className="px-1 pb-8">
+        {/* Resumo do período — o que importa de cara, antes de entrar na lista linha a linha. */}
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <SummaryCard
+            icon={<ShoppingBag className="h-4 w-4" />}
+            label="Vendas no período"
+            value={validas.length.toLocaleString('pt-BR')}
+            tone="info"
+          />
+          <SummaryCard
+            icon={<TrendingUp className="h-4 w-4" />}
+            label="MRR do período"
+            value={formatBRLCents(totalMrr)}
+            tone="success"
+          />
+          <SummaryCard
+            icon={<Wrench className="h-4 w-4" />}
+            label="Implementação"
+            value={formatBRLCents(totalImpl)}
+            tone="info"
+          />
+          <SummaryCard
+            icon={<Award className="h-4 w-4" />}
+            label="Total fechado"
+            value={formatBRLCents(totalMrr + totalImpl)}
+            tone="warning"
+          />
+        </div>
+
         {/* Período */}
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl bg-card p-3 shadow-sm">
           <PeriodoTab active={periodo === 'mes_atual'} onClick={() => setPeriodo('mes_atual')}>
@@ -300,10 +332,10 @@ export function VendasView({ pageId }: { pageId: string }) {
                     <td className="px-4 py-3">Total</td>
                     <td />
                     <td />
-                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
+                    <td className="px-4 py-3 text-right tabular-nums text-success">
                       {formatBRLCents(totalMrr)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
+                    <td className="px-4 py-3 text-right tabular-nums text-success">
                       {formatBRLCents(totalImpl)}
                     </td>
                     <td />
@@ -328,15 +360,35 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <th className="w-28 px-4 py-3 text-right">Vendas</th>
                   <th className="w-40 whitespace-nowrap px-4 py-3 text-right">MRR (R$)</th>
                   <th className="w-48 whitespace-nowrap px-4 py-3 text-right">Implementação (R$)</th>
+                  <th className="w-40 px-4 py-3">Participação</th>
                 </tr>
               </thead>
               <tbody>
                 {resumoPorSdr.map((r) => (
                   <tr key={r.nome} className="border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]">
-                    <td className="px-4 py-2.5 text-sm font-medium text-foreground">{r.nome}</td>
+                    <td className="px-4 py-2.5 text-sm font-medium text-foreground">
+                      <div className="flex items-center gap-2.5">
+                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/10 text-[10px] font-semibold text-accent">
+                          {initials(r.nome)}
+                        </span>
+                        {r.nome}
+                      </div>
+                    </td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums">{r.vendas}</td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums">{formatBRLCents(r.mrr)}</td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums">{formatBRLCents(r.impl)}</td>
+                    <td className="px-4 py-2.5">
+                      <div
+                        className="h-1.5 w-full overflow-hidden rounded-full bg-elevate/[0.08]"
+                        role="img"
+                        aria-label={`${Math.round(((r.mrr + r.impl) / maxSdrTotal) * 100)}% do maior total entre os SDRs`}
+                      >
+                        <div
+                          className="h-full rounded-full bg-accent"
+                          style={{ width: `${Math.max(2, ((r.mrr + r.impl) / maxSdrTotal) * 100)}%` }}
+                        />
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -344,8 +396,9 @@ export function VendasView({ pageId }: { pageId: string }) {
                 <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                   <td className="px-4 py-3">Equipe</td>
                   <td className="px-4 py-3 text-right tabular-nums">{validas.length}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-emerald-700">{formatBRLCents(totalMrr)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-emerald-700">{formatBRLCents(totalImpl)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-success">{formatBRLCents(totalMrr)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-success">{formatBRLCents(totalImpl)}</td>
+                  <td />
                 </tr>
               </tfoot>
             </table>
@@ -364,6 +417,33 @@ export function VendasView({ pageId }: { pageId: string }) {
         boardId={board.id}
       />
     </>
+  )
+}
+
+function SummaryCard({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  tone: 'info' | 'success' | 'warning'
+}) {
+  const tones = {
+    info: 'bg-accent/10 text-accent ring-accent/20',
+    success: 'bg-success/10 text-success ring-success/20',
+    warning: 'bg-warning/10 text-warning ring-warning/20',
+  }
+  return (
+    <div className="rounded-2xl border border-line bg-card p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wider text-foreground/45">{label}</span>
+        <span className={cn('grid h-7 w-7 place-items-center rounded-lg ring-1', tones[tone])}>{icon}</span>
+      </div>
+      <div className="mt-3 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{value}</div>
+    </div>
   )
 }
 
@@ -478,14 +558,24 @@ function VendaRow({ row, selected, onToggleSelect }: { row: LeadRow; selected: b
         />
       </td>
       <td className="px-4 py-3">
-        <span className={cn('text-sm', row.vendaRevertida && 'line-through decoration-foreground/30')}>
-          {row.nome || 'Sem nome'}
-        </span>
-        {row.vendaRevertida && (
-          <span className="ml-2 rounded-full bg-elevate/[0.08] px-1.5 py-0.5 text-[10px] font-medium text-foreground/50">
-            revertida
+        <div className="flex items-center gap-2.5">
+          <span
+            className={cn(
+              'grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent',
+              row.vendaRevertida && 'bg-elevate/[0.06] text-foreground/40',
+            )}
+          >
+            {initials(row.nome)}
           </span>
-        )}
+          <span className={cn('text-sm', row.vendaRevertida && 'line-through decoration-foreground/30')}>
+            {row.nome || 'Sem nome'}
+          </span>
+          {row.vendaRevertida && (
+            <span className="rounded-full bg-elevate/[0.08] px-1.5 py-0.5 text-[10px] font-medium text-foreground/50">
+              revertida
+            </span>
+          )}
+        </div>
       </td>
       <td className={cn('px-4 py-3 text-sm text-foreground/70', row.vendaRevertida && 'line-through')}>
         {row.sdr || '—'}

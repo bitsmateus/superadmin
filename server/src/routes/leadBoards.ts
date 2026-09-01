@@ -429,9 +429,12 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       // própria venda. Ver server/src/lib/autoCommission.ts.
       const row = leadRow as {
         nome: string; sdr: string; fechamento: string; valor_implementacao: string;
-        origem_venda: string | null; tipo_venda_suporte: string | null;
+        origem_venda: string | null; tipo_venda_suporte: string | null; created_at: string;
       };
-      const commissionMonth = row.fechamento ? row.fechamento.slice(0, 7) : undefined;
+      // Sem data de fechamento preenchida (comum em vendas importadas/antigas), usa quando a venda
+      // ENTROU na aba Vendas como aproximação — nunca "agora": classificar uma venda de meses atrás
+      // não pode fazer a comissão cair no mês corrente por acidente.
+      const commissionMonth = (row.fechamento || row.created_at || '').slice(0, 7) || undefined;
       if ('origem_venda' in patch && row.origem_venda && SDR_COMMISSION_LABEL[row.origem_venda]) {
         void upsertSingleSourceCommission({
           sourceType: 'venda_sdr',

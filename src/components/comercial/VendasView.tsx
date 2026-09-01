@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
+import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
 import { leadBoardsService } from '@/services/leadBoards'
@@ -70,6 +71,7 @@ export function VendasView({ pageId }: { pageId: string }) {
   const [to, setTo] = React.useState(() => monthRange(0).to)
   const [registrarOpen, setRegistrarOpen] = React.useState(false)
   const [trashOpen, setTrashOpen] = React.useState(false)
+  const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
 
   // Seleção "estilo Excel" — marca várias linhas (ou todas) e vê o total de MRR/implementação só
   // delas, sem precisar mudar o período. Some sozinha ao trocar de período (ids de outra janela
@@ -323,7 +325,13 @@ export function VendasView({ pageId }: { pageId: string }) {
                   </tr>
                 )}
                 {noPeriodo.map((r) => (
-                  <VendaRow key={r.id} row={r} selected={selectedIds.has(r.id)} onToggleSelect={() => toggleSelect(r.id)} />
+                  <VendaRow
+                    key={r.id}
+                    row={r}
+                    selected={selectedIds.has(r.id)}
+                    onToggleSelect={() => toggleSelect(r.id)}
+                    onOpenLead={() => setOpenLeadId(r.id)}
+                  />
                 ))}
               </tbody>
               {noPeriodo.length > 0 && (
@@ -418,6 +426,7 @@ export function VendasView({ pageId }: { pageId: string }) {
         onClose={() => setTrashOpen(false)}
         boardId={board.id}
       />
+      <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
     </>
   )
 }
@@ -534,7 +543,17 @@ function ObservacoesCell({ value, onSave }: { value: string; onSave: (next: stri
   )
 }
 
-function VendaRow({ row, selected, onToggleSelect }: { row: LeadRow; selected: boolean; onToggleSelect: () => void }) {
+function VendaRow({
+  row,
+  selected,
+  onToggleSelect,
+  onOpenLead,
+}: {
+  row: LeadRow
+  selected: boolean
+  onToggleSelect: () => void
+  onOpenLead: () => void
+}) {
   const [excluirOpen, setExcluirOpen] = React.useState(false)
 
   // Corrige o valor "oficial" (ex.: desconto negociado no fechamento) — se essa venda veio de um
@@ -560,7 +579,12 @@ function VendaRow({ row, selected, onToggleSelect }: { row: LeadRow; selected: b
         />
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={onOpenLead}
+          title="Ver dados do lead"
+          className="group/name flex items-center gap-2.5 rounded-md text-left"
+        >
           <span
             className={cn(
               'grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent',
@@ -569,7 +593,12 @@ function VendaRow({ row, selected, onToggleSelect }: { row: LeadRow; selected: b
           >
             {initials(row.nome)}
           </span>
-          <span className={cn('text-sm', row.vendaRevertida && 'line-through decoration-foreground/30')}>
+          <span
+            className={cn(
+              'text-sm group-hover/name:text-accent group-hover/name:underline',
+              row.vendaRevertida && 'line-through decoration-foreground/30',
+            )}
+          >
             {row.nome || 'Sem nome'}
           </span>
           {row.vendaRevertida && (
@@ -577,7 +606,7 @@ function VendaRow({ row, selected, onToggleSelect }: { row: LeadRow; selected: b
               revertida
             </span>
           )}
-        </div>
+        </button>
       </td>
       <td className={cn('px-4 py-3 text-sm text-foreground/70', row.vendaRevertida && 'line-through')}>
         {row.sdr || '—'}

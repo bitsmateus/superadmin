@@ -62,7 +62,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   // ---------- Lançamentos ----------
 
   app.get('/api/commission-entries', { onRequest: [app.authenticate] }, async () => {
-    return query('SELECT * FROM commission_entries ORDER BY month DESC, created_at DESC');
+    return query('SELECT * FROM commission_entries ORDER BY month DESC, created_at ASC');
   });
 
   app.post<{ Body: {

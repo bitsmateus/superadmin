@@ -15,7 +15,7 @@ import {
   type CommissionRole,
   type CommissionType,
 } from '@/services/commissions'
-import { formatBRLCents, parseBRLCents } from '@/lib/currency'
+import { formatBRLCents, parseBRLCents, prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
 import { addMonthsToId, currentMonthId, monthLabelPt, useMonthFilter } from '@/hooks/useMonthFilter'
 import { cn, initials } from '@/lib/utils'
 
@@ -375,7 +375,10 @@ function ReferenceCell({ entry }: { entry: CommissionEntry }) {
  * blur, sem o auto-save enquanto ainda digitando que o CurrencyField faz pra outras telas). */
 function AmountCell({ entry }: { entry: CommissionEntry }) {
   const [editing, setEditing] = React.useState(false)
-  const [value, setValue] = React.useState(formatBRLCents(entry.amountCents))
+  // Sem "R$"/pontos de milhar enquanto edita — só dígitos e vírgula, igual o CurrencyField (evita
+  // o bug de digitar "100" e virar R$1,00: sem passar pelo prettify, "100" ia direto pra
+  // parseBRLCents como 100 CENTAVOS em vez de R$100,00).
+  const [value, setValue] = React.useState(() => (entry.amountCents > 0 ? sanitizeCurrencyRaw(formatBRLCents(entry.amountCents)) : ''))
 
   if (editing) {
     return (
@@ -384,10 +387,10 @@ function AmountCell({ entry }: { entry: CommissionEntry }) {
         inputMode="decimal"
         value={value}
         onFocus={(ev) => ev.target.select()}
-        onChange={(ev) => setValue(ev.target.value)}
+        onChange={(ev) => setValue(sanitizeCurrencyRaw(ev.target.value))}
         onBlur={() => {
           setEditing(false)
-          const cents = parseBRLCents(value)
+          const cents = parseBRLCents(value ? prettifyCurrencyRaw(value) : '')
           if (cents !== entry.amountCents) void commissionsService.updateEntry(entry.id, { amountCents: cents })
         }}
         onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
@@ -399,7 +402,7 @@ function AmountCell({ entry }: { entry: CommissionEntry }) {
   return (
     <button
       type="button"
-      onClick={() => { setValue(formatBRLCents(entry.amountCents)); setEditing(true) }}
+      onClick={() => { setValue(entry.amountCents > 0 ? sanitizeCurrencyRaw(formatBRLCents(entry.amountCents)) : ''); setEditing(true) }}
       className={cn('rounded px-1.5 py-0.5 hover:bg-elevate/[0.06]', entry.amountCents <= 0 && 'text-warning')}
     >
       {entry.amountCents > 0 ? formatBRLCents(entry.amountCents) : 'Definir valor…'}

@@ -1,4 +1,5 @@
 ﻿import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
@@ -34,10 +35,11 @@ import {
 } from '@/hooks/useTenants'
 import { getServerById, useAuthStore } from '@/store/authStore'
 import { useServerFilter } from '@/hooks/useServerFilter'
+import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useAuth } from '@/hooks/useAuth'
 import { canDeleteClient } from '@/services/supabase'
 import { extractErrorMessage } from '@/api/client'
-import { asText, cn, formatDateShort, isTenantActive } from '@/lib/utils'
+import { asText, formatDateShort, isTenantActive } from '@/lib/utils'
 
 export function TenantsPage() {
   const tenantsQ = useAllTenants()
@@ -54,7 +56,6 @@ export function TenantsPage() {
     useSupportViewValue<'all' | 'active' | 'inactive'>('statusFilter', 'all'),
   )
   const { selected: serverFilter, setSelected: setServerFilter } = useServerFilter()
-  const [openMenu, setOpenMenu] = React.useState<string | null>(null)
   const [editing, setEditing] = React.useState<TaggedTenant | null>(null)
   const [deleting, setDeleting] = React.useState<TaggedTenant | null>(null)
 
@@ -69,23 +70,6 @@ export function TenantsPage() {
       toast.error('Pop-up bloqueado — libere para abrir o sistema')
     }
   }
-
-  // Fecha menu de ações ao clicar fora (mousedown evita o race com o
-  // próprio toggle do botão — `stopPropagation` no wrapper continua
-  // protegendo o menu aberto). Também fecha com ESC.
-  React.useEffect(() => {
-    if (!openMenu) return
-    const onMouseDown = () => setOpenMenu(null)
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenMenu(null)
-    }
-    window.addEventListener('mousedown', onMouseDown)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onMouseDown)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [openMenu])
 
   const filtered = React.useMemo(() => {
     const list = tenantsQ.data
@@ -313,11 +297,7 @@ export function TenantsPage() {
                         {formatDateShort(t.created_at)}
                       </TD>
                       <TD className="text-right">
-                        <div
-                          className="flex items-center justify-end gap-1"
-                          onClick={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={() => openServerLogin(t)}
@@ -327,60 +307,12 @@ export function TenantsPage() {
                             <ExternalLink className="h-3.5 w-3.5" />
                             Acessar
                           </button>
-                          <div className="relative inline-block text-left">
-                            <button
-                              type="button"
-                              aria-label="Ações"
-                              onClick={() =>
-                                setOpenMenu(openMenu === id ? null : id)
-                              }
-                              className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-                            {openMenu === id && (
-                              <div
-                                className={cn(
-                                  'absolute right-0 z-10 mt-1 w-44 rounded-lg border border-line bg-card shadow-xl',
-                                  'animate-fade-in',
-                                )}
-                              >
-                                <Link
-                                  to={`/tenants/${t._serverId}/${t.id}`}
-                                  className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/80 hover:bg-elevate/[0.05]"
-                                  onClick={() => setOpenMenu(null)}
-                                >
-                                  <ArrowRight className="h-3.5 w-3.5" />
-                                  Ver detalhes
-                                </Link>
-                                <button
-                                  onClick={() => {
-                                    setOpenMenu(null)
-                                    setEditing(t)
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground/80 hover:bg-elevate/[0.05]"
-                                >
-                                  <Edit3 className="h-3.5 w-3.5" />
-                                  Editar
-                                </button>
-                                {canDelete && (
-                                  <>
-                                    <div className="my-1 border-t border-line" />
-                                    <button
-                                      onClick={() => {
-                                        setOpenMenu(null)
-                                        setDeleting(t)
-                                      }}
-                                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-danger/10"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                      Excluir
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                          <TenantRowActions
+                            tenant={t}
+                            canDelete={canDelete}
+                            onEdit={() => setEditing(t)}
+                            onDelete={() => setDeleting(t)}
+                          />
                         </div>
                       </TD>
                     </TR>
@@ -458,5 +390,92 @@ export function TenantsPage() {
         </p>
       </Modal>
     </>
+  )
+}
+
+/** Menu de ações (⋯) de uma linha — em portal com posição calculada (fixed), não mais
+ * `position: absolute` dentro da linha. A tabela usa `overflow-hidden` (pros cantos
+ * arredondados), então um dropdown posicionado ali dentro ficava cortado/invisível na última
+ * linha visível — sobretudo com poucos resultados, tipo uma busca que acha 1 tenant só. O
+ * botão só ABRE (nunca fecha no próprio clique, mesmo padrão do AgendamentoField): fechar de
+ * novo clicando nele já é coberto pelo useOutsideClose, que dispara no mousedown antes do
+ * onClick — tentar fazer o botão também fechar entraria em corrida com isso. */
+function TenantRowActions({
+  tenant,
+  canDelete,
+  onEdit,
+  onDelete,
+}: {
+  tenant: TaggedTenant
+  canDelete: boolean
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [coords, setCoords] = React.useState<{ top: number; right: number } | null>(null)
+  const btnRef = React.useRef<HTMLButtonElement>(null)
+  const menuRef = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(menuRef, open, () => setOpen(false))
+
+  const openMenu = () => {
+    const rect = btnRef.current?.getBoundingClientRect()
+    if (rect) setCoords({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+    setOpen(true)
+  }
+
+  return (
+    <div className="relative inline-block text-left">
+      <button
+        ref={btnRef}
+        type="button"
+        aria-label="Ações"
+        onClick={openMenu}
+        className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && coords && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: coords.top, right: coords.right }}
+          className="z-50 w-44 rounded-lg border border-line bg-card shadow-xl animate-fade-in"
+        >
+          <Link
+            to={`/tenants/${tenant._serverId}/${tenant.id}`}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/80 hover:bg-elevate/[0.05]"
+            onClick={() => setOpen(false)}
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+            Ver detalhes
+          </Link>
+          <button
+            onClick={() => {
+              setOpen(false)
+              onEdit()
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground/80 hover:bg-elevate/[0.05]"
+          >
+            <Edit3 className="h-3.5 w-3.5" />
+            Editar
+          </button>
+          {canDelete && (
+            <>
+              <div className="my-1 border-t border-line" />
+              <button
+                onClick={() => {
+                  setOpen(false)
+                  onDelete()
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-danger/10"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Excluir
+              </button>
+            </>
+          )}
+        </div>,
+        document.body,
+      )}
+    </div>
   )
 }

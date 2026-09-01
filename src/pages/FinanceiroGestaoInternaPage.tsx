@@ -7,18 +7,14 @@ import { useClients } from '@/hooks/useClients'
 import { useCommissionPayments, useCommissionRates } from '@/hooks/useCommissions'
 import { commissionsService, type CommissionRole, type CommissionStatus } from '@/services/commissions'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
-import { currentMonthId, addMonthsToId, monthLabelPt } from '@/hooks/useMonthFilter'
+import { addMonthsToId, currentMonthId, monthLabelPt, useMonthFilter } from '@/hooks/useMonthFilter'
 import { cn, initials } from '@/lib/utils'
+import { Plus } from 'lucide-react'
 
 // Mesma lista usada em Vendas ("Quem fechou a venda") — é a única fonte de nomes disponível hoje
 // pra atribuir comissão. Sem separação formal entre "quem é SDR" e "quem é Suporte" no sistema:
 // as duas tabelas abaixo usam o mesmo grupo de nomes, cada uma com sua própria conta.
 const NAMES = ['Arthur', 'Luis', 'Ian', 'Mateus']
-
-function monthOptions(): string[] {
-  const cur = currentMonthId()
-  return Array.from({ length: 6 }, (_, i) => addMonthsToId(cur, -i))
-}
 
 /** Comissões — aba "Gestão Interna" (Financeiro). Só LÊ vendas (quadro is_vendas) e entregas
  * (clients.deliveryCompletedAt) que já existem — não escreve nelas, não muda nada nas outras
@@ -32,7 +28,11 @@ export function FinanceiroGestaoInternaPage() {
   const rates = useCommissionRates()
   const payments = useCommissionPayments()
 
-  const [month, setMonth] = React.useState(() => currentMonthId())
+  // Só mês atual + mês passado por padrão, com "Adicionar mês" pra ir além — mesmo hook usado em
+  // Contrato/Vendas, mas sem o modo "Personalizado" (não faz sentido aqui: comissão é sempre
+  // pessoa-MÊS, um intervalo livre de datas não vira uma chave de mês única).
+  const filter = useMonthFilter([addMonthsToId(currentMonthId(), -1)])
+  const month = filter.selected
 
   const sdrCounts = React.useMemo(() => {
     const map = new Map<string, number>(NAMES.map((n) => [n, 0]))
@@ -77,22 +77,27 @@ export function FinanceiroGestaoInternaPage() {
     <>
       <TopBar title="Gestão Interna" subtitle="Financeiro" />
       <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-card p-3">
-          <div className="flex items-center gap-1.5">
-            {monthOptions().map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMonth(m)}
-                className={cn(
-                  'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                  month === m ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
-                )}
-              >
-                {monthLabelPt(m)}
-              </button>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-line bg-card p-3">
+          {filter.months.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => filter.setSelected(m)}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                month === m ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
+              )}
+            >
+              {monthLabelPt(m)}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={filter.addMonth}
+            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground/50 hover:bg-elevate/[0.04]"
+          >
+            <Plus className="h-3 w-3" /> Adicionar mês
+          </button>
         </div>
 
         <RatesCard rates={rates} />

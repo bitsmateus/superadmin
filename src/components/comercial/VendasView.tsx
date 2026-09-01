@@ -326,6 +326,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <th className="w-28 px-4 py-3">SDR</th>
                   <th className="w-24 px-4 py-3">Funil</th>
                   <th className="w-28 px-4 py-3">Contrato</th>
+                  <th className="w-36 px-4 py-3" title="Classifica a venda pra gerar sozinha o lançamento na Gestão Interna">Comissão</th>
                   <th className="w-48 px-4 py-3 text-right">Valor MRR</th>
                   <th className="w-56 px-4 py-3 text-right">Valor de implementação</th>
                   <th className="w-56 px-4 py-3">Observações</th>
@@ -335,7 +336,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-10 text-center text-sm text-foreground/40">
+                    <td colSpan={10} className="px-4 py-10 text-center text-sm text-foreground/40">
                       {onlyPending ? 'Nenhuma venda pendente de pagamento neste período.' : 'Nenhuma venda neste período.'}
                     </td>
                   </tr>
@@ -656,6 +657,52 @@ function VendaRow({
         >
           {row.contratoAssinado ? 'Assinado' : 'Pendente'}
         </button>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex flex-col items-start gap-1">
+          <div className="inline-flex overflow-hidden rounded-full border border-line text-[10px] font-medium">
+            <button
+              type="button"
+              onClick={() => leadBoardsService.updateRow(row.id, { origemVenda: 'sistema' })}
+              title="Venda de sistema — comissão fixa do SDR"
+              className={cn(
+                'px-1.5 py-0.5 transition-colors',
+                row.origemVenda === 'sistema' ? 'bg-accent/15 text-accent' : 'text-foreground/40 hover:bg-elevate/[0.06]',
+              )}
+            >
+              Sistema
+            </button>
+            <button
+              type="button"
+              onClick={() => leadBoardsService.updateRow(row.id, { origemVenda: 'trafego' })}
+              title="Venda de tráfego — comissão fixa do SDR"
+              className={cn(
+                'border-l border-line px-1.5 py-0.5 transition-colors',
+                row.origemVenda === 'trafego' ? 'bg-accent/15 text-accent' : 'text-foreground/40 hover:bg-elevate/[0.06]',
+              )}
+            >
+              Tráfego
+            </button>
+          </div>
+          {!row.veioDoFunil && (
+            <select
+              value={row.tipoVendaSuporte ?? ''}
+              onChange={(e) =>
+                leadBoardsService.updateRow(row.id, {
+                  tipoVendaSuporte: (e.target.value || null) as LeadRow['tipoVendaSuporte'],
+                })
+              }
+              title="Venda especial do Suporte — comissão % sobre o valor de implementação"
+              className="h-6 max-w-[130px] rounded border border-line bg-surface px-1 text-[10px] text-foreground/60 outline-none focus:border-accent"
+            >
+              <option value="">Suporte: —</option>
+              <option value="ia_avancada">IA Avançada</option>
+              <option value="ia_basica">IA Básica</option>
+              <option value="api_oficial">API Oficial</option>
+              <option value="indicacao_externa">Indicação externa</option>
+            </select>
+          )}
+        </div>
       </td>
       <PendenteValueCell
         value={row.valorMrr}

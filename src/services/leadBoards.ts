@@ -53,6 +53,8 @@ type LeadRowRow = {
   observacoes?: string
   veio_do_funil?: boolean
   contrato_assinado?: boolean
+  origem_venda?: string | null
+  tipo_venda_suporte?: string | null
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
@@ -73,6 +75,8 @@ function rowToLead(r: LeadRowRow): LeadRow {
     observacoes: r.observacoes ?? '',
     veioDoFunil: r.veio_do_funil ?? false,
     contratoAssinado: r.contrato_assinado ?? false,
+    origemVenda: (r.origem_venda as LeadRow['origemVenda']) ?? null,
+    tipoVendaSuporte: (r.tipo_venda_suporte as LeadRow['tipoVendaSuporte']) ?? null,
   }
 }
 function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
@@ -101,6 +105,8 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('observacoes' in patch) row.observacoes = patch.observacoes
   if ('veioDoFunil' in patch) row.veio_do_funil = patch.veioDoFunil
   if ('contratoAssinado' in patch) row.contrato_assinado = patch.contratoAssinado
+  if ('origemVenda' in patch) row.origem_venda = patch.origemVenda
+  if ('tipoVendaSuporte' in patch) row.tipo_venda_suporte = patch.tipoVendaSuporte
   if ('boardId' in patch) row.board_id = patch.boardId
   if ('position' in patch) row.position = patch.position
   if ('createdAt' in patch) row.created_at = patch.createdAt
@@ -229,7 +235,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
     fechamento: '', vendaOrigemId: null, vendaRevertida: false,
     position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
     mrrPendente: true, implPendente: true, observacoes: '', veioDoFunil: false,
-    contratoAssinado: false, ...initial,
+    contratoAssinado: false, origemVenda: null, tipoVendaSuporte: null, ...initial,
   }
   rows = [...rows, row]
   notify()

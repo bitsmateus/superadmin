@@ -872,6 +872,11 @@ END $$`);
   // padrão de veio_do_funil (sem checklist, sem data associada, só liga/desliga).
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS contrato_assinado BOOLEAN NOT NULL DEFAULT false`);
 
+  // Classificação manual da venda (aba Vendas) que dispara sozinha um lançamento de comissão —
+  // ver POST/PATCH /api/lead-rows em leadBoards.ts e o comentário em commission_entries abaixo.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS origem_venda TEXT`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS tipo_venda_suporte TEXT`);
+
   // Integração com Autentique: o contrato é gerado aqui mas enviado pra assinatura lá fora (a
   // pessoa sobe o PDF manualmente no Autentique, não tem criação via API). Esse campo guarda o ID
   // do documento no Autentique, colado à mão depois de subir — é o que liga o webhook de "documento
@@ -1055,10 +1060,25 @@ END $$`);
     amount_cents INT NOT NULL,
     month TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'pago')),
+    source_type TEXT,
+    source_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS commission_entries_month_idx ON commission_entries(month)`);
+  // Rastreia/deduplica lançamentos gerados sozinhos (venda no funil, venda avulsa especial,
+  // entrega concluída) — null/null pra lançamento manual, sem restrição. Ver syncComissao* em
+  // leadBoards.ts/clients.ts.
+  await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS source_type TEXT`);
+  await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS source_id TEXT`);
+  await pool.query(`DO $$ BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint WHERE conname = 'commission_entries_source_type_source_id_type_id_key'
+    ) THEN
+      ALTER TABLE commission_entries ADD CONSTRAINT commission_entries_source_type_source_id_type_id_key
+        UNIQUE (source_type, source_id, type_id);
+    END IF;
+  END $$`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_commission_types ON commission_types;

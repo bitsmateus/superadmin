@@ -397,7 +397,13 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   veio_do_funil BOOLEAN NOT NULL DEFAULT false,
   -- Marca manual se o contrato já foi assinado — usada só na aba Vendas, mesmo padrão de
   -- veio_do_funil (toggle, sem checklist nem data associada).
-  contrato_assinado BOOLEAN NOT NULL DEFAULT false
+  contrato_assinado BOOLEAN NOT NULL DEFAULT false,
+  -- Classificação manual da venda (aba Vendas), usada só pra gerar sozinha a comissão automática:
+  -- origem_venda ('sistema'|'trafego') dispara a comissão fixa do SDR; tipo_venda_suporte
+  -- ('ia_avancada'|'ia_basica'|'api_oficial'|'indicacao_externa') dispara a comissão % do Suporte
+  -- quando a venda é avulsa (veio_do_funil = false). Ver commission_entries.source_type/source_id.
+  origem_venda TEXT,
+  tipo_venda_suporte TEXT
 );
 
 CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);
@@ -1020,8 +1026,15 @@ CREATE TABLE IF NOT EXISTS commission_entries (
   amount_cents INT NOT NULL,
   month TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'pago')),
+  -- Origem automática (null = lançamento manual, registrado à mão na tela). 'venda_sdr'/'venda_suporte'
+  -- vêm de lead_rows (source_id = lead_rows.id) ao marcar origem_venda/tipo_venda_suporte na aba
+  -- Vendas; 'entrega_suporte' vem de clients (source_id = clients.id) ao concluir a entrega. A
+  -- UNIQUE evita duplicar o mesmo lançamento automático se o gatilho disparar de novo.
+  source_type TEXT,
+  source_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (source_type, source_id, type_id)
 );
 CREATE INDEX IF NOT EXISTS commission_entries_month_idx ON commission_entries(month);
 

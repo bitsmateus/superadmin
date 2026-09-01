@@ -4,6 +4,16 @@ import { query, queryOne } from '../db.js';
 import { findMatchingLeadRowId } from '../lib/leadMatch.js';
 import { sendMail } from '../lib/mailer.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
+import { upsertMultiSourceCommissions } from '../lib/autoCommission.js';
+
+const ENTREGA_LABEL_BY_CONNECTION: Record<string, string> = {
+  api_comum: 'Entrega API comum',
+  api_oficial: 'Entrega API oficial',
+};
+const ENTREGA_LABEL_BY_AUTOMATION: Record<string, string> = {
+  ia_basica: 'Entrega IA Básica',
+  ia_avancada: 'Entrega IA Avançada',
+};
 
 const FINANCE_COLS = [
   'contract_url','contract_sent_at','contract_signed_at',
@@ -214,6 +224,10 @@ export async function clientRoutes(app: FastifyInstance) {
         }
       }
 
+      const before = 'stage' in patch
+        ? await queryOne<{ stage: string }>('SELECT stage FROM clients WHERE id = $1', [req.params.id])
+        : null;
+
       const sets: string[] = [];
       const params: unknown[] = [];
       let i = 1;
@@ -236,6 +250,37 @@ export async function clientRoutes(app: FastifyInstance) {
         params
       );
       if (!updated) return reply.status(404).send({ message: 'Cliente não encontrado' });
+
+      // Comissão automática (Gestão Interna) — ao concluir a entrega (DeliveryTab.tsx), gera
+      // sozinho um lançamento de comissão fixa do Suporte pra cada tipo já configurado no
+      // briefing (API Oficial/Comum, IA Básica/Avançada). Snapshot do momento da entrega — não
+      // recalcula se o briefing mudar depois. Sem "Responsável de entrega" definido, não gera
+      // nada (ninguém pra creditar). Nunca lança: efeito colateral, não pode derrubar o PATCH.
+      if (before && before.stage !== 'delivered') {
+        const row = updated as {
+          stage: string; company: string | null; name: string | null;
+          responsavel_entrega: string | null;
+          briefing_config: { connectionTypes?: string[]; automationTypes?: string[] } | null;
+        };
+        if (row.stage === 'delivered' && row.responsavel_entrega?.trim()) {
+          const cfg = row.briefing_config;
+          const labels = [
+            ...(cfg?.connectionTypes ?? []).map((t) => ENTREGA_LABEL_BY_CONNECTION[t]).filter(Boolean),
+            ...(cfg?.automationTypes ?? []).map((t) => ENTREGA_LABEL_BY_AUTOMATION[t]).filter(Boolean),
+          ] as string[];
+          if (labels.length) {
+            void upsertMultiSourceCommissions({
+              sourceType: 'entrega_suporte',
+              sourceId: req.params.id,
+              role: 'suporte',
+              typeLabels: labels,
+              person: row.responsavel_entrega,
+              reference: row.company || row.name || '',
+            });
+          }
+        }
+      }
+
       return updated;
     }
   );

@@ -530,12 +530,16 @@ function MoveSubmenu({
 }) {
   const [aba, setAba] = React.useState<LeadBoardPage | null>(null)
 
+  // Nunca lista aba arquivada como destino — uma cópia arquivada pode ter um quadro de mesmo nome
+  // da aba viva (ex.: "Proposta enviada"), e sem esse filtro dava pra mover um lead pra lá sem
+  // querer e ele sumir da tela do SDR (mesmo bug do auto-move por status, aqui pelo Mover manual).
+  const livePages = allPages.filter((p) => !p.archivedAt)
   // Aba travada num SDR só (CRM Luis/Arthur): só pode mover pra dentro da própria aba ou pra
   // Novos Leads — nunca pra outro SDR, Vendas ou Contrato. Sem trava (ex.: Novos Leads), continua
   // podendo mover pra qualquer aba, como sempre foi.
   const movablePages = sdrLock
-    ? allPages.filter((p) => p.id === currentPageId || p.name.trim().toLowerCase() === 'novos leads')
-    : allPages
+    ? livePages.filter((p) => p.id === currentPageId || p.name.trim().toLowerCase() === 'novos leads')
+    : livePages
 
   if (!aba) {
     return (

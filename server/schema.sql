@@ -1015,6 +1015,9 @@ ON CONFLICT (role, label) DO NOTHING;
 -- congelados no momento do registro (não recalculam se o tipo mudar de valor depois).
 CREATE TABLE IF NOT EXISTS commission_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- Nome do cliente/venda (mesmo nome que aparece na aba Vendas) — separado de "reference", que é
+  -- um campo livre à parte (observação/nota do lançamento).
+  nome TEXT NOT NULL DEFAULT '',
   person TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('sdr', 'suporte')),
   type_id UUID REFERENCES commission_types(id) ON DELETE SET NULL,

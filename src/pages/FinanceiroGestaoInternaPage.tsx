@@ -130,6 +130,7 @@ function EntriesTable({
           <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+                <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">Pessoa</th>
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Referência</th>
@@ -147,6 +148,9 @@ function EntriesTable({
                     key={e.id}
                     className={cn('border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]', incomplete && 'bg-warning/[0.04]')}
                   >
+                    <td className="px-4 py-3 text-sm">
+                      <NomeCell entry={e} />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
@@ -221,6 +225,35 @@ function EntriesTable({
         </p>
       </Modal>
     </div>
+  )
+}
+
+/** Nome do cliente/venda (mesmo nome da aba Vendas), editável no lugar. */
+function NomeCell({ entry }: { entry: CommissionEntry }) {
+  const [editing, setEditing] = React.useState(false)
+  const [value, setValue] = React.useState(entry.nome)
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={value}
+        onChange={(ev) => setValue(ev.target.value)}
+        onBlur={() => { setEditing(false); if (value !== entry.nome) void commissionsService.updateEntry(entry.id, { nome: value }) }}
+        onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
+        className="h-8 w-full rounded-md border border-accent/40 bg-surface px-2 text-xs text-foreground outline-none"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => { setValue(entry.nome); setEditing(true) }}
+      className={cn('rounded px-1.5 py-0.5 text-left font-medium hover:bg-elevate/[0.06]', entry.nome ? 'text-foreground' : 'text-warning')}
+    >
+      {entry.nome || 'Definir nome…'}
+    </button>
   )
 }
 
@@ -344,6 +377,7 @@ function RegisterEntryModal({
   month: string
 }) {
   const [role, setRole] = React.useState<CommissionRole>('sdr')
+  const [nome, setNome] = React.useState('')
   const [person, setPerson] = React.useState('')
   const [typeId, setTypeId] = React.useState('')
   const [reference, setReference] = React.useState('')
@@ -361,6 +395,7 @@ function RegisterEntryModal({
   React.useEffect(() => {
     if (!open) return
     setRole('sdr')
+    setNome('')
     setPerson('')
     setTypeId('')
     setReference('')
@@ -393,6 +428,7 @@ function RegisterEntryModal({
     setSaving(true)
     try {
       await commissionsService.createEntry({
+        nome: nome.trim(),
         person: person.trim(),
         role,
         typeId: selectedType.id,
@@ -440,7 +476,9 @@ function RegisterEntryModal({
           ))}
         </div>
 
-        <Input label="Pessoa" value={person} onChange={(e) => setPerson(e.target.value)} placeholder="Ex.: Arthur" autoFocus />
+        <Input label="Nome (cliente/venda)" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: mesmo nome da aba Vendas" autoFocus />
+
+        <Input label="Pessoa" value={person} onChange={(e) => setPerson(e.target.value)} placeholder="Ex.: Arthur" />
 
         <Select
           label="Tipo de comissão"

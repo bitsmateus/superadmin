@@ -1051,6 +1051,7 @@ END $$`);
   ON CONFLICT (role, label) DO NOTHING`);
   await pool.query(`CREATE TABLE IF NOT EXISTS commission_entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL DEFAULT '',
     person TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('sdr', 'suporte')),
     type_id UUID REFERENCES commission_types(id) ON DELETE SET NULL,
@@ -1066,6 +1067,8 @@ END $$`);
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS commission_entries_month_idx ON commission_entries(month)`);
+  // Nome do cliente/venda (mesmo nome da aba Vendas) — separado de "reference" (campo livre à parte).
+  await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
   // source_type/source_id: sobras de uma automação de comissão removida — todo lançamento hoje é
   // manual. Colunas paradas, sem uso pelo app.
   await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS source_type TEXT`);

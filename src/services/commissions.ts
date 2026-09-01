@@ -18,6 +18,8 @@ export interface CommissionType {
 
 export interface CommissionEntry {
   id: string
+  /** Nome do cliente/venda — o mesmo nome que aparece na aba Vendas. */
+  nome: string
   person: string
   role: CommissionRole
   typeId: string | null
@@ -35,7 +37,7 @@ type TypeRow = {
   rate_cents: number | null; rate_percent: string | null; position: number; archived: boolean
 }
 type EntryRow = {
-  id: string; person: string; role: CommissionRole; type_id: string | null; type_label: string
+  id: string; nome: string; person: string; role: CommissionRole; type_id: string | null; type_label: string
   reference: string; base_value_cents: number | null; amount_cents: number; month: string
   status: CommissionStatus; created_at: string
 }
@@ -49,7 +51,7 @@ function rowToType(r: TypeRow): CommissionType {
 }
 function rowToEntry(r: EntryRow): CommissionEntry {
   return {
-    id: r.id, person: r.person, role: r.role, typeId: r.type_id, typeLabel: r.type_label,
+    id: r.id, nome: r.nome ?? '', person: r.person, role: r.role, typeId: r.type_id, typeLabel: r.type_label,
     reference: r.reference ?? '', baseValueCents: r.base_value_cents ?? null, amountCents: r.amount_cents,
     month: r.month, status: r.status, createdAt: r.created_at,
   }
@@ -126,7 +128,7 @@ export const commissionsService = {
   },
 
   async createEntry(input: {
-    person: string; role: CommissionRole; typeId: string | null; typeLabel: string
+    nome?: string; person: string; role: CommissionRole; typeId: string | null; typeLabel: string
     reference?: string; baseValueCents?: number | null; amountCents: number; month: string
   }): Promise<void> {
     try {
@@ -142,7 +144,7 @@ export const commissionsService = {
   },
 
   async updateEntry(id: string, patch: {
-    status?: CommissionStatus; amountCents?: number; reference?: string
+    status?: CommissionStatus; amountCents?: number; reference?: string; nome?: string
     typeId?: string | null; typeLabel?: string; baseValueCents?: number | null
   }): Promise<void> {
     try {

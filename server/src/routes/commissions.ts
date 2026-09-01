@@ -87,6 +87,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string }; Body: {
     status?: 'pendente' | 'pago'; amountCents?: number; reference?: string
+    typeId?: string | null; typeLabel?: string; baseValueCents?: number | null
   } }>(
     '/api/commission-entries/:id',
     { onRequest: [app.authenticate] },
@@ -97,6 +98,9 @@ export async function commissionRoutes(app: FastifyInstance) {
       if (req.body.status !== undefined) { sets.push(`status = $${i++}`); params.push(req.body.status); }
       if (req.body.amountCents !== undefined) { sets.push(`amount_cents = $${i++}`); params.push(req.body.amountCents); }
       if (req.body.reference !== undefined) { sets.push(`reference = $${i++}`); params.push(req.body.reference.trim()); }
+      if (req.body.typeId !== undefined) { sets.push(`type_id = $${i++}`); params.push(req.body.typeId); }
+      if (req.body.typeLabel !== undefined) { sets.push(`type_label = $${i++}`); params.push(req.body.typeLabel); }
+      if (req.body.baseValueCents !== undefined) { sets.push(`base_value_cents = $${i++}`); params.push(req.body.baseValueCents); }
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       sets.push(`updated_at = NOW()`);
 

@@ -88,8 +88,8 @@ export function FinanceiroGestaoInternaPage() {
           </button>
         </div>
 
-        <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} />
-        <EntriesTable title="Comissão Suporte" entries={bySuporte} onToggle={toggleStatus} />
+        <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} />
+        <EntriesTable title="Comissão Suporte" entries={bySuporte} onToggle={toggleStatus} types={types} />
 
         <p className="text-[11px] text-foreground/40">
           Registro manual — cada venda/entrega/indicação é lançada aqui escolhendo um dos tipos
@@ -107,10 +107,12 @@ function EntriesTable({
   title,
   entries,
   onToggle,
+  types,
 }: {
   title: string
   entries: CommissionEntry[]
   onToggle: (entry: CommissionEntry) => void
+  types: CommissionType[]
 }) {
   const total = entries.reduce((sum, e) => sum + e.amountCents, 0)
   const [deleting, setDeleting] = React.useState<CommissionEntry | null>(null)
@@ -139,8 +141,12 @@ function EntriesTable({
             <tbody>
               {entries.map((e) => {
                 const paid = e.status === 'pago'
+                const incomplete = !e.typeId || e.amountCents <= 0
                 return (
-                  <tr key={e.id} className="border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]">
+                  <tr
+                    key={e.id}
+                    className={cn('border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]', incomplete && 'bg-warning/[0.04]')}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
@@ -149,10 +155,14 @@ function EntriesTable({
                         <span className="text-sm font-medium text-foreground">{e.person}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground/70">{e.typeLabel}</td>
-                    <td className="px-4 py-3 text-sm text-foreground/55">{e.reference || '—'}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <TypeCell entry={e} types={types} />
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <ReferenceCell entry={e} />
+                    </td>
                     <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-foreground">
-                      {formatBRLCents(e.amountCents)}
+                      <AmountCell entry={e} />
                     </td>
                     <td className="px-4 py-3">
                       <button
@@ -211,6 +221,114 @@ function EntriesTable({
         </p>
       </Modal>
     </div>
+  )
+}
+
+/** Tipo de um lançamento, editável no lugar — clica no texto, escolhe na lista (do mesmo papel do
+ * lançamento) e já salva. Trocar o tipo NÃO recalcula o valor sozinho (o valor já lançado é
+ * intencional; se precisar ajustar, edita o valor à parte). */
+function TypeCell({ entry, types }: { entry: CommissionEntry; types: CommissionType[] }) {
+  const [editing, setEditing] = React.useState(false)
+  const options = React.useMemo(
+    () => types.filter((t) => t.role === entry.role && !t.archived).sort((a, b) => a.position - b.position),
+    [types, entry.role],
+  )
+
+  if (editing) {
+    return (
+      <select
+        autoFocus
+        defaultValue={entry.typeId ?? ''}
+        onBlur={() => setEditing(false)}
+        onChange={(ev) => {
+          const type = options.find((t) => t.id === ev.target.value)
+          if (type) void commissionsService.updateEntry(entry.id, { typeId: type.id, typeLabel: type.label })
+          setEditing(false)
+        }}
+        className="h-8 rounded-md border border-accent/40 bg-surface px-2 text-xs text-foreground outline-none"
+      >
+        <option value="" disabled>Selecionar…</option>
+        {options.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+      </select>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className={cn(
+        'rounded px-1.5 py-0.5 text-left hover:bg-elevate/[0.06]',
+        entry.typeId ? 'text-foreground/70' : 'text-warning',
+      )}
+    >
+      {entry.typeId ? entry.typeLabel : 'Escolher tipo…'}
+    </button>
+  )
+}
+
+/** Referência (nome do cliente/venda), editável no lugar. */
+function ReferenceCell({ entry }: { entry: CommissionEntry }) {
+  const [editing, setEditing] = React.useState(false)
+  const [value, setValue] = React.useState(entry.reference)
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={value}
+        onChange={(ev) => setValue(ev.target.value)}
+        onBlur={() => { setEditing(false); if (value !== entry.reference) void commissionsService.updateEntry(entry.id, { reference: value }) }}
+        onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
+        className="h-8 w-full rounded-md border border-accent/40 bg-surface px-2 text-xs text-foreground outline-none"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => { setValue(entry.reference); setEditing(true) }}
+      className="rounded px-1.5 py-0.5 text-left text-foreground/55 hover:bg-elevate/[0.06]"
+    >
+      {entry.reference || '—'}
+    </button>
+  )
+}
+
+/** Valor do lançamento, editável no lugar (input simples, não o CurrencyField — aqui fecha só no
+ * blur, sem o auto-save enquanto ainda digitando que o CurrencyField faz pra outras telas). */
+function AmountCell({ entry }: { entry: CommissionEntry }) {
+  const [editing, setEditing] = React.useState(false)
+  const [value, setValue] = React.useState(formatBRLCents(entry.amountCents))
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        inputMode="decimal"
+        value={value}
+        onFocus={(ev) => ev.target.select()}
+        onChange={(ev) => setValue(ev.target.value)}
+        onBlur={() => {
+          setEditing(false)
+          const cents = parseBRLCents(value)
+          if (cents !== entry.amountCents) void commissionsService.updateEntry(entry.id, { amountCents: cents })
+        }}
+        onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
+        className="h-8 w-28 rounded-md border border-accent/40 bg-surface px-2 text-right text-xs text-foreground outline-none"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => { setValue(formatBRLCents(entry.amountCents)); setEditing(true) }}
+      className={cn('rounded px-1.5 py-0.5 hover:bg-elevate/[0.06]', entry.amountCents <= 0 && 'text-warning')}
+    >
+      {entry.amountCents > 0 ? formatBRLCents(entry.amountCents) : 'Definir valor…'}
+    </button>
   )
 }
 

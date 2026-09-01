@@ -138,13 +138,20 @@ export const commissionsService = {
   },
 
   async setEntryStatus(id: string, status: CommissionStatus): Promise<void> {
+    return commissionsService.updateEntry(id, { status })
+  },
+
+  async updateEntry(id: string, patch: {
+    status?: CommissionStatus; amountCents?: number; reference?: string
+    typeId?: string | null; typeLabel?: string; baseValueCents?: number | null
+  }): Promise<void> {
     try {
-      const row = await api.patch<EntryRow>(`/api/commission-entries/${id}`, { status })
+      const row = await api.patch<EntryRow>(`/api/commission-entries/${id}`, patch)
       const full = rowToEntry(row)
       const idx = entries.findIndex((e) => e.id === id)
       if (idx !== -1) { const copy = entries.slice(); copy[idx] = full; entries = copy; notify() }
     } catch (err) {
-      toast.error('Falha ao salvar status: ' + (err as Error).message)
+      toast.error('Falha ao salvar lançamento: ' + (err as Error).message)
     }
   },
 

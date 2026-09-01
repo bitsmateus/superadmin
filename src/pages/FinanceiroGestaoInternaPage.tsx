@@ -46,11 +46,18 @@ export function FinanceiroGestaoInternaPage() {
   const bySuporte = entriesInMonth.filter((e) => e.role === 'suporte')
 
   // Total do mês por pessoa — só essas 4, na ordem pedida (soma SDR + Suporte, tanto faz o papel).
+  // Separado por Contrato porque só se paga comissão do que já está Assinado — Pendente é só um
+  // "a caminho", não entra na conta de pagamento ainda.
   const totalsByPerson = React.useMemo(() => {
-    const totals = new Map<string, number>(TOTAL_NAMES.map((n) => [n, 0]))
+    const totals = new Map<string, { assinado: number; pendente: number }>(
+      TOTAL_NAMES.map((n) => [n, { assinado: 0, pendente: 0 }]),
+    )
     for (const e of entriesInMonth) {
       const match = TOTAL_NAMES.find((n) => n.toLowerCase() === e.person.trim().toLowerCase())
-      if (match) totals.set(match, (totals.get(match) ?? 0) + e.amountCents)
+      if (!match) continue
+      const t = totals.get(match)!
+      if (e.contratoAssinado) t.assinado += e.amountCents
+      else t.pendente += e.amountCents
     }
     return totals
   }, [entriesInMonth])
@@ -105,17 +112,35 @@ export function FinanceiroGestaoInternaPage() {
         <div className="overflow-hidden rounded-2xl border border-line bg-card">
           <div className="border-b border-line px-4 py-3">
             <p className="text-sm font-semibold text-foreground">Total por pessoa — {monthLabelPt(month)}</p>
+            <p className="mt-0.5 text-xs text-foreground/45">
+              Só o que está com contrato Assinado entra no pagamento — Pendente é só referência.
+            </p>
           </div>
-          <ul className="divide-y divide-line/60">
-            {TOTAL_NAMES.map((name) => (
-              <li key={name} className="flex items-center justify-between px-4 py-2.5">
-                <span className="text-sm font-medium text-foreground">{name}</span>
-                <span className="text-sm font-semibold tabular-nums text-foreground">
-                  {formatBRLCents(totalsByPerson.get(name) ?? 0)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+                <th className="px-4 py-2.5">Pessoa</th>
+                <th className="px-4 py-2.5 text-right">Assinado</th>
+                <th className="px-4 py-2.5 text-right">Pendente</th>
+              </tr>
+            </thead>
+            <tbody>
+              {TOTAL_NAMES.map((name) => {
+                const t = totalsByPerson.get(name)!
+                return (
+                  <tr key={name} className="border-b border-line/60 last:border-0">
+                    <td className="px-4 py-2.5 text-sm font-medium text-foreground">{name}</td>
+                    <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-success">
+                      {formatBRLCents(t.assinado)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-sm font-medium tabular-nums text-warning">
+                      {formatBRLCents(t.pendente)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
 
         <p className="text-[11px] text-foreground/40">

@@ -38,6 +38,7 @@ import { useLeadNotes } from '@/hooks/useLeadNotes'
 import { useLeadEvents } from '@/hooks/useLeadEvents'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useTeam, teamMemberLabel, type TeamMember } from '@/hooks/useTeam'
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadNotesService } from '@/services/leadNotes'
 import { leadEventsService } from '@/services/leadEvents'
@@ -322,6 +323,24 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
   React.useEffect(() => { void leadEventsService.loadEvents(leadRowId) }, [leadRowId])
   React.useEffect(() => { void leadLabelsService.ensureLoaded() }, [])
 
+  // Rascunho local — o texto ainda não enviado fica salvo no navegador enquanto a pessoa digita,
+  // pra não perder se fechar o card sem clicar em "Enviar atualização" (ex.: fechou sem querer,
+  // trocou de aba). Some sozinho quando a atualização é enviada de verdade.
+  const draftKey = `lead_note_draft:${leadRowId}`
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(draftKey)
+      if (saved) setText(saved)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    } catch { /* ignore */ }
+  }, [leadRowId])
+  const saveDraft = useDebouncedCallback((html: string) => {
+    try {
+      if (stripHtml(html).trim()) localStorage.setItem(draftKey, html)
+      else localStorage.removeItem(draftKey)
+    } catch { /* ignore */ }
+  }, 400)
+
   const eventColors = React.useMemo<EventColorMaps>(() => ({
     status: Object.fromEntries(statusLabels.map((l) => [l.name, l.color])),
     diaContato: Object.fromEntries(diaContatoLabels.map((l) => [l.name, l.color])),
@@ -417,7 +436,11 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
     const authorName = profile?.name || profile?.email || 'Alguém'
     const note = await leadNotesService.addNote(leadRowId, text, authorName, pendingAttachments)
     setSending(false)
-    if (note) { setText(''); setPendingAttachments([]) }
+    if (note) {
+      setText('')
+      setPendingAttachments([])
+      try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
+    }
   }
 
   return (
@@ -439,7 +462,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
               <RichTextEditor
                 ref={editorRef}
                 value={text}
-                onChange={setText}
+                onChange={(html) => { setText(html); saveDraft(html) }}
                 onPasteFiles={handleFiles}
                 placeholder="Escreva uma atualização, cole um print (Ctrl+V) e mencione outros com @"
               />
@@ -523,9 +546,14 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
                     <Paperclip className="h-4 w-4" />
                   </button>
                 </div>
-                <Button size="sm" onClick={submit} disabled={(!hasText && !pendingAttachments.length) || sending} loading={sending}>
-                  Enviar atualização
-                </Button>
+                <div className="flex items-center gap-2">
+                  {hasText && (
+                    <span className="text-[11px] text-foreground/35">Rascunho salvo</span>
+                  )}
+                  <Button size="sm" onClick={submit} disabled={(!hasText && !pendingAttachments.length) || sending} loading={sending}>
+                    Enviar atualização
+                  </Button>
+                </div>
               </div>
             </div>
 

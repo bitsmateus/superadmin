@@ -230,19 +230,7 @@ export function OverviewTab({ client }: { client: Client }) {
         </div>
       </Section>
 
-      {/* Acessos */}
-      <AccessesSection client={client} />
-
-      {/* Tenant vinculado — editável (permite vincular clientes antigos à mão) */}
-      <TenantLinkSection client={client} />
-
-      {/* Pendências do cliente — trava a entrada na fila de configuração */}
-      <ReadinessSection client={client} />
-
-      {/* Progresso da config de API Oficial e de IA */}
-      <ConfigProgressSection client={client} />
-
-      {/* Notas */}
+      {/* Notas — logo abaixo de Dados do cliente, antes de Acessos */}
       <Section
         title={
           <span className="flex items-center gap-2">
@@ -394,6 +382,18 @@ export function OverviewTab({ client }: { client: Client }) {
           )}
         </div>
       </Section>
+
+      {/* Acessos */}
+      <AccessesSection client={client} />
+
+      {/* Tenant vinculado — editável (permite vincular clientes antigos à mão) */}
+      <TenantLinkSection client={client} />
+
+      {/* Pendências do cliente — trava a entrada na fila de configuração */}
+      <ReadinessSection client={client} />
+
+      {/* Progresso da config de API Oficial e de IA */}
+      <ConfigProgressSection client={client} />
 
       {/* Timeline */}
       <Section

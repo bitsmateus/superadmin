@@ -72,6 +72,7 @@ export function VendasView({ pageId }: { pageId: string }) {
   const [registrarOpen, setRegistrarOpen] = React.useState(false)
   const [trashOpen, setTrashOpen] = React.useState(false)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
+  const [onlyPending, setOnlyPending] = React.useState(false)
 
   // Seleção "estilo Excel" — marca várias linhas (ou todas) e vê o total de MRR/implementação só
   // delas, sem precisar mudar o período. Some sozinha ao trocar de período (ids de outra janela
@@ -94,8 +95,9 @@ export function VendasView({ pageId }: { pageId: string }) {
         const dia = (r.fechamento || r.createdAt).slice(0, 10)
         return dia >= from && dia <= to
       })
+      .filter((r) => !onlyPending || r.mrrPendente || r.implPendente)
       .sort((a, b) => (a.fechamento || a.createdAt).localeCompare(b.fechamento || b.createdAt))
-  }, [rows, from, to])
+  }, [rows, from, to, onlyPending])
 
   // Revertida continua visível (o histórico importa) mas fora da conta.
   const validas = React.useMemo(() => noPeriodo.filter((r) => !r.vendaRevertida), [noPeriodo])
@@ -247,6 +249,20 @@ export function VendasView({ pageId }: { pageId: string }) {
               />
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => setOnlyPending((v) => !v)}
+            className={cn(
+              'ml-auto inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ring-1 transition-colors',
+              onlyPending
+                ? 'bg-warning/25 text-warning ring-warning/40'
+                : 'text-foreground/50 ring-transparent hover:bg-elevate/[0.04]',
+            )}
+          >
+            <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400 ring-1 ring-amber-500" />
+            Só pendentes
+          </button>
         </div>
 
         {/* Barra de seleção — some quando nada está marcado. */}
@@ -320,7 +336,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                 {noPeriodo.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-4 py-10 text-center text-sm text-foreground/40">
-                      Nenhuma venda neste período.
+                      {onlyPending ? 'Nenhuma venda pendente de pagamento neste período.' : 'Nenhuma venda neste período.'}
                     </td>
                   </tr>
                 )}
@@ -502,7 +518,7 @@ function PendenteValueCell({
   strikethrough?: boolean
 }) {
   return (
-    <td className={cn('px-1 py-1.5 text-sm tabular-nums', pendente && 'bg-warning/15', strikethrough && 'line-through')}>
+    <td className={cn('px-1 py-1.5 text-sm tabular-nums', pendente && 'bg-warning/35', strikethrough && 'line-through')}>
       <div className="flex items-center gap-1.5">
         <button
           type="button"

@@ -872,8 +872,8 @@ END $$`);
   // padrão de veio_do_funil (sem checklist, sem data associada, só liga/desliga).
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS contrato_assinado BOOLEAN NOT NULL DEFAULT false`);
 
-  // Classificação manual da venda (aba Vendas) que dispara sozinha um lançamento de comissão —
-  // ver POST/PATCH /api/lead-rows em leadBoards.ts e o comentário em commission_entries abaixo.
+  // origem_venda/tipo_venda_suporte: sobras de uma automação de comissão removida (Gestão Interna
+  // voltou a ser 100% manual) — colunas paradas, sem uso pelo app.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS origem_venda TEXT`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS tipo_venda_suporte TEXT`);
 
@@ -1066,9 +1066,8 @@ END $$`);
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS commission_entries_month_idx ON commission_entries(month)`);
-  // Rastreia/deduplica lançamentos gerados sozinhos (venda no funil, venda avulsa especial,
-  // entrega concluída) — null/null pra lançamento manual, sem restrição. Ver syncComissao* em
-  // leadBoards.ts/clients.ts.
+  // source_type/source_id: sobras de uma automação de comissão removida — todo lançamento hoje é
+  // manual. Colunas paradas, sem uso pelo app.
   await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS source_type TEXT`);
   await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS source_id TEXT`);
   await pool.query(`DO $$ BEGIN

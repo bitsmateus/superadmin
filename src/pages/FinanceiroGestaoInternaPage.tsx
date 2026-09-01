@@ -18,9 +18,6 @@ import {
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { addMonthsToId, currentMonthId, monthLabelPt, useMonthFilter } from '@/hooks/useMonthFilter'
 import { cn, initials } from '@/lib/utils'
-import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
-import { leadBoardsService } from '@/services/leadBoards'
-import type { LeadRow } from '@/types/leadBoard'
 
 const ROLE_LABEL: Record<CommissionRole, string> = { sdr: 'SDR', suporte: 'Suporte' }
 
@@ -28,10 +25,9 @@ function rateLabel(t: Pick<CommissionType, 'kind' | 'rateCents' | 'ratePercent'>
   return t.kind === 'fixed' ? formatBRLCents(t.rateCents ?? 0) : `${t.ratePercent ?? 0}%`
 }
 
-/** Comissões — aba "Gestão Interna" (Financeiro). Registro MANUAL por enquanto: cada
- * venda/entrega/indicação vira um lançamento escolhido de um cardápio de tipos configurável.
- * Não lê nem escreve em lead_rows/clients/contracts — automação puxando dados de lá fica pra
- * depois, quando o layout já estiver validado. */
+/** Comissões — aba "Gestão Interna" (Financeiro). 100% registro manual, de propósito: cada
+ * venda/entrega/indicação vira um lançamento escolhido de um cardápio de tipos configurável, via
+ * "Registrar comissão". Não lê nem escreve em lead_rows/clients/contracts. */
 export function FinanceiroGestaoInternaPage() {
   const types = useCommissionTypes()
   const entries = useCommissionEntries()
@@ -92,109 +88,18 @@ export function FinanceiroGestaoInternaPage() {
           </button>
         </div>
 
-        <ClassificarVendasCard />
-
         <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} />
         <EntriesTable title="Comissão Suporte" entries={bySuporte} onToggle={toggleStatus} />
 
         <p className="text-[11px] text-foreground/40">
           Registro manual — cada venda/entrega/indicação é lançada aqui escolhendo um dos tipos
-          configurados. Puxar isso automático de Vendas/Entregas fica pra uma próxima etapa.
+          configurados em "Registrar comissão".
         </p>
       </div>
 
       <RegisterEntryModal open={registerOpen} onClose={() => setRegisterOpen(false)} types={types} month={month} />
       <TypesModal open={typesOpen} onClose={() => setTypesOpen(false)} types={types} />
     </>
-  )
-}
-
-/** Vendas fechadas (aba Vendas) ainda sem classificação — só aqui, não na aba Vendas (a pessoa
- * não quis o controle poluindo aquela tela). Marcar Sistema/Tráfego ou o tipo do Suporte grava
- * direto em lead_rows (leadBoardsService.updateRow) e o backend gera sozinho o lançamento de
- * comissão correspondente — a linha some daqui assim que fica totalmente classificada. */
-function ClassificarVendasCard() {
-  const boards = useLeadBoards()
-  const board = React.useMemo(() => boards.find((b) => b.isVendas), [boards])
-  const rows = useLeadRows(board?.id ?? '')
-
-  const pending = React.useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          r.status === 'Vendido' &&
-          !r.vendaRevertida &&
-          (r.origemVenda === null || (!r.veioDoFunil && r.tipoVendaSuporte === null)),
-      ),
-    [rows],
-  )
-
-  if (!board || pending.length === 0) return null
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-card">
-      <div className="border-b border-line px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">Classificar vendas ({pending.length})</p>
-        <p className="mt-0.5 text-xs text-foreground/45">
-          Sistema/Tráfego gera a comissão fixa do SDR; o tipo do Suporte (só em venda avulsa) gera
-          a comissão % sobre o valor de implementação da venda.
-        </p>
-      </div>
-      <ul className="divide-y divide-line/60">
-        {pending.map((r) => (
-          <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">{r.nome || 'Sem nome'}</p>
-              <p className="text-xs text-foreground/45">
-                {r.sdr || 'sem SDR'} · {r.veioDoFunil ? 'Funil' : 'Avulsa'} · impl. {r.valorImplementacao || '—'}
-              </p>
-            </div>
-            {r.origemVenda === null && (
-              <div className="inline-flex overflow-hidden rounded-full border border-line text-xs font-medium">
-                <button
-                  type="button"
-                  onClick={() => leadBoardsService.updateRow(r.id, { origemVenda: 'sistema' })}
-                  className="px-2.5 py-1 text-foreground/60 transition-colors hover:bg-elevate/[0.06] hover:text-foreground"
-                >
-                  Sistema
-                </button>
-                <button
-                  type="button"
-                  onClick={() => leadBoardsService.updateRow(r.id, { origemVenda: 'trafego' })}
-                  className="border-l border-line px-2.5 py-1 text-foreground/60 transition-colors hover:bg-elevate/[0.06] hover:text-foreground"
-                >
-                  Tráfego
-                </button>
-                <button
-                  type="button"
-                  onClick={() => leadBoardsService.updateRow(r.id, { origemVenda: 'nenhum' })}
-                  title="Dispensar — não gera comissão de SDR pra essa venda"
-                  className="border-l border-line px-2.5 py-1 text-foreground/40 transition-colors hover:bg-elevate/[0.06] hover:text-foreground"
-                >
-                  Ignorar
-                </button>
-              </div>
-            )}
-            {!r.veioDoFunil && r.tipoVendaSuporte === null && (
-              <select
-                defaultValue=""
-                onChange={(e) =>
-                  leadBoardsService.updateRow(r.id, { tipoVendaSuporte: e.target.value as LeadRow['tipoVendaSuporte'] })
-                }
-                className="h-8 rounded-lg border border-line bg-surface px-2 text-xs text-foreground/70 outline-none focus:border-accent"
-              >
-                <option value="" disabled>Tipo (Suporte)…</option>
-                <option value="ia_avancada">IA Avançada</option>
-                <option value="ia_basica">IA Básica</option>
-                <option value="api_oficial">API Oficial</option>
-                <option value="indicacao_externa">Indicação externa</option>
-                <option value="nenhum">Nenhum (venda comum)</option>
-              </select>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
   )
 }
 

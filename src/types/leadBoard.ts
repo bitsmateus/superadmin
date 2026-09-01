@@ -84,15 +84,6 @@ export interface LeadRow {
   /** Marca manual (só a pessoa liga/desliga, na aba Vendas) se o contrato dessa venda já foi
    * assinado ou ainda está pendente — mesmo padrão de veioDoFunil, sem data nem checklist. */
   contratoAssinado: boolean
-  /** Classificação manual da venda (Gestão Interna > Financeiro) — dispara sozinho o lançamento de
-   * comissão fixa do SDR assim que marcada. 'nenhum' = revisada e dispensada (sai da lista de
-   * pendentes sem gerar comissão) — null = ainda não revisada. */
-  origemVenda: 'sistema' | 'trafego' | 'nenhum' | null
-  /** Classificação manual da venda avulsa (Gestão Interna > Financeiro, só quando veioDoFunil =
-   * false) — dispara sozinho o lançamento de comissão % do Suporte sobre o Valor de implementação
-   * da venda. 'nenhum' = revisado e confirmado que não é nenhum dos tipos especiais (sai da lista
-   * de pendentes sem gerar comissão) — null = ainda não revisado. */
-  tipoVendaSuporte: 'ia_avancada' | 'ia_basica' | 'api_oficial' | 'indicacao_externa' | 'nenhum' | null
 }
 
 /**
@@ -107,7 +98,7 @@ export type LeadRowField = Exclude<
   keyof LeadRow,
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
-  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'origemVenda' | 'tipoVendaSuporte'
+  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

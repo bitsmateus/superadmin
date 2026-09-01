@@ -1,18 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
-import { parseBRLCentsServer, upsertSingleSourceCommission } from '../lib/autoCommission.js';
-
-const SDR_COMMISSION_LABEL: Record<string, string> = {
-  sistema: 'Venda sistema',
-  trafego: 'Venda tráfego',
-};
-const SUPORTE_VENDA_LABEL: Record<string, string> = {
-  ia_avancada: 'Venda IA Avançada',
-  ia_basica: 'Venda IA Básica',
-  api_oficial: 'Venda API Oficial',
-  indicacao_externa: 'Indicação externa da base (1ª mensalidade)',
-};
 
 /**
  * Resolve a allowlist de quadros de um usuário restrito. A permissão de menu é só "comercial"
@@ -422,42 +410,6 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         params
       );
       if (!leadRow) return reply.status(404).send({ message: 'Linha não encontrada' });
-
-      // Comissão automática (Gestão Interna) — classificar a venda na aba Vendas gera sozinho o
-      // lançamento correspondente. "origem_venda" (Sistema/Tráfego) é a comissão fixa do SDR;
-      // "tipo_venda_suporte" é a comissão % do Suporte, calculada sobre o Valor de implementação da
-      // própria venda. Ver server/src/lib/autoCommission.ts.
-      const row = leadRow as {
-        nome: string; sdr: string; fechamento: string; valor_implementacao: string;
-        origem_venda: string | null; tipo_venda_suporte: string | null; created_at: string;
-      };
-      // Sem data de fechamento preenchida (comum em vendas importadas/antigas), usa quando a venda
-      // ENTROU na aba Vendas como aproximação — nunca "agora": classificar uma venda de meses atrás
-      // não pode fazer a comissão cair no mês corrente por acidente.
-      const commissionMonth = (row.fechamento || row.created_at || '').slice(0, 7) || undefined;
-      if ('origem_venda' in patch && row.origem_venda && SDR_COMMISSION_LABEL[row.origem_venda]) {
-        void upsertSingleSourceCommission({
-          sourceType: 'venda_sdr',
-          sourceId: req.params.id,
-          role: 'sdr',
-          typeLabel: SDR_COMMISSION_LABEL[row.origem_venda],
-          person: row.sdr,
-          reference: row.nome,
-          month: commissionMonth,
-        });
-      }
-      if ('tipo_venda_suporte' in patch && row.tipo_venda_suporte && SUPORTE_VENDA_LABEL[row.tipo_venda_suporte]) {
-        void upsertSingleSourceCommission({
-          sourceType: 'venda_suporte',
-          sourceId: req.params.id,
-          role: 'suporte',
-          typeLabel: SUPORTE_VENDA_LABEL[row.tipo_venda_suporte],
-          person: row.sdr,
-          reference: row.nome,
-          baseValueCents: parseBRLCentsServer(row.valor_implementacao),
-          month: commissionMonth,
-        });
-      }
 
       // Corrigir o MRR/Implementação numa venda sincronizada (ex.: desconto fechado depois)
       // atualiza o valor "oficial" no lead de origem também — só nesse sentido (Vendas -> CRM),

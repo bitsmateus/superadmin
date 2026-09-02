@@ -137,9 +137,11 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
                 onChange={(v) => {
                   // Mesma regra da lista: status vira o nome de um quadro (ex.: "Reunião
                   // agendada"), o lead pula pra lá sozinho — senão fica com o Status dizendo uma
-                  // coisa e o Grupo (quadro) mostrando outra.
+                  // coisa e o Grupo (quadro) mostrando outra. Precisa ser um quadro da MESMA
+                  // página — sem essa checagem, uma cópia arquivada com quadro de mesmo nome virava
+                  // o alvo e o PATCH era rejeitado pelo servidor (não pode mover pra página arquivada).
                   const target = boards.find(
-                    (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === v.trim().toLowerCase(),
+                    (b) => b.id !== row.boardId && b.page === board?.page && b.name.trim().toLowerCase() === v.trim().toLowerCase(),
                   )
                   leadBoardsService.updateRow(row.id, target ? { status: v, boardId: target.id } : { status: v })
                 }}

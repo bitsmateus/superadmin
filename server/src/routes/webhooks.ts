@@ -212,13 +212,26 @@ export async function webhookRoutes(app: FastifyInstance) {
       // sem precisar mexer em código se um dia isso mudar.
       const boardIdEnv = process.env.META_LEADS_BOARD_ID;
       const board = boardIdEnv
-        ? await queryOne<{ id: string }>('SELECT id FROM lead_boards WHERE id = $1', [boardIdEnv])
-        : await queryOne<{ id: string }>(
-            `SELECT id FROM lead_boards WHERE page = 'novos_leads' ORDER BY position ASC LIMIT 1`
+        ? await queryOne<{ id: string; page_archived: string | null }>(
+            `SELECT lb.id, lp.archived_at as page_archived FROM lead_boards lb
+             JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1`,
+            [boardIdEnv]
+          )
+        : await queryOne<{ id: string; page_archived: string | null }>(
+            `SELECT lb.id, lp.archived_at as page_archived FROM lead_boards lb
+             JOIN lead_pages lp ON lp.id = lb.page
+             WHERE lb.page = 'novos_leads' ORDER BY lb.position ASC LIMIT 1`
           );
       if (!board) {
         app.log.error('[meta-leads] nenhum quadro de destino encontrado — lead não criado');
         return reply.status(500).send({ message: 'Quadro de destino não configurado' });
+      }
+      // Mesma trava do POST /api/lead-rows: nunca cria lead num quadro de página arquivada — aqui
+      // cobre o caso da própria página "Novos Leads" (ou o quadro fixo via env) ter sido arquivada
+      // sem atualizar a configuração, o que faria todo lead do Meta Ads sumir sem ninguém notar.
+      if (board.page_archived) {
+        app.log.error('[meta-leads] quadro de destino está numa página arquivada — lead não criado');
+        return reply.status(500).send({ message: 'Quadro de destino está numa página arquivada' });
       }
 
       const [{ max }] = await query<{ max: number | null }>(

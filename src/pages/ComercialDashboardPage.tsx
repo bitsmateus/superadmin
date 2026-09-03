@@ -101,7 +101,7 @@ export function ComercialDashboardPage() {
       <TopBar
         title="Dashboard Comercial"
         subtitle="Comercial · visão geral de todas as abas"
-        titleClassName="text-[36px] font-semibold"
+        titleClassName="text-xl font-semibold lg:text-[36px]"
         breadcrumbs={[
           { label: 'Grupo NX Digital', to: '/' },
           { label: 'Comercial', to: '/comercial' },

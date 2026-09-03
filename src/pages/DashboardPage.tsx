@@ -98,6 +98,7 @@ export function DashboardPage() {
             clients={booted ? metrics.briefing : null}
             tone="warning"
             onOpen={setOpenId}
+            align="left"
           />
           <MetricCard
             icon={<Settings2 className="h-4 w-4" />}
@@ -105,6 +106,7 @@ export function DashboardPage() {
             clients={booted ? metrics.config : null}
             tone="info"
             onOpen={setOpenId}
+            align="right"
           />
           <MetricCard
             icon={<Calendar className="h-4 w-4" />}
@@ -112,6 +114,7 @@ export function DashboardPage() {
             clients={booted ? metrics.pendenteEntrega : null}
             tone="info"
             onOpen={setOpenId}
+            align="left"
           />
           <MetricCard
             icon={<CheckCircle2 className="h-4 w-4" />}
@@ -119,6 +122,7 @@ export function DashboardPage() {
             clients={booted ? metrics.entregasFeitas : null}
             tone="success"
             onOpen={setOpenId}
+            align="right"
           />
           <MetricCard
             icon={<MessageSquare className="h-4 w-4" />}
@@ -126,6 +130,7 @@ export function DashboardPage() {
             clients={booted ? metrics.followup : null}
             tone="warning"
             onOpen={setOpenId}
+            align="left"
           />
         </div>
 
@@ -149,12 +154,18 @@ function MetricCard({
   clients,
   tone,
   onOpen,
+  align = 'left',
 }: {
   icon: React.ReactNode
   label: string
   clients: Client[] | null
   tone: 'info' | 'success' | 'danger' | 'warning'
   onOpen: (id: string) => void
+  // Em telas estreitas (grid-cols-2) os cards da coluna direita ficam perto
+  // da borda direita da tela — o popover (w-72) ancorado em left-0 vazaria
+  // pra fora do viewport. A partir do sm (grid já tem mais colunas/espaço)
+  // volta ao comportamento original (sempre left-0).
+  align?: 'left' | 'right'
 }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
@@ -219,7 +230,12 @@ function MetricCard({
       </button>
 
       {open && clients && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border border-line bg-card p-1.5 shadow-xl animate-fade-in">
+        <div
+          className={cn(
+            'absolute top-full z-20 mt-1 w-72 rounded-xl border border-line bg-card p-1.5 shadow-xl animate-fade-in sm:left-0 sm:right-auto',
+            align === 'right' ? 'right-0' : 'left-0',
+          )}
+        >
           <ul className="max-h-64 overflow-y-auto">
             {clients.map((c) => (
               <li key={c.id}>

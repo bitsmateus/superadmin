@@ -265,7 +265,7 @@ export function PainelMensalPage() {
       <TopBar
         title="Painel do Mês"
         subtitle="Comercial · investimento, funil e ROI por mês"
-        titleClassName="text-[36px] font-semibold"
+        titleClassName="text-xl font-semibold lg:text-[36px]"
         breadcrumbs={[
           { label: 'Grupo NX Digital', to: '/' },
           { label: 'Comercial', to: '/comercial' },
@@ -429,7 +429,7 @@ export function PainelMensalPage() {
 
                   {showFunilDetalhe && (
                     <SectionCard title="Detalhe — vendas do Funil consideradas neste mês">
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
                         <table className="w-full min-w-[520px] text-left text-xs">
                           <thead>
                             <tr className="border-b border-line text-[11px] font-semibold text-foreground/50">

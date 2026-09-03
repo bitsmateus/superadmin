@@ -193,7 +193,7 @@ export function VendasView({ pageId }: { pageId: string }) {
 
       <div className="px-1 pb-8">
         {/* Resumo do período — o que importa de cara, antes de entrar na lista linha a linha. */}
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
           <SummaryCard
             icon={<ShoppingBag className="h-4 w-4" />}
             label="Vendas no período"
@@ -524,11 +524,15 @@ function PendenteValueCell({
           type="button"
           onClick={onTogglePendente}
           title={pendente ? 'Pendente de pagamento — clique para marcar como pago' : 'Pago — clique para marcar como pendente'}
-          className={cn(
-            'h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset transition-colors',
-            pendente ? 'bg-amber-400 ring-amber-500' : 'bg-transparent ring-line hover:ring-foreground/40',
-          )}
-        />
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full lg:h-2.5 lg:w-2.5"
+        >
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full ring-1 ring-inset transition-colors lg:h-full lg:w-full',
+              pendente ? 'bg-amber-400 ring-amber-500' : 'bg-transparent ring-line hover:ring-foreground/40',
+            )}
+          />
+        </button>
         <CurrencyField value={value} onSave={onSave} className="flex-1 bg-transparent text-right" />
       </div>
     </td>
@@ -637,7 +641,7 @@ function VendaRow({
           onClick={() => leadBoardsService.updateRow(row.id, { veioDoFunil: !row.veioDoFunil })}
           title={row.veioDoFunil ? 'Veio do funil — clique pra marcar como avulsa' : 'Avulsa — clique pra marcar como funil'}
           className={cn(
-            'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+            'rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors lg:px-2 lg:py-0.5',
             row.veioDoFunil ? 'bg-accent/10 text-accent' : 'bg-elevate/[0.06] text-foreground/40 hover:bg-elevate/[0.1]',
           )}
         >
@@ -650,7 +654,7 @@ function VendaRow({
           onClick={() => leadBoardsService.updateRow(row.id, { contratoAssinado: !row.contratoAssinado })}
           title={row.contratoAssinado ? 'Assinado — clique pra marcar como pendente' : 'Pendente — clique pra marcar como assinado'}
           className={cn(
-            'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+            'rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors lg:px-2 lg:py-0.5',
             row.contratoAssinado ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning hover:bg-warning/15',
           )}
         >
@@ -677,7 +681,7 @@ function VendaRow({
           type="button"
           onClick={() => setExcluirOpen(true)}
           title="Excluir venda"
-          className="grid h-6 w-6 place-items-center rounded text-foreground/30 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
+          className="grid h-9 w-9 place-items-center rounded text-foreground/30 opacity-100 transition-opacity hover:bg-danger/10 hover:text-danger lg:h-6 lg:w-6 lg:opacity-0 lg:group-hover:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>

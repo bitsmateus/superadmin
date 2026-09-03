@@ -61,7 +61,7 @@ export function SettingsPage() {
         <SettingsHeader />
 
         <section className="space-y-4">
-          <header className="flex items-end justify-between gap-3">
+          <header className="flex flex-col items-start justify-between gap-3 lg:flex-row lg:items-end">
             <div>
               <h2 className="text-sm font-medium text-foreground">Servidores</h2>
               <p className="text-xs text-foreground/45">
@@ -327,7 +327,7 @@ function ServerCard({
             <p className="text-[11px] text-foreground/40">{server.id}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
           {isSelected && (
             <Badge tone="info" dot>
               Selecionado

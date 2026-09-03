@@ -197,7 +197,7 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
         tone === 'neutral' && 'border-line',
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-3 lg:flex-nowrap">
         <div
           className={cn(
             'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
@@ -243,7 +243,7 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
             </pre>
           )}
         </div>
-        <div className="shrink-0 text-right text-[11px] text-foreground/45">
+        <div className="w-full shrink-0 pl-11 text-left text-[11px] text-foreground/45 lg:w-auto lg:pl-0 lg:text-right">
           {new Date(entry.at).toLocaleString('pt-BR')}
         </div>
       </div>

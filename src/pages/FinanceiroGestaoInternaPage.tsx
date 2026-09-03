@@ -116,31 +116,33 @@ export function FinanceiroGestaoInternaPage() {
               Só o que está com contrato Assinado entra no pagamento — Pendente é só referência.
             </p>
           </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
-                <th className="px-4 py-2.5">Pessoa</th>
-                <th className="px-4 py-2.5 text-right">Assinado</th>
-                <th className="px-4 py-2.5 text-right">Pendente</th>
-              </tr>
-            </thead>
-            <tbody>
-              {TOTAL_NAMES.map((name) => {
-                const t = totalsByPerson.get(name)!
-                return (
-                  <tr key={name} className="border-b border-line/60 last:border-0">
-                    <td className="px-4 py-2.5 text-sm font-medium text-foreground">{name}</td>
-                    <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-success">
-                      {formatBRLCents(t.assinado)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-sm font-medium tabular-nums text-warning">
-                      {formatBRLCents(t.pendente)}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px]">
+              <thead>
+                <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+                  <th className="px-4 py-2.5">Pessoa</th>
+                  <th className="px-4 py-2.5 text-right">Assinado</th>
+                  <th className="px-4 py-2.5 text-right">Pendente</th>
+                </tr>
+              </thead>
+              <tbody>
+                {TOTAL_NAMES.map((name) => {
+                  const t = totalsByPerson.get(name)!
+                  return (
+                    <tr key={name} className="border-b border-line/60 last:border-0">
+                      <td className="px-4 py-2.5 text-sm font-medium text-foreground">{name}</td>
+                      <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-success">
+                        {formatBRLCents(t.assinado)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-sm font-medium tabular-nums text-warning">
+                        {formatBRLCents(t.pendente)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <p className="text-[11px] text-foreground/40">
@@ -213,7 +215,7 @@ function EntriesTable({
                         onClick={() => void commissionsService.updateEntry(e.id, { contratoAssinado: !e.contratoAssinado })}
                         title={e.contratoAssinado ? 'Assinado — clique pra marcar como pendente' : 'Pendente — clique pra marcar como assinado'}
                         className={cn(
-                          'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+                          'rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors lg:px-2 lg:py-0.5',
                           e.contratoAssinado ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning hover:bg-warning/15',
                         )}
                       >
@@ -234,7 +236,7 @@ function EntriesTable({
                         type="button"
                         onClick={() => onToggle(e)}
                         className={cn(
-                          'mx-auto flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                          'mx-auto flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition-colors lg:py-1',
                           paid ? 'bg-success/15 text-success hover:bg-success/25' : 'bg-warning/20 text-warning hover:bg-warning/30',
                         )}
                       >
@@ -247,7 +249,7 @@ function EntriesTable({
                         type="button"
                         onClick={() => setDeleting(e)}
                         title="Excluir lançamento"
-                        className="grid h-7 w-7 place-items-center rounded text-foreground/30 hover:bg-danger/10 hover:text-danger"
+                        className="grid h-9 w-9 place-items-center rounded text-foreground/30 hover:bg-danger/10 hover:text-danger lg:h-7 lg:w-7"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

@@ -262,7 +262,10 @@ function Column({
         </span>
 
         {!renaming && (
-          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/head:opacity-100 focus-within:opacity-100">
+          // Em toque não existe "hover" — sem isso os 3 botões abaixo (mover/excluir coluna)
+          // ficavam permanentemente invisíveis e inalcançáveis no celular. Abaixo de lg fica
+          // sempre visível; a partir de lg volta a aparecer só no hover, igual antes.
+          <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity lg:opacity-0 lg:group-hover/head:opacity-100 lg:focus-within:opacity-100">
             <HeadBtn
               title="Mover coluna para a esquerda"
               disabled={isFirst}
@@ -354,7 +357,7 @@ function HeadBtn({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'grid h-5 w-5 place-items-center rounded transition-colors',
+        'grid h-8 w-8 place-items-center rounded transition-colors lg:h-5 lg:w-5',
         disabled
           ? 'cursor-not-allowed text-foreground/15'
           : danger
@@ -549,7 +552,7 @@ function MiniBtn({
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); onClick() }}
       className={cn(
-        'inline-flex h-6 w-6 items-center justify-center rounded-lg text-sm ring-1 ring-line transition-colors',
+        'inline-flex h-8 w-8 items-center justify-center rounded-lg text-sm ring-1 ring-line transition-colors lg:h-6 lg:w-6',
         disabled
           ? 'cursor-not-allowed text-foreground/15'
           : danger

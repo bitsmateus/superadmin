@@ -712,7 +712,7 @@ function ContractsList({
                         type="button"
                         title="Marcar como assinado"
                         onClick={(e) => { e.stopPropagation(); onAdvance(c) }}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success transition-colors hover:bg-success/20"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success transition-colors hover:bg-success/20 lg:h-8 lg:w-8"
                       >
                         <ArrowRight className="h-3.5 w-3.5" />
                       </button>
@@ -721,7 +721,7 @@ function ContractsList({
                       type="button"
                       title="Excluir contrato"
                       onClick={(e) => { e.stopPropagation(); onArchive(c) }}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger transition-colors hover:bg-danger/20"
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger transition-colors hover:bg-danger/20 lg:h-8 lg:w-8"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -855,7 +855,7 @@ function PendingClientsList({
                         type="button"
                         title="Voltar etapa"
                         onClick={(e) => { e.stopPropagation(); onRegress(c) }}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-elevate/[0.08] text-foreground/50 transition-colors hover:bg-elevate/[0.14] hover:text-foreground"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-elevate/[0.08] text-foreground/50 transition-colors hover:bg-elevate/[0.14] hover:text-foreground lg:h-8 lg:w-8"
                       >
                         <ArrowLeft className="h-3.5 w-3.5" />
                       </button>
@@ -865,7 +865,7 @@ function PendingClientsList({
                         type="button"
                         title="Avançar etapa"
                         onClick={(e) => { e.stopPropagation(); onAdvance(c) }}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success transition-colors hover:bg-success/20"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success transition-colors hover:bg-success/20 lg:h-8 lg:w-8"
                       >
                         <ArrowRight className="h-3.5 w-3.5" />
                       </button>
@@ -875,7 +875,7 @@ function PendingClientsList({
                         type="button"
                         title="Arquivar cliente"
                         onClick={(e) => { e.stopPropagation(); onArchive(c) }}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger transition-colors hover:bg-danger/20"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger transition-colors hover:bg-danger/20 lg:h-8 lg:w-8"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -1170,7 +1170,7 @@ function ContractPdfField({
             type="button"
             onClick={() => onChange(null, null)}
             title="Remover contrato anexado"
-            className="rounded-md p-1.5 text-foreground/40 hover:bg-danger/10 hover:text-danger"
+            className="rounded-md p-2.5 text-foreground/40 hover:bg-danger/10 hover:text-danger lg:p-1.5"
           >
             <X className="h-3.5 w-3.5" />
           </button>

@@ -167,51 +167,55 @@ function PerfRow({
 }) {
   const isPodium = rank <= 3
   return (
-    <li className="flex items-center gap-4 px-5 py-3">
-      <div
-        className={cn(
-          'grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold',
-          rank === 1 && 'bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-400/30',
-          rank === 2 && 'bg-zinc-300/15 text-zinc-200 ring-1 ring-zinc-300/30',
-          rank === 3 && 'bg-amber-700/15 text-amber-600 ring-1 ring-amber-700/30',
-          !isPodium && 'bg-elevate/[0.04] text-foreground/55 ring-1 ring-line',
-        )}
-      >
-        {rank}
-      </div>
-      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[11px] font-medium text-foreground/80 ring-1 ring-line">
-        {initials(agent.agentKey)}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-foreground truncate">
-          {agent.agentKey}
-        </div>
-        <div className="text-[11px] text-foreground/45">
-          {agent.activeClients} cliente(s) ativo(s)
-        </div>
-      </div>
-      <Stat
-        icon={<TrendingUp className="h-3.5 w-3.5" />}
-        label="Conversões"
-        value={agent.conversionsThisMonth}
-        tone="success"
-      />
-      <Stat
-        icon={<MessageCircle className="h-3.5 w-3.5" />}
-        label="Tickets"
-        value={agent.ticketsResolvedThisMonth}
-        tone="info"
-      />
-      {isPodium && (
-        <Award
+    <li className="flex flex-wrap items-center gap-3 px-4 py-3 lg:flex-nowrap lg:gap-4 lg:px-5">
+      <div className="flex w-full min-w-0 items-center gap-3 lg:contents">
+        <div
           className={cn(
-            'h-4 w-4 shrink-0',
-            rank === 1 && 'text-yellow-300',
-            rank === 2 && 'text-zinc-300',
-            rank === 3 && 'text-amber-600',
+            'grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold',
+            rank === 1 && 'bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-400/30',
+            rank === 2 && 'bg-zinc-300/15 text-zinc-200 ring-1 ring-zinc-300/30',
+            rank === 3 && 'bg-amber-700/15 text-amber-600 ring-1 ring-amber-700/30',
+            !isPodium && 'bg-elevate/[0.04] text-foreground/55 ring-1 ring-line',
           )}
+        >
+          {rank}
+        </div>
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[11px] font-medium text-foreground/80 ring-1 ring-line">
+          {initials(agent.agentKey)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium text-foreground truncate">
+            {agent.agentKey}
+          </div>
+          <div className="text-[11px] text-foreground/45">
+            {agent.activeClients} cliente(s) ativo(s)
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 lg:contents">
+        <Stat
+          icon={<TrendingUp className="h-3.5 w-3.5" />}
+          label="Conversões"
+          value={agent.conversionsThisMonth}
+          tone="success"
         />
-      )}
+        <Stat
+          icon={<MessageCircle className="h-3.5 w-3.5" />}
+          label="Tickets"
+          value={agent.ticketsResolvedThisMonth}
+          tone="info"
+        />
+        {isPodium && (
+          <Award
+            className={cn(
+              'h-4 w-4 shrink-0',
+              rank === 1 && 'text-yellow-300',
+              rank === 2 && 'text-zinc-300',
+              rank === 3 && 'text-amber-600',
+            )}
+          />
+        )}
+      </div>
     </li>
   )
 }

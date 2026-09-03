@@ -199,18 +199,24 @@ export function TenantDetailPage() {
               variant="secondary"
               onClick={() => navigate('/tenants')}
               leftIcon={<ArrowLeft className="h-4 w-4" />}
+              aria-label="Voltar"
             >
-              Voltar
+              <span className="hidden lg:inline">Voltar</span>
             </Button>
             <Button
               size="sm"
               onClick={openServerLogin}
               leftIcon={<ExternalLink className="h-4 w-4" />}
+              aria-label="Acessar"
             >
-              Acessar
+              <span className="hidden lg:inline">Acessar</span>
             </Button>
-            <Button onClick={() => setEditOpen(true)} leftIcon={<Edit3 className="h-4 w-4" />}>
-              Editar
+            <Button
+              onClick={() => setEditOpen(true)}
+              leftIcon={<Edit3 className="h-4 w-4" />}
+              aria-label="Editar"
+            >
+              <span className="hidden lg:inline">Editar</span>
             </Button>
           </div>
         }
@@ -259,7 +265,7 @@ export function TenantDetailPage() {
         </section>
 
         <section className="mt-8">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 lg:flex-nowrap">
             <div className="flex items-center gap-2">
               <UsersIcon className="h-4 w-4 text-foreground/60" />
               <h3 className="text-sm font-medium text-foreground">Usuários</h3>
@@ -311,6 +317,7 @@ export function TenantDetailPage() {
               }
             />
           ) : (
+            <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
             <Table>
               <THead>
                 <tr>
@@ -355,7 +362,7 @@ export function TenantDetailPage() {
                       <TD className="text-right">
                         <button
                           onClick={() => setUserModal({ mode: 'edit', user: u })}
-                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground/70 hover:bg-elevate/[0.06] hover:text-foreground"
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-2.5 text-xs text-foreground/70 hover:bg-elevate/[0.06] hover:text-foreground lg:py-1"
                           aria-label="Editar usuário"
                         >
                           <Edit3 className="h-3.5 w-3.5" />
@@ -367,6 +374,7 @@ export function TenantDetailPage() {
                 })}
               </TBody>
             </Table>
+            </div>
           )}
         </section>
       </div>
@@ -435,11 +443,11 @@ function InfoCell({ k, v }: { k: string; v: unknown }) {
           {isSensitive && !shown ? '••••••••' : value}
         </dd>
       </div>
-      <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100">
+      <div className="flex shrink-0 items-center gap-2 opacity-100 lg:gap-1 lg:opacity-0 lg:group-hover:opacity-100">
         {isSensitive && (
           <button
             onClick={() => setShown((s) => !s)}
-            className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground"
+            className="rounded-md p-2 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1"
             aria-label={shown ? 'Ocultar' : 'Mostrar'}
           >
             <KeyRound className="h-3.5 w-3.5" />
@@ -448,7 +456,7 @@ function InfoCell({ k, v }: { k: string; v: unknown }) {
         {value !== '—' && (
           <button
             onClick={copy}
-            className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground"
+            className="rounded-md p-2 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1"
             aria-label="Copiar"
           >
             <Copy className="h-3.5 w-3.5" />

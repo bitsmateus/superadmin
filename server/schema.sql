@@ -1048,6 +1048,31 @@ DROP TRIGGER IF EXISTS notify_commission_entries ON commission_entries;
 CREATE TRIGGER notify_commission_entries AFTER INSERT OR UPDATE OR DELETE ON commission_entries
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+-- ---------- template_requests (link público de criação de template do WhatsApp/Meta) ----------
+CREATE TABLE IF NOT EXISTS template_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  token TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  purpose TEXT NOT NULL DEFAULT '',
+  template_name TEXT,
+  body TEXT,
+  variables JSONB NOT NULL DEFAULT '[]',
+  buttons JSONB NOT NULL DEFAULT '[]',
+  category TEXT,
+  language TEXT NOT NULL DEFAULT 'pt_BR',
+  -- Um item por número selecionado: { wabaId, label, status: 'submitted'|'failed',
+  -- externalId?, metaStatus?, errorMessage? }.
+  targets JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  submitted_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS template_requests_client_idx ON template_requests(client_id);
+
+DROP TRIGGER IF EXISTS notify_template_requests ON template_requests;
+CREATE TRIGGER notify_template_requests AFTER INSERT OR UPDATE OR DELETE ON template_requests
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:
 -- Crie o primeiro usuário admin com:

@@ -1095,6 +1095,40 @@ END $$`);
     END IF;
   END $$`);
 
+  // Link público de criação de template do WhatsApp (Meta) — o cliente preenche depois da
+  // entrega (botão "Copiar link de template" na aba Entrega, ver DeliveryTab.tsx), mesmo padrão
+  // do link de briefing (token público, sem login). Ao enviar, o backend resolve os números
+  // WABA do tenant (server/src/lib/wabaAccess.ts) e cria o template em cada um dos escolhidos,
+  // direto na Meta (metaGraph.ts) — a tabela aqui só guarda o pedido e o resultado por número
+  // (`targets`), o template em si mora na Meta. Um tenant pode ter mais de um número conectado,
+  // por isso o resultado é uma lista, não um external_id/status único.
+  await pool.query(`CREATE TABLE IF NOT EXISTS template_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    token TEXT UNIQUE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    purpose TEXT NOT NULL DEFAULT '',
+    template_name TEXT,
+    body TEXT,
+    variables JSONB NOT NULL DEFAULT '[]',
+    buttons JSONB NOT NULL DEFAULT '[]',
+    category TEXT,
+    language TEXT NOT NULL DEFAULT 'pt_BR',
+    -- Um item por número selecionado: { wabaId, label, status: 'submitted'|'failed',
+    -- externalId?, metaStatus?, errorMessage? }.
+    targets JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    submitted_at TIMESTAMPTZ
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS template_requests_client_idx ON template_requests(client_id)`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_template_requests ON template_requests;
+      CREATE TRIGGER notify_template_requests AFTER INSERT OR UPDATE OR DELETE ON template_requests
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

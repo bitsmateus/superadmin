@@ -3,6 +3,14 @@ import { query, queryOne } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { sendSupportGroupMessage } from '../lib/supportGroup.js';
 import { generateWelcomeMessage } from '../lib/flowAi.js';
+import { resolveWabaAccesses } from '../lib/wabaAccess.js';
+import {
+  createTemplate,
+  bodyVariables,
+  suggestTemplateName,
+  suggestCategory,
+  type ButtonInput,
+} from '../lib/metaGraph.js';
 
 export async function publicRoutes(app: FastifyInstance) {
   // POST /api/public/ficha — formulário público de cadastro. Cria um cliente
@@ -481,6 +489,162 @@ export async function publicRoutes(app: FastifyInstance) {
         [score, comment ?? null, classification, req.params.token]
       );
       return { ok: true };
+    }
+  );
+
+  // ── Link público de criação de template do WhatsApp (Meta) ─────────────────────────────
+  // Enviado pra equipe copiar/mandar depois da entrega (ver DeliveryTab.tsx). O cliente
+  // preenche em linguagem simples (propósito + corpo com variáveis + botões), escolhe em quais
+  // números da empresa criar (um tenant pode ter mais de um WhatsApp oficial conectado), e o
+  // backend cria o template em cada um, direto na Meta (server/src/lib/wabaAccess.ts).
+
+  interface RequestTarget {
+    wabaId: string;
+    label: string;
+    status: 'submitted' | 'failed';
+    externalId?: string;
+    metaStatus?: string;
+    errorMessage?: string;
+  }
+
+  // GET /api/public/template-requests/:token — dados pra renderizar a página (nome do cliente,
+  // números disponíveis pra escolher, e se já foi enviado, o resultado por número em vez do form).
+  app.get<{ Params: { token: string } }>(
+    '/api/public/template-requests/:token',
+    async (req, reply) => {
+      const row = await queryOne<{
+        id: string;
+        status: string;
+        purpose: string | null;
+        template_name: string | null;
+        targets: RequestTarget[] | null;
+        client_id: string;
+      }>(
+        `SELECT id, status, purpose, template_name, targets, client_id FROM template_requests WHERE token = $1`,
+        [req.params.token]
+      );
+      if (!row) return reply.status(404).send({ message: 'Link inválido ou expirado.' });
+      const client = await queryOne<{ name: string; company: string | null }>(
+        'SELECT name, company FROM clients WHERE id = $1',
+        [row.client_id]
+      );
+      // Números disponíveis enquanto ainda dá pra (re)enviar — 'failed' inclui aqui de propósito
+      // (nenhum número deu certo, o formulário volta pra tentar de novo); só 'submitted' (pelo
+      // menos um número já criado) não precisa mais consultar a NX.
+      const numbers = row.status !== 'submitted' ? await resolveWabaAccesses(row.client_id) : [];
+      return {
+        status: row.status,
+        purpose: row.purpose,
+        templateName: row.template_name,
+        targets: row.targets ?? [],
+        numbers: numbers.map((n) => ({ wabaId: n.wabaId, label: n.label })),
+        clientName: client?.company?.trim() || client?.name || '',
+      };
+    }
+  );
+
+  // POST /api/public/template-requests/:token/submit — cria o template na Meta, em cada número
+  // escolhido (wabaIds — vazio/ausente = todos os números disponíveis do tenant).
+  app.post<{
+    Params: { token: string };
+    Body: {
+      purpose?: string;
+      body?: string;
+      variables?: { position: number; example: string }[];
+      buttons?: ButtonInput[];
+      wabaIds?: string[];
+    };
+  }>(
+    '/api/public/template-requests/:token/submit',
+    async (req, reply) => {
+      const row = await queryOne<{ id: string; client_id: string; status: string }>(
+        'SELECT id, client_id, status FROM template_requests WHERE token = $1',
+        [req.params.token]
+      );
+      if (!row) return reply.status(404).send({ message: 'Link inválido ou expirado.' });
+      if (row.status === 'submitted') {
+        return reply.status(400).send({ message: 'Este template já foi enviado.' });
+      }
+
+      const purpose = (req.body?.purpose ?? '').trim();
+      const body = (req.body?.body ?? '').trim();
+      const variables = req.body?.variables ?? [];
+      const buttons = req.body?.buttons ?? [];
+
+      if (!purpose) return reply.status(400).send({ message: 'Conte pra gente o propósito dessa mensagem.' });
+      if (!body) return reply.status(400).send({ message: 'Escreva o texto da mensagem.' });
+      if (body.length > 1024) {
+        return reply.status(400).send({ message: 'O texto passa de 1024 caracteres, o limite do WhatsApp.' });
+      }
+      const vars = bodyVariables(body);
+      const expected = vars.map((_, i) => i + 1);
+      if (vars.join(',') !== expected.join(',')) {
+        return reply.status(400).send({
+          message: 'As variáveis precisam ser sequenciais a partir de {{1}}, sem pular números.',
+        });
+      }
+      const missingExample = vars.find((n) => !variables.find((v) => v.position === n)?.example?.trim());
+      if (missingExample) {
+        return reply.status(400).send({ message: `Falta um exemplo pra variável {{${missingExample}}}.` });
+      }
+
+      const allNumbers = await resolveWabaAccesses(row.client_id);
+      if (!allNumbers.length) {
+        return reply.status(400).send({
+          message: 'Não conseguimos localizar seu canal do WhatsApp oficial pra criar o template. Fale com nosso suporte.',
+        });
+      }
+      const requestedIds = req.body?.wabaIds?.length ? new Set(req.body.wabaIds) : null;
+      const selected = requestedIds ? allNumbers.filter((n) => requestedIds.has(n.wabaId)) : allNumbers;
+      if (!selected.length) {
+        return reply.status(400).send({ message: 'Escolha ao menos um número.' });
+      }
+
+      const name = `${suggestTemplateName(purpose)}_${Date.now().toString(36)}`;
+      const category = suggestCategory(body);
+      const examples = vars.map((n) => variables.find((v) => v.position === n)?.example.trim() ?? '');
+
+      // Um template por número selecionado — independentes: um número com token vencido não
+      // impede os outros de criarem normalmente.
+      const targets: RequestTarget[] = await Promise.all(
+        selected.map(async (access): Promise<RequestTarget> => {
+          try {
+            const created = await createTemplate(access, { name, language: 'pt_BR', category, body, examples, buttons });
+            return {
+              wabaId: access.wabaId,
+              label: access.label,
+              status: 'submitted',
+              externalId: created.id,
+              metaStatus: created.status ?? 'PENDING',
+            };
+          } catch (err) {
+            return {
+              wabaId: access.wabaId,
+              label: access.label,
+              status: 'failed',
+              errorMessage: err instanceof Error ? err.message : 'Falha ao criar o template na Meta.',
+            };
+          }
+        })
+      );
+
+      const okCount = targets.filter((t) => t.status === 'submitted').length;
+      const finalStatus = okCount > 0 ? 'submitted' : 'failed';
+      await query(
+        `UPDATE template_requests
+         SET status = $1, purpose = $2, template_name = $3, body = $4, variables = $5, buttons = $6,
+             category = $7, targets = $8, submitted_at = NOW()
+         WHERE id = $9`,
+        [finalStatus, purpose, name, body, JSON.stringify(variables), JSON.stringify(buttons), category, JSON.stringify(targets), row.id]
+      );
+
+      if (okCount > 0) {
+        void sendSupportGroupMessage(
+          `📄 Novo template do WhatsApp criado (aguardando aprovação da Meta): "${name}" em ${okCount} de ${targets.length} número(s)`
+        );
+      }
+
+      return { ok: okCount > 0, targets };
     }
   );
 }

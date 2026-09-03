@@ -4,6 +4,7 @@ import {
   Copy,
   Download,
   Handshake,
+  LayoutTemplate,
   ListChecks,
   Mail,
   PartyPopper,
@@ -16,6 +17,7 @@ import { Input, Textarea } from '@/components/ui/Input'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
+import { templateRequestsApi } from '@/api/templateRequests'
 import { useServerById } from '@/store/authStore'
 import {
   buildHandoffChecklist,
@@ -134,6 +136,20 @@ export function DeliveryTab({ client }: { client: Client }) {
       toast.success('Mensagem de boas-vindas copiada')
     } catch {
       toast.error('Não foi possível copiar — copie manualmente')
+    }
+  }
+
+  // Gera (ou reaproveita) o link público de criar template do WhatsApp e copia pra área de
+  // transferência — a equipe manda pro cliente depois da entrega. O cliente preenche sozinho
+  // (propósito, texto com variáveis, botões) e o backend cria o template direto na Meta.
+  const copyTemplateLink = async () => {
+    try {
+      const { token } = await templateRequestsApi.create(client.id)
+      const link = `${window.location.origin}/template/${token}`
+      await navigator.clipboard.writeText(link)
+      toast.success('Link de criação de template copiado')
+    } catch (err) {
+      toast.error(`Falha ao gerar o link: ${(err as Error).message}`)
     }
   }
 
@@ -272,6 +288,14 @@ export function DeliveryTab({ client }: { client: Client }) {
               leftIcon={!downloadingAccess ? <Download className="h-3.5 w-3.5" /> : undefined}
             >
               Baixar acessos
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={copyTemplateLink}
+              leftIcon={<LayoutTemplate className="h-3.5 w-3.5" />}
+            >
+              Copiar link de template
             </Button>
           </div>
         }

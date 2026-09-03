@@ -31,9 +31,11 @@ import { pageNoteRoutes } from './routes/pageNotes.js';
 import { pushRoutes } from './routes/push.js';
 import { briefingTemplateRoutes } from './routes/briefingTemplate.js';
 import { templateRequestRoutes } from './routes/templateRequests.js';
+import { massCampaignRoutes } from './routes/massCampaigns.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
+import { startMassCampaignDispatch } from './jobs/massCampaignDispatch.js';
 
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
@@ -102,6 +104,7 @@ async function main() {
   await app.register(pushRoutes);
   await app.register(briefingTemplateRoutes);
   await app.register(templateRequestRoutes);
+  await app.register(massCampaignRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -124,6 +127,7 @@ async function main() {
   startDailyDigest();
   startChannelAlerts();
   startTenantUsersSync();
+  startMassCampaignDispatch();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

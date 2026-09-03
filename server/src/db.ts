@@ -1134,6 +1134,54 @@ END $$`);
   await pool.query(`ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS header TEXT`);
   await pool.query(`ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS footer TEXT`);
 
+  // Disparo em massa (portal "Laundry" e futuros clientes que precisem do mesmo self-service) —
+  // link fixo por cliente (clients.mass_campaign_token, não expira/consome como o de template),
+  // o cliente importa a planilha, mapeia colunas pra variáveis de um template JÁ aprovado na Meta
+  // e dispara pra todos, espaçado. Motor simples de propósito (ver server/src/jobs/massCampaignDispatch.ts):
+  // um job varre recipients "queued" com scheduled_for vencido, nada de fila externa — sobrevive a
+  // reinício do servidor sem perder nem duplicar envio, só sem a robustez de multi-canal/fallback.
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS mass_campaign_token TEXT UNIQUE`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS mass_campaigns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    template_name TEXT NOT NULL,
+    template_language TEXT NOT NULL DEFAULT 'pt_BR',
+    -- [{position, source:'column'|'fixed', column?, value?}] — como cada {{n}} do template é preenchido.
+    variable_mapping JSONB NOT NULL DEFAULT '[]',
+    delay_seconds INT NOT NULL DEFAULT 20,
+    status TEXT NOT NULL DEFAULT 'draft', -- draft|running|paused|done
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS mass_campaigns_client_idx ON mass_campaigns(client_id)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS mass_campaign_recipients (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    campaign_id UUID NOT NULL REFERENCES mass_campaigns(id) ON DELETE CASCADE,
+    row_data JSONB NOT NULL DEFAULT '{}',
+    phone TEXT NOT NULL,
+    template_params JSONB NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'queued', -- queued|sent|failed|skipped
+    error_message TEXT,
+    scheduled_for TIMESTAMPTZ,
+    sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS mass_campaign_recipients_campaign_idx ON mass_campaign_recipients(campaign_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS mass_campaign_recipients_dispatch_idx
+    ON mass_campaign_recipients(status, scheduled_for) WHERE status = 'queued'`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_mass_campaigns ON mass_campaigns;
+      CREATE TRIGGER notify_mass_campaigns AFTER INSERT OR UPDATE OR DELETE ON mass_campaigns
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_mass_campaign_recipients ON mass_campaign_recipients;
+      CREATE TRIGGER notify_mass_campaign_recipients AFTER INSERT OR UPDATE OR DELETE ON mass_campaign_recipients
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

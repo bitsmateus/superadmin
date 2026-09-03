@@ -198,3 +198,33 @@ export async function fetchTemplateStatus(
   if (!res.ok) throw new Error(translateMetaError(res.status, res.body));
   return res.body as { status?: string; category?: string };
 }
+
+export interface TemplateSummary {
+  id: string;
+  name: string;
+  language?: string;
+  category?: string;
+  status?: string;
+  components?: { type?: string; text?: string; format?: string; buttons?: unknown[] }[];
+}
+
+/** Lista os templates da WABA (com paginação) — usado pro portal de disparo em massa escolher
+ *  entre os templates JÁ aprovados (a criação é outro fluxo, ver createTemplate acima). */
+export async function listTemplates(access: MetaAccess): Promise<TemplateSummary[]> {
+  const out: TemplateSummary[] = [];
+  let nextUrl: string | null = (() => {
+    const u = new URL(graphUrl(access, `${access.wabaId}/message_templates`));
+    u.searchParams.set('fields', 'name,status,category,language,components');
+    u.searchParams.set('limit', '100');
+    return u.toString();
+  })();
+  let guard = 0;
+  while (nextUrl && guard++ < 20) {
+    const res = await graphFetch('GET', nextUrl, access.token);
+    if (!res.ok) throw new Error(translateMetaError(res.status, res.body));
+    const body = res.body as { data?: TemplateSummary[]; paging?: { next?: string } };
+    out.push(...(body.data ?? []));
+    nextUrl = body.paging?.next ?? null;
+  }
+  return out;
+}

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import { Copy, ExternalLink } from 'lucide-react'
 import { publicTemplateRequestApi } from '@/api/templateRequests'
 import type {
   RequestTarget,
@@ -18,6 +19,39 @@ const BUTTON_TYPE_LABEL: Record<TemplateButtonType, string> = {
   COPY_CODE: 'Copiar código',
 }
 
+/** Variáveis prontas — insere a variável E já preenche um exemplo plausível, pra quem não sabe
+ *  o que colocar no exemplo (a Meta exige um exemplo pra cada variável). */
+const VARIABLE_PRESETS: { label: string; example: string }[] = [
+  { label: 'Nome', example: 'Maria' },
+  { label: 'Saudação', example: 'Bom dia' },
+  { label: 'Empresa', example: 'Sua Empresa' },
+  { label: 'Pedido/Código', example: '12345' },
+  { label: 'Data', example: '15/03' },
+  { label: 'Valor', example: 'R$ 150,00' },
+]
+
+// Mesma heurística do backend (server/src/lib/metaGraph.ts#suggestCategory) — só pra mostrar um
+// indicativo em tempo real, quem decide de verdade é o servidor na hora de criar.
+const MARKETING_WORDS = ['promo', 'promoção', 'promocao', 'desconto', 'oferta', 'aproveite', 'novidade', 'imperdível', 'imperdivel', 'black friday', 'cupom', 'condição especial', 'condicao especial']
+const AUTH_WORDS = ['código', 'codigo', 'otp', 'verificação', 'verificacao', 'autenticação', 'autenticacao', 'senha temporária', 'senha temporaria']
+type TemplateCategory = 'UTILITY' | 'MARKETING' | 'AUTHENTICATION'
+function detectCategory(body: string): TemplateCategory {
+  const t = (body ?? '').toLowerCase()
+  if (AUTH_WORDS.some((k) => t.includes(k))) return 'AUTHENTICATION'
+  if (MARKETING_WORDS.some((k) => t.includes(k))) return 'MARKETING'
+  return 'UTILITY'
+}
+const CATEGORY_LABEL: Record<TemplateCategory, string> = {
+  UTILITY: 'Utilidade',
+  MARKETING: 'Marketing',
+  AUTHENTICATION: 'Autenticação',
+}
+const CATEGORY_STYLE: Record<TemplateCategory, string> = {
+  UTILITY: 'bg-blue-100 text-blue-700',
+  MARKETING: 'bg-purple-100 text-purple-700',
+  AUTHENTICATION: 'bg-amber-100 text-amber-700',
+}
+
 export function TemplateRequestPublicPage() {
   const { token = '' } = useParams<{ token: string }>()
   const [step, setStep] = React.useState<Step>('loading')
@@ -25,13 +59,16 @@ export function TemplateRequestPublicPage() {
   const [resultTargets, setResultTargets] = React.useState<RequestTarget[]>([])
 
   const [purpose, setPurpose] = React.useState('')
+  const [header, setHeader] = React.useState('')
   const [body, setBody] = React.useState('')
+  const [footer, setFooter] = React.useState('')
   const [examples, setExamples] = React.useState<Record<number, string>>({})
   const [buttons, setButtons] = React.useState<TemplateButton[]>([])
   const [selectedWabaIds, setSelectedWabaIds] = React.useState<string[]>([])
   const [submitting, setSubmitting] = React.useState(false)
   const [submitError, setSubmitError] = React.useState('')
   const bodyRef = React.useRef<HTMLTextAreaElement>(null)
+  const cursorRef = React.useRef<number | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
@@ -71,17 +108,27 @@ export function TemplateRequestPublicPage() {
     return [...out].sort((a, b) => a - b)
   }, [body])
 
-  const insertVariable = () => {
+  // Insere sempre onde o cursor estava no textarea — guardado em cursorRef (atualizado a cada
+  // clique/digitação/seleção), não em document.activeElement, que já deixou de ser o textarea no
+  // instante do clique no botão "+ Inserir variável" (o foco vai pro botão).
+  const insertVariable = (presetExample?: string) => {
     const next = (variablePositions[variablePositions.length - 1] ?? 0) + 1
-    const el = bodyRef.current
     const token_ = `{{${next}}}`
-    if (el && document.activeElement === el) {
-      const start = el.selectionStart ?? body.length
-      const end = el.selectionEnd ?? body.length
-      setBody(body.slice(0, start) + token_ + body.slice(end))
-    } else {
-      setBody((b) => `${b}${b && !b.endsWith(' ') ? ' ' : ''}${token_}`)
-    }
+    const pos = cursorRef.current ?? body.length
+    setBody(body.slice(0, pos) + token_ + body.slice(pos))
+    if (presetExample) setExamples((ex) => ({ ...ex, [next]: presetExample }))
+    const newPos = pos + token_.length
+    cursorRef.current = newPos
+    requestAnimationFrame(() => {
+      const el = bodyRef.current
+      if (el) {
+        el.focus()
+        el.setSelectionRange(newPos, newPos)
+      }
+    })
+  }
+  const trackCursor = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    cursorRef.current = e.currentTarget.selectionStart
   }
 
   const addButton = (type: TemplateButtonType) => {
@@ -107,6 +154,13 @@ export function TemplateRequestPublicPage() {
     if (!purpose.trim()) return toast.error('Conte o propósito da mensagem.')
     if (!body.trim()) return toast.error('Escreva o texto da mensagem.')
     if (selectedWabaIds.length === 0) return toast.error('Escolha em quais números criar o modelo.')
+    const trimmedBody = body.trim()
+    if (/^\{\{\s*\d+\s*\}\}/.test(trimmedBody)) {
+      return toast.error('A mensagem não pode começar com uma variável — escreva um texto fixo antes.')
+    }
+    if (/\{\{\s*\d+\s*\}\}$/.test(trimmedBody)) {
+      return toast.error('A mensagem não pode terminar com uma variável — escreva um texto fixo depois (ex.: uma saudação).')
+    }
     const missing = variablePositions.find((p) => !examples[p]?.trim())
     if (missing) return toast.error(`Preencha o exemplo da variável {{${missing}}}.`)
     for (const btn of buttons) {
@@ -122,7 +176,9 @@ export function TemplateRequestPublicPage() {
     try {
       const res = await publicTemplateRequestApi.submit(token, {
         purpose: purpose.trim(),
-        body: body.trim(),
+        header: header.trim() || undefined,
+        body: trimmedBody,
+        footer: footer.trim() || undefined,
         variables,
         buttons,
         wabaIds: selectedWabaIds,
@@ -229,26 +285,48 @@ export function TemplateRequestPublicPage() {
                 <Text value={purpose} onChange={setPurpose} placeholder="Confirmação de pedido" />
               </Field>
 
+              <Field label="Cabeçalho (opcional)" hint="Título curto em negrito, no topo da mensagem. Sem variável.">
+                <Text value={header} onChange={(v) => setHeader(v.slice(0, 60))} placeholder="Ex.: Pedido confirmado" />
+                <span className="mt-1 block text-right text-[11px] text-slate-400">{header.length}/60</span>
+              </Field>
+
               <Field label="Texto da mensagem" required hint="Use variáveis quando algo mudar a cada envio (ex.: nome do cliente).">
                 <textarea
                   ref={bodyRef}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
+                  onSelect={trackCursor}
+                  onClick={trackCursor}
+                  onKeyUp={trackCursor}
                   rows={4}
                   maxLength={1024}
                   placeholder="Olá! Seu pedido foi confirmado e chega em breve."
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
                 />
-                <div className="mt-2 flex items-center justify-between">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={insertVariable}
+                    onClick={() => insertVariable()}
                     className="rounded-md border border-[#2F5BFF]/30 bg-[#2F5BFF]/5 px-3 py-1.5 text-xs font-medium text-[#2F5BFF] hover:bg-[#2F5BFF]/10"
                   >
                     + Inserir variável
                   </button>
-                  <span className="text-[11px] text-slate-400">{body.length}/1024</span>
+                  <span className="mx-1 text-slate-300">·</span>
+                  {VARIABLE_PRESETS.map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => insertVariable(p.example)}
+                      className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:border-[#2F5BFF] hover:text-[#2F5BFF]"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                  <span className="ml-auto text-[11px] text-slate-400">{body.length}/1024</span>
                 </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  A mensagem não pode começar nem terminar com uma variável — o WhatsApp exige texto fixo nas pontas.
+                </p>
               </Field>
 
               {variablePositions.length > 0 && (
@@ -267,6 +345,11 @@ export function TemplateRequestPublicPage() {
                   ))}
                 </div>
               )}
+
+              <Field label="Rodapé (opcional)" hint="Linha pequena e cinza no final da mensagem. Sem variável.">
+                <Text value={footer} onChange={(v) => setFooter(v.slice(0, 60))} placeholder="Ex.: Não responda esta mensagem" />
+                <span className="mt-1 block text-right text-[11px] text-slate-400">{footer.length}/60</span>
+              </Field>
 
               <div>
                 <p className="mb-1.5 text-sm font-medium text-slate-700">Botões (opcional, até 3)</p>
@@ -293,19 +376,13 @@ export function TemplateRequestPublicPage() {
 
               {body.trim() && (
                 <div>
-                  <p className="mb-1.5 text-sm font-medium text-slate-700">Prévia</p>
-                  <div className="rounded-2xl rounded-tl-sm bg-[#dcf8c6] p-3 text-sm text-slate-800 shadow-sm">
-                    <p className="whitespace-pre-wrap">{preview || '—'}</p>
-                    {buttons.length > 0 && (
-                      <div className="mt-2 space-y-1 border-t border-black/10 pt-2">
-                        {buttons.map((b, i) => (
-                          <div key={i} className="rounded-md bg-white/70 py-1.5 text-center text-xs font-medium text-[#00a5f4]">
-                            {b.text || BUTTON_TYPE_LABEL[b.type]}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <p className="text-sm font-medium text-slate-700">Prévia</p>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${CATEGORY_STYLE[detectCategory(body)]}`}>
+                      {CATEGORY_LABEL[detectCategory(body)]}
+                    </span>
                   </div>
+                  <WhatsAppPreview header={header} body={preview} footer={footer} buttons={buttons} />
                 </div>
               )}
 
@@ -338,6 +415,48 @@ export function TemplateRequestPublicPage() {
             <TargetsSummary targets={resultTargets} />
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+/** Bolha de mensagem igual a uma mensagem recebida no WhatsApp (é assim que o cliente final vê
+ *  quando a empresa manda o template) — fundo de conversa, balão branco com "rabinho", cabeçalho
+ *  em negrito, rodapé cinza pequeno, hora, e os botões como linhas coladas embaixo do balão, cada
+ *  um com o ícone que o WhatsApp usa (link, copiar) — resposta rápida não tem ícone no WhatsApp. */
+function WhatsAppPreview({
+  header,
+  body,
+  footer,
+  buttons,
+}: {
+  header: string
+  body: string
+  footer: string
+  buttons: TemplateButton[]
+}) {
+  const now = React.useMemo(() => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), [])
+  return (
+    <div className="rounded-xl p-4" style={{ background: '#e5ddd5' }}>
+      <div className="max-w-[92%] overflow-hidden rounded-lg rounded-tl-none bg-white shadow-sm">
+        <div className="px-3 pb-1.5 pt-2">
+          {header.trim() && <p className="mb-1 text-[14.5px] font-bold leading-snug text-slate-900">{header}</p>}
+          <p className="whitespace-pre-wrap text-[14.5px] leading-snug text-slate-900">{body || '—'}</p>
+          {footer.trim() && <p className="mt-1 text-[12.5px] leading-snug text-slate-500">{footer}</p>}
+          <div className="mt-1 flex justify-end">
+            <span className="text-[11px] text-slate-400">{now}</span>
+          </div>
+        </div>
+        {buttons.map((b, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-center gap-1.5 border-t border-slate-100 py-2.5 text-[13.5px] font-medium text-[#00a5f4]"
+          >
+            {b.type === 'URL' && <ExternalLink className="h-3.5 w-3.5" />}
+            {b.type === 'COPY_CODE' && <Copy className="h-3.5 w-3.5" />}
+            {b.text || BUTTON_TYPE_LABEL[b.type]}
+          </div>
+        ))}
       </div>
     </div>
   )

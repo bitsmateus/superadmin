@@ -7,6 +7,7 @@ import { resolveWabaAccesses } from '../lib/wabaAccess.js';
 import {
   createTemplate,
   bodyVariables,
+  bodyEdgeVariableIssue,
   suggestTemplateName,
   suggestCategory,
   type ButtonInput,
@@ -549,7 +550,9 @@ export async function publicRoutes(app: FastifyInstance) {
     Params: { token: string };
     Body: {
       purpose?: string;
+      header?: string;
       body?: string;
+      footer?: string;
       variables?: { position: number; example: string }[];
       buttons?: ButtonInput[];
       wabaIds?: string[];
@@ -567,7 +570,9 @@ export async function publicRoutes(app: FastifyInstance) {
       }
 
       const purpose = (req.body?.purpose ?? '').trim();
+      const header = (req.body?.header ?? '').trim();
       const body = (req.body?.body ?? '').trim();
+      const footer = (req.body?.footer ?? '').trim();
       const variables = req.body?.variables ?? [];
       const buttons = req.body?.buttons ?? [];
 
@@ -576,11 +581,22 @@ export async function publicRoutes(app: FastifyInstance) {
       if (body.length > 1024) {
         return reply.status(400).send({ message: 'O texto passa de 1024 caracteres, o limite do WhatsApp.' });
       }
+      if (header.length > 60) return reply.status(400).send({ message: 'O cabeçalho passa de 60 caracteres, o limite do WhatsApp.' });
+      if (footer.length > 60) return reply.status(400).send({ message: 'O rodapé passa de 60 caracteres, o limite do WhatsApp.' });
       const vars = bodyVariables(body);
       const expected = vars.map((_, i) => i + 1);
       if (vars.join(',') !== expected.join(',')) {
         return reply.status(400).send({
           message: 'As variáveis precisam ser sequenciais a partir de {{1}}, sem pular números.',
+        });
+      }
+      const edgeIssue = bodyEdgeVariableIssue(body);
+      if (edgeIssue) {
+        return reply.status(400).send({
+          message:
+            edgeIssue === 'end'
+              ? 'A mensagem não pode terminar com uma variável — a Meta exige um texto fixo no final (ex.: uma saudação ou ponto final).'
+              : 'A mensagem não pode começar com uma variável — a Meta exige um texto fixo no início.',
         });
       }
       const missingExample = vars.find((n) => !variables.find((v) => v.position === n)?.example?.trim());
@@ -609,7 +625,7 @@ export async function publicRoutes(app: FastifyInstance) {
       const targets: RequestTarget[] = await Promise.all(
         selected.map(async (access): Promise<RequestTarget> => {
           try {
-            const created = await createTemplate(access, { name, language: 'pt_BR', category, body, examples, buttons });
+            const created = await createTemplate(access, { name, language: 'pt_BR', category, header, body, footer, examples, buttons });
             return {
               wabaId: access.wabaId,
               label: access.label,
@@ -632,10 +648,13 @@ export async function publicRoutes(app: FastifyInstance) {
       const finalStatus = okCount > 0 ? 'submitted' : 'failed';
       await query(
         `UPDATE template_requests
-         SET status = $1, purpose = $2, template_name = $3, body = $4, variables = $5, buttons = $6,
-             category = $7, targets = $8, submitted_at = NOW()
-         WHERE id = $9`,
-        [finalStatus, purpose, name, body, JSON.stringify(variables), JSON.stringify(buttons), category, JSON.stringify(targets), row.id]
+         SET status = $1, purpose = $2, template_name = $3, header = $4, body = $5, footer = $6,
+             variables = $7, buttons = $8, category = $9, targets = $10, submitted_at = NOW()
+         WHERE id = $11`,
+        [
+          finalStatus, purpose, name, header || null, body, footer || null,
+          JSON.stringify(variables), JSON.stringify(buttons), category, JSON.stringify(targets), row.id,
+        ]
       );
 
       if (okCount > 0) {

@@ -1056,7 +1056,9 @@ CREATE TABLE IF NOT EXISTS template_requests (
   status TEXT NOT NULL DEFAULT 'pending',
   purpose TEXT NOT NULL DEFAULT '',
   template_name TEXT,
+  header TEXT,
   body TEXT,
+  footer TEXT,
   variables JSONB NOT NULL DEFAULT '[]',
   buttons JSONB NOT NULL DEFAULT '[]',
   category TEXT,
@@ -1068,6 +1070,8 @@ CREATE TABLE IF NOT EXISTS template_requests (
   submitted_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS template_requests_client_idx ON template_requests(client_id);
+ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS header TEXT;
+ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS footer TEXT;
 
 DROP TRIGGER IF EXISTS notify_template_requests ON template_requests;
 CREATE TRIGGER notify_template_requests AFTER INSERT OR UPDATE OR DELETE ON template_requests

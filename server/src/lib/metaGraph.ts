@@ -41,6 +41,16 @@ export function bodyVariables(body: string): number[] {
   return [...out].sort((a, b) => a - b);
 }
 
+/** A Meta recusa (erro #132001-like) um corpo que COMEÇA ou TERMINA em variável — o revisor
+ *  precisa de texto fixo ao redor pra entender o contexto. Usado tanto no front (aviso na hora)
+ *  quanto aqui no backend (defesa mesmo se o front deixar passar). null = corpo válido. */
+export function bodyEdgeVariableIssue(body: string): 'start' | 'end' | null {
+  const trimmed = (body || '').trim();
+  if (/^\{\{\s*\d+\s*\}\}/.test(trimmed)) return 'start';
+  if (/\{\{\s*\d+\s*\}\}$/.test(trimmed)) return 'end';
+  return null;
+}
+
 /** Nome exigido pela Meta: minúsculas, números e underscore. */
 export function validTemplateName(name: string): boolean {
   return /^[a-z0-9_]{1,512}$/.test(name);
@@ -143,22 +153,36 @@ async function graphFetch(
  */
 export async function createTemplate(
   access: MetaAccess,
-  dto: { name: string; language: string; category: string; body: string; examples?: string[]; buttons?: ButtonInput[] },
+  dto: {
+    name: string;
+    language: string;
+    category: string;
+    header?: string;
+    body: string;
+    footer?: string;
+    examples?: string[];
+    buttons?: ButtonInput[];
+  },
 ): Promise<{ id: string; status?: string; category?: string }> {
   const vars = bodyVariables(dto.body);
   const buttonsComponent = buildButtonsComponent(dto.buttons);
+  const header = (dto.header || '').trim();
+  const footer = (dto.footer || '').trim();
+  const components: Record<string, unknown>[] = [];
+  if (header) components.push({ type: 'HEADER', format: 'TEXT', text: header.slice(0, 60) });
+  components.push({
+    type: 'BODY',
+    text: dto.body,
+    ...(vars.length ? { example: { body_text: [vars.map((n) => dto.examples?.[n - 1] || `exemplo ${n}`)] } } : {}),
+  });
+  if (footer) components.push({ type: 'FOOTER', text: footer.slice(0, 60) });
+  if (buttonsComponent) components.push(buttonsComponent);
+
   const payload: Record<string, unknown> = {
     name: dto.name,
     language: dto.language,
     category: dto.category,
-    components: [
-      {
-        type: 'BODY',
-        text: dto.body,
-        ...(vars.length ? { example: { body_text: [vars.map((n) => dto.examples?.[n - 1] || `exemplo ${n}`)] } } : {}),
-      },
-      ...(buttonsComponent ? [buttonsComponent] : []),
-    ],
+    components,
   };
   const res = await graphFetch('POST', graphUrl(access, `${access.wabaId}/message_templates`), access.token, payload);
   if (!res.ok) throw new Error(translateMetaError(res.status, res.body));

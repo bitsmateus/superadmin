@@ -23,6 +23,14 @@ export const publicTemplateRequestApi = {
   get: (token: string) => api.get<TemplateRequestPublicData>(`/api/public/template-requests/${token}`),
   submit: (
     token: string,
-    body: { purpose: string; body: string; variables: TemplateVariable[]; buttons: TemplateButton[]; wabaIds: string[] },
+    body: {
+      purpose: string
+      header?: string
+      body: string
+      footer?: string
+      variables: TemplateVariable[]
+      buttons: TemplateButton[]
+      wabaIds: string[]
+    },
   ) => api.post<{ ok: boolean; targets: RequestTarget[] }>(`/api/public/template-requests/${token}/submit`, body),
 }

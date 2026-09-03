@@ -1129,6 +1129,11 @@ END $$`);
     END IF;
   END $$`);
 
+  // Cabeçalho/rodapé (opcionais) do template do WhatsApp — a Meta trata como componentes
+  // HEADER/FOOTER separados do corpo (ver createTemplate em metaGraph.ts).
+  await pool.query(`ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS header TEXT`);
+  await pool.query(`ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS footer TEXT`);
+
   console.log('[db] migrations applied');
 }
 

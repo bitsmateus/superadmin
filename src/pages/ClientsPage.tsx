@@ -150,7 +150,7 @@ export function ClientsPage() {
         title="Clientes"
         subtitle={`${clients.length} cliente(s) no CRM`}
         rightSlot={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
             <Button
               variant="secondary"
               onClick={() => setImportOpen(true)}
@@ -250,8 +250,8 @@ export function ClientsPage() {
                 <TH>Nome</TH>
                 <TH>Empresa</TH>
                 <TH>Etapa</TH>
-                <TH>Dias no sistema</TH>
-                <TH>Próxima ação</TH>
+                <TH className="hidden lg:table-cell">Dias no sistema</TH>
+                <TH className="hidden lg:table-cell">Próxima ação</TH>
                 <TH className="text-right">Ações</TH>
               </tr>
             </THead>
@@ -308,8 +308,8 @@ export function ClientsPage() {
                     <TD>
                       <StageBadge stage={c.stage} />
                     </TD>
-                    <TD className="text-foreground/60">{days} dia(s)</TD>
-                    <TD className="text-foreground/60">
+                    <TD className="hidden text-foreground/60 lg:table-cell">{days} dia(s)</TD>
+                    <TD className="hidden text-foreground/60 lg:table-cell">
                       {summarizeNextAction(c)}
                     </TD>
                     <TD className="text-right">
@@ -332,7 +332,7 @@ export function ClientsPage() {
                               e.stopPropagation()
                               onArchive(c.id, c.company || c.name)
                             }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30 lg:h-8 lg:w-8"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>

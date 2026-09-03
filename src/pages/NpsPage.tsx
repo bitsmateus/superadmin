@@ -162,7 +162,7 @@ export function NpsPage() {
                 return (
                   <li
                     key={r.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 lg:flex-nowrap lg:gap-3"
                   >
                     <div className="min-w-0">
                       <div className="text-sm text-foreground truncate">
@@ -248,7 +248,7 @@ export function NpsPage() {
                       {client && (
                         <button
                           onClick={() => navigate(`/clients?open=${client.id}`)}
-                          className="shrink-0 rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+                          className="shrink-0 rounded-md p-3 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
                           title="Abrir cliente"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
@@ -450,7 +450,7 @@ function ResponseRow({
       {onOpenClient && (
         <button
           onClick={onOpenClient}
-          className="shrink-0 rounded-md p-1.5 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
+          className="shrink-0 rounded-md p-3 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
         >
           <ExternalLink className="h-3.5 w-3.5" />
         </button>

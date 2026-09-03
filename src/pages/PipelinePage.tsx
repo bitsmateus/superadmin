@@ -439,8 +439,9 @@ export function PipelinePage() {
                 variant="secondary"
                 onClick={() => setAddToCopyOpen(true)}
                 leftIcon={<PlusCircle className="h-4 w-4" />}
+                aria-label="Adicionar cliente"
               >
-                Adicionar cliente
+                <span className="hidden lg:inline">Adicionar cliente</span>
               </Button>
             )}
             <Button
@@ -453,14 +454,16 @@ export function PipelinePage() {
                   .catch(() => toast.error('Não foi possível copiar'))
               }}
               leftIcon={<LinkIcon className="h-4 w-4" />}
+              aria-label="Link de cadastro"
             >
-              Link de cadastro
+              <span className="hidden lg:inline">Link de cadastro</span>
             </Button>
             <Button
               onClick={() => setOpenNew(true)}
               leftIcon={<PlusCircle className="h-4 w-4" />}
+              aria-label="Novo cliente"
             >
-              Novo cliente
+              <span className="hidden lg:inline">Novo cliente</span>
             </Button>
           </div>
         }
@@ -509,7 +512,7 @@ export function PipelinePage() {
                   onClick={() =>
                     setFilterEntrega((v) => (v === currentUser ? '' : currentUser))
                   }
-                  className={cn(filterEntrega === currentUser && 'ring-1 ring-accent/40')}
+                  className={cn('h-9 lg:h-8', filterEntrega === currentUser && 'ring-1 ring-accent/40')}
                 >
                   {filterEntrega === currentUser ? 'Vendo minha carga' : 'Só minha entrega'}
                 </Button>
@@ -548,6 +551,7 @@ export function PipelinePage() {
                   stage === 'setup_start' ? (
                     <Button
                       size="sm"
+                      className="h-9 lg:h-8"
                       onClick={(e) => { e.stopPropagation(); pullNext() }}
                       leftIcon={<Play className="h-3.5 w-3.5" />}
                     >
@@ -719,10 +723,10 @@ function ListGroup({
       style={{ borderLeft: `3px solid ${style.dot}` }}
     >
       <header
-        className="flex cursor-pointer select-none items-center justify-between gap-3 px-4 py-3 hover:bg-elevate/[0.02]"
+        className="flex flex-wrap cursor-pointer select-none items-center justify-between gap-3 px-4 py-3 hover:bg-elevate/[0.02]"
         onClick={() => setOpen((o) => !o)}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {open ? (
             <ChevronDown className="h-4 w-4 text-foreground/45" />
           ) : (
@@ -783,37 +787,39 @@ function ListGroup({
                     {g.emptyText ?? 'Nenhum cliente.'}
                   </p>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-line text-[11px] uppercase tracking-wider text-foreground/40">
-                        <th className="px-4 py-2 text-left font-medium">Cliente</th>
-                        <th className="px-4 py-2 text-left font-medium">Empresa</th>
-                        <th className="px-4 py-2 text-left font-medium">Entrada</th>
-                        <th className="px-4 py-2 text-left font-medium">Na etapa</th>
-                        <th className="px-4 py-2 text-left font-medium">
-                          Última atualização
-                        </th>
-                        <th className="px-4 py-2 text-left font-medium">Alertas</th>
-                        <th className="w-px px-4 py-2 text-right font-medium">
-                          Ações
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {g.clients.map((c, idx) => (
-                        <ClientRow
-                          key={c.id}
-                          client={c}
-                          position={g.numbered ? idx + 1 : undefined}
-                          onRowClick={onRowClick}
-                          onAdvance={onAdvance}
-                          onRegress={onRegress}
-                          onStartSetup={onStartSetup}
-                          onPauseSetup={onPauseSetup}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[860px] text-sm lg:min-w-0">
+                      <thead>
+                        <tr className="border-b border-line text-[11px] uppercase tracking-wider text-foreground/40">
+                          <th className="px-4 py-2 text-left font-medium">Cliente</th>
+                          <th className="px-4 py-2 text-left font-medium">Empresa</th>
+                          <th className="px-4 py-2 text-left font-medium">Entrada</th>
+                          <th className="px-4 py-2 text-left font-medium">Na etapa</th>
+                          <th className="px-4 py-2 text-left font-medium">
+                            Última atualização
+                          </th>
+                          <th className="px-4 py-2 text-left font-medium">Alertas</th>
+                          <th className="w-px px-4 py-2 text-right font-medium">
+                            Ações
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.clients.map((c, idx) => (
+                          <ClientRow
+                            key={c.id}
+                            client={c}
+                            position={g.numbered ? idx + 1 : undefined}
+                            onRowClick={onRowClick}
+                            onAdvance={onAdvance}
+                            onRegress={onRegress}
+                            onStartSetup={onStartSetup}
+                            onPauseSetup={onPauseSetup}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             ))
@@ -975,7 +981,7 @@ function ClientRow({
               disabled={Boolean(readiness && !readiness.ready)}
               onClick={(e) => { e.stopPropagation(); onStartSetup(c) }}
               className={cn(
-                'inline-flex h-7 w-7 items-center justify-center rounded-full ring-1 transition-colors',
+                'inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 transition-colors lg:h-7 lg:w-7',
                 readiness && !readiness.ready
                   ? 'cursor-not-allowed bg-elevate/[0.03] text-foreground/20 ring-line'
                   : 'bg-success/10 text-success ring-success/30 hover:bg-success/20',
@@ -995,7 +1001,7 @@ function ClientRow({
                 else onStartSetup(c)
               }}
               className={cn(
-                'inline-flex h-7 w-7 items-center justify-center rounded-full ring-1 transition-colors',
+                'inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 transition-colors lg:h-7 lg:w-7',
                 doing
                   ? 'bg-elevate/[0.06] text-foreground/50 ring-line hover:bg-warning/10 hover:text-warning hover:ring-warning/30'
                   : 'bg-success/10 text-success ring-success/30 hover:bg-success/20',
@@ -1010,7 +1016,7 @@ function ClientRow({
             disabled={!prev}
             onClick={(e) => { e.stopPropagation(); onRegress(c) }}
             className={cn(
-              'inline-flex h-7 w-7 items-center justify-center rounded-full ring-1 transition-colors',
+              'inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 transition-colors lg:h-7 lg:w-7',
               prev
                 ? 'bg-elevate/[0.06] text-foreground/50 ring-line hover:bg-warning/10 hover:text-warning hover:ring-warning/30'
                 : 'cursor-not-allowed bg-elevate/[0.03] text-foreground/20 ring-line',
@@ -1024,7 +1030,7 @@ function ClientRow({
             disabled={!next}
             onClick={(e) => { e.stopPropagation(); onAdvance(c) }}
             className={cn(
-              'inline-flex h-7 w-7 items-center justify-center rounded-full ring-1 transition-colors',
+              'inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 transition-colors lg:h-7 lg:w-7',
               next
                 ? 'bg-accent/10 text-accent ring-accent/30 hover:bg-accent/20'
                 : 'cursor-not-allowed bg-elevate/[0.03] text-foreground/25 ring-line',
@@ -1162,7 +1168,10 @@ function PipelineKanban({
       onDragEnd={onDragEnd}
       onDragCancel={() => setDragging(null)}
     >
-      <div className="flex items-start gap-3 overflow-x-auto pb-2">
+      <div
+        className="flex items-start gap-3 overflow-x-auto pb-2"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
         {stages.map((stage) => (
           <PipelineKanbanColumn
             key={stage}
@@ -1429,7 +1438,7 @@ function MiniActionBtn({
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); onClick() }}
       className={cn(
-        'inline-flex h-6 w-6 items-center justify-center rounded-lg ring-1 transition-colors',
+        'inline-flex h-9 w-9 items-center justify-center rounded-lg ring-1 transition-colors lg:h-6 lg:w-6',
         disabled
           ? 'cursor-not-allowed bg-elevate/[0.03] text-foreground/20 ring-line'
           : 'bg-elevate/[0.06] text-foreground/50 ring-line hover:bg-accent/10 hover:text-accent hover:ring-accent/30',

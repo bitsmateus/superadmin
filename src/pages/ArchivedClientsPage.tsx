@@ -90,7 +90,7 @@ export function ArchivedClientsPage() {
                 <TH>Nome</TH>
                 <TH>Empresa</TH>
                 <TH>Etapa</TH>
-                <TH>Arquivado em</TH>
+                <TH className="hidden lg:table-cell">Arquivado em</TH>
                 <TH className="text-right">Ações</TH>
               </tr>
             </THead>
@@ -120,7 +120,7 @@ export function ArchivedClientsPage() {
                   <TD>
                     <StageBadge stage={c.stage} />
                   </TD>
-                  <TD className="text-foreground/60">
+                  <TD className="hidden text-foreground/60 lg:table-cell">
                     {formatDate(c.archivedAt)}
                   </TD>
                   <TD className="text-right">
@@ -144,7 +144,7 @@ export function ArchivedClientsPage() {
                             e.stopPropagation()
                             onDeleteForever(c.id, c.company || c.name)
                           }}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line transition-colors hover:bg-danger/10 hover:text-danger hover:ring-danger/30 lg:h-8 lg:w-8"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

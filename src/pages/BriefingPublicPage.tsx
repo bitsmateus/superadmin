@@ -2562,7 +2562,7 @@ export function BriefingPublicPage() {
           cima do que estiver na tela ao rolar — inclusive o card branco da seção — então
           não pode depender do gradiente da página aparecer "por trás" pra ter contraste. */}
       <footer className="fixed inset-x-0 bottom-0 z-30 bg-[#1E1B6B]/95 shadow-[0_-4px_16px_rgba(0,0,0,0.15)] backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
           <div className="flex flex-col">
             <span className="text-xs uppercase tracking-wider text-white/50">Briefing</span>
             <span className="text-sm font-medium text-white">

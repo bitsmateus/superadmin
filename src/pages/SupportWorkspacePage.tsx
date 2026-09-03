@@ -507,7 +507,7 @@ function TaskRow({
           else void ticketsService.completeReminder(r.id)
         }}
         className={cn(
-          'mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ring-1 transition-colors',
+          'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ring-1 transition-colors lg:h-5 lg:w-5',
           done
             ? 'bg-success/15 text-success ring-success/30'
             : 'text-foreground/30 ring-line hover:bg-success/10 hover:text-success hover:ring-success/30',
@@ -542,7 +542,7 @@ function TaskRow({
               type="button"
               onClick={(e) => { e.stopPropagation(); if (r.clientId) onOpenClient(r.clientId) }}
               title="Abrir cliente"
-              className="grid h-5 w-5 shrink-0 place-items-center rounded text-accent transition-colors hover:bg-accent/10"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded text-accent transition-colors hover:bg-accent/10 lg:h-5 lg:w-5"
             >
               <ExternalLink className="h-3 w-3" />
             </button>
@@ -1001,7 +1001,7 @@ function WhatsAppGroupCard({
             type="button"
             title="Configurar grupo"
             onClick={() => setConfigOpen(true)}
-            className="grid h-7 w-7 place-items-center rounded-lg text-foreground/45 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground/80"
+            className="grid h-9 w-9 place-items-center rounded-lg text-foreground/45 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground/80 lg:h-7 lg:w-7"
           >
             <Settings2 className="h-3.5 w-3.5" />
           </button>
@@ -1251,7 +1251,7 @@ function IconBtn({
       onClick={onClick}
       className={cn(
         'inline-flex items-center justify-center rounded-lg ring-1 ring-line text-foreground/45 transition-colors',
-        small ? 'h-6 w-6 text-sm' : 'h-7 w-7',
+        small ? 'h-6 w-6 text-sm' : 'h-9 w-9 lg:h-7 lg:w-7',
         danger ? 'hover:bg-danger/10 hover:text-danger hover:ring-danger/30' : 'hover:bg-elevate/[0.06] hover:text-foreground/80',
       )}
     >

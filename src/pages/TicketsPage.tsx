@@ -254,7 +254,7 @@ function TicketRow({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
               <span className="text-[10px] uppercase tracking-wider text-foreground/35">
                 #{ticket.number}
               </span>
@@ -416,7 +416,7 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
           { label: `#${ticket.number}` },
         ]}
         rightSlot={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2 lg:flex-nowrap">
             {ticket.assigneeId !== profile?.id && (
               <Button size="sm" variant="secondary" onClick={claim}>
                 Atribuir a mim
@@ -439,7 +439,7 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
               onClick={() => setConfirmDelete(true)}
               aria-label="Excluir ticket"
               title="Excluir ticket"
-              className="rounded-md p-2 text-foreground/40 transition-colors hover:bg-danger/10 hover:text-danger"
+              className="rounded-md p-2.5 text-foreground/40 transition-colors hover:bg-danger/10 hover:text-danger lg:p-2"
             >
               <Trash2 className="h-4 w-4" />
             </button>

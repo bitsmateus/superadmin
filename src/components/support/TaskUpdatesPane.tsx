@@ -178,7 +178,7 @@ export function TaskUpdatesPane({ reminderId, columns }: { reminderId: string; c
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   title="Anexar imagem ou PDF"
-                  className="grid h-7 w-7 place-items-center rounded text-foreground/50 hover:bg-elevate/[0.05] hover:text-foreground"
+                  className="grid h-9 w-9 place-items-center rounded text-foreground/50 hover:bg-elevate/[0.05] hover:text-foreground lg:h-7 lg:w-7"
                 >
                   <Paperclip className="h-4 w-4" />
                 </button>
@@ -207,12 +207,15 @@ export function TaskUpdatesPane({ reminderId, columns }: { reminderId: string; c
                                 {formatDateTimeShort(n.createdAt)}
                               </span>
                               {editingNoteId !== n.id && (
-                                <div className="hidden items-center gap-0.5 group-hover:flex">
+                                // "group-hover" nunca dispara em toque — sem o "flex" na base, editar/excluir
+                                // uma atualização ficava impossível no celular. Abaixo de lg fica sempre visível;
+                                // a partir de lg volta a só aparecer no hover, igual antes.
+                                <div className="flex items-center gap-0.5 lg:hidden lg:group-hover:flex">
                                   <button
                                     type="button"
                                     title="Editar"
                                     onClick={() => { setEditingNoteId(n.id); setEditingText(stripHtml(n.content)) }}
-                                    className="grid h-5 w-5 place-items-center rounded text-foreground/35 transition-colors hover:text-accent"
+                                    className="grid h-8 w-8 place-items-center rounded text-foreground/35 transition-colors hover:text-accent lg:h-5 lg:w-5"
                                   >
                                     <Pencil className="h-3 w-3" />
                                   </button>
@@ -222,7 +225,7 @@ export function TaskUpdatesPane({ reminderId, columns }: { reminderId: string; c
                                     onClick={() => {
                                       if (window.confirm('Excluir esta atualização?')) void reminderNotesService.deleteNote(n.id)
                                     }}
-                                    className="grid h-5 w-5 place-items-center rounded text-foreground/35 transition-colors hover:text-danger"
+                                    className="grid h-8 w-8 place-items-center rounded text-foreground/35 transition-colors hover:text-danger lg:h-5 lg:w-5"
                                   >
                                     <Trash2 className="h-3 w-3" />
                                   </button>

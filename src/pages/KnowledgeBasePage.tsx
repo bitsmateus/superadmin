@@ -188,18 +188,18 @@ function ArticlesTab() {
                       )}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex shrink-0 gap-1 opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100">
                     <button
                       onClick={() => setEditing(a)}
                       title="Editar"
-                      className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+                      className="rounded-md p-2.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
                     >
                       <Edit3 className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => setDeleting(a)}
                       title="Remover"
-                      className="rounded-md p-1.5 text-foreground/40 hover:bg-danger/10 hover:text-danger"
+                      className="rounded-md p-2.5 text-foreground/40 hover:bg-danger/10 hover:text-danger lg:p-1.5"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -469,7 +469,7 @@ function CategoriesTab() {
             </div>
             <button
               onClick={() => setEditing(c)}
-              className="opacity-0 group-hover:opacity-100 rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+              className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 rounded-md p-2.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
             >
               <Edit3 className="h-3.5 w-3.5" />
             </button>
@@ -577,7 +577,7 @@ function CategoryEditor({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Select
             label="Cor"
             value={color}

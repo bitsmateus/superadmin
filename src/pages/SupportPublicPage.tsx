@@ -301,7 +301,7 @@ function IdentifyStep({
 
             <hr className="border-line" />
 
-            <div className="flex items-center justify-between gap-3 text-xs">
+            <div className="flex flex-col items-start gap-2 text-xs lg:flex-row lg:items-center lg:justify-between lg:gap-3">
               <div className="text-foreground/55">
                 Já tem um ticket aberto? Acompanhe pelo número/código:
               </div>
@@ -1255,7 +1255,7 @@ function StepHeader({
       {onBack && (
         <button
           onClick={onBack}
-          className="grid h-8 w-8 place-items-center rounded-lg border border-line text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-line text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground lg:h-8 lg:w-8"
           aria-label="Voltar"
         >
           <ArrowLeft className="h-4 w-4" />

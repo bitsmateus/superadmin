@@ -182,25 +182,27 @@ function ScoreSelector({
   onChange: (n: number) => void
 }) {
   return (
-    <div className="grid grid-cols-11 gap-1.5">
-      {Array.from({ length: 11 }).map((_, i) => {
-        const isSelected = value === i
-        return (
-          <button
-            key={i}
-            onClick={() => onChange(i)}
-            className={cn(
-              'aspect-square rounded-lg border text-sm font-medium transition-all',
-              isSelected
-                ? scoreBg(i)
-                : 'border-line bg-elevate/[0.02] text-foreground/65 hover:bg-elevate/[0.06]',
-            )}
-            aria-label={`Nota ${i}`}
-          >
-            {i}
-          </button>
-        )
-      })}
+    <div className="-mx-1 overflow-x-auto px-1 lg:mx-0 lg:overflow-visible lg:px-0">
+      <div className="grid min-w-[460px] grid-cols-11 gap-1.5 lg:min-w-0">
+        {Array.from({ length: 11 }).map((_, i) => {
+          const isSelected = value === i
+          return (
+            <button
+              key={i}
+              onClick={() => onChange(i)}
+              className={cn(
+                'aspect-square rounded-lg border text-sm font-medium transition-all',
+                isSelected
+                  ? scoreBg(i)
+                  : 'border-line bg-elevate/[0.02] text-foreground/65 hover:bg-elevate/[0.06]',
+              )}
+              aria-label={`Nota ${i}`}
+            >
+              {i}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

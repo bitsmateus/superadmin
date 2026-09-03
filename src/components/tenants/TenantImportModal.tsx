@@ -113,9 +113,14 @@ export function TenantImportModal({
               loading={running}
               disabled={planCreate + planLink === 0}
             >
-              {planCreate + planLink === 0
-                ? 'Nada para importar'
-                : `Importar (${planCreate} criar, ${planLink} vincular, ${planSkip} ignorar)`}
+              {planCreate + planLink === 0 ? (
+                'Nada para importar'
+              ) : (
+                <>
+                  <span className="lg:hidden">{`Importar (${planCreate + planLink})`}</span>
+                  <span className="hidden lg:inline">{`Importar (${planCreate} criar, ${planLink} vincular, ${planSkip} ignorar)`}</span>
+                </>
+              )}
             </Button>
           </>
         )
@@ -147,8 +152,9 @@ export function TenantImportModal({
               Nenhum tenant disponível nos servidores habilitados.
             </div>
           ) : (
+            <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
             <div className="overflow-hidden rounded-xl border border-line">
-              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 border-b border-line bg-elevate/[0.02] px-3 py-2 text-[10px] uppercase tracking-wider text-foreground/45">
+              <div className="grid min-w-[560px] grid-cols-[1fr_auto_auto_auto] gap-3 border-b border-line bg-elevate/[0.02] px-3 py-2 text-[10px] uppercase tracking-wider text-foreground/45 lg:min-w-0">
                 <span>Tenant</span>
                 <span>Servidor</span>
                 <span>Status</span>
@@ -161,7 +167,7 @@ export function TenantImportModal({
                   return (
                     <li
                       key={key}
-                      className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-3 py-2.5"
+                      className="grid min-w-[560px] grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-3 py-2.5 lg:min-w-0"
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm text-foreground">
@@ -199,6 +205,7 @@ export function TenantImportModal({
                   )
                 })}
               </ul>
+            </div>
             </div>
           )}
 
@@ -238,7 +245,7 @@ function Summary({
   news: number
 }) {
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
       <Stat label="Tenants" value={total} />
       <Stat label="Já vinculados" value={linked} tone="success" />
       <Stat label="Sugestões" value={suggest} tone="warning" />

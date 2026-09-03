@@ -185,7 +185,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                   Avançar etapa
                 </Button>
                 {stageMenu && (
-                  <div className="absolute left-0 z-10 mt-1 w-80 rounded-lg border border-line bg-card shadow-xl animate-fade-in">
+                  <div className="absolute left-0 z-10 mt-1 w-64 rounded-lg border border-line bg-card shadow-xl animate-fade-in lg:w-80">
                     <ul className="py-1">
                       {NEXT_STAGE[client.stage] && (
                         <li>
@@ -252,7 +252,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                   onClick={() => setConfirmArchive(true)}
                   aria-label="Arquivar cliente"
                   title="Arquivar cliente"
-                  className="ml-auto rounded-md p-2 text-foreground/40 hover:bg-danger/10 hover:text-danger transition-colors"
+                  className="ml-auto rounded-md p-2.5 text-foreground/40 hover:bg-danger/10 hover:text-danger transition-colors lg:p-2"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

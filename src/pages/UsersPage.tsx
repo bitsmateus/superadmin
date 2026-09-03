@@ -196,34 +196,36 @@ export function UsersPage() {
             }
           />
         ) : (
-          <Table>
-            <THead>
-              <tr>
-                <TH>Usuário</TH>
-                <TH>Status</TH>
-                <TH>E-mail</TH>
-                <TH>Papel</TH>
-                <TH>Área</TH>
-                <TH>Permissões</TH>
-                <TH>Criado em</TH>
-                <TH className="text-right">Ações</TH>
-              </tr>
-            </THead>
-            <TBody>
-              {profiles.map((p) => (
-                <ProfileRow
-                  key={p.id}
-                  profile={p}
-                  isSelf={p.id === profile?.id}
-                  online={onlineIds.has(p.id)}
-                  canForceLogout={canForceLogout}
-                  onChangeArea={(area) => changeArea(p.id, area)}
-                  onSaved={() => reload()}
-                  onDeleted={() => reload()}
-                />
-              ))}
-            </TBody>
-          </Table>
+          <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <Table>
+              <THead>
+                <tr>
+                  <TH>Usuário</TH>
+                  <TH>Status</TH>
+                  <TH>E-mail</TH>
+                  <TH>Papel</TH>
+                  <TH>Área</TH>
+                  <TH>Permissões</TH>
+                  <TH>Criado em</TH>
+                  <TH className="text-right">Ações</TH>
+                </tr>
+              </THead>
+              <TBody>
+                {profiles.map((p) => (
+                  <ProfileRow
+                    key={p.id}
+                    profile={p}
+                    isSelf={p.id === profile?.id}
+                    online={onlineIds.has(p.id)}
+                    canForceLogout={canForceLogout}
+                    onChangeArea={(area) => changeArea(p.id, area)}
+                    onSaved={() => reload()}
+                    onDeleted={() => reload()}
+                  />
+                ))}
+              </TBody>
+            </Table>
+          </div>
         )}
 
         <p className="mt-6 rounded-lg border border-line bg-elevate/[0.02] px-4 py-3 text-[11.5px] text-foreground/55">

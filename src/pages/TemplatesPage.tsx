@@ -125,25 +125,25 @@ export function TemplatesPage() {
                       {t.category && <Badge tone="neutral">{t.category}</Badge>}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex shrink-0 gap-1 opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100">
                     <button
                       onClick={() => copyContent(t.content)}
                       title="Copiar"
-                      className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+                      className="rounded-md p-2.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
                     >
                       <Copy className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => setEditing(t)}
                       title="Editar"
-                      className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+                      className="rounded-md p-2.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
                     >
                       <Edit3 className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => setDeleting(t)}
                       title="Remover"
-                      className="rounded-md p-1.5 text-foreground/40 hover:bg-danger/10 hover:text-danger"
+                      className="rounded-md p-2.5 text-foreground/40 hover:bg-danger/10 hover:text-danger lg:p-1.5"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

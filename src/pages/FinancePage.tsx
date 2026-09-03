@@ -330,7 +330,7 @@ export function FinancePage() {
                     <button
                       type="button"
                       onClick={() => navigate(`/clients?open=${client.id}`)}
-                      className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+                      className="rounded-md p-2.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
                       aria-label="Abrir cliente"
                       title="Abrir cliente"
                     >
@@ -360,43 +360,47 @@ export function FinancePage() {
               />
             </div>
           ) : (
-            <Table>
-              <THead>
-                <tr>
-                  <TH>Pago em</TH>
-                  <TH>Cliente</TH>
-                  <TH>Tipo</TH>
-                  <TH>Valor</TH>
-                  <TH>Método</TH>
-                  <TH>Ref.</TH>
-                </tr>
-              </THead>
-              <TBody>
-                {txInPeriod.map(({ payment, client }) => (
-                  <TR key={payment.id}>
-                    <TD className="text-foreground/85">{formatDateShort(payment.paidAt)}</TD>
-                    <TD>
-                      <div className="text-sm text-foreground">
-                        {client.company || client.name}
-                      </div>
-                      <div className="text-[11px] text-foreground/40">
-                        {client.name}
-                      </div>
-                    </TD>
-                    <TD>
-                      <Badge tone={payment.type === 'implementation' ? 'info' : payment.type === 'monthly' ? 'success' : 'neutral'}>
-                        {TYPE_LABEL[payment.type]}
-                      </Badge>
-                    </TD>
-                    <TD className="tabular-nums text-foreground">{brl(payment.value)}</TD>
-                    <TD className="text-foreground/60">
-                      {payment.method ? METHOD_LABEL[payment.method] : '—'}
-                    </TD>
-                    <TD className="text-foreground/55">{payment.reference ?? '—'}</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <div className="min-w-[680px]">
+                <Table>
+                  <THead>
+                    <tr>
+                      <TH>Pago em</TH>
+                      <TH>Cliente</TH>
+                      <TH>Tipo</TH>
+                      <TH>Valor</TH>
+                      <TH>Método</TH>
+                      <TH>Ref.</TH>
+                    </tr>
+                  </THead>
+                  <TBody>
+                    {txInPeriod.map(({ payment, client }) => (
+                      <TR key={payment.id}>
+                        <TD className="text-foreground/85">{formatDateShort(payment.paidAt)}</TD>
+                        <TD>
+                          <div className="text-sm text-foreground">
+                            {client.company || client.name}
+                          </div>
+                          <div className="text-[11px] text-foreground/40">
+                            {client.name}
+                          </div>
+                        </TD>
+                        <TD>
+                          <Badge tone={payment.type === 'implementation' ? 'info' : payment.type === 'monthly' ? 'success' : 'neutral'}>
+                            {TYPE_LABEL[payment.type]}
+                          </Badge>
+                        </TD>
+                        <TD className="tabular-nums text-foreground">{brl(payment.value)}</TD>
+                        <TD className="text-foreground/60">
+                          {payment.method ? METHOD_LABEL[payment.method] : '—'}
+                        </TD>
+                        <TD className="text-foreground/55">{payment.reference ?? '—'}</TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+            </div>
           )}
           {txInPeriod.length > 0 && (
             <div className="border-t border-line px-4 py-2.5 flex items-center justify-end gap-4 text-sm">

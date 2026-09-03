@@ -154,14 +154,16 @@ export function TenantsPage() {
               onClick={() => setImportOpen(true)}
               disabled={tenantsQ.isLoading || tenantsQ.data.length === 0}
               leftIcon={<UserPlus className="h-4 w-4" />}
+              aria-label="Importar como clientes"
             >
-              Importar como clientes
+              <span className="hidden lg:inline">Importar como clientes</span>
             </Button>
             <Button
               onClick={() => setWizardOpen(true)}
               leftIcon={<PlusCircle className="h-4 w-4" />}
+              aria-label="Novo tenant"
             >
-              Novo tenant
+              <span className="hidden lg:inline">Novo tenant</span>
             </Button>
           </div>
         }
@@ -169,7 +171,7 @@ export function TenantsPage() {
 
       <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-1 items-center gap-3">
+          <div className="flex flex-1 flex-wrap items-center gap-3 lg:flex-nowrap">
             <Input
               placeholder="Buscar por nome, domínio, e-mail, identity…"
               value={search}
@@ -190,26 +192,32 @@ export function TenantsPage() {
               className="sm:max-w-[180px]"
             />
           </div>
-          <ServerFilter selected={serverFilter} onChange={setServerFilter} />
+          <ServerFilter
+            selected={serverFilter}
+            onChange={setServerFilter}
+            className="flex-wrap lg:flex-nowrap"
+          />
         </div>
 
         {tenantsQ.isLoading ? (
-          <Table>
-            <THead>
-              <tr>
-                <TH>Nome</TH>
-                <TH>Servidor</TH>
-                <TH>Status</TH>
-                <TH>Criado em</TH>
-                <TH className="text-right">Ações</TH>
-              </tr>
-            </THead>
-            <TBody>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <SkeletonRow key={i} cols={5} />
-              ))}
-            </TBody>
-          </Table>
+          <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <Table>
+              <THead>
+                <tr>
+                  <TH>Nome</TH>
+                  <TH>Servidor</TH>
+                  <TH>Status</TH>
+                  <TH>Criado em</TH>
+                  <TH className="text-right">Ações</TH>
+                </tr>
+              </THead>
+              <TBody>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <SkeletonRow key={i} cols={5} />
+                ))}
+              </TBody>
+            </Table>
+          </div>
         ) : tenantsQ.isError && tenantsQ.data.length === 0 ? (
           <EmptyState
             icon={<Building2 className="h-5 w-5" />}
@@ -256,6 +264,7 @@ export function TenantsPage() {
                 — verifique tokens em Configurações.
               </div>
             )}
+            <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
             <Table>
               <THead>
                 <tr>
@@ -301,7 +310,7 @@ export function TenantsPage() {
                           <button
                             type="button"
                             onClick={() => openServerLogin(t)}
-                            className="inline-flex items-center gap-1.5 rounded-md bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-accent/20 hover:bg-accent/20 hover:ring-accent/40 transition-colors"
+                            className="inline-flex items-center gap-1.5 rounded-md bg-accent/10 px-2.5 py-2.5 text-xs font-medium text-accent ring-1 ring-accent/20 hover:bg-accent/20 hover:ring-accent/40 transition-colors lg:py-1"
                             aria-label={`Acessar ${asText(t.name)}`}
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
@@ -320,6 +329,7 @@ export function TenantsPage() {
                 })}
               </TBody>
             </Table>
+            </div>
           </>
         )}
       </div>
@@ -430,7 +440,7 @@ function TenantRowActions({
         type="button"
         aria-label="Ações"
         onClick={openMenu}
-        className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+        className="rounded-md p-2.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>

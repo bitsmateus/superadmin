@@ -267,7 +267,7 @@ export function CanaisPage() {
             type="button"
             onClick={() => setView('canais')}
             className={cn(
-              'rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
+              'rounded-lg px-4 py-2 text-sm font-medium transition-colors lg:py-1.5',
               view === 'canais' ? 'bg-accent text-white' : 'text-foreground/60 hover:text-foreground',
             )}
           >
@@ -277,7 +277,7 @@ export function CanaisPage() {
             type="button"
             onClick={() => setView('relatorios')}
             className={cn(
-              'rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
+              'rounded-lg px-4 py-2 text-sm font-medium transition-colors lg:py-1.5',
               view === 'relatorios' ? 'bg-accent text-white' : 'text-foreground/60 hover:text-foreground',
             )}
           >
@@ -430,20 +430,20 @@ export function CanaisPage() {
               const down = g.channels.filter((c) => c.effective_status === 'disconnected').length
               return (
                 <section key={g.key} className="overflow-hidden rounded-xl border border-line bg-card">
-                  <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5 lg:flex-nowrap">
                     <button
                       type="button"
                       onClick={() => toggleCollapsed(g.key)}
-                      className="flex flex-1 items-center gap-2 text-left"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
                       {isCollapsed ? (
-                        <ChevronRight className="h-4 w-4 text-foreground/45" />
+                        <ChevronRight className="h-4 w-4 shrink-0 text-foreground/45" />
                       ) : (
-                        <ChevronDown className="h-4 w-4 text-foreground/45" />
+                        <ChevronDown className="h-4 w-4 shrink-0 text-foreground/45" />
                       )}
-                      <Building2 className="h-4 w-4 text-accent" />
-                      <span className="text-sm font-semibold text-foreground">{g.label}</span>
-                      <span className="text-xs text-foreground/45">{g.channels.length} canal(is)</span>
+                      <Building2 className="h-4 w-4 shrink-0 text-accent" />
+                      <span className="truncate text-sm font-semibold text-foreground">{g.label}</span>
+                      <span className="shrink-0 text-xs text-foreground/45">{g.channels.length} canal(is)</span>
                       {down > 0 && (
                         <Badge tone="danger" className="ml-1">
                           {down} desconectado(s)
@@ -538,6 +538,7 @@ export function CanaisPage() {
                     </div>
                   )}
                 </header>
+                <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <Table>
                   <THead>
                     <tr>
@@ -597,7 +598,7 @@ export function CanaisPage() {
                                   },
                                 )
                               }
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-elevate/[0.06] hover:text-foreground lg:h-8 lg:w-8"
                             >
                               <Archive className="h-4 w-4" />
                             </button>
@@ -605,7 +606,7 @@ export function CanaisPage() {
                               type="button"
                               title="Excluir instância no provedor (irreversível)"
                               onClick={() => removeOrphan(o)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30 lg:h-8 lg:w-8"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -615,6 +616,7 @@ export function CanaisPage() {
                     ))}
                   </TBody>
                 </Table>
+                </div>
               </section>
             )}
 
@@ -636,6 +638,7 @@ export function CanaisPage() {
                   <span className="text-xs text-foreground/45">{data!.archivedOrphans.length}</span>
                 </button>
                 {archivedOpen && (
+                <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <Table>
                   <THead>
                     <tr>
@@ -669,7 +672,7 @@ export function CanaisPage() {
                               type="button"
                               title="Excluir instância no provedor (irreversível)"
                               onClick={() => removeOrphan(o)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30 lg:h-8 lg:w-8"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -679,6 +682,7 @@ export function CanaisPage() {
                     ))}
                   </TBody>
                 </Table>
+                </div>
                 )}
               </section>
             )}
@@ -686,13 +690,14 @@ export function CanaisPage() {
             {/* Tenants sem token vinculado */}
             {(data?.unlinkedTenants?.length ?? 0) > 0 && (
               <section className="overflow-hidden rounded-xl border border-warning/30 bg-card">
-                <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5 lg:flex-nowrap">
                   <KeyRound className="h-4 w-4 text-warning" />
                   <span className="text-sm font-semibold text-foreground">Tenants sem token vinculado</span>
                   <span className="text-xs text-foreground/45">
                     {data!.unlinkedTenants.length} cliente(s) — vincule o token para listar os canais
                   </span>
                 </header>
+                <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <Table>
                   <THead>
                     <tr>
@@ -724,7 +729,7 @@ export function CanaisPage() {
                               type="button"
                               title="Arquivar cliente"
                               onClick={() => archiveTenant(t.client_id, t.company || t.name)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30 lg:h-8 lg:w-8"
                             >
                               <Archive className="h-4 w-4" />
                             </button>
@@ -734,6 +739,7 @@ export function CanaisPage() {
                     ))}
                   </TBody>
                 </Table>
+                </div>
               </section>
             )}
           </div>
@@ -1027,7 +1033,7 @@ function ServerTenantsModal({ open, onClose }: { open: boolean; onClose: () => v
                 {/* Painel inline de vínculo */}
                 {linkingId === String(t.id) && (
                   <div className="mt-3 space-y-3 rounded-lg border border-line/60 bg-elevate/[0.02] p-3">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
                       <Input
                         label="API ID"
                         value={linkApiId}
@@ -1103,6 +1109,7 @@ function ChannelTable({
   onUnassign: (c: NxChannel) => void
 }) {
   return (
+    <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
     <Table>
       <THead>
         <tr>
@@ -1179,6 +1186,7 @@ function ChannelTable({
         ))}
       </TBody>
     </Table>
+    </div>
   )
 }
 
@@ -1342,7 +1350,7 @@ function AssignModal({ orphan, onClose }: { orphan: OrphanInstance | null; onClo
       }
     >
       <div className="space-y-3">
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 lg:flex-row">
           <Input
             placeholder="Digite o nome do cliente…"
             value={q}
@@ -1350,7 +1358,7 @@ function AssignModal({ orphan, onClose }: { orphan: OrphanInstance | null; onClo
             leftIcon={<Search className="h-4 w-4" />}
             containerClassName="flex-1"
           />
-          <div className="w-40">
+          <div className="w-full lg:w-40">
             <Select value={server} onChange={(e) => setServer(e.target.value)} options={ASSIGN_SERVERS} />
           </div>
         </div>
@@ -1515,6 +1523,7 @@ function ChannelReportPanel() {
                 Nenhum canal desconectado no momento. 🎉
               </div>
             ) : (
+              <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
               <Table>
                 <THead>
                   <tr>
@@ -1544,6 +1553,7 @@ function ChannelReportPanel() {
                   ))}
                 </TBody>
               </Table>
+              </div>
             )}
           </section>
 
@@ -1559,6 +1569,7 @@ function ChannelReportPanel() {
                 Sem histórico ainda. As quedas e retornos aparecem aqui conforme o monitoramento roda (a cada 3 min).
               </div>
             ) : (
+              <div className="overflow-x-auto no-scrollbar lg:overflow-visible" style={{ WebkitOverflowScrolling: 'touch' }}>
               <Table>
                 <THead>
                   <tr>
@@ -1593,6 +1604,7 @@ function ChannelReportPanel() {
                   ))}
                 </TBody>
               </Table>
+              </div>
             )}
           </section>
         </>

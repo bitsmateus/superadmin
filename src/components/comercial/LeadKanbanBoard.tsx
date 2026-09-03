@@ -87,6 +87,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
   // Colunas são w-64 (256px) com gap-3 (12px) entre elas — dá pra calcular a largura total
   // sem medir o DOM, e usar isso pra dimensionar a barra de rolagem flutuante abaixo.
   const scrollRef = React.useRef<HTMLDivElement>(null)
+  const barRef = React.useRef<HTMLDivElement>(null)
   const contentWidth = columns.length * 256 + Math.max(0, columns.length - 1) * 12
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
@@ -134,7 +135,16 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
       </div>
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div ref={scrollRef} className="flex items-start gap-3 overflow-x-hidden pb-4">
+        <div
+          ref={scrollRef}
+          className="no-scrollbar flex items-start gap-3 overflow-x-auto pb-4"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+          onScroll={(e) => {
+            if (barRef.current && barRef.current.scrollLeft !== e.currentTarget.scrollLeft) {
+              barRef.current.scrollLeft = e.currentTarget.scrollLeft
+            }
+          }}
+        >
           {columns.map((col) => (
             <KanbanColumn
               key={col.key || '__none__'}
@@ -153,12 +163,19 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
       </DndContext>
 
       {/* Barra de rolagem horizontal flutuante, fixa na tela — igual à da Lista, pra não
-          precisar descer até o fim de colunas cheias de card só pra arrastar de lado. */}
+          precisar descer até o fim de colunas cheias de card só pra arrastar de lado. No celular,
+          o toque direto nas colunas já rola sozinho (overflow-x-auto acima) — essa barra fica só
+          como atalho visual pro mouse, sincronizada nos dois sentidos. */}
       <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 sm:px-6 lg:px-8 lg:pl-[236px]">
         <div
+          ref={barRef}
           className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-line bg-card shadow-lg"
           style={{ height: 14 }}
-          onScroll={(e) => { if (scrollRef.current) scrollRef.current.scrollLeft = e.currentTarget.scrollLeft }}
+          onScroll={(e) => {
+            if (scrollRef.current && scrollRef.current.scrollLeft !== e.currentTarget.scrollLeft) {
+              scrollRef.current.scrollLeft = e.currentTarget.scrollLeft
+            }
+          }}
         >
           <div style={{ width: contentWidth, height: 1 }} />
         </div>

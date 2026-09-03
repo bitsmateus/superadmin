@@ -107,6 +107,17 @@ body {
   background: var(--scrollbar-thumb-hover);
 }
 
+/* Continua rolável (mouse, trackpad, toque) mas sem barra visível — usado onde já existe uma
+ * barra flutuante própria desenhada por cima (Kanban/lista do Comercial), pra rolar com o dedo
+ * no celular sem duplicar a barra e sem mudar nada no visual do desktop. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Skeleton shimmer */
 .skeleton {
   background: linear-gradient(

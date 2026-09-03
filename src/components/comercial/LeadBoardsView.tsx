@@ -780,6 +780,7 @@ interface BoardGroupProps {
   onCreateRow: (boardId: string) => void
   onOpenLead: (rowId: string) => void
   registerScrollEl: (boardId: string, el: HTMLDivElement | null) => void
+  onTableScroll: (left: number, source: HTMLDivElement) => void
   selectedIds: Set<string>
   onToggleRow: (id: string) => void
   onToggleAll: (ids: string[], select: boolean) => void
@@ -799,6 +800,7 @@ interface BoardGroupProps {
 
 function BoardGroup({
   board, allBoards, search, sdrFilter, filterRules, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
+  onTableScroll,
   selectedIds, onToggleRow, onToggleAll,
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
   columnWidths, onResizeColumn, sdrLock, sdrPageBoards, hideIanMateusCols,
@@ -950,8 +952,9 @@ function BoardGroup({
       {open && (
         <div
           ref={(el) => registerScrollEl(board.id, el)}
-          className="overflow-x-hidden"
-          style={{ borderLeft: `4px solid ${board.color}` }}
+          className="no-scrollbar overflow-x-auto"
+          style={{ borderLeft: `4px solid ${board.color}`, WebkitOverflowScrolling: 'touch' }}
+          onScroll={(e) => onTableScroll(e.currentTarget.scrollLeft, e.currentTarget)}
         >
           <table className="border-collapse table-fixed" style={{ width: tableWidth }}>
             <thead>
@@ -1375,14 +1378,19 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   }, [])
 
   const scrollEls = React.useRef<Map<string, HTMLDivElement>>(new Map())
+  const scrollBarEl = React.useRef<HTMLDivElement>(null)
   const registerScrollEl = React.useCallback((boardId: string, el: HTMLDivElement | null) => {
     if (el) scrollEls.current.set(boardId, el)
     else scrollEls.current.delete(boardId)
   }, [])
-  const handleSharedScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const left = e.currentTarget.scrollLeft
-    scrollEls.current.forEach((el) => { el.scrollLeft = left })
+  // Sincroniza todo mundo (a barra flutuante + a tabela de cada quadro aberto) a partir de
+  // QUALQUER um deles — antes só a barra flutuante mandava; agora rolar direto numa tabela
+  // (arrastar com o dedo no celular) também atualiza a barra e as outras tabelas.
+  const syncScroll = (left: number, source?: HTMLDivElement) => {
+    if (scrollBarEl.current && scrollBarEl.current !== source) scrollBarEl.current.scrollLeft = left
+    scrollEls.current.forEach((el) => { if (el !== source) el.scrollLeft = left })
   }
+  const handleSharedScroll = (e: React.UIEvent<HTMLDivElement>) => syncScroll(e.currentTarget.scrollLeft, e.currentTarget)
 
   const handleCreateRow = (boardId: string) => {
     // Aba travada num SDR (CRM Luis/Arthur) — lead criado aqui já nasce com o SDR certo, já que a
@@ -1562,6 +1570,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                       onCreateRow={handleCreateRow}
                       onOpenLead={setOpenLeadId}
                       registerScrollEl={registerScrollEl}
+                      onTableScroll={syncScroll}
                       selectedIds={selectedIds}
                       onToggleRow={toggleRow}
                       onToggleAll={toggleAll}
@@ -1601,6 +1610,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                     não precisa descer até o fim da página pra arrastar. */}
                 <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 sm:px-6 lg:px-8 lg:pl-[236px]">
                   <div
+                    ref={scrollBarEl}
                     className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-line bg-card shadow-lg"
                     style={{ height: 14 }}
                     onScroll={handleSharedScroll}

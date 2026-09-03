@@ -3,7 +3,10 @@ import { cn } from '@/lib/utils'
 
 export function Table({ className, ...rest }: React.TableHTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-card">
+    // overflow-x-auto (não -hidden): uma tabela mais larga que a tela rolava escondida sem
+    // nenhum jeito de alcançar o resto — agora rola normal, com toque incluso, mantendo o
+    // recorte de canto arredondado (overflow-y-hidden não afeta altura livre/sem scroll vertical).
+    <div className="overflow-x-auto overflow-y-hidden rounded-xl border border-line bg-card" style={{ WebkitOverflowScrolling: 'touch' }}>
       <table className={cn('w-full text-left text-sm', className)} {...rest} />
     </div>
   )

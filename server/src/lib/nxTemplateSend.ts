@@ -18,8 +18,9 @@ export async function sendNxTemplate(
   language: string,
   bodyParams: string[],
 ): Promise<void> {
-  const path = bodyParams.length ? '/templateBody' : '/template';
-  const url = `${nx.baseUrl}/v2/api/external/${encodeURIComponent(nx.apiId)}${path}`;
+  // Sempre /templateBody: o atalho /template exige sessão ativa e falha com
+  // ERR_API_REQUIRES_SESSION (mesmo problema já contornado em officialApi.ts).
+  const url = `${nx.baseUrl}/v2/api/external/${encodeURIComponent(nx.apiId)}/templateBody`;
   const templateData: Record<string, unknown> = {
     messaging_product: 'whatsapp',
     to,

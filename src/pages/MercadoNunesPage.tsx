@@ -29,7 +29,6 @@ interface Tema {
 }
 
 const TEMAS: Tema[] = [
-  { id: 'vermelho', nome: 'Vermelho', faixaBg: '#ED1C24', faixaTexto: '#FFD200', borda: '#ED1C24', preco: '#ED1C24', destaque: '#FFD200' },
   { id: 'laranja', nome: 'Laranja', faixaBg: '#E7110D', faixaTexto: '#FFD200', borda: '#E7110D', preco: '#E7110D', destaque: '#FFD200' },
   { id: 'amarelo', nome: 'Amarelo', faixaBg: '#FFD200', faixaTexto: '#ED1C24', borda: '#FFD200', preco: '#ED1C24', destaque: '#ED1C24' },
   { id: 'azul', nome: 'Azul', faixaBg: '#0B5FBF', faixaTexto: '#FFD200', borda: '#0B5FBF', preco: '#0B5FBF', destaque: '#FFD200' },
@@ -97,7 +96,7 @@ const CARTAZ_PADRAO: Cartaz = {
   caixaQtd: '12',
   caixaPreco: '',
   precoLitro: '',
-  temaId: 'vermelho',
+  temaId: 'laranja',
   fonte: FONTES[0].id,
   ajusteNome: 0,
   ajusteFaixa: 0,
@@ -115,17 +114,17 @@ const MODELOS: Modelo[] = [
   {
     nome: 'Oferta de/por',
     descricao: 'Faixa OFERTA + preço antigo riscado',
-    patch: { mostrarFaixa: true, textoFaixa: 'OFERTA', mostrarDePor: true, temaId: 'vermelho' },
+    patch: { mostrarFaixa: true, textoFaixa: 'OFERTA', mostrarDePor: true, temaId: 'laranja' },
   },
   {
     nome: 'Oferta simples',
     descricao: 'Faixa OFERTA, só o preço novo',
-    patch: { mostrarFaixa: true, textoFaixa: 'OFERTA', mostrarDePor: false, temaId: 'vermelho' },
+    patch: { mostrarFaixa: true, textoFaixa: 'OFERTA', mostrarDePor: false, temaId: 'laranja' },
   },
   {
     nome: 'Sem faixa',
     descricao: 'Só produto e preço, bem limpo',
-    patch: { mostrarFaixa: false, mostrarDePor: false, temaId: 'vermelho' },
+    patch: { mostrarFaixa: false, mostrarDePor: false, temaId: 'laranja' },
   },
   {
     nome: 'Super oferta',
@@ -399,6 +398,30 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
 // ── Página ──────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'mercadonunes.fila.v1'
+const LAYOUTS_KEY = 'mercadonunes.layouts.v1'
+
+// Só os campos de ESTILO (não o conteúdo do produto) entram num layout salvo — assim um layout
+// pré-pronto serve pra qualquer produto, sem carregar nome/preço de quem salvou primeiro.
+const CAMPOS_LAYOUT = [
+  'temaId',
+  'fonte',
+  'mostrarFaixa',
+  'textoFaixa',
+  'mostrarDePor',
+  'mostrarBolinhaPreco',
+  'mostrarPrecoAvulsoCaixa',
+  'mostrarLogo',
+  'ajusteNome',
+  'ajusteFaixa',
+  'ajustePreco',
+  'ajustePeso',
+] as const satisfies readonly (keyof Cartaz)[]
+
+interface LayoutSalvo {
+  id: string
+  nome: string
+  patch: Partial<Cartaz>
+}
 
 export function MercadoNunesPage() {
   const [cartaz, setCartaz] = React.useState<Cartaz>({ ...CARTAZ_PADRAO, id: 'atual' })
@@ -410,6 +433,15 @@ export function MercadoNunesPage() {
       return []
     }
   })
+  const [layouts, setLayouts] = React.useState<LayoutSalvo[]>(() => {
+    try {
+      const cru = localStorage.getItem(LAYOUTS_KEY)
+      return cru ? (JSON.parse(cru) as LayoutSalvo[]) : []
+    } catch {
+      return []
+    }
+  })
+  const [nomeNovoLayout, setNomeNovoLayout] = React.useState('')
   const [paraImprimir, setParaImprimir] = React.useState<Cartaz[]>([])
   const [escala, setEscala] = React.useState(0.55)
 
@@ -432,6 +464,23 @@ export function MercadoNunesPage() {
       /* modo anônimo / storage cheio — a fila só não persiste */
     }
   }, [fila])
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(LAYOUTS_KEY, JSON.stringify(layouts))
+    } catch {
+      /* modo anônimo / storage cheio — os layouts só não persistem */
+    }
+  }, [layouts])
+
+  const salvarLayoutAtual = () => {
+    const nome = nomeNovoLayout.trim()
+    if (!nome) return
+    const patch: Partial<Cartaz> = {}
+    for (const campo of CAMPOS_LAYOUT) (patch as Record<string, unknown>)[campo] = cartaz[campo]
+    setLayouts((cur) => [...cur, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, nome, patch }])
+    setNomeNovoLayout('')
+  }
 
   // Prévia sempre cabendo na coluna, em qualquer tela.
   React.useEffect(() => {
@@ -732,8 +781,8 @@ export function MercadoNunesPage() {
           )}
         </div>
 
-        {/* ── Prévia ── */}
-        <div>
+        {/* ── Prévia (fixa na tela enquanto rola a coluna de edição, que é bem mais alta) ── */}
+        <div style={{ position: 'sticky', top: 20 }}>
           <p style={{ fontSize: 12, color: '#7A716A', marginBottom: 8 }}>
             Prévia — folha A4 (210 × 297 mm)
           </p>
@@ -750,6 +799,45 @@ export function MercadoNunesPage() {
             <div style={{ transform: `scale(${escala})`, transformOrigin: 'top left' }}>
               <CartazA4 dados={cartaz} />
             </div>
+          </div>
+
+          <div style={{ marginTop: 16, width: A4_W * escala }}>
+            <Card titulo="Layouts pré-prontos" dica="Salva o estilo atual (cor, fonte, faixa, bolinha…) pra reaplicar em qualquer produto depois.">
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={nomeNovoLayout}
+                  onChange={(e) => setNomeNovoLayout(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && salvarLayoutAtual()}
+                  placeholder="Nome do layout"
+                  style={{ ...inputEstilo, flex: 1 }}
+                />
+                <button type="button" onClick={salvarLayoutAtual} disabled={!nomeNovoLayout.trim()} style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: nomeNovoLayout.trim() ? 1 : 0.5 }}>
+                  Salvar atual
+                </button>
+              </div>
+              {layouts.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  {layouts.map((l) => (
+                    <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #EDE7DF', borderRadius: 8, padding: '6px 8px' }}>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#2A2622', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {l.nome}
+                      </span>
+                      <button type="button" onClick={() => setCartaz((c) => ({ ...c, ...l.patch }))} style={botaoMini}>
+                        Aplicar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLayouts((cur) => cur.filter((x) => x.id !== l.id))}
+                        style={{ ...botaoMini, color: '#C0392B', borderColor: '#F0C9C4' }}
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {layouts.length === 0 && <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>}
+            </Card>
           </div>
         </div>
       </main>

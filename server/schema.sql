@@ -1116,6 +1116,60 @@ DROP TRIGGER IF EXISTS notify_payables_entries ON payables_entries;
 CREATE TRIGGER notify_payables_entries AFTER INSERT OR UPDATE OR DELETE ON payables_entries
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+-- ---------- mass_campaigns (disparo em massa via portal fixo por cliente, ex.: /laundry/:token) ----------
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS mass_campaign_token TEXT UNIQUE;
+CREATE TABLE IF NOT EXISTS mass_campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  template_name TEXT NOT NULL,
+  template_language TEXT NOT NULL DEFAULT 'pt_BR',
+  variable_mapping JSONB NOT NULL DEFAULT '[]',
+  delay_seconds INT NOT NULL DEFAULT 20,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS mass_campaigns_client_idx ON mass_campaigns(client_id);
+
+CREATE TABLE IF NOT EXISTS mass_campaign_recipients (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES mass_campaigns(id) ON DELETE CASCADE,
+  row_data JSONB NOT NULL DEFAULT '{}',
+  phone TEXT NOT NULL,
+  template_params JSONB NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'queued',
+  error_message TEXT,
+  scheduled_for TIMESTAMPTZ,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS mass_campaign_recipients_campaign_idx ON mass_campaign_recipients(campaign_id);
+CREATE INDEX IF NOT EXISTS mass_campaign_recipients_dispatch_idx
+  ON mass_campaign_recipients(status, scheduled_for) WHERE status = 'queued';
+
+DROP TRIGGER IF EXISTS notify_mass_campaigns ON mass_campaigns;
+CREATE TRIGGER notify_mass_campaigns AFTER INSERT OR UPDATE OR DELETE ON mass_campaigns
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+DROP TRIGGER IF EXISTS notify_mass_campaign_recipients ON mass_campaign_recipients;
+CREATE TRIGGER notify_mass_campaign_recipients AFTER INSERT OR UPDATE OR DELETE ON mass_campaign_recipients
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+CREATE TABLE IF NOT EXISTS mass_campaign_contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  phone TEXT NOT NULL,
+  row_data JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (client_id, phone)
+);
+CREATE INDEX IF NOT EXISTS mass_campaign_contacts_client_idx ON mass_campaign_contacts(client_id);
+DROP TRIGGER IF EXISTS notify_mass_campaign_contacts ON mass_campaign_contacts;
+CREATE TRIGGER notify_mass_campaign_contacts AFTER INSERT OR UPDATE OR DELETE ON mass_campaign_contacts
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:
 -- Crie o primeiro usuário admin com:

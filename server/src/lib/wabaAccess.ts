@@ -25,6 +25,42 @@ export interface WabaOption extends MetaAccess {
   label: string;
 }
 
+export interface NxCredentials {
+  baseUrl: string;
+  apiId: string;
+  apiToken: string;
+}
+
+/** Credenciais NX cruas do tenant de um cliente (base URL + apiId + token) — o suficiente pra
+ *  chamar `listChannels`/`showChannelById`/envio de template pela própria NX. Diferente de
+ *  `resolveWabaAccesses`, que ainda troca isso pelo bmToken da Meta (só necessário pra CRIAR
+ *  template no Graph direto) — pra ENVIAR via NX (ver lib/nxTemplateSend.ts) essas credenciais
+ *  já bastam, é a própria NX quem fala com a Meta por trás. null = tenant sem credenciais/servidor
+ *  configurado. */
+export async function resolveNxCredentials(clientId: string): Promise<NxCredentials | null> {
+  const client = await queryOne<{
+    tenant_server_id: string | null;
+    tenant_api_id: string | null;
+    tenant_api_token: string | null;
+  }>(
+    'SELECT tenant_server_id, tenant_api_id, tenant_api_token FROM clients WHERE id = $1',
+    [clientId]
+  );
+  if (!client?.tenant_server_id || !client.tenant_api_id || !client.tenant_api_token) return null;
+
+  const settings = await queryOne<{ servers: Array<{ id?: string; baseUrl?: string }> | null }>(
+    'SELECT servers FROM settings WHERE id = true'
+  );
+  const serverBase: Record<string, string> = { ...SERVER_BASEURL_DEFAULTS };
+  for (const s of settings?.servers ?? []) {
+    if (s.id && s.baseUrl) serverBase[s.id] = s.baseUrl.replace(/\/$/, '');
+  }
+  const baseUrl = serverBase[client.tenant_server_id];
+  if (!baseUrl) return null;
+
+  return { baseUrl, apiId: client.tenant_api_id, apiToken: client.tenant_api_token };
+}
+
 async function fetchJson(url: string, headers: Record<string, string>, method = 'GET', body?: unknown) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 15000);
@@ -58,28 +94,11 @@ async function fetchJson(url: string, headers: Record<string, string>, method = 
  * configurado (ou credenciais do tenant ausentes).
  */
 export async function resolveWabaAccesses(clientId: string): Promise<WabaOption[]> {
-  const client = await queryOne<{
-    tenant_server_id: string | null;
-    tenant_api_id: string | null;
-    tenant_api_token: string | null;
-  }>(
-    'SELECT tenant_server_id, tenant_api_id, tenant_api_token FROM clients WHERE id = $1',
-    [clientId]
-  );
-  if (!client?.tenant_server_id || !client.tenant_api_id || !client.tenant_api_token) return [];
+  const nx = await resolveNxCredentials(clientId);
+  if (!nx) return [];
+  const { baseUrl: base, apiId, apiToken } = nx;
 
-  const settings = await queryOne<{ servers: Array<{ id?: string; baseUrl?: string }> | null }>(
-    'SELECT servers FROM settings WHERE id = true'
-  );
-  const serverBase: Record<string, string> = { ...SERVER_BASEURL_DEFAULTS };
-  for (const s of settings?.servers ?? []) {
-    if (s.id && s.baseUrl) serverBase[s.id] = s.baseUrl.replace(/\/$/, '');
-  }
-  const base = serverBase[client.tenant_server_id];
-  if (!base) return [];
-
-  const headers = { Accept: 'application/json', Authorization: `Bearer ${client.tenant_api_token}` };
-  const apiId = client.tenant_api_id;
+  const headers = { Accept: 'application/json', Authorization: `Bearer ${apiToken}` };
 
   const listRes = await fetchJson(`${base}/v2/api/external/${encodeURIComponent(apiId)}/listChannels`, headers);
   if (!listRes.ok) return [];

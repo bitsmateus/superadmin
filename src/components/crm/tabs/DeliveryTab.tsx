@@ -7,6 +7,7 @@ import {
   LayoutTemplate,
   ListChecks,
   Mail,
+  Megaphone,
   PartyPopper,
   UserCircle2,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
 import { templateRequestsApi } from '@/api/templateRequests'
+import { massCampaignPortalApi } from '@/api/massCampaigns'
 import { useServerById } from '@/store/authStore'
 import {
   buildHandoffChecklist,
@@ -148,6 +150,19 @@ export function DeliveryTab({ client }: { client: Client }) {
       const link = `${window.location.origin}/template/${token}`
       await navigator.clipboard.writeText(link)
       toast.success('Link de criação de template copiado')
+    } catch (err) {
+      toast.error(`Falha ao gerar o link: ${(err as Error).message}`)
+    }
+  }
+
+  // Link fixo (não expira, não se consome com o uso) do portal de disparo em massa — o cliente
+  // volta nele toda vez que quiser importar uma planilha nova e mandar uma campanha.
+  const copyMassCampaignLink = async () => {
+    try {
+      const { token } = await massCampaignPortalApi.create(client.id)
+      const link = `${window.location.origin}/laundry/${token}`
+      await navigator.clipboard.writeText(link)
+      toast.success('Link do portal de disparo em massa copiado')
     } catch (err) {
       toast.error(`Falha ao gerar o link: ${(err as Error).message}`)
     }
@@ -296,6 +311,14 @@ export function DeliveryTab({ client }: { client: Client }) {
               leftIcon={<LayoutTemplate className="h-3.5 w-3.5" />}
             >
               Copiar link de template
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={copyMassCampaignLink}
+              leftIcon={<Megaphone className="h-3.5 w-3.5" />}
+            >
+              Copiar link de disparo em massa
             </Button>
           </div>
         }

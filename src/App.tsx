@@ -112,6 +112,11 @@ const TemplateRequestPublicPage = React.lazy(() =>
     default: m.TemplateRequestPublicPage,
   })),
 )
+const LaundryPortalPage = React.lazy(() =>
+  import('./pages/LaundryPortalPage').then((m) => ({
+    default: m.LaundryPortalPage,
+  })),
+)
 
 export default function App() {
   return (
@@ -120,6 +125,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/briefing/:token" element={<BriefingPublicPage />} />
         <Route path="/template/:token" element={<TemplateRequestPublicPage />} />
+        <Route path="/laundry/:token" element={<LaundryPortalPage />} />
         <Route path="/pendencias/:token" element={<PendenciasPublicPage />} />
         <Route path="/ficha" element={<FichaPublicPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />

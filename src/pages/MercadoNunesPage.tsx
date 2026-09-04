@@ -36,8 +36,13 @@ const TEMAS: Tema[] = [
   { id: 'preto', nome: 'Preto', faixaBg: '#111111', faixaTexto: '#FFD200', borda: '#111111', preco: '#111111', destaque: '#FFD200' },
 ]
 
+// "TT Masters" (a fonte usada no Canva de vocês) é uma fonte PAGA da TypeType — não dá pra puxar
+// de um CDN público sem o arquivo licenciado. Se vocês tiverem o .ttf/.otf/.woff2, é só mandar que
+// a gente incorpora ela igualzinha. Por enquanto, "Baloo 2" é a alternativa gratuita mais parecida
+// (grossa, arredondada, mesmo clima de cartaz de mercado).
 const FONTES = [
   { id: "'Titan One', system-ui", nome: 'Titan One (padrão)' },
+  { id: "'Baloo 2', system-ui", nome: 'Baloo 2 (parecida com TT Masters)' },
   { id: "'Luckiest Guy', system-ui", nome: 'Luckiest Guy' },
   { id: "'Bowlby One SC', system-ui", nome: 'Bowlby One SC' },
   { id: "'Anton', system-ui", nome: 'Anton (mais estreita)' },
@@ -57,7 +62,12 @@ interface Cartaz {
   mostrarLogo: boolean
   temaId: string
   fonte: string
-  ajusteNome: number // -3 a +3, afinação manual do tamanho do nome do produto
+  // Afinação manual de tamanho (-3 a +3) de cada peça do cartaz — o nome já encolhe sozinho
+  // conforme o texto cresce, mas dá pra ajustar tudo na mão também.
+  ajusteNome: number
+  ajusteFaixa: number
+  ajustePreco: number
+  ajustePeso: number
 }
 
 const CARTAZ_PADRAO: Cartaz = {
@@ -74,6 +84,9 @@ const CARTAZ_PADRAO: Cartaz = {
   temaId: 'vermelho',
   fonte: FONTES[0].id,
   ajusteNome: 0,
+  ajusteFaixa: 0,
+  ajustePreco: 0,
+  ajustePeso: 0,
 }
 
 interface Modelo {
@@ -127,6 +140,11 @@ function tamanhoNome(texto: string, ajuste: number): number {
   return Math.round(base * (1 + ajuste * 0.08))
 }
 
+/** Aplica um ajuste manual (-3 a +3) a um tamanho base — cada passo é 10%. */
+function escalar(basePx: number, ajuste: number): number {
+  return Math.round(basePx * (1 + ajuste * 0.1))
+}
+
 // ── O cartaz A4 ─────────────────────────────────────────────────────────────
 
 export function CartazA4({ dados }: { dados: Cartaz }) {
@@ -134,6 +152,10 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
   const { inteiro, centavos } = partesDoPreco(dados.preco)
   const sombra = (px: number) => `${px}px ${px}px 0 #000`
   const fonteNome = tamanhoNome(dados.produto, dados.ajusteNome)
+  const fonteFaixa = escalar(dados.textoFaixa.length > 8 ? 78 : 116, dados.ajusteFaixa)
+  const fontePeso = escalar(64, dados.ajustePeso)
+  const fontePrecoInteiro = escalar(250, dados.ajustePreco)
+  const fontePrecoCentavos = escalar(150, dados.ajustePreco)
 
   return (
     <div
@@ -166,7 +188,7 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
           <span
             style={{
               color: tema.faixaTexto,
-              fontSize: dados.textoFaixa.length > 8 ? '78px' : '116px',
+              fontSize: `${fonteFaixa}px`,
               lineHeight: 1,
               letterSpacing: '2px',
               textTransform: 'uppercase',
@@ -233,7 +255,7 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
             <div
               style={{
                 color: tema.destaque,
-                fontSize: '64px',
+                fontSize: `${fontePeso}px`,
                 lineHeight: 1,
                 textTransform: 'uppercase',
                 textShadow: sombra(5),
@@ -264,9 +286,9 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
               lineHeight: 0.86,
             }}
           >
-            <span style={{ fontSize: '250px' }}>{inteiro}</span>
-            <span style={{ fontSize: '250px', alignSelf: 'flex-end', margin: '0 -6px 0 -10px' }}>,</span>
-            <span style={{ fontSize: '150px', marginTop: '10px' }}>{centavos}</span>
+            <span style={{ fontSize: `${fontePrecoInteiro}px` }}>{inteiro}</span>
+            <span style={{ fontSize: `${fontePrecoInteiro}px`, alignSelf: 'flex-end', margin: '0 -6px 0 -10px' }}>,</span>
+            <span style={{ fontSize: `${fontePrecoCentavos}px`, marginTop: '10px' }}>{centavos}</span>
           </div>
         </div>
 
@@ -324,7 +346,7 @@ export function MercadoNunesPage() {
     const link = document.createElement('link')
     link.rel = 'stylesheet'
     link.href =
-      'https://fonts.googleapis.com/css2?family=Titan+One&family=Luckiest+Guy&family=Bowlby+One+SC&family=Anton&family=Archivo+Black&display=swap'
+      'https://fonts.googleapis.com/css2?family=Titan+One&family=Baloo+2:wght@800&family=Luckiest+Guy&family=Bowlby+One+SC&family=Anton&family=Archivo+Black&display=swap'
     document.head.appendChild(link)
     return () => {
       document.head.removeChild(link)
@@ -452,22 +474,13 @@ export function MercadoNunesPage() {
                 <input value={cartaz.unidade} onChange={(e) => set('unidade', e.target.value)} placeholder="CADA" style={inputEstilo} />
               </Campo>
             </div>
-            <Campo label="Tamanho do nome">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input
-                  type="range"
-                  min={-3}
-                  max={3}
-                  step={1}
-                  value={cartaz.ajusteNome}
-                  onChange={(e) => set('ajusteNome', Number(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <span style={{ fontSize: 12, color: '#7A716A', width: 56 }}>
-                  {cartaz.ajusteNome > 0 ? `+${cartaz.ajusteNome}` : cartaz.ajusteNome}
-                </span>
-              </div>
-            </Campo>
+          </Card>
+
+          <Card titulo="Tamanho das escritas" dica="Ajusta cada peça do cartaz na mão, além do que já encolhe sozinho.">
+            <SliderAjuste label="Nome do produto" valor={cartaz.ajusteNome} onChange={(v) => set('ajusteNome', v)} />
+            <SliderAjuste label="Faixa (topo)" valor={cartaz.ajusteFaixa} onChange={(v) => set('ajusteFaixa', v)} />
+            <SliderAjuste label="Peso / tamanho" valor={cartaz.ajustePeso} onChange={(v) => set('ajustePeso', v)} />
+            <SliderAjuste label="Preço" valor={cartaz.ajustePreco} onChange={(v) => set('ajustePreco', v)} />
           </Card>
 
           <Card titulo="Preço">
@@ -684,14 +697,37 @@ const botaoMini: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-function Card({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+function Card({ titulo, dica, children }: { titulo: string; dica?: string; children: React.ReactNode }) {
   return (
     <section style={{ background: '#fff', border: '1px solid #E7E1D9', borderRadius: 12, padding: 14 }}>
-      <h2 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6, color: '#C1503F', margin: '0 0 10px' }}>
+      <h2 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6, color: '#C1503F', margin: '0 0 4px' }}>
         {titulo}
       </h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</div>
+      {dica && <p style={{ fontSize: 11, color: '#9A928B', margin: '0 0 10px' }}>{dica}</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: dica ? 0 : 10 }}>{children}</div>
     </section>
+  )
+}
+
+function SliderAjuste({ label, valor, onChange }: { label: string; valor: number; onChange: (v: number) => void }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#5B534D', marginBottom: 4 }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <input
+          type="range"
+          min={-3}
+          max={3}
+          step={1}
+          value={valor}
+          onChange={(e) => onChange(Number(e.target.value))}
+          style={{ flex: 1 }}
+        />
+        <span style={{ fontSize: 12, color: '#7A716A', width: 32, textAlign: 'right' }}>
+          {valor > 0 ? `+${valor}` : valor}
+        </span>
+      </div>
+    </label>
   )
 }
 

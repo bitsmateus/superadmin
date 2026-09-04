@@ -1077,6 +1077,45 @@ DROP TRIGGER IF EXISTS notify_template_requests ON template_requests;
 CREATE TRIGGER notify_template_requests AFTER INSERT OR UPDATE OR DELETE ON template_requests
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+-- ---------- payables_groups / payables_entries (Financeiro > Contas a Pagar) ----------
+-- Board estilo Monday, lista contínua de grupos (não é filtrado por mês como Gestão Interna) —
+-- cada grupo é criado à mão pela pessoa (ex.: "Abril 2026", "Folha de pagamento") e some/aparece
+-- na ordem que ela quiser, com um item por linha dentro dele.
+CREATE TABLE IF NOT EXISTS payables_groups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#4F8EF7',
+  position INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS payables_entries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id UUID NOT NULL REFERENCES payables_groups(id) ON DELETE CASCADE,
+  elemento TEXT NOT NULL DEFAULT '',
+  previsto_cents INT NOT NULL DEFAULT 0,
+  comissao_cents INT,
+  real_cents INT,
+  status TEXT NOT NULL DEFAULT 'a_pagar' CHECK (status IN ('a_pagar', 'agendado', 'pago')),
+  data DATE,
+  boleto_data TEXT,
+  boleto_filename TEXT,
+  notas TEXT NOT NULL DEFAULT '',
+  position INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS payables_entries_group_idx ON payables_entries(group_id);
+
+DROP TRIGGER IF EXISTS notify_payables_groups ON payables_groups;
+CREATE TRIGGER notify_payables_groups AFTER INSERT OR UPDATE OR DELETE ON payables_groups
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_payables_entries ON payables_entries;
+CREATE TRIGGER notify_payables_entries AFTER INSERT OR UPDATE OR DELETE ON payables_entries
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:
 -- Crie o primeiro usuário admin com:

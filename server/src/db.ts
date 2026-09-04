@@ -1134,6 +1134,44 @@ END $$`);
   await pool.query(`ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS header TEXT`);
   await pool.query(`ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS footer TEXT`);
 
+  // Contas a Pagar (Financeiro) — board estilo Monday, lista contínua de grupos criados à mão
+  // (ex.: "Abril 2026", "Folha de pagamento"), sem filtro de mês. Ver comentário em schema.sql.
+  await pool.query(`CREATE TABLE IF NOT EXISTS payables_groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#4F8EF7',
+    position INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS payables_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES payables_groups(id) ON DELETE CASCADE,
+    elemento TEXT NOT NULL DEFAULT '',
+    previsto_cents INT NOT NULL DEFAULT 0,
+    comissao_cents INT,
+    real_cents INT,
+    status TEXT NOT NULL DEFAULT 'a_pagar' CHECK (status IN ('a_pagar', 'agendado', 'pago')),
+    data DATE,
+    boleto_data TEXT,
+    boleto_filename TEXT,
+    notas TEXT NOT NULL DEFAULT '',
+    position INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS payables_entries_group_idx ON payables_entries(group_id)`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_payables_groups ON payables_groups;
+      CREATE TRIGGER notify_payables_groups AFTER INSERT OR UPDATE OR DELETE ON payables_groups
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      DROP TRIGGER IF EXISTS notify_payables_entries ON payables_entries;
+      CREATE TRIGGER notify_payables_entries AFTER INSERT OR UPDATE OR DELETE ON payables_entries
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

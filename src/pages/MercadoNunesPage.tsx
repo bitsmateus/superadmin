@@ -30,6 +30,7 @@ interface Tema {
 
 const TEMAS: Tema[] = [
   { id: 'vermelho', nome: 'Vermelho', faixaBg: '#ED1C24', faixaTexto: '#FFD200', borda: '#ED1C24', preco: '#ED1C24', destaque: '#FFD200' },
+  { id: 'laranja', nome: 'Laranja', faixaBg: '#E7110D', faixaTexto: '#FFD200', borda: '#E7110D', preco: '#E7110D', destaque: '#FFD200' },
   { id: 'amarelo', nome: 'Amarelo', faixaBg: '#FFD200', faixaTexto: '#ED1C24', borda: '#FFD200', preco: '#ED1C24', destaque: '#ED1C24' },
   { id: 'azul', nome: 'Azul', faixaBg: '#0B5FBF', faixaTexto: '#FFD200', borda: '#0B5FBF', preco: '#0B5FBF', destaque: '#FFD200' },
   { id: 'verde', nome: 'Verde', faixaBg: '#1B8A3A', faixaTexto: '#FFD200', borda: '#1B8A3A', preco: '#1B8A3A', destaque: '#FFD200' },
@@ -61,6 +62,13 @@ interface Cartaz {
   mostrarFaixa: boolean
   mostrarDePor: boolean
   mostrarLogo: boolean
+  mostrarBolinhaPreco: boolean
+  minUnidades: string // "a partir de X unidades" — vazio = não mostra
+  mostrarPrecoAvulsoCaixa: boolean
+  precoAvulso: string
+  caixaQtd: string
+  caixaPreco: string
+  precoLitro: string
   temaId: string
   fonte: string
   // Afinação manual de tamanho (-3 a +3) de cada peça do cartaz — o nome já encolhe sozinho
@@ -82,6 +90,13 @@ const CARTAZ_PADRAO: Cartaz = {
   mostrarFaixa: true,
   mostrarDePor: true,
   mostrarLogo: true,
+  mostrarBolinhaPreco: false,
+  minUnidades: '',
+  mostrarPrecoAvulsoCaixa: false,
+  precoAvulso: '',
+  caixaQtd: '12',
+  caixaPreco: '',
+  precoLitro: '',
   temaId: 'vermelho',
   fonte: FONTES[0].id,
   ajusteNome: 0,
@@ -253,22 +268,39 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
             )}
           </div>
           {dados.peso.trim() && (
-            <div
-              style={{
-                color: tema.destaque,
-                fontSize: `${fontePeso}px`,
-                lineHeight: 1,
-                textTransform: 'uppercase',
-                textShadow: sombra(5),
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {dados.peso}
+            <div style={{ textAlign: 'right' }}>
+              <div
+                style={{
+                  color: tema.destaque,
+                  fontSize: `${fontePeso}px`,
+                  lineHeight: 1,
+                  textTransform: 'uppercase',
+                  textShadow: sombra(5),
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {dados.peso}
+              </div>
+              {dados.minUnidades.trim() && (
+                <div
+                  style={{
+                    color: '#000',
+                    fontSize: '26px',
+                    lineHeight: 1.2,
+                    textTransform: 'uppercase',
+                    whiteSpace: 'nowrap',
+                    marginTop: '2px',
+                  }}
+                >
+                  A partir de {dados.minUnidades.trim()} un
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Preço gigante */}
+        {/* Preço gigante — a "bolinha" amarela é um fundo orgânico atrás dos números, imitando o
+            círculo feito à mão pra chamar atenção pro preço. */}
         <div
           style={{
             flex: 1,
@@ -278,20 +310,59 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
             minHeight: 0,
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              color: tema.preco,
-              textShadow: sombra(9),
-              lineHeight: 0.86,
-            }}
-          >
-            <span style={{ fontSize: `${fontePrecoInteiro}px` }}>{inteiro}</span>
-            <span style={{ fontSize: `${fontePrecoInteiro}px`, alignSelf: 'flex-end', margin: '0 -6px 0 -10px' }}>,</span>
-            <span style={{ fontSize: `${fontePrecoCentavos}px`, marginTop: '10px' }}>{centavos}</span>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {dados.mostrarBolinhaPreco && (
+              <div
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  inset: '-8% -10%',
+                  background: '#FFD200',
+                  borderRadius: '48% 52% 45% 55% / 55% 45% 58% 42%',
+                  transform: 'rotate(-3deg)',
+                  zIndex: 0,
+                }}
+              />
+            )}
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                display: 'flex',
+                alignItems: 'flex-start',
+                color: tema.preco,
+                textShadow: sombra(9),
+                lineHeight: 0.86,
+              }}
+            >
+              <span style={{ fontSize: `${fontePrecoInteiro}px` }}>{inteiro}</span>
+              <span style={{ fontSize: `${fontePrecoInteiro}px`, alignSelf: 'flex-end', margin: '0 -6px 0 -10px' }}>,</span>
+              <span style={{ fontSize: `${fontePrecoCentavos}px`, marginTop: '10px' }}>{centavos}</span>
+            </div>
           </div>
         </div>
+
+        {/* Avulso / caixa / valor por litro */}
+        {dados.mostrarPrecoAvulsoCaixa && (
+          <div
+            style={{
+              textAlign: 'right',
+              color: '#000',
+              fontSize: '28px',
+              lineHeight: 1.35,
+              textTransform: 'uppercase',
+              marginTop: '-6px',
+            }}
+          >
+            {dados.precoAvulso.trim() && <div>{dados.precoAvulso.trim()} avulsa</div>}
+            {dados.caixaPreco.trim() && (
+              <div>
+                Cx{dados.caixaQtd.trim() || '12'} = {dados.caixaPreco.trim()}
+              </div>
+            )}
+            {dados.precoLitro.trim() && <div>R$ {dados.precoLitro.trim()} por litro</div>}
+          </div>
+        )}
 
         {/* Unidade (ex.: CADA / KG / UN) */}
         {dados.unidade.trim() && (
@@ -476,6 +547,9 @@ export function MercadoNunesPage() {
                 <input value={cartaz.unidade} onChange={(e) => set('unidade', e.target.value)} placeholder="CADA" style={inputEstilo} />
               </Campo>
             </div>
+            <Campo label="A partir de quantas unidades? (opcional)" dica='Aparece embaixo do peso, ex.: "A partir de 6un".'>
+              <input value={cartaz.minUnidades} onChange={(e) => set('minUnidades', e.target.value)} placeholder="6" style={inputEstilo} />
+            </Campo>
           </Card>
 
           <Card titulo="Tamanho das escritas" dica="Ajusta cada peça do cartaz na mão, além do que já encolhe sozinho.">
@@ -505,6 +579,57 @@ export function MercadoNunesPage() {
               onChange={(v) => set('mostrarDePor', v)}
               label='Mostrar "DE / POR" (preço antigo riscado)'
             />
+            <Checkbox
+              checked={cartaz.mostrarBolinhaPreco}
+              onChange={(v) => set('mostrarBolinhaPreco', v)}
+              label="Fundo amarelo (bolinha) atrás do preço"
+            />
+          </Card>
+
+          <Card titulo="Preço avulso e caixa" dica="O bloco pequeno com avulso, caixa e valor por litro.">
+            <Checkbox
+              checked={cartaz.mostrarPrecoAvulsoCaixa}
+              onChange={(v) => set('mostrarPrecoAvulsoCaixa', v)}
+              label="Mostrar esse bloco no cartaz"
+            />
+            <Campo label="Preço avulso">
+              <input
+                value={cartaz.precoAvulso}
+                onChange={(e) => set('precoAvulso', e.target.value)}
+                placeholder="3,79"
+                disabled={!cartaz.mostrarPrecoAvulsoCaixa}
+                style={{ ...inputEstilo, opacity: cartaz.mostrarPrecoAvulsoCaixa ? 1 : 0.5 }}
+              />
+            </Campo>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Campo label="Unidades na caixa">
+                <input
+                  value={cartaz.caixaQtd}
+                  onChange={(e) => set('caixaQtd', e.target.value)}
+                  placeholder="12"
+                  disabled={!cartaz.mostrarPrecoAvulsoCaixa}
+                  style={{ ...inputEstilo, opacity: cartaz.mostrarPrecoAvulsoCaixa ? 1 : 0.5 }}
+                />
+              </Campo>
+              <Campo label="Preço da caixa">
+                <input
+                  value={cartaz.caixaPreco}
+                  onChange={(e) => set('caixaPreco', e.target.value)}
+                  placeholder="40,68"
+                  disabled={!cartaz.mostrarPrecoAvulsoCaixa}
+                  style={{ ...inputEstilo, opacity: cartaz.mostrarPrecoAvulsoCaixa ? 1 : 0.5 }}
+                />
+              </Campo>
+            </div>
+            <Campo label="Valor por litro">
+              <input
+                value={cartaz.precoLitro}
+                onChange={(e) => set('precoLitro', e.target.value)}
+                placeholder="9,68"
+                disabled={!cartaz.mostrarPrecoAvulsoCaixa}
+                style={{ ...inputEstilo, opacity: cartaz.mostrarPrecoAvulsoCaixa ? 1 : 0.5 }}
+              />
+            </Campo>
           </Card>
 
           <Card titulo="Aparência">

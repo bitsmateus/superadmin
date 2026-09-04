@@ -16,7 +16,7 @@ import * as React from 'react'
 const A4_W = 794
 const A4_H = 1123
 
-const LOGO_SRC = '/mercadonunes/logo.jpg'
+const LOGO_SRC = '/assets/mercadonunes-logo.jpg'
 
 interface Tema {
   id: string

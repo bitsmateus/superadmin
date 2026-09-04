@@ -36,13 +36,14 @@ const TEMAS: Tema[] = [
   { id: 'preto', nome: 'Preto', faixaBg: '#111111', faixaTexto: '#FFD200', borda: '#111111', preco: '#111111', destaque: '#FFD200' },
 ]
 
-// "TT Masters" (a fonte usada no Canva de vocês) é uma fonte PAGA da TypeType — não dá pra puxar
-// de um CDN público sem o arquivo licenciado. Se vocês tiverem o .ttf/.otf/.woff2, é só mandar que
-// a gente incorpora ela igualzinha. Por enquanto, "Baloo 2" é a alternativa gratuita mais parecida
-// (grossa, arredondada, mesmo clima de cartaz de mercado).
+// A família "TT Masters" completa é paga (licença comercial da TypeType). Mas "Masters Black" é o
+// corte que a própria TypeType libera de graça (licença SIL OFL 1.1, uso comercial liberado) — é
+// esse arquivo que está em public/fonts/, self-hosted, sem depender de CDN nenhum. É a fonte de
+// verdade, não uma aproximação.
 const FONTES = [
-  { id: "'Titan One', system-ui", nome: 'Titan One (padrão)' },
-  { id: "'Baloo 2', system-ui", nome: 'Baloo 2 (parecida com TT Masters)' },
+  { id: "'MastersBlack', system-ui", nome: 'Masters Black (fonte oficial, grátis)' },
+  { id: "'Titan One', system-ui", nome: 'Titan One' },
+  { id: "'Baloo 2', system-ui", nome: 'Baloo 2' },
   { id: "'Luckiest Guy', system-ui", nome: 'Luckiest Guy' },
   { id: "'Bowlby One SC', system-ui", nome: 'Bowlby One SC' },
   { id: "'Anton', system-ui", nome: 'Anton (mais estreita)' },
@@ -395,6 +396,7 @@ export function MercadoNunesPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#F4F1EC', color: '#2A2622' }} className="mercadonunes">
+      <style>{estiloFontesLocais}</style>
       <style>{estiloImpressao}</style>
 
       {/* Cabeçalho com a logo */}
@@ -638,6 +640,14 @@ export function MercadoNunesPage() {
 }
 
 // ── Estilos ─────────────────────────────────────────────────────────────────
+
+// Fontes self-hosted (public/fonts/) — cortes gratuitos da TypeType (licença SIL OFL 1.1, ver
+// public/fonts/LICENSE-masters.txt), sem depender de CDN externo.
+const estiloFontesLocais = `
+@font-face { font-family: 'MastersBlack'; src: url('/fonts/masters-black.otf') format('opentype'); font-display: swap; }
+@font-face { font-family: 'MastersBirds'; src: url('/fonts/masters-birds.otf') format('opentype'); font-display: swap; }
+@font-face { font-family: 'MastersRoughThin'; src: url('/fonts/masters-rough-thin.otf') format('opentype'); font-display: swap; }
+`
 
 const estiloImpressao = `
 .mercadonunes .area-impressao { display: none; }

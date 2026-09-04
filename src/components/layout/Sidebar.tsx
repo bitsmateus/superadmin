@@ -217,6 +217,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         ...(hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
         ...(hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),
         { to: '/financeiro/gestao-interna', label: 'Gestão Interna', icon: ClipboardList },
+        { to: '/financeiro/contas-a-pagar', label: 'Contas a Pagar', icon: Wallet },
       ]
     : []
   // Numa cópia a URL é /visao/<id>, que não diz nada sobre qual grupo do menu destacar/abrir —

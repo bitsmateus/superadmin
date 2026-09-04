@@ -55,11 +55,13 @@ export async function sendNxTemplate(
     clearTimeout(t);
   }
 
-  // A NX às vezes responde 200 mesmo em erro — só o corpo denuncia.
+  // A NX às vezes responde 200 mesmo em erro — só o corpo denuncia. Guarda o corpo bruto (não só
+  // .message/.error) porque códigos como ERR_API_REQUIRES_SESSION sozinhos não dizem o que fazer —
+  // o resto do corpo (quando vem) costuma trazer o motivo real.
   if (!res.ok || (body as { success?: boolean } | undefined)?.success === false) {
-    const msg = (body as { message?: string; error?: string })?.message
-      || (body as { message?: string; error?: string })?.error
-      || `NX HTTP ${res.status}`;
-    throw new Error(msg);
+    const b = body as { message?: string; error?: string; code?: string; detail?: string } | undefined;
+    const core = b?.message || b?.error || `NX HTTP ${res.status}`;
+    const extra = b && typeof b === 'object' ? JSON.stringify(b).slice(0, 300) : '';
+    throw new Error(extra && extra !== JSON.stringify(core) ? `${core} — ${extra}` : core);
   }
 }

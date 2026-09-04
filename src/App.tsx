@@ -117,6 +117,12 @@ const LaundryPortalPage = React.lazy(() =>
     default: m.LaundryPortalPage,
   })),
 )
+// Gerador de cartazes do Mercado Nunes — página pública própria, fora do CRM/tenant.
+const MercadoNunesPage = React.lazy(() =>
+  import('./pages/MercadoNunesPage').then((m) => ({
+    default: m.MercadoNunesPage,
+  })),
+)
 
 export default function App() {
   return (
@@ -126,6 +132,7 @@ export default function App() {
         <Route path="/briefing/:token" element={<BriefingPublicPage />} />
         <Route path="/template/:token" element={<TemplateRequestPublicPage />} />
         <Route path="/laundry/:token" element={<LaundryPortalPage />} />
+        <Route path="/mercadonunes" element={<MercadoNunesPage />} />
         <Route path="/pendencias/:token" element={<PendenciasPublicPage />} />
         <Route path="/ficha" element={<FichaPublicPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />

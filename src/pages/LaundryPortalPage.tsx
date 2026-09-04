@@ -1,15 +1,20 @@
 import * as React from 'react'
 import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { publicMassCampaignApi } from '@/api/massCampaigns'
+import { publicMassCampaignApi, publicMassContactsApi } from '@/api/massCampaigns'
 import type {
   ApprovedTemplate,
+  MassCampaignContact,
   MassCampaignRecipient,
   MassCampaignSummary,
   VariableMappingEntry,
 } from '@/types/massCampaign'
 
-type View = 'loading' | 'invalid' | 'list' | 'new' | 'report'
+// Mesma chave sintética do backend (routes/massCampaigns.ts) — representa o telefone do próprio
+// contato como se fosse mais uma "coluna" disponível pro mapeamento de variáveis do template.
+const PHONE_MAPPING_KEY = '__phone__'
+
+type View = 'loading' | 'invalid' | 'list' | 'contacts' | 'new' | 'report'
 
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Rascunho',
@@ -91,8 +96,18 @@ export function LaundryPortalPage() {
     )
   }
 
+  if (view === 'contacts') {
+    return (
+      <Shell wide>
+        <PortalTabs current="contacts" onChange={setView} />
+        <ContactsView token={token} />
+      </Shell>
+    )
+  }
+
   return (
     <Shell wide>
+      <PortalTabs current="list" onChange={setView} />
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Campanhas</h1>
@@ -180,6 +195,26 @@ export function LaundryPortalPage() {
                           setView('report')
                         }}
                       />
+                      <ActionButton
+                        label="Duplicar"
+                        onClick={async () => {
+                          const res = await publicMassCampaignApi.duplicate(token, c.id)
+                          toast.success(`Campanha duplicada — ${res.total} contatos prontos.`)
+                          load()
+                        }}
+                      />
+                      {c.status !== 'running' && (
+                        <ActionButton
+                          label="Excluir"
+                          danger
+                          onClick={async () => {
+                            if (!window.confirm(`Excluir a campanha "${c.name}"? Essa ação não pode ser desfeita.`)) return
+                            await publicMassCampaignApi.remove(token, c.id)
+                            toast.success('Campanha excluída')
+                            load()
+                          }}
+                        />
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -192,7 +227,31 @@ export function LaundryPortalPage() {
   )
 }
 
-function ActionButton({ label, onClick }: { label: string; onClick: () => void | Promise<void> }) {
+function PortalTabs({ current, onChange }: { current: 'list' | 'contacts'; onChange: (v: View) => void }) {
+  return (
+    <div className="mb-6 flex gap-1 border-b border-slate-200">
+      {(
+        [
+          { key: 'list', label: 'Campanhas' },
+          { key: 'contacts', label: 'Contatos' },
+        ] as const
+      ).map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+            current === t.key ? 'border-[#2F5BFF] text-[#2F5BFF]' : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ActionButton({ label, onClick, danger }: { label: string; onClick: () => void | Promise<void>; danger?: boolean }) {
   const [busy, setBusy] = React.useState(false)
   return (
     <button
@@ -208,7 +267,11 @@ function ActionButton({ label, onClick }: { label: string; onClick: () => void |
           setBusy(false)
         }
       }}
-      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-[#2F5BFF] hover:text-[#2F5BFF] disabled:opacity-50"
+      className={`rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${
+        danger
+          ? 'border-red-200 text-red-600 hover:border-red-400 hover:text-red-700'
+          : 'border-slate-300 text-slate-600 hover:border-[#2F5BFF] hover:text-[#2F5BFF]'
+      }`}
     >
       {label}
     </button>
@@ -306,9 +369,352 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
   )
 }
 
+// ── Contatos (lista persistente) ────────────────────────────────────────────
+
+function ContactsView({ token }: { token: string }) {
+  const [total, setTotal] = React.useState(0)
+  const [columns, setColumns] = React.useState<string[]>([])
+  const [contacts, setContacts] = React.useState<MassCampaignContact[]>([])
+  const [q, setQ] = React.useState('')
+  const [offset, setOffset] = React.useState(0)
+  const [modal, setModal] = React.useState<'add' | 'import' | null>(null)
+  const [editing, setEditing] = React.useState<MassCampaignContact | null>(null)
+
+  const load = React.useCallback(() => {
+    publicMassContactsApi
+      .list(token, offset, q || undefined)
+      .then((d) => {
+        setTotal(d.total)
+        setColumns(d.columns)
+        setContacts(d.contacts)
+      })
+      .catch(() => {})
+  }, [token, offset, q])
+
+  React.useEffect(() => {
+    load()
+  }, [load])
+
+  const shownColumns = columns.slice(0, 4)
+
+  const remove = async (c: MassCampaignContact) => {
+    if (!window.confirm(`Excluir o contato ${c.phone}?`)) return
+    try {
+      await publicMassContactsApi.remove(token, c.id)
+      toast.success('Contato excluído')
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao excluir')
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Contatos</h1>
+          <p className="text-sm text-slate-500">{total} contato(s) salvos — reaproveitados em qualquer campanha nova.</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setModal('import')}
+            className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-600 hover:border-[#2F5BFF] hover:text-[#2F5BFF]"
+          >
+            Importar planilha
+          </button>
+          <button
+            type="button"
+            onClick={() => setModal('add')}
+            className="rounded-lg bg-[#2F5BFF] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#2348d8]"
+          >
+            + Adicionar contato
+          </button>
+        </div>
+      </div>
+
+      <input
+        value={q}
+        onChange={(e) => {
+          setOffset(0)
+          setQ(e.target.value)
+        }}
+        placeholder="Buscar por telefone ou dado…"
+        className="mb-4 h-10 w-full max-w-sm rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+      />
+
+      {contacts.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 py-16 text-center">
+          <p className="text-lg font-semibold text-slate-700">Nenhum contato encontrado</p>
+          <p className="mt-1 text-sm text-slate-500">Importe uma planilha ou adicione um contato manualmente.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-2.5">Telefone</th>
+                {shownColumns.map((c) => (
+                  <th key={c} className="whitespace-nowrap px-4 py-2.5">{c}</th>
+                ))}
+                <th className="px-4 py-2.5">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {contacts.map((c) => (
+                <tr key={c.id}>
+                  <td className="px-4 py-2.5 font-medium text-slate-800">{c.phone}</td>
+                  {shownColumns.map((col) => (
+                    <td key={col} className="whitespace-nowrap px-4 py-2.5 text-slate-600">{c.row_data[col] ?? ''}</td>
+                  ))}
+                  <td className="px-4 py-2.5">
+                    <div className="flex gap-2">
+                      <ActionButton label="Editar" onClick={() => setEditing(c)} />
+                      <ActionButton label="Excluir" danger onClick={() => remove(c)} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {total > contacts.length && (
+        <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+          <button type="button" disabled={offset === 0} onClick={() => setOffset((o) => Math.max(0, o - 200))} className="disabled:opacity-30">
+            ← Anteriores
+          </button>
+          <span>{offset + 1}–{offset + contacts.length} de {total}</span>
+          <button type="button" disabled={offset + 200 >= total} onClick={() => setOffset((o) => o + 200)} className="disabled:opacity-30">
+            Próximos →
+          </button>
+        </div>
+      )}
+
+      {modal === 'add' && (
+        <ContactFormModal token={token} contact={null} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />
+      )}
+      {modal === 'import' && (
+        <ImportContactsModal token={token} onClose={() => setModal(null)} onImported={() => { setModal(null); load() }} />
+      )}
+      {editing && (
+        <ContactFormModal token={token} contact={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load() }} />
+      )}
+    </div>
+  )
+}
+
+function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-800">{title}</h2>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ContactFormModal({
+  token,
+  contact,
+  onClose,
+  onSaved,
+}: {
+  token: string
+  contact: MassCampaignContact | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [phone, setPhone] = React.useState(contact?.phone ?? '')
+  const [fields, setFields] = React.useState<{ key: string; value: string }[]>(
+    contact && Object.keys(contact.row_data).length
+      ? Object.entries(contact.row_data).map(([key, value]) => ({ key, value }))
+      : [{ key: 'nome', value: '' }],
+  )
+  const [saving, setSaving] = React.useState(false)
+
+  const save = async () => {
+    const digits = phone.replace(/\D/g, '')
+    if (digits.length < 10) return toast.error('Telefone inválido. Digite com DDD (e DDI se for fora do Brasil).')
+    const fieldsObj: Record<string, string> = {}
+    for (const f of fields) if (f.key.trim()) fieldsObj[f.key.trim()] = f.value
+    setSaving(true)
+    try {
+      if (contact) await publicMassContactsApi.update(token, contact.id, { phone: digits, fields: fieldsObj })
+      else await publicMassContactsApi.add(token, { phone: digits, fields: fieldsObj })
+      toast.success(contact ? 'Contato atualizado' : 'Contato adicionado')
+      onSaved()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao salvar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal title={contact ? 'Editar contato' : 'Adicionar contato'} onClose={onClose}>
+      <div className="space-y-4">
+        <Field label="Telefone" required hint="Com DDD e DDI, ex.: 5511999998888">
+          <Text value={phone} onChange={setPhone} placeholder="5511999998888" />
+        </Field>
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-slate-700">Campos (nome, pedido, etc.)</p>
+          {fields.map((f, i) => (
+            <div key={i} className="flex gap-2">
+              <input
+                value={f.key}
+                onChange={(e) => setFields((cur) => cur.map((x, xi) => (xi === i ? { ...x, key: e.target.value } : x)))}
+                placeholder="campo"
+                className="h-9 w-1/3 rounded-md border border-slate-300 px-2 text-xs text-slate-700"
+              />
+              <input
+                value={f.value}
+                onChange={(e) => setFields((cur) => cur.map((x, xi) => (xi === i ? { ...x, value: e.target.value } : x)))}
+                placeholder="valor"
+                className="h-9 flex-1 rounded-md border border-slate-300 px-2 text-xs text-slate-700"
+              />
+              <button
+                type="button"
+                onClick={() => setFields((cur) => cur.filter((_, xi) => xi !== i))}
+                className="px-1 text-sm text-red-500 hover:text-red-700"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFields((cur) => [...cur, { key: '', value: '' }])}
+            className="text-xs font-medium text-[#2F5BFF] hover:underline"
+          >
+            + campo
+          </button>
+        </div>
+      </div>
+      <div className="mt-5 flex justify-end gap-2">
+        <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600">
+          Cancelar
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={save}
+          className="rounded-lg bg-[#2F5BFF] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2348d8] disabled:opacity-60"
+        >
+          {saving ? 'Salvando…' : 'Salvar'}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+function ImportContactsModal({ token, onClose, onImported }: { token: string; onClose: () => void; onImported: () => void }) {
+  const [fileDataUrl, setFileDataUrl] = React.useState<string | null>(null)
+  const [fileName, setFileName] = React.useState('')
+  const [header, setHeader] = React.useState<string[]>([])
+  const [totalRows, setTotalRows] = React.useState(0)
+  const [loadingPreview, setLoadingPreview] = React.useState(false)
+  const [phoneColumn, setPhoneColumn] = React.useState('')
+  const [ddi, setDdi] = React.useState('55')
+  const [ddd, setDdd] = React.useState('')
+  const [importing, setImporting] = React.useState(false)
+
+  const onPickFile = async (file: File) => {
+    setFileName(file.name)
+    setLoadingPreview(true)
+    try {
+      const dataUrl = await fileToDataUrl(file)
+      setFileDataUrl(dataUrl)
+      const res = await publicMassCampaignApi.importPreview(token, dataUrl)
+      setHeader(res.header)
+      setTotalRows(res.totalRows)
+      const guess = res.header.find((h) => /tel|celular|whats|fone|numero|número/i.test(h))
+      if (guess) setPhoneColumn(guess)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao ler o arquivo')
+      setFileDataUrl(null)
+    } finally {
+      setLoadingPreview(false)
+    }
+  }
+
+  const submit = async () => {
+    if (!fileDataUrl) return toast.error('Escolha o arquivo.')
+    if (!phoneColumn) return toast.error('Escolha a coluna de telefone.')
+    setImporting(true)
+    try {
+      const res = await publicMassContactsApi.import(token, { data: fileDataUrl, phoneColumn, ddi, ddd })
+      toast.success(
+        `${res.created} novo(s), ${res.updated} atualizado(s)${res.skipped ? `, ${res.skipped} pulado(s) sem telefone válido` : ''}.`,
+      )
+      onImported()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao importar')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <Modal title="Importar planilha" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-xs text-slate-500">
+          Contatos com o mesmo telefone são atualizados (as colunas vindas nessa planilha substituem as anteriores); os
+          novos são criados.
+        </p>
+        <Field label="Planilha" required hint="CSV, XLS ou XLSX — máximo 8MB.">
+          <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 px-4 py-8 text-center hover:border-[#2F5BFF]">
+            <input
+              type="file"
+              accept=".csv,.xls,.xlsx"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && onPickFile(e.target.files[0])}
+            />
+            <span className="text-sm font-medium text-slate-600">
+              {loadingPreview ? 'Lendo arquivo…' : fileName || 'Clique pra escolher o arquivo'}
+            </span>
+            {totalRows > 0 && <span className="mt-1 text-xs text-slate-400">{totalRows} linha(s) encontrada(s)</span>}
+          </label>
+        </Field>
+        {header.length > 0 && (
+          <Field label="Qual coluna tem o telefone?" required>
+            <Select value={phoneColumn} onChange={setPhoneColumn} options={header} />
+          </Field>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="DDI padrão" hint="Só p/ números sem DDI.">
+            <Text value={ddi} onChange={setDdi} placeholder="55" />
+          </Field>
+          <Field label="DDD padrão" hint="Só p/ números sem DDD.">
+            <Text value={ddd} onChange={setDdd} placeholder="11" />
+          </Field>
+        </div>
+      </div>
+      <div className="mt-5 flex justify-end gap-2">
+        <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600">
+          Cancelar
+        </button>
+        <button
+          type="button"
+          disabled={importing || !fileDataUrl}
+          onClick={submit}
+          className="rounded-lg bg-[#2F5BFF] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2348d8] disabled:opacity-60"
+        >
+          {importing ? 'Importando…' : 'Importar'}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Nova campanha (wizard) ──────────────────────────────────────────────────
 
-type WizardStep = 'planilha' | 'telefone' | 'template' | 'revisao'
+type WizardStep = 'contatos' | 'template' | 'revisao'
 
 function NewCampaignWizard({
   token,
@@ -320,18 +726,17 @@ function NewCampaignWizard({
   onCancel: () => void
   onCreated: () => void
 }) {
-  const [step, setStep] = React.useState<WizardStep>('planilha')
+  const [step, setStep] = React.useState<WizardStep>('contatos')
   const [name, setName] = React.useState('')
-  const [fileDataUrl, setFileDataUrl] = React.useState<string | null>(null)
-  const [fileName, setFileName] = React.useState('')
-  const [header, setHeader] = React.useState<string[]>([])
-  const [sample, setSample] = React.useState<Record<string, string>[]>([])
-  const [totalRows, setTotalRows] = React.useState(0)
-  const [loadingPreview, setLoadingPreview] = React.useState(false)
 
-  const [phoneColumn, setPhoneColumn] = React.useState('')
-  const [ddi, setDdi] = React.useState('55')
-  const [ddd, setDdd] = React.useState('')
+  const [totalContacts, setTotalContacts] = React.useState(0)
+  const [columns, setColumns] = React.useState<string[]>([])
+  const [sampleContact, setSampleContact] = React.useState<MassCampaignContact | null>(null)
+  const [loadingContacts, setLoadingContacts] = React.useState(true)
+  const [selectMode, setSelectMode] = React.useState<'all' | 'manual'>('all')
+  const [manualContacts, setManualContacts] = React.useState<MassCampaignContact[]>([])
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  const [contactsQuery, setContactsQuery] = React.useState('')
 
   const [templates, setTemplates] = React.useState<ApprovedTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
@@ -342,26 +747,35 @@ function NewCampaignWizard({
   const [submitting, setSubmitting] = React.useState(false)
 
   const selectedTemplate = templates.find((t) => t.name === templateName) ?? null
+  const selectedCount = selectMode === 'all' ? totalContacts : selectedIds.size
 
-  const onPickFile = async (file: File) => {
-    setFileName(file.name)
-    setLoadingPreview(true)
-    try {
-      const dataUrl = await fileToDataUrl(file)
-      setFileDataUrl(dataUrl)
-      const res = await publicMassCampaignApi.importPreview(token, dataUrl)
-      setHeader(res.header)
-      setSample(res.sample)
-      setTotalRows(res.totalRows)
-      // Palpite simples de qual coluna é o telefone.
-      const guess = res.header.find((h) => /tel|celular|whats|fone|numero|número/i.test(h))
-      if (guess) setPhoneColumn(guess)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Falha ao ler o arquivo')
-      setFileDataUrl(null)
-    } finally {
-      setLoadingPreview(false)
-    }
+  React.useEffect(() => {
+    publicMassContactsApi
+      .list(token, 0)
+      .then((d) => {
+        setTotalContacts(d.total)
+        setColumns(d.columns)
+        setSampleContact(d.contacts[0] ?? null)
+      })
+      .catch(() => {})
+      .finally(() => setLoadingContacts(false))
+  }, [token])
+
+  React.useEffect(() => {
+    if (selectMode !== 'manual') return
+    publicMassContactsApi
+      .list(token, 0, contactsQuery || undefined)
+      .then((d) => setManualContacts(d.contacts))
+      .catch(() => {})
+  }, [token, selectMode, contactsQuery])
+
+  const toggleContact = (id: string) => {
+    setSelectedIds((cur) => {
+      const next = new Set(cur)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   const goToTemplateStep = async () => {
@@ -384,9 +798,8 @@ function NewCampaignWizard({
   }
 
   const submit = async () => {
-    if (!fileDataUrl) return toast.error('Volte e importe a planilha.')
     if (!name.trim()) return toast.error('Dê um nome pra campanha.')
-    if (!phoneColumn) return toast.error('Escolha a coluna de telefone.')
+    if (selectedCount === 0) return toast.error('Selecione ao menos um contato.')
     if (!templateName) return toast.error('Escolha um template.')
     const missing = mapping.find((m) => (m.source === 'column' && !m.column) || (m.source === 'fixed' && !m.value?.trim()))
     if (missing) return toast.error(`Preencha a variável {{${missing.position}}}.`)
@@ -398,13 +811,10 @@ function NewCampaignWizard({
         templateName,
         templateLanguage: selectedTemplate?.language ?? 'pt_BR',
         delaySeconds,
-        data: fileDataUrl,
-        phoneColumn,
-        ddi,
-        ddd,
+        contactIds: selectMode === 'manual' ? Array.from(selectedIds) : undefined,
         mapping,
       })
-      toast.success(`Campanha criada — ${res.total} contatos prontos${res.skipped ? ` (${res.skipped} pulados sem telefone válido)` : ''}.`)
+      toast.success(`Campanha criada — ${res.total} contatos prontos.`)
       onCreated()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao criar a campanha')
@@ -421,61 +831,64 @@ function NewCampaignWizard({
       <h1 className="mb-1 text-2xl font-bold text-slate-800">Nova campanha</h1>
       <Steps current={step} />
 
-      {step === 'planilha' && (
+      {step === 'contatos' && (
         <div className="mt-6 space-y-5">
           <Field label="Nome da campanha" required>
             <Text value={name} onChange={setName} placeholder="Ex.: Aviso de reajuste — Março" />
           </Field>
-          <Field label="Planilha de contatos" required hint="CSV, XLS ou XLSX — máximo 8MB.">
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 px-4 py-10 text-center hover:border-[#2F5BFF]">
-              <input
-                type="file"
-                accept=".csv,.xls,.xlsx"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && onPickFile(e.target.files[0])}
-              />
-              <span className="text-sm font-medium text-slate-600">
-                {loadingPreview ? 'Lendo arquivo…' : fileName || 'Clique pra escolher o arquivo'}
-              </span>
-              {totalRows > 0 && <span className="mt-1 text-xs text-slate-400">{totalRows} linha(s) encontrada(s)</span>}
-            </label>
-          </Field>
-          {header.length > 0 && (
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500">
-                  <tr>{header.map((h) => <th key={h} className="whitespace-nowrap px-3 py-2">{h}</th>)}</tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {sample.map((row, i) => (
-                    <tr key={i}>{header.map((h) => <td key={h} className="whitespace-nowrap px-3 py-2 text-slate-600">{row[h]}</td>)}</tr>
-                  ))}
-                </tbody>
-              </table>
+
+          {loadingContacts ? (
+            <p className="text-sm text-slate-500">Carregando contatos…</p>
+          ) : totalContacts === 0 ? (
+            <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-700">
+              Você ainda não tem contatos salvos. Volte pra lista e importe uma planilha (ou adicione contatos) na aba{' '}
+              <strong>Contatos</strong> antes de criar uma campanha.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-slate-700">Quem vai receber?</p>
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-3 text-sm text-slate-700 hover:border-[#2F5BFF]">
+                <input type="radio" checked={selectMode === 'all'} onChange={() => setSelectMode('all')} className="mt-0.5" />
+                <span>
+                  <strong>Todos os contatos</strong> — {totalContacts} contato(s) salvos
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-3 text-sm text-slate-700 hover:border-[#2F5BFF]">
+                <input type="radio" checked={selectMode === 'manual'} onChange={() => setSelectMode('manual')} className="mt-0.5" />
+                <span>
+                  <strong>Selecionar manualmente</strong> — escolha quem recebe
+                </span>
+              </label>
+
+              {selectMode === 'manual' && (
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <input
+                    value={contactsQuery}
+                    onChange={(e) => setContactsQuery(e.target.value)}
+                    placeholder="Buscar por telefone ou dado…"
+                    className="mb-2 h-9 w-full rounded-md border border-slate-300 px-2.5 text-xs outline-none focus:border-[#2F5BFF]"
+                  />
+                  <div className="max-h-56 space-y-1 overflow-y-auto">
+                    {manualContacts.map((c) => (
+                      <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-slate-50">
+                        <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleContact(c.id)} />
+                        <span className="font-medium text-slate-700">{c.phone}</span>
+                        <span className="text-slate-400">{Object.values(c.row_data)[0] ?? ''}</span>
+                      </label>
+                    ))}
+                    {manualContacts.length === 0 && <p className="px-1.5 py-1 text-xs text-slate-400">Nenhum contato encontrado.</p>}
+                    {manualContacts.length === 200 && (
+                      <p className="px-1.5 py-1 text-xs text-slate-400">Mostrando os primeiros 200 — refine a busca pra achar outros.</p>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">{selectedIds.size} selecionado(s)</p>
+                </div>
+              )}
             </div>
           )}
-          <div className="flex justify-end">
-            <NextButton disabled={!fileDataUrl || !name.trim()} onClick={() => setStep('telefone')} />
-          </div>
-        </div>
-      )}
 
-      {step === 'telefone' && (
-        <div className="mt-6 space-y-5">
-          <Field label="Qual coluna tem o telefone?" required>
-            <Select value={phoneColumn} onChange={setPhoneColumn} options={header} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Código do país padrão" hint="Aplicado só a números sem DDI (ex.: 55).">
-              <Text value={ddi} onChange={setDdi} placeholder="55" />
-            </Field>
-            <Field label="Código de área padrão" hint="Aplicado só a números sem DDD (ex.: 11).">
-              <Text value={ddd} onChange={setDdd} placeholder="11" />
-            </Field>
-          </div>
-          <div className="flex justify-between">
-            <BackButton onClick={() => setStep('planilha')} />
-            <NextButton disabled={!phoneColumn} onClick={goToTemplateStep} />
+          <div className="flex justify-end">
+            <NextButton disabled={!name.trim() || selectedCount === 0} onClick={goToTemplateStep} />
           </div>
         </div>
       )}
@@ -547,7 +960,8 @@ function NewCampaignWizard({
                           className="h-9 flex-1 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
                         >
                           <option value="">Escolha a coluna…</option>
-                          {header.map((h) => <option key={h} value={h}>{h}</option>)}
+                          <option value={PHONE_MAPPING_KEY}>Telefone do contato</option>
+                          {columns.map((h) => <option key={h} value={h}>{h}</option>)}
                         </select>
                       ) : (
                         <input
@@ -561,12 +975,12 @@ function NewCampaignWizard({
                   </div>
                 ))}
               </div>
-              <TemplatePreview template={selectedTemplate} mapping={mapping} sampleRow={sample[0]} />
+              <TemplatePreview template={selectedTemplate} mapping={mapping} sampleContact={sampleContact} />
             </div>
           )}
 
           <div className="flex justify-between">
-            <BackButton onClick={() => setStep('telefone')} />
+            <BackButton onClick={() => setStep('contatos')} />
             <NextButton disabled={!templateName} onClick={() => setStep('revisao')} />
           </div>
         </div>
@@ -574,9 +988,9 @@ function NewCampaignWizard({
 
       {step === 'revisao' && (
         <div className="mt-6 space-y-4">
-          <div className="rounded-lg border border-slate-200 p-4 text-sm">
+          <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-700">
             <p><strong>Campanha:</strong> {name}</p>
-            <p><strong>Contatos na planilha:</strong> {totalRows}</p>
+            <p><strong>Destinatários:</strong> {selectedCount} contato(s)</p>
             <p><strong>Template:</strong> {templateName}</p>
             <p><strong>Intervalo entre mensagens:</strong> {delaySeconds}s</p>
           </div>
@@ -603,21 +1017,21 @@ function NewCampaignWizard({
 function TemplatePreview({
   template,
   mapping,
-  sampleRow,
+  sampleContact,
 }: {
   template: ApprovedTemplate
   mapping: VariableMappingEntry[]
-  sampleRow?: Record<string, string>
+  sampleContact?: MassCampaignContact | null
 }) {
   const rendered = React.useMemo(() => {
     let text = template.bodyText
     for (const m of mapping) {
-      const value =
-        m.source === 'fixed' ? m.value || `valor fixo` : (sampleRow && m.column ? sampleRow[m.column] : '') || `[exemplo]`
+      const columnValue = m.column === PHONE_MAPPING_KEY ? sampleContact?.phone : sampleContact?.row_data[m.column ?? '']
+      const value = m.source === 'fixed' ? m.value || `valor fixo` : columnValue || `[exemplo]`
       text = text.replace(new RegExp(`\\{\\{\\s*${m.position}\\s*\\}\\}`, 'g'), value)
     }
     return text
-  }, [template, mapping, sampleRow])
+  }, [template, mapping, sampleContact])
 
   return (
     <div>
@@ -642,8 +1056,7 @@ function TemplatePreview({
 
 function Steps({ current }: { current: WizardStep }) {
   const items: { key: WizardStep; label: string }[] = [
-    { key: 'planilha', label: 'Planilha' },
-    { key: 'telefone', label: 'Telefone' },
+    { key: 'contatos', label: 'Contatos' },
     { key: 'template', label: 'Template' },
     { key: 'revisao', label: 'Revisão' },
   ]

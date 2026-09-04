@@ -1182,6 +1182,28 @@ END $$`);
     END IF;
   END $$`);
 
+  // Lista de contatos persistente por cliente — desacoplada de campanha (antes cada campanha
+  // exigia reimportar a planilha do zero). Reimportar uma planilha faz upsert por (client_id,
+  // phone): quem já existe tem o row_data mesclado (colunas novas atualizam, colunas antigas que
+  // não vieram nessa planilha continuam valendo); quem não existe é criado.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mass_campaign_contacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    phone TEXT NOT NULL,
+    row_data JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (client_id, phone)
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS mass_campaign_contacts_client_idx ON mass_campaign_contacts(client_id)`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_mass_campaign_contacts ON mass_campaign_contacts;
+      CREATE TRIGGER notify_mass_campaign_contacts AFTER INSERT OR UPDATE OR DELETE ON mass_campaign_contacts
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

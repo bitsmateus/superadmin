@@ -1117,6 +1117,20 @@ DROP TRIGGER IF EXISTS notify_mass_campaign_recipients ON mass_campaign_recipien
 CREATE TRIGGER notify_mass_campaign_recipients AFTER INSERT OR UPDATE OR DELETE ON mass_campaign_recipients
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+CREATE TABLE IF NOT EXISTS mass_campaign_contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  phone TEXT NOT NULL,
+  row_data JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (client_id, phone)
+);
+CREATE INDEX IF NOT EXISTS mass_campaign_contacts_client_idx ON mass_campaign_contacts(client_id);
+DROP TRIGGER IF EXISTS notify_mass_campaign_contacts ON mass_campaign_contacts;
+CREATE TRIGGER notify_mass_campaign_contacts AFTER INSERT OR UPDATE OR DELETE ON mass_campaign_contacts
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:
 -- Crie o primeiro usuário admin com:

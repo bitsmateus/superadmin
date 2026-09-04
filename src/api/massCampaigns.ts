@@ -1,6 +1,7 @@
 import { api } from '@/services/api'
 import type {
   ApprovedTemplate,
+  MassCampaignContact,
   MassCampaignRecipient,
   MassCampaignSummary,
   VariableMappingEntry,
@@ -29,13 +30,14 @@ export const publicMassCampaignApi = {
       templateName: string
       templateLanguage: string
       delaySeconds: number
-      data: string
-      phoneColumn: string
-      ddi?: string
-      ddd?: string
+      contactIds?: string[]
       mapping: VariableMappingEntry[]
     },
-  ) => api.post<{ id: string; total: number; skipped: number }>(`/api/public/laundry/${token}`, body),
+  ) => api.post<{ id: string; total: number }>(`/api/public/laundry/${token}`, body),
+  duplicate: (token: string, campaignId: string) =>
+    api.post<{ id: string; total: number }>(`/api/public/laundry/${token}/${campaignId}/duplicate`),
+  remove: (token: string, campaignId: string) =>
+    api.delete(`/api/public/laundry/${token}/${campaignId}`),
   start: (token: string, campaignId: string) =>
     api.post(`/api/public/laundry/${token}/${campaignId}/start`),
   pause: (token: string, campaignId: string) =>
@@ -48,4 +50,24 @@ export const publicMassCampaignApi = {
     }>(
       `/api/public/laundry/${token}/${campaignId}?offset=${offset}${status ? `&status=${status}` : ''}`,
     ),
+}
+
+/** Lista de contatos persistente do cliente — desacoplada de campanha, reaproveitada na criação
+ *  de quantas campanhas quiser. */
+export const publicMassContactsApi = {
+  list: (token: string, offset = 0, q?: string) =>
+    api.get<{ total: number; columns: string[]; contacts: MassCampaignContact[] }>(
+      `/api/public/laundry/${token}/contacts?offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ''}`,
+    ),
+  import: (token: string, body: { data: string; phoneColumn: string; ddi?: string; ddd?: string }) =>
+    api.post<{ created: number; updated: number; skipped: number }>(
+      `/api/public/laundry/${token}/contacts/import`,
+      body,
+    ),
+  add: (token: string, body: { phone: string; fields: Record<string, string> }) =>
+    api.post<MassCampaignContact>(`/api/public/laundry/${token}/contacts`, body),
+  update: (token: string, contactId: string, body: { phone?: string; fields?: Record<string, string> }) =>
+    api.patch<MassCampaignContact>(`/api/public/laundry/${token}/contacts/${contactId}`, body),
+  remove: (token: string, contactId: string) =>
+    api.delete(`/api/public/laundry/${token}/contacts/${contactId}`),
 }

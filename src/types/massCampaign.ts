@@ -43,3 +43,11 @@ export interface MassCampaignRecipient {
   scheduled_for: string | null
   sent_at: string | null
 }
+
+export interface MassCampaignContact {
+  id: string
+  phone: string
+  row_data: Record<string, string>
+  created_at: string
+  updated_at: string
+}

@@ -32,7 +32,7 @@ const TEMAS: Tema[] = [
   { id: 'laranja', nome: 'Laranja', faixaBg: '#E7110D', faixaTexto: '#FFD200', borda: '#E7110D', preco: '#E7110D', destaque: '#FFD200' },
   // Cor amostrada direto do arquivo da logo (public/assets/mercadonunes-logo.jpg) — o laranja do
   // selo/badge, diferente do "Laranja" acima (que é mais avermelhado).
-  { id: 'laranja-logo', nome: 'Laranja da logo', faixaBg: '#F6902F', faixaTexto: '#FFFFFF', borda: '#F6902F', preco: '#E7110D', destaque: '#FFD200' },
+  { id: 'laranja-logo', nome: 'Laranja da logo', faixaBg: '#F6902F', faixaTexto: '#FFFFFF', borda: '#F6902F', preco: '#F6902F', destaque: '#F6902F' },
   { id: 'amarelo', nome: 'Amarelo', faixaBg: '#FFD200', faixaTexto: '#ED1C24', borda: '#FFD200', preco: '#ED1C24', destaque: '#ED1C24' },
   { id: 'azul', nome: 'Azul', faixaBg: '#0B5FBF', faixaTexto: '#FFD200', borda: '#0B5FBF', preco: '#0B5FBF', destaque: '#FFD200' },
   { id: 'verde', nome: 'Verde', faixaBg: '#1B8A3A', faixaTexto: '#FFD200', borda: '#1B8A3A', preco: '#1B8A3A', destaque: '#FFD200' },

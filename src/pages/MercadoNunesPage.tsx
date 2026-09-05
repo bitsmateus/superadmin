@@ -324,10 +324,11 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
         </div>
 
         {/* Preço gigante — a "bolinha" amarela é um fundo orgânico atrás dos números, imitando o
-            círculo feito à mão pra chamar atenção pro preço. O marginTop dá uma folga fixa: com
-            ajustePreco alto, o line-height apertado (0.86) dos números pode "vazar" visualmente
-            pra fora da própria caixa — essa folga evita que esse vazamento suba em cima do
-            "a partir de X un" da linha de cima. */}
+            círculo feito à mão pra chamar atenção pro preço. O line-height apertado (0.86) dos
+            números faz o texto "vazar" visualmente pra fora da própria caixa (isso é esperado —
+            é o que deixa a vírgula/centavos coladinhos), então a folga (margin) acima e abaixo
+            precisa ser generosa mesmo no tamanho padrão, não só nos ajustes grandes — senão vaza
+            em cima do "a partir de X un" da linha de cima. */}
         <div
           style={{
             flex: 1,
@@ -335,7 +336,8 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
             alignItems: 'center',
             justifyContent: 'center',
             minHeight: 0,
-            marginTop: '28px',
+            marginTop: '56px',
+            marginBottom: '16px',
           }}
         >
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -344,7 +346,7 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
                 aria-hidden
                 style={{
                   position: 'absolute',
-                  inset: '-8% -10%',
+                  inset: '-4% -14%',
                   background: '#FFD200',
                   borderRadius: '48% 52% 45% 55% / 55% 45% 58% 42%',
                   transform: 'rotate(-3deg)',
@@ -370,15 +372,15 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
           </div>
         </div>
 
-        {/* Unidade (ex.: CADA / KG / UN) */}
+        {/* Unidade (ex.: CADA / KG / UN) — embaixo do preço, alinhada à direita. */}
         {dados.unidade.trim() && (
           <div
             style={{
-              textAlign: 'center',
+              textAlign: 'right',
               color: '#000',
-              fontSize: '48px',
+              fontSize: '40px',
               textTransform: 'uppercase',
-              marginTop: '-10px',
+              marginTop: '-4px',
             }}
           >
             {dados.unidade}

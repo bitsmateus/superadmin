@@ -53,6 +53,7 @@ const FONTES = [
 interface Cartaz {
   id: string
   produto: string
+  subtitulo: string // opcional — vazio = mostra só o título, igual antes
   peso: string
   preco: string
   precoDe: string
@@ -73,6 +74,7 @@ interface Cartaz {
   // Afinação manual de tamanho (-3 a +3) de cada peça do cartaz — o nome já encolhe sozinho
   // conforme o texto cresce, mas dá pra ajustar tudo na mão também.
   ajusteNome: number
+  ajusteSubtitulo: number
   ajusteFaixa: number
   ajustePreco: number
   ajustePeso: number
@@ -80,7 +82,8 @@ interface Cartaz {
 
 const CARTAZ_PADRAO: Cartaz = {
   id: '',
-  produto: 'GRANOLA SHAMBALA TRADICIONAL',
+  produto: 'GRANOLA SHAMBALA',
+  subtitulo: 'TRADICIONAL',
   peso: '800 G',
   preco: '22,99',
   precoDe: '27,80',
@@ -99,6 +102,7 @@ const CARTAZ_PADRAO: Cartaz = {
   temaId: 'laranja',
   fonte: FONTES[0].id,
   ajusteNome: 0,
+  ajusteSubtitulo: 0,
   ajusteFaixa: 0,
   ajustePreco: 0,
   ajustePeso: 0,
@@ -140,17 +144,18 @@ function partesDoPreco(preco: string): { inteiro: string; centavos: string } {
   return { inteiro: inteiro || '0', centavos: centavos.padEnd(2, '0').slice(0, 2) }
 }
 
-/** Tamanho do nome do produto: encolhe conforme o texto cresce, pra nunca estourar a folha. */
-function tamanhoNome(texto: string, ajuste: number): number {
+/** Tamanho de um texto (título ou subtítulo): encolhe conforme o texto cresce, pra nunca estourar
+ *  a folha, e ainda aceita o ajuste manual (-3 a +3) do slider por cima. */
+function tamanhoTexto(texto: string, ajuste: number, baseMax: number): number {
   const linhas = texto.split('\n')
   const maiorLinha = Math.max(1, ...linhas.map((l) => l.trim().length))
   const totalLinhas = Math.max(1, linhas.length, Math.ceil(texto.length / Math.max(1, maiorLinha)))
-  let base = 108
-  if (maiorLinha > 10) base = 96
-  if (maiorLinha > 13) base = 84
-  if (maiorLinha > 16) base = 72
-  if (maiorLinha > 20) base = 60
-  if (maiorLinha > 26) base = 50
+  let base = baseMax
+  if (maiorLinha > 10) base = baseMax * (96 / 108)
+  if (maiorLinha > 13) base = baseMax * (84 / 108)
+  if (maiorLinha > 16) base = baseMax * (72 / 108)
+  if (maiorLinha > 20) base = baseMax * (60 / 108)
+  if (maiorLinha > 26) base = baseMax * (50 / 108)
   if (totalLinhas >= 4) base *= 0.82
   return Math.round(base * (1 + ajuste * 0.08))
 }
@@ -166,7 +171,8 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
   const tema = TEMAS.find((t) => t.id === dados.temaId) ?? TEMAS[0]
   const { inteiro, centavos } = partesDoPreco(dados.preco)
   const sombra = (px: number) => `${px}px ${px}px 0 #000`
-  const fonteNome = tamanhoNome(dados.produto, dados.ajusteNome)
+  const fonteNome = tamanhoTexto(dados.produto, dados.ajusteNome, 108)
+  const fonteSubtitulo = tamanhoTexto(dados.subtitulo, dados.ajusteSubtitulo, 90)
   const fonteFaixa = escalar(dados.textoFaixa.length > 8 ? 78 : 116, dados.ajusteFaixa)
   const fontePeso = escalar(64, dados.ajustePeso)
   const fontePrecoInteiro = escalar(250, dados.ajustePreco)
@@ -228,7 +234,7 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
           minHeight: 0,
         }}
       >
-        {/* Nome do produto */}
+        {/* Título do produto */}
         <div
           style={{
             fontSize: `${fonteNome}px`,
@@ -244,6 +250,25 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
         >
           {dados.produto}
         </div>
+
+        {/* Subtítulo (opcional) */}
+        {dados.subtitulo.trim() && (
+          <div
+            style={{
+              fontSize: `${fonteSubtitulo}px`,
+              lineHeight: 0.94,
+              color: '#000',
+              textTransform: 'uppercase',
+              textAlign: 'center',
+              textShadow: '3px 3px 0 rgba(0,0,0,0.25)',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              marginTop: '4px',
+            }}
+          >
+            {dados.subtitulo}
+          </div>
+        )}
 
         {/* Linha de/por + peso */}
         <div
@@ -299,7 +324,10 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
         </div>
 
         {/* Preço gigante — a "bolinha" amarela é um fundo orgânico atrás dos números, imitando o
-            círculo feito à mão pra chamar atenção pro preço. */}
+            círculo feito à mão pra chamar atenção pro preço. O marginTop dá uma folga fixa: com
+            ajustePreco alto, o line-height apertado (0.86) dos números pode "vazar" visualmente
+            pra fora da própria caixa — essa folga evita que esse vazamento suba em cima do
+            "a partir de X un" da linha de cima. */}
         <div
           style={{
             flex: 1,
@@ -307,6 +335,7 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
             alignItems: 'center',
             justifyContent: 'center',
             minHeight: 0,
+            marginTop: '28px',
           }}
         >
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -341,28 +370,6 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
           </div>
         </div>
 
-        {/* Avulso / caixa / valor por litro */}
-        {dados.mostrarPrecoAvulsoCaixa && (
-          <div
-            style={{
-              textAlign: 'right',
-              color: '#000',
-              fontSize: '28px',
-              lineHeight: 1.35,
-              textTransform: 'uppercase',
-              marginTop: '-6px',
-            }}
-          >
-            {dados.precoAvulso.trim() && <div>{dados.precoAvulso.trim()} avulsa</div>}
-            {dados.caixaPreco.trim() && (
-              <div>
-                Cx{dados.caixaQtd.trim() || '12'} = {dados.caixaPreco.trim()}
-              </div>
-            )}
-            {dados.precoLitro.trim() && <div>R$ {dados.precoLitro.trim()} por litro</div>}
-          </div>
-        )}
-
         {/* Unidade (ex.: CADA / KG / UN) */}
         {dados.unidade.trim() && (
           <div
@@ -375,6 +382,29 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
             }}
           >
             {dados.unidade}
+          </div>
+        )}
+
+        {/* Avulso / caixa / valor por litro — mais pra baixo, perto da logo, pra não disputar
+            espaço com o preço grande logo acima. */}
+        {dados.mostrarPrecoAvulsoCaixa && (
+          <div
+            style={{
+              textAlign: 'right',
+              color: '#000',
+              fontSize: '28px',
+              lineHeight: 1.35,
+              textTransform: 'uppercase',
+              marginTop: '18px',
+            }}
+          >
+            {dados.precoAvulso.trim() && <div>{dados.precoAvulso.trim()} avulsa</div>}
+            {dados.caixaPreco.trim() && (
+              <div>
+                Cx{dados.caixaQtd.trim() || '12'} = {dados.caixaPreco.trim()}
+              </div>
+            )}
+            {dados.precoLitro.trim() && <div>R$ {dados.precoLitro.trim()} por litro</div>}
           </div>
         )}
 
@@ -412,6 +442,7 @@ const CAMPOS_LAYOUT = [
   'mostrarPrecoAvulsoCaixa',
   'mostrarLogo',
   'ajusteNome',
+  'ajusteSubtitulo',
   'ajusteFaixa',
   'ajustePreco',
   'ajustePeso',
@@ -580,11 +611,19 @@ export function MercadoNunesPage() {
           </Card>
 
           <Card titulo="Produto">
-            <Campo label="Nome do produto" dica="Enter quebra linha. Já sai em maiúsculas.">
+            <Campo label="Título" dica="Enter quebra linha. Já sai em maiúsculas.">
               <textarea
                 value={cartaz.produto}
                 onChange={(e) => set('produto', e.target.value)}
-                rows={3}
+                rows={2}
+                style={{ ...inputEstilo, resize: 'vertical', lineHeight: 1.3 }}
+              />
+            </Campo>
+            <Campo label="Subtítulo (opcional)" dica="Uma segunda linha, com tamanho próprio — ex.: a marca embaixo do tipo do produto.">
+              <textarea
+                value={cartaz.subtitulo}
+                onChange={(e) => set('subtitulo', e.target.value)}
+                rows={2}
                 style={{ ...inputEstilo, resize: 'vertical', lineHeight: 1.3 }}
               />
             </Campo>
@@ -602,7 +641,8 @@ export function MercadoNunesPage() {
           </Card>
 
           <Card titulo="Tamanho das escritas" dica="Ajusta cada peça do cartaz na mão, além do que já encolhe sozinho.">
-            <SliderAjuste label="Nome do produto" valor={cartaz.ajusteNome} onChange={(v) => set('ajusteNome', v)} />
+            <SliderAjuste label="Título" valor={cartaz.ajusteNome} onChange={(v) => set('ajusteNome', v)} />
+            <SliderAjuste label="Subtítulo" valor={cartaz.ajusteSubtitulo} onChange={(v) => set('ajusteSubtitulo', v)} />
             <SliderAjuste label="Faixa (topo)" valor={cartaz.ajusteFaixa} onChange={(v) => set('ajusteFaixa', v)} />
             <SliderAjuste label="Peso / tamanho" valor={cartaz.ajustePeso} onChange={(v) => set('ajustePeso', v)} />
             <SliderAjuste label="Preço" valor={cartaz.ajustePreco} onChange={(v) => set('ajustePreco', v)} />

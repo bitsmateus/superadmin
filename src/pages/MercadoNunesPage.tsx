@@ -476,7 +476,7 @@ export function MercadoNunesPage() {
   const carregarLayouts = React.useCallback(() => {
     mercadoNunesLayoutsApi
       .list()
-      .then((d) => setLayouts(d.layouts))
+      .then((d) => setLayouts(Array.isArray(d?.layouts) ? d.layouts : []))
       .catch(() => toast.error('Falha ao carregar os layouts salvos.'))
       .finally(() => setCarregandoLayouts(false))
   }, [])
@@ -568,13 +568,11 @@ export function MercadoNunesPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#F4F1EC', color: '#2A2622' }} className="mercadonunes">
       <style>{estiloFontesLocais}</style>
+      <style>{estiloResponsivo}</style>
       <style>{estiloImpressao}</style>
 
       {/* Cabeçalho com a logo */}
-      <header
-        className="tela"
-        style={{ background: '#fff', borderBottom: '3px solid #C1503F', padding: '14px 20px' }}
-      >
+      <header className="tela mn-header" style={{ background: '#fff', borderBottom: '3px solid #C1503F' }}>
         <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 14 }}>
           <img
             src={LOGO_SRC}
@@ -593,22 +591,11 @@ export function MercadoNunesPage() {
         </div>
       </header>
 
-      <main
-        className="tela"
-        style={{
-          maxWidth: 1180,
-          margin: '0 auto',
-          padding: '20px',
-          display: 'grid',
-          gap: 20,
-          gridTemplateColumns: 'minmax(300px, 400px) 1fr',
-          alignItems: 'start',
-        }}
-      >
+      <main className="tela mn-main" style={{ maxWidth: 1180, margin: '0 auto', alignItems: 'start' }}>
         {/* ── Coluna de edição ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Card titulo="Modelos prontos">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div className="mn-2col" style={{ gap: 8 }}>
               {MODELOS.map((m) => (
                 <button
                   key={m.nome}
@@ -647,7 +634,7 @@ export function MercadoNunesPage() {
                 style={{ ...inputEstilo, resize: 'vertical', lineHeight: 1.3 }}
               />
             </Campo>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className="mn-2col">
               <Campo label="Peso / tamanho">
                 <input value={cartaz.peso} onChange={(e) => set('peso', e.target.value)} placeholder="800 G" style={inputEstilo} />
               </Campo>
@@ -669,7 +656,7 @@ export function MercadoNunesPage() {
           </Card>
 
           <Card titulo="Preço">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className="mn-2col">
               <Campo label="Preço (por)">
                 <input value={cartaz.preco} onChange={(e) => set('preco', e.target.value)} placeholder="22,99" style={inputEstilo} />
               </Campo>
@@ -710,7 +697,7 @@ export function MercadoNunesPage() {
                 style={{ ...inputEstilo, opacity: cartaz.mostrarPrecoAvulsoCaixa ? 1 : 0.5 }}
               />
             </Campo>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className="mn-2col">
               <Campo label="Unidades na caixa">
                 <input
                   value={cartaz.caixaQtd}
@@ -761,8 +748,9 @@ export function MercadoNunesPage() {
                     title={t.nome}
                     onClick={() => set('temaId', t.id)}
                     style={{
-                      width: 38,
-                      height: 38,
+                      width: 44,
+                      height: 44,
+                      flexShrink: 0,
                       borderRadius: 9,
                       cursor: 'pointer',
                       background: t.faixaBg,
@@ -816,11 +804,12 @@ export function MercadoNunesPage() {
                         R$ {c.preco} {c.peso ? `· ${c.peso}` : ''}
                       </div>
                     </div>
-                    <button type="button" onClick={() => setCartaz({ ...c, id: 'atual' })} style={botaoMini}>
+                    <button type="button" className="mn-botao-mini" onClick={() => setCartaz({ ...c, id: 'atual' })} style={botaoMini}>
                       Editar
                     </button>
                     <button
                       type="button"
+                      className="mn-botao-mini"
                       onClick={() => setFila((f) => f.filter((x) => x.id !== c.id))}
                       style={{ ...botaoMini, color: '#C0392B', borderColor: '#F0C9C4' }}
                     >
@@ -841,8 +830,9 @@ export function MercadoNunesPage() {
           )}
         </div>
 
-        {/* ── Prévia (fixa na tela enquanto rola a coluna de edição, que é bem mais alta) ── */}
-        <div style={{ position: 'sticky', top: 20 }}>
+        {/* ── Prévia (fixa na tela enquanto rola a coluna de edição, que é bem mais alta; no celular
+            vira uma coluna só e a prévia sobe pra cima da lista de campos, sem ficar fixa) ── */}
+        <div className="mn-preview-col">
           <p style={{ fontSize: 12, color: '#7A716A', marginBottom: 8 }}>
             Prévia — folha A4 (210 × 297 mm)
           </p>
@@ -889,11 +879,12 @@ export function MercadoNunesPage() {
                       <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#2A2622', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {l.nome}
                       </span>
-                      <button type="button" onClick={() => setCartaz((c) => ({ ...c, ...(l.patch as Partial<Cartaz>) }))} style={botaoMini}>
+                      <button type="button" className="mn-botao-mini" onClick={() => setCartaz((c) => ({ ...c, ...(l.patch as Partial<Cartaz>) }))} style={botaoMini}>
                         Aplicar
                       </button>
                       <button
                         type="button"
+                        className="mn-botao-mini"
                         onClick={() => removerLayout(l.id)}
                         style={{ ...botaoMini, color: '#C0392B', borderColor: '#F0C9C4' }}
                       >
@@ -930,6 +921,38 @@ const estiloFontesLocais = `
 @font-face { font-family: 'MastersRoughThin'; src: url('/fonts/masters-rough-thin.otf') format('opentype'); font-display: swap; }
 `
 
+// Layout responsivo — o resto da página usa style inline (não Tailwind), então as poucas coisas
+// que PRECISAM mudar por tamanho de tela (virar 1 coluna, tirar o "sticky", aumentar áreas de
+// toque) ficam concentradas aqui, fora do inline, pra dar pra usar media query de verdade.
+const estiloResponsivo = `
+.mercadonunes .mn-header { padding: 14px 20px; }
+.mercadonunes .mn-main { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 20px; padding: 20px; }
+.mercadonunes .mn-preview-col { position: sticky; top: 20px; }
+.mercadonunes .mn-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+@media (max-width: 900px) {
+  .mercadonunes .mn-header { padding: 12px 14px; }
+  .mercadonunes .mn-main { grid-template-columns: 1fr; gap: 14px; padding: 14px; }
+  .mercadonunes .mn-preview-col { position: static; order: -1; }
+  .mercadonunes .mn-preview-col > div:first-child,
+  .mercadonunes .mn-preview-col > div:last-child { margin-left: auto; margin-right: auto; }
+}
+
+@media (max-width: 420px) {
+  .mercadonunes .mn-2col { grid-template-columns: 1fr; }
+}
+
+/* Áreas de toque maiores no celular: caixa de seleção, controle deslizante e botõezinhos de
+   lista (Editar/Excluir/Aplicar) ficam pequenos demais pra tocar com o dedo no tamanho padrão. */
+@media (max-width: 900px) {
+  .mercadonunes input[type='checkbox'] { width: 20px; height: 20px; }
+  .mercadonunes input[type='range'] { height: 28px; }
+  .mercadonunes .mn-botao-mini { padding: 8px 12px !important; font-size: 13px !important; }
+}
+
+.mercadonunes input[type='checkbox'] { accent-color: #C1503F; }
+`
+
 const estiloImpressao = `
 .mercadonunes .area-impressao { display: none; }
 .mercadonunes * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -948,8 +971,10 @@ const inputEstilo: React.CSSProperties = {
   boxSizing: 'border-box',
   border: '1px solid #DED8D0',
   borderRadius: 8,
-  padding: '9px 10px',
-  fontSize: 14,
+  padding: '10px',
+  // 16px (não 14) porque o Safari do iPhone dá zoom automático ao focar um campo com fonte menor
+  // que essa — isso deixava o teclado abrindo com a tela toda "pulando" pra dentro.
+  fontSize: 16,
   color: '#2A2622',
   background: '#fff',
   outline: 'none',
@@ -1034,8 +1059,8 @@ function Campo({ label, dica, children }: { label: string; dica?: string; childr
 
 function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#2A2622', cursor: 'pointer' }}>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#2A2622', cursor: 'pointer', padding: '3px 0' }}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ flexShrink: 0 }} />
       {label}
     </label>
   )

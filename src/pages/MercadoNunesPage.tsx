@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { toast } from 'sonner'
+import { mercadoNunesLayoutsApi, type MercadoNunesLayout } from '@/api/mercadoNunes'
 
 /**
  * Gerador de cartazes de oferta A4 do Mercado Nunes (/mercadonunes) — página pública, sem login e
@@ -433,7 +435,6 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
 // ── Página ──────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'mercadonunes.fila.v1'
-const LAYOUTS_KEY = 'mercadonunes.layouts.v1'
 
 // Só os campos de ESTILO (não o conteúdo do produto) entram num layout salvo — assim um layout
 // pré-pronto serve pra qualquer produto, sem carregar nome/preço de quem salvou primeiro.
@@ -453,12 +454,6 @@ const CAMPOS_LAYOUT = [
   'ajustePeso',
 ] as const satisfies readonly (keyof Cartaz)[]
 
-interface LayoutSalvo {
-  id: string
-  nome: string
-  patch: Partial<Cartaz>
-}
-
 export function MercadoNunesPage() {
   const [cartaz, setCartaz] = React.useState<Cartaz>({ ...CARTAZ_PADRAO, id: 'atual' })
   const [fila, setFila] = React.useState<Cartaz[]>(() => {
@@ -469,17 +464,26 @@ export function MercadoNunesPage() {
       return []
     }
   })
-  const [layouts, setLayouts] = React.useState<LayoutSalvo[]>(() => {
-    try {
-      const cru = localStorage.getItem(LAYOUTS_KEY)
-      return cru ? (JSON.parse(cru) as LayoutSalvo[]) : []
-    } catch {
-      return []
-    }
-  })
+  // Layouts salvos no banco (server/routes/mercadoNunes.ts) — compartilhado entre todo mundo que
+  // usa a página, não fica só no navegador de quem salvou.
+  const [layouts, setLayouts] = React.useState<MercadoNunesLayout[]>([])
+  const [carregandoLayouts, setCarregandoLayouts] = React.useState(true)
   const [nomeNovoLayout, setNomeNovoLayout] = React.useState('')
+  const [salvandoLayout, setSalvandoLayout] = React.useState(false)
   const [paraImprimir, setParaImprimir] = React.useState<Cartaz[]>([])
   const [escala, setEscala] = React.useState(0.55)
+
+  const carregarLayouts = React.useCallback(() => {
+    mercadoNunesLayoutsApi
+      .list()
+      .then((d) => setLayouts(d.layouts))
+      .catch(() => toast.error('Falha ao carregar os layouts salvos.'))
+      .finally(() => setCarregandoLayouts(false))
+  }, [])
+
+  React.useEffect(() => {
+    carregarLayouts()
+  }, [carregarLayouts])
 
   // Fontes do Google só nesta página (não pesam o resto do app).
   React.useEffect(() => {
@@ -501,21 +505,32 @@ export function MercadoNunesPage() {
     }
   }, [fila])
 
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(LAYOUTS_KEY, JSON.stringify(layouts))
-    } catch {
-      /* modo anônimo / storage cheio — os layouts só não persistem */
-    }
-  }, [layouts])
-
-  const salvarLayoutAtual = () => {
+  const salvarLayoutAtual = async () => {
     const nome = nomeNovoLayout.trim()
     if (!nome) return
     const patch: Partial<Cartaz> = {}
     for (const campo of CAMPOS_LAYOUT) (patch as Record<string, unknown>)[campo] = cartaz[campo]
-    setLayouts((cur) => [...cur, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, nome, patch }])
-    setNomeNovoLayout('')
+    setSalvandoLayout(true)
+    try {
+      const criado = await mercadoNunesLayoutsApi.create(nome, patch)
+      setLayouts((cur) => [...cur, criado])
+      setNomeNovoLayout('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao salvar o layout')
+    } finally {
+      setSalvandoLayout(false)
+    }
+  }
+
+  const removerLayout = async (id: string) => {
+    const antes = layouts
+    setLayouts((cur) => cur.filter((x) => x.id !== id))
+    try {
+      await mercadoNunesLayoutsApi.remove(id)
+    } catch (err) {
+      setLayouts(antes)
+      toast.error(err instanceof Error ? err.message : 'Falha ao excluir o layout')
+    }
   }
 
   // Prévia sempre cabendo na coluna, em qualquer tela.
@@ -856,23 +871,30 @@ export function MercadoNunesPage() {
                   placeholder="Nome do layout"
                   style={{ ...inputEstilo, flex: 1 }}
                 />
-                <button type="button" onClick={salvarLayoutAtual} disabled={!nomeNovoLayout.trim()} style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: nomeNovoLayout.trim() ? 1 : 0.5 }}>
-                  Salvar atual
+                <button
+                  type="button"
+                  onClick={salvarLayoutAtual}
+                  disabled={!nomeNovoLayout.trim() || salvandoLayout}
+                  style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: nomeNovoLayout.trim() && !salvandoLayout ? 1 : 0.5 }}
+                >
+                  {salvandoLayout ? 'Salvando…' : 'Salvar atual'}
                 </button>
               </div>
-              {layouts.length > 0 && (
+              {carregandoLayouts ? (
+                <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Carregando layouts…</p>
+              ) : layouts.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
                   {layouts.map((l) => (
                     <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #EDE7DF', borderRadius: 8, padding: '6px 8px' }}>
                       <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#2A2622', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {l.nome}
                       </span>
-                      <button type="button" onClick={() => setCartaz((c) => ({ ...c, ...l.patch }))} style={botaoMini}>
+                      <button type="button" onClick={() => setCartaz((c) => ({ ...c, ...(l.patch as Partial<Cartaz>) }))} style={botaoMini}>
                         Aplicar
                       </button>
                       <button
                         type="button"
-                        onClick={() => setLayouts((cur) => cur.filter((x) => x.id !== l.id))}
+                        onClick={() => removerLayout(l.id)}
                         style={{ ...botaoMini, color: '#C0392B', borderColor: '#F0C9C4' }}
                       >
                         Excluir
@@ -880,8 +902,9 @@ export function MercadoNunesPage() {
                     </div>
                   ))}
                 </div>
+              ) : (
+                <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>
               )}
-              {layouts.length === 0 && <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>}
             </Card>
           </div>
         </div>

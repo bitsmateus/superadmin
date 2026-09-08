@@ -43,7 +43,6 @@ export function FinanceiroGestaoInternaPage() {
 
   const entriesInMonth = React.useMemo(() => entries.filter((e) => e.month === month), [entries, month])
   const bySdr = entriesInMonth.filter((e) => e.role === 'sdr')
-  const bySuporte = entriesInMonth.filter((e) => e.role === 'suporte')
 
   // Total do mês por pessoa — só essas 4, na ordem pedida (soma SDR + Suporte, tanto faz o papel).
   // Separado por Contrato porque só se paga comissão do que já está Assinado — Pendente é só um
@@ -107,7 +106,6 @@ export function FinanceiroGestaoInternaPage() {
         </div>
 
         <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} />
-        <EntriesTable title="Comissão Suporte" entries={bySuporte} onToggle={toggleStatus} types={types} />
 
         <div className="overflow-hidden rounded-2xl border border-line bg-card">
           <div className="border-b border-line px-4 py-3">

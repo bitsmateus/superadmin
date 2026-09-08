@@ -89,8 +89,11 @@ export async function payablesRoutes(app: FastifyInstance) {
       const {
         groupId, elemento, previstoCents, comissaoCents, realCents, status, data, boletoData, boletoFilename, notas,
       } = req.body;
-      if (!groupId || !elemento?.trim()) {
-        return reply.status(400).send({ message: 'groupId e elemento são obrigatórios' });
+      // "elemento" nasce em branco de propósito — o botão "+ Item" cria a linha vazia e a pessoa
+      // digita o nome depois, clicando na célula (mesmo padrão de "Registrar comissão" na Gestão
+      // Interna). Só groupId é obrigatório aqui.
+      if (!groupId) {
+        return reply.status(400).send({ message: 'groupId é obrigatório' });
       }
       const [{ max }] = await query<{ max: number | null }>(
         'SELECT MAX(position) as max FROM payables_entries WHERE group_id = $1',
@@ -101,7 +104,7 @@ export async function payablesRoutes(app: FastifyInstance) {
           (group_id, elemento, previsto_cents, comissao_cents, real_cents, status, data, boleto_data, boleto_filename, notas, position)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
         [
-          groupId, elemento.trim(), previstoCents ?? 0, comissaoCents ?? null, realCents ?? null,
+          groupId, elemento?.trim() ?? '', previstoCents ?? 0, comissaoCents ?? null, realCents ?? null,
           status ?? 'a_pagar', data ?? null, boletoData ?? null, boletoFilename ?? null, notas?.trim() ?? '',
           (max ?? -1) + 1,
         ]

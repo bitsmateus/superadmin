@@ -3,6 +3,28 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
 
 /**
+ * Toda venda nova (funil ou avulsa) já cria sozinha a linha correspondente em Gestão Interna >
+ * Comissão SDR — só com Nome e Pessoa (o SDR) preenchidos. Tipo, Valor, Referência e Contrato
+ * ficam em branco/manual de propósito (a pessoa que registra a comissão escolhe isso à mão,
+ * inclusive porque uma venda vira comissão de "Venda sistema" ou "Venda tráfego" dependendo de
+ * um critério que não dá pra inferir sozinho aqui). Nunca lança: efeito colateral de criar a
+ * venda, não pode derrubar isso se der erro.
+ */
+async function createCommissionStub(nome: string, sdr: string, month: string) {
+  try {
+    if (!sdr?.trim()) return;
+    await query(
+      `INSERT INTO commission_entries
+        (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month, status, contrato_assinado)
+       VALUES ($1,$2,'sdr',NULL,'(a definir)','',NULL,0,$3,'pendente',false)`,
+      [nome, sdr, month]
+    );
+  } catch (err) {
+    console.error('[commissions] falha ao criar comissão em branco pra venda', nome, err);
+  }
+}
+
+/**
  * Resolve a allowlist de quadros de um usuário restrito. A permissão de menu é só "comercial"
  * (tudo ou nada — as abas viraram gerenciáveis, não dá mais pra restringir por aba individual
  * nessa camada); a granularidade fina é por ABA inteira (user_page_access) — ex.: um SDR só
@@ -167,6 +189,7 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
         (max ?? -1) + 1,
       ]
     );
+    void createCommissionStub(lead.nome, lead.sdr, new Date().toISOString().slice(0, 7));
   } catch (err) {
     console.error('[vendas] falha ao sincronizar venda do lead', leadRowId, err);
   }
@@ -334,8 +357,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
 
       // Mesma trava do PATCH: nunca cria lead direto num quadro de página arquivada (ex.: um front
       // com a lista de quadros em cache desatualizado, de antes da página ter sido arquivada).
-      const targetBoard = await queryOne<{ page_archived: string | null }>(
-        `SELECT lp.archived_at as page_archived FROM lead_boards lb
+      const targetBoard = await queryOne<{ page_archived: string | null; is_vendas: boolean }>(
+        `SELECT lp.archived_at as page_archived, lb.is_vendas FROM lead_boards lb
          JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1`,
         [b.board_id]
       );
@@ -373,6 +396,13 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         ]
       );
       void getActorName(sub).then((actorName) => logLeadEvent(id, 'created', null, null, actorName));
+      // Venda avulsa registrada direto na aba Vendas (botão "Registrar venda") — mesma comissão em
+      // branco que uma venda vinda do funil já ganha sozinha.
+      if (targetBoard?.is_vendas) {
+        const row = leadRow as { nome: string; sdr: string; fechamento: string; created_at: string };
+        const month = (row.fechamento || row.created_at || '').slice(0, 7) || new Date().toISOString().slice(0, 7);
+        void createCommissionStub(row.nome, row.sdr, month);
+      }
       return reply.status(201).send(leadRow);
     }
   );

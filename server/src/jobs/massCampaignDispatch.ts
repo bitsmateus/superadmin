@@ -71,8 +71,10 @@ async function runOnce() {
 }
 
 async function markFailed(recipientId: string, message: string): Promise<void> {
+  // 1000 chars: cabe a resposta crua da NX inteira (ver lib/nxTemplateSend.ts) — o código curto
+  // sozinho ("ERR_..." ) não diz o motivo, e é no relatório do portal que a gente lê isso.
   await query(
     `UPDATE mass_campaign_recipients SET status = 'failed', error_message = $1 WHERE id = $2`,
-    [message.slice(0, 500), recipientId]
+    [message.slice(0, 1000), recipientId]
   );
 }

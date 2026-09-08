@@ -33,6 +33,7 @@ import { pushRoutes } from './routes/push.js';
 import { briefingTemplateRoutes } from './routes/briefingTemplate.js';
 import { templateRequestRoutes } from './routes/templateRequests.js';
 import { massCampaignRoutes } from './routes/massCampaigns.js';
+import { mercadoNunesRoutes } from './routes/mercadoNunes.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
@@ -107,6 +108,7 @@ async function main() {
   await app.register(briefingTemplateRoutes);
   await app.register(templateRequestRoutes);
   await app.register(massCampaignRoutes);
+  await app.register(mercadoNunesRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

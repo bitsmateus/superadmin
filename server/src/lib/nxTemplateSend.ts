@@ -34,34 +34,41 @@ export async function sendNxTemplate(
     },
   };
 
+  const payload = { number: to, isClosed: true, templateData };
+
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 20000);
   let res: Response;
+  let rawText = '';
   let body: unknown;
   try {
     res = await fetch(url, {
       method: 'POST',
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${nx.apiToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ number: to, isClosed: true, templateData }),
+      body: JSON.stringify(payload),
     });
-    const text = await res.text();
+    rawText = await res.text();
     try {
-      body = text ? JSON.parse(text) : undefined;
+      body = rawText ? JSON.parse(rawText) : undefined;
     } catch {
-      body = text;
+      body = rawText;
     }
   } finally {
     clearTimeout(t);
   }
 
-  // A NX às vezes responde 200 mesmo em erro — só o corpo denuncia. Guarda o corpo bruto (não só
-  // .message/.error) porque códigos como ERR_API_REQUIRES_SESSION sozinhos não dizem o que fazer —
-  // o resto do corpo (quando vem) costuma trazer o motivo real.
+  // A NX às vezes responde 200 mesmo em erro — só o corpo denuncia. Guarda a RESPOSTA CRUA inteira
+  // (não só .message/.error): códigos como ERR_API_REQUIRES_SESSION sozinhos não dizem o motivo, e
+  // sem o corpo completo não dá pra saber do que ela está reclamando.
   if (!res.ok || (body as { success?: boolean } | undefined)?.success === false) {
-    const b = body as { message?: string; error?: string; code?: string; detail?: string } | undefined;
-    const core = b?.message || b?.error || `NX HTTP ${res.status}`;
-    const extra = b && typeof b === 'object' ? JSON.stringify(b).slice(0, 300) : '';
-    throw new Error(extra && extra !== JSON.stringify(core) ? `${core} — ${extra}` : core);
+    // Log no servidor com request + response completos — o relatório do portal fica com a versão
+    // curta, aqui fica o suficiente pra depurar o que a NX recebeu de fato.
+    console.error(
+      '[nxTemplateSend] falha',
+      JSON.stringify({ url, status: res.status, request: payload, response: rawText.slice(0, 2000) })
+    );
+    const detail = rawText.trim().slice(0, 800) || '(resposta vazia)';
+    throw new Error(`NX HTTP ${res.status} — ${detail}`);
   }
 }

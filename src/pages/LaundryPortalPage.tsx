@@ -345,7 +345,9 @@ function ReportView({ token, campaignId, onBack }: { token: string; campaignId: 
                     {r.status === 'sent' ? 'Enviado' : r.status === 'failed' ? 'Falha' : r.status === 'skipped' ? 'Ignorado' : 'Na fila'}
                   </span>
                 </td>
-                <td className="px-4 py-2.5 text-xs text-slate-500">{r.error_message || (r.sent_at ? new Date(r.sent_at).toLocaleString('pt-BR') : '—')}</td>
+                <td className="max-w-md whitespace-pre-wrap break-words px-4 py-2.5 text-xs text-slate-500">
+                  {r.error_message || (r.sent_at ? new Date(r.sent_at).toLocaleString('pt-BR') : '—')}
+                </td>
               </tr>
             ))}
           </tbody>

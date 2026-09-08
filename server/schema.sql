@@ -1170,6 +1170,16 @@ DROP TRIGGER IF EXISTS notify_mass_campaign_contacts ON mass_campaign_contacts;
 CREATE TRIGGER notify_mass_campaign_contacts AFTER INSERT OR UPDATE OR DELETE ON mass_campaign_contacts
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+CREATE TABLE IF NOT EXISTS mercadonunes_layouts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome TEXT NOT NULL,
+  patch JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+DROP TRIGGER IF EXISTS notify_mercadonunes_layouts ON mercadonunes_layouts;
+CREATE TRIGGER notify_mercadonunes_layouts AFTER INSERT OR UPDATE OR DELETE ON mercadonunes_layouts
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 -- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:
 -- Crie o primeiro usuário admin com:

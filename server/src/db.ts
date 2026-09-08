@@ -1242,6 +1242,23 @@ END $$`);
     END IF;
   END $$`);
 
+  // Layouts salvos do gerador de cartazes do Mercado Nunes (/mercadonunes) — compartilhado entre
+  // todo mundo que usa a página (não é por cliente/tenant, é uma ferramenta única pra esse
+  // mercado), por isso não fica só no localStorage do navegador de quem salvou.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mercadonunes_layouts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    patch JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_mercadonunes_layouts ON mercadonunes_layouts;
+      CREATE TRIGGER notify_mercadonunes_layouts AFTER INSERT OR UPDATE OR DELETE ON mercadonunes_layouts
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

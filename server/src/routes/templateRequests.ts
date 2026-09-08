@@ -17,29 +17,24 @@ interface RequestTarget {
  * listagem de pedidos de um cliente, e verificação manual de status de um número na Meta. O
  * preenchimento e envio em si acontecem do lado público (ver server/src/routes/public.ts). */
 export async function templateRequestRoutes(app: FastifyInstance) {
-  // POST /api/clients/:id/template-requests — gera (ou reaproveita) o link pra esse cliente.
-  // Reaproveita um pedido "pending" (ainda não preenchido) existente em vez de acumular links
-  // diferentes pro mesmo cliente a cada clique em "Copiar link de template".
+  // POST /api/clients/:id/template-requests — gera (ou devolve o já existente) o link fixo desse
+  // cliente. Não expira nem se consome com o uso (mesmo padrão do link de disparo em massa) — o
+  // cliente volta nele toda vez que quiser criar um modelo novo; cada envio vira uma linha nova em
+  // template_requests, sem mexer no token.
   app.post<{ Params: { id: string } }>(
     '/api/clients/:id/template-requests',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const client = await queryOne<{ id: string }>('SELECT id FROM clients WHERE id = $1', [req.params.id]);
-      if (!client) return reply.status(404).send({ message: 'Cliente não encontrado' });
-
-      const existing = await queryOne<{ id: string; token: string; status: string }>(
-        `SELECT id, token, status FROM template_requests
-         WHERE client_id = $1 AND status = 'pending' ORDER BY created_at DESC LIMIT 1`,
+      const client = await queryOne<{ id: string; template_portal_token: string | null }>(
+        'SELECT id, template_portal_token FROM clients WHERE id = $1',
         [req.params.id]
       );
-      if (existing) return existing;
+      if (!client) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      if (client.template_portal_token) return { token: client.template_portal_token };
 
       const token = crypto.randomBytes(24).toString('base64url');
-      const [row] = await query<{ id: string; token: string; status: string }>(
-        `INSERT INTO template_requests (client_id, token) VALUES ($1, $2) RETURNING id, token, status`,
-        [req.params.id, token]
-      );
-      return reply.status(201).send(row);
+      await query('UPDATE clients SET template_portal_token = $1 WHERE id = $2', [token, req.params.id]);
+      return { token };
     }
   );
 

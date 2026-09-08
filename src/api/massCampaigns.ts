@@ -31,6 +31,7 @@ export const publicMassCampaignApi = {
       templateLanguage: string
       delaySeconds: number
       contactIds?: string[]
+      tag?: string
       mapping: VariableMappingEntry[]
     },
   ) => api.post<{ id: string; total: number }>(`/api/public/laundry/${token}`, body),
@@ -55,18 +56,18 @@ export const publicMassCampaignApi = {
 /** Lista de contatos persistente do cliente — desacoplada de campanha, reaproveitada na criação
  *  de quantas campanhas quiser. */
 export const publicMassContactsApi = {
-  list: (token: string, offset = 0, q?: string) =>
-    api.get<{ total: number; columns: string[]; contacts: MassCampaignContact[] }>(
-      `/api/public/laundry/${token}/contacts?offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ''}`,
+  list: (token: string, offset = 0, q?: string, tag?: string) =>
+    api.get<{ total: number; columns: string[]; tags: string[]; contacts: MassCampaignContact[] }>(
+      `/api/public/laundry/${token}/contacts?offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`,
     ),
-  import: (token: string, body: { data: string; phoneColumn: string; ddi?: string; ddd?: string }) =>
+  import: (token: string, body: { data: string; phoneColumn: string; ddi?: string; ddd?: string; tag?: string }) =>
     api.post<{ created: number; updated: number; skipped: number }>(
       `/api/public/laundry/${token}/contacts/import`,
       body,
     ),
-  add: (token: string, body: { phone: string; fields: Record<string, string> }) =>
+  add: (token: string, body: { phone: string; fields: Record<string, string>; tags?: string[] }) =>
     api.post<MassCampaignContact>(`/api/public/laundry/${token}/contacts`, body),
-  update: (token: string, contactId: string, body: { phone?: string; fields?: Record<string, string> }) =>
+  update: (token: string, contactId: string, body: { phone?: string; fields?: Record<string, string>; tags?: string[] }) =>
     api.patch<MassCampaignContact>(`/api/public/laundry/${token}/contacts/${contactId}`, body),
   remove: (token: string, contactId: string) =>
     api.delete(`/api/public/laundry/${token}/contacts/${contactId}`),

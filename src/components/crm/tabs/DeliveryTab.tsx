@@ -141,9 +141,10 @@ export function DeliveryTab({ client }: { client: Client }) {
     }
   }
 
-  // Gera (ou reaproveita) o link público de criar template do WhatsApp e copia pra área de
-  // transferência — a equipe manda pro cliente depois da entrega. O cliente preenche sozinho
-  // (propósito, texto com variáveis, botões) e o backend cria o template direto na Meta.
+  // Link fixo (não expira, não se consome com o uso — mesmo padrão do link de disparo em massa
+  // abaixo) — a equipe manda pro cliente depois da entrega. O cliente preenche sozinho (propósito,
+  // texto com variáveis, botões) e o backend cria o template direto na Meta; volta no mesmo link
+  // sempre que quiser criar outro modelo.
   const copyTemplateLink = async () => {
     try {
       const { token } = await templateRequestsApi.create(client.id)

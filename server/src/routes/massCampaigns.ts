@@ -29,11 +29,19 @@ interface Contact {
 // template pro telefone sem depender de a planilha original ter uma coluna com esse nome.
 const PHONE_MAPPING_KEY = '__phone__';
 
-async function fetchContacts(clientId: string, ids?: string[]): Promise<Contact[]> {
-  if (ids?.length) {
+/** Resolve os contatos que vão entrar numa campanha: por id explícito (seleção manual), por
+ *  etiqueta (todo mundo marcado com ela), ou todos do cliente se nenhum filtro vier. */
+async function fetchContacts(clientId: string, opts?: { ids?: string[]; tag?: string }): Promise<Contact[]> {
+  if (opts?.ids?.length) {
     return query<Contact>(
       'SELECT id, phone, row_data FROM mass_campaign_contacts WHERE client_id = $1 AND id = ANY($2::uuid[])',
-      [clientId, ids]
+      [clientId, opts.ids]
+    );
+  }
+  if (opts?.tag) {
+    return query<Contact>(
+      'SELECT id, phone, row_data FROM mass_campaign_contacts WHERE client_id = $1 AND $2 = ANY(tags)',
+      [clientId, opts.tag]
     );
   }
   return query<Contact>('SELECT id, phone, row_data FROM mass_campaign_contacts WHERE client_id = $1', [clientId]);
@@ -178,8 +186,9 @@ export async function massCampaignRoutes(app: FastifyInstance) {
   // Desacoplada de campanha: importa/edita uma vez, reaproveita em quantas campanhas quiser.
 
   // GET /api/public/laundry/:token/contacts — página de contatos + as colunas disponíveis (união
-  // de todas as chaves já vistas em row_data) pra alimentar o mapeamento de variáveis na campanha.
-  app.get<{ Params: { token: string }; Querystring: { offset?: string; q?: string } }>(
+  // de todas as chaves já vistas em row_data, pro mapeamento de variáveis) + as etiquetas
+  // disponíveis (união de tags, pro filtro de campanha e pro filtro dessa mesma lista).
+  app.get<{ Params: { token: string }; Querystring: { offset?: string; q?: string; tag?: string } }>(
     '/api/public/laundry/:token/contacts',
     async (req, reply) => {
       const client = await resolveClientByToken(req.params.token);
@@ -187,33 +196,55 @@ export async function massCampaignRoutes(app: FastifyInstance) {
 
       const offset = Math.max(0, Number(req.query.offset) || 0);
       const q = (req.query.q ?? '').trim();
-      const filter = q ? 'AND (phone ILIKE $2 OR row_data::text ILIKE $2)' : '';
-      const filterArgs = q ? [client.id, `%${q}%`] : [client.id];
+      const tag = (req.query.tag ?? '').trim();
+
+      const conditions: string[] = [];
+      const args: unknown[] = [client.id];
+      if (q) {
+        args.push(`%${q}%`);
+        conditions.push(`(phone ILIKE $${args.length} OR row_data::text ILIKE $${args.length})`);
+      }
+      if (tag) {
+        args.push(tag);
+        conditions.push(`$${args.length} = ANY(tags)`);
+      }
+      const filter = conditions.length ? `AND ${conditions.join(' AND ')}` : '';
 
       const countRow = await queryOne<{ count: string }>(
         `SELECT COUNT(*) AS count FROM mass_campaign_contacts WHERE client_id = $1 ${filter}`,
-        filterArgs
+        args
       );
       const contacts = await query(
-        `SELECT id, phone, row_data, created_at, updated_at FROM mass_campaign_contacts
+        `SELECT id, phone, row_data, tags, created_at, updated_at FROM mass_campaign_contacts
          WHERE client_id = $1 ${filter}
-         ORDER BY created_at DESC LIMIT 200 OFFSET $${filterArgs.length + 1}`,
-        [...filterArgs, offset]
+         ORDER BY created_at DESC LIMIT 200 OFFSET $${args.length + 1}`,
+        [...args, offset]
       );
       const columnRows = await query<{ k: string }>(
         `SELECT DISTINCT jsonb_object_keys(row_data) AS k FROM mass_campaign_contacts WHERE client_id = $1`,
         [client.id]
       );
-      return { total: Number(countRow?.count ?? 0), columns: columnRows.map((r) => r.k), contacts };
+      const tagRows = await query<{ t: string }>(
+        `SELECT DISTINCT unnest(tags) AS t FROM mass_campaign_contacts WHERE client_id = $1 ORDER BY 1`,
+        [client.id]
+      );
+      return {
+        total: Number(countRow?.count ?? 0),
+        columns: columnRows.map((r) => r.k),
+        tags: tagRows.map((r) => r.t),
+        contacts,
+      };
     }
   );
 
   // POST /api/public/laundry/:token/contacts/import — importa a planilha pra dentro da lista
   // persistente: quem já existe (mesmo telefone) é ATUALIZADO (colunas novas sobrescrevem, colunas
-  // antigas que não vieram nessa planilha continuam valendo); quem não existe é criado.
+  // antigas que não vieram nessa planilha continuam valendo); quem não existe é criado. Se vier uma
+  // etiqueta, todo mundo desse lote recebe ela — sem duplicar caso o contato já tenha a mesma tag
+  // de uma importação anterior.
   app.post<{
     Params: { token: string };
-    Body: { data?: string; phoneColumn?: string; ddi?: string; ddd?: string };
+    Body: { data?: string; phoneColumn?: string; ddi?: string; ddd?: string; tag?: string };
   }>('/api/public/laundry/:token/contacts/import', async (req, reply) => {
     const client = await resolveClientByToken(req.params.token);
     if (!client) return reply.status(404).send({ message: 'Link inválido.' });
@@ -221,6 +252,7 @@ export async function massCampaignRoutes(app: FastifyInstance) {
     const phoneColumn = (req.body?.phoneColumn ?? '').trim();
     if (!phoneColumn) return reply.status(400).send({ message: 'Escolha qual coluna tem o telefone.' });
     if (!req.body?.data) return reply.status(400).send({ message: 'Envie a planilha de contatos.' });
+    const tag = (req.body?.tag ?? '').trim();
 
     let header: string[];
     let rows: Record<string, string>[];
@@ -255,13 +287,15 @@ export async function massCampaignRoutes(app: FastifyInstance) {
       const placeholders: string[] = [];
       let p = 1;
       for (const [phone, row] of byPhone) {
-        placeholders.push(`($${p++}, $${p++}, $${p++})`);
-        values.push(client.id, phone, JSON.stringify(row));
+        placeholders.push(`($${p++}, $${p++}, $${p++}, $${p++}::text[])`);
+        values.push(client.id, phone, JSON.stringify(row), tag ? [tag] : []);
       }
       const result = await query<{ inserted: boolean }>(
-        `INSERT INTO mass_campaign_contacts (client_id, phone, row_data) VALUES ${placeholders.join(',')}
+        `INSERT INTO mass_campaign_contacts (client_id, phone, row_data, tags) VALUES ${placeholders.join(',')}
          ON CONFLICT (client_id, phone) DO UPDATE
-           SET row_data = mass_campaign_contacts.row_data || EXCLUDED.row_data, updated_at = NOW()
+           SET row_data = mass_campaign_contacts.row_data || EXCLUDED.row_data,
+               tags = (SELECT ARRAY(SELECT DISTINCT unnest(mass_campaign_contacts.tags || EXCLUDED.tags))),
+               updated_at = NOW()
          RETURNING (xmax = 0) AS inserted`,
         values
       );
@@ -273,7 +307,7 @@ export async function massCampaignRoutes(app: FastifyInstance) {
 
   // POST /api/public/laundry/:token/contacts — adiciona (ou atualiza, se o telefone já existir) UM
   // contato manualmente.
-  app.post<{ Params: { token: string }; Body: { phone?: string; fields?: Record<string, string> } }>(
+  app.post<{ Params: { token: string }; Body: { phone?: string; fields?: Record<string, string>; tags?: string[] } }>(
     '/api/public/laundry/:token/contacts',
     async (req, reply) => {
       const client = await resolveClientByToken(req.params.token);
@@ -284,21 +318,26 @@ export async function massCampaignRoutes(app: FastifyInstance) {
         return reply.status(400).send({ message: 'Telefone inválido. Digite com DDD (e DDI se for fora do Brasil).' });
       }
       const fields = req.body?.fields ?? {};
+      const tags = (req.body?.tags ?? []).map((t) => t.trim()).filter(Boolean);
       const [row] = await query(
-        `INSERT INTO mass_campaign_contacts (client_id, phone, row_data) VALUES ($1,$2,$3)
+        `INSERT INTO mass_campaign_contacts (client_id, phone, row_data, tags) VALUES ($1,$2,$3,$4::text[])
          ON CONFLICT (client_id, phone) DO UPDATE
-           SET row_data = mass_campaign_contacts.row_data || EXCLUDED.row_data, updated_at = NOW()
-         RETURNING id, phone, row_data, created_at, updated_at`,
-        [client.id, phone, JSON.stringify(fields)]
+           SET row_data = mass_campaign_contacts.row_data || EXCLUDED.row_data,
+               tags = (SELECT ARRAY(SELECT DISTINCT unnest(mass_campaign_contacts.tags || EXCLUDED.tags))),
+               updated_at = NOW()
+         RETURNING id, phone, row_data, tags, created_at, updated_at`,
+        [client.id, phone, JSON.stringify(fields), tags]
       );
       return reply.status(201).send(row);
     }
   );
 
-  // PATCH /api/public/laundry/:token/contacts/:contactId — edita telefone e/ou campos de um contato.
+  // PATCH /api/public/laundry/:token/contacts/:contactId — edita telefone, campos e/ou etiquetas
+  // de um contato. Etiquetas são SUBSTITUÍDAS (não mescladas) — o formulário de edição já manda a
+  // lista completa, igual já acontece com os campos.
   app.patch<{
     Params: { token: string; contactId: string };
-    Body: { phone?: string; fields?: Record<string, string> };
+    Body: { phone?: string; fields?: Record<string, string>; tags?: string[] };
   }>('/api/public/laundry/:token/contacts/:contactId', async (req, reply) => {
     const client = await resolveClientByToken(req.params.token);
     if (!client) return reply.status(404).send({ message: 'Link inválido.' });
@@ -308,15 +347,17 @@ export async function massCampaignRoutes(app: FastifyInstance) {
       phone = req.body.phone.replace(/\D/g, '');
       if (phone.length < 10) return reply.status(400).send({ message: 'Telefone inválido.' });
     }
+    const tags = req.body?.tags ? req.body.tags.map((t) => t.trim()).filter(Boolean) : null;
     try {
       const [row] = await query(
         `UPDATE mass_campaign_contacts SET
            phone = COALESCE($3, phone),
            row_data = COALESCE($4::jsonb, row_data),
+           tags = COALESCE($5::text[], tags),
            updated_at = NOW()
          WHERE id = $1 AND client_id = $2
-         RETURNING id, phone, row_data, created_at, updated_at`,
-        [req.params.contactId, client.id, phone, req.body?.fields ? JSON.stringify(req.body.fields) : null]
+         RETURNING id, phone, row_data, tags, created_at, updated_at`,
+        [req.params.contactId, client.id, phone, req.body?.fields ? JSON.stringify(req.body.fields) : null, tags]
       );
       if (!row) return reply.status(404).send({ message: 'Contato não encontrado.' });
       return row;
@@ -353,6 +394,7 @@ export async function massCampaignRoutes(app: FastifyInstance) {
       templateLanguage?: string;
       delaySeconds?: number;
       contactIds?: string[];
+      tag?: string;
       mapping?: VariableMappingEntry[];
     };
   }>('/api/public/laundry/:token', async (req, reply) => {
@@ -368,7 +410,10 @@ export async function massCampaignRoutes(app: FastifyInstance) {
     if (!name) return reply.status(400).send({ message: 'Dê um nome pra campanha.' });
     if (!templateName) return reply.status(400).send({ message: 'Escolha um template.' });
 
-    const contacts = await fetchContacts(client.id, req.body.contactIds?.length ? req.body.contactIds : undefined);
+    const contacts = await fetchContacts(client.id, {
+      ids: req.body.contactIds?.length ? req.body.contactIds : undefined,
+      tag: req.body.tag?.trim() || undefined,
+    });
     if (!contacts.length) {
       return reply.status(400).send({ message: 'Nenhum contato selecionado. Importe ou adicione contatos na aba Contatos primeiro.' });
     }

@@ -508,38 +508,23 @@ export async function publicRoutes(app: FastifyInstance) {
     errorMessage?: string;
   }
 
-  // GET /api/public/template-requests/:token — dados pra renderizar a página (nome do cliente,
-  // números disponíveis pra escolher, e se já foi enviado, o resultado por número em vez do form).
+  // GET /api/public/template-requests/:token — dados pra renderizar a página (nome do cliente +
+  // números disponíveis). O link é fixo por cliente (clients.template_portal_token) e sempre
+  // devolve o formulário pronto pra preencher — não existe mais um estado "já enviado" que bloqueia
+  // reuso, o cliente volta aqui quantas vezes quiser criar um modelo novo.
   app.get<{ Params: { token: string } }>(
     '/api/public/template-requests/:token',
     async (req, reply) => {
-      const row = await queryOne<{
-        id: string;
-        status: string;
-        purpose: string | null;
-        template_name: string | null;
-        targets: RequestTarget[] | null;
-        client_id: string;
-      }>(
-        `SELECT id, status, purpose, template_name, targets, client_id FROM template_requests WHERE token = $1`,
+      const client = await queryOne<{ id: string; name: string; company: string | null }>(
+        'SELECT id, name, company FROM clients WHERE template_portal_token = $1',
         [req.params.token]
       );
-      if (!row) return reply.status(404).send({ message: 'Link inválido ou expirado.' });
-      const client = await queryOne<{ name: string; company: string | null }>(
-        'SELECT name, company FROM clients WHERE id = $1',
-        [row.client_id]
-      );
-      // Números disponíveis enquanto ainda dá pra (re)enviar — 'failed' inclui aqui de propósito
-      // (nenhum número deu certo, o formulário volta pra tentar de novo); só 'submitted' (pelo
-      // menos um número já criado) não precisa mais consultar a NX.
-      const numbers = row.status !== 'submitted' ? await resolveWabaAccesses(row.client_id) : [];
+      if (!client) return reply.status(404).send({ message: 'Link inválido ou expirado.' });
+
+      const numbers = await resolveWabaAccesses(client.id);
       return {
-        status: row.status,
-        purpose: row.purpose,
-        templateName: row.template_name,
-        targets: row.targets ?? [],
         numbers: numbers.map((n) => ({ wabaId: n.wabaId, label: n.label })),
-        clientName: client?.company?.trim() || client?.name || '',
+        clientName: client.company?.trim() || client.name || '',
       };
     }
   );
@@ -560,14 +545,11 @@ export async function publicRoutes(app: FastifyInstance) {
   }>(
     '/api/public/template-requests/:token/submit',
     async (req, reply) => {
-      const row = await queryOne<{ id: string; client_id: string; status: string }>(
-        'SELECT id, client_id, status FROM template_requests WHERE token = $1',
+      const client = await queryOne<{ id: string }>(
+        'SELECT id FROM clients WHERE template_portal_token = $1',
         [req.params.token]
       );
-      if (!row) return reply.status(404).send({ message: 'Link inválido ou expirado.' });
-      if (row.status === 'submitted') {
-        return reply.status(400).send({ message: 'Este template já foi enviado.' });
-      }
+      if (!client) return reply.status(404).send({ message: 'Link inválido ou expirado.' });
 
       const purpose = (req.body?.purpose ?? '').trim();
       const header = (req.body?.header ?? '').trim();
@@ -604,7 +586,7 @@ export async function publicRoutes(app: FastifyInstance) {
         return reply.status(400).send({ message: `Falta um exemplo pra variável {{${missingExample}}}.` });
       }
 
-      const allNumbers = await resolveWabaAccesses(row.client_id);
+      const allNumbers = await resolveWabaAccesses(client.id);
       if (!allNumbers.length) {
         return reply.status(400).send({
           message: 'Não conseguimos localizar seu canal do WhatsApp oficial pra criar o template. Fale com nosso suporte.',
@@ -644,16 +626,18 @@ export async function publicRoutes(app: FastifyInstance) {
         })
       );
 
+      // Uma linha nova por envio — só histórico/auditoria (a aba Entrega pode listar por
+      // client_id); o link do cliente (template_portal_token) nunca é tocado aqui, por isso o
+      // mesmo link serve pra criar quantos modelos o cliente quiser, um atrás do outro.
       const okCount = targets.filter((t) => t.status === 'submitted').length;
       const finalStatus = okCount > 0 ? 'submitted' : 'failed';
       await query(
-        `UPDATE template_requests
-         SET status = $1, purpose = $2, template_name = $3, header = $4, body = $5, footer = $6,
-             variables = $7, buttons = $8, category = $9, targets = $10, submitted_at = NOW()
-         WHERE id = $11`,
+        `INSERT INTO template_requests
+           (client_id, token, status, purpose, template_name, header, body, footer, variables, buttons, category, targets, submitted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
         [
-          finalStatus, purpose, name, header || null, body, footer || null,
-          JSON.stringify(variables), JSON.stringify(buttons), category, JSON.stringify(targets), row.id,
+          client.id, uuidv4(), finalStatus, purpose, name, header || null, body, footer || null,
+          JSON.stringify(variables), JSON.stringify(buttons), category, JSON.stringify(targets),
         ]
       );
 

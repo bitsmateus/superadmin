@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
 
 export type PayableStatus = 'a_pagar' | 'agendado' | 'pago'
+export type PayableCategoria = 'fixo' | 'variavel'
 
 export interface PayableGroup {
   id: string
@@ -15,6 +16,10 @@ export interface PayableEntry {
   id: string
   groupId: string
   elemento: string
+  /** Texto livre mais longo — "o que é essa conta" (fornecedor, condição, vencimento). */
+  descricao: string
+  /** Fixo/Variável — null = ainda não classificado. */
+  categoria: PayableCategoria | null
   previstoCents: number
   comissaoCents: number | null
   realCents: number | null
@@ -30,7 +35,8 @@ export interface PayableEntry {
 
 type GroupRow = { id: string; name: string; color: string; position: number; created_at: string }
 type EntryRow = {
-  id: string; group_id: string; elemento: string; previsto_cents: number
+  id: string; group_id: string; elemento: string; descricao: string; categoria: PayableCategoria | null
+  previsto_cents: number
   comissao_cents: number | null; real_cents: number | null; status: PayableStatus; data: string | null
   boleto_data?: string | null; boleto_filename: string | null; notas: string; position: number; created_at: string
 }
@@ -40,7 +46,8 @@ function rowToGroup(r: GroupRow): PayableGroup {
 }
 function rowToEntry(r: EntryRow, prevBoletoData?: string | null): PayableEntry {
   return {
-    id: r.id, groupId: r.group_id, elemento: r.elemento, previstoCents: r.previsto_cents,
+    id: r.id, groupId: r.group_id, elemento: r.elemento, descricao: r.descricao ?? '', categoria: r.categoria ?? null,
+    previstoCents: r.previsto_cents,
     comissaoCents: r.comissao_cents ?? null, realCents: r.real_cents ?? null, status: r.status,
     data: r.data, boletoData: 'boleto_data' in r ? (r.boleto_data ?? null) : (prevBoletoData ?? null),
     boletoFilename: r.boleto_filename, notas: r.notas ?? '', position: r.position, createdAt: r.created_at,
@@ -138,7 +145,8 @@ export const payablesService = {
   },
 
   async createEntry(input: {
-    groupId: string; elemento: string; previstoCents?: number; comissaoCents?: number | null
+    groupId: string; elemento: string; descricao?: string; categoria?: PayableCategoria | null
+    previstoCents?: number; comissaoCents?: number | null
     realCents?: number | null; status?: PayableStatus; data?: string | null; notas?: string
   }): Promise<void> {
     try {
@@ -150,7 +158,8 @@ export const payablesService = {
   },
 
   async updateEntry(id: string, patch: {
-    groupId?: string; elemento?: string; previstoCents?: number; comissaoCents?: number | null
+    groupId?: string; elemento?: string; descricao?: string; categoria?: PayableCategoria | null
+    previstoCents?: number; comissaoCents?: number | null
     realCents?: number | null; status?: PayableStatus; data?: string | null
     boletoData?: string | null; boletoFilename?: string | null; notas?: string; position?: number
   }): Promise<void> {

@@ -1094,6 +1094,11 @@ CREATE TABLE IF NOT EXISTS payables_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   group_id UUID NOT NULL REFERENCES payables_groups(id) ON DELETE CASCADE,
   elemento TEXT NOT NULL DEFAULT '',
+  -- Texto livre mais longo, à parte do nome — "o que é essa conta" (fornecedor, vencimento,
+  -- condição) sem disputar espaço com a coluna Notas (essa continua sendo um remark curto).
+  descricao TEXT NOT NULL DEFAULT '',
+  -- Fixo/Variável — null = ainda não classificado. Editável direto no card do item.
+  categoria TEXT CHECK (categoria IN ('fixo', 'variavel')),
   previsto_cents INT NOT NULL DEFAULT 0,
   comissao_cents INT,
   real_cents INT,

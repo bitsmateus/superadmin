@@ -79,7 +79,8 @@ export async function payablesRoutes(app: FastifyInstance) {
   );
 
   app.post<{ Body: {
-    groupId?: string; elemento?: string; previstoCents?: number; comissaoCents?: number | null
+    groupId?: string; elemento?: string; descricao?: string; categoria?: string | null
+    previstoCents?: number; comissaoCents?: number | null
     realCents?: number | null; status?: string; data?: string | null
     boletoData?: string | null; boletoFilename?: string | null; notas?: string
   } }>(
@@ -87,7 +88,8 @@ export async function payablesRoutes(app: FastifyInstance) {
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const {
-        groupId, elemento, previstoCents, comissaoCents, realCents, status, data, boletoData, boletoFilename, notas,
+        groupId, elemento, descricao, categoria, previstoCents, comissaoCents, realCents,
+        status, data, boletoData, boletoFilename, notas,
       } = req.body;
       // "elemento" nasce em branco de propósito — o botão "+ Item" cria a linha vazia e a pessoa
       // digita o nome depois, clicando na célula (mesmo padrão de "Registrar comissão" na Gestão
@@ -101,10 +103,11 @@ export async function payablesRoutes(app: FastifyInstance) {
       );
       const [entry] = await query(
         `INSERT INTO payables_entries
-          (group_id, elemento, previsto_cents, comissao_cents, real_cents, status, data, boleto_data, boleto_filename, notas, position)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+          (group_id, elemento, descricao, categoria, previsto_cents, comissao_cents, real_cents, status, data, boleto_data, boleto_filename, notas, position)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
         [
-          groupId, elemento?.trim() ?? '', previstoCents ?? 0, comissaoCents ?? null, realCents ?? null,
+          groupId, elemento?.trim() ?? '', descricao?.trim() ?? '', categoria ?? null,
+          previstoCents ?? 0, comissaoCents ?? null, realCents ?? null,
           status ?? 'a_pagar', data ?? null, boletoData ?? null, boletoFilename ?? null, notas?.trim() ?? '',
           (max ?? -1) + 1,
         ]
@@ -114,7 +117,8 @@ export async function payablesRoutes(app: FastifyInstance) {
   );
 
   app.patch<{ Params: { id: string }; Body: {
-    groupId?: string; elemento?: string; previstoCents?: number; comissaoCents?: number | null
+    groupId?: string; elemento?: string; descricao?: string; categoria?: string | null
+    previstoCents?: number; comissaoCents?: number | null
     realCents?: number | null; status?: string; data?: string | null
     boletoData?: string | null; boletoFilename?: string | null; notas?: string; position?: number
   } }>(
@@ -127,6 +131,8 @@ export async function payablesRoutes(app: FastifyInstance) {
       const b = req.body;
       if (b.groupId !== undefined) { sets.push(`group_id = $${i++}`); params.push(b.groupId); }
       if (b.elemento !== undefined) { sets.push(`elemento = $${i++}`); params.push(b.elemento.trim()); }
+      if (b.descricao !== undefined) { sets.push(`descricao = $${i++}`); params.push(b.descricao.trim()); }
+      if (b.categoria !== undefined) { sets.push(`categoria = $${i++}`); params.push(b.categoria); }
       if (b.previstoCents !== undefined) { sets.push(`previsto_cents = $${i++}`); params.push(b.previstoCents); }
       if (b.comissaoCents !== undefined) { sets.push(`comissao_cents = $${i++}`); params.push(b.comissaoCents); }
       if (b.realCents !== undefined) { sets.push(`real_cents = $${i++}`); params.push(b.realCents); }

@@ -1,12 +1,16 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { ChevronDown, FileText, Loader2, Plus, Trash2, X } from 'lucide-react'
+import {
+  CalendarClock, CheckCircle2, ChevronDown, FileText, Loader2, Plus, Repeat, Shuffle, Trash2, Wallet, X,
+} from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { usePayableEntries, usePayableGroups } from '@/hooks/usePayables'
-import { payablesService, type PayableEntry, type PayableGroup, type PayableStatus } from '@/services/payables'
+import {
+  payablesService, type PayableCategoria, type PayableEntry, type PayableGroup, type PayableStatus,
+} from '@/services/payables'
 import { formatBRLCents, parseBRLCents, prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +21,12 @@ const STATUS_STYLE: Record<PayableStatus, string> = {
   a_pagar: 'bg-danger/15 text-danger',
   agendado: 'bg-warning/20 text-warning',
   pago: 'bg-success/15 text-success',
+}
+
+const CATEGORIA_LABEL: Record<PayableCategoria, string> = { fixo: 'Fixo', variavel: 'Variável' }
+const CATEGORIA_STYLE: Record<PayableCategoria, string> = {
+  fixo: 'bg-accent/15 text-accent',
+  variavel: 'bg-warning/20 text-warning',
 }
 
 const GROUP_COLORS = ['#4F8EF7', '#22C55E', '#F59E0B', '#EF4444', '#A855F7', '#EC4899', '#14B8A6', '#64748B']
@@ -41,6 +51,8 @@ export function FinanceiroContasPagarPage() {
         }
       />
       <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <OverviewCards entries={entries} />
+
         {groups.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-line p-10 text-center text-sm text-foreground/40">
             Nenhum grupo ainda — crie um pra começar (ex.: "Abril 2026" ou "Folha de pagamento").
@@ -56,6 +68,56 @@ export function FinanceiroContasPagarPage() {
       </div>
       <NewGroupModal open={newGroupOpen} onClose={() => setNewGroupOpen(false)} />
     </>
+  )
+}
+
+/** Visão geral no topo — soma TODOS os grupos, pra ter noção do total sem precisar somar cabeça.
+ * "Pago" usa o Real quando preenchido (senão o Previsto, pra não ficar em branco por esquecimento). */
+function OverviewCards({ entries }: { entries: PayableEntry[] }) {
+  const totals = React.useMemo(() => {
+    let previsto = 0, pago = 0, pendente = 0, fixo = 0, variavel = 0
+    for (const e of entries) {
+      previsto += e.previstoCents
+      if (e.status === 'pago') pago += e.realCents ?? e.previstoCents
+      else pendente += e.previstoCents
+      if (e.categoria === 'fixo') fixo += e.previstoCents
+      else if (e.categoria === 'variavel') variavel += e.previstoCents
+    }
+    return { previsto, pago, pendente, fixo, variavel }
+  }, [entries])
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <OverviewCard icon={<Wallet className="h-4 w-4" />} label="Previsto (total)" value={formatBRLCents(totals.previsto)} tone="info" />
+      <OverviewCard icon={<CheckCircle2 className="h-4 w-4" />} label="Pago" value={formatBRLCents(totals.pago)} tone="success" />
+      <OverviewCard icon={<CalendarClock className="h-4 w-4" />} label="A pagar / agendado" value={formatBRLCents(totals.pendente)} tone="warning" />
+      <OverviewCard icon={<Repeat className="h-4 w-4" />} label="Fixo" value={formatBRLCents(totals.fixo)} tone="info" />
+      <OverviewCard icon={<Shuffle className="h-4 w-4" />} label="Variável" value={formatBRLCents(totals.variavel)} tone="warning" />
+    </div>
+  )
+}
+
+function OverviewCard({
+  icon, label, value, tone,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  tone: 'info' | 'success' | 'warning'
+}) {
+  const tones = {
+    info: 'bg-accent/10 text-accent ring-accent/20',
+    success: 'bg-success/10 text-success ring-success/20',
+    warning: 'bg-warning/10 text-warning ring-warning/20',
+  }
+  return (
+    <div className="rounded-2xl border border-line bg-card p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] uppercase tracking-wider text-foreground/45">{label}</span>
+        <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-lg ring-1', tones[tone])}>{icon}</span>
+      </div>
+      <div className="mt-2.5 truncate text-xl font-semibold tracking-tight tabular-nums text-foreground">{value}</div>
+    </div>
   )
 }
 
@@ -215,30 +277,88 @@ function EntryRow({ entry }: { entry: PayableEntry }) {
   )
 }
 
+/** Nome + descrição (fornecedor, condição, vencimento...) do item, editados juntos — a descrição
+ * fica "dentro" do elemento em vez de uma coluna própria, pra caber mais informação sem alargar
+ * a tabela. A categoria (Fixo/Variável) mora aqui do lado também, como uma etiqueta pequena. */
 function ElementoCell({ entry }: { entry: PayableEntry }) {
   const [editing, setEditing] = React.useState(false)
-  const [value, setValue] = React.useState(entry.elemento)
+  const [nome, setNome] = React.useState(entry.elemento)
+  const [desc, setDesc] = React.useState(entry.descricao)
+  const wrapRef = React.useRef<HTMLDivElement>(null)
+
+  const startEdit = () => {
+    setNome(entry.elemento)
+    setDesc(entry.descricao)
+    setEditing(true)
+  }
+
+  const save = () => {
+    const patch: { elemento?: string; descricao?: string } = {}
+    if (nome !== entry.elemento) patch.elemento = nome
+    if (desc !== entry.descricao) patch.descricao = desc
+    if (Object.keys(patch).length) void payablesService.updateEntry(entry.id, patch)
+  }
 
   if (editing) {
     return (
-      <input
-        autoFocus
-        value={value}
-        onChange={(ev) => setValue(ev.target.value)}
-        onBlur={() => { setEditing(false); if (value !== entry.elemento) void payablesService.updateEntry(entry.id, { elemento: value }) }}
-        onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
-        className="h-8 w-full min-w-[160px] rounded-md border border-accent/40 bg-surface px-2 text-sm text-foreground outline-none"
-      />
+      <div
+        ref={wrapRef}
+        onBlur={(e) => {
+          if (wrapRef.current && !wrapRef.current.contains(e.relatedTarget as Node)) { setEditing(false); save() }
+        }}
+        className="min-w-[240px] space-y-1.5 rounded-lg border border-accent/40 bg-surface p-2"
+      >
+        <input
+          autoFocus
+          value={nome}
+          onChange={(ev) => setNome(ev.target.value)}
+          placeholder="Nome do item"
+          onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
+          className="h-8 w-full rounded-md border border-line bg-card px-2 text-sm font-medium text-foreground outline-none focus:border-accent"
+        />
+        <textarea
+          value={desc}
+          onChange={(ev) => setDesc(ev.target.value)}
+          placeholder="Descrição — fornecedor, condição, vencimento…"
+          rows={2}
+          className="w-full resize-none rounded-md border border-line bg-card px-2 py-1.5 text-xs text-foreground/70 outline-none focus:border-accent"
+        />
+      </div>
     )
   }
+
   return (
-    <button
-      type="button"
-      onClick={() => { setValue(entry.elemento); setEditing(true) }}
-      className={cn('w-full rounded px-1.5 py-0.5 text-left hover:bg-elevate/[0.06]', !entry.elemento && 'text-foreground/35')}
+    <div className="flex items-start gap-1.5">
+      <CategoriaBadge entry={entry} />
+      <button
+        type="button"
+        onClick={startEdit}
+        className="flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded px-1 py-0.5 text-left hover:bg-elevate/[0.06]"
+      >
+        <span className={cn('text-sm text-foreground', !entry.elemento && 'text-foreground/35')}>
+          {entry.elemento || 'Nome do item…'}
+        </span>
+        {entry.descricao && <span className="max-w-[300px] truncate text-xs text-foreground/40">{entry.descricao}</span>}
+      </button>
+    </div>
+  )
+}
+
+function CategoriaBadge({ entry }: { entry: PayableEntry }) {
+  return (
+    <select
+      value={entry.categoria ?? ''}
+      onChange={(e) => void payablesService.updateEntry(entry.id, { categoria: (e.target.value || null) as PayableCategoria | null })}
+      title="Fixo ou Variável"
+      className={cn(
+        'h-6 shrink-0 rounded-full border-0 px-2 text-[10px] font-semibold uppercase tracking-wide outline-none',
+        entry.categoria ? CATEGORIA_STYLE[entry.categoria] : 'bg-elevate/[0.06] text-foreground/35',
+      )}
     >
-      {entry.elemento || 'Nome do item…'}
-    </button>
+      <option value="" className="bg-card text-foreground">—</option>
+      <option value="fixo" className="bg-card text-foreground">Fixo</option>
+      <option value="variavel" className="bg-card text-foreground">Variável</option>
+    </select>
   )
 }
 

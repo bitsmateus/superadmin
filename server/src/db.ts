@@ -1161,6 +1161,18 @@ END $$`);
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS payables_entries_group_idx ON payables_entries(group_id)`);
+  // Descrição mais longa (à parte de Notas) + categoria Fixo/Variável — as duas vivem "dentro" da
+  // célula Elemento na UI, não são coluna própria da tabela.
+  await pool.query(`ALTER TABLE payables_entries ADD COLUMN IF NOT EXISTS descricao TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE payables_entries ADD COLUMN IF NOT EXISTS categoria TEXT`);
+  await pool.query(`DO $$ BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint WHERE conname = 'payables_entries_categoria_check'
+    ) THEN
+      ALTER TABLE payables_entries ADD CONSTRAINT payables_entries_categoria_check
+        CHECK (categoria IN ('fixo', 'variavel'));
+    END IF;
+  END $$`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_payables_groups ON payables_groups;

@@ -42,6 +42,7 @@ import { ticketsService } from '@/services/tickets'
 import { db } from '@/services/db'
 import { useServerById } from '@/store/authStore'
 import { cn, formatDateShort, asText, initials } from '@/lib/utils'
+import { sanitizeHtml } from '@/lib/richText'
 import { timeAgo } from '@/lib/time'
 import type {
   Ticket,
@@ -614,9 +615,15 @@ function ThreadMessages({ messages }: { messages: TicketMessage[] }) {
                 {timeAgo(m.createdAt)}
               </span>
             </div>
-            <p className="whitespace-pre-wrap text-sm text-foreground/90 leading-relaxed">
-              {m.content}
-            </p>
+            {/* Conteúdo pode vir como texto puro (composto aqui, na textarea simples) ou como HTML
+                (nota migrada de um editor rico, ex.: Atualizações do lead) — renderiza como HTML
+                sanitizado nos dois casos: texto puro sem tag nenhuma passa direto, e
+                whitespace-pre-wrap continua quebrando linha de \n solto. Sem isso, uma nota com
+                <div>/<br> aparecia com as tags literais na tela em vez de quebrar linha. */}
+            <div
+              className="whitespace-pre-wrap text-sm text-foreground/90 leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(m.content) }}
+            />
           </div>
         )
       })}

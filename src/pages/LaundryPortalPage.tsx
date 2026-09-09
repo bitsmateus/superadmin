@@ -376,22 +376,25 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
 function ContactsView({ token }: { token: string }) {
   const [total, setTotal] = React.useState(0)
   const [columns, setColumns] = React.useState<string[]>([])
+  const [availableTags, setAvailableTags] = React.useState<string[]>([])
   const [contacts, setContacts] = React.useState<MassCampaignContact[]>([])
   const [q, setQ] = React.useState('')
+  const [tagFilter, setTagFilter] = React.useState('')
   const [offset, setOffset] = React.useState(0)
   const [modal, setModal] = React.useState<'add' | 'import' | null>(null)
   const [editing, setEditing] = React.useState<MassCampaignContact | null>(null)
 
   const load = React.useCallback(() => {
     publicMassContactsApi
-      .list(token, offset, q || undefined)
+      .list(token, offset, q || undefined, tagFilter || undefined)
       .then((d) => {
         setTotal(d.total)
         setColumns(d.columns)
+        setAvailableTags(d.tags)
         setContacts(d.contacts)
       })
       .catch(() => {})
-  }, [token, offset, q])
+  }, [token, offset, q, tagFilter])
 
   React.useEffect(() => {
     load()
@@ -435,15 +438,30 @@ function ContactsView({ token }: { token: string }) {
         </div>
       </div>
 
-      <input
-        value={q}
-        onChange={(e) => {
-          setOffset(0)
-          setQ(e.target.value)
-        }}
-        placeholder="Buscar por telefone ou dado…"
-        className="mb-4 h-10 w-full max-w-sm rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
-      />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <input
+          value={q}
+          onChange={(e) => {
+            setOffset(0)
+            setQ(e.target.value)
+          }}
+          placeholder="Buscar por telefone ou dado…"
+          className="h-10 w-full max-w-sm rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+        />
+        <select
+          value={tagFilter}
+          onChange={(e) => {
+            setOffset(0)
+            setTagFilter(e.target.value)
+          }}
+          className="h-10 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-[#2F5BFF]"
+        >
+          <option value="">Todas as etiquetas</option>
+          {availableTags.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
 
       {contacts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 py-16 text-center">
@@ -459,6 +477,7 @@ function ContactsView({ token }: { token: string }) {
                 {shownColumns.map((c) => (
                   <th key={c} className="whitespace-nowrap px-4 py-2.5">{c}</th>
                 ))}
+                <th className="px-4 py-2.5">Etiquetas</th>
                 <th className="px-4 py-2.5">Ações</th>
               </tr>
             </thead>
@@ -469,6 +488,13 @@ function ContactsView({ token }: { token: string }) {
                   {shownColumns.map((col) => (
                     <td key={col} className="whitespace-nowrap px-4 py-2.5 text-slate-600">{c.row_data[col] ?? ''}</td>
                   ))}
+                  <td className="px-4 py-2.5">
+                    <div className="flex flex-wrap gap-1">
+                      {c.tags.map((t) => (
+                        <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{t}</span>
+                      ))}
+                    </div>
+                  </td>
                   <td className="px-4 py-2.5">
                     <div className="flex gap-2">
                       <ActionButton label="Editar" onClick={() => setEditing(c)} />
@@ -538,6 +564,7 @@ function ContactFormModal({
       ? Object.entries(contact.row_data).map(([key, value]) => ({ key, value }))
       : [{ key: 'nome', value: '' }],
   )
+  const [tagsText, setTagsText] = React.useState((contact?.tags ?? []).join(', '))
   const [saving, setSaving] = React.useState(false)
 
   const save = async () => {
@@ -545,10 +572,11 @@ function ContactFormModal({
     if (digits.length < 10) return toast.error('Telefone inválido. Digite com DDD (e DDI se for fora do Brasil).')
     const fieldsObj: Record<string, string> = {}
     for (const f of fields) if (f.key.trim()) fieldsObj[f.key.trim()] = f.value
+    const tags = tagsText.split(',').map((t) => t.trim()).filter(Boolean)
     setSaving(true)
     try {
-      if (contact) await publicMassContactsApi.update(token, contact.id, { phone: digits, fields: fieldsObj })
-      else await publicMassContactsApi.add(token, { phone: digits, fields: fieldsObj })
+      if (contact) await publicMassContactsApi.update(token, contact.id, { phone: digits, fields: fieldsObj, tags })
+      else await publicMassContactsApi.add(token, { phone: digits, fields: fieldsObj, tags })
       toast.success(contact ? 'Contato atualizado' : 'Contato adicionado')
       onSaved()
     } catch (err) {
@@ -563,6 +591,9 @@ function ContactFormModal({
       <div className="space-y-4">
         <Field label="Telefone" required hint="Com DDD e DDI, ex.: 5511999998888">
           <Text value={phone} onChange={setPhone} placeholder="5511999998888" />
+        </Field>
+        <Field label="Etiquetas (opcional)" hint="Separadas por vírgula, ex.: VIP, Aniversariantes">
+          <Text value={tagsText} onChange={setTagsText} placeholder="VIP, Aniversariantes" />
         </Field>
         <div className="space-y-2">
           <p className="text-sm font-medium text-slate-700">Campos (nome, pedido, etc.)</p>
@@ -624,6 +655,7 @@ function ImportContactsModal({ token, onClose, onImported }: { token: string; on
   const [phoneColumn, setPhoneColumn] = React.useState('')
   const [ddi, setDdi] = React.useState('55')
   const [ddd, setDdd] = React.useState('')
+  const [tag, setTag] = React.useState('')
   const [importing, setImporting] = React.useState(false)
 
   const onPickFile = async (file: File) => {
@@ -650,7 +682,7 @@ function ImportContactsModal({ token, onClose, onImported }: { token: string; on
     if (!phoneColumn) return toast.error('Escolha a coluna de telefone.')
     setImporting(true)
     try {
-      const res = await publicMassContactsApi.import(token, { data: fileDataUrl, phoneColumn, ddi, ddd })
+      const res = await publicMassContactsApi.import(token, { data: fileDataUrl, phoneColumn, ddi, ddd, tag: tag.trim() || undefined })
       toast.success(
         `${res.created} novo(s), ${res.updated} atualizado(s)${res.skipped ? `, ${res.skipped} pulado(s) sem telefone válido` : ''}.`,
       )
@@ -696,6 +728,9 @@ function ImportContactsModal({ token, onClose, onImported }: { token: string; on
             <Text value={ddd} onChange={setDdd} placeholder="11" />
           </Field>
         </div>
+        <Field label="Etiqueta (opcional)" hint="Todo mundo dessa planilha recebe essa etiqueta — dá pra filtrar depois na criação de campanha.">
+          <Text value={tag} onChange={setTag} placeholder="Ex.: Clientes VIP" />
+        </Field>
       </div>
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600">
@@ -733,12 +768,16 @@ function NewCampaignWizard({
 
   const [totalContacts, setTotalContacts] = React.useState(0)
   const [columns, setColumns] = React.useState<string[]>([])
+  const [availableTags, setAvailableTags] = React.useState<string[]>([])
   const [sampleContact, setSampleContact] = React.useState<MassCampaignContact | null>(null)
   const [loadingContacts, setLoadingContacts] = React.useState(true)
-  const [selectMode, setSelectMode] = React.useState<'all' | 'manual'>('all')
+  const [selectMode, setSelectMode] = React.useState<'all' | 'manual' | 'tag'>('all')
   const [manualContacts, setManualContacts] = React.useState<MassCampaignContact[]>([])
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [contactsQuery, setContactsQuery] = React.useState('')
+  const [manualTagFilter, setManualTagFilter] = React.useState('')
+  const [selectedTag, setSelectedTag] = React.useState('')
+  const [tagCount, setTagCount] = React.useState(0)
 
   const [templates, setTemplates] = React.useState<ApprovedTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
@@ -749,7 +788,7 @@ function NewCampaignWizard({
   const [submitting, setSubmitting] = React.useState(false)
 
   const selectedTemplate = templates.find((t) => t.name === templateName) ?? null
-  const selectedCount = selectMode === 'all' ? totalContacts : selectedIds.size
+  const selectedCount = selectMode === 'all' ? totalContacts : selectMode === 'tag' ? tagCount : selectedIds.size
 
   React.useEffect(() => {
     publicMassContactsApi
@@ -757,19 +796,30 @@ function NewCampaignWizard({
       .then((d) => {
         setTotalContacts(d.total)
         setColumns(d.columns)
+        setAvailableTags(d.tags)
         setSampleContact(d.contacts[0] ?? null)
+        if (d.tags.length && !selectedTag) setSelectedTag(d.tags[0])
       })
       .catch(() => {})
       .finally(() => setLoadingContacts(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   React.useEffect(() => {
     if (selectMode !== 'manual') return
     publicMassContactsApi
-      .list(token, 0, contactsQuery || undefined)
+      .list(token, 0, contactsQuery || undefined, manualTagFilter || undefined)
       .then((d) => setManualContacts(d.contacts))
       .catch(() => {})
-  }, [token, selectMode, contactsQuery])
+  }, [token, selectMode, contactsQuery, manualTagFilter])
+
+  React.useEffect(() => {
+    if (selectMode !== 'tag' || !selectedTag) return
+    publicMassContactsApi
+      .list(token, 0, undefined, selectedTag)
+      .then((d) => setTagCount(d.total))
+      .catch(() => {})
+  }, [token, selectMode, selectedTag])
 
   const toggleContact = (id: string) => {
     setSelectedIds((cur) => {
@@ -814,6 +864,7 @@ function NewCampaignWizard({
         templateLanguage: selectedTemplate?.language ?? 'pt_BR',
         delaySeconds,
         contactIds: selectMode === 'manual' ? Array.from(selectedIds) : undefined,
+        tag: selectMode === 'tag' ? selectedTag : undefined,
         mapping,
       })
       toast.success(`Campanha criada — ${res.total} contatos prontos.`)
@@ -861,15 +912,37 @@ function NewCampaignWizard({
                   <strong>Selecionar manualmente</strong> — escolha quem recebe
                 </span>
               </label>
+              {availableTags.length > 0 && (
+                <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-3 text-sm text-slate-700 hover:border-[#2F5BFF]">
+                  <input type="radio" checked={selectMode === 'tag'} onChange={() => setSelectMode('tag')} className="mt-0.5" />
+                  <span>
+                    <strong>Por etiqueta</strong> — todo mundo marcado com uma etiqueta
+                  </span>
+                </label>
+              )}
 
               {selectMode === 'manual' && (
                 <div className="rounded-lg border border-slate-200 p-3">
-                  <input
-                    value={contactsQuery}
-                    onChange={(e) => setContactsQuery(e.target.value)}
-                    placeholder="Buscar por telefone ou dado…"
-                    className="mb-2 h-9 w-full rounded-md border border-slate-300 px-2.5 text-xs outline-none focus:border-[#2F5BFF]"
-                  />
+                  <div className="mb-2 flex gap-2">
+                    <input
+                      value={contactsQuery}
+                      onChange={(e) => setContactsQuery(e.target.value)}
+                      placeholder="Buscar por telefone ou dado…"
+                      className="h-9 flex-1 rounded-md border border-slate-300 px-2.5 text-xs outline-none focus:border-[#2F5BFF]"
+                    />
+                    {availableTags.length > 0 && (
+                      <select
+                        value={manualTagFilter}
+                        onChange={(e) => setManualTagFilter(e.target.value)}
+                        className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+                      >
+                        <option value="">Todas as etiquetas</option>
+                        {availableTags.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                   <div className="max-h-56 space-y-1 overflow-y-auto">
                     {manualContacts.map((c) => (
                       <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-slate-50">
@@ -884,6 +957,21 @@ function NewCampaignWizard({
                     )}
                   </div>
                   <p className="mt-2 text-xs text-slate-500">{selectedIds.size} selecionado(s)</p>
+                </div>
+              )}
+
+              {selectMode === 'tag' && (
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <select
+                    value={selectedTag}
+                    onChange={(e) => setSelectedTag(e.target.value)}
+                    className="h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-700"
+                  >
+                    {availableTags.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs text-slate-500">{tagCount} contato(s) com essa etiqueta</p>
                 </div>
               )}
             </div>

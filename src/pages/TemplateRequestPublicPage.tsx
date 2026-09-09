@@ -11,7 +11,7 @@ import type {
   TemplateVariable,
 } from '@/types/templateRequest'
 
-type Step = 'loading' | 'invalid' | 'no-numbers' | 'welcome' | 'form' | 'done' | 'already'
+type Step = 'loading' | 'invalid' | 'no-numbers' | 'welcome' | 'form' | 'done'
 
 const BUTTON_TYPE_LABEL: Record<TemplateButtonType, string> = {
   QUICK_REPLY: 'Resposta rápida',
@@ -78,24 +78,27 @@ export function TemplateRequestPublicPage() {
         if (cancelled) return
         setData(d)
         setSelectedWabaIds(d.numbers.map((n) => n.wabaId))
-        if (d.status === 'submitted') {
-          setResultTargets(d.targets)
-          setStep('already')
-        } else if (d.numbers.length === 0) {
-          setStep('no-numbers')
-        } else {
-          if (d.status === 'failed') {
-            setPurpose(d.purpose ?? '')
-            toast.message('A última tentativa falhou em todos os números — revise e envie de novo.')
-          }
-          setStep('welcome')
-        }
+        setStep(d.numbers.length === 0 ? 'no-numbers' : 'welcome')
       })
       .catch(() => !cancelled && setStep('invalid'))
     return () => {
       cancelled = true
     }
   }, [token])
+
+  // Link é fixo — depois de enviar um modelo, volta pro início zerado pra criar outro, em vez de
+  // travar numa tela final sem saída.
+  const criarOutro = () => {
+    setPurpose('')
+    setHeader('')
+    setBody('')
+    setFooter('')
+    setExamples({})
+    setButtons([])
+    setSelectedWabaIds(data?.numbers.map((n) => n.wabaId) ?? [])
+    setSubmitError('')
+    setStep('welcome')
+  }
 
   const toggleNumber = (wabaId: string) =>
     setSelectedWabaIds((ids) => (ids.includes(wabaId) ? ids.filter((id) => id !== wabaId) : [...ids, wabaId]))
@@ -221,18 +224,6 @@ export function TemplateRequestPublicPage() {
               Ainda não localizamos um número do WhatsApp oficial conectado à sua conta. Fale com nosso suporte pra gente
               configurar antes de criar o modelo de mensagem.
             </p>
-          </div>
-        )}
-
-        {step === 'already' && (
-          <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
-            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-blue-100 text-3xl">📄</div>
-            <h1 className="text-2xl font-bold text-slate-800">Template já enviado</h1>
-            <p className="mt-3 text-sm text-slate-500">
-              "{data?.templateName || data?.purpose}" já foi enviado pra aprovação da Meta. Precisa de outro modelo? Peça um
-              novo link.
-            </p>
-            <TargetsSummary targets={resultTargets} />
           </div>
         )}
 
@@ -413,6 +404,13 @@ export function TemplateRequestPublicPage() {
               estiver liberado. Obrigado! 🚀
             </p>
             <TargetsSummary targets={resultTargets} />
+            <button
+              type="button"
+              onClick={criarOutro}
+              className="mt-6 rounded-lg bg-[#2F5BFF] px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8]"
+            >
+              Criar outro modelo
+            </button>
           </div>
         )}
       </div>

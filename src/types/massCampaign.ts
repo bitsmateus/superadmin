@@ -48,6 +48,7 @@ export interface MassCampaignContact {
   id: string
   phone: string
   row_data: Record<string, string>
+  tags: string[]
   created_at: string
   updated_at: string
 }

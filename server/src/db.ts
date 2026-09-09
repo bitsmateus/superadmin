@@ -1134,6 +1134,13 @@ END $$`);
   await pool.query(`ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS header TEXT`);
   await pool.query(`ALTER TABLE template_requests ADD COLUMN IF NOT EXISTS footer TEXT`);
 
+  // Link fixo por cliente pra criar template — igual ao mass_campaign_token: não expira nem se
+  // consome com o uso, o cliente volta nele toda vez que quiser criar um modelo novo. Antes o
+  // token vivia em template_requests (uma linha por tentativa), e virava um link novo a cada
+  // envio — cada submit agora só INSERE uma linha de histórico em template_requests, sem mexer
+  // no token do cliente.
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS template_portal_token TEXT UNIQUE`);
+
   // Contas a Pagar (Financeiro) — board estilo Monday, lista contínua de grupos criados à mão
   // (ex.: "Abril 2026", "Folha de pagamento"), sem filtro de mês. Ver comentário em schema.sql.
   await pool.query(`CREATE TABLE IF NOT EXISTS payables_groups (
@@ -1246,6 +1253,11 @@ END $$`);
     UNIQUE (client_id, phone)
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS mass_campaign_contacts_client_idx ON mass_campaign_contacts(client_id)`);
+  // Etiquetas — atribuídas na importação (todo mundo daquele arquivo recebe a mesma) ou na mão por
+  // contato; um contato pode acumular várias ao longo de importações diferentes. Usadas pra
+  // filtrar quem entra numa campanha nova sem precisar selecionar um por um.
+  await pool.query(`ALTER TABLE mass_campaign_contacts ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}'`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS mass_campaign_contacts_tags_idx ON mass_campaign_contacts USING GIN (tags)`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_mass_campaign_contacts ON mass_campaign_contacts;

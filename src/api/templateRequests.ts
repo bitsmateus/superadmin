@@ -7,10 +7,10 @@ import type {
   TemplateVariable,
 } from '@/types/templateRequest'
 
-/** Chamadas autenticadas (lado da equipe) — gerar/listar links, verificar status na Meta. */
+/** Chamadas autenticadas (lado da equipe) — gerar/reaproveitar o link fixo, listar histórico,
+ *  verificar status na Meta. */
 export const templateRequestsApi = {
-  create: (clientId: string) =>
-    api.post<{ id: string; token: string; status: string }>(`/api/clients/${clientId}/template-requests`),
+  create: (clientId: string) => api.post<{ token: string }>(`/api/clients/${clientId}/template-requests`),
   list: (clientId: string) => api.get<TemplateRequest[]>(`/api/clients/${clientId}/template-requests`),
   refreshStatus: (clientId: string, requestId: string, wabaId: string) =>
     api.post<TemplateRequest>(

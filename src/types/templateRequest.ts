@@ -42,12 +42,10 @@ export interface TemplateRequest {
   submittedAt: string | null
 }
 
-/** Dados da página pública (GET /api/public/template-requests/:token). */
+/** Dados da página pública (GET /api/public/template-requests/:token) — o link é fixo por
+ *  cliente, então isso é só "quem é o cliente e quais números tem pra escolher", nunca um estado
+ *  de "já enviado" (o formulário está sempre pronto pra criar mais um modelo). */
 export interface TemplateRequestPublicData {
-  status: 'pending' | 'submitted' | 'failed'
-  purpose: string | null
-  templateName: string | null
-  targets: RequestTarget[]
   numbers: WabaNumberOption[]
   clientName: string
 }

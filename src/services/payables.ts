@@ -124,6 +124,33 @@ export const payablesService = {
     }
   },
 
+  /** Copia um grupo pra um mês novo — resolve o "todo mês eu preencho tudo de novo": os itens
+   * Fixo (aluguel, contabilidade, folha) tendem a se repetir mês a mês, só o Variável (comissão
+   * etc.) muda de verdade. Cada item copiado nasce limpo (status "A pagar", sem data/boleto/real),
+   * só o nome/descrição/categoria/valor previsto vêm do original como ponto de partida. */
+  async duplicateGroup(sourceGroupId: string, newName: string, opts: { onlyFixo: boolean }): Promise<void> {
+    const source = groups.find((g) => g.id === sourceGroupId)
+    const sourceEntries = entries.filter((e) => e.groupId === sourceGroupId && (!opts.onlyFixo || e.categoria === 'fixo'))
+    try {
+      const newGroupRow = await api.post<GroupRow>('/api/payables-groups', { name: newName, color: source?.color ?? '#4F8EF7' })
+      for (const e of sourceEntries) {
+        // eslint-disable-next-line no-await-in-loop
+        await api.post('/api/payables-entries', {
+          groupId: newGroupRow.id,
+          elemento: e.elemento,
+          descricao: e.descricao,
+          categoria: e.categoria,
+          previstoCents: e.previstoCents,
+          status: 'a_pagar',
+        })
+      }
+      await reload()
+      toast.success(`Grupo "${newName}" criado com ${sourceEntries.length} item(ns).`)
+    } catch (err) {
+      toast.error('Falha ao duplicar grupo: ' + (err as Error).message)
+    }
+  },
+
   async updateGroup(id: string, patch: { name?: string; color?: string; position?: number }): Promise<void> {
     try {
       await api.patch(`/api/payables-groups/${id}`, patch)

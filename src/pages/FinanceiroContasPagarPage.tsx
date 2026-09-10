@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import {
-  CalendarClock, CheckCircle2, ChevronDown, FileText, Loader2, Plus, Repeat, Shuffle, Trash2, Wallet, X,
+  CalendarClock, CheckCircle2, ChevronDown, Copy, FileText, Loader2, Plus, Repeat, Shuffle, Trash2, Wallet, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -129,6 +129,7 @@ function OverviewCard({
 function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEntry[] }) {
   const [open, setOpen] = React.useState(true)
   const [deleting, setDeleting] = React.useState(false)
+  const [duplicating, setDuplicating] = React.useState(false)
   const sorted = entries.slice().sort((a, b) => a.position - b.position)
 
   const totals = sorted.reduce(
@@ -162,6 +163,16 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
           <Button size="sm" variant="ghost" onClick={addItem} leftIcon={<Plus className="h-3.5 w-3.5" />}>
             Item
           </Button>
+          {sorted.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setDuplicating(true)}
+              title="Duplicar pra um mês novo"
+              className="grid h-8 w-8 place-items-center rounded text-foreground/30 hover:bg-accent/10 hover:text-accent"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setDeleting(true)}
@@ -241,6 +252,8 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
           Excluir o grupo <strong>{group.name}</strong> e os {sorted.length} item(ns) dentro dele? Essa ação não pode ser desfeita.
         </p>
       </Modal>
+
+      <DuplicateGroupModal open={duplicating} onClose={() => setDuplicating(false)} group={group} entries={sorted} />
     </div>
   )
 }
@@ -621,6 +634,97 @@ function NewGroupModal({ open, onClose }: { open: boolean; onClose: () => void }
                 style={{ backgroundColor: c }}
               />
             ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function DuplicateGroupModal({
+  open, onClose, group, entries,
+}: { open: boolean; onClose: () => void; group: PayableGroup; entries: PayableEntry[] }) {
+  const [name, setName] = React.useState('')
+  const [onlyFixo, setOnlyFixo] = React.useState(true)
+  const [saving, setSaving] = React.useState(false)
+  const fixoCount = entries.filter((e) => e.categoria === 'fixo').length
+
+  React.useEffect(() => {
+    if (!open) return
+    setName(group.name)
+    setOnlyFixo(true)
+  }, [open, group.name])
+
+  const submit = async () => {
+    if (!name.trim()) { toast.error('Informe o nome do novo grupo.'); return }
+    setSaving(true)
+    try {
+      await payablesService.duplicateGroup(group.id, name.trim(), { onlyFixo })
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Duplicar pra um mês novo"
+      size="sm"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={submit} loading={saving}>Duplicar</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-foreground/60">
+          Cria um grupo novo já com os itens de <strong>{group.name}</strong>, prontos pra editar — sem precisar
+          digitar tudo de novo. Cada item copiado nasce com status "A pagar", sem data, boleto ou valor real.
+        </p>
+        <Input
+          label="Nome do novo grupo"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder='Ex.: "Outubro 2026"'
+          autoFocus
+          onKeyDown={(e) => { if (e.key === 'Enter') void submit() }}
+        />
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-foreground/70">O que copiar</label>
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={() => setOnlyFixo(true)}
+              className={cn(
+                'flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                onlyFixo ? 'border-accent bg-accent/5 text-foreground' : 'border-line text-foreground/60 hover:bg-elevate/[0.04]',
+              )}
+            >
+              <span className={cn('mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2', onlyFixo ? 'border-accent bg-accent' : 'border-line')} />
+              <span>
+                <span className="block font-medium">Só os itens Fixo</span>
+                <span className="block text-xs text-foreground/50">
+                  {fixoCount} item(ns) — aluguel, contabilidade, folha... o que se repete todo mês.
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlyFixo(false)}
+              className={cn(
+                'flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                !onlyFixo ? 'border-accent bg-accent/5 text-foreground' : 'border-line text-foreground/60 hover:bg-elevate/[0.04]',
+              )}
+            >
+              <span className={cn('mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2', !onlyFixo ? 'border-accent bg-accent' : 'border-line')} />
+              <span>
+                <span className="block font-medium">Todos os itens</span>
+                <span className="block text-xs text-foreground/50">{entries.length} item(ns), incluindo Variável.</span>
+              </span>
+            </button>
           </div>
         </div>
       </div>

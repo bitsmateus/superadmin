@@ -7,6 +7,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { DatePickerField } from '@/components/comercial/DatePickerField'
 import { usePayableEntries, usePayableGroups } from '@/hooks/usePayables'
 import {
   payablesService, type PayableCategoria, type PayableEntry, type PayableGroup, type PayableStatus,
@@ -415,11 +416,11 @@ function StatusCell({ entry }: { entry: PayableEntry }) {
 
 function DateCell({ entry }: { entry: PayableEntry }) {
   return (
-    <input
-      type="date"
-      value={entry.data ?? ''}
-      onChange={(e) => void payablesService.updateEntry(entry.id, { data: e.target.value || null })}
-      className="h-8 w-full rounded-md border border-line bg-surface px-2 text-xs text-foreground outline-none focus:border-accent"
+    <DatePickerField
+      value={entry.data}
+      onChange={(next) => void payablesService.updateEntry(entry.id, { data: next })}
+      placeholder="Sem data"
+      className="h-8 rounded-md px-1.5 text-xs hover:bg-elevate/[0.06]"
     />
   )
 }

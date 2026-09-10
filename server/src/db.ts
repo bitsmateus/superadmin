@@ -1196,6 +1196,26 @@ END $$`);
     END IF;
   END $$`);
 
+  // Catálogo de itens Fixos padrão — auto-preenche um grupo novo quando a pessoa entra num mês
+  // que ainda não tem nenhum grupo (POST /api/payables-groups/ensure-month), sem precisar
+  // duplicar manualmente todo mês. Ver comentário em schema.sql.
+  await pool.query(`CREATE TABLE IF NOT EXISTS payables_fixed_catalog (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    valor_cents INT NOT NULL DEFAULT 0,
+    ativo BOOLEAN NOT NULL DEFAULT true,
+    position INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_payables_fixed_catalog ON payables_fixed_catalog;
+      CREATE TRIGGER notify_payables_fixed_catalog AFTER INSERT OR UPDATE OR DELETE ON payables_fixed_catalog
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   // Disparo em massa (portal "Laundry" e futuros clientes que precisem do mesmo self-service) —
   // link fixo por cliente (clients.mass_campaign_token, não expira/consome como o de template),
   // o cliente importa a planilha, mapeia colunas pra variáveis de um template JÁ aprovado na Meta

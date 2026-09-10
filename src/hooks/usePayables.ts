@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { payablesService, isPayablesLoaded, type PayableEntry, type PayableGroup } from '@/services/payables'
+import { payablesService, isPayablesLoaded, type PayableEntry, type PayableFixedCatalogItem, type PayableGroup } from '@/services/payables'
 
 function useSnapshot<T>(getter: () => T): T {
   React.useEffect(() => { void payablesService.ensureLoaded() }, [])
@@ -16,4 +16,8 @@ export function usePayableGroups(): PayableGroup[] {
 
 export function usePayableEntries(): PayableEntry[] {
   return useSnapshot(payablesService.getEntries)
+}
+
+export function usePayableCatalog(): PayableFixedCatalogItem[] {
+  return useSnapshot(payablesService.getCatalog)
 }

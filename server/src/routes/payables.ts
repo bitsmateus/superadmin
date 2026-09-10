@@ -1,6 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 
+const MONTH_NAMES_FULL = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+function monthFullLabel(id: string): string {
+  const [y, m] = id.split('-').map(Number);
+  return `${MONTH_NAMES_FULL[m - 1] ?? id} ${y}`;
+}
+
 /**
  * Contas a Pagar (Financeiro) — board estilo Monday: grupos criados à mão (ex.: "Setembro 2026",
  * "Folha de pagamento"), cada um com seus itens e um mês ('YYYY-MM') associado — o front filtra
@@ -59,6 +68,38 @@ export async function payablesRoutes(app: FastifyInstance) {
       if (!existing) return reply.status(404).send({ message: 'Grupo não encontrado' });
       await query('DELETE FROM payables_groups WHERE id = $1', [req.params.id]);
       return reply.status(204).send();
+    }
+  );
+
+  // Garante que um mês tenha pelo menos os itens Fixo padrão, sem precisar duplicar manualmente.
+  // Idempotente: só age se AINDA não existe nenhum grupo nesse mês — se já existe (criado à mão ou
+  // por essa mesma rota antes), não mexe em nada, pra nunca duplicar itens numa visita repetida.
+  app.post<{ Body: { month?: string } }>(
+    '/api/payables-groups/ensure-month',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { month } = req.body;
+      if (!month) return reply.status(400).send({ message: 'month é obrigatório' });
+      const existing = await queryOne('SELECT id FROM payables_groups WHERE month = $1', [month]);
+      if (existing) return { created: false };
+      const catalog = await query<{ id: string; nome: string; valor_cents: number }>(
+        'SELECT id, nome, valor_cents FROM payables_fixed_catalog WHERE ativo = true ORDER BY position'
+      );
+      if (catalog.length === 0) return { created: false };
+      const [{ max }] = await query<{ max: number | null }>('SELECT MAX(position) as max FROM payables_groups');
+      const [group] = await query(
+        `INSERT INTO payables_groups (name, color, month, position) VALUES ($1,$2,$3,$4) RETURNING *`,
+        [monthFullLabel(month), '#4F8EF7', month, (max ?? -1) + 1]
+      );
+      for (let i = 0; i < catalog.length; i++) {
+        const c = catalog[i];
+        await query(
+          `INSERT INTO payables_entries (group_id, elemento, categoria, previsto_cents, status, position)
+           VALUES ($1,$2,'fixo',$3,'a_pagar',$4)`,
+          [group.id, c.nome, c.valor_cents, i]
+        );
+      }
+      return reply.status(201).send({ created: true, group });
     }
   );
 
@@ -160,6 +201,59 @@ export async function payablesRoutes(app: FastifyInstance) {
       const existing = await queryOne('SELECT id FROM payables_entries WHERE id = $1', [req.params.id]);
       if (!existing) return reply.status(404).send({ message: 'Item não encontrado' });
       await query('DELETE FROM payables_entries WHERE id = $1', [req.params.id]);
+      return reply.status(204).send();
+    }
+  );
+
+  // ---------- Catálogo de itens Fixos padrão ----------
+
+  app.get('/api/payables-fixed-catalog', { onRequest: [app.authenticate] }, async () => {
+    return query('SELECT * FROM payables_fixed_catalog ORDER BY position, created_at');
+  });
+
+  app.post<{ Body: { nome?: string; valorCents?: number } }>(
+    '/api/payables-fixed-catalog',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { nome, valorCents } = req.body;
+      if (!nome?.trim()) return reply.status(400).send({ message: 'nome é obrigatório' });
+      const [{ max }] = await query<{ max: number | null }>('SELECT MAX(position) as max FROM payables_fixed_catalog');
+      const [item] = await query(
+        `INSERT INTO payables_fixed_catalog (nome, valor_cents, position) VALUES ($1,$2,$3) RETURNING *`,
+        [nome.trim(), valorCents ?? 0, (max ?? -1) + 1]
+      );
+      return reply.status(201).send(item);
+    }
+  );
+
+  app.patch<{ Params: { id: string }; Body: { nome?: string; valorCents?: number; ativo?: boolean; position?: number } }>(
+    '/api/payables-fixed-catalog/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      let i = 1;
+      const b = req.body;
+      if (b.nome !== undefined) { sets.push(`nome = $${i++}`); params.push(b.nome.trim()); }
+      if (b.valorCents !== undefined) { sets.push(`valor_cents = $${i++}`); params.push(b.valorCents); }
+      if (b.ativo !== undefined) { sets.push(`ativo = $${i++}`); params.push(b.ativo); }
+      if (b.position !== undefined) { sets.push(`position = $${i++}`); params.push(b.position); }
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+      sets.push(`updated_at = NOW()`);
+      params.push(req.params.id);
+      const [item] = await query(`UPDATE payables_fixed_catalog SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
+      if (!item) return reply.status(404).send({ message: 'Item não encontrado' });
+      return item;
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/payables-fixed-catalog/:id',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const existing = await queryOne('SELECT id FROM payables_fixed_catalog WHERE id = $1', [req.params.id]);
+      if (!existing) return reply.status(404).send({ message: 'Item não encontrado' });
+      await query('DELETE FROM payables_fixed_catalog WHERE id = $1', [req.params.id]);
       return reply.status(204).send();
     }
   );

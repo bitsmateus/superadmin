@@ -1129,6 +1129,24 @@ DROP TRIGGER IF EXISTS notify_payables_entries ON payables_entries;
 CREATE TRIGGER notify_payables_entries AFTER INSERT OR UPDATE OR DELETE ON payables_entries
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
+-- Catálogo de itens Fixos padrão (aluguel, folha etc) — ao entrar num mês sem nenhum grupo ainda,
+-- o backend cria um grupo sozinho e copia esses itens pra dentro (ver POST /api/payables-groups/
+-- ensure-month), sem precisar duplicar manualmente todo mês. Editar o catálogo só afeta meses
+-- futuros — a cópia de cada mês já criada é independente (editável/apagável sem mexer no padrão).
+CREATE TABLE IF NOT EXISTS payables_fixed_catalog (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome TEXT NOT NULL,
+  valor_cents INT NOT NULL DEFAULT 0,
+  ativo BOOLEAN NOT NULL DEFAULT true,
+  position INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP TRIGGER IF EXISTS notify_payables_fixed_catalog ON payables_fixed_catalog;
+CREATE TRIGGER notify_payables_fixed_catalog AFTER INSERT OR UPDATE OR DELETE ON payables_fixed_catalog
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
 -- ---------- mass_campaigns (disparo em massa via portal fixo por cliente, ex.: /laundry/:token) ----------
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS mass_campaign_token TEXT UNIQUE;
 CREATE TABLE IF NOT EXISTS mass_campaigns (

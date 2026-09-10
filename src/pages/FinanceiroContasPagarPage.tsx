@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { Link } from 'react-router-dom'
 import {
   CalendarClock, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Copy, FileText, LayoutDashboard, Loader2,
-  Plus, Repeat, Shuffle, Trash2, Users, Wallet, X,
+  Plus, Repeat, Settings2, Shuffle, Trash2, Users, Wallet, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -12,9 +12,10 @@ import { Modal } from '@/components/ui/Modal'
 import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
 import { DatePickerField } from '@/components/comercial/DatePickerField'
 import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt, useMonthFilter, type MonthFilter } from '@/hooks/useMonthFilter'
-import { usePayableEntries, usePayableGroups } from '@/hooks/usePayables'
+import { usePayableCatalog, usePayableEntries, usePayableGroups } from '@/hooks/usePayables'
 import {
-  payablesService, type PayableCategoria, type PayableEntry, type PayableGroup, type PayableStatus,
+  payablesService,
+  type PayableCategoria, type PayableEntry, type PayableFixedCatalogItem, type PayableGroup, type PayableStatus,
 } from '@/services/payables'
 import { useCommissionEntries } from '@/hooks/useCommissions'
 import { commissionsService, type CommissionEntry, type CommissionRole } from '@/services/commissions'
@@ -78,8 +79,10 @@ function monthInFilter(month: string | null, filter: MonthFilter): boolean {
 export function FinanceiroContasPagarPage() {
   const groups = usePayableGroups()
   const entries = usePayableEntries()
+  const catalog = usePayableCatalog()
   const commissionEntries = useCommissionEntries()
   const [newGroupOpen, setNewGroupOpen] = React.useState(false)
+  const [catalogOpen, setCatalogOpen] = React.useState(false)
   const [tab, setTab] = React.useState<Tab>('geral')
   const filter = useMonthFilter([addMonthsToId(currentMonthId(), -1)])
 
@@ -102,17 +105,36 @@ export function FinanceiroContasPagarPage() {
   const monthHint = filter.customMode ? 'no período selecionado' : `em ${monthLabelPt(filter.selected)}`
   const defaultMonth = filter.customMode ? currentMonthId() : filter.selected
 
+  // Ao abrir um mês (normal, não personalizado) que ainda não tem nenhum grupo, pede pro backend
+  // criar um sozinho com os itens Fixo padrão — resolve o "todo mês eu preencho tudo de novo" sem
+  // precisar clicar em nada. Idempotente no backend, e o ref evita reenviar o pedido repetido
+  // enquanto a resposta não volta (StrictMode chama o efeito 2x, por exemplo).
+  const ensuredRef = React.useRef<Set<string>>(new Set())
+  React.useEffect(() => {
+    if (filter.customMode) return
+    const month = filter.selected
+    if (groupsInMonth.length > 0) return
+    if (ensuredRef.current.has(month)) return
+    ensuredRef.current.add(month)
+    void payablesService.ensureMonth(month)
+  }, [filter.customMode, filter.selected, groupsInMonth.length])
+
   return (
     <>
       <TopBar
         title="Contas a Pagar"
         subtitle="Financeiro"
         rightSlot={
-          tab !== 'comissoes' ? (
-            <Button onClick={() => setNewGroupOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
-              Novo grupo
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setCatalogOpen(true)} leftIcon={<Settings2 className="h-4 w-4" />}>
+              Itens fixos
             </Button>
-          ) : undefined
+            {tab !== 'comissoes' && (
+              <Button onClick={() => setNewGroupOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
+                Novo grupo
+              </Button>
+            )}
+          </div>
         }
       />
       <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
@@ -126,7 +148,11 @@ export function FinanceiroContasPagarPage() {
           <GroupsList groups={groupsInMonth} entries={entriesInMonth} monthHint={monthHint} onNewGroup={() => setNewGroupOpen(true)} />
         )}
         {tab === 'fixas' && (
-          <GroupsList groups={groupsInMonth} entries={entriesInMonth} categoria="fixo" monthHint={monthHint} onNewGroup={() => setNewGroupOpen(true)} />
+          <GroupsList
+            groups={groupsInMonth} entries={entriesInMonth} categoria="fixo" monthHint={monthHint}
+            onNewGroup={() => setNewGroupOpen(true)}
+            catalogHint={catalog.length === 0 ? () => setCatalogOpen(true) : undefined}
+          />
         )}
         {tab === 'variaveis' && (
           <GroupsList groups={groupsInMonth} entries={entriesInMonth} categoria="variavel" monthHint={monthHint} onNewGroup={() => setNewGroupOpen(true)} />
@@ -134,6 +160,7 @@ export function FinanceiroContasPagarPage() {
         {tab === 'comissoes' && <ComissoesTab entries={commissionsInMonth} monthHint={monthHint} />}
       </div>
       <NewGroupModal open={newGroupOpen} onClose={() => setNewGroupOpen(false)} defaultMonth={defaultMonth} />
+      <FixedCatalogModal open={catalogOpen} onClose={() => setCatalogOpen(false)} />
     </>
   )
 }
@@ -231,13 +258,15 @@ function TabNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 }
 
 function GroupsList({
-  groups, entries, categoria, monthHint, onNewGroup,
+  groups, entries, categoria, monthHint, onNewGroup, catalogHint,
 }: {
   groups: PayableGroup[]
   entries: PayableEntry[]
   categoria?: PayableCategoria
   monthHint: string
   onNewGroup: () => void
+  /** Se vier definido, mostra um lembrete de configurar o catálogo de Fixos (ele está vazio). */
+  catalogHint?: () => void
 }) {
   if (groups.length === 0) {
     return (
@@ -246,6 +275,13 @@ function GroupsList({
         <button type="button" onClick={onNewGroup} className="mt-2 font-medium text-accent hover:underline">
           Criar um grupo novo
         </button>
+        {catalogHint && (
+          <p className="mt-3 text-xs text-foreground/35">
+            Ou configure os{' '}
+            <button type="button" onClick={catalogHint} className="font-medium text-accent hover:underline">itens fixos padrão</button>
+            {' '}pra eles entrarem sozinhos todo mês.
+          </p>
+        )}
       </div>
     )
   }
@@ -1008,5 +1044,144 @@ function DuplicateGroupModal({
         </div>
       </div>
     </Modal>
+  )
+}
+
+function FixedCatalogModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const catalog = usePayableCatalog()
+  const [newNome, setNewNome] = React.useState('')
+  const [newValor, setNewValor] = React.useState('')
+  const sorted = catalog.slice().sort((a, b) => a.position - b.position)
+  const totalAtivo = sorted.filter((c) => c.ativo).reduce((sum, c) => sum + c.valorCents, 0)
+
+  const addItem = async () => {
+    if (!newNome.trim()) { toast.error('Informe o nome do item.'); return }
+    const valorCents = newValor ? parseBRLCents(prettifyCurrencyRaw(newValor)) : 0
+    await payablesService.createCatalogItem({ nome: newNome.trim(), valorCents })
+    setNewNome('')
+    setNewValor('')
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Itens fixos padrão" size="md" footer={<Button onClick={onClose}>Fechar</Button>}>
+      <div className="space-y-4">
+        <p className="text-sm text-foreground/60">
+          Esses itens entram sozinhos, já como Fixo, em todo mês novo que ainda não tiver nenhum grupo — sem
+          precisar duplicar manualmente. Editar aqui só vale pra meses futuros: os meses já criados continuam
+          independentes, edite ou apague neles à vontade.
+        </p>
+        <div className="divide-y divide-line rounded-xl border border-line">
+          {sorted.length === 0 ? (
+            <p className="px-3 py-6 text-center text-xs text-foreground/40">Nenhum item padrão ainda — adicione um abaixo.</p>
+          ) : (
+            sorted.map((item) => <CatalogItemRow key={item.id} item={item} />)
+          )}
+        </div>
+        <div className="flex items-center gap-2 rounded-xl border border-dashed border-line p-2">
+          <input
+            value={newNome}
+            onChange={(e) => setNewNome(e.target.value)}
+            placeholder="Nome (ex.: Aluguel)"
+            onKeyDown={(e) => { if (e.key === 'Enter') void addItem() }}
+            className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-card px-2.5 text-sm text-foreground outline-none focus:border-accent"
+          />
+          <input
+            inputMode="decimal"
+            value={newValor}
+            onChange={(e) => setNewValor(sanitizeCurrencyRaw(e.target.value))}
+            placeholder="R$ 0,00"
+            onKeyDown={(e) => { if (e.key === 'Enter') void addItem() }}
+            className="h-9 w-28 shrink-0 rounded-lg border border-line bg-card px-2.5 text-right text-sm text-foreground outline-none focus:border-accent"
+          />
+          <Button size="sm" onClick={addItem} leftIcon={<Plus className="h-3.5 w-3.5" />}>Add</Button>
+        </div>
+        {sorted.some((c) => c.ativo) && (
+          <p className="text-right text-xs text-foreground/50">
+            Total ativo: <span className="font-semibold tabular-nums text-foreground">{formatBRLCents(totalAtivo)}</span>
+          </p>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function CatalogItemRow({ item }: { item: PayableFixedCatalogItem }) {
+  const [editing, setEditing] = React.useState(false)
+  const [nome, setNome] = React.useState(item.nome)
+
+  return (
+    <div className={cn('flex items-center gap-2 px-3 py-2', !item.ativo && 'opacity-40')}>
+      {editing ? (
+        <input
+          autoFocus
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          onBlur={() => { setEditing(false); if (nome.trim() && nome !== item.nome) void payablesService.updateCatalogItem(item.id, { nome: nome.trim() }) }}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+          className="h-8 min-w-0 flex-1 rounded-md border border-accent/40 bg-surface px-2 text-sm text-foreground outline-none"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => { setNome(item.nome); setEditing(true) }}
+          className="min-w-0 flex-1 truncate rounded px-1 py-0.5 text-left text-sm font-medium text-foreground hover:bg-elevate/[0.06]"
+        >
+          {item.nome}
+        </button>
+      )}
+      <CatalogValorCell item={item} />
+      <button
+        type="button"
+        onClick={() => void payablesService.updateCatalogItem(item.id, { ativo: !item.ativo })}
+        title={item.ativo ? 'Ativo — clique pra desativar (não entra em meses novos)' : 'Inativo — clique pra ativar'}
+        className={cn(
+          'shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide',
+          item.ativo ? 'bg-success/10 text-success' : 'bg-elevate/[0.06] text-foreground/40',
+        )}
+      >
+        {item.ativo ? 'Ativo' : 'Inativo'}
+      </button>
+      <button
+        type="button"
+        onClick={() => { if (window.confirm(`Excluir "${item.nome}" do catálogo padrão?`)) void payablesService.deleteCatalogItem(item.id) }}
+        title="Excluir do catálogo"
+        className="grid h-7 w-7 shrink-0 place-items-center rounded text-foreground/30 hover:bg-danger/10 hover:text-danger"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
+
+function CatalogValorCell({ item }: { item: PayableFixedCatalogItem }) {
+  const [editing, setEditing] = React.useState(false)
+  const [value, setValue] = React.useState(() => sanitizeCurrencyRaw(formatBRLCents(item.valorCents)))
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        inputMode="decimal"
+        value={value}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setValue(sanitizeCurrencyRaw(e.target.value))}
+        onBlur={() => {
+          setEditing(false)
+          const cents = value ? parseBRLCents(prettifyCurrencyRaw(value)) : 0
+          if (cents !== item.valorCents) void payablesService.updateCatalogItem(item.id, { valorCents: cents })
+        }}
+        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+        className="h-8 w-24 shrink-0 rounded-md border border-accent/40 bg-surface px-2 text-right text-sm text-foreground outline-none"
+      />
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => { setValue(sanitizeCurrencyRaw(formatBRLCents(item.valorCents))); setEditing(true) }}
+      className="w-24 shrink-0 rounded px-1.5 py-0.5 text-right text-sm tabular-nums text-foreground hover:bg-elevate/[0.06]"
+    >
+      {formatBRLCents(item.valorCents)}
+    </button>
   )
 }

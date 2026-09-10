@@ -35,7 +35,16 @@ export interface PayableEntry {
   createdAt: string
 }
 
+export interface PayableFixedCatalogItem {
+  id: string
+  nome: string
+  valorCents: number
+  ativo: boolean
+  position: number
+}
+
 type GroupRow = { id: string; name: string; color: string; month: string | null; position: number; created_at: string }
+type CatalogRow = { id: string; nome: string; valor_cents: number; ativo: boolean; position: number }
 type EntryRow = {
   id: string; group_id: string; elemento: string; descricao: string; categoria: PayableCategoria | null
   previsto_cents: number
@@ -55,9 +64,13 @@ function rowToEntry(r: EntryRow, prevBoletoData?: string | null): PayableEntry {
     boletoFilename: r.boleto_filename, notas: r.notas ?? '', position: r.position, createdAt: r.created_at,
   }
 }
+function rowToCatalog(r: CatalogRow): PayableFixedCatalogItem {
+  return { id: r.id, nome: r.nome, valorCents: r.valor_cents, ativo: r.ativo, position: r.position }
+}
 
 let groups: PayableGroup[] = []
 let entries: PayableEntry[] = []
+let catalog: PayableFixedCatalogItem[] = []
 let loaded = false
 let loadingPromise: Promise<void> | null = null
 
@@ -68,20 +81,22 @@ let unsubSse: (() => void) | null = null
 function ensureRealtime() {
   if (unsubSse) return
   unsubSse = onSseEvent((table) => {
-    if (table !== 'payables_groups' && table !== 'payables_entries') return
+    if (table !== 'payables_groups' && table !== 'payables_entries' && table !== 'payables_fixed_catalog') return
     void reload()
   })
 }
 
 async function reload(): Promise<void> {
   try {
-    const [groupRows, entryRows] = await Promise.all([
+    const [groupRows, entryRows, catalogRows] = await Promise.all([
       api.get<GroupRow[]>('/api/payables-groups'),
       api.get<EntryRow[]>('/api/payables-entries'),
+      api.get<CatalogRow[]>('/api/payables-fixed-catalog'),
     ])
     groups = groupRows.map(rowToGroup)
     const prevById = new Map(entries.map((e) => [e.id, e]))
     entries = entryRows.map((r) => rowToEntry(r, prevById.get(r.id)?.boletoData))
+    catalog = catalogRows.map(rowToCatalog)
     loaded = true
     notify()
   } catch (err) {
@@ -96,6 +111,7 @@ export const payablesService = {
 
   getGroups(): PayableGroup[] { return groups },
   getEntries(): PayableEntry[] { return entries },
+  getCatalog(): PayableFixedCatalogItem[] { return catalog },
 
   async ensureLoaded(): Promise<void> {
     ensureRealtime()
@@ -211,6 +227,45 @@ export const payablesService = {
       notify()
     } catch (err) {
       toast.error('Falha ao excluir item: ' + (err as Error).message)
+    }
+  },
+
+  /** Garante que o mês já tenha os itens Fixo padrão — chamado sozinho ao abrir um mês sem
+   * nenhum grupo ainda. Idempotente no backend: se já existe grupo nesse mês, não faz nada. */
+  async ensureMonth(month: string): Promise<void> {
+    try {
+      const res = await api.post<{ created: boolean }>('/api/payables-groups/ensure-month', { month })
+      if (res.created) await reload()
+    } catch (err) {
+      toast.error('Falha ao preparar o mês: ' + (err as Error).message)
+    }
+  },
+
+  async createCatalogItem(input: { nome: string; valorCents: number }): Promise<void> {
+    try {
+      await api.post('/api/payables-fixed-catalog', input)
+      await reload()
+    } catch (err) {
+      toast.error('Falha ao criar item padrão: ' + (err as Error).message)
+    }
+  },
+
+  async updateCatalogItem(id: string, patch: { nome?: string; valorCents?: number; ativo?: boolean; position?: number }): Promise<void> {
+    try {
+      await api.patch(`/api/payables-fixed-catalog/${id}`, patch)
+      await reload()
+    } catch (err) {
+      toast.error('Falha ao salvar item padrão: ' + (err as Error).message)
+    }
+  },
+
+  async deleteCatalogItem(id: string): Promise<void> {
+    try {
+      await api.delete(`/api/payables-fixed-catalog/${id}`)
+      catalog = catalog.filter((c) => c.id !== id)
+      notify()
+    } catch (err) {
+      toast.error('Falha ao excluir item padrão: ' + (err as Error).message)
     }
   },
 }

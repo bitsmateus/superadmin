@@ -27,7 +27,10 @@ export function MonthFilterBar({ filter }: { filter: MonthFilter }) {
           {filter.months.length > 1 && (
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); filter.removeMonth(m) }}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (window.confirm(`Tirar ${monthLabelPt(m)} da barra de meses?`)) filter.removeMonth(m)
+              }}
               title={`Tirar ${monthLabelPt(m)} da barra`}
               className="grid h-5 w-5 shrink-0 place-items-center rounded-full opacity-100 hover:bg-danger/15 hover:text-danger lg:opacity-0 lg:group-hover:opacity-100"
             >

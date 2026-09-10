@@ -436,24 +436,6 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
 
 const STORAGE_KEY = 'mercadonunes.fila.v1'
 
-// Só os campos de ESTILO (não o conteúdo do produto) entram num layout salvo — assim um layout
-// pré-pronto serve pra qualquer produto, sem carregar nome/preço de quem salvou primeiro.
-const CAMPOS_LAYOUT = [
-  'temaId',
-  'fonte',
-  'mostrarFaixa',
-  'textoFaixa',
-  'mostrarDePor',
-  'mostrarBolinhaPreco',
-  'mostrarPrecoAvulsoCaixa',
-  'mostrarLogo',
-  'ajusteNome',
-  'ajusteSubtitulo',
-  'ajusteFaixa',
-  'ajustePreco',
-  'ajustePeso',
-] as const satisfies readonly (keyof Cartaz)[]
-
 export function MercadoNunesPage() {
   const [cartaz, setCartaz] = React.useState<Cartaz>({ ...CARTAZ_PADRAO, id: 'atual' })
   const [fila, setFila] = React.useState<Cartaz[]>(() => {
@@ -508,8 +490,9 @@ export function MercadoNunesPage() {
   const salvarLayoutAtual = async () => {
     const nome = nomeNovoLayout.trim()
     if (!nome) return
-    const patch: Partial<Cartaz> = {}
-    for (const campo of CAMPOS_LAYOUT) (patch as Record<string, unknown>)[campo] = cartaz[campo]
+    // Cópia completa do cartaz — texto, preço, tudo — menos o id (interno, não faz sentido salvar
+    // nem restaurar). "Aplicar" deve devolver a tela exatamente como estava quando salvou.
+    const { id: _id, ...patch } = cartaz
     setSalvandoLayout(true)
     try {
       const criado = await mercadoNunesLayoutsApi.create(nome, patch)
@@ -852,7 +835,7 @@ export function MercadoNunesPage() {
           </div>
 
           <div style={{ marginTop: 16, width: A4_W * escala }}>
-            <Card titulo="Layouts pré-prontos" dica="Salva o estilo atual (cor, fonte, faixa, bolinha…) pra reaplicar em qualquer produto depois.">
+            <Card titulo="Layouts pré-prontos" dica="Salva o cartaz inteiro (texto, preço, cor, fonte…) pra voltar exatamente assim depois.">
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   value={nomeNovoLayout}

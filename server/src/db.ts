@@ -1180,6 +1180,11 @@ END $$`);
         CHECK (categoria IN ('fixo', 'variavel'));
     END IF;
   END $$`);
+  // Mês do grupo ('YYYY-MM') — separa Contas a Pagar por mês com totais, igual o resto do
+  // Financeiro. Grupos criados antes desse campo existir são retroativamente colocados no mês
+  // corrente, pra não sumirem da visão filtrada por mês.
+  await pool.query(`ALTER TABLE payables_groups ADD COLUMN IF NOT EXISTS month TEXT`);
+  await pool.query(`UPDATE payables_groups SET month = to_char(NOW(), 'YYYY-MM') WHERE month IS NULL`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_payables_groups ON payables_groups;

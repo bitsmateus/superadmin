@@ -8,6 +8,8 @@ export interface PayableGroup {
   id: string
   name: string
   color: string
+  /** 'YYYY-MM' — mês do grupo, usado pra filtrar/separar Contas a Pagar por mês. */
+  month: string | null
   position: number
   createdAt: string
 }
@@ -33,7 +35,7 @@ export interface PayableEntry {
   createdAt: string
 }
 
-type GroupRow = { id: string; name: string; color: string; position: number; created_at: string }
+type GroupRow = { id: string; name: string; color: string; month: string | null; position: number; created_at: string }
 type EntryRow = {
   id: string; group_id: string; elemento: string; descricao: string; categoria: PayableCategoria | null
   previsto_cents: number
@@ -42,7 +44,7 @@ type EntryRow = {
 }
 
 function rowToGroup(r: GroupRow): PayableGroup {
-  return { id: r.id, name: r.name, color: r.color, position: r.position, createdAt: r.created_at }
+  return { id: r.id, name: r.name, color: r.color, month: r.month ?? null, position: r.position, createdAt: r.created_at }
 }
 function rowToEntry(r: EntryRow, prevBoletoData?: string | null): PayableEntry {
   return {
@@ -115,7 +117,7 @@ export const payablesService = {
     }
   },
 
-  async createGroup(input: { name: string; color?: string }): Promise<void> {
+  async createGroup(input: { name: string; color?: string; month?: string | null }): Promise<void> {
     try {
       await api.post('/api/payables-groups', input)
       await reload()
@@ -128,11 +130,13 @@ export const payablesService = {
    * Fixo (aluguel, contabilidade, folha) tendem a se repetir mês a mês, só o Variável (comissão
    * etc.) muda de verdade. Cada item copiado nasce limpo (status "A pagar", sem data/boleto/real),
    * só o nome/descrição/categoria/valor previsto vêm do original como ponto de partida. */
-  async duplicateGroup(sourceGroupId: string, newName: string, opts: { onlyFixo: boolean }): Promise<void> {
+  async duplicateGroup(sourceGroupId: string, newName: string, opts: { onlyFixo: boolean; month?: string | null }): Promise<void> {
     const source = groups.find((g) => g.id === sourceGroupId)
     const sourceEntries = entries.filter((e) => e.groupId === sourceGroupId && (!opts.onlyFixo || e.categoria === 'fixo'))
     try {
-      const newGroupRow = await api.post<GroupRow>('/api/payables-groups', { name: newName, color: source?.color ?? '#4F8EF7' })
+      const newGroupRow = await api.post<GroupRow>('/api/payables-groups', {
+        name: newName, color: source?.color ?? '#4F8EF7', month: opts.month ?? null,
+      })
       for (const e of sourceEntries) {
         // eslint-disable-next-line no-await-in-loop
         await api.post('/api/payables-entries', {
@@ -151,7 +155,7 @@ export const payablesService = {
     }
   },
 
-  async updateGroup(id: string, patch: { name?: string; color?: string; position?: number }): Promise<void> {
+  async updateGroup(id: string, patch: { name?: string; color?: string; month?: string | null; position?: number }): Promise<void> {
     try {
       await api.patch(`/api/payables-groups/${id}`, patch)
       await reload()

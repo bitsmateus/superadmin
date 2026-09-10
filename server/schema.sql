@@ -1090,6 +1090,9 @@ CREATE TABLE IF NOT EXISTS payables_groups (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#4F8EF7',
+  -- Mês do grupo, formato 'YYYY-MM' — permite ver Contas a Pagar separado por mês (com totais),
+  -- igual o resto do Financeiro. Nullable só por causa de grupos criados antes desse campo existir.
+  month TEXT,
   position INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

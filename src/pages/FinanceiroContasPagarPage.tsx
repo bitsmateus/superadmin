@@ -1,17 +1,23 @@
 import * as React from 'react'
 import { toast } from 'sonner'
+import { Link } from 'react-router-dom'
 import {
-  CalendarClock, CheckCircle2, ChevronDown, Copy, FileText, Loader2, Plus, Repeat, Shuffle, Trash2, Wallet, X,
+  CalendarClock, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Copy, FileText, LayoutDashboard, Loader2,
+  Plus, Repeat, Shuffle, Trash2, Users, Wallet, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
 import { DatePickerField } from '@/components/comercial/DatePickerField'
+import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt, useMonthFilter, type MonthFilter } from '@/hooks/useMonthFilter'
 import { usePayableEntries, usePayableGroups } from '@/hooks/usePayables'
 import {
   payablesService, type PayableCategoria, type PayableEntry, type PayableGroup, type PayableStatus,
 } from '@/services/payables'
+import { useCommissionEntries } from '@/hooks/useCommissions'
+import { commissionsService, type CommissionEntry, type CommissionRole } from '@/services/commissions'
 import { formatBRLCents, parseBRLCents, prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
@@ -30,15 +36,71 @@ const CATEGORIA_STYLE: Record<PayableCategoria, string> = {
   variavel: 'bg-warning/20 text-warning',
 }
 
+const ROLE_LABEL: Record<CommissionRole, string> = { sdr: 'SDR', suporte: 'Suporte' }
+
 const GROUP_COLORS = ['#4F8EF7', '#22C55E', '#F59E0B', '#EF4444', '#A855F7', '#EC4899', '#14B8A6', '#64748B']
 
-/** Contas a Pagar (Financeiro) — board estilo Monday: lista contínua de grupos criados à mão
- * (ex.: "Abril 2026", "Folha de pagamento"), cada um com seus itens. Sem filtro de mês — tudo
- * visível de uma vez, igual o board original que serviu de referência. */
+const MONTH_NAMES_FULL = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+]
+function monthFullLabelPt(id: string): string {
+  const [y, m] = id.split('-').map(Number)
+  return `${MONTH_NAMES_FULL[m - 1] ?? id} ${y}`
+}
+
+type Tab = 'geral' | 'fixas' | 'variaveis' | 'comissoes'
+const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: 'geral', label: 'Visão geral', icon: LayoutDashboard },
+  { key: 'fixas', label: 'Fixas', icon: Repeat },
+  { key: 'variaveis', label: 'Variáveis', icon: Shuffle },
+  { key: 'comissoes', label: 'Comissões', icon: Users },
+]
+
+/** Um grupo/comissão "pertence" ao mês selecionado — normal (um mês só) ou personalizado
+ * (intervalo livre, compara o mês inteiro contra o intervalo). */
+function monthInFilter(month: string | null, filter: MonthFilter): boolean {
+  if (!month) return false
+  if (filter.customMode) {
+    const { from, to } = filter.bounds
+    const bounds = monthIdBounds(month)
+    if (from && bounds.to < from) return false
+    if (to && bounds.from > to) return false
+    return true
+  }
+  return month === filter.selected
+}
+
+/** Contas a Pagar (Financeiro) — controle financeiro completo, separado por mês: grupos criados à
+ * mão (ex.: "Setembro 2026"), cada um com seu mês, navegados em abas por categoria (Fixas,
+ * Variáveis) + uma aba Comissões que só reflete o que já está lançado na Gestão Interna (contrato
+ * Assinado — o resto fica lá, não duplica edição aqui). */
 export function FinanceiroContasPagarPage() {
   const groups = usePayableGroups()
   const entries = usePayableEntries()
+  const commissionEntries = useCommissionEntries()
   const [newGroupOpen, setNewGroupOpen] = React.useState(false)
+  const [tab, setTab] = React.useState<Tab>('geral')
+  const filter = useMonthFilter([addMonthsToId(currentMonthId(), -1)])
+
+  const groupsInMonth = React.useMemo(
+    () => groups.filter((g) => monthInFilter(g.month, filter)).slice().sort((a, b) => a.position - b.position),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [groups, filter.selected, filter.customMode, filter.customFrom, filter.customTo],
+  )
+  const groupIdsInMonth = React.useMemo(() => new Set(groupsInMonth.map((g) => g.id)), [groupsInMonth])
+  const entriesInMonth = React.useMemo(
+    () => entries.filter((e) => groupIdsInMonth.has(e.groupId)),
+    [entries, groupIdsInMonth],
+  )
+  const commissionsInMonth = React.useMemo(
+    () => commissionEntries.filter((c) => c.contratoAssinado && monthInFilter(c.month, filter)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [commissionEntries, filter.selected, filter.customMode, filter.customFrom, filter.customTo],
+  )
+
+  const monthHint = filter.customMode ? 'no período selecionado' : `em ${monthLabelPt(filter.selected)}`
+  const defaultMonth = filter.customMode ? currentMonthId() : filter.selected
 
   return (
     <>
@@ -46,28 +108,32 @@ export function FinanceiroContasPagarPage() {
         title="Contas a Pagar"
         subtitle="Financeiro"
         rightSlot={
-          <Button onClick={() => setNewGroupOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
-            Novo grupo
-          </Button>
+          tab !== 'comissoes' ? (
+            <Button onClick={() => setNewGroupOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
+              Novo grupo
+            </Button>
+          ) : undefined
         }
       />
       <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <OverviewCards entries={entries} />
+        <MonthFilterBar filter={filter} />
 
-        {groups.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-line p-10 text-center text-sm text-foreground/40">
-            Nenhum grupo ainda — crie um pra começar (ex.: "Abril 2026" ou "Folha de pagamento").
-          </div>
-        ) : (
-          groups
-            .slice()
-            .sort((a, b) => a.position - b.position)
-            .map((g) => (
-              <GroupCard key={g.id} group={g} entries={entries.filter((e) => e.groupId === g.id)} />
-            ))
+        <OverviewCards entries={entriesInMonth} commissions={commissionsInMonth} />
+
+        <TabNav tab={tab} setTab={setTab} />
+
+        {tab === 'geral' && (
+          <GroupsList groups={groupsInMonth} entries={entriesInMonth} monthHint={monthHint} onNewGroup={() => setNewGroupOpen(true)} />
         )}
+        {tab === 'fixas' && (
+          <GroupsList groups={groupsInMonth} entries={entriesInMonth} categoria="fixo" monthHint={monthHint} onNewGroup={() => setNewGroupOpen(true)} />
+        )}
+        {tab === 'variaveis' && (
+          <GroupsList groups={groupsInMonth} entries={entriesInMonth} categoria="variavel" monthHint={monthHint} onNewGroup={() => setNewGroupOpen(true)} />
+        )}
+        {tab === 'comissoes' && <ComissoesTab entries={commissionsInMonth} monthHint={monthHint} />}
       </div>
-      <NewGroupModal open={newGroupOpen} onClose={() => setNewGroupOpen(false)} />
+      <NewGroupModal open={newGroupOpen} onClose={() => setNewGroupOpen(false)} defaultMonth={defaultMonth} />
     </>
   )
 }
@@ -87,17 +153,33 @@ function computeStats(entries: PayableEntry[]) {
   return { previsto, pago, pendente, fixo, variavel }
 }
 
-/** Visão geral no topo — soma TODOS os grupos, pra ter noção do total sem precisar somar cabeça. */
-function OverviewCards({ entries }: { entries: PayableEntry[] }) {
+function computeCommissionStats(commissionEntries: CommissionEntry[]) {
+  let total = 0, pago = 0, pendente = 0
+  for (const c of commissionEntries) {
+    total += c.amountCents
+    if (c.status === 'pago') pago += c.amountCents
+    else pendente += c.amountCents
+  }
+  return { total, pago, pendente }
+}
+
+/** Visão geral no topo — soma os grupos do mês selecionado + as comissões assinadas do mesmo mês,
+ * pra ter noção do total de contas a pagar sem precisar somar de cabeça nem abrir a Gestão Interna. */
+function OverviewCards({ entries, commissions }: { entries: PayableEntry[]; commissions: CommissionEntry[] }) {
   const totals = React.useMemo(() => computeStats(entries), [entries])
+  const commTotals = React.useMemo(() => computeCommissionStats(commissions), [commissions])
+  const previstoGeral = totals.previsto + commTotals.total
+  const pagoGeral = totals.pago + commTotals.pago
+  const pendenteGeral = totals.pendente + commTotals.pendente
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      <OverviewCard icon={<Wallet className="h-4 w-4" />} label="Previsto (total)" value={formatBRLCents(totals.previsto)} tone="info" />
-      <OverviewCard icon={<CheckCircle2 className="h-4 w-4" />} label="Pago" value={formatBRLCents(totals.pago)} tone="success" />
-      <OverviewCard icon={<CalendarClock className="h-4 w-4" />} label="A pagar / agendado" value={formatBRLCents(totals.pendente)} tone="warning" />
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <OverviewCard icon={<Wallet className="h-4 w-4" />} label="Previsto (total)" value={formatBRLCents(previstoGeral)} tone="info" />
+      <OverviewCard icon={<CheckCircle2 className="h-4 w-4" />} label="Pago" value={formatBRLCents(pagoGeral)} tone="success" />
+      <OverviewCard icon={<CalendarClock className="h-4 w-4" />} label="A pagar / agendado" value={formatBRLCents(pendenteGeral)} tone="warning" />
       <OverviewCard icon={<Repeat className="h-4 w-4" />} label="Fixo" value={formatBRLCents(totals.fixo)} tone="info" />
       <OverviewCard icon={<Shuffle className="h-4 w-4" />} label="Variável" value={formatBRLCents(totals.variavel)} tone="warning" />
+      <OverviewCard icon={<Users className="h-4 w-4" />} label="Comissões (assinadas)" value={formatBRLCents(commTotals.total)} tone="purple" />
     </div>
   )
 }
@@ -108,12 +190,13 @@ function OverviewCard({
   icon: React.ReactNode
   label: string
   value: string
-  tone: 'info' | 'success' | 'warning'
+  tone: 'info' | 'success' | 'warning' | 'purple'
 }) {
   const tones = {
     info: 'bg-accent/10 text-accent ring-accent/20',
     success: 'bg-success/10 text-success ring-success/20',
     warning: 'bg-warning/10 text-warning ring-warning/20',
+    purple: 'bg-purple-500/10 text-purple-500 ring-purple-500/20',
   }
   return (
     <div className="rounded-2xl border border-line bg-card p-4 shadow-sm">
@@ -126,11 +209,63 @@ function OverviewCard({
   )
 }
 
-function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEntry[] }) {
+function TabNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1 overflow-x-auto no-scrollbar border-b border-line">
+      {TABS.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => setTab(key)}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors',
+            tab === key ? 'border-accent text-accent' : 'border-transparent text-foreground/50 hover:text-foreground/80',
+          )}
+        >
+          <Icon className="h-4 w-4" />
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function GroupsList({
+  groups, entries, categoria, monthHint, onNewGroup,
+}: {
+  groups: PayableGroup[]
+  entries: PayableEntry[]
+  categoria?: PayableCategoria
+  monthHint: string
+  onNewGroup: () => void
+}) {
+  if (groups.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-line p-10 text-center text-sm text-foreground/40">
+        <p>Nenhum grupo {monthHint}.</p>
+        <button type="button" onClick={onNewGroup} className="mt-2 font-medium text-accent hover:underline">
+          Criar um grupo novo
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-5">
+      {groups.map((g) => (
+        <GroupCard key={g.id} group={g} entries={entries.filter((e) => e.groupId === g.id)} categoria={categoria} />
+      ))}
+    </div>
+  )
+}
+
+function GroupCard({
+  group, entries, categoria,
+}: { group: PayableGroup; entries: PayableEntry[]; categoria?: PayableCategoria }) {
   const [open, setOpen] = React.useState(true)
   const [deleting, setDeleting] = React.useState(false)
   const [duplicating, setDuplicating] = React.useState(false)
-  const sorted = entries.slice().sort((a, b) => a.position - b.position)
+  const filtered = categoria ? entries.filter((e) => e.categoria === categoria) : entries
+  const sorted = filtered.slice().sort((a, b) => a.position - b.position)
 
   const totals = sorted.reduce(
     (acc, e) => ({
@@ -143,15 +278,16 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
   const stats = React.useMemo(() => computeStats(sorted), [sorted])
 
   const addItem = () => {
-    void payablesService.createEntry({ groupId: group.id, elemento: '', previstoCents: 0 })
+    void payablesService.createEntry({ groupId: group.id, elemento: '', previstoCents: 0, categoria: categoria ?? null })
   }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-card" style={{ borderLeft: `4px solid ${group.color}` }}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
-        <button type="button" onClick={() => setOpen((o) => !o)} className="flex min-w-0 items-center gap-2">
+        <button type="button" onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-wrap items-center gap-2">
           <ChevronDown className={cn('h-4 w-4 shrink-0 text-foreground/40 transition-transform', !open && '-rotate-90')} />
           <GroupNameField group={group} />
+          <GroupMonthField group={group} />
           <span className="shrink-0 text-xs text-foreground/40">{sorted.length} item(ns)</span>
           {sorted.length > 0 && (
             <span className="shrink-0 rounded-full bg-elevate/[0.06] px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground/70">
@@ -163,16 +299,14 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
           <Button size="sm" variant="ghost" onClick={addItem} leftIcon={<Plus className="h-3.5 w-3.5" />}>
             Item
           </Button>
-          {sorted.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setDuplicating(true)}
-              title="Duplicar pra um mês novo"
-              className="grid h-8 w-8 place-items-center rounded text-foreground/30 hover:bg-accent/10 hover:text-accent"
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setDuplicating(true)}
+            title="Duplicar pra um mês novo"
+            className="grid h-8 w-8 place-items-center rounded text-foreground/30 hover:bg-accent/10 hover:text-accent"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             onClick={() => setDeleting(true)}
@@ -188,9 +322,13 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
         <div className="flex flex-wrap items-center gap-1.5 border-b border-line bg-elevate/[0.015] px-4 py-2">
           <StatChip label="Pago" value={stats.pago} tone="success" />
           <StatChip label="A pagar/agendado" value={stats.pendente} tone="warning" />
-          <span className="mx-1 h-3.5 w-px shrink-0 bg-line" />
-          <StatChip label="Fixo" value={stats.fixo} tone="info" />
-          <StatChip label="Variável" value={stats.variavel} tone="warning" />
+          {!categoria && (
+            <>
+              <span className="mx-1 h-3.5 w-px shrink-0 bg-line" />
+              <StatChip label="Fixo" value={stats.fixo} tone="info" />
+              <StatChip label="Variável" value={stats.variavel} tone="warning" />
+            </>
+          )}
         </div>
       )}
 
@@ -213,7 +351,9 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
             <tbody>
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-6 text-center text-xs text-foreground/40">Nenhum item nesse grupo.</td>
+                  <td colSpan={9} className="px-4 py-6 text-center text-xs text-foreground/40">
+                    {categoria ? `Nenhum item ${CATEGORIA_LABEL[categoria].toLowerCase()} nesse grupo.` : 'Nenhum item nesse grupo.'}
+                  </td>
                 </tr>
               ) : (
                 sorted.map((e) => <EntryRow key={e.id} entry={e} />)
@@ -249,11 +389,11 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
         }
       >
         <p className="text-sm text-foreground/70">
-          Excluir o grupo <strong>{group.name}</strong> e os {sorted.length} item(ns) dentro dele? Essa ação não pode ser desfeita.
+          Excluir o grupo <strong>{group.name}</strong> e os {entries.length} item(ns) dentro dele? Essa ação não pode ser desfeita.
         </p>
       </Modal>
 
-      <DuplicateGroupModal open={duplicating} onClose={() => setDuplicating(false)} group={group} entries={sorted} />
+      <DuplicateGroupModal open={duplicating} onClose={() => setDuplicating(false)} group={group} entries={entries} />
     </div>
   )
 }
@@ -297,6 +437,49 @@ function GroupNameField({ group }: { group: PayableGroup }) {
     >
       {group.name}
     </span>
+  )
+}
+
+/** Pill com o mês do grupo + setas pra mudar de mês sem precisar abrir modal nenhum — o mês é o
+ * que decide em que aba de mês (MonthFilterBar) esse grupo aparece. */
+function GroupMonthField({ group }: { group: PayableGroup }) {
+  const month = group.month ?? currentMonthId()
+  const step = (delta: number) => { void payablesService.updateGroup(group.id, { month: addMonthsToId(month, delta) }) }
+  return (
+    <span
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-elevate/[0.06] py-0.5 pl-0.5 pr-1.5 text-xs font-medium text-foreground/60"
+    >
+      <button type="button" onClick={() => step(-1)} title="Mês anterior" className="grid h-5 w-5 place-items-center rounded-full hover:bg-elevate/[0.1] hover:text-foreground">
+        <ChevronLeft className="h-3 w-3" />
+      </button>
+      {monthLabelPt(month)}
+      <button type="button" onClick={() => step(1)} title="Próximo mês" className="grid h-5 w-5 place-items-center rounded-full hover:bg-elevate/[0.1] hover:text-foreground">
+        <ChevronRight className="h-3 w-3" />
+      </button>
+    </span>
+  )
+}
+
+function MonthStepper({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="inline-flex items-center gap-1 rounded-lg border border-line px-1">
+      <button
+        type="button"
+        onClick={() => onChange(addMonthsToId(value, -1))}
+        className="grid h-8 w-8 place-items-center rounded text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </button>
+      <span className="min-w-[92px] text-center text-sm font-medium text-foreground">{monthLabelPt(value)}</span>
+      <button
+        type="button"
+        onClick={() => onChange(addMonthsToId(value, 1))}
+        className="grid h-8 w-8 place-items-center rounded text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground"
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+    </div>
   )
 }
 
@@ -576,22 +759,107 @@ function BoletoCell({ entry }: { entry: PayableEntry }) {
   )
 }
 
-function NewGroupModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Comissões (Financeiro > Contas a Pagar) — só reflete o que a Gestão Interna já tem lançado com
+ * contrato Assinado (é o que de fato vira conta a pagar). Não duplica os campos de edição —
+ * "Nome"/"Pessoa"/"Tipo" ficam só na Gestão Interna, aqui só toggla Pago/Pendente, que é o que
+ * importa pro controle de pagamento. */
+function ComissoesTab({ entries, monthHint }: { entries: CommissionEntry[]; monthHint: string }) {
+  const bySdr = entries.filter((e) => e.role === 'sdr')
+  const bySuporte = entries.filter((e) => e.role === 'suporte')
+
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-line p-10 text-center text-sm text-foreground/40">
+        <p>Nenhuma comissão assinada {monthHint}.</p>
+        <p className="mx-auto mt-1 max-w-md">
+          Comissões com contrato ainda não assinado não entram aqui — acompanhe pendências na{' '}
+          <Link to="/financeiro/gestao-interna" className="text-accent hover:underline">Gestão Interna</Link>.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      <CommissionRoleCard title={`Comissão ${ROLE_LABEL.sdr}`} entries={bySdr} />
+      <CommissionRoleCard title={`Comissão ${ROLE_LABEL.suporte}`} entries={bySuporte} />
+      <p className="text-xs text-foreground/40">
+        Mostrando só comissões com contrato Assinado — são as que realmente entram como conta a pagar. Pra
+        registrar uma comissão nova, editar valores ou tipos, use a{' '}
+        <Link to="/financeiro/gestao-interna" className="text-accent hover:underline">Gestão Interna</Link>.
+      </p>
+    </div>
+  )
+}
+
+function CommissionRoleCard({ title, entries }: { title: string; entries: CommissionEntry[] }) {
+  const total = entries.reduce((sum, e) => sum + e.amountCents, 0)
+  if (entries.length === 0) return null
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line bg-card">
+      <div className="flex items-center justify-between border-b border-line px-4 py-3">
+        <span className="text-sm font-semibold text-foreground">{title}</span>
+        <span className="shrink-0 rounded-full bg-elevate/[0.06] px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground/70">
+          {formatBRLCents(total)}
+        </span>
+      </div>
+      <div className="overflow-x-auto no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <table className="w-full min-w-[560px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+              <th className="px-4 py-2.5">Nome</th>
+              <th className="px-3 py-2.5">Pessoa</th>
+              <th className="px-3 py-2.5">Tipo</th>
+              <th className="w-32 px-3 py-2.5 text-right">Valor</th>
+              <th className="w-32 px-3 py-2.5">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((e) => (
+              <tr key={e.id} className="border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]">
+                <td className="px-4 py-2 text-sm text-foreground">{e.nome || '—'}</td>
+                <td className="px-3 py-2 text-sm text-foreground/70">{e.person}</td>
+                <td className="px-3 py-2 text-sm text-foreground/70">{e.typeLabel}</td>
+                <td className="px-3 py-2 text-right text-sm tabular-nums text-foreground">{formatBRLCents(e.amountCents)}</td>
+                <td className="px-3 py-2 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => void commissionsService.setEntryStatus(e.id, e.status === 'pago' ? 'pendente' : 'pago')}
+                    className={cn(
+                      'rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+                      e.status === 'pago' ? 'bg-success/10 text-success hover:bg-success/15' : 'bg-warning/10 text-warning hover:bg-warning/15',
+                    )}
+                  >
+                    {e.status === 'pago' ? 'Pago' : 'Pendente'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function NewGroupModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
   const [name, setName] = React.useState('')
   const [color, setColor] = React.useState(GROUP_COLORS[0])
+  const [month, setMonth] = React.useState(defaultMonth)
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     if (!open) return
-    setName('')
+    setName(monthFullLabelPt(defaultMonth))
     setColor(GROUP_COLORS[0])
-  }, [open])
+    setMonth(defaultMonth)
+  }, [open, defaultMonth])
 
   const submit = async () => {
     if (!name.trim()) { toast.error('Informe o nome do grupo.'); return }
     setSaving(true)
     try {
-      await payablesService.createGroup({ name: name.trim(), color })
+      await payablesService.createGroup({ name: name.trim(), color, month })
       toast.success('Grupo criado.')
       onClose()
     } finally {
@@ -617,10 +885,14 @@ function NewGroupModal({ open, onClose }: { open: boolean; onClose: () => void }
           label="Nome"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder='Ex.: "Abril 2026" ou "Folha de pagamento"'
+          placeholder='Ex.: "Setembro 2026" ou "Folha de pagamento"'
           autoFocus
           onKeyDown={(e) => { if (e.key === 'Enter') void submit() }}
         />
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-foreground/70">Mês</label>
+          <MonthStepper value={month} onChange={setMonth} />
+        </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-foreground/70">Cor</label>
           <div className="flex flex-wrap gap-2">
@@ -645,21 +917,24 @@ function DuplicateGroupModal({
   open, onClose, group, entries,
 }: { open: boolean; onClose: () => void; group: PayableGroup; entries: PayableEntry[] }) {
   const [name, setName] = React.useState('')
+  const [month, setMonth] = React.useState('')
   const [onlyFixo, setOnlyFixo] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const fixoCount = entries.filter((e) => e.categoria === 'fixo').length
 
   React.useEffect(() => {
     if (!open) return
-    setName(group.name)
+    const next = addMonthsToId(group.month ?? currentMonthId(), 1)
+    setMonth(next)
+    setName(monthFullLabelPt(next))
     setOnlyFixo(true)
-  }, [open, group.name])
+  }, [open, group.month])
 
   const submit = async () => {
     if (!name.trim()) { toast.error('Informe o nome do novo grupo.'); return }
     setSaving(true)
     try {
-      await payablesService.duplicateGroup(group.id, name.trim(), { onlyFixo })
+      await payablesService.duplicateGroup(group.id, name.trim(), { onlyFixo, month })
       onClose()
     } finally {
       setSaving(false)
@@ -692,6 +967,10 @@ function DuplicateGroupModal({
           autoFocus
           onKeyDown={(e) => { if (e.key === 'Enter') void submit() }}
         />
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-foreground/70">Mês</label>
+          <MonthStepper value={month} onChange={setMonth} />
+        </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-foreground/70">O que copiar</label>
           <div className="space-y-1.5">

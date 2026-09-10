@@ -2,11 +2,12 @@ import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 
 /**
- * Contas a Pagar (Financeiro) — board estilo Monday: lista contínua de grupos criados à mão
- * (ex.: "Abril 2026", "Folha de pagamento"), cada um com seus itens. Sem conceito de mês
- * selecionado — diferente da Gestão Interna, aqui é tudo visível de uma vez, na ordem que a
- * pessoa organizar. `boleto_data` (PDF em base64) é pesado — omitido do GET de lista, igual o
- * padrão já usado em contracts.ts/clients.ts, com uma rota própria pra buscar um item completo.
+ * Contas a Pagar (Financeiro) — board estilo Monday: grupos criados à mão (ex.: "Setembro 2026",
+ * "Folha de pagamento"), cada um com seus itens e um mês ('YYYY-MM') associado — o front filtra
+ * por mês (igual o resto do Financeiro) e separa em abas por categoria (Fixas/Variáveis) +
+ * Comissões (que na verdade vem de commission_entries, ver commissions.ts). `boleto_data` (PDF em
+ * base64) é pesado — omitido do GET de lista, igual o padrão já usado em contracts.ts/clients.ts,
+ * com uma rota própria pra buscar um item completo.
  */
 export async function payablesRoutes(app: FastifyInstance) {
   // ---------- Grupos ----------
@@ -15,22 +16,22 @@ export async function payablesRoutes(app: FastifyInstance) {
     return query('SELECT * FROM payables_groups ORDER BY position, created_at');
   });
 
-  app.post<{ Body: { name?: string; color?: string } }>(
+  app.post<{ Body: { name?: string; color?: string; month?: string } }>(
     '/api/payables-groups',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const { name, color } = req.body;
+      const { name, color, month } = req.body;
       if (!name?.trim()) return reply.status(400).send({ message: 'name é obrigatório' });
       const [{ max }] = await query<{ max: number | null }>('SELECT MAX(position) as max FROM payables_groups');
       const [group] = await query(
-        `INSERT INTO payables_groups (name, color, position) VALUES ($1,$2,$3) RETURNING *`,
-        [name.trim(), color ?? '#4F8EF7', (max ?? -1) + 1]
+        `INSERT INTO payables_groups (name, color, month, position) VALUES ($1,$2,$3,$4) RETURNING *`,
+        [name.trim(), color ?? '#4F8EF7', month ?? null, (max ?? -1) + 1]
       );
       return reply.status(201).send(group);
     }
   );
 
-  app.patch<{ Params: { id: string }; Body: { name?: string; color?: string; position?: number } }>(
+  app.patch<{ Params: { id: string }; Body: { name?: string; color?: string; month?: string; position?: number } }>(
     '/api/payables-groups/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -39,6 +40,7 @@ export async function payablesRoutes(app: FastifyInstance) {
       let i = 1;
       if (req.body.name !== undefined) { sets.push(`name = $${i++}`); params.push(req.body.name.trim()); }
       if (req.body.color !== undefined) { sets.push(`color = $${i++}`); params.push(req.body.color); }
+      if (req.body.month !== undefined) { sets.push(`month = $${i++}`); params.push(req.body.month); }
       if (req.body.position !== undefined) { sets.push(`position = $${i++}`); params.push(req.body.position); }
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       sets.push(`updated_at = NOW()`);

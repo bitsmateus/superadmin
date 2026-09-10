@@ -8,7 +8,6 @@ import {
   Briefcase,
   Building2,
   ChevronDown,
-  ClipboardList,
   Columns3,
   Contact,
   Copy,
@@ -216,7 +215,6 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     ? [
         ...(hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
         ...(hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),
-        { to: '/financeiro/gestao-interna', label: 'Gestão Interna', icon: ClipboardList },
         { to: '/financeiro/contas-a-pagar', label: 'Contas a Pagar', icon: Wallet },
       ]
     : []

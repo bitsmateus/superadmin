@@ -1,13 +1,11 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Check, ChevronDown, Loader2, Plus, Settings2, Trash2, X } from 'lucide-react'
-import { TopBar } from '@/components/layout/TopBar'
+import { Check, Plus, Settings2, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
-import { useCommissionEntries, useCommissionTypes } from '@/hooks/useCommissions'
 import {
   commissionsService,
   type CommissionEntry,
@@ -16,8 +14,16 @@ import {
   type CommissionType,
 } from '@/services/commissions'
 import { formatBRLCents, parseBRLCents, prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
-import { addMonthsToId, currentMonthId, monthLabelPt, useMonthFilter } from '@/hooks/useMonthFilter'
+import { monthLabelPt } from '@/hooks/useMonthFilter'
 import { cn, initials } from '@/lib/utils'
+
+/**
+ * Comissão SDR — nasceu como a tela separada "Gestão Interna" e foi unificada dentro de Vendas
+ * (mesmo período, mesma tela) porque as duas mostravam basicamente a mesma informação em lugares
+ * diferentes. 100% registro manual, de propósito: cada venda/entrega/indicação vira um lançamento
+ * escolhido de um cardápio de tipos configurável, via "Registrar comissão". Não lê nem escreve em
+ * lead_rows/clients/contracts.
+ */
 
 const ROLE_LABEL: Record<CommissionRole, string> = { sdr: 'SDR', suporte: 'Suporte' }
 const TOTAL_NAMES = ['Luis', 'Jean', 'Arthur', 'Joao']
@@ -26,32 +32,47 @@ function rateLabel(t: Pick<CommissionType, 'kind' | 'rateCents' | 'ratePercent'>
   return t.kind === 'fixed' ? formatBRLCents(t.rateCents ?? 0) : `${t.ratePercent ?? 0}%`
 }
 
-/** Comissões — aba "Gestão Interna" (Financeiro). 100% registro manual, de propósito: cada
- * venda/entrega/indicação vira um lançamento escolhido de um cardápio de tipos configurável, via
- * "Registrar comissão". Não lê nem escreve em lead_rows/clients/contracts. */
-export function FinanceiroGestaoInternaPage() {
-  const types = useCommissionTypes()
-  const entries = useCommissionEntries()
+/** Botão "Tipos de comissão" pra usar na TopBar de quem incorpora esse painel. */
+export function CommissionTypesButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="secondary" onClick={onClick} leftIcon={<Settings2 className="h-4 w-4" />}>
+      Tipos de comissão
+    </Button>
+  )
+}
 
-  // Só mês atual + passado por padrão, "Adicionar mês" pra ir além — mesmo hook de Contrato/Vendas,
-  // sem "Personalizado" (comissão é sempre pessoa-lançamento-MÊS, não intervalo livre).
-  const filter = useMonthFilter([addMonthsToId(currentMonthId(), -1)])
-  const month = filter.selected
+/** Botão "Registrar comissão" pra usar na TopBar de quem incorpora esse painel. */
+export function RegisterCommissionButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button onClick={onClick} leftIcon={<Plus className="h-4 w-4" />}>
+      Registrar comissão
+    </Button>
+  )
+}
 
-  const [registerOpen, setRegisterOpen] = React.useState(false)
-  const [typesOpen, setTypesOpen] = React.useState(false)
+/** Comissão SDR (tabela dos lançamentos) + Total por pessoa — `entries` já vem filtrada pro
+ * período que a tela host estiver mostrando (mesmo período da lista de Vendas). */
+export function CommissionSdrSection({
+  entries, types, periodLabel,
+}: {
+  entries: CommissionEntry[]
+  types: CommissionType[]
+  periodLabel: string
+}) {
+  const bySdr = React.useMemo(() => entries.filter((e) => e.role === 'sdr'), [entries])
 
-  const entriesInMonth = React.useMemo(() => entries.filter((e) => e.month === month), [entries, month])
-  const bySdr = entriesInMonth.filter((e) => e.role === 'sdr')
+  const toggleStatus = (entry: CommissionEntry) => {
+    void commissionsService.setEntryStatus(entry.id, entry.status === 'pago' ? 'pendente' : 'pago')
+  }
 
-  // Total do mês por pessoa — só essas 4, na ordem pedida (soma SDR + Suporte, tanto faz o papel).
-  // Separado por Contrato porque só se paga comissão do que já está Assinado — Pendente é só um
-  // "a caminho", não entra na conta de pagamento ainda.
+  // Total do período por pessoa — só essas 4, na ordem pedida (soma SDR + Suporte, tanto faz o
+  // papel). Separado por Contrato porque só se paga comissão do que já está Assinado — Pendente é
+  // só um "a caminho", não entra na conta de pagamento ainda.
   const totalsByPerson = React.useMemo(() => {
     const totals = new Map<string, { assinado: number; pendente: number }>(
       TOTAL_NAMES.map((n) => [n, { assinado: 0, pendente: 0 }]),
     )
-    for (const e of entriesInMonth) {
+    for (const e of entries) {
       const match = TOTAL_NAMES.find((n) => n.toLowerCase() === e.person.trim().toLowerCase())
       if (!match) continue
       const t = totals.get(match)!
@@ -59,99 +80,53 @@ export function FinanceiroGestaoInternaPage() {
       else t.pendente += e.amountCents
     }
     return totals
-  }, [entriesInMonth])
-
-  const toggleStatus = (entry: CommissionEntry) => {
-    void commissionsService.setEntryStatus(entry.id, entry.status === 'pago' ? 'pendente' : 'pago')
-  }
+  }, [entries])
 
   return (
-    <>
-      <TopBar
-        title="Gestão Interna"
-        subtitle="Financeiro"
-        rightSlot={
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={() => setTypesOpen(true)} leftIcon={<Settings2 className="h-4 w-4" />}>
-              Tipos de comissão
-            </Button>
-            <Button onClick={() => setRegisterOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
-              Registrar comissão
-            </Button>
-          </div>
-        }
-      />
-      <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-line bg-card p-3">
-          {filter.months.map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => filter.setSelected(m)}
-              className={cn(
-                'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-                month === m ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
-              )}
-            >
-              {monthLabelPt(m)}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={filter.addMonth}
-            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground/50 hover:bg-elevate/[0.04]"
-          >
-            <Plus className="h-3 w-3" /> Adicionar mês
-          </button>
+    <div className="mt-4 space-y-4">
+      <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} />
+
+      <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
+        <div className="border-b border-line px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">Total por pessoa — {periodLabel}</p>
+          <p className="mt-0.5 text-xs text-foreground/45">
+            Só o que está com contrato Assinado entra no pagamento — Pendente é só referência.
+          </p>
         </div>
-
-        <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} />
-
-        <div className="overflow-hidden rounded-2xl border border-line bg-card">
-          <div className="border-b border-line px-4 py-3">
-            <p className="text-sm font-semibold text-foreground">Total por pessoa — {monthLabelPt(month)}</p>
-            <p className="mt-0.5 text-xs text-foreground/45">
-              Só o que está com contrato Assinado entra no pagamento — Pendente é só referência.
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px]">
-              <thead>
-                <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
-                  <th className="px-4 py-2.5">Pessoa</th>
-                  <th className="px-4 py-2.5 text-right">Assinado</th>
-                  <th className="px-4 py-2.5 text-right">Pendente</th>
-                </tr>
-              </thead>
-              <tbody>
-                {TOTAL_NAMES.map((name) => {
-                  const t = totalsByPerson.get(name)!
-                  return (
-                    <tr key={name} className="border-b border-line/60 last:border-0">
-                      <td className="px-4 py-2.5 text-sm font-medium text-foreground">{name}</td>
-                      <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-success">
-                        {formatBRLCents(t.assinado)}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-sm font-medium tabular-nums text-warning">
-                        {formatBRLCents(t.pendente)}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px]">
+            <thead>
+              <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+                <th className="px-4 py-2.5">Pessoa</th>
+                <th className="px-4 py-2.5 text-right">Assinado</th>
+                <th className="px-4 py-2.5 text-right">Pendente</th>
+              </tr>
+            </thead>
+            <tbody>
+              {TOTAL_NAMES.map((name) => {
+                const t = totalsByPerson.get(name)!
+                return (
+                  <tr key={name} className="border-b border-line/60 last:border-0">
+                    <td className="px-4 py-2.5 text-sm font-medium text-foreground">{name}</td>
+                    <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-success">
+                      {formatBRLCents(t.assinado)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-sm font-medium tabular-nums text-warning">
+                      {formatBRLCents(t.pendente)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
-
-        <p className="text-[11px] text-foreground/40">
-          Registro manual — cada venda/entrega/indicação é lançada aqui escolhendo um dos tipos
-          configurados em "Registrar comissão".
-        </p>
       </div>
 
-      <RegisterEntryModal open={registerOpen} onClose={() => setRegisterOpen(false)} types={types} month={month} />
-      <TypesModal open={typesOpen} onClose={() => setTypesOpen(false)} types={types} />
-    </>
+      <p className="text-[11px] text-foreground/40">
+        Registro manual — cada venda/entrega/indicação é lançada aqui escolhendo um dos tipos
+        configurados em "Registrar comissão".
+      </p>
+    </div>
   )
 }
 
@@ -170,7 +145,7 @@ function EntriesTable({
   const [deleting, setDeleting] = React.useState<CommissionEntry | null>(null)
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-card">
+    <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <p className="text-sm font-semibold text-foreground">{title}</p>
         <span className="text-sm font-semibold tabular-nums text-foreground">{formatBRLCents(total)}</span>
@@ -462,7 +437,7 @@ function AmountCell({ entry }: { entry: CommissionEntry }) {
   )
 }
 
-function RegisterEntryModal({
+export function RegisterCommissionModal({
   open,
   onClose,
   types,
@@ -622,7 +597,7 @@ function RegisterEntryModal({
   )
 }
 
-function TypesModal({ open, onClose, types }: { open: boolean; onClose: () => void; types: CommissionType[] }) {
+export function CommissionTypesModal({ open, onClose, types }: { open: boolean; onClose: () => void; types: CommissionType[] }) {
   const [adding, setAdding] = React.useState<CommissionRole | null>(null)
 
   return (

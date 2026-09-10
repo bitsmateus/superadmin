@@ -8,8 +8,14 @@ import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
+import {
+  CommissionSdrSection, CommissionTypesButton, CommissionTypesModal,
+  RegisterCommissionButton, RegisterCommissionModal,
+} from '@/components/comercial/CommissionSdrPanel'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
+import { useCommissionEntries, useCommissionTypes } from '@/hooks/useCommissions'
+import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt } from '@/hooks/useMonthFilter'
 import { leadBoardsService } from '@/services/leadBoards'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { cn, initials } from '@/lib/utils'
@@ -39,6 +45,13 @@ function monthRange(offset: number): { from: string; to: string } {
   const first = new Date(now.getFullYear(), now.getMonth() + offset, 1)
   const last = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0)
   return { from: isoDay(first), to: isoDay(last) }
+}
+
+/** Comissão só guarda mês ('YYYY-MM'), não uma data — pra filtrar pelo mesmo período de Vendas
+ * (que é um intervalo de datas), compara o mês inteiro contra o intervalo [from, to]. */
+function monthOverlapsRange(month: string, from: string, to: string): boolean {
+  const bounds = monthIdBounds(month)
+  return bounds.to >= from && bounds.from <= to
 }
 
 export function VendasView({ pageId }: { pageId: string }) {
@@ -73,6 +86,23 @@ export function VendasView({ pageId }: { pageId: string }) {
   const [trashOpen, setTrashOpen] = React.useState(false)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
   const [onlyPending, setOnlyPending] = React.useState(false)
+  const [commissionRegisterOpen, setCommissionRegisterOpen] = React.useState(false)
+  const [commissionTypesOpen, setCommissionTypesOpen] = React.useState(false)
+
+  // Comissão SDR — unificada aqui (era a tela separada "Gestão Interna"): mesmo período de Vendas,
+  // pra não ter dois seletores de data mostrando praticamente a mesma coisa em telas diferentes.
+  const commissionTypes = useCommissionTypes()
+  const commissionEntries = useCommissionEntries()
+  const commissionsInPeriod = React.useMemo(
+    () => commissionEntries.filter((e) => monthOverlapsRange(e.month, from, to)),
+    [commissionEntries, from, to],
+  )
+  const periodLabel = periodo === 'personalizado'
+    ? `${from.split('-').reverse().join('/')} a ${to.split('-').reverse().join('/')}`
+    : monthLabelPt(periodo === 'mes_atual' ? currentMonthId() : addMonthsToId(currentMonthId(), -1))
+  // "Mês passado" registra a comissão nesse mês de propósito (backfill) — "Personalizado" não tem
+  // um mês único óbvio, então cai no mês atual por padrão.
+  const commissionMonth = periodo === 'mes_passado' ? addMonthsToId(currentMonthId(), -1) : currentMonthId()
 
   // Seleção "estilo Excel" — marca várias linhas (ou todas) e vê o total de MRR/implementação só
   // delas, sem precisar mudar o período. Some sozinha ao trocar de período (ids de outra janela
@@ -180,10 +210,12 @@ export function VendasView({ pageId }: { pageId: string }) {
         title="Vendas"
         subtitle={`${validas.length} venda(s) no período`}
         rightSlot={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="secondary" onClick={() => setTrashOpen(true)} leftIcon={<Trash2 className="h-4 w-4" />}>
               Lixeira
             </Button>
+            <CommissionTypesButton onClick={() => setCommissionTypesOpen(true)} />
+            <RegisterCommissionButton onClick={() => setCommissionRegisterOpen(true)} />
             <Button onClick={() => setRegistrarOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
               Registrar venda
             </Button>
@@ -434,6 +466,8 @@ export function VendasView({ pageId }: { pageId: string }) {
             </table>
           </div>
         </div>
+
+        <CommissionSdrSection entries={commissionsInPeriod} types={commissionTypes} periodLabel={periodLabel} />
       </div>
 
       <RegistrarVendaModal
@@ -447,6 +481,13 @@ export function VendasView({ pageId }: { pageId: string }) {
         boardId={board.id}
       />
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
+      <RegisterCommissionModal
+        open={commissionRegisterOpen}
+        onClose={() => setCommissionRegisterOpen(false)}
+        types={commissionTypes}
+        month={commissionMonth}
+      />
+      <CommissionTypesModal open={commissionTypesOpen} onClose={() => setCommissionTypesOpen(false)} types={commissionTypes} />
     </>
   )
 }

@@ -74,7 +74,7 @@ function monthInFilter(month: string | null, filter: MonthFilter): boolean {
 
 /** Contas a Pagar (Financeiro) — controle financeiro completo, separado por mês: grupos criados à
  * mão (ex.: "Setembro 2026"), cada um com seu mês, navegados em abas por categoria (Fixas,
- * Variáveis) + uma aba Comissões que só reflete o que já está lançado na Gestão Interna (contrato
+ * Variáveis) + uma aba Comissões que só reflete o que já está lançado em Vendas (contrato
  * Assinado — o resto fica lá, não duplica edição aqui). */
 export function FinanceiroContasPagarPage() {
   const groups = usePayableGroups()
@@ -195,7 +195,7 @@ function computeCommissionStats(commissionEntries: CommissionEntry[]) {
 }
 
 /** Visão geral no topo — soma os grupos do mês selecionado + as comissões assinadas do mesmo mês,
- * pra ter noção do total de contas a pagar sem precisar somar de cabeça nem abrir a Gestão Interna. */
+ * pra ter noção do total de contas a pagar sem precisar somar de cabeça nem abrir a aba Vendas. */
 function OverviewCards({ entries, commissions }: { entries: PayableEntry[]; commissions: CommissionEntry[] }) {
   const totals = React.useMemo(() => computeStats(entries), [entries])
   const commTotals = React.useMemo(() => computeCommissionStats(commissions), [commissions])
@@ -799,9 +799,9 @@ function BoletoCell({ entry }: { entry: PayableEntry }) {
   )
 }
 
-/** Comissões (Financeiro > Contas a Pagar) — só reflete o que a Gestão Interna já tem lançado com
+/** Comissões (Financeiro > Contas a Pagar) — só reflete o que a aba Vendas já tem lançado com
  * contrato Assinado (é o que de fato vira conta a pagar). Não duplica os campos de edição —
- * "Nome"/"Pessoa"/"Tipo" ficam só na Gestão Interna, aqui só toggla Pago/Pendente, que é o que
+ * "Nome"/"Pessoa"/"Tipo" ficam só em Vendas, aqui só toggla Pago/Pendente, que é o que
  * importa pro controle de pagamento. */
 function ComissoesTab({ entries, monthHint }: { entries: CommissionEntry[]; monthHint: string }) {
   const bySdr = entries.filter((e) => e.role === 'sdr')
@@ -812,8 +812,8 @@ function ComissoesTab({ entries, monthHint }: { entries: CommissionEntry[]; mont
       <div className="rounded-2xl border border-dashed border-line p-10 text-center text-sm text-foreground/40">
         <p>Nenhuma comissão assinada {monthHint}.</p>
         <p className="mx-auto mt-1 max-w-md">
-          Comissões com contrato ainda não assinado não entram aqui — acompanhe pendências na{' '}
-          <Link to="/financeiro/gestao-interna" className="text-accent hover:underline">Gestão Interna</Link>.
+          Comissões com contrato ainda não assinado não entram aqui — acompanhe pendências em{' '}
+          <Link to="/financeiro/vendas" className="text-accent hover:underline">Vendas</Link>.
         </p>
       </div>
     )
@@ -825,8 +825,8 @@ function ComissoesTab({ entries, monthHint }: { entries: CommissionEntry[]; mont
       <CommissionRoleCard title={`Comissão ${ROLE_LABEL.suporte}`} entries={bySuporte} />
       <p className="text-xs text-foreground/40">
         Mostrando só comissões com contrato Assinado — são as que realmente entram como conta a pagar. Pra
-        registrar uma comissão nova, editar valores ou tipos, use a{' '}
-        <Link to="/financeiro/gestao-interna" className="text-accent hover:underline">Gestão Interna</Link>.
+        registrar uma comissão nova, editar valores ou tipos, use a aba{' '}
+        <Link to="/financeiro/vendas" className="text-accent hover:underline">Vendas</Link>.
       </p>
     </div>
   )

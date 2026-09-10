@@ -72,20 +72,24 @@ export function FinanceiroContasPagarPage() {
   )
 }
 
-/** Visão geral no topo — soma TODOS os grupos, pra ter noção do total sem precisar somar cabeça.
- * "Pago" usa o Real quando preenchido (senão o Previsto, pra não ficar em branco por esquecimento). */
+/** "Pago" usa o Real quando preenchido (senão o Previsto, pra não ficar em branco por esquecimento
+ * de preencher). Reaproveitado tanto na visão geral (todos os grupos) quanto no resumo de cada
+ * grupo (só os itens dele) — mesma conta, escopo diferente. */
+function computeStats(entries: PayableEntry[]) {
+  let previsto = 0, pago = 0, pendente = 0, fixo = 0, variavel = 0
+  for (const e of entries) {
+    previsto += e.previstoCents
+    if (e.status === 'pago') pago += e.realCents ?? e.previstoCents
+    else pendente += e.previstoCents
+    if (e.categoria === 'fixo') fixo += e.previstoCents
+    else if (e.categoria === 'variavel') variavel += e.previstoCents
+  }
+  return { previsto, pago, pendente, fixo, variavel }
+}
+
+/** Visão geral no topo — soma TODOS os grupos, pra ter noção do total sem precisar somar cabeça. */
 function OverviewCards({ entries }: { entries: PayableEntry[] }) {
-  const totals = React.useMemo(() => {
-    let previsto = 0, pago = 0, pendente = 0, fixo = 0, variavel = 0
-    for (const e of entries) {
-      previsto += e.previstoCents
-      if (e.status === 'pago') pago += e.realCents ?? e.previstoCents
-      else pendente += e.previstoCents
-      if (e.categoria === 'fixo') fixo += e.previstoCents
-      else if (e.categoria === 'variavel') variavel += e.previstoCents
-    }
-    return { previsto, pago, pendente, fixo, variavel }
-  }, [entries])
+  const totals = React.useMemo(() => computeStats(entries), [entries])
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -135,6 +139,7 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
     }),
     { previsto: 0, comissao: 0, real: 0 },
   )
+  const stats = React.useMemo(() => computeStats(sorted), [sorted])
 
   const addItem = () => {
     void payablesService.createEntry({ groupId: group.id, elemento: '', previstoCents: 0 })
@@ -147,6 +152,11 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
           <ChevronDown className={cn('h-4 w-4 shrink-0 text-foreground/40 transition-transform', !open && '-rotate-90')} />
           <GroupNameField group={group} />
           <span className="shrink-0 text-xs text-foreground/40">{sorted.length} item(ns)</span>
+          {sorted.length > 0 && (
+            <span className="shrink-0 rounded-full bg-elevate/[0.06] px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground/70">
+              {formatBRLCents(stats.previsto)}
+            </span>
+          )}
         </button>
         <div className="flex shrink-0 items-center gap-1.5">
           <Button size="sm" variant="ghost" onClick={addItem} leftIcon={<Plus className="h-3.5 w-3.5" />}>
@@ -162,6 +172,16 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
           </button>
         </div>
       </div>
+
+      {open && sorted.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-line bg-elevate/[0.015] px-4 py-2">
+          <StatChip label="Pago" value={stats.pago} tone="success" />
+          <StatChip label="A pagar/agendado" value={stats.pendente} tone="warning" />
+          <span className="mx-1 h-3.5 w-px shrink-0 bg-line" />
+          <StatChip label="Fixo" value={stats.fixo} tone="info" />
+          <StatChip label="Variável" value={stats.variavel} tone="warning" />
+        </div>
+      )}
 
       {open && (
         <div className="overflow-x-auto no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -222,6 +242,20 @@ function GroupCard({ group, entries }: { group: PayableGroup; entries: PayableEn
         </p>
       </Modal>
     </div>
+  )
+}
+
+function StatChip({ label, value, tone }: { label: string; value: number; tone: 'success' | 'warning' | 'info' }) {
+  const tones = {
+    success: 'bg-success/10 text-success',
+    warning: 'bg-warning/10 text-warning',
+    info: 'bg-accent/10 text-accent',
+  }
+  return (
+    <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium', tones[tone])}>
+      {label}
+      <span className="font-semibold tabular-nums">{formatBRLCents(value)}</span>
+    </span>
   )
 }
 

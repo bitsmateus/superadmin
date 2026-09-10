@@ -63,8 +63,28 @@ export function useMonthFilter(extraInitialMonths: string[] = []) {
     setCustomMode(false)
   }
 
+  // Tira um pill da barra — só de exibição, não apaga nada que exista no mês. Sempre sobra pelo
+  // menos um pill (o mês atual, se for o único restante, não sai). Se o pill removido era o
+  // selecionado, cai pro mês mais próximo do atual que ainda sobrou.
+  const removeMonth = (id: string) => {
+    setMonths((prev) => {
+      const next = prev.filter((m) => m !== id)
+      if (next.length === 0) return prev
+      if (selected === id) {
+        const now = currentMonthId()
+        const fallback = next.includes(now) ? now : next[next.length - 1]
+        setSelected(fallback)
+        setCustomMode(false)
+      }
+      return next
+    })
+  }
+
   const bounds = customMode ? { from: customFrom, to: customTo } : monthIdBounds(selected)
 
-  return { months, selected, setSelected, addMonth, customMode, setCustomMode, customFrom, setCustomFrom, customTo, setCustomTo, bounds }
+  return {
+    months, selected, setSelected, addMonth, removeMonth,
+    customMode, setCustomMode, customFrom, setCustomFrom, customTo, setCustomTo, bounds,
+  }
 }
 export type MonthFilter = ReturnType<typeof useMonthFilter>

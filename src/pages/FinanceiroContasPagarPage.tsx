@@ -105,14 +105,18 @@ export function FinanceiroContasPagarPage() {
   const monthHint = filter.customMode ? 'no período selecionado' : `em ${monthLabelPt(filter.selected)}`
   const defaultMonth = filter.customMode ? currentMonthId() : filter.selected
 
-  // Ao abrir um mês (normal, não personalizado) que ainda não tem nenhum grupo, pede pro backend
-  // criar um sozinho com os itens Fixo padrão — resolve o "todo mês eu preencho tudo de novo" sem
-  // precisar clicar em nada. Idempotente no backend, e o ref evita reenviar o pedido repetido
-  // enquanto a resposta não volta (StrictMode chama o efeito 2x, por exemplo).
+  // Ao abrir o mês CORRENTE de verdade (não qualquer mês que a pessoa esteja só espiando pelos
+  // pills) e ele ainda não tiver nenhum grupo, pede pro backend criar um sozinho com os itens
+  // Fixo padrão — resolve o "todo mês eu preencho tudo de novo" sem precisar clicar em nada. Só
+  // dispara pro mês atual de propósito: criar registro de verdade só de "dar uma olhada" num mês
+  // passado ou futuro pelos pills seria surpreendente (foi o que aconteceu e gerou Agosto/Outubro
+  // à toa). Idempotente no backend, e o ref evita reenviar o pedido repetido enquanto a resposta
+  // não volta (StrictMode chama o efeito 2x, por exemplo).
   const ensuredRef = React.useRef<Set<string>>(new Set())
   React.useEffect(() => {
     if (filter.customMode) return
     const month = filter.selected
+    if (month !== currentMonthId()) return
     if (groupsInMonth.length > 0) return
     if (ensuredRef.current.has(month)) return
     ensuredRef.current.add(month)

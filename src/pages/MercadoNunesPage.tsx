@@ -74,9 +74,10 @@ interface Cartaz {
   caixaQtd: string
   caixaPreco: string
   precoLitro: string
+  precoQuilo: string
   temaId: string
   fonte: string
-  // Afinação manual de tamanho (-3 a +3) de cada peça do cartaz — o nome já encolhe sozinho
+  // Afinação manual de tamanho (-6 a +6) de cada peça do cartaz — o nome já encolhe sozinho
   // conforme o texto cresce, mas dá pra ajustar tudo na mão também.
   ajusteNome: number
   ajusteSubtitulo: number
@@ -104,6 +105,7 @@ const CARTAZ_PADRAO: Cartaz = {
   caixaQtd: '12',
   caixaPreco: '',
   precoLitro: '',
+  precoQuilo: '',
   temaId: 'laranja',
   fonte: FONTES[0].id,
   ajusteNome: 0,
@@ -165,9 +167,41 @@ function tamanhoTexto(texto: string, ajuste: number, baseMax: number): number {
   return Math.round(base * (1 + ajuste * 0.08))
 }
 
-/** Aplica um ajuste manual (-3 a +3) a um tamanho base — cada passo é 10%. */
+/** Aplica um ajuste manual (-6 a +6) a um tamanho base — cada passo é 10%. */
 function escalar(basePx: number, ajuste: number): number {
   return Math.round(basePx * (1 + ajuste * 0.1))
+}
+
+/** Lê o peso/volume digitado ("800 G", "150g", "500 ML", "1,5 KG"...) e devolve a quantidade
+ *  normalizada. null quando não reconhece nenhuma unidade. */
+function parsePeso(peso: string): { valor: number; unidade: 'g' | 'kg' | 'ml' | 'l' } | null {
+  const m = peso.trim().match(/([\d]+(?:[.,]\d+)?)\s*(kg|g|ml|l)\b/i)
+  if (!m) return null
+  const valor = Number(m[1].replace(',', '.'))
+  if (!valor) return null
+  return { valor, unidade: m[2].toLowerCase() as 'g' | 'kg' | 'ml' | 'l' }
+}
+
+function parsePrecoNumero(preco: string): number | null {
+  const n = Number(preco.trim().replace(/[^\d,.-]/g, '').replace(',', '.'))
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** Calcula sozinho o preço por kg (peso em G/KG) ou por litro (volume em ML/L) a partir do peso e
+ *  do preço já digitados — pra não precisar fazer conta na mão pra saber que 150g por 4,99 dá
+ *  33,27/kg. */
+function calcularPrecoPorUnidade(peso: string, preco: string): { valor: string; tipo: 'kg' | 'l' } | null {
+  const p = parsePeso(peso)
+  const pr = parsePrecoNumero(preco)
+  if (!p || !pr) return null
+  if (p.unidade === 'g' || p.unidade === 'kg') {
+    const kg = p.unidade === 'kg' ? p.valor : p.valor / 1000
+    if (!kg) return null
+    return { valor: (pr / kg).toFixed(2).replace('.', ','), tipo: 'kg' }
+  }
+  const l = p.unidade === 'l' ? p.valor : p.valor / 1000
+  if (!l) return null
+  return { valor: (pr / l).toFixed(2).replace('.', ','), tipo: 'l' }
 }
 
 // ── O cartaz A4 ─────────────────────────────────────────────────────────────
@@ -412,6 +446,7 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
               </div>
             )}
             {dados.precoLitro.trim() && <div>R$ {dados.precoLitro.trim()} por litro</div>}
+            {dados.precoQuilo.trim() && <div>R$ {dados.precoQuilo.trim()} por kg</div>}
           </div>
         )}
 
@@ -544,6 +579,20 @@ export function MercadoNunesPage() {
 
   const aplicarModelo = (m: Modelo) => setCartaz((c) => ({ ...c, ...m.patch }))
 
+  // Calcula sozinho a partir do peso ("800 G", "500 ML"...) e do preço já digitados — em vez de
+  // fazer conta na mão pra saber quanto dá o kg ou o litro.
+  const recalcularPrecoPorUnidade = () => {
+    const resultado = calcularPrecoPorUnidade(cartaz.peso, cartaz.preco)
+    if (!resultado) {
+      toast.error('Preencha o peso (com G, KG, ML ou L) e o preço pra calcular sozinho.')
+      return
+    }
+    if (resultado.tipo === 'kg') set('precoQuilo', resultado.valor)
+    else set('precoLitro', resultado.valor)
+    toast.success(`Calculado: R$ ${resultado.valor} por ${resultado.tipo === 'kg' ? 'kg' : 'litro'}`)
+  }
+
+
   const adicionarNaFila = () => {
     setFila((f) => [...f, { ...cartaz, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }])
   }
@@ -665,10 +714,22 @@ export function MercadoNunesPage() {
             />
           </Card>
 
-          <Card titulo="Preço avulso e caixa" dica="O bloco pequeno com avulso, caixa e valor por litro.">
+          <Card titulo="Preço avulso e caixa" dica="O bloco pequeno com avulso, caixa e valor por litro/kg.">
             <Checkbox
               checked={cartaz.mostrarPrecoAvulsoCaixa}
-              onChange={(v) => set('mostrarPrecoAvulsoCaixa', v)}
+              onChange={(v) => {
+                set('mostrarPrecoAvulsoCaixa', v)
+                // Ao ligar o bloco, já calcula sozinho se o peso e o preço estiverem preenchidos e
+                // os campos de por-kg/por-litro ainda estiverem vazios — sem sobrescrever nada que
+                // já tenha sido digitado ou vindo de um layout salvo.
+                if (v && !cartaz.precoQuilo.trim() && !cartaz.precoLitro.trim()) {
+                  const resultado = calcularPrecoPorUnidade(cartaz.peso, cartaz.preco)
+                  if (resultado) {
+                    if (resultado.tipo === 'kg') set('precoQuilo', resultado.valor)
+                    else set('precoLitro', resultado.valor)
+                  }
+                }
+              }}
               label="Mostrar esse bloco no cartaz"
             />
             <Campo label="Preço avulso">
@@ -700,15 +761,39 @@ export function MercadoNunesPage() {
                 />
               </Campo>
             </div>
-            <Campo label="Valor por litro">
-              <input
-                value={cartaz.precoLitro}
-                onChange={(e) => set('precoLitro', e.target.value)}
-                placeholder="9,68"
-                disabled={!cartaz.mostrarPrecoAvulsoCaixa}
-                style={{ ...inputEstilo, opacity: cartaz.mostrarPrecoAvulsoCaixa ? 1 : 0.5 }}
-              />
-            </Campo>
+            <div className="mn-2col">
+              <Campo label="Valor por litro">
+                <input
+                  value={cartaz.precoLitro}
+                  onChange={(e) => set('precoLitro', e.target.value)}
+                  placeholder="9,68"
+                  disabled={!cartaz.mostrarPrecoAvulsoCaixa}
+                  style={{ ...inputEstilo, opacity: cartaz.mostrarPrecoAvulsoCaixa ? 1 : 0.5 }}
+                />
+              </Campo>
+              <Campo label="Valor por kg">
+                <input
+                  value={cartaz.precoQuilo}
+                  onChange={(e) => set('precoQuilo', e.target.value)}
+                  placeholder="33,27"
+                  disabled={!cartaz.mostrarPrecoAvulsoCaixa}
+                  style={{ ...inputEstilo, opacity: cartaz.mostrarPrecoAvulsoCaixa ? 1 : 0.5 }}
+                />
+              </Campo>
+            </div>
+            <button
+              type="button"
+              onClick={recalcularPrecoPorUnidade}
+              disabled={!cartaz.mostrarPrecoAvulsoCaixa}
+              className="text-xs font-medium text-[#C1503F] hover:underline disabled:opacity-40"
+              style={{ textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+            >
+              ↻ Calcular a partir do peso e do preço
+            </button>
+            <p style={{ fontSize: 11, color: '#9A928B', margin: 0 }}>
+              Calcula sozinho a partir do peso (com G, KG, ML ou L — ex.: "150 G") e do preço já digitados. Preenche
+              automático ao ligar o bloco acima; clique aqui pra recalcular sempre que mudar o peso ou o preço.
+            </p>
           </Card>
 
           <Card titulo="Aparência">
@@ -1015,8 +1100,8 @@ function SliderAjuste({ label, valor, onChange }: { label: string; valor: number
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <input
           type="range"
-          min={-3}
-          max={3}
+          min={-6}
+          max={6}
           step={1}
           value={valor}
           onChange={(e) => onChange(Number(e.target.value))}

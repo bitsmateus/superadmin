@@ -20,6 +20,7 @@ const labels: Record<string, string> = {
   templates: 'Templates',
   kb: 'Conhecimento',
   nps: 'NPS',
+  followups: 'Follow-ups',
 }
 
 export interface TopBarProps {

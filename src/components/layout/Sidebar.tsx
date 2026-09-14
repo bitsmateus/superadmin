@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { createPortal } from 'react-dom'
 import {
   Archive,
+  Bell,
   BookOpen,
   Briefcase,
   Building2,
@@ -68,11 +69,12 @@ const suporteItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
+  { to: '/followups', label: 'Follow-ups', icon: Bell },
   { to: '/canais', label: 'Canais', icon: Radio },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
 ]
 
-const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/canais', '/tenants', '/nps']
+const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/canais', '/tenants', '/nps']
 
 /** Intercala cópias ("Duplicar") logo depois do item original de cada rota. A cópia herda só o
  * ícone; o nome, o id e a ROTA são próprios dela: `/visao/<id>`, que abre a mesma tela do original

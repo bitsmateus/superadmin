@@ -641,6 +641,10 @@ END $$`);
     WHERE NOT EXISTS (SELECT 1 FROM support_pages sp WHERE sp.id = v.id)`);
   await pool.query(`UPDATE support_pages SET source_key = id WHERE source_key IS NULL`);
   await pool.query(`ALTER TABLE support_pages ALTER COLUMN source_key SET NOT NULL`);
+  // Item novo adicionado depois da constraint acima já existir — precisa vir com source_key.
+  await pool.query(`INSERT INTO support_pages (id, name, position, source_key)
+    SELECT 'followups', 'Follow-ups', 4, 'followups'
+    WHERE NOT EXISTS (SELECT 1 FROM support_pages WHERE id = 'followups')`);
   // Uma cópia abre a mesma TELA do original, mas com a própria visão salva (filtros/modo de
   // exibição escolhidos na hora de duplicar) — é o que a diferencia de um atalho repetido.
   // NULL/{} = abre a tela com os filtros padrão dela, igual ao item de origem.

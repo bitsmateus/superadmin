@@ -71,6 +71,9 @@ const KnowledgeBasePage = React.lazy(() =>
 const NpsPage = React.lazy(() =>
   import('./pages/NpsPage').then((m) => ({ default: m.NpsPage })),
 )
+const FollowUpsPage = React.lazy(() =>
+  import('./pages/FollowUpsPage').then((m) => ({ default: m.FollowUpsPage })),
+)
 const CommandCenterPage = React.lazy(() =>
   import('./pages/CommandCenterPage').then((m) => ({ default: m.CommandCenterPage })),
 )
@@ -174,6 +177,7 @@ export default function App() {
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/kb" element={<KnowledgeBasePage />} />
           <Route path="/nps" element={<NpsPage />} />
+          <Route path="/followups" element={<FollowUpsPage />} />
           <Route path="/comando" element={<CommandCenterPage />} />
           <Route path="/equipe" element={<TeamPerformancePage />} />
           <Route path="/auditoria" element={<AuditLogPage />} />

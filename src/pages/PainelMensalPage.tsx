@@ -1,8 +1,7 @@
 import * as React from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Activity, ArrowLeft, CalendarDays, CheckCircle2, DollarSign, Loader2, Plus, Target, TrendingUp, UserCheck,
-  Users, XCircle, Zap,
+  ArrowLeft, CalendarDays, CheckCircle2, DollarSign, Loader2, Plus, Target, TrendingUp, Users, XCircle, Zap,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
@@ -210,7 +209,6 @@ export function PainelMensalPage() {
 
     const investimentoCents = parseBRLCents(month.investimentoTrafego)
     const leadsGerados = month.leadsGerados
-    const leadsMql = month.leadsMql
     const permanencia = month.permanenciaMedia
 
     const mrrTotalCents = vendasNoMes.reduce((s, r) => s + parseBRLCents(r.valorMrr), 0)
@@ -247,7 +245,6 @@ export function PainelMensalPage() {
     const showRate = agendAteHoje > 0 ? comparecimentos / agendAteHoje : 0
     const taxaCompVenda = comparecimentos > 0 ? vendas / comparecimentos : 0
     const taxaLeadVenda = leadsGerados > 0 ? vendas / leadsGerados : 0
-    const taxaMql = leadsGerados > 0 ? leadsMql / leadsGerados : 0
     const taxaNoShow = agendAteHoje > 0 ? noShow / agendAteHoje : 0
 
     const ticketMedioCents = clientesVendidos > 0 ? entrouCents / clientesVendidos : 0
@@ -273,7 +270,7 @@ export function PainelMensalPage() {
     const paybackCacFunil = mrrMedioFunilCents > 0 ? cacCents / mrrMedioFunilCents : 0
 
     return {
-      investimentoCents, leadsGerados, leadsMql, taxaMql, taxaNoShow, cplCents,
+      investimentoCents, leadsGerados, taxaNoShow, cplCents,
       agendTotal, agendAteHoje, comparecimentos, vendas, noShow,
       taxaLeadAgend, showRate, taxaCompVenda, taxaLeadVenda, custoPorAgendCents, cacCents,
       mrrTotalCents, implTotalCents, entrouCents, clientesVendidos, permanencia,
@@ -386,13 +383,6 @@ export function PainelMensalPage() {
                   />
 
                   <KpiTile label="Total de leads" value={stats.leadsGerados > 0 ? stats.leadsGerados : '—'} icon={Users} tone="volume" />
-                  <KpiTile label="Leads MQL" value={stats.leadsMql > 0 ? stats.leadsMql : '—'} icon={UserCheck} tone="volume" />
-                  <KpiTile
-                    label="Taxa de MQL"
-                    value={stats.leadsGerados > 0 && stats.leadsMql > 0 ? pct(stats.taxaMql) : '—'}
-                    icon={Activity}
-                    tone="volume"
-                  />
                   <KpiTile label="Agendamentos" value={stats.agendTotal} icon={CalendarDays} tone="volume" />
 
                   <KpiTile label="Reuniões" value={stats.comparecimentos} sub="Realizadas" icon={CheckCircle2} tone="good" />
@@ -442,11 +432,6 @@ export function PainelMensalPage() {
                       label="Total de leads gerados"
                       value={month.leadsGerados}
                       onSave={(next) => void commercialMonthsService.update(month.id, { leadsGerados: Math.round(next) })}
-                    />
-                    <ManualNumberRow
-                      label="Leads MQL (qualificados)"
-                      value={month.leadsMql}
-                      onSave={(next) => void commercialMonthsService.update(month.id, { leadsMql: Math.round(next) })}
                     />
                     <MetricRow label="CPL — Custo por Lead (R$)" value={money(stats.cplCents)} hint="investimento ÷ leads" />
                   </SectionCard>

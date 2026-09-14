@@ -1,6 +1,9 @@
 import * as React from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Loader2, Plus, TrendingUp } from 'lucide-react'
+import {
+  Activity, ArrowLeft, CalendarDays, CheckCircle2, DollarSign, Loader2, Plus, Target, TrendingUp, UserCheck,
+  Users, XCircle, Zap,
+} from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { MILESTONE_NO_SHOW, MILESTONE_VENDIDO } from '@/components/comercial/LeadDashboardView'
@@ -62,6 +65,38 @@ function MetricRow({ label, value, hint }: { label: string; value: React.ReactNo
         {hint && <span className="ml-1.5 text-[11px] text-foreground/30">{hint}</span>}
       </span>
       <span className="shrink-0 font-semibold text-foreground">{value}</span>
+    </div>
+  )
+}
+
+type KpiTone = 'cost' | 'volume' | 'good' | 'bad'
+const KPI_TONE: Record<KpiTone, { bar: string; icon: string }> = {
+  cost: { bar: 'bg-warning', icon: 'text-warning' },
+  volume: { bar: 'bg-accent', icon: 'text-accent' },
+  good: { bar: 'bg-success', icon: 'text-success' },
+  bad: { bar: 'bg-danger', icon: 'text-danger' },
+}
+
+/** Card de KPI do topo — a cor (faixa + ícone) só agrupa o tipo de métrica; o nome e o valor
+ * ficam sempre em cor de texto. "—" = falta o dado de base pra calcular (não é zero de verdade). */
+function KpiTile({
+  label, value, sub, icon: Icon, tone,
+}: {
+  label: string
+  value: React.ReactNode
+  sub?: string
+  icon: React.ComponentType<{ className?: string }>
+  tone: KpiTone
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-line bg-card p-4 pl-5 shadow-sm">
+      <span className={cn('absolute inset-y-0 left-0 w-1', KPI_TONE[tone].bar)} />
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-foreground/70">{label}</span>
+        <Icon className={cn('h-4 w-4 shrink-0', KPI_TONE[tone].icon)} />
+      </div>
+      <div className="mt-3 truncate text-xl font-bold tabular-nums text-foreground lg:text-2xl">{value}</div>
+      {sub && <div className="mt-1 truncate text-xs text-foreground/50">{sub}</div>}
     </div>
   )
 }
@@ -175,6 +210,7 @@ export function PainelMensalPage() {
 
     const investimentoCents = parseBRLCents(month.investimentoTrafego)
     const leadsGerados = month.leadsGerados
+    const leadsMql = month.leadsMql
     const permanencia = month.permanenciaMedia
 
     const mrrTotalCents = vendasNoMes.reduce((s, r) => s + parseBRLCents(r.valorMrr), 0)
@@ -211,6 +247,8 @@ export function PainelMensalPage() {
     const showRate = agendAteHoje > 0 ? comparecimentos / agendAteHoje : 0
     const taxaCompVenda = comparecimentos > 0 ? vendas / comparecimentos : 0
     const taxaLeadVenda = leadsGerados > 0 ? vendas / leadsGerados : 0
+    const taxaMql = leadsGerados > 0 ? leadsMql / leadsGerados : 0
+    const taxaNoShow = agendAteHoje > 0 ? noShow / agendAteHoje : 0
 
     const ticketMedioCents = clientesVendidos > 0 ? entrouCents / clientesVendidos : 0
     const mrrMedioCents = clientesVendidos > 0 ? mrrTotalCents / clientesVendidos : 0
@@ -235,7 +273,7 @@ export function PainelMensalPage() {
     const paybackCacFunil = mrrMedioFunilCents > 0 ? cacCents / mrrMedioFunilCents : 0
 
     return {
-      investimentoCents, leadsGerados, cplCents,
+      investimentoCents, leadsGerados, leadsMql, taxaMql, taxaNoShow, cplCents,
       agendTotal, agendAteHoje, comparecimentos, vendas, noShow,
       taxaLeadAgend, showRate, taxaCompVenda, taxaLeadVenda, custoPorAgendCents, cacCents,
       mrrTotalCents, implTotalCents, entrouCents, clientesVendidos, permanencia,
@@ -323,6 +361,76 @@ export function PainelMensalPage() {
               </div>
             ) : (
               <>
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <KpiTile label="Investimento" value={money(stats.investimentoCents)} icon={DollarSign} tone="cost" />
+                  <KpiTile
+                    label="CPL"
+                    value={stats.leadsGerados > 0 ? money(stats.cplCents) : '—'}
+                    sub="Custo por lead"
+                    icon={Target}
+                    tone="cost"
+                  />
+                  <KpiTile
+                    label="CAC"
+                    value={stats.investimentoCents > 0 && stats.vendas > 0 ? money(stats.cacCents) : '—'}
+                    sub="Custo por venda"
+                    icon={Target}
+                    tone="cost"
+                  />
+                  <KpiTile
+                    label="ROI / ROAS"
+                    value={stats.investimentoCents > 0 ? pct(stats.roiImediato) : '—'}
+                    sub={stats.investimentoCents > 0 ? `ROAS ${mult(stats.roasImediato)} · 1º mês` : undefined}
+                    icon={TrendingUp}
+                    tone="good"
+                  />
+
+                  <KpiTile label="Total de leads" value={stats.leadsGerados > 0 ? stats.leadsGerados : '—'} icon={Users} tone="volume" />
+                  <KpiTile label="Leads MQL" value={stats.leadsMql > 0 ? stats.leadsMql : '—'} icon={UserCheck} tone="volume" />
+                  <KpiTile
+                    label="Taxa de MQL"
+                    value={stats.leadsGerados > 0 && stats.leadsMql > 0 ? pct(stats.taxaMql) : '—'}
+                    icon={Activity}
+                    tone="volume"
+                  />
+                  <KpiTile label="Agendamentos" value={stats.agendTotal} icon={CalendarDays} tone="volume" />
+
+                  <KpiTile label="Reuniões" value={stats.comparecimentos} sub="Realizadas" icon={CheckCircle2} tone="good" />
+                  <KpiTile label="Vendas" value={stats.vendas} icon={Zap} tone="volume" />
+                  <KpiTile
+                    label="Taxa comparecimento"
+                    value={stats.agendAteHoje > 0 ? pct(stats.showRate) : '—'}
+                    icon={CheckCircle2}
+                    tone="good"
+                  />
+                  <KpiTile
+                    label="Taxa no-show"
+                    value={stats.agendAteHoje > 0 ? pct(stats.taxaNoShow) : '—'}
+                    icon={XCircle}
+                    tone="bad"
+                  />
+
+                  <KpiTile
+                    label="Lead → Agend."
+                    value={stats.leadsGerados > 0 ? pct(stats.taxaLeadAgend) : '—'}
+                    icon={TrendingUp}
+                    tone="good"
+                  />
+                  <KpiTile
+                    label="Reunião → Venda"
+                    value={stats.comparecimentos > 0 ? pct(stats.taxaCompVenda) : '—'}
+                    icon={TrendingUp}
+                    tone="good"
+                  />
+                  <KpiTile
+                    label="Ticket médio"
+                    value={stats.clientesVendidos > 0 ? money(stats.ticketMedioCents) : '—'}
+                    icon={DollarSign}
+                    tone="volume"
+                  />
+                  <KpiTile label="Total no-shows" value={stats.noShow} icon={XCircle} tone="bad" />
+                </div>
+
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <SectionCard title="Investimento & Leads">
                     <ManualCurrencyRow
@@ -334,6 +442,11 @@ export function PainelMensalPage() {
                       label="Total de leads gerados"
                       value={month.leadsGerados}
                       onSave={(next) => void commercialMonthsService.update(month.id, { leadsGerados: Math.round(next) })}
+                    />
+                    <ManualNumberRow
+                      label="Leads MQL (qualificados)"
+                      value={month.leadsMql}
+                      onSave={(next) => void commercialMonthsService.update(month.id, { leadsMql: Math.round(next) })}
                     />
                     <MetricRow label="CPL — Custo por Lead (R$)" value={money(stats.cplCents)} hint="investimento ÷ leads" />
                   </SectionCard>

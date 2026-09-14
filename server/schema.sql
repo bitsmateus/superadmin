@@ -970,6 +970,8 @@ CREATE TABLE IF NOT EXISTS commercial_months (
   id TEXT PRIMARY KEY,
   investimento_trafego TEXT NOT NULL DEFAULT '0,00',
   leads_gerados INT NOT NULL DEFAULT 0,
+  -- Leads qualificados (MQL) do mês — manual, igual leads_gerados (o CRM não marca MQL).
+  leads_mql INT NOT NULL DEFAULT 0,
   permanencia_media NUMERIC(10,2) NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

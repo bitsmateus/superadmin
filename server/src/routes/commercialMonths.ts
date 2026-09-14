@@ -33,13 +33,14 @@ export async function commercialMonthRoutes(app: FastifyInstance) {
   // PATCH /api/commercial-months/:id — atualiza os campos manuais.
   app.patch<{
     Params: { id: string };
-    Body: { investimentoTrafego?: string; leadsGerados?: number; permanenciaMedia?: number };
+    Body: { investimentoTrafego?: string; leadsGerados?: number; leadsMql?: number; permanenciaMedia?: number };
   }>('/api/commercial-months/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const sets: string[] = [];
     const params: unknown[] = [];
     let i = 1;
     if (req.body.investimentoTrafego !== undefined) { sets.push(`investimento_trafego = $${i++}`); params.push(req.body.investimentoTrafego); }
     if (req.body.leadsGerados !== undefined) { sets.push(`leads_gerados = $${i++}`); params.push(req.body.leadsGerados); }
+    if (req.body.leadsMql !== undefined) { sets.push(`leads_mql = $${i++}`); params.push(req.body.leadsMql); }
     if (req.body.permanenciaMedia !== undefined) { sets.push(`permanencia_media = $${i++}`); params.push(req.body.permanenciaMedia); }
     if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
 

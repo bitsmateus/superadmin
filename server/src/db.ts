@@ -736,6 +736,8 @@ END $$`);
     permanencia_media NUMERIC(10,2) NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  // Leads qualificados (MQL) — manual, o CRM não tem esse marco.
+  await pool.query(`ALTER TABLE commercial_months ADD COLUMN IF NOT EXISTS leads_mql INT NOT NULL DEFAULT 0`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_commercial_months ON commercial_months;

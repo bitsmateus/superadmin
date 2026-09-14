@@ -8,18 +8,22 @@ export interface CommercialMonth {
   id: string
   investimentoTrafego: string
   leadsGerados: number
+  /** Leads qualificados — manual, o CRM não marca MQL. */
+  leadsMql: number
   permanenciaMedia: number
   createdAt: string
 }
 
 type Row = {
-  id: string; investimento_trafego: string; leads_gerados: number; permanencia_media: string; created_at: string
+  id: string; investimento_trafego: string; leads_gerados: number; leads_mql: number
+  permanencia_media: string; created_at: string
 }
 function rowToMonth(r: Row): CommercialMonth {
   return {
     id: r.id,
     investimentoTrafego: r.investimento_trafego,
     leadsGerados: r.leads_gerados,
+    leadsMql: r.leads_mql ?? 0,
     permanenciaMedia: Number(r.permanencia_media),
     createdAt: r.created_at,
   }
@@ -73,7 +77,9 @@ export const commercialMonthsService = {
     return rowToMonth(row)
   },
 
-  async update(id: string, patch: { investimentoTrafego?: string; leadsGerados?: number; permanenciaMedia?: number }): Promise<void> {
+  async update(id: string, patch: {
+    investimentoTrafego?: string; leadsGerados?: number; leadsMql?: number; permanenciaMedia?: number
+  }): Promise<void> {
     try {
       await api.patch(`/api/commercial-months/${id}`, patch)
       await reload()

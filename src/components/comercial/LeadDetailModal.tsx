@@ -10,6 +10,7 @@ import {
   Circle,
   Clock,
   Download,
+  ExternalLink,
   FileText,
   Hash,
   Image as ImageIcon,
@@ -93,14 +94,25 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               in → {board?.name ?? '—'} Board
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground focus-ring"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href="https://gruponxdigital.com/planos"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20 focus-ring"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Acessar planos
+            </a>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fechar"
+              className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground focus-ring"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">

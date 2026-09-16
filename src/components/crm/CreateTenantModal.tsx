@@ -24,6 +24,7 @@ import {
   setChecklistItem,
 } from '@/constants/checklist'
 import { cn, deriveSupportEmail, normalizeWhatsappNumber } from '@/lib/utils'
+import { generateUserPassword } from '@/lib/accessSheet'
 import type { Client } from '@/types/client'
 
 const FALLBACK_TENANT_PASSWORD = 'Nxim01@!'
@@ -714,7 +715,6 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
     const briefingUsers = [...(client.briefingData?.users ?? [])].sort((a, b) =>
       (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' }),
     )
-    const defaultPassword = db.getSettings().defaultTenantPassword || FALLBACK_TENANT_PASSWORD
     let success = 0
     const failures: string[] = []
     for (const u of briefingUsers) {
@@ -726,7 +726,10 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
           {
             name: u.name,
             email: u.email,
-            password: defaultPassword,
+            // Mesma senha individual (primeiro nome + "1234") que sai no PDF de
+            // acessos (ver generateUserPassword) — antes criava com uma senha
+            // fixa diferente da que o cliente recebia impressa.
+            password: generateUserPassword(u.name),
             // NX aceita 'admin' | 'user'. Só admin do briefing vira admin.
             profile: u.role === 'admin' ? 'admin' : 'user',
           },

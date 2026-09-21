@@ -67,6 +67,7 @@ interface Cartaz {
   mostrarFaixa: boolean
   mostrarDePor: boolean
   mostrarLogo: boolean
+  logoEsquerda?: boolean // logo no canto esquerdo e avulso/caixa na mesma linha, à direita
   mostrarBolinhaPreco: boolean
   minUnidades: string // "a partir de X unidades" — vazio = não mostra
   mostrarPrecoAvulsoCaixa: boolean
@@ -98,6 +99,7 @@ const CARTAZ_PADRAO: Cartaz = {
   mostrarFaixa: true,
   mostrarDePor: true,
   mostrarLogo: true,
+  logoEsquerda: false,
   mostrarBolinhaPreco: false,
   minUnidades: '',
   mostrarPrecoAvulsoCaixa: false,
@@ -216,6 +218,64 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
   const fontePeso = escalar(64, dados.ajustePeso)
   const fontePrecoInteiro = escalar(250, dados.ajustePreco)
   const fontePrecoCentavos = escalar(150, dados.ajustePreco)
+
+  // Auto-ajuste do preço: o slider define o tamanho desejado, mas se ele não couber no espaço livre
+  // entre o peso e o avulso/logo, encolhe só o necessário (junto com a bolinha) em vez de vazar por
+  // cima dos outros textos ou ser cortado. Mede com offset* (não é afetado por transform, então
+  // funciona mesmo dentro da prévia reduzida).
+  const areaPrecoRef = React.useRef<HTMLDivElement>(null)
+  const conteudoPrecoRef = React.useRef<HTMLDivElement>(null)
+  const [escalaPreco, setEscalaPreco] = React.useState(1)
+  React.useLayoutEffect(() => {
+    const area = areaPrecoRef.current
+    const conteudo = conteudoPrecoRef.current
+    if (!area || !conteudo) return
+    const medir = () => {
+      if (!area.clientWidth || !area.clientHeight) return
+      const w = conteudo.offsetWidth * (dados.mostrarBolinhaPreco ? 1.28 : 1) + 12
+      const h = conteudo.offsetHeight * (dados.mostrarBolinhaPreco ? 1.08 : 1) + 12
+      const proxima = Math.min(1, area.clientWidth / w, area.clientHeight / h)
+      setEscalaPreco((atual) => (Math.abs(atual - proxima) < 0.005 ? atual : proxima))
+    }
+    medir()
+    const ro = new ResizeObserver(medir)
+    ro.observe(area)
+    ro.observe(conteudo)
+    return () => ro.disconnect()
+  }, [dados.mostrarBolinhaPreco])
+
+  const blocoAvulso = dados.mostrarPrecoAvulsoCaixa && (
+    <div
+      style={{
+        textAlign: 'right',
+        color: '#000',
+        fontSize: '28px',
+        lineHeight: 1.35,
+        textTransform: 'uppercase',
+        marginTop: dados.logoEsquerda ? 0 : '18px',
+      }}
+    >
+      {dados.precoAvulso.trim() && <div>{dados.precoAvulso.trim()} avulsa</div>}
+      {dados.caixaPreco.trim() && (
+        <div>
+          Cx{dados.caixaQtd.trim() || '12'} = {dados.caixaPreco.trim()}
+        </div>
+      )}
+      {dados.precoLitro.trim() && <div>R$ {dados.precoLitro.trim()} por litro</div>}
+      {dados.precoQuilo.trim() && <div>R$ {dados.precoQuilo.trim()} por kg</div>}
+    </div>
+  )
+
+  const logo = dados.mostrarLogo && (
+    <img
+      src={LOGO_SRC}
+      alt="Nunes Supermercado"
+      style={{ height: '86px', objectFit: 'contain' }}
+      onError={(e) => {
+        ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+      }}
+    />
+  )
 
   return (
     <div
@@ -362,24 +422,32 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
           )}
         </div>
 
-        {/* Preço gigante — a "bolinha" amarela é um fundo orgânico atrás dos números, imitando o
-            círculo feito à mão pra chamar atenção pro preço. O line-height apertado (0.86) dos
-            números faz o texto "vazar" visualmente pra fora da própria caixa (isso é esperado —
-            é o que deixa a vírgula/centavos coladinhos), então a folga (margin) acima e abaixo
-            precisa ser generosa mesmo no tamanho padrão, não só nos ajustes grandes — senão vaza
-            em cima do "a partir de X un" da linha de cima. */}
+        {/* Preço gigante — a "bolinha" amarela é um fundo orgânico atrás dos números. O line-height
+            apertado (0.86) deixa vírgula/centavos coladinhos; o auto-ajuste (escalaPreco) encolhe o
+            conjunto quando o tamanho pedido não cabe no espaço livre, pra nunca vazar por cima do
+            "a partir de X un" nem das linhas de baixo. */}
         <div
+          ref={areaPrecoRef}
           style={{
             flex: 1,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             minHeight: 0,
-            marginTop: '56px',
+            marginTop: '40px',
             marginBottom: '16px',
           }}
         >
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            style={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transform: escalaPreco < 1 ? `scale(${escalaPreco})` : undefined,
+              transformOrigin: 'center',
+            }}
+          >
             {dados.mostrarBolinhaPreco && (
               <div
                 aria-hidden
@@ -394,6 +462,7 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
               />
             )}
             <div
+              ref={conteudoPrecoRef}
               style={{
                 position: 'relative',
                 zIndex: 1,
@@ -426,41 +495,32 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
           </div>
         )}
 
-        {/* Avulso / caixa / valor por litro — mais pra baixo, perto da logo, pra não disputar
-            espaço com o preço grande logo acima. */}
-        {dados.mostrarPrecoAvulsoCaixa && (
+        {/* Rodapé. Padrão: avulso/caixa à direita e a logo centralizada embaixo. Com "logo à
+            esquerda": a logo vai pro canto e o avulso/caixa desce pra mesma linha, à direita —
+            libera altura pro preço. */}
+        {dados.logoEsquerda && dados.mostrarLogo ? (
           <div
             style={{
-              textAlign: 'right',
-              color: '#000',
-              fontSize: '28px',
-              lineHeight: 1.35,
-              textTransform: 'uppercase',
-              marginTop: '18px',
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'space-between',
+              gap: '16px',
+              marginTop: 'auto',
+              paddingTop: '14px',
             }}
           >
-            {dados.precoAvulso.trim() && <div>{dados.precoAvulso.trim()} avulsa</div>}
-            {dados.caixaPreco.trim() && (
-              <div>
-                Cx{dados.caixaQtd.trim() || '12'} = {dados.caixaPreco.trim()}
+            {logo}
+            {blocoAvulso}
+          </div>
+        ) : (
+          <>
+            {blocoAvulso}
+            {dados.mostrarLogo && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'auto', paddingTop: '14px' }}>
+                {logo}
               </div>
             )}
-            {dados.precoLitro.trim() && <div>R$ {dados.precoLitro.trim()} por litro</div>}
-            {dados.precoQuilo.trim() && <div>R$ {dados.precoQuilo.trim()} por kg</div>}
-          </div>
-        )}
-
-        {dados.mostrarLogo && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'auto', paddingTop: '14px' }}>
-            <img
-              src={LOGO_SRC}
-              alt="Nunes Supermercado"
-              style={{ height: '86px', objectFit: 'contain' }}
-              onError={(e) => {
-                ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-              }}
-            />
-          </div>
+          </>
         )}
       </div>
     </div>
@@ -707,11 +767,6 @@ export function MercadoNunesPage() {
               onChange={(v) => set('mostrarDePor', v)}
               label='Mostrar "DE / POR" (preço antigo riscado)'
             />
-            <Checkbox
-              checked={cartaz.mostrarBolinhaPreco}
-              onChange={(v) => set('mostrarBolinhaPreco', v)}
-              label="Fundo amarelo (bolinha) atrás do preço"
-            />
           </Card>
 
           <Card titulo="Preço avulso e caixa" dica="O bloco pequeno com avulso, caixa e valor por litro/kg.">
@@ -838,6 +893,16 @@ export function MercadoNunesPage() {
               </select>
             </Campo>
             <Checkbox checked={cartaz.mostrarLogo} onChange={(v) => set('mostrarLogo', v)} label="Mostrar a logo no cartaz" />
+            <Checkbox
+              checked={!!cartaz.logoEsquerda}
+              onChange={(v) => set('logoEsquerda', v)}
+              label="Logo à esquerda (avulso/caixa descem pra mesma linha)"
+            />
+            <Checkbox
+              checked={cartaz.mostrarBolinhaPreco}
+              onChange={(v) => set('mostrarBolinhaPreco', v)}
+              label="Fundo amarelo (bolinha) atrás do preço"
+            />
           </Card>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -1022,13 +1087,15 @@ const estiloResponsivo = `
 `
 
 const estiloImpressao = `
-.mercadonunes .area-impressao { display: none; }
+/* Fora da tela mas com layout (não display:none): o preço se auto-ajusta medindo o espaço, e isso
+   precisa já estar calculado quando o navegador abre a impressão. */
+.mercadonunes .area-impressao { position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none; }
 .mercadonunes * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @media print {
   @page { size: A4 portrait; margin: 0; }
   body > *:not(#root) { display: none !important; }
   .mercadonunes .tela { display: none !important; }
-  .mercadonunes .area-impressao { display: block !important; }
+  .mercadonunes .area-impressao { position: static !important; visibility: visible !important; display: block !important; }
   .mercadonunes .cartaz-a4 { page-break-after: always; break-after: page; }
   .mercadonunes .cartaz-a4:last-child { page-break-after: auto; break-after: auto; }
 }

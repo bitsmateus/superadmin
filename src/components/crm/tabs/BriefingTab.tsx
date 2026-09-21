@@ -46,6 +46,7 @@ import { queuesApi } from '@/api/queues'
 import { tenantsApi } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
+import { generateUserPassword } from '@/lib/accessSheet'
 import { getServerById, useAuthStore } from '@/store/authStore'
 import type { Tenant } from '@/types'
 import {
@@ -1271,8 +1272,6 @@ function AutomationView({ client }: { client: Client }) {
       )
     }
     setCreatingUsers(true)
-    const defaultPassword =
-      db.getSettings().defaultTenantPassword || 'Nxim01@!'
 
     // Garante as filas a partir dos setores do briefing (departamentos +
     // setores dos usuários). Idempotente: fila já existente apenas falha e é
@@ -1317,7 +1316,10 @@ function AutomationView({ client }: { client: Client }) {
           {
             name: u.name,
             email: u.email,
-            password: defaultPassword,
+            // Mesma senha individual (primeiro nome + "1234") que sai no PDF de
+            // acessos (ver generateUserPassword) — antes criava com uma senha
+            // fixa diferente da que o cliente recebia impressa.
+            password: generateUserPassword(u.name),
             // NX aceita 'admin' | 'user'. Só admin do briefing vira admin.
             profile: u.role === 'admin' ? 'admin' : 'user',
           },

@@ -58,9 +58,12 @@ export function ComercialDashboardPage() {
     return allBoards.filter((b) => activePageIds.has(b.page))
   }, [allBoards, activePages])
 
+  // Fora as cópias do espelho CRM ARTHUR -> CRM LUIS CLOSER: é a MESMA lead aparecendo em dois
+  // CRMs, então contá-la aqui dobraria o total de leads do SDR (mesmo motivo da cópia da aba
+  // Vendas ficar de fora das métricas).
   const pageRows = React.useMemo(() => {
     const boardIds = new Set(boards.map((b) => b.id))
-    return allRows.filter((r) => boardIds.has(r.boardId))
+    return allRows.filter((r) => boardIds.has(r.boardId) && !r.espelhoOrigemId)
   }, [allRows, boards])
 
   const [dateRange, setDateRange] = React.useState<DateRange>('today')

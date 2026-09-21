@@ -401,8 +401,14 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   -- origem_venda/tipo_venda_suporte: sobras de uma automação de comissão removida (a pessoa
   -- preferiu manter Gestão Interna 100% manual) — colunas paradas, sem uso pelo app.
   origem_venda TEXT,
-  tipo_venda_suporte TEXT
+  tipo_venda_suporte TEXT,
+  -- Espelho CRM ARTHUR -> CRM LUIS CLOSER: nas cópias, aponta pra lead original do Arthur. NULL
+  -- em lead comum. Ver comentário em leadBoards.ts (syncEspelhoReuniaoAgendada).
+  espelho_origem_id UUID
 );
+-- Uma cópia por lead de origem — a trava que impede espelhar a mesma lead duas vezes.
+CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_espelho_origem_idx
+  ON lead_rows(espelho_origem_id) WHERE espelho_origem_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS lead_rows_board_idx ON lead_rows(board_id);
 CREATE INDEX IF NOT EXISTS lead_rows_deleted_at_idx ON lead_rows(deleted_at) WHERE deleted_at IS NOT NULL;

@@ -195,6 +195,154 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
   }
 }
 
+/**
+ * Espelho CRM ARTHUR -> CRM LUIS CLOSER.
+ *
+ * Quando uma lead do CRM do Arthur chega em "Reunião agendada" (pelo Status ou arrastada pro
+ * quadro), o closer precisa dela no CRM dele com o mesmo conteúdo. O app cria UMA cópia lá, ligada
+ * à original por espelho_origem_id, e daí em diante o conteúdo anda junto nos dois sentidos: quem
+ * editar de um lado, edita dos dois. Fora do espelho, de propósito:
+ *  - status/quadro: cada CRM toca o funil dele. Status compartilhado criaria venda e comissão em
+ *    DOBRO (uma por CRM), já que virar "Vendido" dispara o registro de venda;
+ *  - o sentido contrário: lead que nasce no CRM do Luis não vira nada no do Arthur;
+ *  - saída: tirar de "Reunião agendada" ou excluir no Arthur não mexe na cópia — o closer continua
+ *    com a lead que já estava trabalhando.
+ * As Atualizações são compartilhadas (ver idCanonicoDasNotas): os dois escrevem no mesmo histórico.
+ */
+const ESPELHO_PAGE_ORIGEM = 'crm-arthur';
+const ESPELHO_PAGE_DESTINO = 'crm-luis-closer';
+
+/** Campos de CONTEÚDO que andam juntos. Fora daqui: status e board_id (funil é de cada um),
+ * position, notes_count e o pacote de venda (esse só existe na aba Vendas). */
+const ESPELHO_CAMPOS = [
+  'nome', 'tipo', 'empresa', 'telefone', 'dia_contato', 'ligacao', 'agendamento', 'retornar',
+  'retornado', 'responsavel', 'sdr', 'numero', 'dor_cliente', 'numero_atendentes',
+  'valor_mrr', 'valor_implementacao', 'observacoes',
+];
+
+/** "Reunião agendada"/"REUNIÃO AGENDADA" — nome do quadro varia de CRM pra CRM. "Reunião não
+ * comparecida" não cai aqui porque não tem "agendada" no nome. */
+function ehQuadroReuniaoAgendada(name: string): boolean {
+  return name.toLowerCase().includes('agendada');
+}
+
+/** Cria a cópia no CRM do closer, se ainda não existir. Nunca lança: roda em background depois da
+ * edição, e falhar aqui não pode derrubar o que o usuário acabou de fazer. */
+async function syncEspelhoReuniaoAgendada(leadRowId: string) {
+  try {
+    const lead = await queryOne<{
+      status: string; espelho_origem_id: string | null; page: string; board_name: string;
+      nome: string; tipo: string; empresa: string; telefone: string; dia_contato: string;
+      ligacao: string; agendamento: string; retornar: string; retornado: boolean;
+      responsavel: string; sdr: string; numero: string; dor_cliente: string;
+      numero_atendentes: string; valor_mrr: string; valor_implementacao: string; observacoes: string;
+    }>(
+      `SELECT r.*, lb.page, lb.name AS board_name
+       FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+       WHERE r.id = $1 AND r.deleted_at IS NULL`,
+      [leadRowId]
+    );
+    if (!lead) return;
+    // Só nasce do CRM do Arthur, e só quando está de fato em "Reunião agendada".
+    if (lead.page !== ESPELHO_PAGE_ORIGEM) return;
+    // A própria linha já é uma cópia — nunca espelha o espelho.
+    if (lead.espelho_origem_id) return;
+    if (lead.status !== MILESTONE_AGENDADA && !ehQuadroReuniaoAgendada(lead.board_name)) return;
+
+    const jaEspelhada = await queryOne<{ id: string }>(
+      'SELECT id FROM lead_rows WHERE espelho_origem_id = $1',
+      [leadRowId]
+    );
+    if (jaEspelhada) return;
+
+    const destino =
+      (await queryOne<{ id: string }>(
+        `SELECT id FROM lead_boards WHERE page = $1 AND lower(name) LIKE '%agendada%'
+         ORDER BY position LIMIT 1`,
+        [ESPELHO_PAGE_DESTINO]
+      )) ??
+      (await queryOne<{ id: string }>(
+        'SELECT id FROM lead_boards WHERE page = $1 ORDER BY position LIMIT 1',
+        [ESPELHO_PAGE_DESTINO]
+      ));
+    // Sem CRM de destino configurado não há pra onde espelhar — silencioso de propósito: a lead do
+    // Arthur segue normal.
+    if (!destino) return;
+
+    const [{ max }] = await query<{ max: number | null }>(
+      'SELECT MAX(position) as max FROM lead_rows WHERE board_id = $1',
+      [destino.id]
+    );
+
+    await query(
+      `INSERT INTO lead_rows (
+        board_id, nome, tipo, empresa, telefone, dia_contato, ligacao, status, agendamento,
+        retornar, retornado, responsavel, sdr, numero, dor_cliente, numero_atendentes,
+        valor_mrr, valor_implementacao, observacoes, espelho_origem_id, position
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+      ON CONFLICT DO NOTHING`,
+      [
+        destino.id, lead.nome, lead.tipo, lead.empresa, lead.telefone, lead.dia_contato,
+        lead.ligacao, MILESTONE_AGENDADA, lead.agendamento, lead.retornar, lead.retornado,
+        lead.responsavel, lead.sdr, lead.numero, lead.dor_cliente, lead.numero_atendentes,
+        lead.valor_mrr, lead.valor_implementacao, lead.observacoes, leadRowId, (max ?? -1) + 1,
+      ]
+    );
+  } catch (err) {
+    console.error('[espelho] falha ao espelhar lead pro CRM do closer', leadRowId, err);
+  }
+}
+
+/** Edição de conteúdo vai pro outro lado do espelho (original <-> cópia). É um pulo só: o UPDATE
+ * daqui não passa pelo PATCH de novo, então não entra em loop. */
+async function propagarEspelho(
+  leadRowId: string,
+  espelhoOrigemId: string | null,
+  patch: Record<string, unknown>
+) {
+  try {
+    const campos = Object.keys(patch).filter((k) => ESPELHO_CAMPOS.includes(k));
+    if (!campos.length) return;
+    const parceiro = espelhoOrigemId
+      ? { id: espelhoOrigemId }
+      : await queryOne<{ id: string }>(
+          'SELECT id FROM lead_rows WHERE espelho_origem_id = $1',
+          [leadRowId]
+        );
+    if (!parceiro) return;
+    const params = campos.map((k) => patch[k]);
+    const sets = campos.map((k, idx) => `${k} = $${idx + 1}`);
+    params.push(parceiro.id);
+    await query(`UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+  } catch (err) {
+    console.error('[espelho] falha ao propagar edição do lead', leadRowId, err);
+  }
+}
+
+/** As Atualizações são compartilhadas: a cópia não tem histórico próprio, lê e escreve no da lead
+ * original. É o que faz Arthur e Luis conversarem no mesmo lugar. */
+async function idCanonicoDasNotas(leadRowId: string): Promise<string> {
+  const row = await queryOne<{ espelho_origem_id: string | null }>(
+    'SELECT espelho_origem_id FROM lead_rows WHERE id = $1',
+    [leadRowId]
+  );
+  return row?.espelho_origem_id ?? leadRowId;
+}
+
+/** O gatilho do banco conta as notas só na linha dona do histórico — aqui o número é refletido na
+ * cópia também, pra o contador não aparecer zerado pro closer. */
+async function sincronizarContagemNotas(canonicalId: string) {
+  try {
+    await query(
+      `UPDATE lead_rows SET notes_count = (SELECT count(*) FROM lead_notes WHERE lead_row_id = $1)
+       WHERE id = $1 OR espelho_origem_id = $1`,
+      [canonicalId]
+    );
+  } catch (err) {
+    console.error('[espelho] falha ao sincronizar contagem de notas', canonicalId, err);
+  }
+}
+
 export async function leadBoardRoutes(app: FastifyInstance) {
   // GET /api/lead-rows/:id/support-view — card de leitura de UMA lead específica (dados + as
   // Atualizações), SEM checar restrictedBoardFilter de propósito: é o que deixa o Suporte ver o
@@ -403,6 +551,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         const month = (row.fechamento || row.created_at || '').slice(0, 7) || new Date().toISOString().slice(0, 7);
         void createCommissionStub(row.nome, row.sdr, month);
       }
+      // Lead criada já dentro de "Reunião agendada" no CRM do Arthur também espelha pro closer.
+      void syncEspelhoReuniaoAgendada(id);
       return reply.status(201).send(leadRow);
     }
   );
@@ -481,6 +631,17 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         originParams.push(vendaOrigemId);
         void query(`UPDATE lead_rows SET ${originSets.join(', ')} WHERE id = $${j}`, originParams)
           .catch((err) => console.error('[vendas] falha ao propagar valor pro lead de origem', vendaOrigemId, err));
+      }
+
+      // Espelho CRM ARTHUR <-> CRM LUIS CLOSER: conteúdo editado de um lado reflete no outro...
+      void propagarEspelho(
+        req.params.id,
+        (leadRow as { espelho_origem_id?: string | null }).espelho_origem_id ?? null,
+        patch
+      );
+      // ...e chegar em "Reunião agendada" (pelo Status ou arrastando de quadro) cria a cópia.
+      if ('status' in patch || 'board_id' in patch) {
+        void syncEspelhoReuniaoAgendada(req.params.id);
       }
 
       if (before) {
@@ -712,6 +873,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
        FROM lead_rows lr
        JOIN lead_boards lb ON lb.id = lr.board_id
        WHERE lb.is_vendas = false
+       AND lr.espelho_origem_id IS NULL
        ${boardFilter}`,
       params
     );
@@ -734,9 +896,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           return reply.status(403).send({ message: 'Acesso negado' });
         }
       }
+      // Lead espelhada lê o histórico da original — os dois CRMs veem as mesmas Atualizações.
+      const canonicalId = await idCanonicoDasNotas(req.query.lead_row_id as string);
       return query(
         'SELECT * FROM lead_notes WHERE lead_row_id = $1 ORDER BY created_at DESC',
-        [req.query.lead_row_id]
+        [canonicalId]
       );
     }
   );
@@ -763,14 +927,17 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           return reply.status(403).send({ message: 'Acesso negado' });
         }
       }
+      // Atualização escrita na cópia entra no histórico da lead original — um só pros dois CRMs.
+      const canonicalId = await idCanonicoDasNotas(b.lead_row_id as string);
       const [note] = await query(
         `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments, created_at)
          VALUES ($1,$2,$3,$4,$5, COALESCE($6::timestamptz, NOW())) RETURNING *`,
         [
-          b.lead_row_id, authorId ?? null, b.author_name ?? 'Alguém', b.content ?? '',
+          canonicalId, authorId ?? null, b.author_name ?? 'Alguém', b.content ?? '',
           JSON.stringify(b.attachments ?? []), b.created_at ?? null,
         ]
       );
+      void sincronizarContagemNotas(canonicalId);
       return reply.status(201).send(note);
     }
   );
@@ -827,7 +994,12 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           return reply.status(403).send({ message: 'Acesso negado' });
         }
       }
+      const noteRow = await queryOne<{ lead_row_id: string }>(
+        'SELECT lead_row_id FROM lead_notes WHERE id = $1',
+        [req.params.id]
+      );
       await query('DELETE FROM lead_notes WHERE id = $1', [req.params.id]);
+      if (noteRow) void sincronizarContagemNotas(noteRow.lead_row_id);
       return reply.status(204).send();
     }
   );

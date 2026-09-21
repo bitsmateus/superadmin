@@ -84,6 +84,9 @@ export interface LeadRow {
   /** Marca manual (só a pessoa liga/desliga, na aba Vendas) se o contrato dessa venda já foi
    * assinado ou ainda está pendente — mesmo padrão de veioDoFunil, sem data nem checklist. */
   contratoAssinado: boolean
+  /** Espelho CRM ARTHUR -> CRM LUIS CLOSER: nas cópias, o id da lead original do Arthur; null em
+   * lead comum. Serve pras métricas não contarem a mesma lead duas vezes. */
+  espelhoOrigemId: string | null
 }
 
 /**
@@ -98,7 +101,7 @@ export type LeadRowField = Exclude<
   keyof LeadRow,
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
-  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado'
+  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

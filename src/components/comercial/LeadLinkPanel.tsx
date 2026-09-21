@@ -118,7 +118,10 @@ function LeadPickerModal({
       // "Vendido" (mesmo nome/telefone do original) — ela nunca tem Atualizações (ficam só no
       // original), então nunca deve aparecer como opção de vínculo, senão a busca "acha" e a
       // pessoa vincula errado sem perceber que é uma cópia vazia.
-      .filter((r) => !r.vendaOrigemId)
+      // espelhoOrigemId marca a cópia no CRM do closer (espelho do CRM ARTHUR): mesmo nome e
+      // telefone da original, então aparecer as duas na busca só confunde — o vínculo é sempre
+      // com a lead original, que é onde o histórico mora.
+      .filter((r) => !r.vendaOrigemId && !r.espelhoOrigemId)
       .filter((r) => {
         if (r.nome.toLowerCase().includes(needle)) return true
         if (r.empresa.toLowerCase().includes(needle)) return true

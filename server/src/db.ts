@@ -370,6 +370,12 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS dor_cliente TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS numero_atendentes TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS notes_count INT NOT NULL DEFAULT 0`);
+  // Espelho CRM ARTHUR -> CRM LUIS CLOSER (ver syncEspelhoReuniaoAgendada em leadBoards.ts): a
+  // cópia no CRM do closer guarda aqui o id da lead original do Arthur. Índice único = no máximo
+  // uma cópia por lead, mesmo se o gatilho rodar duas vezes.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS espelho_origem_id UUID`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_espelho_origem_idx
+    ON lead_rows(espelho_origem_id) WHERE espelho_origem_id IS NOT NULL`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS sdr TEXT NOT NULL DEFAULT ''`);
   // Marca se o retorno agendado já foi feito — usado pra colorir a coluna Retornar (amarelo = pendente, vermelho = atrasado).
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS retornado BOOLEAN NOT NULL DEFAULT false`);

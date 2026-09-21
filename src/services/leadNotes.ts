@@ -15,6 +15,18 @@ function rowToNote(r: NoteRow): LeadNote {
   }
 }
 
+/**
+ * Lead espelhada (cópia do CRM ARTHUR no CRM LUIS CLOSER) NÃO tem histórico próprio: as
+ * Atualizações são as mesmas da lead original, pros dois conversarem no mesmo lugar. Então tudo
+ * aqui — buscar, cachear, filtrar e escrever — usa sempre o id da original. Sem isso, a cópia
+ * pedia as notas certas pro servidor mas jogava fora na hora de filtrar (o dono da nota é a
+ * original), e a tela aparecia vazia.
+ */
+export function canonicalNoteLeadId(leadRowId: string): string {
+  const row = leadBoardsService.getRows().find((r) => r.id === leadRowId)
+  return row?.espelhoOrigemId ?? leadRowId
+}
+
 // ---------- Cache (carregado sob demanda por lead, igual às mensagens de ticket) ----------
 
 let notes: LeadNote[] = []
@@ -53,15 +65,16 @@ export const leadNotesService = {
   /** Referência crua do cache — filtrar/ordenar por leadRowId fica por conta do hook (useMemo). */
   getAllNotes(): LeadNote[] { return notes },
 
-  isLoaded(leadRowId: string): boolean { return loadedLeadIds.has(leadRowId) },
+  isLoaded(leadRowId: string): boolean { return loadedLeadIds.has(canonicalNoteLeadId(leadRowId)) },
 
   async loadNotes(leadRowId: string): Promise<void> {
     ensureRealtime()
+    const canonicalId = canonicalNoteLeadId(leadRowId)
     try {
-      const rows = await api.get<NoteRow[]>(`/api/lead-notes?lead_row_id=${leadRowId}`)
+      const rows = await api.get<NoteRow[]>(`/api/lead-notes?lead_row_id=${canonicalId}`)
       const fresh = rows.map(rowToNote)
-      notes = [...notes.filter((n) => n.leadRowId !== leadRowId), ...fresh]
-      loadedLeadIds.add(leadRowId)
+      notes = [...notes.filter((n) => n.leadRowId !== canonicalId), ...fresh]
+      loadedLeadIds.add(canonicalId)
       notify()
     } catch (err) {
       toast.error('Falha ao carregar anotações: ' + (err as Error).message)
@@ -76,9 +89,10 @@ export const leadNotesService = {
   ): Promise<LeadNote | null> {
     const trimmed = content.trim()
     if (!trimmed && attachments.length === 0) return null
+    const canonicalId = canonicalNoteLeadId(leadRowId)
     try {
       const row = await api.post<NoteRow>('/api/lead-notes', {
-        lead_row_id: leadRowId, content: trimmed, author_name: authorName, attachments,
+        lead_row_id: canonicalId, content: trimmed, author_name: authorName, attachments,
       })
       const note = rowToNote(row)
       // O SSE (notify_lead_notes) pode entregar esse mesmo INSERT antes desse POST
@@ -98,9 +112,10 @@ export const leadNotesService = {
   async importNote(leadRowId: string, content: string, authorName: string, createdAt: string | null): Promise<void> {
     const trimmed = content.trim()
     if (!trimmed) return
+    const canonicalId = canonicalNoteLeadId(leadRowId)
     try {
       const row = await api.post<NoteRow>('/api/lead-notes', {
-        lead_row_id: leadRowId, content: trimmed, author_name: authorName || 'Importado', attachments: [],
+        lead_row_id: canonicalId, content: trimmed, author_name: authorName || 'Importado', attachments: [],
         ...(createdAt ? { created_at: createdAt } : {}),
       })
       const note = rowToNote(row)

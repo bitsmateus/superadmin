@@ -138,6 +138,15 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
   try {
     if (fromStatus === toStatus) return;
 
+    // Cópia do espelho nunca registra venda: o closer pode ser quem marca "Vendido", mas a venda
+    // (e a comissão) sai UMA vez só, sempre pela lead original do Arthur — quem chama por ela
+    // nesse caso é o propagarEspelho.
+    const espelho = await queryOne<{ espelho_origem_id: string | null }>(
+      'SELECT espelho_origem_id FROM lead_rows WHERE id = $1',
+      [leadRowId]
+    );
+    if (espelho?.espelho_origem_id) return;
+
     if (toStatus !== MILESTONE_VENDIDO) {
       if (fromStatus !== MILESTONE_VENDIDO) return;
       await query(
@@ -226,6 +235,39 @@ function ehQuadroReuniaoAgendada(name: string): boolean {
   return name.toLowerCase().includes('agendada');
 }
 
+/** Etiquetas do funil que andam juntas nos dois CRMs. Status fora dessa lista (Primeiro Contato,
+ * Disparo em massa, Perdidos, Desqualificado...) fica só no CRM onde foi mexido — cada um
+ * organiza a base dele sem bagunçar a do outro. */
+const ESPELHO_STATUS = [
+  'Reunião agendada',
+  'Reunião não comparecida',
+  'Proposta Enviada',
+  'Follow-up Propostas',
+  'Vendido',
+];
+
+/** Sem acento, sem pontuação, minúsculo — pra comparar nome de quadro com nome de status mesmo
+ * escritos diferente em cada CRM ("Follow-up Propostas" acha "FOLLOW UP PROPOSTAS (APÓS 3
+ * TENTATIVAS)"). */
+function normalizaNome(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Quadro equivalente ao status dentro da página do parceiro — senão a etiqueta muda mas a lead
+ * fica parada no grupo errado. Sem equivalente (o CRM do closer não tem "Vendido" nem "Reunião
+ * não comparecida"), devolve null: muda só a etiqueta e a lead fica onde está. */
+async function quadroDoStatus(page: string, status: string): Promise<string | null> {
+  const alvo = normalizaNome(status);
+  const boards = await query<{ id: string; name: string }>(
+    'SELECT id, name FROM lead_boards WHERE page = $1 ORDER BY position',
+    [page]
+  );
+  const match =
+    boards.find((b) => normalizaNome(b.name) === alvo) ??
+    boards.find((b) => normalizaNome(b.name).startsWith(alvo));
+  return match?.id ?? null;
+}
+
 /** Cria a cópia no CRM do closer, se ainda não existir. Nunca lança: roda em background depois da
  * edição, e falhar aqui não pode derrubar o que o usuário acabou de fazer. */
 async function syncEspelhoReuniaoAgendada(leadRowId: string) {
@@ -298,22 +340,54 @@ async function syncEspelhoReuniaoAgendada(leadRowId: string) {
 async function propagarEspelho(
   leadRowId: string,
   espelhoOrigemId: string | null,
-  patch: Record<string, unknown>
+  patch: Record<string, unknown>,
+  actorId: string
 ) {
   try {
     const campos = Object.keys(patch).filter((k) => ESPELHO_CAMPOS.includes(k));
-    if (!campos.length) return;
-    const parceiro = espelhoOrigemId
-      ? { id: espelhoOrigemId }
-      : await queryOne<{ id: string }>(
-          'SELECT id FROM lead_rows WHERE espelho_origem_id = $1',
-          [leadRowId]
-        );
+    const novoStatus =
+      typeof patch.status === 'string' && ESPELHO_STATUS.includes(patch.status) ? patch.status : null;
+    if (!campos.length && !novoStatus) return;
+
+    // espelhoOrigemId preenchido = quem foi editado é a CÓPIA, então o parceiro é a original.
+    const parceiro = await queryOne<{ id: string; status: string; board_id: string; page: string }>(
+      `SELECT r.id, r.status, r.board_id, lb.page
+       FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+       WHERE ${espelhoOrigemId ? 'r.id = $1' : 'r.espelho_origem_id = $1'}`,
+      [espelhoOrigemId ?? leadRowId]
+    );
     if (!parceiro) return;
-    const params = campos.map((k) => patch[k]);
-    const sets = campos.map((k, idx) => `${k} = $${idx + 1}`);
+
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    for (const k of campos) {
+      sets.push(`${k} = $${params.length + 1}`);
+      params.push(patch[k]);
+    }
+
+    const statusMudou = !!novoStatus && novoStatus !== parceiro.status;
+    if (statusMudou) {
+      sets.push(`status = $${params.length + 1}`);
+      params.push(novoStatus);
+      const quadro = await quadroDoStatus(parceiro.page, novoStatus!);
+      if (quadro && quadro !== parceiro.board_id) {
+        sets.push(`board_id = $${params.length + 1}`);
+        params.push(quadro);
+      }
+    }
+    if (!sets.length) return;
+
     params.push(parceiro.id);
     await query(`UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+
+    if (statusMudou) {
+      const actorName = await getActorName(actorId);
+      await logLeadEvent(parceiro.id, 'status', parceiro.status, novoStatus, actorName);
+      // Quem mexeu foi a cópia (closer): a venda nasce aqui, pela original, uma vez só.
+      if (espelhoOrigemId) {
+        await syncVendaFromStatus(parceiro.id, parceiro.status, novoStatus!);
+      }
+    }
   } catch (err) {
     console.error('[espelho] falha ao propagar edição do lead', leadRowId, err);
   }
@@ -633,11 +707,13 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           .catch((err) => console.error('[vendas] falha ao propagar valor pro lead de origem', vendaOrigemId, err));
       }
 
-      // Espelho CRM ARTHUR <-> CRM LUIS CLOSER: conteúdo editado de um lado reflete no outro...
+      // Espelho CRM ARTHUR <-> CRM LUIS CLOSER: conteúdo e etiqueta de funil editados de um lado
+      // refletem no outro...
       void propagarEspelho(
         req.params.id,
         (leadRow as { espelho_origem_id?: string | null }).espelho_origem_id ?? null,
-        patch
+        patch,
+        sub
       );
       // ...e chegar em "Reunião agendada" (pelo Status ou arrastando de quadro) cria a cópia.
       if ('status' in patch || 'board_id' in patch) {
@@ -665,6 +741,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
             if (String(fromVal ?? '') === String(toVal ?? '')) continue;
             // Marcar/desmarcar "Vendido" reflete na aba Vendas — mesmo lugar onde a linha do
             // tempo já detecta a troca de status, pra não varrer o status em dois pontos.
+            // Numa cópia do espelho isso não roda (syncVendaFromStatus ignora cópia): a venda sai
+            // pela lead original, chamada de dentro do propagarEspelho.
             if (key === 'status') {
               await syncVendaFromStatus(req.params.id, String(fromVal ?? ''), String(toVal ?? ''));
             }

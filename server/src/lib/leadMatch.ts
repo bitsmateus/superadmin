@@ -17,15 +17,15 @@ export async function findMatchingLeadRowId(
   name: string | null | undefined,
   company: string | null | undefined,
 ): Promise<string | null> {
-  // venda_origem_id IS NULL exclui as CÓPIAS que o sistema cria sozinho na aba Vendas quando um
-  // lead vira "Vendido" (mesmo nome/telefone do original, mas nunca têm Atualizações — elas ficam
-  // só no lead original). Sem esse filtro, telefone/nome "achavam" 2 candidatos (original + cópia)
-  // e a regra de match inequívoco desistia (0 ou 2+ = null) mesmo quando o original existia certinho.
+  // Fora as CÓPIAS que o próprio sistema cria (mesmo nome/telefone do original, então sem esse
+  // filtro o match via 2 candidatos e a regra de inequívoco desistia mesmo com o original certinho):
+  //  - venda_origem_id: cópia da aba Vendas quando o lead vira "Vendido";
+  //  - espelho_origem_id: cópia no CRM do closer (espelho do CRM ARTHUR, ver leadBoards.ts).
   const key = phoneKey(phone);
   if (key) {
     const byPhone = await query<{ id: string }>(
       `SELECT id FROM lead_rows
-       WHERE deleted_at IS NULL AND venda_origem_id IS NULL
+       WHERE deleted_at IS NULL AND venda_origem_id IS NULL AND espelho_origem_id IS NULL
          AND right(regexp_replace(telefone, '\\D', '', 'g'), 8) = $1`,
       [key]
     );
@@ -37,13 +37,13 @@ export async function findMatchingLeadRowId(
 
   const candidates = await query<{ id: string; nome: string; empresa: string }>(
     `SELECT id, nome, empresa FROM lead_rows
-     WHERE deleted_at IS NULL AND venda_origem_id IS NULL AND (nome <> '' OR empresa <> '')`
+     WHERE deleted_at IS NULL AND venda_origem_id IS NULL AND espelho_origem_id IS NULL
+       AND (nome <> '' OR empresa <> '')`
   );
   // Nome/empresa curto ou genérico ("D", "Brasil") vira falso positivo por containment contra
   // quase qualquer texto — exige os DOIS lados com pelo menos MIN_LEN caracteres normalizados pra
   // considerar o match, senão nomes curtos empatam entre vários leads sem relação nenhuma (o que
   // já era "seguro" — vira ambíguo e não copia nada — mas escondia o match certo que existia).
-  const MIN_LEN = 8;
   const matches = candidates.filter((c) => {
     const leadNeedle = normalizeName(c.empresa) || normalizeName(c.nome);
     if (leadNeedle.length < MIN_LEN || needle.length < MIN_LEN) return false;
@@ -51,6 +51,41 @@ export async function findMatchingLeadRowId(
   });
   return matches.length === 1 ? matches[0].id : null;
 }
+
+/**
+ * O caminho contrário: acha o `clients` (quem preencheu a ficha pública) de um lead do CRM — mesma
+ * heurística e a mesma garantia de só aceitar match inequívoco. A ficha grava o telefone de NF como
+ * `phone` do cliente e o nome da empresa como `name`/`company`, então é contra esses que compara.
+ */
+export async function findMatchingClientId(
+  phone: string | null | undefined,
+  name: string | null | undefined,
+  company: string | null | undefined,
+): Promise<string | null> {
+  const key = phoneKey(phone);
+  if (key) {
+    const byPhone = await query<{ id: string }>(
+      `SELECT id FROM clients WHERE right(regexp_replace(phone, '\\D', '', 'g'), 8) = $1`,
+      [key]
+    );
+    if (byPhone.length === 1) return byPhone[0].id;
+  }
+
+  const needle = normalizeName(company) || normalizeName(name);
+  if (!needle) return null;
+
+  const candidates = await query<{ id: string; name: string; company: string }>(
+    `SELECT id, name, company FROM clients WHERE name <> '' OR company <> ''`
+  );
+  const matches = candidates.filter((c) => {
+    const clientNeedle = normalizeName(c.company) || normalizeName(c.name);
+    if (clientNeedle.length < MIN_LEN || needle.length < MIN_LEN) return false;
+    return needle.includes(clientNeedle) || clientNeedle.includes(needle);
+  });
+  return matches.length === 1 ? matches[0].id : null;
+}
+
+const MIN_LEN = 8;
 
 /** Só os últimos 8 dígitos — tolera diferença de DDI (55) e o "9" extra que nem todo cadastro
  * tem, sem exigir que os dois números estejam no formato exatamente igual. */

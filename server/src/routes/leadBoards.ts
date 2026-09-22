@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
+import { findMatchingClientId } from '../lib/leadMatch.js';
 
 /**
  * Toda venda nova (funil ou avulsa) já cria sozinha a linha correspondente em Gestão Interna >
@@ -418,6 +419,51 @@ async function sincronizarContagemNotas(canonicalId: string) {
 }
 
 export async function leadBoardRoutes(app: FastifyInstance) {
+  // GET /api/lead-rows/:id/ficha-status — essa lead já tem ficha de cadastro? (botão "Ficha de
+  // cadastro" no cabeçalho da lead). Não existe vínculo direto lead <-> cliente (ver leadMatch.ts),
+  // então procura primeiro o vínculo CONFIRMADO à mão (contracts.venda_lead_id), olhando também as
+  // cópias da mesma lead (a da aba Vendas e a do espelho do closer), e só depois o casamento
+  // automático por telefone/nome. "preenchida" = cliente achado e com ficha; "pendente" = cliente
+  // achado mas sem ficha (cadastrado por outro caminho); "nao_atrelada" = nenhum cliente.
+  app.get<{ Params: { id: string } }>(
+    '/api/lead-rows/:id/ficha-status',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const lead = await queryOne<{
+        id: string; telefone: string; nome: string; empresa: string;
+        venda_origem_id: string | null; espelho_origem_id: string | null;
+      }>(
+        'SELECT id, telefone, nome, empresa, venda_origem_id, espelho_origem_id FROM lead_rows WHERE id = $1',
+        [req.params.id]
+      );
+      if (!lead) return reply.status(404).send({ message: 'Lead não encontrada' });
+
+      const base = [lead.id, lead.venda_origem_id, lead.espelho_origem_id].filter((v): v is string => !!v);
+      const related = await query<{ id: string }>(
+        `SELECT id FROM lead_rows
+         WHERE id = ANY($1) OR venda_origem_id = ANY($1) OR espelho_origem_id = ANY($1)`,
+        [base]
+      );
+
+      let client = await queryOne<{ id: string; ficha_cadastro: unknown }>(
+        `SELECT c.id, c.ficha_cadastro FROM contracts ct JOIN clients c ON c.id = ct.client_id
+         WHERE ct.venda_lead_id = ANY($1) ORDER BY ct.created_at DESC LIMIT 1`,
+        [related.map((r) => r.id)]
+      );
+      if (!client) {
+        const matchId = await findMatchingClientId(lead.telefone, lead.nome, lead.empresa);
+        if (matchId) {
+          client = await queryOne<{ id: string; ficha_cadastro: unknown }>(
+            'SELECT id, ficha_cadastro FROM clients WHERE id = $1',
+            [matchId]
+          );
+        }
+      }
+      if (!client) return { status: 'nao_atrelada', clientId: null };
+      return { status: client.ficha_cadastro ? 'preenchida' : 'pendente', clientId: client.id };
+    }
+  );
+
   // GET /api/lead-rows/:id/support-view — card de leitura de UMA lead específica (dados + as
   // Atualizações), SEM checar restrictedBoardFilter de propósito: é o que deixa o Suporte ver o
   // histórico do SDR com o cliente (aba Pipeline > "Lead do CRM", ver LeadLinkPanel) mesmo sem

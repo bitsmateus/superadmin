@@ -2,6 +2,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import {
+  AlertCircle,
   ArrowRight,
   ArrowRightLeft,
   AtSign,
@@ -14,6 +15,7 @@ import {
   FileText,
   Hash,
   Image as ImageIcon,
+  Loader2,
   MessageSquare,
   Paperclip,
   Pencil,
@@ -32,6 +34,8 @@ import { RetornarField } from '@/components/comercial/RetornarField'
 import { AgendamentoField } from '@/components/comercial/AgendamentoField'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/comercial/RichTextEditor'
+import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
+import { api } from '@/services/api'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useAuth } from '@/hooks/useAuth'
 import { useLeadBoards, useLeadRow } from '@/hooks/useLeadBoards'
@@ -56,21 +60,105 @@ export interface LeadDetailModalProps {
   onClose: () => void
 }
 
+type FichaStatus = {
+  status: 'preenchida' | 'pendente' | 'nao_atrelada' | 'erro'
+  clientId: string | null
+}
+
+/** Verde = cliente ligado a essa lead já preencheu a ficha (clique abre o cadastro dele). Vermelho
+ * = pendente (cliente existe, sem ficha) ou não atrelada (nenhum cliente) — clique abre o
+ * formulário público da ficha, pra mandar pro cliente. */
+function FichaCadastroButton({ ficha, onOpenClient }: { ficha: FichaStatus | null; onOpenClient: (id: string) => void }) {
+  const preenchida = ficha?.status === 'preenchida' && !!ficha.clientId
+  const vermelha = ficha?.status === 'pendente' || ficha?.status === 'nao_atrelada'
+  const title = !ficha
+    ? 'Verificando a ficha de cadastro…'
+    : preenchida
+      ? 'Ficha preenchida — clique pra ver o cadastro do cliente'
+      : ficha.status === 'pendente'
+        ? 'Ficha pendente: o cliente está cadastrado mas ainda não preencheu a ficha. Clique pra abrir o formulário.'
+        : ficha.status === 'nao_atrelada'
+          ? 'Ficha não atrelada: nenhum cliente ligado a essa lead ainda. Clique pra abrir o formulário.'
+          : 'Não deu pra verificar a ficha agora.'
+
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={!ficha}
+      onClick={() => {
+        if (preenchida) onOpenClient(ficha!.clientId!)
+        else window.open(`${window.location.origin}/ficha`, '_blank', 'noopener,noreferrer')
+      }}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors focus-ring',
+        preenchida
+          ? 'bg-success/10 text-success hover:bg-success/20'
+          : vermelha
+            ? 'bg-danger/10 text-danger hover:bg-danger/20'
+            : 'bg-elevate/[0.06] text-foreground/50 hover:bg-elevate/[0.1]',
+      )}
+    >
+      {!ficha ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : preenchida ? (
+        <CheckCircle2 className="h-3.5 w-3.5" />
+      ) : (
+        <AlertCircle className="h-3.5 w-3.5" />
+      )}
+      Ficha de cadastro
+    </button>
+  )
+}
+
+/** Casca do modal: guarda o cadastro do cliente aberto pelo botão "Ficha de cadastro", que abre
+ * por cima da lead (fora do portal dela, pra não herdar a animação/camada do modal). */
 export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
+  const [fichaClientId, setFichaClientId] = React.useState<string | null>(null)
+  React.useEffect(() => { if (!leadRowId) setFichaClientId(null) }, [leadRowId])
+
+  return (
+    <>
+      <LeadDetailModalInner
+        leadRowId={leadRowId}
+        onClose={onClose}
+        onOpenFichaClient={setFichaClientId}
+        fichaDrawerOpen={!!fichaClientId}
+      />
+      <ClientDrawer clientId={fichaClientId} onClose={() => setFichaClientId(null)} />
+    </>
+  )
+}
+
+function LeadDetailModalInner({
+  leadRowId, onClose, onOpenFichaClient, fichaDrawerOpen,
+}: LeadDetailModalProps & { onOpenFichaClient: (id: string) => void; fichaDrawerOpen: boolean }) {
   const row = useLeadRow(leadRowId)
   const boards = useLeadBoards()
   const board = boards.find((b) => b.id === row?.boardId)
 
   React.useEffect(() => {
     if (!leadRowId) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // Com o cadastro do cliente aberto por cima, o ESC é dele — não fecha a lead junto.
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !fichaDrawerOpen) onClose() }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [leadRowId, onClose])
+  }, [leadRowId, onClose, fichaDrawerOpen])
+
+  const [ficha, setFicha] = React.useState<FichaStatus | null>(null)
+  React.useEffect(() => {
+    if (!leadRowId) return
+    let cancelled = false
+    setFicha(null)
+    api.get<FichaStatus>(`/api/lead-rows/${leadRowId}/ficha-status`)
+      .then((res) => { if (!cancelled) setFicha(res) })
+      .catch(() => { if (!cancelled) setFicha({ status: 'erro', clientId: null }) })
+    return () => { cancelled = true }
+  }, [leadRowId])
 
   if (!leadRowId || !row) return null
 
@@ -94,7 +182,8 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
               in → {board?.name ?? '—'} Board
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <FichaCadastroButton ficha={ficha} onOpenClient={onOpenFichaClient} />
             <a
               href="https://gruponxdigital.com/planos"
               target="_blank"

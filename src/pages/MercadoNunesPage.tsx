@@ -961,10 +961,62 @@ export function MercadoNunesPage() {
               </div>
             </Card>
           )}
+
+          {/* Fica na coluna de edição (não na da prévia) de propósito: essa lista cresce muito —
+              loja com muitos layouts salvos — e se morasse dentro do painel fixo da prévia, ela
+              transbordaria pra fora da tela sem jeito de rolar até o fim. Aqui ela rola junto com
+              o resto do formulário, sem nunca competir com a prévia por espaço. */}
+          <Card titulo="Layouts pré-prontos" dica="Salva o cartaz inteiro (texto, preço, cor, fonte…) pra voltar exatamente assim depois.">
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={nomeNovoLayout}
+                onChange={(e) => setNomeNovoLayout(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && salvarLayoutAtual()}
+                placeholder="Nome do layout"
+                style={{ ...inputEstilo, flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={salvarLayoutAtual}
+                disabled={!nomeNovoLayout.trim() || salvandoLayout}
+                style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: nomeNovoLayout.trim() && !salvandoLayout ? 1 : 0.5 }}
+              >
+                {salvandoLayout ? 'Salvando…' : 'Salvar atual'}
+              </button>
+            </div>
+            {carregandoLayouts ? (
+              <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Carregando layouts…</p>
+            ) : layouts.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                {layouts.map((l) => (
+                  <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #EDE7DF', borderRadius: 8, padding: '6px 8px' }}>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#2A2622', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {l.nome}
+                    </span>
+                    <button type="button" className="mn-botao-mini" onClick={() => setCartaz((c) => ({ ...c, ...(l.patch as Partial<Cartaz>) }))} style={botaoMini}>
+                      Aplicar
+                    </button>
+                    <button
+                      type="button"
+                      className="mn-botao-mini"
+                      onClick={() => removerLayout(l.id)}
+                      style={{ ...botaoMini, color: '#C0392B', borderColor: '#F0C9C4' }}
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>
+            )}
+          </Card>
         </div>
 
-        {/* ── Prévia (fixa na tela enquanto rola a coluna de edição, que é bem mais alta; no celular
-            vira uma coluna só e a prévia sobe pra cima da lista de campos, sem ficar fixa) ── */}
+        {/* ── Prévia: position:fixed de verdade (não sticky) — fica sempre no mesmo lugar da tela,
+            não importa o quanto role a coluna de edição ao lado (ela é bem mais alta, principalmente
+            com muitos layouts salvos). No celular vira uma coluna só e a prévia sobe pra cima da
+            lista de campos, sem ficar fixa (tela estreita demais pra sobrepor). ── */}
         <div className="mn-preview-col">
           <p style={{ fontSize: 12, color: '#7A716A', marginBottom: 8 }}>
             Prévia — folha A4 (210 × 297 mm)
@@ -982,54 +1034,6 @@ export function MercadoNunesPage() {
             <div style={{ transform: `scale(${escala})`, transformOrigin: 'top left' }}>
               <CartazA4 dados={cartaz} />
             </div>
-          </div>
-
-          <div style={{ marginTop: 16, width: A4_W * escala }}>
-            <Card titulo="Layouts pré-prontos" dica="Salva o cartaz inteiro (texto, preço, cor, fonte…) pra voltar exatamente assim depois.">
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  value={nomeNovoLayout}
-                  onChange={(e) => setNomeNovoLayout(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && salvarLayoutAtual()}
-                  placeholder="Nome do layout"
-                  style={{ ...inputEstilo, flex: 1 }}
-                />
-                <button
-                  type="button"
-                  onClick={salvarLayoutAtual}
-                  disabled={!nomeNovoLayout.trim() || salvandoLayout}
-                  style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: nomeNovoLayout.trim() && !salvandoLayout ? 1 : 0.5 }}
-                >
-                  {salvandoLayout ? 'Salvando…' : 'Salvar atual'}
-                </button>
-              </div>
-              {carregandoLayouts ? (
-                <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Carregando layouts…</p>
-              ) : layouts.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                  {layouts.map((l) => (
-                    <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #EDE7DF', borderRadius: 8, padding: '6px 8px' }}>
-                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#2A2622', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {l.nome}
-                      </span>
-                      <button type="button" className="mn-botao-mini" onClick={() => setCartaz((c) => ({ ...c, ...(l.patch as Partial<Cartaz>) }))} style={botaoMini}>
-                        Aplicar
-                      </button>
-                      <button
-                        type="button"
-                        className="mn-botao-mini"
-                        onClick={() => removerLayout(l.id)}
-                        style={{ ...botaoMini, color: '#C0392B', borderColor: '#F0C9C4' }}
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>
-              )}
-            </Card>
           </div>
         </div>
       </main>
@@ -1060,13 +1064,20 @@ const estiloFontesLocais = `
 const estiloResponsivo = `
 .mercadonunes .mn-header { padding: 14px 20px; }
 .mercadonunes .mn-main { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 20px; padding: 20px; }
-.mercadonunes .mn-preview-col { position: sticky; top: 20px; }
-.mercadonunes .mn-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* position:fixed (não sticky) — a prévia trava num ponto fixo da TELA, não da coluna. Sticky some
+   quando a coluna ao lado é mais curta que a tela e "acaba" antes da rolagem terminar (foi o que
+   aconteceu com muitos layouts salvos, ou rolando o formulário: a placa sumia). Fixed nunca some. */
+.mercadonunes .mn-preview-col {
+  position: fixed;
+  top: 20px;
+  right: max(20px, calc((100vw - 1180px) / 2));
+  z-index: 5;
+}
 
 @media (max-width: 900px) {
   .mercadonunes .mn-header { padding: 12px 14px; }
   .mercadonunes .mn-main { grid-template-columns: 1fr; gap: 14px; padding: 14px; }
-  .mercadonunes .mn-preview-col { position: static; order: -1; }
+  .mercadonunes .mn-preview-col { position: static; order: -1; right: auto; }
   .mercadonunes .mn-preview-col > div:first-child,
   .mercadonunes .mn-preview-col > div:last-child { margin-left: auto; margin-right: auto; }
 }

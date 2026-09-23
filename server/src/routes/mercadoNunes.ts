@@ -6,21 +6,38 @@ import { query } from '../db.js';
  *  ver e reaproveitar o mesmo layout, não só quem salvou. */
 export async function mercadoNunesRoutes(app: FastifyInstance) {
   app.get('/api/public/mercadonunes/layouts', async () => {
-    const layouts = await query('SELECT id, nome, patch, created_at FROM mercadonunes_layouts ORDER BY created_at ASC');
+    const layouts = await query(
+      'SELECT id, nome, patch, pasta, created_at FROM mercadonunes_layouts ORDER BY created_at ASC'
+    );
     return { layouts };
   });
 
-  app.post<{ Body: { nome?: string; patch?: Record<string, unknown> } }>(
+  app.post<{ Body: { nome?: string; patch?: Record<string, unknown>; pasta?: string | null } }>(
     '/api/public/mercadonunes/layouts',
     async (req, reply) => {
       const nome = (req.body?.nome ?? '').trim();
       if (!nome) return reply.status(400).send({ message: 'Dê um nome pro layout.' });
       const patch = req.body?.patch ?? {};
+      const pasta = (req.body?.pasta ?? '').toString().trim() || null;
       const [layout] = await query(
-        'INSERT INTO mercadonunes_layouts (nome, patch) VALUES ($1, $2) RETURNING id, nome, patch, created_at',
-        [nome, JSON.stringify(patch)]
+        'INSERT INTO mercadonunes_layouts (nome, patch, pasta) VALUES ($1, $2, $3) RETURNING id, nome, patch, pasta, created_at',
+        [nome, JSON.stringify(patch), pasta]
       );
       return reply.status(201).send(layout);
+    }
+  );
+
+  // Move um layout já salvo pra dentro (ou pra fora, com pasta null/vazia) de uma pasta.
+  app.patch<{ Params: { id: string }; Body: { pasta?: string | null } }>(
+    '/api/public/mercadonunes/layouts/:id',
+    async (req, reply) => {
+      const pasta = (req.body?.pasta ?? '').toString().trim() || null;
+      const [layout] = await query(
+        'UPDATE mercadonunes_layouts SET pasta = $2 WHERE id = $1 RETURNING id, nome, patch, pasta, created_at',
+        [req.params.id, pasta]
+      );
+      if (!layout) return reply.status(404).send({ message: 'Layout não encontrado.' });
+      return layout;
     }
   );
 

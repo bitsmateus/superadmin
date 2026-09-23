@@ -1312,6 +1312,9 @@ END $$`);
     patch JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  // Pasta pra organizar layouts (ex.: "Bebidas") — criada livremente pelo mercado, sem cadastro
+  // próprio: é só um texto no layout. null/vazio = sem pasta, continua na lista simples de sempre.
+  await pool.query(`ALTER TABLE mercadonunes_layouts ADD COLUMN IF NOT EXISTS pasta TEXT`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_mercadonunes_layouts ON mercadonunes_layouts;

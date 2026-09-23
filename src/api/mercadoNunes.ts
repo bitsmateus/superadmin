@@ -4,6 +4,9 @@ export interface MercadoNunesLayout {
   id: string
   nome: string
   patch: Record<string, unknown>
+  // Pasta onde o layout foi organizado (ex.: "Bebidas"). null/vazio = sem pasta, continua
+  // aparecendo na lista simples da página principal.
+  pasta: string | null
   created_at: string
 }
 
@@ -11,7 +14,10 @@ export interface MercadoNunesLayout {
  *  entre todo mundo que usa a página, não só no navegador de quem salvou). */
 export const mercadoNunesLayoutsApi = {
   list: () => api.get<{ layouts: MercadoNunesLayout[] }>('/api/public/mercadonunes/layouts'),
-  create: (nome: string, patch: Record<string, unknown>) =>
-    api.post<MercadoNunesLayout>('/api/public/mercadonunes/layouts', { nome, patch }),
+  create: (nome: string, patch: Record<string, unknown>, pasta?: string | null) =>
+    api.post<MercadoNunesLayout>('/api/public/mercadonunes/layouts', { nome, patch, pasta }),
+  /** Move um layout já salvo pra dentro (ou pra fora, com pasta=null) de uma pasta. */
+  mover: (id: string, pasta: string | null) =>
+    api.patch<MercadoNunesLayout>(`/api/public/mercadonunes/layouts/${id}`, { pasta }),
   remove: (id: string) => api.delete(`/api/public/mercadonunes/layouts/${id}`),
 }

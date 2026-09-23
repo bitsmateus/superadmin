@@ -38,6 +38,13 @@ export async function settingsRoutes(app: FastifyInstance) {
       const sm = row.smtp as Record<string, unknown>;
       row.smtp = { ...sm, password: '', passwordSet: Boolean(sm.password) };
     }
+    // Mascara o token da API do Autentique (usado pela checagem de assinatura — ver
+    // jobs/autentiqueSync.ts). Só o servidor precisa dele; o front só sabe se está configurado.
+    if (row) {
+      const autentiqueToken = row.autentique_api_token;
+      row.autentique_api_token = '';
+      row.autentique_api_token_set = Boolean(autentiqueToken);
+    }
     return row ?? {};
   });
 

@@ -92,10 +92,14 @@ CREATE TABLE IF NOT EXISTS settings (
   uazapi JSONB,
   sla_by_stage JSONB,
   smtp JSONB,
+  -- Token da API do Autentique, usado pela checagem "assinou lá, marca aqui"
+  -- (server/src/jobs/autentiqueSync.ts). Mascarado no GET /api/settings, nunca vai pro front.
+  autentique_api_token TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT settings_singleton CHECK (id = TRUE)
 );
 -- add column if running against existing DB
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS autentique_api_token TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS support_group JSONB;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS evolution JSONB;

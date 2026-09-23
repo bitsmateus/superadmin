@@ -1,4 +1,4 @@
-import { query } from '../db.js';
+import { query, queryOne } from '../db.js';
 import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
 
 /**
@@ -19,6 +19,18 @@ import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
 const API_URL = 'https://api.autentique.com.br/v2/graphql';
 const INTERVALO_MS = 10 * 60_000;
 const PRIMEIRA_CHECAGEM_MS = 30_000;
+
+/** Token da API do Autentique: variável de ambiente ganha da configuração salva no banco
+ * (settings.autentique_api_token, mesmo lugar onde já moram a chave do Asaas e a senha do SMTP) —
+ * assim dá pra trocar o token sem precisar mexer no deploy. */
+async function obterToken(): Promise<string | null> {
+  const doAmbiente = process.env.AUTENTIQUE_API_TOKEN?.trim();
+  if (doAmbiente) return doAmbiente;
+  const row = await queryOne<{ autentique_api_token: string | null }>(
+    'SELECT autentique_api_token FROM settings WHERE id = true'
+  );
+  return row?.autentique_api_token?.trim() || null;
+}
 
 type Assinatura = { signed: { created_at: string } | null };
 
@@ -74,7 +86,7 @@ export async function consultarDocumento(
 /** Uma passada: confere todos os contratos pendentes que têm ID do Autentique colado.
  * `dryRun` só informa o que faria, sem gravar nada (usado pra testar com dado real). */
 export async function verificarContratosPendentes(opts: { dryRun?: boolean } = {}): Promise<void> {
-  const token = process.env.AUTENTIQUE_API_TOKEN;
+  const token = await obterToken();
   if (!token) return;
 
   const contratos = await query<{ id: string; client_id: string | null; autentique_document_id: string }>(
@@ -82,6 +94,7 @@ export async function verificarContratosPendentes(opts: { dryRun?: boolean } = {
      WHERE autentique_document_id IS NOT NULL AND status <> 'assinado'`
   );
   if (!contratos.length) return;
+  if (opts.dryRun) console.log('[autentique-sync] (simulação) token ok,', contratos.length, 'contrato(s) pendente(s) com ID pra conferir');
 
   for (const c of contratos) {
     const info = await consultarDocumento(token, c.autentique_document_id);
@@ -106,11 +119,6 @@ let rodando = false;
 
 /** Liga a checagem periódica (a cada 10 min, mais uma logo depois de subir o servidor). */
 export function startAutentiqueSync(): void {
-  if (!process.env.AUTENTIQUE_API_TOKEN) {
-    console.log('[autentique-sync] AUTENTIQUE_API_TOKEN não configurado — checagem automática desligada');
-    return;
-  }
-
   const tick = async () => {
     if (rodando) return;
     rodando = true;

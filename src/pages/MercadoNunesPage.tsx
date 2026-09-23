@@ -151,6 +151,14 @@ const MODELOS: Modelo[] = [
   },
 ]
 
+/** minúsculo + sem acento, pra busca não se importar com "Café" vs "cafe" nem maiúsculas. */
+function normaliza(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+}
+
 /** Quebra o preço em "22" + "99" — o cartaz mostra os centavos menores, em cima. */
 function partesDoPreco(preco: string): { inteiro: string; centavos: string } {
   const limpo = (preco || '').replace(/[^\d.,]/g, '').replace(/\./g, ',')
@@ -563,6 +571,18 @@ export function MercadoNunesPage() {
   const [movendoId, setMovendoId] = React.useState<string | null>(null)
   const [pastaDestino, setPastaDestino] = React.useState('')
 
+  // Busca em "Modelos salvos" (por nome de pasta ou de layout) + quais pastas estão abertas —
+  // toda pasta nasce minimizada; abre na mão (clicando) ou sozinha quando a busca acha algo nela.
+  const [buscaLayouts, setBuscaLayouts] = React.useState('')
+  const [pastasAbertas, setPastasAbertas] = React.useState<Set<string>>(new Set())
+  const togglePasta = (nome: string) =>
+    setPastasAbertas((atual) => {
+      const novo = new Set(atual)
+      if (novo.has(nome)) novo.delete(nome)
+      else novo.add(nome)
+      return novo
+    })
+
   // Cadastro de pastas — criadas num campo próprio (não "adivinhadas" a partir de layouts), pra
   // já aparecerem como opção no seletor antes mesmo de qualquer layout ser movido pra dentro.
   const [pastasCadastradas, setPastasCadastradas] = React.useState<MercadoNunesPasta[]>([])
@@ -580,6 +600,39 @@ export function MercadoNunesPage() {
     )
   }, [pastasCadastradas, layouts])
   const layoutsSemPasta = React.useMemo(() => layouts.filter((l) => !l.pasta), [layouts])
+
+  // Busca: acha por nome da pasta OU por nome do layout/produto dentro dela. Pasta sem nenhum
+  // resultado nem aparece; pasta com resultado abre sozinha, mesmo que o usuário não tenha clicado.
+  const buscaNormalizada = React.useMemo(() => normaliza(buscaLayouts.trim()), [buscaLayouts])
+  const buscaAtiva = buscaNormalizada.length > 0
+  const layoutsPorPasta = React.useCallback((pasta: string) => layouts.filter((l) => l.pasta === pasta), [layouts])
+  const pastaTemResultado = React.useCallback(
+    (pasta: string) =>
+      normaliza(pasta).includes(buscaNormalizada) ||
+      layoutsPorPasta(pasta).some((l) => normaliza(l.nome).includes(buscaNormalizada)),
+    [buscaNormalizada, layoutsPorPasta],
+  )
+  const pastasVisiveis = React.useMemo(
+    () => (buscaAtiva ? pastas.filter(pastaTemResultado) : pastas),
+    [pastas, buscaAtiva, pastaTemResultado],
+  )
+  const layoutsSemPastaVisiveis = React.useMemo(
+    () =>
+      buscaAtiva ? layoutsSemPasta.filter((l) => normaliza(l.nome).includes(buscaNormalizada)) : layoutsSemPasta,
+    [layoutsSemPasta, buscaAtiva, buscaNormalizada],
+  )
+  // Abre sozinha toda pasta com resultado da busca — some com o texto, mas não fecha de novo
+  // sozinha (fica aberta até o usuário clicar e fechar, sem gerar surpresa).
+  React.useEffect(() => {
+    if (!buscaAtiva) return
+    setPastasAbertas((atual) => {
+      const comResultado = pastas.filter(pastaTemResultado)
+      if (comResultado.every((p) => atual.has(p))) return atual
+      const novo = new Set(atual)
+      comResultado.forEach((p) => novo.add(p))
+      return novo
+    })
+  }, [buscaAtiva, pastas, pastaTemResultado])
 
   const carregarLayouts = React.useCallback(() => {
     mercadoNunesLayoutsApi
@@ -607,6 +660,7 @@ export function MercadoNunesPage() {
     setPastaNovoLayout('')
     setCriarPastaAberto(false)
     setNovaPastaNome('')
+    setBuscaLayouts('')
   }
 
   const criarPasta = async () => {
@@ -1351,52 +1405,89 @@ export function MercadoNunesPage() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {layouts.length > 0 && (
+                    <input
+                      value={buscaLayouts}
+                      onChange={(e) => setBuscaLayouts(e.target.value)}
+                      placeholder="Buscar por pasta ou por nome do layout…"
+                      style={inputEstilo}
+                    />
+                  )}
                   {carregandoLayouts ? (
                     <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Carregando layouts…</p>
                   ) : layouts.length === 0 ? (
                     <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>
+                  ) : buscaAtiva && pastasVisiveis.length === 0 && layoutsSemPastaVisiveis.length === 0 ? (
+                    <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>
+                      Nada encontrado pra "{buscaLayouts.trim()}".
+                    </p>
                   ) : (
                     <>
-                      {pastas.map((pasta) => (
-                        <div key={pasta}>
+                      {pastasVisiveis.map((pasta) => {
+                        const layoutsDaPasta = layoutsPorPasta(pasta)
+                        const aberta = pastasAbertas.has(pasta)
+                        return (
+                          <div key={pasta}>
+                            <button
+                              type="button"
+                              onClick={() => togglePasta(pasta)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                width: '100%',
+                                background: 'none',
+                                border: 'none',
+                                padding: '0 0 8px',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                              }}
+                            >
+                              <span style={{ fontSize: 10, color: '#C1503F', transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+                                ▶
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 800,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.6,
+                                  color: '#C1503F',
+                                }}
+                              >
+                                📁 {pasta}
+                              </span>
+                              <span style={{ fontSize: 11, color: '#9A928B', fontWeight: 600 }}>
+                                ({layoutsDaPasta.length})
+                              </span>
+                            </button>
+                            {aberta && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
+                                {layoutsDaPasta.map(renderLayoutRow)}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {layoutsSemPastaVisiveis.length > 0 && (
+                        <div>
                           <h3
                             style={{
                               fontSize: 12,
                               fontWeight: 800,
                               textTransform: 'uppercase',
                               letterSpacing: 0.6,
-                              color: '#C1503F',
+                              color: '#9A928B',
                               margin: '0 0 8px',
                             }}
                           >
-                            📁 {pasta}
+                            Sem pasta
                           </h3>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {layouts.filter((l) => l.pasta === pasta).map(renderLayoutRow)}
+                            {layoutsSemPastaVisiveis.map(renderLayoutRow)}
                           </div>
                         </div>
-                      ))}
-                      <div>
-                        <h3
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 800,
-                            textTransform: 'uppercase',
-                            letterSpacing: 0.6,
-                            color: '#9A928B',
-                            margin: '0 0 8px',
-                          }}
-                        >
-                          Sem pasta
-                        </h3>
-                        {layoutsSemPasta.length > 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {layoutsSemPasta.map(renderLayoutRow)}
-                          </div>
-                        ) : (
-                          <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum.</p>
-                        )}
-                      </div>
+                      )}
                     </>
                   )}
                 </div>

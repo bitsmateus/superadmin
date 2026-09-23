@@ -1243,16 +1243,39 @@ export function MercadoNunesPage() {
                   </Campo>
                   <Campo
                     label="Pasta (opcional)"
-                    dica='Escreva o nome de uma pasta já existente ou de uma nova — ela é criada na hora, sem precisar cadastrar antes.'
+                    dica="Escolha uma pasta já criada ou digite um nome novo pra criar na hora."
                   >
                     <input
                       list="mn-pastas-existentes"
                       value={pastaNovoLayout}
                       onChange={(e) => setPastaNovoLayout(e.target.value)}
-                      placeholder="Ex.: Bebidas"
+                      placeholder="Ex.: Bebidas (ou deixe em branco)"
                       style={inputEstilo}
                     />
                   </Campo>
+                  {pastas.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: -4 }}>
+                      {pastas.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setPastaNovoLayout(p)}
+                          style={{
+                            ...botaoMini,
+                            padding: '6px 12px',
+                            borderRadius: 20,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            background: pastaNovoLayout === p ? '#C1503F' : '#fff',
+                            color: pastaNovoLayout === p ? '#fff' : '#5B534D',
+                            borderColor: pastaNovoLayout === p ? '#C1503F' : '#DED8D0',
+                          }}
+                        >
+                          📁 {p}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={salvarLayoutAtual}
@@ -1350,7 +1373,9 @@ const estiloResponsivo = `
    aconteceu com muitos layouts salvos, ou rolando o formulário: a placa sumia). Fixed nunca some. */
 .mercadonunes .mn-preview-col {
   position: fixed;
-  top: 20px;
+  /* 85px = altura do cabeçalho (.mn-header) + 20px de respiro — sem isso a prévia fixa cobria o
+     próprio cabeçalho (logo, título e botão "Layouts") por trás dela. */
+  top: 105px;
   right: max(20px, calc((100vw - 1180px) / 2));
   z-index: 5;
 }

@@ -33,5 +33,8 @@ export interface MercadoNunesPasta {
 export const mercadoNunesPastasApi = {
   list: () => api.get<{ pastas: MercadoNunesPasta[] }>('/api/public/mercadonunes/pastas'),
   create: (nome: string) => api.post<MercadoNunesPasta>('/api/public/mercadonunes/pastas', { nome }),
+  /** Renomeia a pasta — o back também atualiza o texto guardado em todo layout que já estava nela. */
+  renomear: (id: string, nome: string) => api.patch<MercadoNunesPasta>(`/api/public/mercadonunes/pastas/${id}`, { nome }),
+  /** Apaga a pasta; os layouts que estavam nela voltam a ficar sem pasta (nada é excluído). */
   remove: (id: string) => api.delete(`/api/public/mercadonunes/pastas/${id}`),
 }

@@ -589,6 +589,10 @@ export function MercadoNunesPage() {
   const [novaPastaNome, setNovaPastaNome] = React.useState('')
   const [criandoPasta, setCriandoPasta] = React.useState(false)
   const [criarPastaAberto, setCriarPastaAberto] = React.useState(false)
+  const [editandoPasta, setEditandoPasta] = React.useState<string | null>(null) // nome atual da pasta em edição
+  const [renomearPastaValor, setRenomearPastaValor] = React.useState('')
+  const [renomeandoPasta, setRenomeandoPasta] = React.useState(false)
+  const [excluindoPasta, setExcluindoPasta] = React.useState<string | null>(null)
 
   // União com o que já está em uso nos layouts — rede de segurança pra nunca "esconder" uma
   // pasta que algum layout ainda referencia (ex.: cadastro apagado depois, ou dado antigo).
@@ -678,6 +682,66 @@ export function MercadoNunesPage() {
       toast.error(err instanceof Error ? err.message : 'Falha ao criar a pasta')
     } finally {
       setCriandoPasta(false)
+    }
+  }
+
+  const renomearPasta = async () => {
+    if (!editandoPasta) return
+    const nomeNovo = renomearPastaValor.trim()
+    if (!nomeNovo || nomeNovo === editandoPasta) {
+      setEditandoPasta(null)
+      return
+    }
+    const pasta = pastasCadastradas.find((p) => p.nome === editandoPasta)
+    if (!pasta) return
+    setRenomeandoPasta(true)
+    try {
+      await mercadoNunesPastasApi.renomear(pasta.id, nomeNovo)
+      // Atualiza tudo que já está na tela na hora — cadastro, layouts que estavam nela, pasta
+      // aberta/em busca — em vez de esperar um recarregamento pra refletir o nome novo.
+      setPastasCadastradas((cur) => cur.map((p) => (p.id === pasta.id ? { ...p, nome: nomeNovo } : p)))
+      setLayouts((cur) => cur.map((l) => (l.pasta === editandoPasta ? { ...l, pasta: nomeNovo } : l)))
+      setPastasAbertas((cur) => {
+        if (!cur.has(editandoPasta!)) return cur
+        const novo = new Set(cur)
+        novo.delete(editandoPasta!)
+        novo.add(nomeNovo)
+        return novo
+      })
+      toast.success(`Pasta renomeada pra "${nomeNovo}"`)
+      setEditandoPasta(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao renomear a pasta')
+    } finally {
+      setRenomeandoPasta(false)
+    }
+  }
+
+  const excluirPasta = async (nome: string) => {
+    const pasta = pastasCadastradas.find((p) => p.nome === nome)
+    if (!pasta) return
+    const qtd = layoutsPorPasta(nome).length
+    const aviso =
+      qtd > 0
+        ? `Excluir a pasta "${nome}"? Os ${qtd} layout(s) dentro dela não serão apagados — só voltam pra "Sem pasta".`
+        : `Excluir a pasta "${nome}"?`
+    if (!window.confirm(aviso)) return
+    setExcluindoPasta(nome)
+    try {
+      await mercadoNunesPastasApi.remove(pasta.id)
+      setPastasCadastradas((cur) => cur.filter((p) => p.id !== pasta.id))
+      setLayouts((cur) => cur.map((l) => (l.pasta === nome ? { ...l, pasta: null } : l)))
+      setPastasAbertas((cur) => {
+        if (!cur.has(nome)) return cur
+        const novo = new Set(cur)
+        novo.delete(nome)
+        return novo
+      })
+      toast.success(`Pasta "${nome}" excluída`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao excluir a pasta')
+    } finally {
+      setExcluindoPasta(null)
     }
   }
 
@@ -1426,42 +1490,107 @@ export function MercadoNunesPage() {
                       {pastasVisiveis.map((pasta) => {
                         const layoutsDaPasta = layoutsPorPasta(pasta)
                         const aberta = pastasAbertas.has(pasta)
+                        const cadastrada = pastasCadastradas.some((p) => p.nome === pasta)
+                        const emEdicao = editandoPasta === pasta
                         return (
                           <div key={pasta}>
-                            <button
-                              type="button"
-                              onClick={() => togglePasta(pasta)}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                width: '100%',
-                                background: 'none',
-                                border: 'none',
-                                padding: '0 0 8px',
-                                cursor: 'pointer',
-                                textAlign: 'left',
-                              }}
-                            >
-                              <span style={{ fontSize: 10, color: '#C1503F', transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
-                                ▶
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 800,
-                                  textTransform: 'uppercase',
-                                  letterSpacing: 0.6,
-                                  color: '#C1503F',
-                                }}
-                              >
-                                📁 {pasta}
-                              </span>
-                              <span style={{ fontSize: 11, color: '#9A928B', fontWeight: 600 }}>
-                                ({layoutsDaPasta.length})
-                              </span>
-                            </button>
-                            {aberta && (
+                            {emEdicao ? (
+                              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                                <input
+                                  value={renomearPastaValor}
+                                  onChange={(e) => setRenomearPastaValor(e.target.value)}
+                                  onKeyDown={(e) => e.key === 'Enter' && renomearPasta()}
+                                  autoFocus
+                                  style={{ ...inputEstilo, flex: 1, padding: '6px 8px', fontSize: 13 }}
+                                />
+                                <button
+                                  type="button"
+                                  className="mn-botao-mini"
+                                  onClick={renomearPasta}
+                                  disabled={!renomearPastaValor.trim() || renomeandoPasta}
+                                  style={{ ...botaoMini, opacity: renomearPastaValor.trim() && !renomeandoPasta ? 1 : 0.5 }}
+                                >
+                                  {renomeandoPasta ? 'Salvando…' : 'OK'}
+                                </button>
+                                <button type="button" className="mn-botao-mini" onClick={() => setEditandoPasta(null)} style={botaoMini}>
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => togglePasta(pasta)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    flex: 1,
+                                    minWidth: 0,
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                  }}
+                                >
+                                  <span style={{ fontSize: 10, color: '#C1503F', transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+                                    ▶
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: 800,
+                                      textTransform: 'uppercase',
+                                      letterSpacing: 0.6,
+                                      color: '#C1503F',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    📁 {pasta}
+                                  </span>
+                                  <span style={{ fontSize: 11, color: '#9A928B', fontWeight: 600, flexShrink: 0 }}>
+                                    ({layoutsDaPasta.length})
+                                  </span>
+                                </button>
+                                {cadastrada && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="mn-botao-mini"
+                                      onClick={() => {
+                                        setEditandoPasta(pasta)
+                                        setRenomearPastaValor(pasta)
+                                      }}
+                                      title="Renomear pasta"
+                                      style={{ ...botaoMini, flexShrink: 0, padding: '4px 7px' }}
+                                    >
+                                      ✏️
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="mn-botao-mini"
+                                      onClick={() => excluirPasta(pasta)}
+                                      disabled={excluindoPasta === pasta}
+                                      title="Excluir pasta"
+                                      style={{
+                                        ...botaoMini,
+                                        flexShrink: 0,
+                                        padding: '4px 7px',
+                                        color: '#C0392B',
+                                        borderColor: '#F0C9C4',
+                                        opacity: excluindoPasta === pasta ? 0.5 : 1,
+                                      }}
+                                    >
+                                      🗑️
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {aberta && !emEdicao && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
                                 {layoutsDaPasta.map(renderLayoutRow)}
                               </div>

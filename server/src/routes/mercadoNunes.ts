@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
 
 /** Layouts salvos do gerador de cartazes do Mercado Nunes (/mercadonunes) — página pública, sem
  *  login. Guardado no banco (não no localStorage do navegador) pra todo mundo que usa a ferramenta
@@ -26,9 +26,48 @@ export async function mercadoNunesRoutes(app: FastifyInstance) {
     return reply.status(201).send(pasta);
   });
 
+  // Renomeia a pasta e atualiza o texto guardado em todo layout que já estava nela (o vínculo é só
+  // pelo nome, não por id — sem isso os layouts continuariam apontando pro nome antigo).
+  app.patch<{ Params: { id: string }; Body: { nome?: string } }>(
+    '/api/public/mercadonunes/pastas/:id',
+    async (req, reply) => {
+      const nome = (req.body?.nome ?? '').trim();
+      if (!nome) return reply.status(400).send({ message: 'Dê um nome pra pasta.' });
+      try {
+        const pasta = await withTransaction(async (client) => {
+          const { rows: antes } = await client.query('SELECT nome FROM mercadonunes_pastas WHERE id = $1', [req.params.id]);
+          if (!antes.length) return null;
+          const nomeAntigo = antes[0].nome as string;
+          const { rows: atualizado } = await client.query(
+            'UPDATE mercadonunes_pastas SET nome = $2 WHERE id = $1 RETURNING id, nome, created_at',
+            [req.params.id, nome]
+          );
+          if (nomeAntigo !== nome) {
+            await client.query('UPDATE mercadonunes_layouts SET pasta = $2 WHERE pasta = $1', [nomeAntigo, nome]);
+          }
+          return atualizado[0];
+        });
+        if (!pasta) return reply.status(404).send({ message: 'Pasta não encontrada.' });
+        return pasta;
+      } catch (err) {
+        // unique_violation (nome já usado por outra pasta)
+        if ((err as { code?: string }).code === '23505') {
+          return reply.status(409).send({ message: 'Já existe uma pasta com esse nome.' });
+        }
+        throw err;
+      }
+    }
+  );
+
+  // Apaga a pasta, mas NÃO os layouts que estavam nela — eles voltam a ficar sem pasta.
   app.delete<{ Params: { id: string } }>('/api/public/mercadonunes/pastas/:id', async (req, reply) => {
-    const result = await query('DELETE FROM mercadonunes_pastas WHERE id = $1 RETURNING id', [req.params.id]);
-    if (!result.length) return reply.status(404).send({ message: 'Pasta não encontrada.' });
+    const encontrada = await withTransaction(async (client) => {
+      const { rows } = await client.query('DELETE FROM mercadonunes_pastas WHERE id = $1 RETURNING nome', [req.params.id]);
+      if (!rows.length) return false;
+      await client.query('UPDATE mercadonunes_layouts SET pasta = NULL WHERE pasta = $1', [rows[0].nome]);
+      return true;
+    });
+    if (!encontrada) return reply.status(404).send({ message: 'Pasta não encontrada.' });
     return reply.status(204).send();
   });
 

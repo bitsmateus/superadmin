@@ -1263,7 +1263,7 @@ function AutentiqueField({
         {value
           ? signed
             ? '✓ Vinculado — assinatura detectada automaticamente pelo Autentique.'
-            : '✓ Vinculado — quando todo mundo assinar lá, esse contrato marca como assinado sozinho aqui.'
+            : '✓ Vinculado — quando todo mundo assinar lá, esse contrato marca como assinado sozinho aqui (em até 10 min).'
           : 'Sem isso, "Marcar como assinado" continua manual — cole aqui pra automatizar.'}
       </p>
     </div>

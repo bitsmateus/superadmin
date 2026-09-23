@@ -39,6 +39,7 @@ import { startFollowUpDigest } from './jobs/followUpDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
 import { startMassCampaignDispatch } from './jobs/massCampaignDispatch.js';
+import { startAutentiqueSync } from './jobs/autentiqueSync.js';
 
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
@@ -134,6 +135,7 @@ async function main() {
   startChannelAlerts();
   startTenantUsersSync();
   startMassCampaignDispatch();
+  startAutentiqueSync();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

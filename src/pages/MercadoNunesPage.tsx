@@ -1,6 +1,11 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { mercadoNunesLayoutsApi, type MercadoNunesLayout } from '@/api/mercadoNunes'
+import {
+  mercadoNunesLayoutsApi,
+  mercadoNunesPastasApi,
+  type MercadoNunesLayout,
+  type MercadoNunesPasta,
+} from '@/api/mercadoNunes'
 
 /**
  * Gerador de cartazes de oferta A4 do Mercado Nunes (/mercadonunes) — página pública, sem login e
@@ -558,14 +563,22 @@ export function MercadoNunesPage() {
   const [movendoId, setMovendoId] = React.useState<string | null>(null)
   const [pastaDestino, setPastaDestino] = React.useState('')
 
-  // Pastas existentes — não têm cadastro próprio, são só o conjunto de nomes já usados nos
-  // layouts salvos. Cria-se uma pasta simplesmente digitando um nome novo ao salvar/mover.
-  const pastas = React.useMemo(
-    () =>
-      Array.from(new Set(layouts.map((l) => l.pasta).filter((p): p is string => !!(p && p.trim()))))
-        .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' })),
-    [layouts],
-  )
+  // Cadastro de pastas — criadas num campo próprio (não "adivinhadas" a partir de layouts), pra
+  // já aparecerem como opção no seletor antes mesmo de qualquer layout ser movido pra dentro.
+  const [pastasCadastradas, setPastasCadastradas] = React.useState<MercadoNunesPasta[]>([])
+  const [novaPastaNome, setNovaPastaNome] = React.useState('')
+  const [criandoPasta, setCriandoPasta] = React.useState(false)
+  const [criarPastaAberto, setCriarPastaAberto] = React.useState(false)
+
+  // União com o que já está em uso nos layouts — rede de segurança pra nunca "esconder" uma
+  // pasta que algum layout ainda referencia (ex.: cadastro apagado depois, ou dado antigo).
+  const pastas = React.useMemo(() => {
+    const doCadastro = pastasCadastradas.map((p) => p.nome)
+    const dosLayouts = layouts.map((l) => l.pasta).filter((p): p is string => !!(p && p.trim()))
+    return Array.from(new Set([...doCadastro, ...dosLayouts])).sort((a, b) =>
+      a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }),
+    )
+  }, [pastasCadastradas, layouts])
   const layoutsSemPasta = React.useMemo(() => layouts.filter((l) => !l.pasta), [layouts])
 
   const carregarLayouts = React.useCallback(() => {
@@ -579,6 +592,40 @@ export function MercadoNunesPage() {
   React.useEffect(() => {
     carregarLayouts()
   }, [carregarLayouts])
+
+  React.useEffect(() => {
+    mercadoNunesPastasApi
+      .list()
+      .then((d) => setPastasCadastradas(Array.isArray(d?.pastas) ? d.pastas : []))
+      .catch(() => toast.error('Falha ao carregar as pastas.'))
+  }, [])
+
+  // Fecha o menu e limpa o rascunho de pasta — sem isso, escolher uma pasta no menu e fechar sem
+  // salvar deixava a seleção "grudada" pro próximo "Salvar atual" da listinha da página principal.
+  const fecharMenuLayouts = () => {
+    setMenuLayoutsAberto(false)
+    setPastaNovoLayout('')
+    setCriarPastaAberto(false)
+    setNovaPastaNome('')
+  }
+
+  const criarPasta = async () => {
+    const nome = novaPastaNome.trim()
+    if (!nome) return
+    setCriandoPasta(true)
+    try {
+      const criada = await mercadoNunesPastasApi.create(nome)
+      setPastasCadastradas((cur) => (cur.some((p) => p.nome === criada.nome) ? cur : [...cur, criada]))
+      setPastaNovoLayout(criada.nome) // já deixa selecionada pro layout que está sendo criado
+      setNovaPastaNome('')
+      setCriarPastaAberto(false)
+      toast.success(`Pasta "${criada.nome}" criada!`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao criar a pasta')
+    } finally {
+      setCriandoPasta(false)
+    }
+  }
 
   // Fontes do Google só nesta página (não pesam o resto do app).
   React.useEffect(() => {
@@ -685,15 +732,19 @@ export function MercadoNunesPage() {
         </div>
         {emEdicao && (
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-            <input
-              list="mn-pastas-existentes"
+            <select
               value={pastaDestino}
               onChange={(e) => setPastaDestino(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && moverLayout(l.id, pastaDestino)}
-              placeholder="Nome da pasta (vazio = tira da pasta)"
               autoFocus
               style={{ ...inputEstilo, flex: 1, padding: '6px 8px', fontSize: 13 }}
-            />
+            >
+              <option value="">— Sem pasta —</option>
+              {pastas.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
             <button type="button" className="mn-botao-mini" onClick={() => moverLayout(l.id, pastaDestino)} style={botaoMini}>
               OK
             </button>
@@ -1149,14 +1200,6 @@ export function MercadoNunesPage() {
         </div>
       </main>
 
-      {/* Pastas existentes, pra autocompletar tanto o campo de "criar pasta nova" quanto o de
-          "mover pra pasta" — sem cadastro próprio, é só o texto já usado em algum layout. */}
-      <datalist id="mn-pastas-existentes">
-        {pastas.map((p) => (
-          <option key={p} value={p} />
-        ))}
-      </datalist>
-
       {/* Menu "Layouts": Criar (salva o cartaz atual, já com pasta) e Modelos salvos (tudo
           organizado por pasta, mais uma seção "Sem pasta" igual à listinha da página principal). */}
       {menuLayoutsAberto && (
@@ -1174,7 +1217,7 @@ export function MercadoNunesPage() {
             zIndex: 50,
             overflowY: 'auto',
           }}
-          onClick={() => setMenuLayoutsAberto(false)}
+          onClick={fecharMenuLayouts}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -1203,7 +1246,7 @@ export function MercadoNunesPage() {
               <h2 style={{ fontSize: 16, fontWeight: 800, color: '#C1503F', margin: 0 }}>Layouts</h2>
               <button
                 type="button"
-                onClick={() => setMenuLayoutsAberto(false)}
+                onClick={fecharMenuLayouts}
                 style={{ ...botaoMini, fontSize: 15, padding: '4px 10px' }}
               >
                 ✕
@@ -1241,41 +1284,62 @@ export function MercadoNunesPage() {
                       style={inputEstilo}
                     />
                   </Campo>
-                  <Campo
-                    label="Pasta (opcional)"
-                    dica="Escolha uma pasta já criada ou digite um nome novo pra criar na hora."
-                  >
-                    <input
-                      list="mn-pastas-existentes"
+                  <Campo label="Pasta (opcional)" dica="Selecione uma pasta já criada, ou crie uma nova abaixo.">
+                    <select
                       value={pastaNovoLayout}
                       onChange={(e) => setPastaNovoLayout(e.target.value)}
-                      placeholder="Ex.: Bebidas (ou deixe em branco)"
                       style={inputEstilo}
-                    />
-                  </Campo>
-                  {pastas.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: -4 }}>
+                    >
+                      <option value="">— Sem pasta —</option>
                       {pastas.map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setPastaNovoLayout(p)}
-                          style={{
-                            ...botaoMini,
-                            padding: '6px 12px',
-                            borderRadius: 20,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            background: pastaNovoLayout === p ? '#C1503F' : '#fff',
-                            color: pastaNovoLayout === p ? '#fff' : '#5B534D',
-                            borderColor: pastaNovoLayout === p ? '#C1503F' : '#DED8D0',
-                          }}
-                        >
-                          📁 {p}
-                        </button>
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
                       ))}
+                    </select>
+                  </Campo>
+
+                  {/* Campo próprio pra criar pasta — não é preciso ter um layout pronto: cria a
+                      pasta na hora e ela já fica selecionada logo acima. */}
+                  {criarPastaAberto ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        value={novaPastaNome}
+                        onChange={(e) => setNovaPastaNome(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && criarPasta()}
+                        placeholder="Nome da nova pasta — ex.: Bebidas"
+                        autoFocus
+                        style={{ ...inputEstilo, flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={criarPasta}
+                        disabled={!novaPastaNome.trim() || criandoPasta}
+                        style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: novaPastaNome.trim() && !criandoPasta ? 1 : 0.5 }}
+                      >
+                        {criandoPasta ? 'Criando…' : 'Criar pasta'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCriarPastaAberto(false)
+                          setNovaPastaNome('')
+                        }}
+                        style={botaoSecundario}
+                      >
+                        Cancelar
+                      </button>
                     </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCriarPastaAberto(true)}
+                      style={{ ...botaoSecundario, textAlign: 'left', width: 'fit-content' }}
+                    >
+                      + Criar nova pasta
+                    </button>
                   )}
+
                   <button
                     type="button"
                     onClick={salvarLayoutAtual}

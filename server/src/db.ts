@@ -1312,13 +1312,32 @@ END $$`);
     patch JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
-  // Pasta pra organizar layouts (ex.: "Bebidas") — criada livremente pelo mercado, sem cadastro
-  // próprio: é só um texto no layout. null/vazio = sem pasta, continua na lista simples de sempre.
+  // Pasta pra organizar layouts (ex.: "Bebidas") — o layout guarda só o nome (texto), null/vazio =
+  // sem pasta, continua na lista simples de sempre.
   await pool.query(`ALTER TABLE mercadonunes_layouts ADD COLUMN IF NOT EXISTS pasta TEXT`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_mercadonunes_layouts ON mercadonunes_layouts;
       CREATE TRIGGER notify_mercadonunes_layouts AFTER INSERT OR UPDATE OR DELETE ON mercadonunes_layouts
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+  // Cadastro das pastas em si — criadas explicitamente (não só "inferidas" de layouts que já usam
+  // o nome), pra aparecerem no seletor mesmo antes de qualquer layout ser movido pra dentro delas.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mercadonunes_pastas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  // Backfill: pasta que já é usada em algum layout salvo (de antes desse cadastro existir) entra
+  // automaticamente no cadastro, pra não "sumir" do seletor.
+  await pool.query(`INSERT INTO mercadonunes_pastas (nome)
+    SELECT DISTINCT pasta FROM mercadonunes_layouts WHERE pasta IS NOT NULL AND pasta <> ''
+    ON CONFLICT (nome) DO NOTHING`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_mercadonunes_pastas ON mercadonunes_pastas;
+      CREATE TRIGGER notify_mercadonunes_pastas AFTER INSERT OR UPDATE OR DELETE ON mercadonunes_pastas
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);

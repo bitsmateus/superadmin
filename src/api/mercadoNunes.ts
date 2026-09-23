@@ -21,3 +21,17 @@ export const mercadoNunesLayoutsApi = {
     api.patch<MercadoNunesLayout>(`/api/public/mercadonunes/layouts/${id}`, { pasta }),
   remove: (id: string) => api.delete(`/api/public/mercadonunes/layouts/${id}`),
 }
+
+export interface MercadoNunesPasta {
+  id: string
+  nome: string
+  created_at: string
+}
+
+/** Cadastro das pastas em si — criadas num campo próprio, pra aparecerem como opção no seletor
+ *  mesmo antes de qualquer layout ser movido pra dentro delas. */
+export const mercadoNunesPastasApi = {
+  list: () => api.get<{ pastas: MercadoNunesPasta[] }>('/api/public/mercadonunes/pastas'),
+  create: (nome: string) => api.post<MercadoNunesPasta>('/api/public/mercadonunes/pastas', { nome }),
+  remove: (id: string) => api.delete(`/api/public/mercadonunes/pastas/${id}`),
+}

@@ -1,6 +1,11 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { mercadoNunesLayoutsApi, type MercadoNunesLayout } from '@/api/mercadoNunes'
+import {
+  mercadoNunesLayoutsApi,
+  mercadoNunesPastasApi,
+  type MercadoNunesLayout,
+  type MercadoNunesPasta,
+} from '@/api/mercadoNunes'
 
 /**
  * Gerador de cartazes de oferta A4 do Mercado Nunes (/mercadonunes) — página pública, sem login e
@@ -145,6 +150,14 @@ const MODELOS: Modelo[] = [
     patch: { mostrarFaixa: true, textoFaixa: 'SUPER OFERTA', mostrarDePor: true, temaId: 'amarelo' },
   },
 ]
+
+/** minúsculo + sem acento, pra busca não se importar com "Café" vs "cafe" nem maiúsculas. */
+function normaliza(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+}
 
 /** Quebra o preço em "22" + "99" — o cartaz mostra os centavos menores, em cima. */
 function partesDoPreco(preco: string): { inteiro: string; centavos: string } {
@@ -550,6 +563,81 @@ export function MercadoNunesPage() {
   const [paraImprimir, setParaImprimir] = React.useState<Cartaz[]>([])
   const [escala, setEscala] = React.useState(0.55)
 
+  // Menu "Layouts" (Criar / Modelos salvos, organizados em pastas) — some do resto da página; a
+  // listinha simples que já existia continua no lugar de sempre, só com os SEM pasta.
+  const [menuLayoutsAberto, setMenuLayoutsAberto] = React.useState(false)
+  const [abaMenuLayouts, setAbaMenuLayouts] = React.useState<'criar' | 'salvos'>('salvos')
+  const [pastaNovoLayout, setPastaNovoLayout] = React.useState('')
+  const [movendoId, setMovendoId] = React.useState<string | null>(null)
+  const [pastaDestino, setPastaDestino] = React.useState('')
+
+  // Busca em "Modelos salvos" (por nome de pasta ou de layout) + quais pastas estão abertas —
+  // toda pasta nasce minimizada; abre na mão (clicando) ou sozinha quando a busca acha algo nela.
+  const [buscaLayouts, setBuscaLayouts] = React.useState('')
+  const [pastasAbertas, setPastasAbertas] = React.useState<Set<string>>(new Set())
+  const togglePasta = (nome: string) =>
+    setPastasAbertas((atual) => {
+      const novo = new Set(atual)
+      if (novo.has(nome)) novo.delete(nome)
+      else novo.add(nome)
+      return novo
+    })
+
+  // Cadastro de pastas — criadas num campo próprio (não "adivinhadas" a partir de layouts), pra
+  // já aparecerem como opção no seletor antes mesmo de qualquer layout ser movido pra dentro.
+  const [pastasCadastradas, setPastasCadastradas] = React.useState<MercadoNunesPasta[]>([])
+  const [novaPastaNome, setNovaPastaNome] = React.useState('')
+  const [criandoPasta, setCriandoPasta] = React.useState(false)
+  const [criarPastaAberto, setCriarPastaAberto] = React.useState(false)
+  const [editandoPasta, setEditandoPasta] = React.useState<string | null>(null) // nome atual da pasta em edição
+  const [renomearPastaValor, setRenomearPastaValor] = React.useState('')
+  const [renomeandoPasta, setRenomeandoPasta] = React.useState(false)
+  const [excluindoPasta, setExcluindoPasta] = React.useState<string | null>(null)
+
+  // União com o que já está em uso nos layouts — rede de segurança pra nunca "esconder" uma
+  // pasta que algum layout ainda referencia (ex.: cadastro apagado depois, ou dado antigo).
+  const pastas = React.useMemo(() => {
+    const doCadastro = pastasCadastradas.map((p) => p.nome)
+    const dosLayouts = layouts.map((l) => l.pasta).filter((p): p is string => !!(p && p.trim()))
+    return Array.from(new Set([...doCadastro, ...dosLayouts])).sort((a, b) =>
+      a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }),
+    )
+  }, [pastasCadastradas, layouts])
+  const layoutsSemPasta = React.useMemo(() => layouts.filter((l) => !l.pasta), [layouts])
+
+  // Busca: acha por nome da pasta OU por nome do layout/produto dentro dela. Pasta sem nenhum
+  // resultado nem aparece; pasta com resultado abre sozinha, mesmo que o usuário não tenha clicado.
+  const buscaNormalizada = React.useMemo(() => normaliza(buscaLayouts.trim()), [buscaLayouts])
+  const buscaAtiva = buscaNormalizada.length > 0
+  const layoutsPorPasta = React.useCallback((pasta: string) => layouts.filter((l) => l.pasta === pasta), [layouts])
+  const pastaTemResultado = React.useCallback(
+    (pasta: string) =>
+      normaliza(pasta).includes(buscaNormalizada) ||
+      layoutsPorPasta(pasta).some((l) => normaliza(l.nome).includes(buscaNormalizada)),
+    [buscaNormalizada, layoutsPorPasta],
+  )
+  const pastasVisiveis = React.useMemo(
+    () => (buscaAtiva ? pastas.filter(pastaTemResultado) : pastas),
+    [pastas, buscaAtiva, pastaTemResultado],
+  )
+  const layoutsSemPastaVisiveis = React.useMemo(
+    () =>
+      buscaAtiva ? layoutsSemPasta.filter((l) => normaliza(l.nome).includes(buscaNormalizada)) : layoutsSemPasta,
+    [layoutsSemPasta, buscaAtiva, buscaNormalizada],
+  )
+  // Abre sozinha toda pasta com resultado da busca — some com o texto, mas não fecha de novo
+  // sozinha (fica aberta até o usuário clicar e fechar, sem gerar surpresa).
+  React.useEffect(() => {
+    if (!buscaAtiva) return
+    setPastasAbertas((atual) => {
+      const comResultado = pastas.filter(pastaTemResultado)
+      if (comResultado.every((p) => atual.has(p))) return atual
+      const novo = new Set(atual)
+      comResultado.forEach((p) => novo.add(p))
+      return novo
+    })
+  }, [buscaAtiva, pastas, pastaTemResultado])
+
   const carregarLayouts = React.useCallback(() => {
     mercadoNunesLayoutsApi
       .list()
@@ -561,6 +649,101 @@ export function MercadoNunesPage() {
   React.useEffect(() => {
     carregarLayouts()
   }, [carregarLayouts])
+
+  React.useEffect(() => {
+    mercadoNunesPastasApi
+      .list()
+      .then((d) => setPastasCadastradas(Array.isArray(d?.pastas) ? d.pastas : []))
+      .catch(() => toast.error('Falha ao carregar as pastas.'))
+  }, [])
+
+  // Fecha o menu e limpa o rascunho de pasta — sem isso, escolher uma pasta no menu e fechar sem
+  // salvar deixava a seleção "grudada" pro próximo "Salvar atual" da listinha da página principal.
+  const fecharMenuLayouts = () => {
+    setMenuLayoutsAberto(false)
+    setPastaNovoLayout('')
+    setCriarPastaAberto(false)
+    setNovaPastaNome('')
+    setBuscaLayouts('')
+  }
+
+  const criarPasta = async () => {
+    const nome = novaPastaNome.trim()
+    if (!nome) return
+    setCriandoPasta(true)
+    try {
+      const criada = await mercadoNunesPastasApi.create(nome)
+      setPastasCadastradas((cur) => (cur.some((p) => p.nome === criada.nome) ? cur : [...cur, criada]))
+      setPastaNovoLayout(criada.nome) // já deixa selecionada pro layout que está sendo criado
+      setNovaPastaNome('')
+      setCriarPastaAberto(false)
+      toast.success(`Pasta "${criada.nome}" criada!`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao criar a pasta')
+    } finally {
+      setCriandoPasta(false)
+    }
+  }
+
+  const renomearPasta = async () => {
+    if (!editandoPasta) return
+    const nomeNovo = renomearPastaValor.trim()
+    if (!nomeNovo || nomeNovo === editandoPasta) {
+      setEditandoPasta(null)
+      return
+    }
+    const pasta = pastasCadastradas.find((p) => p.nome === editandoPasta)
+    if (!pasta) return
+    setRenomeandoPasta(true)
+    try {
+      await mercadoNunesPastasApi.renomear(pasta.id, nomeNovo)
+      // Atualiza tudo que já está na tela na hora — cadastro, layouts que estavam nela, pasta
+      // aberta/em busca — em vez de esperar um recarregamento pra refletir o nome novo.
+      setPastasCadastradas((cur) => cur.map((p) => (p.id === pasta.id ? { ...p, nome: nomeNovo } : p)))
+      setLayouts((cur) => cur.map((l) => (l.pasta === editandoPasta ? { ...l, pasta: nomeNovo } : l)))
+      setPastasAbertas((cur) => {
+        if (!cur.has(editandoPasta!)) return cur
+        const novo = new Set(cur)
+        novo.delete(editandoPasta!)
+        novo.add(nomeNovo)
+        return novo
+      })
+      toast.success(`Pasta renomeada pra "${nomeNovo}"`)
+      setEditandoPasta(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao renomear a pasta')
+    } finally {
+      setRenomeandoPasta(false)
+    }
+  }
+
+  const excluirPasta = async (nome: string) => {
+    const pasta = pastasCadastradas.find((p) => p.nome === nome)
+    if (!pasta) return
+    const qtd = layoutsPorPasta(nome).length
+    const aviso =
+      qtd > 0
+        ? `Excluir a pasta "${nome}"? Os ${qtd} layout(s) dentro dela não serão apagados — só voltam pra "Sem pasta".`
+        : `Excluir a pasta "${nome}"?`
+    if (!window.confirm(aviso)) return
+    setExcluindoPasta(nome)
+    try {
+      await mercadoNunesPastasApi.remove(pasta.id)
+      setPastasCadastradas((cur) => cur.filter((p) => p.id !== pasta.id))
+      setLayouts((cur) => cur.map((l) => (l.pasta === nome ? { ...l, pasta: null } : l)))
+      setPastasAbertas((cur) => {
+        if (!cur.has(nome)) return cur
+        const novo = new Set(cur)
+        novo.delete(nome)
+        return novo
+      })
+      toast.success(`Pasta "${nome}" excluída`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao excluir a pasta')
+    } finally {
+      setExcluindoPasta(null)
+    }
+  }
 
   // Fontes do Google só nesta página (não pesam o resto do app).
   React.useEffect(() => {
@@ -590,13 +773,33 @@ export function MercadoNunesPage() {
     const { id: _id, ...patch } = cartaz
     setSalvandoLayout(true)
     try {
-      const criado = await mercadoNunesLayoutsApi.create(nome, patch)
+      // pastaNovoLayout só tem valor quando salva pelo menu "Layouts" → Criar (tem o campo de
+      // pasta); salvando pela listinha da página principal, fica vazio = sem pasta, como sempre.
+      const criado = await mercadoNunesLayoutsApi.create(nome, patch, pastaNovoLayout.trim() || null)
       setLayouts((cur) => [...cur, criado])
       setNomeNovoLayout('')
+      setPastaNovoLayout('')
+      toast.success('Layout salvo!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao salvar o layout')
     } finally {
       setSalvandoLayout(false)
+    }
+  }
+
+  const moverLayout = async (id: string, pasta: string) => {
+    const destino = pasta.trim() || null
+    const antes = layouts
+    setLayouts((cur) => cur.map((l) => (l.id === id ? { ...l, pasta: destino } : l)))
+    try {
+      await mercadoNunesLayoutsApi.mover(id, destino)
+      toast.success(destino ? `Movido pra "${destino}"` : 'Removido da pasta')
+    } catch (err) {
+      setLayouts(antes)
+      toast.error(err instanceof Error ? err.message : 'Falha ao mover o layout')
+    } finally {
+      setMovendoId(null)
+      setPastaDestino('')
     }
   }
 
@@ -609,6 +812,75 @@ export function MercadoNunesPage() {
       setLayouts(antes)
       toast.error(err instanceof Error ? err.message : 'Falha ao excluir o layout')
     }
+  }
+
+  // Uma linha de layout (nome + Aplicar/Mover/Excluir) — reaproveitada na listinha da página
+  // principal e dentro do menu "Layouts" (tanto nas pastas quanto em "Sem pasta"), sempre a
+  // mesma aparência e o mesmo jeito de mover pra pasta.
+  const renderLayoutRow = (l: MercadoNunesLayout) => {
+    const emEdicao = movendoId === l.id
+    return (
+      <div key={l.id} style={{ border: '1px solid #EDE7DF', borderRadius: 8, padding: '6px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#2A2622', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {l.nome}
+          </span>
+          <button type="button" className="mn-botao-mini" onClick={() => setCartaz((c) => ({ ...c, ...(l.patch as Partial<Cartaz>) }))} style={botaoMini}>
+            Aplicar
+          </button>
+          <button
+            type="button"
+            className="mn-botao-mini"
+            onClick={() => {
+              setMovendoId(emEdicao ? null : l.id)
+              setPastaDestino(l.pasta ?? '')
+            }}
+            style={botaoMini}
+          >
+            {l.pasta ? 'Mudar pasta' : 'Mover'}
+          </button>
+          <button
+            type="button"
+            className="mn-botao-mini"
+            onClick={() => removerLayout(l.id)}
+            style={{ ...botaoMini, color: '#C0392B', borderColor: '#F0C9C4' }}
+          >
+            Excluir
+          </button>
+        </div>
+        {emEdicao && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <select
+              value={pastaDestino}
+              onChange={(e) => setPastaDestino(e.target.value)}
+              autoFocus
+              style={{ ...inputEstilo, flex: 1, padding: '6px 8px', fontSize: 13 }}
+            >
+              <option value="">— Sem pasta —</option>
+              {pastas.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="mn-botao-mini" onClick={() => moverLayout(l.id, pastaDestino)} style={botaoMini}>
+              OK
+            </button>
+            <button
+              type="button"
+              className="mn-botao-mini"
+              onClick={() => {
+                setMovendoId(null)
+                setPastaDestino('')
+              }}
+              style={botaoMini}
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
+      </div>
+    )
   }
 
   // Prévia sempre cabendo na coluna, em qualquer tela.
@@ -674,12 +946,19 @@ export function MercadoNunesPage() {
               ;(e.currentTarget as HTMLImageElement).style.display = 'none'
             }}
           />
-          <div>
+          <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: '#C1503F', margin: 0 }}>Cartazes de oferta</h1>
             <p style={{ fontSize: 13, color: '#7A716A', margin: 0 }}>
               Preencha, veja a prévia e imprima em folha A4.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setMenuLayoutsAberto(true)}
+            style={{ ...botaoSecundario, whiteSpace: 'nowrap' }}
+          >
+            📁 Layouts
+          </button>
         </div>
       </header>
 
@@ -707,6 +986,57 @@ export function MercadoNunesPage() {
                 </button>
               ))}
             </div>
+          </Card>
+
+          {/* Fica na coluna de edição (não na da prévia) de propósito: essa lista cresce muito —
+              loja com muitos layouts salvos — e se morasse dentro do painel fixo da prévia, ela
+              transbordaria pra fora da tela sem jeito de rolar até o fim. Aqui ela rola junto com
+              o resto do formulário, sem nunca competir com a prévia por espaço. */}
+          <Card titulo="Layouts pré-prontos" dica="Salva o cartaz inteiro (texto, preço, cor, fonte…) pra voltar exatamente assim depois.">
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={nomeNovoLayout}
+                onChange={(e) => setNomeNovoLayout(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && salvarLayoutAtual()}
+                placeholder="Nome do layout"
+                style={{ ...inputEstilo, flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={salvarLayoutAtual}
+                disabled={!nomeNovoLayout.trim() || salvandoLayout}
+                style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: nomeNovoLayout.trim() && !salvandoLayout ? 1 : 0.5 }}
+              >
+                {salvandoLayout ? 'Salvando…' : 'Salvar atual'}
+              </button>
+            </div>
+            {/* Só os SEM pasta — os organizados em pasta ficam só dentro do menu "Layouts",
+                senão essa lista voltaria a crescer do mesmo jeito que antes. */}
+            {carregandoLayouts ? (
+              <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Carregando layouts…</p>
+            ) : layoutsSemPasta.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                {layoutsSemPasta.map(renderLayoutRow)}
+              </div>
+            ) : layouts.length > 0 ? (
+              <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>
+                Todos os layouts estão organizados em pastas — veja no menu "Layouts" abaixo.
+              </p>
+            ) : (
+              <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>
+            )}
+            {pastas.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAbaMenuLayouts('salvos')
+                  setMenuLayoutsAberto(true)
+                }}
+                style={{ ...botaoSecundario, textAlign: 'left' }}
+              >
+                📁 Ver {pastas.length} pasta{pastas.length > 1 ? 's' : ''} de layouts
+              </button>
+            )}
           </Card>
 
           <Card titulo="Produto">
@@ -963,8 +1293,10 @@ export function MercadoNunesPage() {
           )}
         </div>
 
-        {/* ── Prévia (fixa na tela enquanto rola a coluna de edição, que é bem mais alta; no celular
-            vira uma coluna só e a prévia sobe pra cima da lista de campos, sem ficar fixa) ── */}
+        {/* ── Prévia: position:fixed de verdade (não sticky) — fica sempre no mesmo lugar da tela,
+            não importa o quanto role a coluna de edição ao lado (ela é bem mais alta, principalmente
+            com muitos layouts salvos). No celular vira uma coluna só e a prévia sobe pra cima da
+            lista de campos, sem ficar fixa (tela estreita demais pra sobrepor). ── */}
         <div className="mn-preview-col">
           <p style={{ fontSize: 12, color: '#7A716A', marginBottom: 8 }}>
             Prévia — folha A4 (210 × 297 mm)
@@ -983,56 +1315,316 @@ export function MercadoNunesPage() {
               <CartazA4 dados={cartaz} />
             </div>
           </div>
+        </div>
+      </main>
 
-          <div style={{ marginTop: 16, width: A4_W * escala }}>
-            <Card titulo="Layouts pré-prontos" dica="Salva o cartaz inteiro (texto, preço, cor, fonte…) pra voltar exatamente assim depois.">
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  value={nomeNovoLayout}
-                  onChange={(e) => setNomeNovoLayout(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && salvarLayoutAtual()}
-                  placeholder="Nome do layout"
-                  style={{ ...inputEstilo, flex: 1 }}
-                />
-                <button
-                  type="button"
-                  onClick={salvarLayoutAtual}
-                  disabled={!nomeNovoLayout.trim() || salvandoLayout}
-                  style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: nomeNovoLayout.trim() && !salvandoLayout ? 1 : 0.5 }}
-                >
-                  {salvandoLayout ? 'Salvando…' : 'Salvar atual'}
-                </button>
-              </div>
-              {carregandoLayouts ? (
-                <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Carregando layouts…</p>
-              ) : layouts.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                  {layouts.map((l) => (
-                    <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #EDE7DF', borderRadius: 8, padding: '6px 8px' }}>
-                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#2A2622', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {l.nome}
-                      </span>
-                      <button type="button" className="mn-botao-mini" onClick={() => setCartaz((c) => ({ ...c, ...(l.patch as Partial<Cartaz>) }))} style={botaoMini}>
-                        Aplicar
+      {/* Menu "Layouts": Criar (salva o cartaz atual, já com pasta) e Modelos salvos (tudo
+          organizado por pasta, mais uma seção "Sem pasta" igual à listinha da página principal). */}
+      {menuLayoutsAberto && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(20,16,12,0.45)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            padding: '40px 16px',
+            zIndex: 50,
+            overflowY: 'auto',
+          }}
+          onClick={fecharMenuLayouts}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#F4F1EC',
+              borderRadius: 14,
+              width: '100%',
+              maxWidth: 640,
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px 20px',
+                borderBottom: '1px solid #E7E1D9',
+                background: '#fff',
+              }}
+            >
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: '#C1503F', margin: 0 }}>Layouts</h2>
+              <button
+                type="button"
+                onClick={fecharMenuLayouts}
+                style={{ ...botaoMini, fontSize: 15, padding: '4px 10px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, padding: '12px 20px 0' }}>
+              <button
+                type="button"
+                onClick={() => setAbaMenuLayouts('salvos')}
+                style={{ ...(abaMenuLayouts === 'salvos' ? botaoPrimario : botaoSecundario), flex: 1 }}
+              >
+                Modelos salvos
+              </button>
+              <button
+                type="button"
+                onClick={() => setAbaMenuLayouts('criar')}
+                style={{ ...(abaMenuLayouts === 'criar' ? botaoPrimario : botaoSecundario), flex: 1 }}
+              >
+                Criar
+              </button>
+            </div>
+
+            <div style={{ padding: 20, overflowY: 'auto' }}>
+              {abaMenuLayouts === 'criar' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <p style={{ fontSize: 12, color: '#7A716A', margin: 0 }}>
+                    Salva o cartaz que está aberto agora — já dentro de uma pasta, se quiser.
+                  </p>
+                  <Campo label="Nome do layout">
+                    <input
+                      value={nomeNovoLayout}
+                      onChange={(e) => setNomeNovoLayout(e.target.value)}
+                      placeholder="Ex.: Suco Del Valle 450ml"
+                      style={inputEstilo}
+                    />
+                  </Campo>
+                  <Campo label="Pasta (opcional)" dica="Selecione uma pasta já criada, ou crie uma nova abaixo.">
+                    <select
+                      value={pastaNovoLayout}
+                      onChange={(e) => setPastaNovoLayout(e.target.value)}
+                      style={inputEstilo}
+                    >
+                      <option value="">— Sem pasta —</option>
+                      {pastas.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </Campo>
+
+                  {/* Campo próprio pra criar pasta — não é preciso ter um layout pronto: cria a
+                      pasta na hora e ela já fica selecionada logo acima. */}
+                  {criarPastaAberto ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        value={novaPastaNome}
+                        onChange={(e) => setNovaPastaNome(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && criarPasta()}
+                        placeholder="Nome da nova pasta — ex.: Bebidas"
+                        autoFocus
+                        style={{ ...inputEstilo, flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={criarPasta}
+                        disabled={!novaPastaNome.trim() || criandoPasta}
+                        style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: novaPastaNome.trim() && !criandoPasta ? 1 : 0.5 }}
+                      >
+                        {criandoPasta ? 'Criando…' : 'Criar pasta'}
                       </button>
                       <button
                         type="button"
-                        className="mn-botao-mini"
-                        onClick={() => removerLayout(l.id)}
-                        style={{ ...botaoMini, color: '#C0392B', borderColor: '#F0C9C4' }}
+                        onClick={() => {
+                          setCriarPastaAberto(false)
+                          setNovaPastaNome('')
+                        }}
+                        style={botaoSecundario}
                       >
-                        Excluir
+                        Cancelar
                       </button>
                     </div>
-                  ))}
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCriarPastaAberto(true)}
+                      style={{ ...botaoSecundario, textAlign: 'left', width: 'fit-content' }}
+                    >
+                      + Criar nova pasta
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={salvarLayoutAtual}
+                    disabled={!nomeNovoLayout.trim() || salvandoLayout}
+                    style={{ ...botaoPrimario, opacity: nomeNovoLayout.trim() && !salvandoLayout ? 1 : 0.5 }}
+                  >
+                    {salvandoLayout ? 'Salvando…' : 'Salvar layout atual'}
+                  </button>
                 </div>
               ) : (
-                <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {layouts.length > 0 && (
+                    <input
+                      value={buscaLayouts}
+                      onChange={(e) => setBuscaLayouts(e.target.value)}
+                      placeholder="Buscar por pasta ou por nome do layout…"
+                      style={inputEstilo}
+                    />
+                  )}
+                  {carregandoLayouts ? (
+                    <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Carregando layouts…</p>
+                  ) : layouts.length === 0 ? (
+                    <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>
+                  ) : buscaAtiva && pastasVisiveis.length === 0 && layoutsSemPastaVisiveis.length === 0 ? (
+                    <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>
+                      Nada encontrado pra "{buscaLayouts.trim()}".
+                    </p>
+                  ) : (
+                    <>
+                      {pastasVisiveis.map((pasta) => {
+                        const layoutsDaPasta = layoutsPorPasta(pasta)
+                        const aberta = pastasAbertas.has(pasta)
+                        const cadastrada = pastasCadastradas.some((p) => p.nome === pasta)
+                        const emEdicao = editandoPasta === pasta
+                        return (
+                          <div key={pasta}>
+                            {emEdicao ? (
+                              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                                <input
+                                  value={renomearPastaValor}
+                                  onChange={(e) => setRenomearPastaValor(e.target.value)}
+                                  onKeyDown={(e) => e.key === 'Enter' && renomearPasta()}
+                                  autoFocus
+                                  style={{ ...inputEstilo, flex: 1, padding: '6px 8px', fontSize: 13 }}
+                                />
+                                <button
+                                  type="button"
+                                  className="mn-botao-mini"
+                                  onClick={renomearPasta}
+                                  disabled={!renomearPastaValor.trim() || renomeandoPasta}
+                                  style={{ ...botaoMini, opacity: renomearPastaValor.trim() && !renomeandoPasta ? 1 : 0.5 }}
+                                >
+                                  {renomeandoPasta ? 'Salvando…' : 'OK'}
+                                </button>
+                                <button type="button" className="mn-botao-mini" onClick={() => setEditandoPasta(null)} style={botaoMini}>
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => togglePasta(pasta)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    flex: 1,
+                                    minWidth: 0,
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                  }}
+                                >
+                                  <span style={{ fontSize: 10, color: '#C1503F', transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+                                    ▶
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: 800,
+                                      textTransform: 'uppercase',
+                                      letterSpacing: 0.6,
+                                      color: '#C1503F',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    📁 {pasta}
+                                  </span>
+                                  <span style={{ fontSize: 11, color: '#9A928B', fontWeight: 600, flexShrink: 0 }}>
+                                    ({layoutsDaPasta.length})
+                                  </span>
+                                </button>
+                                {cadastrada && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="mn-botao-mini"
+                                      onClick={() => {
+                                        setEditandoPasta(pasta)
+                                        setRenomearPastaValor(pasta)
+                                      }}
+                                      title="Renomear pasta"
+                                      style={{ ...botaoMini, flexShrink: 0, padding: '4px 7px' }}
+                                    >
+                                      ✏️
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="mn-botao-mini"
+                                      onClick={() => excluirPasta(pasta)}
+                                      disabled={excluindoPasta === pasta}
+                                      title="Excluir pasta"
+                                      style={{
+                                        ...botaoMini,
+                                        flexShrink: 0,
+                                        padding: '4px 7px',
+                                        color: '#C0392B',
+                                        borderColor: '#F0C9C4',
+                                        opacity: excluindoPasta === pasta ? 0.5 : 1,
+                                      }}
+                                    >
+                                      🗑️
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {aberta && !emEdicao && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
+                                {layoutsDaPasta.map(renderLayoutRow)}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {layoutsSemPastaVisiveis.length > 0 && (
+                        <div>
+                          <h3
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 800,
+                              textTransform: 'uppercase',
+                              letterSpacing: 0.6,
+                              color: '#9A928B',
+                              margin: '0 0 8px',
+                            }}
+                          >
+                            Sem pasta
+                          </h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {layoutsSemPastaVisiveis.map(renderLayoutRow)}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
-            </Card>
+            </div>
           </div>
         </div>
-      </main>
+      )}
 
       {/* Área de impressão — some da tela, aparece só no papel (uma folha por cartaz) */}
       <div className="area-impressao">
@@ -1060,13 +1652,22 @@ const estiloFontesLocais = `
 const estiloResponsivo = `
 .mercadonunes .mn-header { padding: 14px 20px; }
 .mercadonunes .mn-main { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 20px; padding: 20px; }
-.mercadonunes .mn-preview-col { position: sticky; top: 20px; }
-.mercadonunes .mn-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* position:fixed (não sticky) — a prévia trava num ponto fixo da TELA, não da coluna. Sticky some
+   quando a coluna ao lado é mais curta que a tela e "acaba" antes da rolagem terminar (foi o que
+   aconteceu com muitos layouts salvos, ou rolando o formulário: a placa sumia). Fixed nunca some. */
+.mercadonunes .mn-preview-col {
+  position: fixed;
+  /* 85px = altura do cabeçalho (.mn-header) + 20px de respiro — sem isso a prévia fixa cobria o
+     próprio cabeçalho (logo, título e botão "Layouts") por trás dela. */
+  top: 105px;
+  right: max(20px, calc((100vw - 1180px) / 2));
+  z-index: 5;
+}
 
 @media (max-width: 900px) {
   .mercadonunes .mn-header { padding: 12px 14px; }
   .mercadonunes .mn-main { grid-template-columns: 1fr; gap: 14px; padding: 14px; }
-  .mercadonunes .mn-preview-col { position: static; order: -1; }
+  .mercadonunes .mn-preview-col { position: static; order: -1; right: auto; }
   .mercadonunes .mn-preview-col > div:first-child,
   .mercadonunes .mn-preview-col > div:last-child { margin-left: auto; margin-right: auto; }
 }

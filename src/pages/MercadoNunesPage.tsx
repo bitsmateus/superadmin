@@ -562,7 +562,7 @@ export function MercadoNunesPage() {
   // layouts salvos. Cria-se uma pasta simplesmente digitando um nome novo ao salvar/mover.
   const pastas = React.useMemo(
     () =>
-      Array.from(new Set(layouts.map((l) => l.pasta).filter((p): p is string => !!p && p.trim())))
+      Array.from(new Set(layouts.map((l) => l.pasta).filter((p): p is string => !!(p && p.trim()))))
         .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' })),
     [layouts],
   )

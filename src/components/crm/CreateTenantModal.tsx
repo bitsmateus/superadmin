@@ -13,7 +13,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
-import { queuesApi } from '@/api/queues'
+import { queuesApi, extractQueueId } from '@/api/queues'
+import { chatbotFlowApi } from '@/api/chatbotFlow'
 import { usersApi } from '@/api/users'
 import { extractErrorMessage } from '@/api/client'
 import { useAuthStore, type ServerConfig } from '@/store/authStore'
@@ -695,15 +696,19 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
     const sectors = collectSectors(client)
     if (sectors.length === 0) return 'sem setores'
     let queues = 0
+    const created: Array<{ name: string; id: string }> = []
     for (const q of sectors) {
       try {
         // eslint-disable-next-line no-await-in-loop
-        await queuesApi.create(server, prov.apiId ?? '', { queue: q, isActive: true }, prov.apiToken)
+        const resp = await queuesApi.create(server, prov.apiId ?? '', { queue: q, isActive: true }, prov.apiToken)
+        const qid = extractQueueId(resp)
+        if (qid) created.push({ name: q, id: qid })
         queues++
       } catch {
         /* fila duplicada / erro pontual — segue */
       }
     }
+    if (created.length > 0) await chatbotFlowApi.saveQueues(client.id, created).catch(() => {})
     db.updateClient(client.id, {
       deliveryChecklist: setChecklistItem(currentChecklist(), 'queues_created', true, 'Sistema'),
     })

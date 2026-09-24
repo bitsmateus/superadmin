@@ -43,7 +43,8 @@ import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
 import { usersApi } from '@/api/users'
-import { queuesApi } from '@/api/queues'
+import { queuesApi, extractQueueId } from '@/api/queues'
+import { chatbotFlowApi } from '@/api/chatbotFlow'
 import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
@@ -1337,19 +1338,23 @@ function AutomationView({ client }: { client: Client }) {
     // Token da API do tenant — autentica as chamadas /v2/api/external/{apiId}.
     const apiToken = client.tenantApiToken || undefined
     let queuesCreated = 0
+    const createdQueues: Array<{ name: string; id: string }> = []
     for (const q of sectors) {
       try {
-        await queuesApi.create(
+        const qResp = await queuesApi.create(
           server,
           client.tenantApiId,
           { queue: q, isActive: true },
           apiToken,
         )
+        const qid = extractQueueId(qResp)
+        if (qid) createdQueues.push({ name: q, id: qid })
         queuesCreated++
       } catch {
         /* fila já existe / erro pontual — segue */
       }
     }
+    if (createdQueues.length > 0) await chatbotFlowApi.saveQueues(client.id, createdQueues).catch(() => {})
 
     let success = 0
     const failures: string[] = []

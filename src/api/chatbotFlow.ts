@@ -20,6 +20,9 @@ export interface ChatbotFlowResult {
 }
 
 export const chatbotFlowApi = {
+  /** Grava nome -> id das filas criadas no tenant (usadas ao gerar o roteiro). */
+  saveQueues: (clientId: string, queues: Array<{ name: string; id: string }>) =>
+    api.put<{ ok: boolean }>(`/api/clients/${clientId}/tenant-queues`, { queues }),
   get: (clientId: string) => api.get<ChatbotFlowState>(`/api/clients/${clientId}/chatbot-flow`),
   /** Dispara a geração (202) e consulta o estado até terminar — evita 502 do proxy. */
   generate: async (clientId: string): Promise<ChatbotFlowState> => {

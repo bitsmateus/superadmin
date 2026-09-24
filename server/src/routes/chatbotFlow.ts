@@ -16,6 +16,7 @@ type ClientRow = {
   tenant_server_id: string | null;
   tenant_api_id: string | null;
   tenant_api_token: string | null;
+  tenant_queues: Array<{ name: string; id: string }> | null;
   chatbot_flow_spec: FlowSpec | null;
   chatbot_flow_json: unknown;
   chatbot_flow_warnings: unknown;
@@ -71,10 +72,14 @@ async function fetchQueueMap(tenant: { baseUrl: string; apiId: string; token: st
   const url = new URL(path, tenant.baseUrl + '/').toString();
   const map: Record<string, string> = {};
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${tenant.token}`, Accept: 'application/json' },
-    });
-    if (!res.ok) return map;
+    const headers = { Authorization: `Bearer ${tenant.token}`, Accept: 'application/json', 'Content-Type': 'application/json' };
+    // O NX costuma usar POST nos endpoints *Data; tenta GET e, se falhar, POST.
+    let res = await fetch(url, { headers });
+    if (!res.ok) res = await fetch(url, { method: 'POST', headers, body: '{}' });
+    if (!res.ok) {
+      console.warn(`[chatbot-flow] listar filas falhou: ${res.status} ${url}`);
+      return map;
+    }
     const raw = (await res.json()) as unknown;
     const arr = (raw && typeof raw === 'object' && 'data' in (raw as object) ? (raw as { data: unknown }).data : raw) as unknown;
     if (!Array.isArray(arr)) return map;
@@ -87,6 +92,13 @@ async function fetchQueueMap(tenant: { baseUrl: string; apiId: string; token: st
   } catch {
     /* endpoint desconhecido/offline — segue sem resolver (o operador ajusta à mão) */
   }
+  return map;
+}
+
+/** Filas gravadas na criação do tenant: nome(normalizado) -> queueId. */
+function storedQueueMap(c: ClientRow): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const q of c.tenant_queues ?? []) if (q?.name && q?.id) map[normalizeQueueName(q.name)] = String(q.id);
   return map;
 }
 
@@ -142,7 +154,7 @@ export async function chatbotFlowRoutes(app: FastifyInstance) {
             return;
           }
           const tenant = await resolveTenant(c);
-          const queueMap = tenant ? await fetchQueueMap(tenant) : {};
+          const queueMap = { ...(tenant ? await fetchQueueMap(tenant) : {}), ...storedQueueMap(c) };
           const saved = await saveAndBuild(id, result.spec, queueMap);
           if (!saved.ok) {
             job.error = 'O fluxo gerado não passou na validação.';
@@ -157,6 +169,21 @@ export async function chatbotFlowRoutes(app: FastifyInstance) {
         }
       })();
       return reply.status(202).send({ status: 'running' });
+    },
+  );
+
+  // Guarda o id das filas criadas no tenant (nome -> id) para o roteiro usar.
+  app.put<{ Params: { id: string }; Body: { queues: Array<{ name: string; id: string }> } }>(
+    '/api/clients/:id/tenant-queues',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const c = await queryOne<ClientRow>('SELECT tenant_queues FROM clients WHERE id = $1', [req.params.id]);
+      if (!c) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      const incoming = (req.body?.queues ?? []).filter((q) => q?.name && q?.id);
+      const byName = new Map<string, { name: string; id: string }>();
+      for (const q of [...(c.tenant_queues ?? []), ...incoming]) byName.set(normalizeQueueName(q.name), { name: q.name, id: String(q.id) });
+      await query('UPDATE clients SET tenant_queues = $1 WHERE id = $2', [JSON.stringify([...byName.values()]), req.params.id]);
+      return { ok: true };
     },
   );
 
@@ -192,7 +219,7 @@ export async function chatbotFlowRoutes(app: FastifyInstance) {
       if (!spec) return reply.status(400).send({ message: 'Envie { spec }.' });
 
       const tenant = await resolveTenant(c);
-      const queueMap = tenant ? await fetchQueueMap(tenant) : {};
+      const queueMap = { ...(tenant ? await fetchQueueMap(tenant) : {}), ...storedQueueMap(c) };
       const saved = await saveAndBuild(req.params.id, spec, queueMap);
       if (!saved.ok) return reply.status(saved.status === 422 ? 400 : saved.status).send({ errors: saved.errors, warnings: saved.warnings });
 

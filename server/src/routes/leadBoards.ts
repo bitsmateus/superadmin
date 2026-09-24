@@ -378,7 +378,7 @@ const ESPELHO_PAGE_DESTINO = 'crm-luis-closer';
 const ESPELHO_CAMPOS = [
   'nome', 'tipo', 'empresa', 'telefone', 'dia_contato', 'ligacao', 'agendamento', 'retornar',
   'retornado', 'responsavel', 'sdr', 'numero', 'dor_cliente', 'numero_atendentes',
-  'valor_mrr', 'valor_implementacao', 'observacoes',
+  'valor_mrr', 'valor_implementacao', 'observacoes', 'fechamento',
 ];
 
 /** "Reunião agendada"/"REUNIÃO AGENDADA" — nome do quadro varia de CRM pra CRM. "Reunião não
@@ -464,6 +464,7 @@ async function syncEspelhoReuniaoAgendada(leadRowId: string) {
       ligacao: string; agendamento: string; retornar: string; retornado: boolean;
       responsavel: string; sdr: string; numero: string; dor_cliente: string;
       numero_atendentes: string; valor_mrr: string; valor_implementacao: string; observacoes: string;
+      fechamento: string;
     }>(
       `SELECT r.*, lb.page, lb.name AS board_name
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
@@ -506,14 +507,15 @@ async function syncEspelhoReuniaoAgendada(leadRowId: string) {
       `INSERT INTO lead_rows (
         board_id, nome, tipo, empresa, telefone, dia_contato, ligacao, status, agendamento,
         retornar, retornado, responsavel, sdr, numero, dor_cliente, numero_atendentes,
-        valor_mrr, valor_implementacao, observacoes, espelho_origem_id, position
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+        valor_mrr, valor_implementacao, observacoes, fechamento, espelho_origem_id, position
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
       ON CONFLICT DO NOTHING`,
       [
         destino.id, lead.nome, lead.tipo, lead.empresa, lead.telefone, lead.dia_contato,
         lead.ligacao, MILESTONE_AGENDADA, lead.agendamento, lead.retornar, lead.retornado,
         lead.responsavel, lead.sdr, lead.numero, lead.dor_cliente, lead.numero_atendentes,
-        lead.valor_mrr, lead.valor_implementacao, lead.observacoes, leadRowId, (max ?? -1) + 1,
+        lead.valor_mrr, lead.valor_implementacao, lead.observacoes, lead.fechamento, leadRowId,
+        (max ?? -1) + 1,
       ]
     );
   } catch (err) {
@@ -1160,7 +1162,15 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         }
       }
       const reason = req.body?.reason?.trim() || null;
-      await query('UPDATE lead_rows SET deleted_at = NOW(), delete_reason = $2 WHERE id = $1', [req.params.id, reason]);
+      // A cópia do espelho (CRM do closer) vai junto: ela é derivada da lead original e, sem isso,
+      // excluir no CRM do Arthur deixava um fantasma no CRM do Luis — com as Atualizações apontando
+      // pra uma lead que não existe mais. No sentido contrário nada acontece: excluir a cópia tira
+      // só ela, a lead do Arthur continua.
+      await query(
+        `UPDATE lead_rows SET deleted_at = NOW(), delete_reason = $2
+         WHERE id = $1 OR espelho_origem_id = $1`,
+        [req.params.id, reason]
+      );
       return reply.status(204).send();
     }
   );
@@ -1181,7 +1191,14 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           return reply.status(403).send({ message: 'Acesso negado' });
         }
       }
-      const [row] = await query('UPDATE lead_rows SET deleted_at = NULL WHERE id = $1 RETURNING *', [req.params.id]);
+      // Restaurar a original traz a cópia do closer de volta junto (foram excluídas juntas) — mas
+      // quem volta pra tela é sempre a linha pedida, não a cópia que veio de carona.
+      const restauradas = await query<{ id: string }>(
+        `UPDATE lead_rows SET deleted_at = NULL WHERE id = $1 OR espelho_origem_id = $1
+         RETURNING *`,
+        [req.params.id]
+      );
+      const row = restauradas.find((r) => r.id === req.params.id);
       if (!row) return reply.status(404).send({ message: 'Linha não encontrada' });
       return row;
     }

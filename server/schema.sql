@@ -1046,11 +1046,17 @@ CREATE TABLE IF NOT EXISTS commission_entries (
   -- manual, registrado à mão na tela ("Registrar comissão"). Colunas paradas, sem uso pelo app.
   source_type TEXT,
   source_id TEXT,
+  -- Linha da venda (lead_rows do quadro is_vendas) que gerou esse lançamento. É o que faz o nome
+  -- corrigido e o "Contrato assinado" da aba Vendas chegarem sozinhos aqui (ver leadBoards.ts,
+  -- propagarComissao). NULL em lançamento criado à mão por "Registrar comissão".
+  venda_lead_id UUID,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (source_type, source_id, type_id)
 );
 CREATE INDEX IF NOT EXISTS commission_entries_month_idx ON commission_entries(month);
+CREATE INDEX IF NOT EXISTS commission_entries_venda_lead_idx
+  ON commission_entries(venda_lead_id) WHERE venda_lead_id IS NOT NULL;
 
 DROP TRIGGER IF EXISTS notify_commission_types ON commission_types;
 CREATE TRIGGER notify_commission_types AFTER INSERT OR UPDATE OR DELETE ON commission_types

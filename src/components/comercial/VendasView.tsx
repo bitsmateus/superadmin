@@ -9,6 +9,8 @@ import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
+import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
+import { api } from '@/services/api'
 import {
   CommissionSdrSection, CommissionTypesButton, CommissionTypesModal,
   RegisterCommissionButton, RegisterCommissionModal,
@@ -94,7 +96,7 @@ export function VendasView({ pageId }: { pageId: string }) {
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
   const [onlyPending, setOnlyPending] = React.useState(false)
   // Filtro vindo do painel de pendências (só um por vez — é "me mostre o que falta AGORA").
-  const [foco, setFoco] = React.useState<'nenhum' | 'contrato' | 'sem_comissao' | 'sem_contrato'>('nenhum')
+  const [foco, setFoco] = React.useState<'nenhum' | 'contrato' | 'sem_comissao' | 'sem_contrato' | 'sem_ficha'>('nenhum')
   // Recorte por pessoa: vale pra lista, pros cards de resumo, pras pendências e pras comissões —
   // é "me mostre só o Arthur", não só um filtro da tabela.
   const [sdrFiltro, setSdrFiltro] = React.useState('')
@@ -107,6 +109,18 @@ export function VendasView({ pageId }: { pageId: string }) {
   const commissionTypes = useCommissionTypes()
   const commissionEntries = useCommissionEntries()
   const contratos = useContracts()
+
+  // Estado da ficha de cadastro de cada venda, em uma consulta só (ver ficha-status-lote): a lista
+  // mostra isso por linha, e perguntar de uma em uma deixaria a tela lenta.
+  const [fichas, setFichas] = React.useState<Record<string, { status: string; clientId: string | null }>>({})
+  React.useEffect(() => {
+    let cancelado = false
+    api.get<Record<string, { status: string; clientId: string | null }>>('/api/lead-rows/ficha-status-lote')
+      .then((res) => { if (!cancelado) setFichas(res) })
+      .catch(() => { if (!cancelado) setFichas({}) })
+    return () => { cancelado = true }
+  }, [rows.length])
+  const [fichaClientId, setFichaClientId] = React.useState<string | null>(null)
   const commissionsInPeriod = React.useMemo(
     () => commissionEntries.filter(
       (e) => monthOverlapsRange(e.month, from, to) && (!sdrFiltro || e.person === sdrFiltro),
@@ -180,7 +194,8 @@ export function VendasView({ pageId }: { pageId: string }) {
       .filter((r) => foco !== 'contrato' || !r.contratoAssinado)
       .filter((r) => foco !== 'sem_comissao' || !vendasComComissao.has(r.id))
       .filter((r) => foco !== 'sem_contrato' || !contratoPorVenda.has(r.id))
-  }, [doPeriodo, onlyPending, foco, vendasComComissao, contratoPorVenda])
+      .filter((r) => foco !== 'sem_ficha' || fichas[r.id]?.status !== 'preenchida')
+  }, [doPeriodo, onlyPending, foco, vendasComComissao, contratoPorVenda, fichas])
 
   const pendencias = React.useMemo(() => {
     const base = doPeriodo.filter((r) => !r.vendaRevertida)
@@ -190,8 +205,9 @@ export function VendasView({ pageId }: { pageId: string }) {
       semComissao: base.filter((r) => !vendasComComissao.has(r.id)).length,
       comissaoIncompleta: commissionsInPeriod.filter((c) => !c.typeId || c.amountCents <= 0).length,
       semContrato: base.filter((r) => !contratoPorVenda.has(r.id)).length,
+      semFicha: base.filter((r) => fichas[r.id]?.status !== 'preenchida').length,
     }
-  }, [doPeriodo, vendasComComissao, commissionsInPeriod, contratoPorVenda])
+  }, [doPeriodo, vendasComComissao, commissionsInPeriod, contratoPorVenda, fichas])
 
   // Revertida continua visível (o histórico importa) mas fora da conta.
   const validas = React.useMemo(() => noPeriodo.filter((r) => !r.vendaRevertida), [noPeriodo])
@@ -399,6 +415,12 @@ export function VendasView({ pageId }: { pageId: string }) {
             onClick={() => setFoco((f) => (f === 'sem_contrato' ? 'nenhum' : 'sem_contrato'))}
           />
           <PendenciaChip
+            label="sem ficha preenchida"
+            count={pendencias.semFicha}
+            active={foco === 'sem_ficha'}
+            onClick={() => setFoco((f) => (f === 'sem_ficha' ? 'nenhum' : 'sem_ficha'))}
+          />
+          <PendenciaChip
             label="sem comissão lançada"
             count={pendencias.semComissao}
             active={foco === 'sem_comissao'}
@@ -465,7 +487,7 @@ export function VendasView({ pageId }: { pageId: string }) {
         {/* Lista */}
         <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[780px]">
+            <table className="w-full min-w-[880px]">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                   <th className="w-10 px-4 py-3">
@@ -483,6 +505,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <th className="w-32 px-4 py-3">Fechou</th>
                   <th className="w-24 px-4 py-3">Funil</th>
                   <th className="w-28 px-4 py-3">Contrato</th>
+                  <th className="w-24 px-4 py-3">Ficha</th>
                   <th className="w-48 px-4 py-3 text-right">Valor MRR</th>
                   <th className="w-56 px-4 py-3 text-right">Valor de implementação</th>
                   <th className="w-56 px-4 py-3">Observações</th>
@@ -492,7 +515,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-10 text-center text-sm text-foreground/40">
+                    <td colSpan={11} className="px-4 py-10 text-center text-sm text-foreground/40">
                       {onlyPending ? 'Nenhuma venda pendente de pagamento neste período.' : 'Nenhuma venda neste período.'}
                     </td>
                   </tr>
@@ -502,6 +525,8 @@ export function VendasView({ pageId }: { pageId: string }) {
                     key={r.id}
                     row={r}
                     contrato={contratoPorVenda.get(r.id) ?? null}
+                    ficha={fichas[r.id]}
+                    onAbrirCliente={setFichaClientId}
                     selected={selectedIds.has(r.id)}
                     onToggleSelect={() => toggleSelect(r.id)}
                     // A linha daqui é uma CÓPIA que o sistema cria sozinho ao marcar "Vendido" —
@@ -517,6 +542,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                     <td />
                     <td className="px-4 py-3">Total</td>
+                    <td />
                     <td />
                     <td />
                     <td />
@@ -619,6 +645,7 @@ export function VendasView({ pageId }: { pageId: string }) {
         boardId={board.id}
       />
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
+      <ClientDrawer clientId={fichaClientId} onClose={() => setFichaClientId(null)} />
       <RegisterCommissionModal
         open={commissionRegisterOpen}
         onClose={() => setCommissionRegisterOpen(false)}
@@ -654,6 +681,41 @@ function SummaryCard({
       </div>
       <div className="mt-3 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{value}</div>
     </div>
+  )
+}
+
+/** Ficha de cadastro do cliente dessa venda: verde = preenchida (clica e abre o cadastro dele),
+ * vermelho = pendente (cliente existe, sem ficha) ou sem cliente atrelado — nesses dois o clique
+ * abre o formulário público pra mandar pro cliente. Mesma regra do botão dentro da lead. */
+function FichaCell({
+  ficha, onAbrirCliente,
+}: {
+  ficha: { status: string; clientId: string | null } | undefined
+  onAbrirCliente: (clientId: string) => void
+}) {
+  if (!ficha) return <span className="text-xs text-foreground/25">—</span>
+  const preenchida = ficha.status === 'preenchida' && !!ficha.clientId
+  const titulo = preenchida
+    ? 'Ficha preenchida — clique pra ver o cadastro do cliente'
+    : ficha.status === 'pendente'
+      ? 'Cliente cadastrado, mas ainda sem ficha. Clique pra abrir o formulário.'
+      : 'Nenhum cliente atrelado a essa venda. Clique pra abrir o formulário.'
+
+  return (
+    <button
+      type="button"
+      title={titulo}
+      onClick={() => {
+        if (preenchida) onAbrirCliente(ficha.clientId!)
+        else window.open(`${window.location.origin}/ficha`, '_blank', 'noopener,noreferrer')
+      }}
+      className={cn(
+        'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors lg:px-2 lg:py-0.5',
+        preenchida ? 'bg-success/10 text-success hover:bg-success/15' : 'bg-danger/10 text-danger hover:bg-danger/15',
+      )}
+    >
+      {preenchida ? 'Preenchida' : ficha.status === 'pendente' ? 'Pendente' : 'Sem cliente'}
+    </button>
   )
 }
 
@@ -779,16 +841,21 @@ function ObservacoesCell({ value, onSave }: { value: string; onSave: (next: stri
 function VendaRow({
   row,
   contrato,
+  ficha,
   selected,
   onToggleSelect,
   onOpenLead,
+  onAbrirCliente,
 }: {
   row: LeadRow
   /** Contrato gerado pra essa venda na aba Contrato (null = ainda não existe). */
   contrato: { id: string; assinado: boolean } | null
+  /** Estado da ficha de cadastro do cliente dessa venda. */
+  ficha: { status: string; clientId: string | null } | undefined
   selected: boolean
   onToggleSelect: () => void
   onOpenLead: () => void
+  onAbrirCliente: (clientId: string) => void
 }) {
   const [excluirOpen, setExcluirOpen] = React.useState(false)
 
@@ -907,6 +974,9 @@ function VendaRow({
           </span>
         )}
         </div>
+      </td>
+      <td className="px-4 py-3">
+        <FichaCell ficha={ficha} onAbrirCliente={onAbrirCliente} />
       </td>
       <PendenteValueCell
         value={row.valorMrr}

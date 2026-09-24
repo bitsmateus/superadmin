@@ -85,18 +85,20 @@ export async function findMatchingClientId(
   return matches.length === 1 ? matches[0].id : null;
 }
 
-const MIN_LEN = 8;
+/** Nome/empresa curto ou genérico vira falso positivo por containment — os dois lados precisam
+ * ter pelo menos isso de caracteres normalizados pra um match por nome valer. */
+export const MIN_LEN = 8;
 
 /** Só os últimos 8 dígitos — tolera diferença de DDI (55) e o "9" extra que nem todo cadastro
  * tem, sem exigir que os dois números estejam no formato exatamente igual. */
-function phoneKey(raw: string | null | undefined): string | null {
+export function phoneKey(raw: string | null | undefined): string | null {
   const digits = (raw ?? '').replace(/\D/g, '');
   return digits.length >= 8 ? digits.slice(-8) : null;
 }
 
 /** minúsculo, sem acento, só letras/números — pra comparar "Instituto Brasil" com "INSTITUTO
  * BRASIL COSMÉTICOS..." ignorando maiúscula/acento/pontuação. */
-function normalizeName(raw: string | null | undefined): string {
+export function normalizeName(raw: string | null | undefined): string {
   return (raw ?? '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
-import { findMatchingClientId } from '../lib/leadMatch.js';
+import { findMatchingClientId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 
 /**
  * Toda venda nova (funil ou avulsa) já cria sozinha a linha correspondente em Gestão Interna >
@@ -628,6 +628,68 @@ async function sincronizarContagemNotas(canonicalId: string) {
 }
 
 export async function leadBoardRoutes(app: FastifyInstance) {
+  // GET /api/lead-rows/ficha-status-lote — o mesmo de baixo, mas pra TODAS as vendas de uma vez:
+  // a lista de Vendas mostra o estado da ficha em cada linha, e uma consulta por linha deixaria a
+  // tela lenta. Resolve em memória (poucas centenas de clientes) com a mesma regra: vínculo
+  // confirmado no contrato primeiro, casamento por telefone/nome depois, sempre exigindo um único
+  // candidato.
+  app.get('/api/lead-rows/ficha-status-lote', { onRequest: [app.authenticate] }, async () => {
+    const vendas = await query<{ id: string; nome: string; empresa: string; telefone: string; venda_origem_id: string | null }>(
+      `SELECT r.id, r.nome, r.empresa, r.telefone, r.venda_origem_id
+       FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+       WHERE lb.is_vendas AND r.deleted_at IS NULL`
+    );
+    if (!vendas.length) return {};
+
+    const clientes = await query<{ id: string; name: string; company: string; phone: string; tem_ficha: boolean }>(
+      `SELECT id, name, company, phone, (ficha_cadastro IS NOT NULL) AS tem_ficha FROM clients`
+    );
+    const contratos = await query<{ venda_lead_id: string; client_id: string }>(
+      `SELECT venda_lead_id, client_id FROM contracts
+       WHERE venda_lead_id IS NOT NULL AND client_id IS NOT NULL ORDER BY created_at`
+    );
+
+    const clientePorId = new Map(clientes.map((c) => [c.id, c]));
+    const clientePorLead = new Map<string, typeof clientes[number]>();
+    for (const ct of contratos) {
+      const cli = clientePorId.get(ct.client_id);
+      if (cli) clientePorLead.set(ct.venda_lead_id, cli);
+    }
+    const porTelefone = new Map<string, typeof clientes[number][]>();
+    for (const c of clientes) {
+      const k = phoneKey(c.phone);
+      if (!k) continue;
+      porTelefone.set(k, [...(porTelefone.get(k) ?? []), c]);
+    }
+
+    const resultado: Record<string, { status: string; clientId: string | null }> = {};
+    for (const v of vendas) {
+      let cli =
+        clientePorLead.get(v.id) ?? (v.venda_origem_id ? clientePorLead.get(v.venda_origem_id) : undefined);
+
+      if (!cli) {
+        const k = phoneKey(v.telefone);
+        const porTel = k ? porTelefone.get(k) ?? [] : [];
+        if (porTel.length === 1) cli = porTel[0];
+      }
+      if (!cli) {
+        const alvo = normalizeName(v.empresa) || normalizeName(v.nome);
+        if (alvo.length >= MIN_LEN) {
+          const achados = clientes.filter((c) => {
+            const n = normalizeName(c.company) || normalizeName(c.name);
+            return n.length >= MIN_LEN && (n.includes(alvo) || alvo.includes(n));
+          });
+          if (achados.length === 1) cli = achados[0];
+        }
+      }
+
+      resultado[v.id] = cli
+        ? { status: cli.tem_ficha ? 'preenchida' : 'pendente', clientId: cli.id }
+        : { status: 'nao_atrelada', clientId: null };
+    }
+    return resultado;
+  });
+
   // GET /api/lead-rows/:id/ficha-status — essa lead já tem ficha de cadastro? (botão "Ficha de
   // cadastro" no cabeçalho da lead). Não existe vínculo direto lead <-> cliente (ver leadMatch.ts),
   // então procura primeiro o vínculo CONFIRMADO à mão (contracts.venda_lead_id), olhando também as

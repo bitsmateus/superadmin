@@ -77,10 +77,18 @@ export function CommissionSdrSection({
     () => visiveis.filter((e) => e.role === 'sdr' && e.typeLabel !== CLOSER_TYPE_LABEL),
     [visiveis],
   )
-  const byCloser = React.useMemo(
-    () => visiveis.filter((e) => e.typeLabel === CLOSER_TYPE_LABEL),
-    [visiveis],
-  )
+  // Fechamentos ficam separados POR PESSOA: a faixa de volume é individual, então cada closer tem
+  // a própria contagem e o próprio valor por venda — misturar numa tabela só escondia isso.
+  const closerPorPessoa = React.useMemo(() => {
+    const mapa = new Map<string, CommissionEntry[]>()
+    for (const e of visiveis) {
+      if (e.typeLabel !== CLOSER_TYPE_LABEL) continue
+      const lista = mapa.get(e.person) ?? []
+      lista.push(e)
+      mapa.set(e.person, lista)
+    }
+    return [...mapa.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+  }, [visiveis])
 
   const toggleStatus = (entry: CommissionEntry) => {
     void commissionsService.setEntryStatus(entry.id, entry.status === 'pago' ? 'pendente' : 'pago')
@@ -107,16 +115,17 @@ export function CommissionSdrSection({
     <div className="mt-4 space-y-4">
       <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} onOpenLead={onOpenLead} />
 
-      {byCloser.length > 0 && (
+      {closerPorPessoa.map(([pessoa, lista]) => (
         <EntriesTable
-          title="Comissão Closer (fechamento)"
-          entries={byCloser}
+          key={pessoa}
+          title={`Comissão Closer (fechamento) — ${pessoa}`}
+          entries={lista}
           onToggle={toggleStatus}
           types={types}
           onOpenLead={onOpenLead}
-          hint="Valor por faixa de volume do mês — o sistema lança e recalcula sozinho."
+          hint={`${lista.length} fechamento(s) no período · ${formatBRLCents(lista[0]?.amountCents ?? 0)} por venda (faixa de volume de cada closer — o sistema lança e recalcula sozinho).`}
         />
-      )}
+      ))}
 
       <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
         <div className="border-b border-line px-4 py-3">

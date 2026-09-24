@@ -76,21 +76,26 @@ async function garantirTipoCloser(): Promise<string | null> {
   }
 }
 
-/** Reaplica a faixa do mês em TODOS os fechamentos daquele mês (o valor é retroativo). */
+/** Reaplica a faixa do mês, POR PESSOA: a quantidade que muda o valor é a de cada um, não a soma
+ * do time (dois closers com 8 fechamentos cada continuam na primeira faixa, não viram 16). Dentro
+ * de cada pessoa o valor é retroativo — todos os fechamentos dela no mês ficam na mesma faixa. */
 export async function recalcularComissaoCloser(month: string): Promise<void> {
   try {
     const typeId = await garantirTipoCloser();
     if (!typeId) return;
-    const [{ qtd }] = await query<{ qtd: number }>(
-      `SELECT count(*)::int AS qtd FROM commission_entries WHERE month = $1 AND type_id = $2`,
+    const porPessoa = await query<{ person: string; qtd: number }>(
+      `SELECT person, count(*)::int AS qtd FROM commission_entries
+       WHERE month = $1 AND type_id = $2 GROUP BY person`,
       [month, typeId]
     );
-    const valor = valorCloserPorVolume(qtd);
-    await query(
-      `UPDATE commission_entries SET amount_cents = $1, updated_at = NOW()
-       WHERE month = $2 AND type_id = $3 AND amount_cents <> $1`,
-      [valor, month, typeId]
-    );
+    for (const p of porPessoa) {
+      const valor = valorCloserPorVolume(p.qtd);
+      await query(
+        `UPDATE commission_entries SET amount_cents = $1, updated_at = NOW()
+         WHERE month = $2 AND type_id = $3 AND person = $4 AND amount_cents <> $1`,
+        [valor, month, typeId, p.person]
+      );
+    }
   } catch (err) {
     console.error('[commissions] falha ao recalcular a faixa do closer', month, err);
   }

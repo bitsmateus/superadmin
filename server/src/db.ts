@@ -1093,6 +1093,12 @@ END $$`);
   // manual. Colunas paradas, sem uso pelo app.
   await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS source_type TEXT`);
   await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS source_id TEXT`);
+  // Liga o lançamento à linha da venda (lead_rows do quadro is_vendas): é o que faz o nome
+  // corrigido e o "Contrato assinado" da aba Vendas chegarem sozinhos na Comissão SDR, em vez de
+  // ser o mesmo trabalho feito duas vezes. NULL = lançamento criado à mão em "Registrar comissão".
+  await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS venda_lead_id UUID`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS commission_entries_venda_lead_idx
+    ON commission_entries(venda_lead_id) WHERE venda_lead_id IS NOT NULL`);
   await pool.query(`DO $$ BEGIN
     IF NOT EXISTS (
       SELECT 1 FROM pg_constraint WHERE conname = 'commission_entries_source_type_source_id_type_id_key'

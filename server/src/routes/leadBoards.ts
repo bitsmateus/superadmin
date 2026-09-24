@@ -11,14 +11,14 @@ import { findMatchingClientId } from '../lib/leadMatch.js';
  * um critério que não dá pra inferir sozinho aqui). Nunca lança: efeito colateral de criar a
  * venda, não pode derrubar isso se der erro.
  */
-async function createCommissionStub(nome: string, sdr: string, month: string) {
+async function createCommissionStub(nome: string, sdr: string, month: string, vendaLeadId: string | null = null) {
   try {
     if (!sdr?.trim()) return;
     await query(
       `INSERT INTO commission_entries
-        (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month, status, contrato_assinado)
-       VALUES ($1,$2,'sdr',NULL,'(a definir)','',NULL,0,$3,'pendente',false)`,
-      [nome, sdr, month]
+        (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month, status, contrato_assinado, venda_lead_id)
+       VALUES ($1,$2,'sdr',NULL,'(a definir)','',NULL,0,$3,'pendente',false,$4)`,
+      [nome, sdr, month, vendaLeadId]
     );
   } catch (err) {
     console.error('[commissions] falha ao criar comissão em branco pra venda', nome, err);
@@ -186,11 +186,11 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
       [target.id]
     );
 
-    await query(
+    const [vendaRow] = await query<{ id: string }>(
       `INSERT INTO lead_rows (
         board_id, nome, empresa, telefone, sdr, status,
         valor_mrr, valor_implementacao, fechamento, venda_origem_id, position, veio_do_funil
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true)`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true) RETURNING id`,
       [
         target.id, lead.nome, lead.empresa, lead.telefone, lead.sdr, MILESTONE_VENDIDO,
         lead.valor_mrr, lead.valor_implementacao,
@@ -199,7 +199,9 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
         (max ?? -1) + 1,
       ]
     );
-    void createCommissionStub(lead.nome, lead.sdr, new Date().toISOString().slice(0, 7));
+    // venda_lead_id liga o lançamento de comissão à linha da venda — é o que faz renomear a venda
+    // (ou marcar o contrato como assinado) chegar sozinho na Comissão SDR.
+    void createCommissionStub(lead.nome, lead.sdr, new Date().toISOString().slice(0, 7), vendaRow?.id ?? null);
   } catch (err) {
     console.error('[vendas] falha ao sincronizar venda do lead', leadRowId, err);
   }
@@ -407,6 +409,30 @@ async function propagarEspelho(
  *    lead (a venda segue "Vendido" mesmo que o lead mude de etapa depois no CRM). */
 const VENDA_CAMPOS = ['nome', 'empresa', 'telefone', 'sdr'];
 
+/** Do registro da venda pro lançamento na Comissão SDR (ligados por venda_lead_id): o nome
+ * corrigido e o "Contrato assinado" marcado na aba Vendas chegam sozinhos na comissão — antes era
+ * o mesmo trabalho feito duas vezes, um em cada tela. Só esses dois campos: valor, tipo e
+ * referência da comissão continuam 100% manuais, como a tela foi pedida. */
+async function propagarComissao(vendaLeadId: string, patch: Record<string, unknown>) {
+  try {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    if ('nome' in patch) { sets.push(`nome = $${params.length + 1}`); params.push(patch.nome); }
+    if ('contrato_assinado' in patch) {
+      sets.push(`contrato_assinado = $${params.length + 1}`);
+      params.push(patch.contrato_assinado);
+    }
+    if (!sets.length) return;
+    params.push(vendaLeadId);
+    await query(
+      `UPDATE commission_entries SET ${sets.join(', ')}, updated_at = NOW() WHERE venda_lead_id = $${params.length}`,
+      params
+    );
+  } catch (err) {
+    console.error('[commissions] falha ao propagar pro lançamento de comissão', vendaLeadId, err);
+  }
+}
+
 /** Leva pro registro da aba Vendas as correções de identidade feitas no lead de origem. */
 async function propagarVenda(origemId: string, patch: Record<string, unknown>) {
   try {
@@ -421,6 +447,8 @@ async function propagarVenda(origemId: string, patch: Record<string, unknown>) {
     const sets = campos.map((k, idx) => `${k} = $${idx + 1}`);
     params.push(venda.id);
     await query(`UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+    // O nome novo segue da venda pro lançamento de comissão daquela venda.
+    void propagarComissao(venda.id, patch);
   } catch (err) {
     console.error('[vendas] falha ao propagar correção pro registro de venda', origemId, err);
   }
@@ -701,7 +729,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       if (targetBoard?.is_vendas) {
         const row = leadRow as { nome: string; sdr: string; fechamento: string; created_at: string };
         const month = (row.fechamento || row.created_at || '').slice(0, 7) || new Date().toISOString().slice(0, 7);
-        void createCommissionStub(row.nome, row.sdr, month);
+        void createCommissionStub(row.nome, row.sdr, month, id);
       }
       // Lead criada já dentro de "Reunião agendada" no CRM do Arthur também espelha pro closer.
       void syncEspelhoReuniaoAgendada(id);
@@ -799,8 +827,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       if ('status' in patch || 'board_id' in patch) {
         void syncEspelhoReuniaoAgendada(req.params.id);
       }
-      // Corrigir nome/empresa/telefone/SDR do lead atualiza a linha dele na aba Vendas também.
+      // Corrigir nome/empresa/telefone/SDR do lead atualiza a linha dele na aba Vendas também...
       void propagarVenda(req.params.id, patch);
+      // ...e editar direto na aba Vendas (nome ou "Contrato assinado") atualiza a Comissão SDR.
+      void propagarComissao(req.params.id, patch);
 
       if (before) {
         void (async () => {

@@ -93,6 +93,9 @@ export function VendasView({ pageId }: { pageId: string }) {
   const [onlyPending, setOnlyPending] = React.useState(false)
   // Filtro vindo do painel de pendências (só um por vez — é "me mostre o que falta AGORA").
   const [foco, setFoco] = React.useState<'nenhum' | 'contrato' | 'sem_comissao'>('nenhum')
+  // Recorte por pessoa: vale pra lista, pros cards de resumo, pras pendências e pras comissões —
+  // é "me mostre só o Arthur", não só um filtro da tabela.
+  const [sdrFiltro, setSdrFiltro] = React.useState('')
   const [comissaoIncompleta, setComissaoIncompleta] = React.useState(false)
   const [commissionRegisterOpen, setCommissionRegisterOpen] = React.useState(false)
   const [commissionTypesOpen, setCommissionTypesOpen] = React.useState(false)
@@ -102,8 +105,10 @@ export function VendasView({ pageId }: { pageId: string }) {
   const commissionTypes = useCommissionTypes()
   const commissionEntries = useCommissionEntries()
   const commissionsInPeriod = React.useMemo(
-    () => commissionEntries.filter((e) => monthOverlapsRange(e.month, from, to)),
-    [commissionEntries, from, to],
+    () => commissionEntries.filter(
+      (e) => monthOverlapsRange(e.month, from, to) && (!sdrFiltro || e.person === sdrFiltro),
+    ),
+    [commissionEntries, from, to, sdrFiltro],
   )
   const periodLabel = periodo === 'personalizado'
     ? `${from.split('-').reverse().join('/')} a ${to.split('-').reverse().join('/')}`
@@ -135,8 +140,15 @@ export function VendasView({ pageId }: { pageId: string }) {
         const dia = (r.fechamento || r.createdAt).slice(0, 10)
         return dia >= from && dia <= to
       })
+      .filter((r) => !sdrFiltro || r.sdr === sdrFiltro)
       .sort((a, b) => (a.fechamento || a.createdAt).localeCompare(b.fechamento || b.createdAt))
-  }, [rows, from, to])
+  }, [rows, from, to, sdrFiltro])
+
+  /** Nomes pro filtro: os da equipe + qualquer SDR que apareça nas vendas (nome antigo, importado). */
+  const sdrsDisponiveis = React.useMemo(() => {
+    const dasVendas = rows.map((r) => r.sdr).filter(Boolean)
+    return Array.from(new Set([...QUEM_FECHA, ...dasVendas])).sort()
+  }, [rows])
 
   const vendasComComissao = React.useMemo(
     () => new Set(commissionsInPeriod.map((c) => c.vendaLeadId).filter(Boolean) as string[]),
@@ -313,6 +325,19 @@ export function VendasView({ pageId }: { pageId: string }) {
               />
             </div>
           )}
+
+          <select
+            value={sdrFiltro}
+            onChange={(e) => setSdrFiltro(e.target.value)}
+            title="Ver só as vendas (e as comissões) de uma pessoa"
+            className={cn(
+              'ml-1 h-8 rounded-lg border px-2 text-sm font-medium outline-none transition-colors',
+              sdrFiltro ? 'border-accent/40 bg-accent/10 text-accent' : 'border-line text-foreground/60',
+            )}
+          >
+            <option value="">Todos os SDRs</option>
+            {sdrsDisponiveis.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
 
           <button
             type="button"

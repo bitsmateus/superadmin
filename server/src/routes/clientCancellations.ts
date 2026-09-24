@@ -30,10 +30,13 @@ export async function clientCancellationRoutes(app: FastifyInstance) {
 
   // POST /api/client-cancellations — cancela um cliente.
   app.post<{
-    Body: { clientId?: string; canceledAt?: string; motivo?: string; observacao?: string; mrrCents?: number };
+    Body: {
+      clientId?: string; canceledAt?: string; motivo?: string; observacao?: string; mrrCents?: number;
+      multaCents?: number; asaasRemovido?: boolean;
+    };
   }>('/api/client-cancellations', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { sub } = req.user as { sub: string };
-    const { clientId, canceledAt, motivo, observacao, mrrCents } = req.body ?? {};
+    const { clientId, canceledAt, motivo, observacao, mrrCents, multaCents, asaasRemovido } = req.body ?? {};
     if (!clientId) return reply.status(400).send({ message: 'clientId é obrigatório' });
 
     const cliente = await queryOne<{ id: string; monthly_value: string | null }>(
@@ -49,10 +52,14 @@ export async function clientCancellationRoutes(app: FastifyInstance) {
         : Math.round(Number(cliente.monthly_value ?? 0) * 100);
 
     const [row] = await query(
-      `INSERT INTO client_cancellations (client_id, canceled_at, motivo, observacao, mrr_cents, created_by)
-       VALUES ($1, COALESCE($2::date, CURRENT_DATE), $3, $4, $5, $6)
+      `INSERT INTO client_cancellations
+         (client_id, canceled_at, motivo, observacao, mrr_cents, multa_cents, asaas_removido, created_by)
+       VALUES ($1, COALESCE($2::date, CURRENT_DATE), $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [clientId, canceledAt ?? null, motivo ?? '', observacao ?? '', valor, sub]
+      [
+        clientId, canceledAt ?? null, motivo ?? '', observacao ?? '', valor,
+        Math.round(multaCents ?? 0), asaasRemovido ?? false, sub,
+      ]
     );
 
     await query(`UPDATE clients SET stage = 'churned', stage_updated_at = NOW(), updated_at = NOW() WHERE id = $1`, [
@@ -65,9 +72,12 @@ export async function clientCancellationRoutes(app: FastifyInstance) {
   // PATCH /api/client-cancellations/:id — corrigir data/motivo/observação/valor depois.
   app.patch<{
     Params: { id: string };
-    Body: { canceledAt?: string; motivo?: string; observacao?: string; mrrCents?: number };
+    Body: {
+      canceledAt?: string; motivo?: string; observacao?: string; mrrCents?: number;
+      multaCents?: number; asaasRemovido?: boolean;
+    };
   }>('/api/client-cancellations/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { canceledAt, motivo, observacao, mrrCents } = req.body ?? {};
+    const { canceledAt, motivo, observacao, mrrCents, multaCents, asaasRemovido } = req.body ?? {};
     const sets: string[] = [];
     const params: unknown[] = [];
     let i = 1;
@@ -75,6 +85,8 @@ export async function clientCancellationRoutes(app: FastifyInstance) {
     if (motivo !== undefined) { sets.push(`motivo = $${i++}`); params.push(motivo); }
     if (observacao !== undefined) { sets.push(`observacao = $${i++}`); params.push(observacao); }
     if (mrrCents !== undefined) { sets.push(`mrr_cents = $${i++}`); params.push(Math.round(mrrCents)); }
+    if (multaCents !== undefined) { sets.push(`multa_cents = $${i++}`); params.push(Math.round(multaCents)); }
+    if (asaasRemovido !== undefined) { sets.push(`asaas_removido = $${i++}`); params.push(asaasRemovido); }
     if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
 
     params.push(req.params.id);

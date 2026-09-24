@@ -508,6 +508,10 @@ CREATE TABLE IF NOT EXISTS client_cancellations (
   motivo TEXT NOT NULL DEFAULT '',
   observacao TEXT NOT NULL DEFAULT '',
   mrr_cents INT NOT NULL DEFAULT 0,
+  -- Multa de rescisão cobrada (0 = não teve) e se a cobrança já foi cancelada no Asaas — sem isso
+  -- o cliente sai da lista daqui e continua sendo cobrado lá, que é o erro caro.
+  multa_cents INT NOT NULL DEFAULT 0,
+  asaas_removido BOOLEAN NOT NULL DEFAULT false,
   reactivated_at TIMESTAMPTZ,
   created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

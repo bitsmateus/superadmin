@@ -1,6 +1,7 @@
 import * as React from 'react'
 import {
-  ChevronLeft, ChevronRight, Loader2, RotateCcw, Search, Trash2, TrendingDown, UserMinus, Users, Wand2, Wallet,
+  AlertTriangle, ChevronLeft, ChevronRight, Loader2, RotateCcw, Search, Trash2, TrendingDown, UserMinus,
+  Users, Wand2, Wallet,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -85,6 +86,9 @@ export function FinanceiroClientesGeralPage() {
   const mrrAtivo = ativos.reduce((acc, c) => acc + centsDoCliente(c.monthlyValue), 0)
   const comValor = ativos.filter((c) => (c.monthlyValue ?? 0) > 0).length
   const mrrPerdido = cancelamentosDoMes.filter((c) => !c.reactivatedAt).reduce((acc, c) => acc + c.mrrCents, 0)
+  const multasDoMes = cancelamentosDoMes.reduce((acc, c) => acc + c.multaCents, 0)
+  // Saiu daqui mas continua sendo cobrado no Asaas — é o que vira reclamação e estorno depois.
+  const pendentesAsaas = cancelamentos.filter((c) => !c.reactivatedAt && !c.asaasRemovido).length
   const cancelados = cancelamentosDoMes.filter((c) => !c.reactivatedAt).length
   // Churn do mês = quem saiu sobre a base que existia no começo do mês (ativos de hoje + quem saiu).
   const churn = ativos.length + cancelados > 0 ? (cancelados / (ativos.length + cancelados)) * 100 : 0
@@ -170,7 +174,9 @@ export function FinanceiroClientesGeralPage() {
           <Card icon={<UserMinus className="h-4 w-4" />} label={`Cancelados em ${monthLabelPt(mes)}`}
             value={String(cancelados)} hint={`${churn.toFixed(1)}% da base`} tone={cancelados ? 'danger' : undefined} />
           <Card icon={<TrendingDown className="h-4 w-4" />} label="MRR perdido no mês"
-            value={formatBRLCents(mrrPerdido)} hint="mensalidade que saiu" tone={mrrPerdido ? 'danger' : undefined} />
+            value={formatBRLCents(mrrPerdido)}
+            hint={multasDoMes ? `+ ${formatBRLCents(multasDoMes)} de multa` : 'mensalidade que saiu'}
+            tone={mrrPerdido ? 'danger' : undefined} />
         </div>
 
         {/* Abas */}
@@ -182,6 +188,19 @@ export function FinanceiroClientesGeralPage() {
             Cancelamentos ({cancelamentosDoMes.length})
           </AbaBotao>
         </div>
+
+        {pendentesAsaas > 0 && (
+          <button
+            type="button"
+            onClick={() => setAba('cancelamentos')}
+            className="mt-3 flex w-full items-center gap-2 rounded-xl bg-warning/10 px-4 py-2.5 text-left text-sm text-warning hover:bg-warning/15"
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>
+              {pendentesAsaas} cliente(s) cancelado(s) ainda sem baixa no Asaas — continuam sendo cobrados lá.
+            </span>
+          </button>
+        )}
 
         {aba === 'clientes' ? (
           <>
@@ -381,8 +400,9 @@ function LinhaCliente({ cliente, sugestao, onAbrir, onCancelar, onAplicarSugesta
             type="button"
             onClick={onCancelar}
             title="Registrar cancelamento desse cliente"
-            className="rounded-lg px-2 py-1 text-xs text-foreground/40 opacity-100 transition-colors hover:bg-danger/10 hover:text-danger lg:opacity-0 lg:group-hover:opacity-100"
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
           >
+            <UserMinus className="h-3.5 w-3.5" />
             Cancelar
           </button>
         )}
@@ -462,13 +482,15 @@ function ListaCancelamentos({ itens, mes, todos, onAbrirCliente }: {
                 <th className="w-48 px-4 py-3">Motivo</th>
                 <th className="px-4 py-3">Observação</th>
                 <th className="w-32 px-4 py-3 text-right">MRR perdido</th>
+                <th className="w-28 px-4 py-3 text-right">Multa</th>
+                <th className="w-28 px-4 py-3 text-center">Asaas</th>
                 <th className="w-28 px-2 py-3" />
               </tr>
             </thead>
             <tbody>
               {itens.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-foreground/40">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-foreground/40">
                     Nenhum cancelamento em {monthLabelPt(mes)}.
                   </td>
                 </tr>
@@ -498,6 +520,22 @@ function ListaCancelamentos({ itens, mes, todos, onAbrirCliente }: {
                   </td>
                   <td className={cn('px-4 py-2.5 text-right text-sm font-medium tabular-nums', c.reactivatedAt ? 'text-foreground/35 line-through' : 'text-danger')}>
                     {formatBRLCents(c.mrrCents)}
+                  </td>
+                  <td className={cn('px-4 py-2.5 text-right text-sm tabular-nums', c.multaCents ? 'text-success' : 'text-foreground/25')}>
+                    {c.multaCents ? formatBRLCents(c.multaCents) : '—'}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <button
+                      type="button"
+                      onClick={() => void clientCancellationsService.atualizar(c.id, { asaasRemovido: !c.asaasRemovido })}
+                      title={c.asaasRemovido ? 'Cobrança já cancelada no Asaas — clique pra desmarcar' : 'Ainda sendo cobrado no Asaas — clique quando der baixa'}
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+                        c.asaasRemovido ? 'bg-success/10 text-success' : 'bg-warning/15 text-warning hover:bg-warning/25',
+                      )}
+                    >
+                      {c.asaasRemovido ? 'baixado' : 'pendente'}
+                    </button>
                   </td>
                   <td className="px-2 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">
@@ -535,7 +573,10 @@ function ListaCancelamentos({ itens, mes, todos, onAbrirCliente }: {
                   <td className="px-4 py-3 text-right tabular-nums text-danger">
                     {formatBRLCents(itens.filter((c) => !c.reactivatedAt).reduce((a, c) => a + c.mrrCents, 0))}
                   </td>
-                  <td />
+                  <td className="px-4 py-3 text-right tabular-nums text-success">
+                    {formatBRLCents(itens.reduce((a, c) => a + c.multaCents, 0))}
+                  </td>
+                  <td /><td />
                 </tr>
               </tfoot>
             )}
@@ -587,6 +628,8 @@ function CancelarClienteModal({ cliente, onClose }: { cliente: Client | null; on
   const [motivo, setMotivo] = React.useState(MOTIVOS[0])
   const [observacao, setObservacao] = React.useState('')
   const [valorRaw, setValorRaw] = React.useState('')
+  const [multaRaw, setMultaRaw] = React.useState('')
+  const [asaasRemovido, setAsaasRemovido] = React.useState(false)
   const [salvando, setSalvando] = React.useState(false)
 
   React.useEffect(() => {
@@ -595,6 +638,8 @@ function CancelarClienteModal({ cliente, onClose }: { cliente: Client | null; on
     setMotivo(MOTIVOS[0])
     setObservacao('')
     setValorRaw(cliente.monthlyValue ? prettifyCurrencyRaw(String(Math.round(cliente.monthlyValue * 100))) : '')
+    setMultaRaw('')
+    setAsaasRemovido(false)
   }, [cliente])
 
   if (!cliente) return null
@@ -607,6 +652,8 @@ function CancelarClienteModal({ cliente, onClose }: { cliente: Client | null; on
       motivo,
       observacao: observacao.trim(),
       mrrCents: parseBRLCents(valorRaw),
+      multaCents: parseBRLCents(multaRaw),
+      asaasRemovido,
     })
     setSalvando(false)
     onClose()
@@ -635,6 +682,36 @@ function CancelarClienteModal({ cliente, onClose }: { cliente: Client | null; on
             />
           </div>
         </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-medium text-foreground/60">Multa de rescisão cobrada</label>
+          <Input
+            value={multaRaw}
+            onChange={(e) => setMultaRaw(sanitizeCurrencyRaw(e.target.value))}
+            placeholder="0,00 — deixe vazio se não teve"
+            className="text-right tabular-nums"
+          />
+        </div>
+
+        <label className={cn(
+          'flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors',
+          asaasRemovido ? 'border-success/40 bg-success/5' : 'border-warning/40 bg-warning/5',
+        )}>
+          <input
+            type="checkbox"
+            checked={asaasRemovido}
+            onChange={(e) => setAsaasRemovido(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-accent"
+          />
+          <span className="text-sm">
+            <span className="font-medium text-foreground">Já tirei a cobrança do Asaas</span>
+            <span className="mt-0.5 block text-xs text-foreground/55">
+              {asaasRemovido
+                ? 'Assinatura cancelada lá — não vai gerar cobrança nova.'
+                : 'Se não marcar, ele fica na lista de pendências até você dar baixa.'}
+            </span>
+          </span>
+        </label>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-foreground/60">Motivo</label>

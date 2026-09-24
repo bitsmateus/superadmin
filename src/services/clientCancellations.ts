@@ -11,6 +11,11 @@ export interface ClientCancellation {
   observacao: string
   /** Foto da mensalidade no dia do cancelamento: corrigir o valor do cliente depois não mexe aqui. */
   mrrCents: number
+  /** Multa de rescisão cobrada — 0 quando não teve. */
+  multaCents: number
+  /** A cobrança já foi cancelada no Asaas? Enquanto for false, o cliente saiu daqui mas continua
+   * sendo cobrado lá. */
+  asaasRemovido: boolean
   /** Preenchido quando o cliente voltou — o registro fica, o mês dele não muda. */
   reactivatedAt: string | null
   createdAt: string
@@ -22,7 +27,8 @@ export interface ClientCancellation {
 
 type Row = {
   id: string; client_id: string; canceled_at: string; motivo: string; observacao: string
-  mrr_cents: number; reactivated_at: string | null; created_at: string
+  mrr_cents: number; multa_cents: number; asaas_removido: boolean
+  reactivated_at: string | null; created_at: string
   client_name?: string; client_company?: string; client_phone?: string
 }
 
@@ -35,6 +41,8 @@ function rowTo(r: Row): ClientCancellation {
     motivo: r.motivo ?? '',
     observacao: r.observacao ?? '',
     mrrCents: r.mrr_cents ?? 0,
+    multaCents: r.multa_cents ?? 0,
+    asaasRemovido: r.asaas_removido ?? false,
     reactivatedAt: r.reactivated_at ?? null,
     createdAt: r.created_at,
     clientName: r.client_name ?? '',
@@ -87,6 +95,7 @@ export const clientCancellationsService = {
 
   async cancelar(input: {
     clientId: string; canceledAt: string; motivo: string; observacao: string; mrrCents: number
+    multaCents: number; asaasRemovido: boolean
   }): Promise<void> {
     try {
       await api.post('/api/client-cancellations', input)
@@ -96,7 +105,10 @@ export const clientCancellationsService = {
     }
   },
 
-  async atualizar(id: string, patch: Partial<Pick<ClientCancellation, 'canceledAt' | 'motivo' | 'observacao' | 'mrrCents'>>): Promise<void> {
+  async atualizar(
+    id: string,
+    patch: Partial<Pick<ClientCancellation, 'canceledAt' | 'motivo' | 'observacao' | 'mrrCents' | 'multaCents' | 'asaasRemovido'>>,
+  ): Promise<void> {
     try {
       await api.patch(`/api/client-cancellations/${id}`, patch)
       await reload()

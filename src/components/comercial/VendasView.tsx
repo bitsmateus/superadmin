@@ -794,7 +794,7 @@ function VendaRow({
         <select
           value={row.closer}
           onChange={(e) => leadBoardsService.updateRow(row.id, { closer: e.target.value })}
-          title="Quem fechou a venda — gera a comissão de fechamento pra essa pessoa, mesmo que seja o próprio SDR da venda."
+          title="Quem fechou a venda. Só o Luis (closer) tem a comissão escalonada de fechamento — pros demais o campo é só registro de quem fechou."
           className={cn(
             'h-7 rounded-full border-0 px-2 text-[11px] font-medium outline-none',
             row.closer ? 'bg-accent/10 text-accent' : 'bg-elevate/[0.06] text-foreground/40',

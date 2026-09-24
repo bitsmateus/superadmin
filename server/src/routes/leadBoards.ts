@@ -127,8 +127,11 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
       (venda.fechamento || new Date(venda.created_at).toISOString()).slice(0, 7) ||
       new Date().toISOString().slice(0, 7);
 
+    // Só o closer da casa (CLOSER_PERSON) tem a comissão escalonada de fechamento. O campo "Fechou"
+    // aceita qualquer pessoa — serve pra registrar quem fechou —, mas para os demais isso não gera
+    // lançamento nenhum: a venda deles já é remunerada pela comissão de SDR.
     const closer = (venda.closer ?? '').trim();
-    const deveTer = !!closer;
+    const deveTer = closer.toLowerCase() === CLOSER_PERSON.toLowerCase();
     const atual = await queryOne<{ id: string; person: string }>(
       `SELECT id, person FROM commission_entries WHERE venda_lead_id = $1 AND type_id = $2`,
       [vendaLeadId, typeId]

@@ -149,18 +149,46 @@ export const commissionsService = {
     return commissionsService.updateEntry(id, { status })
   },
 
+  /** Atualiza na tela ANTES da resposta do servidor (e desfaz se falhar) — mesmo padrão da aba
+   * Vendas. Sem isso cada clique em Contrato/Status ficava esperando a ida e volta da rede, o que
+   * dava a sensação de travamento. Marcar o contrato reflete na hora nos outros lançamentos da
+   * mesma venda, porque no servidor esse estado é da venda, não do lançamento. */
   async updateEntry(id: string, patch: {
     status?: CommissionStatus; amountCents?: number; reference?: string; nome?: string; person?: string
     typeId?: string | null; typeLabel?: string; baseValueCents?: number | null; contratoAssinado?: boolean
   }): Promise<void> {
+    const anterior = entries
+    const alvo = entries.find((e) => e.id === id)
+    entries = entries.map((e) => {
+      if (e.id === id) return { ...e, ...patch }
+      const mesmaVenda =
+        patch.contratoAssinado !== undefined && !!alvo?.vendaLeadId && e.vendaLeadId === alvo.vendaLeadId
+      return mesmaVenda ? { ...e, contratoAssinado: patch.contratoAssinado! } : e
+    })
+    notify()
+
     try {
       const row = await api.patch<EntryRow>(`/api/commission-entries/${id}`, patch)
       const full = rowToEntry(row)
       const idx = entries.findIndex((e) => e.id === id)
       if (idx !== -1) { const copy = entries.slice(); copy[idx] = full; entries = copy; notify() }
     } catch (err) {
+      entries = anterior
+      notify()
       toast.error('Falha ao salvar lançamento: ' + (err as Error).message)
     }
+  },
+
+  /** Reflete na hora, na tela, o "Contrato assinado" marcado do lado da VENDA — o servidor já
+   * propaga pros lançamentos, isso aqui só evita esperar o aviso chegar de volta. */
+  marcarContratoDaVenda(vendaLeadId: string, assinado: boolean): void {
+    let mudou = false
+    entries = entries.map((e) => {
+      if (e.vendaLeadId !== vendaLeadId || e.contratoAssinado === assinado) return e
+      mudou = true
+      return { ...e, contratoAssinado: assinado }
+    })
+    if (mudou) notify()
   },
 
   async deleteEntry(id: string): Promise<void> {

@@ -17,6 +17,7 @@ import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
 import { useCommissionEntries, useCommissionTypes } from '@/hooks/useCommissions'
 import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt } from '@/hooks/useMonthFilter'
 import { leadBoardsService } from '@/services/leadBoards'
+import { commissionsService } from '@/services/commissions'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { cn, initials } from '@/lib/utils'
 import type { LeadRow } from '@/types/leadBoard'
@@ -820,7 +821,13 @@ function VendaRow({
       <td className="px-4 py-3">
         <button
           type="button"
-          onClick={() => leadBoardsService.updateRow(row.id, { contratoAssinado: !row.contratoAssinado })}
+          onClick={() => {
+            const proximo = !row.contratoAssinado
+            leadBoardsService.updateRow(row.id, { contratoAssinado: proximo })
+            // O servidor também marca os lançamentos de comissão dessa venda; isso aqui só
+            // antecipa na tela, pra não parecer que ficou pra trás.
+            commissionsService.marcarContratoDaVenda(row.id, proximo)
+          }}
           title={row.contratoAssinado ? 'Assinado — clique pra marcar como pendente' : 'Pendente — clique pra marcar como assinado'}
           className={cn(
             'rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors lg:px-2 lg:py-0.5',

@@ -539,6 +539,12 @@ export function VendasView({ pageId }: { pageId: string }) {
           types={commissionTypes}
           periodLabel={periodLabel}
           somenteIncompletos={comissaoIncompleta}
+          // Mesmo destino do clique no nome lá em cima: o lead ORIGINAL do CRM (é onde moram as
+          // Atualizações); a linha da venda é só uma cópia e não tem histórico.
+          onOpenLead={(vendaLeadId) => {
+            const venda = rows.find((r) => r.id === vendaLeadId)
+            setOpenLeadId(venda?.vendaOrigemId || vendaLeadId)
+          }}
         />
       </div>
 

@@ -110,8 +110,16 @@ export async function commissionRoutes(app: FastifyInstance) {
       sets.push(`updated_at = NOW()`);
 
       params.push(req.params.id);
-      const [entry] = await query(`UPDATE commission_entries SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
+      const [entry] = await query<{ month: string; type_label: string }>(
+        `UPDATE commission_entries SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+        params
+      );
       if (!entry) return reply.status(404).send({ message: 'Lançamento não encontrado' });
+      // Rede de segurança: se um lançamento virar (ou deixar de ser) fechamento de closer por
+      // qualquer caminho, o mês inteiro é reavaliado pela faixa de volume.
+      if (entry.type_label === CLOSER_TYPE_LABEL || req.body.typeLabel === CLOSER_TYPE_LABEL) {
+        void recalcularComissaoCloser(entry.month);
+      }
       return entry;
     }
   );

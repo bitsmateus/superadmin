@@ -420,6 +420,40 @@ async function quadroDoStatus(page: string, status: string): Promise<string | nu
   return match?.id ?? null;
 }
 
+/** A etiqueta de Status daquela aba com esse nome, ignorando maiúscula/acento — cada CRM escreve a
+ * mesma etapa do jeito dele ("Reunião Não Comparecida" num, "Reunião não comparecida" no outro").
+ * Devolve o nome exato da etiqueta de lá (é ele que tem cor na tela); sem equivalente, null. */
+async function etiquetaDeStatus(page: string, status: string): Promise<string | null> {
+  const alvo = normalizaNome(status);
+  const labels = await query<{ name: string }>(
+    `SELECT name FROM lead_labels WHERE field = 'status' AND page_id = $1 ORDER BY position`,
+    [page]
+  );
+  return labels.find((l) => normalizaNome(l.name) === alvo)?.name ?? null;
+}
+
+/** O contrário de quadroDoStatus: a etiqueta de Status equivalente ao quadro, dentro da mesma aba.
+ * Grupo e Status são a MESMA informação escrita em dois lugares, então mudar um sem o outro deixa a
+ * lead dizendo duas coisas diferentes. Devolve o nome exato da etiqueta (respeita como ela está
+ * escrita na aba); quadro sem etiqueta equivalente (ex.: "SÓ LIGAÇÃO", "Projetos") devolve null e o
+ * Status fica como está — melhor manter do que inventar uma etiqueta que não existe. */
+async function statusDoQuadro(boardId: string): Promise<string | null> {
+  const board = await queryOne<{ name: string; page: string }>(
+    'SELECT name, page FROM lead_boards WHERE id = $1',
+    [boardId]
+  );
+  if (!board) return null;
+  const alvo = normalizaNome(board.name);
+  const labels = await query<{ name: string }>(
+    `SELECT name FROM lead_labels WHERE field = 'status' AND page_id = $1 ORDER BY position`,
+    [board.page]
+  );
+  const match =
+    labels.find((l) => normalizaNome(l.name) === alvo) ??
+    labels.find((l) => normalizaNome(l.name).startsWith(alvo));
+  return match?.name ?? null;
+}
+
 /** Cria a cópia no CRM do closer, se ainda não existir. Nunca lança: roda em background depois da
  * edição, e falhar aqui não pode derrubar o que o usuário acabou de fazer. */
 async function syncEspelhoReuniaoAgendada(leadRowId: string) {
@@ -497,8 +531,13 @@ async function propagarEspelho(
 ) {
   try {
     const campos = Object.keys(patch).filter((k) => ESPELHO_CAMPOS.includes(k));
+    // Compara sem maiúscula/acento: os dois CRMs escrevem a mesma etapa de jeitos diferentes, e
+    // exigir a grafia exata fazia a etiqueta do closer ("Reunião Não Comparecida") não sincronizar.
     const novoStatus =
-      typeof patch.status === 'string' && ESPELHO_STATUS.includes(patch.status) ? patch.status : null;
+      typeof patch.status === 'string' &&
+      ESPELHO_STATUS.some((e) => normalizaNome(e) === normalizaNome(patch.status as string))
+        ? patch.status
+        : null;
     if (!campos.length && !novoStatus) return;
 
     // espelhoOrigemId preenchido = quem foi editado é a CÓPIA, então o parceiro é a original.
@@ -517,10 +556,15 @@ async function propagarEspelho(
       params.push(patch[k]);
     }
 
-    const statusMudou = !!novoStatus && novoStatus !== parceiro.status;
+    // Grava a etapa com o nome que ELA tem na aba do parceiro (é o nome que tem cor lá); só se o
+    // parceiro não tiver etiqueta equivalente é que vai o texto como veio.
+    const statusParceiro = novoStatus
+      ? (await etiquetaDeStatus(parceiro.page, novoStatus)) ?? novoStatus
+      : null;
+    const statusMudou = !!statusParceiro && normalizaNome(statusParceiro) !== normalizaNome(parceiro.status);
     if (statusMudou) {
       sets.push(`status = $${params.length + 1}`);
-      params.push(novoStatus);
+      params.push(statusParceiro);
       const quadro = await quadroDoStatus(parceiro.page, novoStatus!);
       if (quadro && quadro !== parceiro.board_id) {
         sets.push(`board_id = $${params.length + 1}`);
@@ -538,10 +582,10 @@ async function propagarEspelho(
 
     if (statusMudou) {
       const actorName = await getActorName(actorId);
-      await logLeadEvent(parceiro.id, 'status', parceiro.status, novoStatus, actorName);
+      await logLeadEvent(parceiro.id, 'status', parceiro.status, statusParceiro, actorName);
       // Quem mexeu foi a cópia (closer): a venda nasce aqui, pela original, uma vez só.
       if (espelhoOrigemId) {
-        await syncVendaFromStatus(parceiro.id, parceiro.status, novoStatus!);
+        await syncVendaFromStatus(parceiro.id, parceiro.status, statusParceiro!);
       }
     }
   } catch (err) {
@@ -811,6 +855,18 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       }
 
       const patch = req.body;
+      // Grupo e Status andam lado a lado: trocar o quadro (pelo select "Grupo" do modal, pelo menu
+      // "Mover" ou arrastando o card) já acerta a etiqueta de Status junto. O caminho contrário
+      // (Status -> quadro) já existia no front; sem este aqui, mover a lead deixava o Status
+      // dizendo uma coisa e o Grupo mostrando outra. Fica no servidor de propósito: assim vale pros
+      // três caminhos de uma vez e o resto da rota (linha do tempo, espelho do closer, criação da
+      // venda ao cair em "Vendido") enxerga a mudança de status como qualquer outra.
+      // Quem já manda status junto no patch tem a palavra final — não sobrescreve.
+      if (typeof patch.board_id === 'string' && !('status' in patch)) {
+        const etiqueta = await statusDoQuadro(patch.board_id);
+        if (etiqueta) patch.status = etiqueta;
+      }
+
       const sets: string[] = [];
       const params: unknown[] = [];
       let i = 1;

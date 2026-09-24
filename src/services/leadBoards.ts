@@ -372,7 +372,19 @@ export const leadBoardsService = {
 
     void (async () => {
       try {
-        await api.patch(`/api/lead-rows/${id}`, leadToRow(patch))
+        const salvo = await api.patch<LeadRowRow>(`/api/lead-rows/${id}`, leadToRow(patch))
+        // O servidor acerta o Status junto quando a lead troca de quadro (Grupo e Status são a
+        // mesma informação, ver statusDoQuadro no back). Como a atualização aqui é otimista e não
+        // relê a linha, sem isso a etiqueta só aparecia certa depois de recarregar a página.
+        if (!('status' in patch) && salvo?.status !== undefined) {
+          const atual = rows.findIndex((r) => r.id === id)
+          if (atual !== -1 && rows[atual].status !== salvo.status) {
+            const sincronizado = rows.slice()
+            sincronizado[atual] = { ...sincronizado[atual], status: salvo.status }
+            rows = sincronizado
+            notify()
+          }
+        }
       } catch (err) {
         const rollback = rows.slice()
         const ridx = rollback.findIndex((r) => r.id === id)

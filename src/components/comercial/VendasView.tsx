@@ -86,6 +86,9 @@ export function VendasView({ pageId }: { pageId: string }) {
   const [trashOpen, setTrashOpen] = React.useState(false)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
   const [onlyPending, setOnlyPending] = React.useState(false)
+  // Filtro vindo do painel de pendências (só um por vez — é "me mostre o que falta AGORA").
+  const [foco, setFoco] = React.useState<'nenhum' | 'contrato' | 'sem_comissao'>('nenhum')
+  const [comissaoIncompleta, setComissaoIncompleta] = React.useState(false)
   const [commissionRegisterOpen, setCommissionRegisterOpen] = React.useState(false)
   const [commissionTypesOpen, setCommissionTypesOpen] = React.useState(false)
 
@@ -117,7 +120,9 @@ export function VendasView({ pageId }: { pageId: string }) {
     setTo(r.to)
   }, [periodo])
 
-  const noPeriodo = React.useMemo(() => {
+  // Tudo do período, sem os filtros de pendência — é a base pra CONTAR o que falta (os contadores
+  // não podem mudar conforme o filtro ligado, senão o painel deixa de ser um retrato do mês).
+  const doPeriodo = React.useMemo(() => {
     return rows
       .filter((r) => {
         // Sem data de fechamento a venda não pertence a período nenhum — em vez de sumir, cai no
@@ -125,9 +130,30 @@ export function VendasView({ pageId }: { pageId: string }) {
         const dia = (r.fechamento || r.createdAt).slice(0, 10)
         return dia >= from && dia <= to
       })
-      .filter((r) => !onlyPending || r.mrrPendente || r.implPendente)
       .sort((a, b) => (a.fechamento || a.createdAt).localeCompare(b.fechamento || b.createdAt))
-  }, [rows, from, to, onlyPending])
+  }, [rows, from, to])
+
+  const vendasComComissao = React.useMemo(
+    () => new Set(commissionsInPeriod.map((c) => c.vendaLeadId).filter(Boolean) as string[]),
+    [commissionsInPeriod],
+  )
+
+  const noPeriodo = React.useMemo(() => {
+    return doPeriodo
+      .filter((r) => !onlyPending || r.mrrPendente || r.implPendente)
+      .filter((r) => foco !== 'contrato' || !r.contratoAssinado)
+      .filter((r) => foco !== 'sem_comissao' || !vendasComComissao.has(r.id))
+  }, [doPeriodo, onlyPending, foco, vendasComComissao])
+
+  const pendencias = React.useMemo(() => {
+    const base = doPeriodo.filter((r) => !r.vendaRevertida)
+    return {
+      contrato: base.filter((r) => !r.contratoAssinado).length,
+      cobranca: base.filter((r) => r.mrrPendente || r.implPendente).length,
+      semComissao: base.filter((r) => !vendasComComissao.has(r.id)).length,
+      comissaoIncompleta: commissionsInPeriod.filter((c) => !c.typeId || c.amountCents <= 0).length,
+    }
+  }, [doPeriodo, vendasComComissao, commissionsInPeriod])
 
   // Revertida continua visível (o histórico importa) mas fora da conta.
   const validas = React.useMemo(() => noPeriodo.filter((r) => !r.vendaRevertida), [noPeriodo])
@@ -165,11 +191,12 @@ export function VendasView({ pageId }: { pageId: string }) {
     [selectedRows],
   )
 
-  // Mesmos 4 nomes do seletor "Quem fechou a venda" — sempre aparecem, mesmo zerados, pra dar
-  // pra comparar o time inteiro de cara. Alguém fora dessa lista (sdr em branco, nome antigo)
+  // Mesmos nomes do seletor "Quem fechou a venda" — sempre aparecem, mesmo zerados, pra dar
+  // pra comparar o time inteiro de cara. Jean e Joao entram porque também fecham venda (as que
+  // nascem do Suporte, depois da entrega). Alguém fora dessa lista (sdr em branco, nome antigo)
   // cai num "Outros" só se tiver de fato alguma venda.
   const resumoPorSdr = React.useMemo(() => {
-    const nomes = ['Arthur', 'Luis', 'Ian', 'Mateus']
+    const nomes = ['Arthur', 'Luis', 'Ian', 'Mateus', 'Jean', 'Joao']
     const buckets = new Map<string, { vendas: number; mrr: number; impl: number }>()
     for (const nome of nomes) buckets.set(nome, { vendas: 0, mrr: 0, impl: 0 })
     for (const r of validas) {
@@ -295,6 +322,46 @@ export function VendasView({ pageId }: { pageId: string }) {
             <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400 ring-1 ring-amber-500" />
             Só pendentes
           </button>
+        </div>
+
+        {/* O que falta fechar no período — cada número filtra a lista (ou a comissão) no clique. */}
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl bg-card p-3 shadow-sm">
+          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-foreground/45">
+            O que falta
+          </span>
+          <PendenciaChip
+            label="contrato pendente"
+            count={pendencias.contrato}
+            active={foco === 'contrato'}
+            onClick={() => setFoco((f) => (f === 'contrato' ? 'nenhum' : 'contrato'))}
+          />
+          <PendenciaChip
+            label="cobrança pendente"
+            count={pendencias.cobranca}
+            active={onlyPending}
+            onClick={() => setOnlyPending((v) => !v)}
+          />
+          <PendenciaChip
+            label="sem comissão lançada"
+            count={pendencias.semComissao}
+            active={foco === 'sem_comissao'}
+            onClick={() => setFoco((f) => (f === 'sem_comissao' ? 'nenhum' : 'sem_comissao'))}
+          />
+          <PendenciaChip
+            label="comissão a completar"
+            count={pendencias.comissaoIncompleta}
+            active={comissaoIncompleta}
+            onClick={() => setComissaoIncompleta((v) => !v)}
+          />
+          {(foco !== 'nenhum' || onlyPending || comissaoIncompleta) && (
+            <button
+              type="button"
+              onClick={() => { setFoco('nenhum'); setOnlyPending(false); setComissaoIncompleta(false) }}
+              className="ml-auto text-xs font-medium text-accent hover:underline"
+            >
+              Limpar filtros
+            </button>
+          )}
         </div>
 
         {/* Barra de seleção — some quando nada está marcado. */}
@@ -467,7 +534,12 @@ export function VendasView({ pageId }: { pageId: string }) {
           </div>
         </div>
 
-        <CommissionSdrSection entries={commissionsInPeriod} types={commissionTypes} periodLabel={periodLabel} />
+        <CommissionSdrSection
+          entries={commissionsInPeriod}
+          types={commissionTypes}
+          periodLabel={periodLabel}
+          somenteIncompletos={comissaoIncompleta}
+        />
       </div>
 
       <RegistrarVendaModal
@@ -516,6 +588,36 @@ function SummaryCard({
       </div>
       <div className="mt-3 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{value}</div>
     </div>
+  )
+}
+
+/** Número do painel "O que falta": zerado fica apagado e não clica (não há o que filtrar). */
+function PendenciaChip({
+  label, count, active, onClick,
+}: {
+  label: string
+  count: number
+  active: boolean
+  onClick: () => void
+}) {
+  const vazio = count === 0
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={vazio}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm ring-1 transition-colors',
+        vazio
+          ? 'text-foreground/30 ring-transparent'
+          : active
+            ? 'bg-warning/25 text-warning ring-warning/40'
+            : 'text-foreground/60 ring-line hover:bg-elevate/[0.04]',
+      )}
+    >
+      <span className="font-semibold tabular-nums">{count}</span>
+      {label}
+    </button>
   )
 }
 
@@ -943,6 +1045,8 @@ function RegistrarVendaModal({
               { value: '', label: 'Selecionar...' },
               { value: 'Arthur', label: 'SDR Arthur' },
               { value: 'Luis', label: 'SDR Luis' },
+              { value: 'Jean', label: 'Jean (Suporte)' },
+              { value: 'Joao', label: 'Joao (Suporte)' },
               { value: 'Ian', label: 'Ian' },
               { value: 'Mateus', label: 'Mateus' },
             ]}

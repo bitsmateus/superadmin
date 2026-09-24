@@ -381,6 +381,10 @@ async function propagarEspelho(
     params.push(parceiro.id);
     await query(`UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
 
+    // Quem recebeu foi a lead ORIGINAL (ou seja, quem editou foi o closer): a correção segue pra
+    // aba Vendas também, senão o nome novo só aparecia nos dois CRMs e não na lista de vendas.
+    if (espelhoOrigemId) void propagarVenda(parceiro.id, patch);
+
     if (statusMudou) {
       const actorName = await getActorName(actorId);
       await logLeadEvent(parceiro.id, 'status', parceiro.status, novoStatus, actorName);
@@ -391,6 +395,34 @@ async function propagarEspelho(
     }
   } catch (err) {
     console.error('[espelho] falha ao propagar edição do lead', leadRowId, err);
+  }
+}
+
+/** Campos de IDENTIDADE que a aba Vendas reflete do lead de origem — renomear/corrigir o lead no
+ * CRM tem que aparecer na lista de Vendas também (a linha de lá é uma cópia tirada no momento da
+ * venda, e antes ela nunca era atualizada depois disso). De fora ficam:
+ *  - valor_mrr/valor_implementacao: andam no sentido CONTRÁRIO (Vendas -> CRM), porque o valor que
+ *    vale é o fechado na venda — ver o PATCH mais abaixo;
+ *  - status/quadro/fechamento/observações e as marcas de pagamento: são da vida da VENDA, não do
+ *    lead (a venda segue "Vendido" mesmo que o lead mude de etapa depois no CRM). */
+const VENDA_CAMPOS = ['nome', 'empresa', 'telefone', 'sdr'];
+
+/** Leva pro registro da aba Vendas as correções de identidade feitas no lead de origem. */
+async function propagarVenda(origemId: string, patch: Record<string, unknown>) {
+  try {
+    const campos = Object.keys(patch).filter((k) => VENDA_CAMPOS.includes(k));
+    if (!campos.length) return;
+    const venda = await queryOne<{ id: string }>(
+      'SELECT id FROM lead_rows WHERE venda_origem_id = $1',
+      [origemId]
+    );
+    if (!venda) return;
+    const params = campos.map((k) => patch[k]);
+    const sets = campos.map((k, idx) => `${k} = $${idx + 1}`);
+    params.push(venda.id);
+    await query(`UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+  } catch (err) {
+    console.error('[vendas] falha ao propagar correção pro registro de venda', origemId, err);
   }
 }
 
@@ -743,14 +775,16 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       // nunca o contrário, senão editar o lead depois apagaria a correção feita na venda.
       const vendaOrigemId = (leadRow as { venda_origem_id?: string | null }).venda_origem_id;
       if (vendaOrigemId && ('valor_mrr' in patch || 'valor_implementacao' in patch)) {
-        const originSets: string[] = [];
-        const originParams: unknown[] = [];
-        let j = 1;
-        if ('valor_mrr' in patch) { originSets.push(`valor_mrr = $${j++}`); originParams.push(patch.valor_mrr); }
-        if ('valor_implementacao' in patch) { originSets.push(`valor_implementacao = $${j++}`); originParams.push(patch.valor_implementacao); }
-        originParams.push(vendaOrigemId);
-        void query(`UPDATE lead_rows SET ${originSets.join(', ')} WHERE id = $${j}`, originParams)
+        const valores: Record<string, unknown> = {};
+        if ('valor_mrr' in patch) valores.valor_mrr = patch.valor_mrr;
+        if ('valor_implementacao' in patch) valores.valor_implementacao = patch.valor_implementacao;
+        const campos = Object.keys(valores);
+        const originSets = campos.map((k, idx) => `${k} = $${idx + 1}`);
+        const originParams = [...campos.map((k) => valores[k]), vendaOrigemId];
+        void query(`UPDATE lead_rows SET ${originSets.join(', ')} WHERE id = $${originParams.length}`, originParams)
           .catch((err) => console.error('[vendas] falha ao propagar valor pro lead de origem', vendaOrigemId, err));
+        // O CRM do closer (cópia do espelho) acompanha o mesmo valor corrigido.
+        void propagarEspelho(vendaOrigemId, null, valores, sub);
       }
 
       // Espelho CRM ARTHUR <-> CRM LUIS CLOSER: conteúdo e etiqueta de funil editados de um lado
@@ -765,6 +799,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       if ('status' in patch || 'board_id' in patch) {
         void syncEspelhoReuniaoAgendada(req.params.id);
       }
+      // Corrigir nome/empresa/telefone/SDR do lead atualiza a linha dele na aba Vendas também.
+      void propagarVenda(req.params.id, patch);
 
       if (before) {
         void (async () => {

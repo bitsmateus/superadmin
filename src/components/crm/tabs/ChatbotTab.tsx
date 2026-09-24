@@ -50,13 +50,7 @@ export function ChatbotTab({ client }: { client: Client }) {
     setErrors([])
     try {
       const r = await chatbotFlowApi.generate(client.id)
-      setData((d) => ({
-        spec: r.spec,
-        json: r.json,
-        warnings: r.warnings,
-        generatedAt: new Date().toISOString(),
-        publishedAt: d?.publishedAt ?? null,
-      }))
+      setData(r)
       setEdited(r.spec)
       toast.success('Fluxo gerado com IA')
     } catch (err) {

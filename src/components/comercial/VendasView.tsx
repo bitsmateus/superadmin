@@ -191,11 +191,12 @@ export function VendasView({ pageId }: { pageId: string }) {
     [selectedRows],
   )
 
-  // Mesmos 4 nomes do seletor "Quem fechou a venda" — sempre aparecem, mesmo zerados, pra dar
-  // pra comparar o time inteiro de cara. Alguém fora dessa lista (sdr em branco, nome antigo)
+  // Mesmos nomes do seletor "Quem fechou a venda" — sempre aparecem, mesmo zerados, pra dar
+  // pra comparar o time inteiro de cara. Jean e Joao entram porque também fecham venda (as que
+  // nascem do Suporte, depois da entrega). Alguém fora dessa lista (sdr em branco, nome antigo)
   // cai num "Outros" só se tiver de fato alguma venda.
   const resumoPorSdr = React.useMemo(() => {
-    const nomes = ['Arthur', 'Luis', 'Ian', 'Mateus']
+    const nomes = ['Arthur', 'Luis', 'Ian', 'Mateus', 'Jean', 'Joao']
     const buckets = new Map<string, { vendas: number; mrr: number; impl: number }>()
     for (const nome of nomes) buckets.set(nome, { vendas: 0, mrr: 0, impl: 0 })
     for (const r of validas) {
@@ -1044,6 +1045,8 @@ function RegistrarVendaModal({
               { value: '', label: 'Selecionar...' },
               { value: 'Arthur', label: 'SDR Arthur' },
               { value: 'Luis', label: 'SDR Luis' },
+              { value: 'Jean', label: 'Jean (Suporte)' },
+              { value: 'Joao', label: 'Joao (Suporte)' },
               { value: 'Ian', label: 'Ian' },
               { value: 'Mateus', label: 'Mateus' },
             ]}

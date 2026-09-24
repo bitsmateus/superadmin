@@ -387,8 +387,13 @@ function PersonCell({ entry }: { entry: CommissionEntry }) {
  * caso), e sobrescrever apagaria a correção de quem lançou. */
 function TypeCell({ entry, types }: { entry: CommissionEntry; types: CommissionType[] }) {
   const [editing, setEditing] = React.useState(false)
+  // "Fechamento closer" fica FORA da escolha manual: quem lança e calcula o valor (por faixa de
+  // volume do mês) é o servidor. Escolher à mão criava um fechamento duplicado — um do sistema e
+  // outro convertido de uma comissão de SDR — e com valor fora da faixa.
   const options = React.useMemo(
-    () => types.filter((t) => t.role === entry.role && !t.archived).sort((a, b) => a.position - b.position),
+    () => types
+      .filter((t) => t.role === entry.role && !t.archived && t.label !== CLOSER_TYPE_LABEL)
+      .sort((a, b) => a.position - b.position),
     [types, entry.role],
   )
 
@@ -523,8 +528,11 @@ export function RegisterCommissionModal({
   const [amountTouched, setAmountTouched] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
 
+  // Igual ao TypeCell: fechamento de closer não se lança à mão, o sistema cria e calcula sozinho.
   const typesForRole = React.useMemo(
-    () => types.filter((t) => t.role === role && !t.archived).sort((a, b) => a.position - b.position),
+    () => types
+      .filter((t) => t.role === role && !t.archived && t.label !== CLOSER_TYPE_LABEL)
+      .sort((a, b) => a.position - b.position),
     [types, role],
   )
   const selectedType = typesForRole.find((t) => t.id === typeId) ?? null

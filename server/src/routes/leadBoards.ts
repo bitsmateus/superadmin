@@ -96,25 +96,54 @@ export async function recalcularComissaoCloser(month: string): Promise<void> {
   }
 }
 
-/** Lança a comissão de fechamento de uma venda que veio do funil de outro SDR. Uma por venda. */
-async function createCloserCommission(nome: string, month: string, vendaLeadId: string) {
+/**
+ * Mantém a comissão de fechamento de UMA venda igual ao campo "Fechou" dela:
+ *  - fechou alguém DIFERENTE do SDR  -> garante o lançamento de fechamento pra essa pessoa;
+ *  - fechou o próprio SDR (ou vazio) -> não existe fechamento (é o caso do closer que agendou e
+ *    fechou a mesma venda: pela regra combinada, ele recebe só a comissão de SDR);
+ * e reaplica a faixa do mês nos dois casos, já que a quantidade de fechamentos muda o valor.
+ * Uma venda nunca tem dois fechamentos: o lançamento é procurado pelo par (venda, tipo).
+ */
+async function sincronizarComissaoCloser(vendaLeadId: string) {
   try {
+    const venda = await queryOne<{
+      nome: string; sdr: string; closer: string; fechamento: string; created_at: string; is_vendas: boolean;
+    }>(
+      `SELECT r.nome, r.sdr, r.closer, r.fechamento, r.created_at, lb.is_vendas
+       FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id WHERE r.id = $1`,
+      [vendaLeadId]
+    );
+    if (!venda?.is_vendas) return;
+
     const typeId = await garantirTipoCloser();
     if (!typeId) return;
-    const jaTem = await queryOne<{ id: string }>(
-      `SELECT id FROM commission_entries WHERE venda_lead_id = $1 AND type_id = $2`,
+    const month =
+      (venda.fechamento || new Date(venda.created_at).toISOString()).slice(0, 7) ||
+      new Date().toISOString().slice(0, 7);
+
+    const closer = (venda.closer ?? '').trim();
+    const deveTer = !!closer && closer.toLowerCase() !== (venda.sdr ?? '').trim().toLowerCase();
+    const atual = await queryOne<{ id: string; person: string }>(
+      `SELECT id, person FROM commission_entries WHERE venda_lead_id = $1 AND type_id = $2`,
       [vendaLeadId, typeId]
     );
-    if (jaTem) return;
-    await query(
-      `INSERT INTO commission_entries
-        (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month, status, contrato_assinado, venda_lead_id)
-       VALUES ($1,$2,'sdr',$3,$4,'',NULL,$5,$6,'pendente',false,$7)`,
-      [nome, CLOSER_PERSON, typeId, CLOSER_TYPE_LABEL, CLOSER_FAIXAS[0].valorCents, month, vendaLeadId]
-    );
+
+    if (deveTer && !atual) {
+      await query(
+        `INSERT INTO commission_entries
+          (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month, status, contrato_assinado, venda_lead_id)
+         VALUES ($1,$2,'sdr',$3,$4,'',NULL,$5,$6,'pendente',false,$7)`,
+        [venda.nome, closer, typeId, CLOSER_TYPE_LABEL, CLOSER_FAIXAS[0].valorCents, month, vendaLeadId]
+      );
+    } else if (deveTer && atual && atual.person !== closer) {
+      await query(`UPDATE commission_entries SET person = $1, updated_at = NOW() WHERE id = $2`, [closer, atual.id]);
+    } else if (!deveTer && atual) {
+      await query('DELETE FROM commission_entries WHERE id = $1', [atual.id]);
+    }
+
     await recalcularComissaoCloser(month);
   } catch (err) {
-    console.error('[commissions] falha ao lançar a comissão do closer', nome, err);
+    console.error('[commissions] falha ao sincronizar a comissão do closer', vendaLeadId, err);
   }
 }
 
@@ -297,14 +326,18 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
     const mesDaVenda = new Date().toISOString().slice(0, 7);
     void createCommissionStub(lead.nome, lead.sdr, mesDaVenda, vendaRow?.id ?? null);
 
-    // Lead que foi espelhada pro CRM do closer = quem fechou foi ele, não o SDR que agendou. Então
-    // a mesma venda gera DUAS comissões: a de SDR (acima) e a de fechamento (aqui).
+    // Lead que foi espelhada pro CRM do closer = quem fechou foi ele, não o SDR que agendou. A
+    // venda já nasce com o campo "Fechou" preenchido, e é dele que sai a comissão de fechamento
+    // (ver sincronizarComissaoCloser) — dá pra corrigir depois direto na aba Vendas.
     if (vendaRow?.id) {
       const temEspelho = await queryOne<{ id: string }>(
         'SELECT id FROM lead_rows WHERE espelho_origem_id = $1',
         [leadRowId]
       );
-      if (temEspelho) void createCloserCommission(lead.nome, mesDaVenda, vendaRow.id);
+      if (temEspelho) {
+        await query('UPDATE lead_rows SET closer = $1 WHERE id = $2', [CLOSER_PERSON, vendaRow.id]);
+        void sincronizarComissaoCloser(vendaRow.id);
+      }
     }
   } catch (err) {
     console.error('[vendas] falha ao sincronizar venda do lead', leadRowId, err);
@@ -935,6 +968,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       void propagarVenda(req.params.id, patch);
       // ...e editar direto na aba Vendas (nome ou "Contrato assinado") atualiza a Comissão SDR.
       void propagarComissao(req.params.id, patch);
+      // Mudou quem fechou a venda (ou o SDR dela): a comissão de fechamento acompanha.
+      if ('closer' in patch || 'sdr' in patch) void sincronizarComissaoCloser(req.params.id);
 
       if (before) {
         void (async () => {

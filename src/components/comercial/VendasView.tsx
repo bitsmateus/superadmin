@@ -35,6 +35,10 @@ import type { LeadRow } from '@/types/leadBoard'
 
 type Periodo = 'mes_atual' | 'mes_passado' | 'personalizado'
 
+/** Quem pode aparecer como SDR ou como quem fechou a venda. Jean e Joao entram porque também
+ * fecham venda (as que nascem no Suporte, depois da entrega). */
+const QUEM_FECHA = ['Arthur', 'Luis', 'Jean', 'Joao', 'Ian', 'Mateus']
+
 function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
@@ -408,7 +412,7 @@ export function VendasView({ pageId }: { pageId: string }) {
         {/* Lista */}
         <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[660px]">
+            <table className="w-full min-w-[780px]">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                   <th className="w-10 px-4 py-3">
@@ -423,6 +427,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   </th>
                   <th className="px-4 py-3">Nome</th>
                   <th className="w-28 px-4 py-3">SDR</th>
+                  <th className="w-32 px-4 py-3">Fechou</th>
                   <th className="w-24 px-4 py-3">Funil</th>
                   <th className="w-28 px-4 py-3">Contrato</th>
                   <th className="w-48 px-4 py-3 text-right">Valor MRR</th>
@@ -434,7 +439,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-10 text-center text-sm text-foreground/40">
+                    <td colSpan={10} className="px-4 py-10 text-center text-sm text-foreground/40">
                       {onlyPending ? 'Nenhuma venda pendente de pagamento neste período.' : 'Nenhuma venda neste período.'}
                     </td>
                   </tr>
@@ -458,6 +463,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                     <td />
                     <td className="px-4 py-3">Total</td>
+                    <td />
                     <td />
                     <td />
                     <td />
@@ -783,6 +789,22 @@ function VendaRow({
       </td>
       <td className={cn('px-4 py-3 text-sm text-foreground/70', row.vendaRevertida && 'line-through')}>
         {row.sdr || '—'}
+      </td>
+      <td className="px-4 py-3">
+        <select
+          value={row.closer}
+          onChange={(e) => leadBoardsService.updateRow(row.id, { closer: e.target.value })}
+          title="Quem fechou a venda. Diferente do SDR, entra também a comissão de fechamento pra essa pessoa."
+          className={cn(
+            'h-7 rounded-full border-0 px-2 text-[11px] font-medium outline-none',
+            row.closer && row.closer !== row.sdr
+              ? 'bg-accent/10 text-accent'
+              : 'bg-elevate/[0.06] text-foreground/40',
+          )}
+        >
+          <option value="">o próprio SDR</option>
+          {QUEM_FECHA.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
       </td>
       <td className="px-4 py-3">
         <button

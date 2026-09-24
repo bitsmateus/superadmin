@@ -87,6 +87,9 @@ export interface LeadRow {
   /** Espelho CRM ARTHUR -> CRM LUIS CLOSER: nas cópias, o id da lead original do Arthur; null em
    * lead comum. Serve pras métricas não contarem a mesma lead duas vezes. */
   espelhoOrigemId: string | null
+  /** Quem FECHOU a venda (só a aba Vendas usa). Diferente do SDR = a venda também gera a comissão
+   * de fechamento pra essa pessoa; vazio ou igual ao SDR = só a comissão de SDR. */
+  closer: string
 }
 
 /**
@@ -101,7 +104,7 @@ export type LeadRowField = Exclude<
   keyof LeadRow,
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
-  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId'
+  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId' | 'closer'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

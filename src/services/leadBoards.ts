@@ -54,6 +54,7 @@ type LeadRowRow = {
   veio_do_funil?: boolean
   contrato_assinado?: boolean
   espelho_origem_id?: string | null
+  closer?: string
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
@@ -75,6 +76,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     veioDoFunil: r.veio_do_funil ?? false,
     contratoAssinado: r.contrato_assinado ?? false,
     espelhoOrigemId: r.espelho_origem_id ?? null,
+    closer: r.closer ?? '',
   }
 }
 function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
@@ -103,6 +105,7 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('observacoes' in patch) row.observacoes = patch.observacoes
   if ('veioDoFunil' in patch) row.veio_do_funil = patch.veioDoFunil
   if ('contratoAssinado' in patch) row.contrato_assinado = patch.contratoAssinado
+  if ('closer' in patch) row.closer = patch.closer
   if ('boardId' in patch) row.board_id = patch.boardId
   if ('position' in patch) row.position = patch.position
   if ('createdAt' in patch) row.created_at = patch.createdAt
@@ -228,7 +231,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
     id: uuid(), boardId, nome: '', tipo: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
     status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
     dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
-    fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null,
+    fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, closer: '',
     position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
     mrrPendente: true, implPendente: true, observacoes: '', veioDoFunil: false,
     contratoAssinado: false, ...initial,

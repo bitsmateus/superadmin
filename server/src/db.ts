@@ -380,6 +380,9 @@ END $$`);
   // cópia no CRM do closer guarda aqui o id da lead original do Arthur. Índice único = no máximo
   // uma cópia por lead, mesmo se o gatilho rodar duas vezes.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS espelho_origem_id UUID`);
+  // Quem FECHOU a venda (aba Vendas): diferente do SDR = sai também a comissão de fechamento pra
+  // essa pessoa; igual ao SDR ou vazio = só a de SDR. Ver sincronizarComissaoCloser.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS closer TEXT NOT NULL DEFAULT ''`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_espelho_origem_idx
     ON lead_rows(espelho_origem_id) WHERE espelho_origem_id IS NOT NULL`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS sdr TEXT NOT NULL DEFAULT ''`);

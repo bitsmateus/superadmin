@@ -409,7 +409,11 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   tipo_venda_suporte TEXT,
   -- Espelho CRM ARTHUR -> CRM LUIS CLOSER: nas cópias, aponta pra lead original do Arthur. NULL
   -- em lead comum. Ver comentário em leadBoards.ts (syncEspelhoReuniaoAgendada).
-  espelho_origem_id UUID
+  espelho_origem_id UUID,
+  -- Quem FECHOU a venda (só usado na aba Vendas). Diferente do SDR = a venda gera também a
+  -- comissão de fechamento pra essa pessoa (ver sincronizarComissaoCloser). Igual ao SDR ou vazio
+  -- = só a comissão de SDR, que é o caso de quem agenda e fecha a mesma venda.
+  closer TEXT NOT NULL DEFAULT ''
 );
 -- Uma cópia por lead de origem — a trava que impede espelhar a mesma lead duas vezes.
 CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_espelho_origem_idx

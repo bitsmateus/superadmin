@@ -103,11 +103,11 @@ export async function recalcularComissaoCloser(month: string): Promise<void> {
 
 /**
  * Mantém a comissão de fechamento de UMA venda igual ao campo "Fechou" dela:
- *  - fechou alguém DIFERENTE do SDR  -> garante o lançamento de fechamento pra essa pessoa;
- *  - fechou o próprio SDR (ou vazio) -> não existe fechamento (é o caso do closer que agendou e
- *    fechou a mesma venda: pela regra combinada, ele recebe só a comissão de SDR);
- * e reaplica a faixa do mês nos dois casos, já que a quantidade de fechamentos muda o valor.
- * Uma venda nunca tem dois fechamentos: o lançamento é procurado pelo par (venda, tipo).
+ *  - tem alguém no campo -> garante o lançamento de fechamento pra essa pessoa, MESMO que seja o
+ *    próprio SDR da venda (agendar e fechar são dois trabalhos: quem faz os dois ganha nos dois);
+ *  - campo vazio         -> não existe fechamento (ninguém informado ainda).
+ * Reaplica a faixa do mês nos dois casos, já que a quantidade de fechamentos da pessoa muda o
+ * valor. Uma venda nunca tem dois fechamentos: o lançamento é procurado pelo par (venda, tipo).
  */
 async function sincronizarComissaoCloser(vendaLeadId: string) {
   try {
@@ -127,7 +127,7 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
       new Date().toISOString().slice(0, 7);
 
     const closer = (venda.closer ?? '').trim();
-    const deveTer = !!closer && closer.toLowerCase() !== (venda.sdr ?? '').trim().toLowerCase();
+    const deveTer = !!closer;
     const atual = await queryOne<{ id: string; person: string }>(
       `SELECT id, person FROM commission_entries WHERE venda_lead_id = $1 AND type_id = $2`,
       [vendaLeadId, typeId]

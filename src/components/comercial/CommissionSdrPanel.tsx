@@ -28,6 +28,11 @@ import { cn, initials } from '@/lib/utils'
 const ROLE_LABEL: Record<CommissionRole, string> = { sdr: 'SDR', suporte: 'Suporte' }
 const TOTAL_NAMES = ['Luis', 'Jean', 'Arthur', 'Joao']
 
+/** Comissão de quem FECHA a venda que veio do funil de outro SDR — valor escalonado por volume do
+ * mês, lançado sozinho pelo servidor (ver leadBoards.ts). Fica numa tabela à parte pra não
+ * misturar com a comissão de quem agendou. */
+export const CLOSER_TYPE_LABEL = 'Fechamento closer'
+
 function rateLabel(t: Pick<CommissionType, 'kind' | 'rateCents' | 'ratePercent'>): string {
   return t.kind === 'fixed' ? formatBRLCents(t.rateCents ?? 0) : `${t.ratePercent ?? 0}%`
 }
@@ -53,13 +58,27 @@ export function RegisterCommissionButton({ onClick }: { onClick: () => void }) {
 /** Comissão SDR (tabela dos lançamentos) + Total por pessoa — `entries` já vem filtrada pro
  * período que a tela host estiver mostrando (mesmo período da lista de Vendas). */
 export function CommissionSdrSection({
-  entries, types, periodLabel,
+  entries, types, periodLabel, somenteIncompletos = false,
 }: {
   entries: CommissionEntry[]
   types: CommissionType[]
   periodLabel: string
+  /** Ligado pelo painel de pendências: mostra só o que falta preencher (sem tipo ou sem valor). */
+  somenteIncompletos?: boolean
 }) {
-  const bySdr = React.useMemo(() => entries.filter((e) => e.role === 'sdr'), [entries])
+  const incompleto = (e: CommissionEntry) => !e.typeId || e.amountCents <= 0
+  const visiveis = React.useMemo(
+    () => (somenteIncompletos ? entries.filter(incompleto) : entries),
+    [entries, somenteIncompletos],
+  )
+  const bySdr = React.useMemo(
+    () => visiveis.filter((e) => e.role === 'sdr' && e.typeLabel !== CLOSER_TYPE_LABEL),
+    [visiveis],
+  )
+  const byCloser = React.useMemo(
+    () => visiveis.filter((e) => e.typeLabel === CLOSER_TYPE_LABEL),
+    [visiveis],
+  )
 
   const toggleStatus = (entry: CommissionEntry) => {
     void commissionsService.setEntryStatus(entry.id, entry.status === 'pago' ? 'pendente' : 'pago')
@@ -85,6 +104,16 @@ export function CommissionSdrSection({
   return (
     <div className="mt-4 space-y-4">
       <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} />
+
+      {byCloser.length > 0 && (
+        <EntriesTable
+          title="Comissão Closer (fechamento)"
+          entries={byCloser}
+          onToggle={toggleStatus}
+          types={types}
+          hint="Valor por faixa de volume do mês — o sistema lança e recalcula sozinho."
+        />
+      )}
 
       <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
         <div className="border-b border-line px-4 py-3">
@@ -135,20 +164,25 @@ function EntriesTable({
   entries,
   onToggle,
   types,
+  hint,
 }: {
   title: string
   entries: CommissionEntry[]
   onToggle: (entry: CommissionEntry) => void
   types: CommissionType[]
+  hint?: string
 }) {
   const total = entries.reduce((sum, e) => sum + e.amountCents, 0)
   const [deleting, setDeleting] = React.useState<CommissionEntry | null>(null)
 
   return (
     <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        <span className="text-sm font-semibold tabular-nums text-foreground">{formatBRLCents(total)}</span>
+      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          {hint && <p className="mt-0.5 text-xs text-foreground/45">{hint}</p>}
+        </div>
+        <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatBRLCents(total)}</span>
       </div>
       {entries.length === 0 ? (
         <p className="px-4 py-6 text-center text-xs text-foreground/40">Nenhum lançamento nesse período.</p>
@@ -327,8 +361,10 @@ function PersonCell({ entry }: { entry: CommissionEntry }) {
 }
 
 /** Tipo de um lançamento, editável no lugar — clica no texto, escolhe na lista (do mesmo papel do
- * lançamento) e já salva. Trocar o tipo NÃO recalcula o valor sozinho (o valor já lançado é
- * intencional; se precisar ajustar, edita o valor à parte). */
+ * lançamento) e já salva. Se o valor ainda estiver ZERADO (lançamento criado sozinho pela venda),
+ * escolher o tipo já preenche o valor da tabela — era o passo manual repetido em todo lançamento.
+ * Com valor já preenchido, trocar o tipo NÃO mexe nele: ali o número é intencional (ajuste caso a
+ * caso), e sobrescrever apagaria a correção de quem lançou. */
 function TypeCell({ entry, types }: { entry: CommissionEntry; types: CommissionType[] }) {
   const [editing, setEditing] = React.useState(false)
   const options = React.useMemo(
@@ -344,7 +380,16 @@ function TypeCell({ entry, types }: { entry: CommissionEntry; types: CommissionT
         onBlur={() => setEditing(false)}
         onChange={(ev) => {
           const type = options.find((t) => t.id === ev.target.value)
-          if (type) void commissionsService.updateEntry(entry.id, { typeId: type.id, typeLabel: type.label })
+          if (type) {
+            const patch: { typeId: string; typeLabel: string; amountCents?: number } = {
+              typeId: type.id,
+              typeLabel: type.label,
+            }
+            if (entry.amountCents <= 0 && type.kind === 'fixed' && (type.rateCents ?? 0) > 0) {
+              patch.amountCents = type.rateCents ?? 0
+            }
+            void commissionsService.updateEntry(entry.id, patch)
+          }
           setEditing(false)
         }}
         className="h-8 rounded-md border border-accent/40 bg-surface px-2 text-xs text-foreground outline-none"

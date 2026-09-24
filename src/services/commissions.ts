@@ -29,8 +29,11 @@ export interface CommissionEntry {
   amountCents: number
   month: string
   status: CommissionStatus
-  /** Mesmo padrão de contratoAssinado na aba Vendas — cópia independente, não sincroniza sozinha. */
+  /** Mesmo padrão de contratoAssinado na aba Vendas — mas agora acompanha a venda quando o
+   * lançamento está ligado a ela (ver vendaLeadId). */
   contratoAssinado: boolean
+  /** Linha da venda que gerou o lançamento. null = registrado à mão em "Registrar comissão". */
+  vendaLeadId: string | null
   createdAt: string
 }
 
@@ -41,7 +44,7 @@ type TypeRow = {
 type EntryRow = {
   id: string; nome: string; person: string; role: CommissionRole; type_id: string | null; type_label: string
   reference: string; base_value_cents: number | null; amount_cents: number; month: string
-  status: CommissionStatus; contrato_assinado: boolean; created_at: string
+  status: CommissionStatus; contrato_assinado: boolean; venda_lead_id: string | null; created_at: string
 }
 
 function rowToType(r: TypeRow): CommissionType {
@@ -55,7 +58,8 @@ function rowToEntry(r: EntryRow): CommissionEntry {
   return {
     id: r.id, nome: r.nome ?? '', person: r.person, role: r.role, typeId: r.type_id, typeLabel: r.type_label,
     reference: r.reference ?? '', baseValueCents: r.base_value_cents ?? null, amountCents: r.amount_cents,
-    month: r.month, status: r.status, contratoAssinado: r.contrato_assinado ?? false, createdAt: r.created_at,
+    month: r.month, status: r.status, contratoAssinado: r.contrato_assinado ?? false,
+    vendaLeadId: r.venda_lead_id ?? null, createdAt: r.created_at,
   }
 }
 

@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
+import { CLOSER_TYPE_LABEL, recalcularComissaoCloser } from './leadBoards.js';
 
 /**
  * Comissões (aba "Gestão Interna", em Financeiro) — feature isolada: só lê contagens de
@@ -119,9 +120,15 @@ export async function commissionRoutes(app: FastifyInstance) {
     '/api/commission-entries/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const existing = await queryOne('SELECT id FROM commission_entries WHERE id = $1', [req.params.id]);
+      const existing = await queryOne<{ id: string; month: string; type_label: string }>(
+        'SELECT id, month, type_label FROM commission_entries WHERE id = $1',
+        [req.params.id]
+      );
       if (!existing) return reply.status(404).send({ message: 'Lançamento não encontrado' });
       await query('DELETE FROM commission_entries WHERE id = $1', [req.params.id]);
+      // Excluir um fechamento pode DERRUBAR a faixa do mês (o valor é escalonado por volume e vale
+      // retroativo), então os outros fechamentos do mês precisam ser reavaliados.
+      if (existing.type_label === CLOSER_TYPE_LABEL) void recalcularComissaoCloser(existing.month);
       return reply.status(204).send();
     }
   );

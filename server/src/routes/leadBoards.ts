@@ -26,6 +26,99 @@ async function createCommissionStub(nome: string, sdr: string, month: string, ve
 }
 
 /**
+ * Comissão do CLOSER — quem FECHA uma venda que veio do funil de OUTRO SDR (hoje o Luis, que
+ * recebe as leads agendadas pelo Arthur através do espelho). É diferente da comissão de SDR:
+ *  - o valor é escalonado pelo VOLUME de fechamentos do mês (1-14: R$60, 15-19: R$70, 20-29: R$90,
+ *    30-35: R$100, 36-39: R$110, 40-45: R$120, 46+: R$130 por venda);
+ *  - e a faixa vale RETROATIVO: ao chegar na 15ª venda do mês, as 14 anteriores também passam a
+ *    valer R$70 (por isso todo fechamento novo recalcula o mês inteiro).
+ * Venda do próprio CRM dele (onde é SDR e closer ao mesmo tempo) NÃO entra aqui: essa gera só a
+ * comissão de SDR, e também não conta pra subir a faixa.
+ */
+const CLOSER_PERSON = 'Luis';
+export const CLOSER_TYPE_LABEL = 'Fechamento closer';
+const CLOSER_FAIXAS: { ateQtd: number; valorCents: number }[] = [
+  { ateQtd: 14, valorCents: 6000 },
+  { ateQtd: 19, valorCents: 7000 },
+  { ateQtd: 29, valorCents: 9000 },
+  { ateQtd: 35, valorCents: 10000 },
+  { ateQtd: 39, valorCents: 11000 },
+  { ateQtd: 45, valorCents: 12000 },
+  { ateQtd: Number.MAX_SAFE_INTEGER, valorCents: 13000 },
+];
+
+function valorCloserPorVolume(qtd: number): number {
+  const faixa = CLOSER_FAIXAS.find((f) => qtd <= f.ateQtd);
+  return (faixa ?? CLOSER_FAIXAS[CLOSER_FAIXAS.length - 1]).valorCents;
+}
+
+/** O tipo "Fechamento closer" é criado sozinho na primeira vez — assim ele também aparece em
+ * "Tipos de comissão" pra quem quiser conferir/renomear. */
+async function garantirTipoCloser(): Promise<string | null> {
+  try {
+    const existente = await queryOne<{ id: string }>(
+      `SELECT id FROM commission_types WHERE role = 'sdr' AND label = $1 LIMIT 1`,
+      [CLOSER_TYPE_LABEL]
+    );
+    if (existente) return existente.id;
+    const [{ max }] = await query<{ max: number | null }>(
+      `SELECT MAX(position) as max FROM commission_types WHERE role = 'sdr'`
+    );
+    const [novo] = await query<{ id: string }>(
+      `INSERT INTO commission_types (role, label, kind, rate_cents, position)
+       VALUES ('sdr',$1,'fixed',$2,$3) RETURNING id`,
+      [CLOSER_TYPE_LABEL, CLOSER_FAIXAS[0].valorCents, (max ?? -1) + 1]
+    );
+    return novo.id;
+  } catch (err) {
+    console.error('[commissions] falha ao garantir o tipo de comissão do closer', err);
+    return null;
+  }
+}
+
+/** Reaplica a faixa do mês em TODOS os fechamentos daquele mês (o valor é retroativo). */
+export async function recalcularComissaoCloser(month: string): Promise<void> {
+  try {
+    const typeId = await garantirTipoCloser();
+    if (!typeId) return;
+    const [{ qtd }] = await query<{ qtd: number }>(
+      `SELECT count(*)::int AS qtd FROM commission_entries WHERE month = $1 AND type_id = $2`,
+      [month, typeId]
+    );
+    const valor = valorCloserPorVolume(qtd);
+    await query(
+      `UPDATE commission_entries SET amount_cents = $1, updated_at = NOW()
+       WHERE month = $2 AND type_id = $3 AND amount_cents <> $1`,
+      [valor, month, typeId]
+    );
+  } catch (err) {
+    console.error('[commissions] falha ao recalcular a faixa do closer', month, err);
+  }
+}
+
+/** Lança a comissão de fechamento de uma venda que veio do funil de outro SDR. Uma por venda. */
+async function createCloserCommission(nome: string, month: string, vendaLeadId: string) {
+  try {
+    const typeId = await garantirTipoCloser();
+    if (!typeId) return;
+    const jaTem = await queryOne<{ id: string }>(
+      `SELECT id FROM commission_entries WHERE venda_lead_id = $1 AND type_id = $2`,
+      [vendaLeadId, typeId]
+    );
+    if (jaTem) return;
+    await query(
+      `INSERT INTO commission_entries
+        (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month, status, contrato_assinado, venda_lead_id)
+       VALUES ($1,$2,'sdr',$3,$4,'',NULL,$5,$6,'pendente',false,$7)`,
+      [nome, CLOSER_PERSON, typeId, CLOSER_TYPE_LABEL, CLOSER_FAIXAS[0].valorCents, month, vendaLeadId]
+    );
+    await recalcularComissaoCloser(month);
+  } catch (err) {
+    console.error('[commissions] falha ao lançar a comissão do closer', nome, err);
+  }
+}
+
+/**
  * Resolve a allowlist de quadros de um usuário restrito. A permissão de menu é só "comercial"
  * (tudo ou nada — as abas viraram gerenciáveis, não dá mais pra restringir por aba individual
  * nessa camada); a granularidade fina é por ABA inteira (user_page_access) — ex.: um SDR só
@@ -201,7 +294,18 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
     );
     // venda_lead_id liga o lançamento de comissão à linha da venda — é o que faz renomear a venda
     // (ou marcar o contrato como assinado) chegar sozinho na Comissão SDR.
-    void createCommissionStub(lead.nome, lead.sdr, new Date().toISOString().slice(0, 7), vendaRow?.id ?? null);
+    const mesDaVenda = new Date().toISOString().slice(0, 7);
+    void createCommissionStub(lead.nome, lead.sdr, mesDaVenda, vendaRow?.id ?? null);
+
+    // Lead que foi espelhada pro CRM do closer = quem fechou foi ele, não o SDR que agendou. Então
+    // a mesma venda gera DUAS comissões: a de SDR (acima) e a de fechamento (aqui).
+    if (vendaRow?.id) {
+      const temEspelho = await queryOne<{ id: string }>(
+        'SELECT id FROM lead_rows WHERE espelho_origem_id = $1',
+        [leadRowId]
+      );
+      if (temEspelho) void createCloserCommission(lead.nome, mesDaVenda, vendaRow.id);
+    }
   } catch (err) {
     console.error('[vendas] falha ao sincronizar venda do lead', leadRowId, err);
   }

@@ -112,9 +112,10 @@ export async function recalcularComissaoCloser(month: string): Promise<void> {
 async function sincronizarComissaoCloser(vendaLeadId: string) {
   try {
     const venda = await queryOne<{
-      nome: string; sdr: string; closer: string; fechamento: string; created_at: string; is_vendas: boolean;
+      nome: string; sdr: string; closer: string; fechamento: string; created_at: string;
+      contrato_assinado: boolean; is_vendas: boolean;
     }>(
-      `SELECT r.nome, r.sdr, r.closer, r.fechamento, r.created_at, lb.is_vendas
+      `SELECT r.nome, r.sdr, r.closer, r.fechamento, r.created_at, r.contrato_assinado, lb.is_vendas
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id WHERE r.id = $1`,
       [vendaLeadId]
     );
@@ -135,10 +136,13 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
 
     if (deveTer && !atual) {
       await query(
+        // Nasce com o MESMO estado de contrato da venda — senão um fechamento lançado depois de o
+        // contrato já ter sido assinado aparecia como pendente e exigia clicar de novo.
         `INSERT INTO commission_entries
           (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month, status, contrato_assinado, venda_lead_id)
-         VALUES ($1,$2,'sdr',$3,$4,'',NULL,$5,$6,'pendente',false,$7)`,
-        [venda.nome, closer, typeId, CLOSER_TYPE_LABEL, CLOSER_FAIXAS[0].valorCents, month, vendaLeadId]
+         VALUES ($1,$2,'sdr',$3,$4,'',NULL,$5,$6,'pendente',$7,$8)`,
+        [venda.nome, closer, typeId, CLOSER_TYPE_LABEL, CLOSER_FAIXAS[0].valorCents, month,
+         venda.contrato_assinado ?? false, vendaLeadId]
       );
     } else if (deveTer && atual && atual.person !== closer) {
       await query(`UPDATE commission_entries SET person = $1, updated_at = NOW() WHERE id = $2`, [closer, atual.id]);

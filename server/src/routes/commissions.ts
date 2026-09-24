@@ -110,7 +110,7 @@ export async function commissionRoutes(app: FastifyInstance) {
       sets.push(`updated_at = NOW()`);
 
       params.push(req.params.id);
-      const [entry] = await query<{ month: string; type_label: string }>(
+      const [entry] = await query<{ month: string; type_label: string; venda_lead_id: string | null }>(
         `UPDATE commission_entries SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
         params
       );
@@ -119,6 +119,18 @@ export async function commissionRoutes(app: FastifyInstance) {
       // qualquer caminho, o mês inteiro é reavaliado pela faixa de volume.
       if (entry.type_label === CLOSER_TYPE_LABEL || req.body.typeLabel === CLOSER_TYPE_LABEL) {
         void recalcularComissaoCloser(entry.month);
+      }
+      // "Contrato assinado" é um estado da VENDA, não de cada lançamento: marcar em qualquer lugar
+      // (aqui, na comissão do SDR ou na do closer) atualiza a venda e os outros lançamentos dela,
+      // pra não precisar clicar o mesmo contrato três vezes.
+      if (req.body.contratoAssinado !== undefined && entry.venda_lead_id) {
+        const valor = req.body.contratoAssinado;
+        void query('UPDATE lead_rows SET contrato_assinado = $1, updated_at = NOW() WHERE id = $2', [valor, entry.venda_lead_id])
+          .catch((err) => console.error('[commissions] falha ao propagar contrato pra venda', entry.venda_lead_id, err));
+        void query(
+          'UPDATE commission_entries SET contrato_assinado = $1, updated_at = NOW() WHERE venda_lead_id = $2 AND contrato_assinado <> $1',
+          [valor, entry.venda_lead_id]
+        ).catch((err) => console.error('[commissions] falha ao propagar contrato pros outros lançamentos', entry.venda_lead_id, err));
       }
       return entry;
     }

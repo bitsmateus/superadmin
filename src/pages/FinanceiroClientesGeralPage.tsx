@@ -11,7 +11,6 @@ import { DatePickerField } from '@/components/comercial/DatePickerField'
 import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt } from '@/hooks/useMonthFilter'
 import { useClients } from '@/hooks/useClients'
 import { useClientCancellations } from '@/hooks/useClientCancellations'
-import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
 import { clientCancellationsService, type ClientCancellation } from '@/services/clientCancellations'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
@@ -55,14 +54,11 @@ function centsDoCliente(valor: number | undefined): number {
 export function FinanceiroClientesGeralPage() {
   const clients = useClients()
   const cancelamentos = useClientCancellations()
-  const { data: profiles } = useTeamProfiles()
-  const atendentes = React.useMemo(() => profileOptions(profiles), [profiles])
 
   const [aba, setAba] = React.useState<Aba>('clientes')
   const [mes, setMes] = React.useState(currentMonthId())
   const [busca, setBusca] = React.useState('')
   const [status, setStatus] = React.useState<FiltroStatus>('ativos')
-  const [atendenteFiltro, setAtendenteFiltro] = React.useState('')
   const [drawerId, setDrawerId] = React.useState<string | null>(null)
   const [cancelando, setCancelando] = React.useState<Client | null>(null)
 
@@ -102,13 +98,12 @@ export function FinanceiroClientesGeralPage() {
         if (status === 'cancelados') return c.stage === 'churned'
         return true
       })
-      .filter((c) => (atendenteFiltro ? (c.responsavelEntrega ?? '') === atendenteFiltro : true))
       .filter((c) => {
         if (!termo) return true
-        return [c.name, c.company, c.phone, c.responsavelEntrega].some((v) => (v ?? '').toLowerCase().includes(termo))
+        return [c.name, c.company, c.phone].some((v) => (v ?? '').toLowerCase().includes(termo))
       })
       .sort((a, b) => centsDoCliente(b.monthlyValue) - centsDoCliente(a.monthlyValue) || (a.name ?? '').localeCompare(b.name ?? ''))
-  }, [clients, busca, status, atendenteFiltro])
+  }, [clients, busca, status])
 
   const semValorComSugestao = React.useMemo(
     () => lista.filter((c) => (c.monthlyValue ?? 0) === 0 && sugestoes[c.id]?.mrrCents),
@@ -196,7 +191,7 @@ export function FinanceiroClientesGeralPage() {
                 <Input
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar por cliente, empresa, telefone ou atendente…"
+                  placeholder="Buscar por cliente, empresa ou telefone…"
                   className="pl-9"
                 />
               </div>
@@ -208,14 +203,6 @@ export function FinanceiroClientesGeralPage() {
                 <option value="ativos">Só ativos</option>
                 <option value="cancelados">Só cancelados</option>
                 <option value="todos">Todos</option>
-              </select>
-              <select
-                value={atendenteFiltro}
-                onChange={(e) => setAtendenteFiltro(e.target.value)}
-                className="rounded-lg border border-line bg-card px-3 py-2 text-sm text-foreground outline-none"
-              >
-                <option value="">Todos os atendentes</option>
-                {atendentes.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
               </select>
               {semValorComSugestao.length > 0 && (
                 <Button
@@ -238,7 +225,6 @@ export function FinanceiroClientesGeralPage() {
                       <th className="px-4 py-3">Cliente</th>
                       <th className="px-4 py-3">Empresa</th>
                       <th className="w-40 px-4 py-3">Telefone</th>
-                      <th className="w-44 px-4 py-3">Atendente</th>
                       <th className="w-40 px-4 py-3 text-right">Mensalidade</th>
                       <th className="w-40 px-4 py-3 text-right">Implementação</th>
                       <th className="w-28 px-4 py-3">Situação</th>
@@ -248,7 +234,7 @@ export function FinanceiroClientesGeralPage() {
                   <tbody>
                     {lista.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-10 text-center text-sm text-foreground/40">
+                        <td colSpan={7} className="px-4 py-10 text-center text-sm text-foreground/40">
                           Nenhum cliente com esses filtros.
                         </td>
                       </tr>
@@ -257,7 +243,6 @@ export function FinanceiroClientesGeralPage() {
                       <LinhaCliente
                         key={c.id}
                         cliente={c}
-                        atendentes={atendentes}
                         sugestao={sugestoes[c.id]}
                         onAbrir={() => setDrawerId(c.id)}
                         onCancelar={() => setCancelando(c)}
@@ -269,7 +254,7 @@ export function FinanceiroClientesGeralPage() {
                     <tfoot>
                       <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                         <td className="px-4 py-3">Total ({lista.length})</td>
-                        <td /><td /><td />
+                        <td /><td />
                         <td className="px-4 py-3 text-right tabular-nums text-success">
                           {formatBRLCents(lista.reduce((a, c) => a + centsDoCliente(c.monthlyValue), 0))}
                         </td>
@@ -335,9 +320,8 @@ function Card({ icon, label, value, hint, tone }: {
   )
 }
 
-function LinhaCliente({ cliente, atendentes, sugestao, onAbrir, onCancelar, onAplicarSugestao }: {
+function LinhaCliente({ cliente, sugestao, onAbrir, onCancelar, onAplicarSugestao }: {
   cliente: Client
-  atendentes: { value: string; label: string }[]
   sugestao: Sugestao | undefined
   onAbrir: () => void
   onCancelar: () => void
@@ -361,19 +345,6 @@ function LinhaCliente({ cliente, atendentes, sugestao, onAbrir, onCancelar, onAp
       </td>
       <td className="px-4 py-2.5 text-sm text-foreground/70">{cliente.company || '—'}</td>
       <td className="px-4 py-2.5 text-sm tabular-nums text-foreground/60">{cliente.phone || '—'}</td>
-      <td className="px-4 py-2.5">
-        <select
-          value={cliente.responsavelEntrega ?? ''}
-          onChange={(e) => void db.updateClient(cliente.id, { responsavelEntrega: e.target.value || undefined })}
-          className={cn(
-            'w-full rounded-md bg-elevate/[0.05] px-2 py-1 text-sm outline-none',
-            cliente.responsavelEntrega ? 'text-foreground' : 'text-foreground/35',
-          )}
-        >
-          <option value="">— sem atendente —</option>
-          {atendentes.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
-        </select>
-      </td>
       <td className="px-4 py-2.5 text-right">
         <CelulaValor
           cents={centsDoCliente(cliente.monthlyValue)}

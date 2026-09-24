@@ -229,6 +229,7 @@ CREATE TABLE IF NOT EXISTS clients (
   chatbot_flow_generated_at TIMESTAMPTZ,
   chatbot_flow_published_at TIMESTAMPTZ,
   tenant_queues JSONB,
+  n8n_flow JSONB,
   platform_app BOOLEAN NOT NULL DEFAULT FALSE,
   platform_web BOOLEAN NOT NULL DEFAULT FALSE,
   platform_chat BOOLEAN NOT NULL DEFAULT FALSE,

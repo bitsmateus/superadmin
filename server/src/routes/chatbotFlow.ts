@@ -5,6 +5,7 @@ import { generateFlowSpec } from '../lib/flowAi.js';
 import { buildFlowJson, normalizeQueueName } from '../lib/flowBuilder.js';
 import { validateSpec, validateJson } from '../lib/flowValidator.js';
 import type { FlowSpec, FlowStep } from '../lib/flowSpec.js';
+import { buildN8nWorkflow, generateAgentPrompt, sanitizePrompt, slugify, type N8nSector } from '../lib/n8nFlow.js';
 
 type ClientRow = {
   id: string;
@@ -17,6 +18,7 @@ type ClientRow = {
   tenant_api_id: string | null;
   tenant_api_token: string | null;
   tenant_queues: Array<{ name: string; id: string }> | null;
+  n8n_flow: N8nStored | null;
   chatbot_flow_spec: FlowSpec | null;
   chatbot_flow_json: unknown;
   chatbot_flow_warnings: unknown;
@@ -26,6 +28,17 @@ type ClientRow = {
 };
 
 type GenJob = { running: boolean; error?: string; errors?: string[] };
+
+/** O que fica salvo em clients.n8n_flow. */
+type N8nStored = {
+  agentName: string;
+  prompt: string;
+  warnings: string[];
+  json: Record<string, unknown>;
+  generatedAt: string;
+  webhookPath: string;
+};
+const n8nJobs = new Map<string, GenJob>();
 const generating = new Map<string, GenJob>();
 
 async function addClientLog(id: string, action: string): Promise<void> {
@@ -277,6 +290,151 @@ export async function chatbotFlowRoutes(app: FastifyInstance) {
 
       await query('UPDATE clients SET chatbot_flow_published_at = NOW() WHERE id = $1', [req.params.id]);
       await addClientLog(req.params.id, 'Fluxo do chatbot enviado ao tenant');
+      return { ok: true };
+    },
+  );
+
+  // ── IA no n8n: prompt adaptado ao briefing + workflow importável ─────────────────
+  /** Setores do cliente (briefing + filas gravadas) com queueId quando conhecido. */
+  async function n8nContext(c: ClientRow) {
+    const tenant = await resolveTenant(c);
+    const queueMap = { ...(tenant ? await fetchQueueMap(tenant) : {}), ...storedQueueMap(c) };
+    const b = (c.briefing_data ?? {}) as { departments?: string[]; users?: Array<{ sectors?: string[]; sector?: string }> };
+    const names = new Map<string, string>();
+    for (const q of c.tenant_queues ?? []) if (q?.name) names.set(normalizeQueueName(q.name), q.name);
+    for (const d of b.departments ?? []) if (d?.trim()) names.set(normalizeQueueName(d), d.trim());
+    for (const u of b.users ?? []) {
+      for (const s of u.sectors ?? (u.sector ? [u.sector] : [])) if (s?.trim()) names.set(normalizeQueueName(s), s.trim());
+    }
+    names.delete('pendente');
+    const sectors: N8nSector[] = [...names.entries()].map(([norm, name]) => ({
+      key: slugify(name),
+      name,
+      queueId: queueMap[norm] ?? null,
+    }));
+    return { tenant, sectors, pendingQueueId: queueMap['pendente'] ?? null };
+  }
+
+  function n8nChannelInfo(c: ClientRow, servers: Array<{ id?: string; name?: string }>) {
+    const server = servers.find((s) => s.id === c.tenant_server_id);
+    if (!server || !c.tenant_api_id || !c.tenant_api_token) return null;
+    const nums = ((c.briefing_data as { whatsappNumbers?: string[] } | null)?.whatsappNumbers ?? []).filter(Boolean);
+    return {
+      serverId: c.tenant_server_id,
+      serverName: server.name ?? c.tenant_server_id,
+      sessionType: c.tenant_server_id === 'chat' ? 'uazapi' : 'evo',
+      apiId: c.tenant_api_id,
+      numbers: nums,
+    };
+  }
+
+  app.get<{ Params: { id: string } }>(
+    '/api/clients/:id/n8n-flow',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const c = await queryOne<ClientRow>('SELECT * FROM clients WHERE id = $1', [req.params.id]);
+      if (!c) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      const settings = await queryOne<{ servers: Array<{ id?: string; name?: string }> | null }>(
+        'SELECT servers FROM settings WHERE id = true',
+      );
+      const job = n8nJobs.get(req.params.id);
+      const stored = c.n8n_flow;
+      return {
+        generating: Boolean(job?.running),
+        generateError: job && !job.running ? job.error ?? null : null,
+        channel: n8nChannelInfo(c, settings?.servers ?? []),
+        flow: stored
+          ? {
+              agentName: stored.agentName,
+              prompt: stored.prompt,
+              warnings: stored.warnings,
+              json: stored.json,
+              generatedAt: stored.generatedAt,
+              webhookPath: stored.webhookPath,
+            }
+          : null,
+      };
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { notes?: string } }>(
+    '/api/clients/:id/n8n-flow/generate',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const id = req.params.id;
+      const c = await queryOne<ClientRow>('SELECT * FROM clients WHERE id = $1', [id]);
+      if (!c) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      if (!c.tenant_api_id || !c.tenant_api_token || !c.tenant_server_id) {
+        return reply.status(400).send({ message: 'Crie o tenant e o canal antes: falta apiId/token do canal.' });
+      }
+      if (n8nJobs.get(id)?.running) return reply.status(202).send({ status: 'running' });
+
+      const notes = req.body?.notes;
+      const job: GenJob = { running: true };
+      n8nJobs.set(id, job);
+      void (async () => {
+        try {
+          const ctx = await n8nContext(c);
+          if (!ctx.tenant) throw new Error('Servidor do tenant não encontrado nas configurações.');
+          const company = c.company || c.name || 'Empresa';
+          const agent = await generateAgentPrompt({ company, briefing: c.briefing_data, sectors: ctx.sectors, extraNotes: notes });
+          const webhookPath = slugify(company) + '-ia';
+          const built = buildN8nWorkflow({
+            company,
+            agentName: agent.agentName,
+            systemPrompt: agent.systemPrompt,
+            apiBase: `${ctx.tenant.baseUrl}/v2/api/external/${ctx.tenant.apiId}`,
+            token: ctx.tenant.token,
+            sectors: ctx.sectors,
+            pendingQueueId: ctx.pendingQueueId,
+            webhookPath,
+          });
+          const stored: N8nStored = {
+            agentName: agent.agentName,
+            prompt: agent.systemPrompt,
+            warnings: [...agent.warnings, ...built.warnings],
+            json: built.json,
+            generatedAt: new Date().toISOString(),
+            webhookPath,
+          };
+          await query('UPDATE clients SET n8n_flow = $1 WHERE id = $2', [JSON.stringify(stored), id]);
+          await addClientLog(id, 'Fluxo n8n (IA) gerado');
+        } catch (err) {
+          job.error = `Falha ao gerar: ${(err as Error).message}`;
+        } finally {
+          job.running = false;
+        }
+      })();
+      return reply.status(202).send({ status: 'running' });
+    },
+  );
+
+  // Edita o prompt à mão e rebuilda o workflow (sem IA).
+  app.put<{ Params: { id: string }; Body: { prompt: string } }>(
+    '/api/clients/:id/n8n-flow/prompt',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const c = await queryOne<ClientRow>('SELECT * FROM clients WHERE id = $1', [req.params.id]);
+      if (!c) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      const stored = c.n8n_flow;
+      const prompt = req.body?.prompt?.trim();
+      if (!stored) return reply.status(400).send({ message: 'Gere o fluxo primeiro.' });
+      if (!prompt) return reply.status(400).send({ message: 'Envie { prompt }.' });
+      const ctx = await n8nContext(c);
+      if (!ctx.tenant) return reply.status(400).send({ message: 'Servidor do tenant não encontrado nas configurações.' });
+      const clean = sanitizePrompt(prompt);
+      const built = buildN8nWorkflow({
+        company: c.company || c.name || 'Empresa',
+        agentName: stored.agentName,
+        systemPrompt: clean,
+        apiBase: `${ctx.tenant.baseUrl}/v2/api/external/${ctx.tenant.apiId}`,
+        token: ctx.tenant.token,
+        sectors: ctx.sectors,
+        pendingQueueId: ctx.pendingQueueId,
+        webhookPath: stored.webhookPath,
+      });
+      const next: N8nStored = { ...stored, prompt: clean, json: built.json, warnings: built.warnings, generatedAt: new Date().toISOString() };
+      await query('UPDATE clients SET n8n_flow = $1 WHERE id = $2', [JSON.stringify(next), req.params.id]);
       return { ok: true };
     },
   );

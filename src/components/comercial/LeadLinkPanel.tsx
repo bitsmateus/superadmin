@@ -6,30 +6,13 @@ import { Modal } from '@/components/ui/Modal'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { SupportLeadCard } from '@/components/comercial/SupportLeadCard'
 import { useAllLeadRows, useLeadRow } from '@/hooks/useLeadBoards'
-import { suggestCrmLead } from '@/services/crmLeadLookup'
+import { fetchClientContract, suggestCrmLead } from '@/services/crmLeadLookup'
 import { fetchSupportLeadView, type SupportLeadInfo } from '@/services/leadRowLookup'
 
-/** Vínculo do contrato com o card do CRM (SDR) do mesmo prospect — não existe ligação automática
- * garantida entre a ficha de cadastro e o CRM (cadastros separados, às vezes sem telefone
- * preenchido no CRM), então: sugere um vínculo por telefone/nome quando possível, mas SEMPRE deixa
- * a pessoa confirmar/trocar/remover à mão (contract.vendaLeadId) — inclusive pra contrato avulso,
- * sem lead nenhuma vindo do funil. "Ver dados do lead" abre o card completo de verdade
- * (LeadDetailModal, o mesmo do quadro) pra quem tem acesso ao Comercial; quem não tem (ex.: o
- * Suporte, no Pipeline) cai automaticamente pra um card de leitura pontual (SupportLeadCard) —
- * sem isso, o painel inteiro ficava mostrando "nenhuma lead vinculada" pro Suporte mesmo quando
- * existia um vínculo de verdade, só porque useLeadRow depende da allowlist de quadros. */
-export function LeadLinkPanel({
-  clientId,
-  vendaLeadId,
-  onLink,
-}: {
-  clientId: string | null
-  vendaLeadId: string | null
-  onLink: (leadId: string | null) => void
-}) {
+/** Resolve a lead do CRM ligada ao cliente (vínculo salvo ou sugestão automática) e busca os dados
+ * dela — pelo quadro do Comercial se a pessoa tem acesso, ou por leitura pontual (Suporte). */
+function useEffectiveLead(clientId: string | null, vendaLeadId: string | null) {
   const [suggestedId, setSuggestedId] = React.useState<string | null>(null)
-  const [pickerOpen, setPickerOpen] = React.useState(false)
-  const [detailLeadId, setDetailLeadId] = React.useState<string | null>(null)
   const [fallbackLead, setFallbackLead] = React.useState<SupportLeadInfo | null>(null)
 
   React.useEffect(() => {
@@ -53,10 +36,68 @@ export function LeadLinkPanel({
     return () => { cancelled = true }
   }, [effectiveId, row])
 
-  const isSuggestion = !vendaLeadId && !!suggestedId
-  const displayName = row?.nome || row?.empresa || fallbackLead?.nome || fallbackLead?.empresa
-  const displaySdr = row?.sdr || fallbackLead?.sdr
-  const hasLead = !!effectiveId && !!(row || fallbackLead)
+  return {
+    effectiveId,
+    row,
+    isSuggestion: !vendaLeadId && !!suggestedId,
+    displayName: row?.nome || row?.empresa || fallbackLead?.nome || fallbackLead?.empresa,
+    displaySdr: row?.sdr || fallbackLead?.sdr,
+    hasLead: !!effectiveId && !!(row || fallbackLead),
+  }
+}
+
+/** Botão "Ver dados do lead" avulso — abre o mesmo card da aba "Lead do CRM", pra usar em outras
+ * telas do cliente (ex.: Briefing). Some sozinho se o cliente não tem lead ligada. */
+export function LeadDataButton({ clientId }: { clientId: string }) {
+  const [vendaLeadId, setVendaLeadId] = React.useState<string | null>(null)
+  const [detailLeadId, setDetailLeadId] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    fetchClientContract(clientId)
+      .then((res) => { if (!cancelled) setVendaLeadId(res.vendaLeadId) })
+      .catch(() => { if (!cancelled) setVendaLeadId(null) })
+    return () => { cancelled = true }
+  }, [clientId])
+
+  const { effectiveId, row, hasLead } = useEffectiveLead(clientId, vendaLeadId)
+  if (!hasLead) return null
+
+  return (
+    <>
+      <Button size="sm" variant="secondary" onClick={() => setDetailLeadId(effectiveId)}>
+        Ver dados do lead
+      </Button>
+      {row ? (
+        <LeadDetailModal leadRowId={detailLeadId} onClose={() => setDetailLeadId(null)} />
+      ) : (
+        <SupportLeadCard leadId={detailLeadId} onClose={() => setDetailLeadId(null)} />
+      )}
+    </>
+  )
+}
+
+/** Vínculo do contrato com o card do CRM (SDR) do mesmo prospect — não existe ligação automática
+ * garantida entre a ficha de cadastro e o CRM (cadastros separados, às vezes sem telefone
+ * preenchido no CRM), então: sugere um vínculo por telefone/nome quando possível, mas SEMPRE deixa
+ * a pessoa confirmar/trocar/remover à mão (contract.vendaLeadId) — inclusive pra contrato avulso,
+ * sem lead nenhuma vindo do funil. "Ver dados do lead" abre o card completo de verdade
+ * (LeadDetailModal, o mesmo do quadro) pra quem tem acesso ao Comercial; quem não tem (ex.: o
+ * Suporte, no Pipeline) cai automaticamente pra um card de leitura pontual (SupportLeadCard) —
+ * sem isso, o painel inteiro ficava mostrando "nenhuma lead vinculada" pro Suporte mesmo quando
+ * existia um vínculo de verdade, só porque useLeadRow depende da allowlist de quadros. */
+export function LeadLinkPanel({
+  clientId,
+  vendaLeadId,
+  onLink,
+}: {
+  clientId: string | null
+  vendaLeadId: string | null
+  onLink: (leadId: string | null) => void
+}) {
+  const [pickerOpen, setPickerOpen] = React.useState(false)
+  const [detailLeadId, setDetailLeadId] = React.useState<string | null>(null)
+  const { effectiveId, row, isSuggestion, displayName, displaySdr, hasLead } = useEffectiveLead(clientId, vendaLeadId)
 
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line/60 p-3">

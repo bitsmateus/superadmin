@@ -314,6 +314,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         ...(hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
         ...(hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),
         { to: '/financeiro/contas-a-pagar', label: 'Contas a Pagar', icon: Wallet },
+        { to: '/financeiro/clientes-geral', label: 'CLIENTES GERAL', icon: Users },
       ]
     : []
   // Cada grupo já sai na ordem que ESSA pessoa montou arrastando (ver useMenuArrastavel).

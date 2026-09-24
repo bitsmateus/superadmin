@@ -56,6 +56,9 @@ const FinanceiroVendasPage = React.lazy(() =>
 const FinanceiroContratoPage = React.lazy(() =>
   import('./pages/FinanceiroContratoPage').then((m) => ({ default: m.FinanceiroContratoPage })),
 )
+const FinanceiroClientesGeralPage = React.lazy(() =>
+  import('./pages/FinanceiroClientesGeralPage').then((m) => ({ default: m.FinanceiroClientesGeralPage })),
+)
 const FinanceiroContasPagarPage = React.lazy(() =>
   import('./pages/FinanceiroContasPagarPage').then((m) => ({ default: m.FinanceiroContasPagarPage })),
 )
@@ -164,6 +167,7 @@ export default function App() {
           {/* Gestão Interna virou parte de Vendas — mesma tela, mesmo período, só num lugar. */}
           <Route path="/financeiro/gestao-interna" element={<Navigate to="/financeiro/vendas" replace />} />
           <Route path="/financeiro/contas-a-pagar" element={<FinanceiroContasPagarPage />} />
+          <Route path="/financeiro/clientes-geral" element={<FinanceiroClientesGeralPage />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           {/* Uma cópia do menu Suporte tem rota só dela — ver SupportViewPage. */}
           <Route path="/visao/:pageId" element={<SupportViewPage />} />

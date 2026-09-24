@@ -6,6 +6,7 @@ import { isOriginAllowed } from './lib/corsOrigin.js';
 import { broadcast } from './sse.js';
 import { authRoutes } from './routes/auth.js';
 import { clientRoutes } from './routes/clients.js';
+import { clientCancellationRoutes } from './routes/clientCancellations.js';
 import { settingsRoutes } from './routes/settings.js';
 import { ticketRoutes } from './routes/tickets.js';
 import { analyticsRoutes } from './routes/analytics.js';
@@ -83,6 +84,7 @@ async function main() {
 
   await app.register(authRoutes);
   await app.register(clientRoutes);
+  await app.register(clientCancellationRoutes);
   await app.register(settingsRoutes);
   await app.register(ticketRoutes);
   await app.register(analyticsRoutes);

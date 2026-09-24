@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
-import { findMatchingLeadRowId } from '../lib/leadMatch.js';
+import { findMatchingLeadRowId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 import { sendMail } from '../lib/mailer.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 
@@ -11,6 +11,14 @@ const FINANCE_COLS = [
   'implementation_value','monthly_value','due_day',
   'payment_status','last_payment_check','payments','extra_links','finance_notes',
 ];
+
+/** "R$ 1.797,00" -> 179700. O valor da venda é texto livre digitado na planilha do Comercial, não
+ * número — vale o que estiver escrito, e vazio/bagunçado vira 0 em vez de quebrar a conta. */
+function centavosDeTexto(raw: string | null | undefined): number {
+  const limpo = (raw ?? '').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+  const n = Number(limpo);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
+}
 
 export async function clientRoutes(app: FastifyInstance) {
   // GET /api/clients — lista. Por padrão remove contract_file (base64 pesado)
@@ -240,6 +248,74 @@ export async function clientRoutes(app: FastifyInstance) {
       return updated;
     }
   );
+
+  // GET /api/clients/valores-sugeridos — quanto cada cliente paga, segundo a VENDA dele.
+  //
+  // Mensalidade e implementação só existem, hoje, na linha da aba Vendas (o cadastro do cliente
+  // nasceu no Suporte, onde ninguém preenche valor). A tela "Clientes Geral" usa isso pra sugerir o
+  // valor de quem está com o campo vazio, em vez de obrigar a digitar cliente por cliente.
+  //
+  // Mesma escada de ligação da ficha (ver ficha-status-lote): vínculo confirmado no contrato
+  // primeiro, telefone depois, nome por último — e sempre exigindo UM único candidato, pra nunca
+  // sugerir o valor da venda de outra pessoa.
+  app.get('/api/clients/valores-sugeridos', { onRequest: [app.authenticate] }, async () => {
+    const vendas = await query<{
+      id: string; nome: string; empresa: string; telefone: string; valor_mrr: string; valor_implementacao: string;
+    }>(
+      `SELECT r.id, r.nome, r.empresa, r.telefone, r.valor_mrr, r.valor_implementacao
+       FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+       WHERE lb.is_vendas AND r.deleted_at IS NULL AND r.venda_revertida IS NOT TRUE`
+    );
+    if (!vendas.length) return {};
+
+    const clientes = await query<{ id: string; name: string; company: string; phone: string }>(
+      `SELECT id, name, company, phone FROM clients WHERE archived_at IS NULL`
+    );
+    const contratos = await query<{ venda_lead_id: string; client_id: string }>(
+      `SELECT venda_lead_id, client_id FROM contracts
+       WHERE venda_lead_id IS NOT NULL AND client_id IS NOT NULL ORDER BY created_at`
+    );
+
+    const vendaPorId = new Map(vendas.map((v) => [v.id, v]));
+    const vendaPorCliente = new Map<string, typeof vendas[number]>();
+    for (const ct of contratos) {
+      const venda = vendaPorId.get(ct.venda_lead_id);
+      if (venda) vendaPorCliente.set(ct.client_id, venda);
+    }
+    const porTelefone = new Map<string, typeof vendas[number][]>();
+    for (const v of vendas) {
+      const k = phoneKey(v.telefone);
+      if (!k) continue;
+      porTelefone.set(k, [...(porTelefone.get(k) ?? []), v]);
+    }
+
+    const resultado: Record<string, { mrrCents: number; implCents: number; origem: string }> = {};
+    for (const c of clientes) {
+      let venda = vendaPorCliente.get(c.id);
+      let origem = 'contrato';
+      if (!venda) {
+        const k = phoneKey(c.phone);
+        const porTel = k ? porTelefone.get(k) ?? [] : [];
+        if (porTel.length === 1) { venda = porTel[0]; origem = 'telefone'; }
+      }
+      if (!venda) {
+        const alvo = normalizeName(c.company) || normalizeName(c.name);
+        if (alvo.length >= MIN_LEN) {
+          const achados = vendas.filter((v) => {
+            const n = normalizeName(v.empresa) || normalizeName(v.nome);
+            return n.length >= MIN_LEN && (n.includes(alvo) || alvo.includes(n));
+          });
+          if (achados.length === 1) { venda = achados[0]; origem = 'nome'; }
+        }
+      }
+      if (!venda) continue;
+      const mrrCents = centavosDeTexto(venda.valor_mrr);
+      const implCents = centavosDeTexto(venda.valor_implementacao);
+      if (!mrrCents && !implCents) continue;
+      resultado[c.id] = { mrrCents, implCents, origem };
+    }
+    return resultado;
+  });
 
   // DELETE /api/clients/:id — admin only
   app.delete<{ Params: { id: string } }>(

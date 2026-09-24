@@ -1171,6 +1171,21 @@ END $$`);
   // no token do cliente.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS template_portal_token TEXT UNIQUE`);
 
+  // Cancelamentos de cliente (tela "Clientes Geral") — ver comentário em schema.sql.
+  await pool.query(`CREATE TABLE IF NOT EXISTS client_cancellations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    canceled_at DATE NOT NULL DEFAULT CURRENT_DATE,
+    motivo TEXT NOT NULL DEFAULT '',
+    observacao TEXT NOT NULL DEFAULT '',
+    mrr_cents INT NOT NULL DEFAULT 0,
+    reactivated_at TIMESTAMPTZ,
+    created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS client_cancellations_client_idx ON client_cancellations(client_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS client_cancellations_data_idx ON client_cancellations(canceled_at)`);
+
   // Contas a Pagar (Financeiro) — board estilo Monday, lista contínua de grupos criados à mão
   // (ex.: "Abril 2026", "Folha de pagamento"), sem filtro de mês. Ver comentário em schema.sql.
   await pool.query(`CREATE TABLE IF NOT EXISTS payables_groups (

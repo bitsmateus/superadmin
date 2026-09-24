@@ -496,6 +496,26 @@ CREATE TABLE IF NOT EXISTS lead_labels (
 CREATE INDEX IF NOT EXISTS lead_labels_field_idx ON lead_labels(field);
 CREATE INDEX IF NOT EXISTS lead_labels_page_field_idx ON lead_labels(page_id, field);
 
+-- ---------- client_cancellations (cancelamentos de cliente — tela "Clientes Geral") ----------
+-- Um registro por cancelamento, e não só um flag no cliente: é o que permite ver "quanto eu perdi
+-- em setembro" mês a mês. mrr_cents é a FOTO da mensalidade no dia do cancelamento (corrigir o
+-- valor do cliente depois não reescreve o passado). reactivated_at = cliente voltou; o registro
+-- fica, porque o cancelamento aconteceu naquele mês.
+CREATE TABLE IF NOT EXISTS client_cancellations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  canceled_at DATE NOT NULL DEFAULT CURRENT_DATE,
+  motivo TEXT NOT NULL DEFAULT '',
+  observacao TEXT NOT NULL DEFAULT '',
+  mrr_cents INT NOT NULL DEFAULT 0,
+  reactivated_at TIMESTAMPTZ,
+  created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS client_cancellations_client_idx ON client_cancellations(client_id);
+CREATE INDEX IF NOT EXISTS client_cancellations_data_idx ON client_cancellations(canceled_at);
+
 -- ---------- kb_articles ----------
 CREATE TABLE IF NOT EXISTS kb_articles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

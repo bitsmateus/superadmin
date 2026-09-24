@@ -41,6 +41,7 @@ type ClientRow = {
   responsavel: string | null
   responsavel_comercial: string | null
   responsavel_entrega: string | null
+  unidade: string | null
   channel_notify_enabled: boolean | null
   channel_notify_number: string | null
   stage: PipelineStage
@@ -110,6 +111,7 @@ function rowToClient(r: ClientRow): Client {
     company: r.company,
     responsavel: r.responsavel ?? undefined,
     responsavelComercial: r.responsavel_comercial ?? undefined,
+    unidade: (r.unidade as Client['unidade']) ?? undefined,
     responsavelEntrega: r.responsavel_entrega ?? undefined,
     channelNotifyEnabled: r.channel_notify_enabled ?? false,
     channelNotifyNumber: r.channel_notify_number ?? undefined,
@@ -180,6 +182,7 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('company' in patch) out.company = patch.company
   if ('responsavel' in patch) out.responsavel = patch.responsavel ?? null
   if ('responsavelComercial' in patch) out.responsavel_comercial = patch.responsavelComercial ?? null
+  if ('unidade' in patch) out.unidade = patch.unidade ?? null
   if ('responsavelEntrega' in patch) out.responsavel_entrega = patch.responsavelEntrega ?? null
   if ('channelNotifyEnabled' in patch) out.channel_notify_enabled = patch.channelNotifyEnabled ?? false
   if ('channelNotifyNumber' in patch) out.channel_notify_number = patch.channelNotifyNumber ?? null
@@ -559,6 +562,10 @@ export const db = {
 
   /** Clientes ATIVOS (não arquivados) — usado no pipeline, listas e dashboards. */
   getClients(): Client[] { return activeClientsCache },
+
+  /** Relê a lista do servidor agora — pra quando algo mudou por fora do app (ex.: a leitura das
+   * assinaturas do Asaas) e esperar o próximo ciclo deixaria a tela com número velho. */
+  async refresh(): Promise<void> { await refreshClients() },
   /** Clientes arquivados — usado só na tela de Arquivados. */
   getArchivedClients(): Client[] { return archivedClientsCache },
   getClient(id: string): Client | undefined { return clientsCache.find((c) => c.id === id) },

@@ -1187,6 +1187,9 @@ END $$`);
   await pool.query(`CREATE INDEX IF NOT EXISTS client_cancellations_data_idx ON client_cancellations(canceled_at)`);
   await pool.query(`ALTER TABLE client_cancellations ADD COLUMN IF NOT EXISTS multa_cents INT NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE client_cancellations ADD COLUMN IF NOT EXISTS asaas_removido BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS asaas_last_sync_at TIMESTAMPTZ`);
+  // Empresa do grupo que atende o cliente (Clientes Geral) — ver schema.sql.
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS unidade TEXT`);
 
   // Contas a Pagar (Financeiro) — board estilo Monday, lista contínua de grupos criados à mão
   // (ex.: "Abril 2026", "Folha de pagamento"), sem filtro de mês. Ver comentário em schema.sql.

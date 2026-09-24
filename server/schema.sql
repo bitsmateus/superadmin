@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS settings (
   asaas_api_key TEXT,
   asaas_environment TEXT CHECK (asaas_environment IN ('sandbox','production')) DEFAULT 'sandbox',
   asaas_sync_interval_min INT DEFAULT 15,
+  -- Última vez que o painel leu as assinaturas do Asaas (ver jobs/asaasSync.ts).
+  asaas_last_sync_at TIMESTAMPTZ,
   default_tenant_password TEXT,
   default_access_password TEXT,
   support_phone TEXT,
@@ -166,6 +168,9 @@ CREATE TABLE IF NOT EXISTS clients (
   phone TEXT NOT NULL,
   company TEXT NOT NULL,
   responsavel TEXT,
+  -- Qual empresa do grupo atende esse cliente: 'nx_sistema' | 'nx_digital' | 'netscale'.
+  -- NULL = ainda não classificado (a tela "Clientes Geral" separa por aqui).
+  unidade TEXT,
   responsavel_comercial TEXT,
   responsavel_entrega TEXT,
   channel_notify_enabled BOOLEAN DEFAULT FALSE,

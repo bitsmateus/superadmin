@@ -315,6 +315,8 @@ export interface Client {
   responsavel?: string
   /** Responsável comercial (nome/e-mail de um usuário da equipe). */
   responsavelComercial?: string
+  /** Empresa do grupo que atende esse cliente — separa as abas de "Clientes Geral". */
+  unidade?: 'nx_sistema' | 'nx_digital' | 'netscale'
   /** Responsável pela entrega (nome/e-mail de um usuário da equipe). */
   responsavelEntrega?: string
   /** Liga/desliga aviso de queda de canais para este tenant. */

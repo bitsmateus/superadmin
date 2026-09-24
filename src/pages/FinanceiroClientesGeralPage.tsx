@@ -1,7 +1,7 @@
 import * as React from 'react'
 import {
-  AlertTriangle, ChevronLeft, ChevronRight, Loader2, RotateCcw, Search, Trash2, TrendingDown, UserMinus,
-  Users, Wand2, Wallet,
+  AlertTriangle, ChevronLeft, ChevronRight, Loader2, RefreshCw, RotateCcw, Search, Trash2, TrendingDown,
+  UserMinus, Users, Wand2, Wallet,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -16,6 +16,7 @@ import { clientCancellationsService, type ClientCancellation } from '@/services/
 import { db } from '@/services/db'
 import { api } from '@/services/api'
 import { formatBRLCents, parseBRLCents, prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Client } from '@/types/client'
 
@@ -35,8 +36,22 @@ const MOTIVOS = [
  * rodando. Quem está em contrato/briefing/setup ainda não paga mensalidade, e 'churned' saiu. */
 const ETAPAS_ATIVAS = new Set(['active', 'delivered', 'delivery', 'setup_done'])
 
-type Aba = 'clientes' | 'cancelamentos'
+type Unidade = 'nx_sistema' | 'nx_digital' | 'netscale'
+type Aba = Unidade | 'cancelamentos'
 type FiltroStatus = 'ativos' | 'cancelados' | 'todos'
+
+/** As três empresas do grupo, na ordem em que aparecem nas abas. O cliente é classificado na
+ * própria lista; quem ainda não foi classificado não some — aparece no aviso do topo. */
+const UNIDADES: { valor: Unidade; label: string }[] = [
+  { valor: 'nx_sistema', label: 'CLIENTES NX SISTEMA' },
+  { valor: 'nx_digital', label: 'CLIENTES NX DIGITAL' },
+  { valor: 'netscale', label: 'CLIENTES NETSCALE' },
+]
+const UNIDADE_CURTA: Record<Unidade, string> = {
+  nx_sistema: 'NX Sistema',
+  nx_digital: 'NX Digital',
+  netscale: 'Netscale',
+}
 
 type Sugestao = { mrrCents: number; implCents: number; origem: string }
 
@@ -56,12 +71,36 @@ export function FinanceiroClientesGeralPage() {
   const clients = useClients()
   const cancelamentos = useClientCancellations()
 
-  const [aba, setAba] = React.useState<Aba>('clientes')
+  const [aba, setAba] = React.useState<Aba>('nx_sistema')
+  // Quem ainda não tem empresa definida não aparece em nenhuma das três abas — este botão mostra
+  // esse pessoal pra classificar, sem precisar de uma quarta aba só pra isso.
+  const [verSemEmpresa, setVerSemEmpresa] = React.useState(false)
   const [mes, setMes] = React.useState(currentMonthId())
   const [busca, setBusca] = React.useState('')
   const [status, setStatus] = React.useState<FiltroStatus>('ativos')
   const [drawerId, setDrawerId] = React.useState<string | null>(null)
   const [cancelando, setCancelando] = React.useState<Client | null>(null)
+
+  // Leitura das assinaturas do Asaas: o servidor já faz sozinho de tempos em tempos, o botão é
+  // pra quando a pessoa acabou de mexer lá e quer ver aqui na hora.
+  const [sincronizando, setSincronizando] = React.useState(false)
+  const sincronizarAsaas = async () => {
+    setSincronizando(true)
+    try {
+      const r = await api.post<{ vinculados: number; valoresAtualizados: number; mrrLigado: number; semVinculo: number }>(
+        '/api/asaas/sync',
+      )
+      await db.refresh()
+      toast.success(
+        `Asaas lido: ${r.valoresAtualizados} mensalidade(s) atualizada(s), ${r.vinculados} cliente(s) ligado(s) agora` +
+        (r.semVinculo ? ` — ${r.semVinculo} sem par lá` : ''),
+      )
+    } catch (err) {
+      toast.error('Falha ao ler o Asaas: ' + (err as Error).message)
+    } finally {
+      setSincronizando(false)
+    }
+  }
 
   // Valores que a venda conhece, pra quem ainda está sem — carregado uma vez.
   const [sugestoes, setSugestoes] = React.useState<Record<string, Sugestao>>({})
@@ -79,9 +118,16 @@ export function FinanceiroClientesGeralPage() {
     [cancelamentos, bounds],
   )
 
+  const unidadeAtiva: Unidade | null = aba === 'cancelamentos' ? null : aba
+  const semEmpresa = React.useMemo(() => clients.filter((c) => !c.archivedAt && !c.unidade), [clients])
+
+  // Os números do topo seguem a aba: em "NX SISTEMA", é o MRR da NX Sistema.
   const ativos = React.useMemo(
-    () => clients.filter((c) => !c.archivedAt && ETAPAS_ATIVAS.has(c.stage)),
-    [clients],
+    () => clients.filter((c) => {
+      if (c.archivedAt || !ETAPAS_ATIVAS.has(c.stage)) return false
+      return unidadeAtiva ? c.unidade === unidadeAtiva : true
+    }),
+    [clients, unidadeAtiva],
   )
   const mrrAtivo = ativos.reduce((acc, c) => acc + centsDoCliente(c.monthlyValue), 0)
   const comValor = ativos.filter((c) => (c.monthlyValue ?? 0) > 0).length
@@ -97,6 +143,7 @@ export function FinanceiroClientesGeralPage() {
     const termo = busca.trim().toLowerCase()
     return clients
       .filter((c) => !c.archivedAt)
+      .filter((c) => (verSemEmpresa ? !c.unidade : c.unidade === unidadeAtiva))
       .filter((c) => {
         if (status === 'ativos') return c.stage !== 'churned'
         if (status === 'cancelados') return c.stage === 'churned'
@@ -107,7 +154,7 @@ export function FinanceiroClientesGeralPage() {
         return [c.name, c.company, c.phone].some((v) => (v ?? '').toLowerCase().includes(termo))
       })
       .sort((a, b) => centsDoCliente(b.monthlyValue) - centsDoCliente(a.monthlyValue) || (a.name ?? '').localeCompare(b.name ?? ''))
-  }, [clients, busca, status])
+  }, [clients, busca, status, unidadeAtiva, verSemEmpresa])
 
   const semValorComSugestao = React.useMemo(
     () => lista.filter((c) => (c.monthlyValue ?? 0) === 0 && sugestoes[c.id]?.mrrCents),
@@ -160,11 +207,27 @@ export function FinanceiroClientesGeralPage() {
               Voltar pro mês atual
             </button>
           )}
+
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={sincronizarAsaas}
+            disabled={sincronizando}
+            title="Relê as assinaturas do Asaas e atualiza as mensalidades"
+            className="ml-auto"
+          >
+            {sincronizando
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            Atualizar do Asaas
+          </Button>
         </div>
 
         {/* Painel do mês */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <Card icon={<Users className="h-4 w-4" />} label="Clientes ativos" value={String(ativos.length)}
+          <Card icon={<Users className="h-4 w-4" />}
+            label={unidadeAtiva ? `Ativos ${UNIDADE_CURTA[unidadeAtiva]}` : 'Clientes ativos'}
+            value={String(ativos.length)}
             hint={`${comValor} com mensalidade preenchida`} />
           <Card icon={<Wallet className="h-4 w-4" />} label="MRR ativo" value={formatBRLCents(mrrAtivo)}
             hint="soma das mensalidades" tone="success" />
@@ -180,12 +243,18 @@ export function FinanceiroClientesGeralPage() {
         </div>
 
         {/* Abas */}
-        <div className="mt-5 flex items-center gap-1 border-b border-line">
-          <AbaBotao ativa={aba === 'clientes'} onClick={() => setAba('clientes')}>
-            Clientes ({lista.length})
-          </AbaBotao>
+        <div className="mt-5 flex flex-wrap items-center gap-1 border-b border-line">
+          {UNIDADES.map((u) => (
+            <AbaBotao
+              key={u.valor}
+              ativa={aba === u.valor}
+              onClick={() => { setAba(u.valor); setVerSemEmpresa(false) }}
+            >
+              {u.label} ({clients.filter((c) => !c.archivedAt && c.unidade === u.valor).length})
+            </AbaBotao>
+          ))}
           <AbaBotao ativa={aba === 'cancelamentos'} onClick={() => setAba('cancelamentos')}>
-            Cancelamentos ({cancelamentosDoMes.length})
+            CANCELAMENTOS GERAL ({cancelamentosDoMes.length})
           </AbaBotao>
         </div>
 
@@ -202,7 +271,25 @@ export function FinanceiroClientesGeralPage() {
           </button>
         )}
 
-        {aba === 'clientes' ? (
+        {aba !== 'cancelamentos' && semEmpresa.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setVerSemEmpresa((v) => !v)}
+            className={cn(
+              'mt-3 flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-colors',
+              verSemEmpresa ? 'bg-accent/15 text-accent' : 'bg-elevate/[0.05] text-foreground/70 hover:bg-elevate/[0.08]',
+            )}
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>
+              {verSemEmpresa
+                ? `Mostrando os ${semEmpresa.length} clientes sem empresa definida — escolha a empresa de cada um na coluna "Empresa do grupo". Clique aqui pra voltar.`
+                : `${semEmpresa.length} cliente(s) ainda sem empresa do grupo definida — clique pra classificar.`}
+            </span>
+          </button>
+        )}
+
+        {aba !== 'cancelamentos' ? (
           <>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[220px]">
@@ -244,6 +331,7 @@ export function FinanceiroClientesGeralPage() {
                       <th className="px-4 py-3">Cliente</th>
                       <th className="px-4 py-3">Empresa</th>
                       <th className="w-40 px-4 py-3">Telefone</th>
+                      <th className="w-40 px-4 py-3">Empresa do grupo</th>
                       <th className="w-40 px-4 py-3 text-right">Mensalidade</th>
                       <th className="w-40 px-4 py-3 text-right">Implementação</th>
                       <th className="w-28 px-4 py-3">Situação</th>
@@ -253,8 +341,10 @@ export function FinanceiroClientesGeralPage() {
                   <tbody>
                     {lista.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-10 text-center text-sm text-foreground/40">
-                          Nenhum cliente com esses filtros.
+                        <td colSpan={8} className="px-4 py-10 text-center text-sm text-foreground/40">
+                          {semEmpresa.length > 0 && !verSemEmpresa
+                            ? 'Nenhum cliente nesta empresa ainda — use o aviso acima pra classificar quem está sem.'
+                            : 'Nenhum cliente com esses filtros.'}
                         </td>
                       </tr>
                     )}
@@ -273,7 +363,7 @@ export function FinanceiroClientesGeralPage() {
                     <tfoot>
                       <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                         <td className="px-4 py-3">Total ({lista.length})</td>
-                        <td /><td />
+                        <td /><td /><td />
                         <td className="px-4 py-3 text-right tabular-nums text-success">
                           {formatBRLCents(lista.reduce((a, c) => a + centsDoCliente(c.monthlyValue), 0))}
                         </td>
@@ -364,6 +454,19 @@ function LinhaCliente({ cliente, sugestao, onAbrir, onCancelar, onAplicarSugesta
       </td>
       <td className="px-4 py-2.5 text-sm text-foreground/70">{cliente.company || '—'}</td>
       <td className="px-4 py-2.5 text-sm tabular-nums text-foreground/60">{cliente.phone || '—'}</td>
+      <td className="px-4 py-2.5">
+        <select
+          value={cliente.unidade ?? ''}
+          onChange={(e) => void db.updateClient(cliente.id, { unidade: (e.target.value || undefined) as Client['unidade'] })}
+          className={cn(
+            'w-full rounded-md bg-elevate/[0.05] px-2 py-1 text-sm outline-none',
+            cliente.unidade ? 'text-foreground' : 'text-danger',
+          )}
+        >
+          <option value="">— definir —</option>
+          {UNIDADES.map((u) => <option key={u.valor} value={u.valor}>{UNIDADE_CURTA[u.valor]}</option>)}
+        </select>
+      </td>
       <td className="px-4 py-2.5 text-right">
         <CelulaValor
           cents={centsDoCliente(cliente.monthlyValue)}

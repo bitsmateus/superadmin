@@ -1335,6 +1335,7 @@ function AutomationView({ client }: { client: Client }) {
         sectors.push(t)
       }
     }
+    if (!sectorSet.has('pendente')) sectors.push('Pendente')
     // Token da API do tenant — autentica as chamadas /v2/api/external/{apiId}.
     const apiToken = client.tenantApiToken || undefined
     let queuesCreated = 0

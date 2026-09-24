@@ -150,6 +150,8 @@ function collectSectors(client: Client): string[] {
       out.push(t)
     }
   }
+  // Sempre existe uma fila "Pendente" (destino de timeout/tentativas/fora do horário).
+  if (!seen.has('pendente')) out.push('Pendente')
   return out
 }
 
@@ -694,7 +696,6 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
 
   if (key === 'queues') {
     const sectors = collectSectors(client)
-    if (sectors.length === 0) return 'sem setores'
     let queues = 0
     const created: Array<{ name: string; id: string }> = []
     for (const q of sectors) {

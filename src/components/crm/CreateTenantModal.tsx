@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { tenantsApi } from '@/api/tenants'
+import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
 import { queuesApi } from '@/api/queues'
 import { usersApi } from '@/api/users'
 import { extractErrorMessage } from '@/api/client'
@@ -566,7 +566,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
 
     // Um canal por número de WhatsApp do briefing, nomeado com o número
     // normalizado (55+DDD+número). Sem números, cria um canal padrão com o nome
-    // da empresa. Tipo sempre "baileys" — é o que cria a API do tenant no NX.
+    // da empresa. Tipo por servidor: chat → uazapi; app/web → evo.
     const numbers = (client.briefingData?.whatsappNumbers ?? [])
       .map((n) => String(n).trim())
       .filter(Boolean)
@@ -620,7 +620,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
           tenant: tenantId,
           name,
           status: 'DISCONNECTED',
-          type: 'baileys',
+          type: sessionTypeForServer(server),
         })
         const sid = captureFromSession(session)
         // O primeiro canal é crítico: é ele que gera a API + token.
@@ -643,7 +643,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       tenantApiToken: prov.apiToken || undefined,
       deliveryChecklist: setChecklistItem(currentChecklist(), 'channels_created', true, 'Sistema'),
     })
-    const base = `${createdChannels} canal(is) · baileys`
+    const base = `${createdChannels} canal(is) · ${sessionTypeForServer(server)}`
     return channelFailures.length > 0
       ? `${base} · ${channelFailures.length} falhou(ram)`
       : base

@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { Bot, Download, Loader2, Sparkles, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Section } from '../ClientDrawer'
+import { N8nAiSection } from './N8nAiSection'
 import { chatbotFlowApi, type ChatbotFlowState } from '@/api/chatbotFlow'
 import type { Client } from '@/types/client'
 import type { FlowSpec, FlowStep } from '@/types/chatbotFlow'
@@ -202,6 +203,8 @@ export function ChatbotTab({ client }: { client: Client }) {
           )}
         </div>
       </Section>
+
+      <N8nAiSection client={client} />
 
       {/* Preview em árvore (editável) */}
       {edited && (

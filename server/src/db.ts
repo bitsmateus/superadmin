@@ -115,6 +115,7 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS chatbot_flow_generated_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS chatbot_flow_published_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tenant_queues JSONB`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS n8n_flow JSONB`);
   // Arquivamento (soft-delete): card sai do pipeline mas pode ser restaurado
   // ou excluído permanentemente na tela de Arquivados.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);

@@ -140,6 +140,8 @@ export function BriefingTab({ client }: { client: Client }) {
   // recolhe (seta pra abrir) e, com o briefing preenchido, trava de vez (só leitura).
   const [configOpen, setConfigOpen] = React.useState(status === 'not_sent')
   const configLocked = status === 'filled' || status === 'approved'
+  // "Link do briefing" também nasce recolhido; abre na seta.
+  const [linkOpen, setLinkOpen] = React.useState(false)
 
   // Fluxo da ficha: enquanto não houver contrato assinado, o briefing fica
   // bloqueado e mostramos o passo "marcar contrato assinado".
@@ -167,6 +169,7 @@ export function BriefingTab({ client }: { client: Client }) {
     setRevisionNote(client.briefingRevisionNote ?? '')
     setEditing(false)
     setConfigOpen((client.briefingStatus ?? 'not_sent') === 'not_sent')
+    setLinkOpen(false)
   }, [client.id])
 
   React.useEffect(() => {
@@ -493,14 +496,27 @@ export function BriefingTab({ client }: { client: Client }) {
       {/* ── Link gerado ── */}
       {link && status !== 'not_sent' && (
         <Section
+          className={cn(!linkOpen && '[&>header]:mb-0')}
           title={
-            <span className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setLinkOpen((o) => !o)}
+              aria-expanded={linkOpen}
+              className="flex items-center gap-2 text-left"
+            >
+              {linkOpen ? (
+                <ChevronDown className="h-3.5 w-3.5 text-foreground/50" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-foreground/50" />
+              )}
               <FileText className="h-3.5 w-3.5 text-accent" />
               Link do briefing
-            </span>
+            </button>
           }
           action={<BriefingStatusBadge status={status} />}
         >
+          {linkOpen && (
+          <>
           <p className="text-xs text-foreground/55">
             Enviado em {formatDate(client.briefingSentAt)}.
           </p>
@@ -534,6 +550,8 @@ export function BriefingTab({ client }: { client: Client }) {
             <div className="mt-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
               Revisão solicitada: {client.briefingRevisionNote}
             </div>
+          )}
+          </>
           )}
         </Section>
       )}

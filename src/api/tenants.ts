@@ -12,6 +12,11 @@ import type {
   UpdateTenantPayload,
 } from '@/types'
 
+/** Tipo de sessão WhatsApp por servidor: chat → uazapi; app e web → evo. */
+export function sessionTypeForServer(server: ServerConfig): 'uazapi' | 'evo' {
+  return server.id === 'chat' ? 'uazapi' : 'evo'
+}
+
 function unwrap<T = unknown>(data: unknown): T {
   if (data && typeof data === 'object' && 'data' in (data as object)) {
     const inner = (data as { data: unknown }).data

@@ -38,15 +38,23 @@ export interface BuildOpts {
 
 const LINE_STYLE = { strokeWidth: 3, stroke: '#5c67f2' } as const;
 
+/** Saudação enviada quando o bot direciona o atendimento para fila/usuário. */
+export const WELCOME_TRANSFER_MESSAGE =
+  'Pronto! ✅ Sua solicitação foi encaminhada para a nossa equipe. Em breve um atendente vai falar com você. Obrigado por aguardar! 😊';
+
+export const PENDING_QUEUE_NAME = 'Pendente';
+
 /** Config padrão do nó `configurations` (igual ao golden koimas — tudo vazio). */
-function defaultConfigurations(): Record<string, unknown> {
+function defaultConfigurations(pendingQueueId = ''): Record<string, unknown> {
   return {
     notOptionsSelectMessage: { message: '', stepReturn: 'A' },
-    notResponseMessage: { time: 10, type: 1, destiny: '', message: '' },
-    welcomeMessage: { message: '' },
+    // Sem resposta após 3 min, 2 tentativas erradas e fora do horário:
+    // tudo cai na fila "Pendente" (destiny = queueId; vazio se não resolvida).
+    notResponseMessage: { time: 3, type: 1, destiny: pendingQueueId, message: '' },
+    welcomeMessage: { message: WELCOME_TRANSFER_MESSAGE },
     farewellMessage: { message: '' },
-    maxRetryBotMessage: { number: 3, type: 1, destiny: '' },
-    outOpenHours: { type: 1, destiny: null },
+    maxRetryBotMessage: { number: 2, type: 1, destiny: pendingQueueId },
+    outOpenHours: { type: 1, destiny: pendingQueueId || null },
     firstInteraction: { type: 1, destiny: null },
     keyword: { message: '', messages: [] },
   };
@@ -89,6 +97,10 @@ export function buildFlowJson(
   // nome (o chamador avisa que precisa resolver a fila antes de importar).
   const resolveQueue = (name: string): string =>
     opts.queueMap?.[normalizeQueueName(name)] ?? name;
+
+  const pendingQueueId = opts.queueMap?.[normalizeQueueName(PENDING_QUEUE_NAME)] ?? '';
+  if (!pendingQueueId)
+    warnings.push(`Fila "${PENDING_QUEUE_NAME}" não encontrada — defina o destino de timeout, tentativas e fora de horário nas Configurações do fluxo.`);
 
   const byId = new Map(spec.steps.map((s) => [s.id, s]));
 
@@ -140,7 +152,7 @@ export function buildFlowJson(
       top: '100px',
       viewOnly: true,
       ico: 'mdi-alert-circle-outline',
-      configurations: defaultConfigurations(),
+      configurations: defaultConfigurations(pendingQueueId),
     },
   ];
 

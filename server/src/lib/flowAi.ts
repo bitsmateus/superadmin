@@ -169,6 +169,7 @@ export async function generateWelcomeMessage(input: {
     headers: {
       'x-api-key': key,
       'anthropic-version': '2023-06-01',
+      ...(process.env.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID } : {}),
       'content-type': 'application/json',
     },
     body: JSON.stringify({
@@ -205,6 +206,7 @@ async function callClaude(messages: unknown[]): Promise<FlowSpec> {
     headers: {
       'x-api-key': key,
       'anthropic-version': '2023-06-01',
+      ...(process.env.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID } : {}),
       'content-type': 'application/json',
     },
     body: JSON.stringify({

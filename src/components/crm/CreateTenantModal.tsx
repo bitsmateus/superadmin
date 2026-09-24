@@ -12,8 +12,9 @@ import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { tenantsApi } from '@/api/tenants'
-import { queuesApi } from '@/api/queues'
+import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
+import { queuesApi, extractQueueId } from '@/api/queues'
+import { chatbotFlowApi } from '@/api/chatbotFlow'
 import { usersApi } from '@/api/users'
 import { extractErrorMessage } from '@/api/client'
 import { useAuthStore, type ServerConfig } from '@/store/authStore'
@@ -149,6 +150,8 @@ function collectSectors(client: Client): string[] {
       out.push(t)
     }
   }
+  // Sempre existe uma fila "Pendente" (destino de timeout/tentativas/fora do horário).
+  if (!seen.has('pendente')) out.push('Pendente')
   return out
 }
 
@@ -566,7 +569,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
 
     // Um canal por número de WhatsApp do briefing, nomeado com o número
     // normalizado (55+DDD+número). Sem números, cria um canal padrão com o nome
-    // da empresa. Tipo sempre "baileys" — é o que cria a API do tenant no NX.
+    // da empresa. Tipo por servidor: chat → uazapi; app/web → evo.
     const numbers = (client.briefingData?.whatsappNumbers ?? [])
       .map((n) => String(n).trim())
       .filter(Boolean)
@@ -620,7 +623,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
           tenant: tenantId,
           name,
           status: 'DISCONNECTED',
-          type: 'baileys',
+          type: sessionTypeForServer(server),
         })
         const sid = captureFromSession(session)
         // O primeiro canal é crítico: é ele que gera a API + token.
@@ -643,7 +646,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       tenantApiToken: prov.apiToken || undefined,
       deliveryChecklist: setChecklistItem(currentChecklist(), 'channels_created', true, 'Sistema'),
     })
-    const base = `${createdChannels} canal(is) · baileys`
+    const base = `${createdChannels} canal(is) · ${sessionTypeForServer(server)}`
     return channelFailures.length > 0
       ? `${base} · ${channelFailures.length} falhou(ram)`
       : base
@@ -693,17 +696,20 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
 
   if (key === 'queues') {
     const sectors = collectSectors(client)
-    if (sectors.length === 0) return 'sem setores'
     let queues = 0
+    const created: Array<{ name: string; id: string }> = []
     for (const q of sectors) {
       try {
         // eslint-disable-next-line no-await-in-loop
-        await queuesApi.create(server, prov.apiId ?? '', { queue: q, isActive: true }, prov.apiToken)
+        const resp = await queuesApi.create(server, prov.apiId ?? '', { queue: q, isActive: true }, prov.apiToken)
+        const qid = extractQueueId(resp)
+        if (qid) created.push({ name: q, id: qid })
         queues++
       } catch {
         /* fila duplicada / erro pontual — segue */
       }
     }
+    if (created.length > 0) await chatbotFlowApi.saveQueues(client.id, created).catch(() => {})
     db.updateClient(client.id, {
       deliveryChecklist: setChecklistItem(currentChecklist(), 'queues_created', true, 'Sistema'),
     })

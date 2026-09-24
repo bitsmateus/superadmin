@@ -43,8 +43,9 @@ import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
 import { usersApi } from '@/api/users'
-import { queuesApi } from '@/api/queues'
-import { tenantsApi } from '@/api/tenants'
+import { queuesApi, extractQueueId } from '@/api/queues'
+import { chatbotFlowApi } from '@/api/chatbotFlow'
+import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
 import { generateUserPassword } from '@/lib/accessSheet'
@@ -1276,16 +1277,17 @@ function AutomationView({ client }: { client: Client }) {
     const channelName = normalizeWhatsappNumber(number) || number
     setCreatingChannelId(item.id)
     try {
-      // Sempre baileys: é o que cria a API do tenant de forma confiável no NX.
+      // Tipo por servidor: chat → uazapi; app/web → evo.
+      const sessionType = sessionTypeForServer(server)
       await tenantsApi.createSession(server, {
         tenant: client.tenantId,
         name: channelName.slice(0, 60),
         status: 'DISCONNECTED',
-        type: 'baileys',
+        type: sessionType,
       })
       const next = setChecklistItem(tree, item.id, true, user)
       db.updateClient(client.id, { deliveryChecklist: next })
-      db.addLog(client.id, 'Canal criado', `${channelName} · baileys`)
+      db.addLog(client.id, 'Canal criado', `${channelName} · ${sessionType}`)
       toast.success(`Canal ${channelName} criado`)
     } catch (err) {
       toast.error('Falha ao criar canal: ' + extractErrorMessage(err, 'erro'))
@@ -1333,22 +1335,27 @@ function AutomationView({ client }: { client: Client }) {
         sectors.push(t)
       }
     }
+    if (!sectorSet.has('pendente')) sectors.push('Pendente')
     // Token da API do tenant — autentica as chamadas /v2/api/external/{apiId}.
     const apiToken = client.tenantApiToken || undefined
     let queuesCreated = 0
+    const createdQueues: Array<{ name: string; id: string }> = []
     for (const q of sectors) {
       try {
-        await queuesApi.create(
+        const qResp = await queuesApi.create(
           server,
           client.tenantApiId,
           { queue: q, isActive: true },
           apiToken,
         )
+        const qid = extractQueueId(qResp)
+        if (qid) createdQueues.push({ name: q, id: qid })
         queuesCreated++
       } catch {
         /* fila já existe / erro pontual — segue */
       }
     }
+    if (createdQueues.length > 0) await chatbotFlowApi.saveQueues(client.id, createdQueues).catch(() => {})
 
     let success = 0
     const failures: string[] = []

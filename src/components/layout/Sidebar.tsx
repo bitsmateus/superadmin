@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import logoNx from '@/assets/logo-nx.jpg'
-import { signOut, useAuth, saveOwnTheme } from '@/hooks/useAuth'
+import { signOut, useAuth, saveOwnTheme, saveOwnSidebarOrder } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
 import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
@@ -110,6 +110,92 @@ const ROLE_LABELS = {
   suporte: 'Usuário',
 } as const
 
+/** Chave estável de um item do menu pra guardar a ordem: a rota, ou o id quando é uma cópia
+ * ("Duplicar"), que tem rota própria. */
+function chaveDoItem(item: { to: string; pageId?: string }): string {
+  return item.pageId ?? item.to
+}
+
+/**
+ * Arrastar os itens do menu pra montar a sequência que a pessoa quiser.
+ *
+ * A ordem é DE CADA UM (fica salva no perfil, ver profiles.sidebar_order) e vale só dentro de um
+ * grupo — arrastar não tira item de Comercial pra Financeiro, só reordena ali dentro. Como a lista
+ * de cada grupo já vem filtrada pelo que aquela pessoa enxerga, quem não tem acesso a uma aba
+ * simplesmente não a tem pra arrastar, e a ordem salva de quem tem não interfere na de ninguém.
+ */
+function useMenuArrastavel() {
+  const { profile } = useAuth()
+  const ordemSalva = profile?.sidebarOrder ?? {}
+  const [arrastando, setArrastando] = React.useState<{ grupo: string; chave: string } | null>(null)
+  const [alvo, setAlvo] = React.useState<string | null>(null)
+
+  /** Aplica a ordem escolhida. Item sem posição salva (aba criada depois) vai pro fim, mantendo a
+   * ordem natural entre os novos — nunca some nem embaralha. */
+  const ordenar = React.useCallback(
+    <T extends { to: string; pageId?: string }>(grupo: string, itens: T[]): T[] => {
+      const salva = ordemSalva[grupo]
+      if (!salva?.length) return itens
+      const posicao = new Map(salva.map((chave, i) => [chave, i]))
+      return itens
+        .map((item, i) => ({ item, i, pos: posicao.get(chaveDoItem(item)) ?? Number.MAX_SAFE_INTEGER }))
+        .sort((a, b) => a.pos - b.pos || a.i - b.i)
+        .map((x) => x.item)
+    },
+    [ordemSalva],
+  )
+
+  /** Props do item arrastável: os handlers pro NavLink e a classe do feedback visual (o que está
+   * sendo arrastado fica apagado; onde vai cair ganha uma linha no topo). */
+  const arrastar = <T extends { to: string; pageId?: string }>(grupo: string, itens: T[], item: T) => {
+    const chave = chaveDoItem(item)
+    const mesmoGrupo = arrastando?.grupo === grupo
+    return {
+      handlers: {
+        draggable: true,
+        onDragStart: (e: React.DragEvent) => {
+          setArrastando({ grupo, chave })
+          e.dataTransfer.effectAllowed = 'move'
+          // Firefox só inicia o arraste se tiver algum dado no evento.
+          e.dataTransfer.setData('text/plain', chave)
+        },
+        onDragOver: (e: React.DragEvent) => {
+          if (!mesmoGrupo || arrastando?.chave === chave) return
+          e.preventDefault()
+          setAlvo(chave)
+        },
+        onDragLeave: () => setAlvo((atual) => (atual === chave ? null : atual)),
+        onDrop: (e: React.DragEvent) => {
+          e.preventDefault()
+          const origem = arrastando
+          setArrastando(null)
+          setAlvo(null)
+          if (!origem || origem.grupo !== grupo || origem.chave === chave) return
+          const chaves = ordenar(grupo, itens).map(chaveDoItem)
+          const de = chaves.indexOf(origem.chave)
+          const para = chaves.indexOf(chave)
+          if (de === -1 || para === -1) return
+          chaves.splice(para, 0, chaves.splice(de, 1)[0])
+          void saveOwnSidebarOrder({ ...ordemSalva, [grupo]: chaves })
+        },
+        onDragEnd: () => {
+          setArrastando(null)
+          setAlvo(null)
+        },
+      },
+      classe: cn(
+        'active:cursor-grabbing',
+        arrastando?.chave === chave && mesmoGrupo && 'opacity-40',
+        // Onde vai cair: fundo marcado em vez de uma borda — borda muda a altura da linha e o menu
+        // inteiro treme enquanto se arrasta por cima dos itens.
+        alvo === chave && mesmoGrupo && 'bg-accent/15',
+      ),
+    }
+  }
+
+  return { ordenar, arrastar }
+}
+
 export interface SidebarProps {
   open: boolean
   onClose: () => void
@@ -177,6 +263,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     return map
   }, [supportPages])
 
+  const { ordenar, arrastar } = useMenuArrastavel()
+
   const [archivedOpen, setArchivedOpen] = React.useState(false)
   const [supportArchiveOpen, setSupportArchiveOpen] = React.useState(false)
   const [comercialOpen, setComercialOpen] = React.useState(() =>
@@ -209,7 +297,15 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const visibleComercialItems = canSee('/comercial')
     ? leadPages
         .filter((p) => !financeiroPageIds.has(p.id))
-        .map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact, page: p }))
+        .map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact }))
+    : []
+  // O Dashboard Comercial entra na mesma lista dos demais — assim ele também pode ser arrastado
+  // pra onde a pessoa quiser dentro do grupo, em vez de ficar preso no topo.
+  const comercialItems = visibleComercialItems.length
+    ? [
+        { to: '/comercial-dashboard', label: 'Dashboard Comercial', icon: LayoutDashboard },
+        ...visibleComercialItems,
+      ]
     : []
   const hasVendasBoard = leadBoards.some((b) => b.isVendas)
   const hasContratoBoard = leadBoards.some((b) => b.isContrato)
@@ -220,6 +316,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         { to: '/financeiro/contas-a-pagar', label: 'Contas a Pagar', icon: Wallet },
       ]
     : []
+  // Cada grupo já sai na ordem que ESSA pessoa montou arrastando (ver useMenuArrastavel).
+  const suporteOrdenado = ordenar('suporte', suporte)
+  const comercialOrdenado = ordenar('comercial', comercialItems)
+  const financeiroOrdenado = ordenar('financeiro', visibleFinanceiroItems)
+
   // Numa cópia a URL é /visao/<id>, que não diz nada sobre qual grupo do menu destacar/abrir —
   // quem decide é a TELA de origem dela. Sem isso, abrir "Pipeline (cópia)" deixava o grupo
   // "Suporte" fechado e sem destaque, como se nada tivesse acontecido.
@@ -273,6 +374,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to)),
     duplicatesByKey,
   )
+
+  const secundariosOrdenados = ordenar('secundarios', secondaryItems)
+  const arquivadosOrdenados = ordenar('arquivados', archivedItems)
 
   return (
     <aside
@@ -328,24 +432,27 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
           />
         </button>
         {suporteOpen &&
-          suporte.map((item) => {
+          suporteOrdenado.map((item) => {
             const Icon = item.icon
             const badge =
               'badgeKey' in item && item.badgeKey === 'tasks' && myTasks > 0
                 ? myTasks
                 : null
+            const drag = arrastar('suporte', suporteOrdenado, item)
             return (
               <NavLink
                 key={item.pageId ?? item.to}
                 to={item.to}
                 end={'end' in item ? item.end : undefined}
                 onClick={closeOnMobile}
+                {...drag.handlers}
                 className={({ isActive }) =>
                   cn(
                     'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
                     isActive
                       ? 'bg-elevate/[0.05] text-foreground'
                       : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                    drag.classe,
                   )
                 }
               >
@@ -422,57 +529,39 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         </button>
         {comercialOpen && (
           <>
-            <NavLink
-              to="/comercial-dashboard"
-              onClick={closeOnMobile}
-              className={({ isActive }) =>
-                cn(
-                  'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
-                  isActive
-                    ? 'bg-elevate/[0.05] text-foreground'
-                    : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <LayoutDashboard
-                    className={cn(
-                      'h-4 w-4 shrink-0',
-                      isActive ? 'text-accent' : 'text-foreground/35 group-hover:text-foreground/60',
-                    )}
-                  />
-                  <span>Dashboard Comercial</span>
-                </>
-              )}
-            </NavLink>
-            {visibleComercialItems.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                onClick={closeOnMobile}
-                className={({ isActive }) =>
-                  cn(
-                    'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
-                    isActive
-                      ? 'bg-elevate/[0.05] text-foreground'
-                      : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon
-                      className={cn(
-                        'h-4 w-4 shrink-0',
-                        isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
-                      )}
-                    />
-                    <span>{label}</span>
-                  </>
-                )}
-              </NavLink>
-            ))}
+            {comercialOrdenado.map((item) => {
+              const { to, label, icon: Icon } = item
+              const drag = arrastar('comercial', comercialOrdenado, item)
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={closeOnMobile}
+                  {...drag.handlers}
+                  className={({ isActive }) =>
+                    cn(
+                      'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                      isActive
+                        ? 'bg-elevate/[0.05] text-foreground'
+                        : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                      drag.classe,
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon
+                        className={cn(
+                          'h-4 w-4 shrink-0',
+                          isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                        )}
+                      />
+                      <span className="truncate">{label}</span>
+                    </>
+                  )}
+                </NavLink>
+              )
+            })}
           </>
         )}
         </>
@@ -507,33 +596,39 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             )}
           />
         </button>
-        {financeiroOpen && visibleFinanceiroItems.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={closeOnMobile}
-            className={({ isActive }) =>
-              cn(
-                'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
-                isActive
-                  ? 'bg-elevate/[0.05] text-foreground'
-                  : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon
-                  className={cn(
-                    'h-4 w-4 shrink-0',
-                    isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
-                  )}
-                />
-                <span>{label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+        {financeiroOpen && financeiroOrdenado.map((item) => {
+          const { to, label, icon: Icon } = item
+          const drag = arrastar('financeiro', financeiroOrdenado, item)
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={closeOnMobile}
+              {...drag.handlers}
+              className={({ isActive }) =>
+                cn(
+                  'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                  isActive
+                    ? 'bg-elevate/[0.05] text-foreground'
+                    : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                  drag.classe,
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    className={cn(
+                      'h-4 w-4 shrink-0',
+                      isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                    )}
+                  />
+                  <span className="truncate">{label}</span>
+                </>
+              )}
+            </NavLink>
+          )
+        })}
         </>
         )}
 
@@ -541,17 +636,22 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         <>
         <div className="my-2 h-px bg-elevate/[0.05]" />
 
-        {secondaryItems.map(({ to, label, icon: Icon, pageId, sourceKey }) => (
+        {secundariosOrdenados.map((item) => {
+          const { to, label, icon: Icon, pageId, sourceKey } = item
+          const drag = arrastar('secundarios', secundariosOrdenados, item)
+          return (
           <NavLink
             key={pageId ?? to}
             to={to}
             onClick={closeOnMobile}
+            {...drag.handlers}
             className={({ isActive }) =>
               cn(
                 'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
                 isActive
                   ? 'bg-elevate/[0.05] text-foreground'
                   : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
+                drag.classe,
               )
             }
           >
@@ -572,7 +672,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
               </>
             )}
           </NavLink>
-        ))}
+          )
+        })}
 
         {/* Arquivados — recolhido por padrão */}
         {archivedItems.length > 0 && (
@@ -593,17 +694,22 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
               />
             </button>
             {archivedOpen &&
-              archivedItems.map(({ to, label, icon: Icon, pageId, sourceKey }) => (
+              arquivadosOrdenados.map((item) => {
+                const { to, label, icon: Icon, pageId, sourceKey } = item
+                const drag = arrastar('arquivados', arquivadosOrdenados, item)
+                return (
                 <NavLink
                   key={pageId ?? to}
                   to={to}
                   onClick={closeOnMobile}
+                  {...drag.handlers}
                   className={({ isActive }) =>
                     cn(
                       'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
                       isActive
                         ? 'bg-elevate/[0.05] text-foreground'
                         : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                      drag.classe,
                     )
                   }
                 >
@@ -622,7 +728,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                     </>
                   )}
                 </NavLink>
-              ))}
+                )
+              })}
             {archivedOpen && isAdmin && (
               <button
                 type="button"

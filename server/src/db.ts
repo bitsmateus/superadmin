@@ -160,6 +160,8 @@ export async function runMigrations() {
   // Preferência de tema (claro/escuro) da PESSOA, não do navegador — fica salva na conta e volta
   // igual em qualquer dispositivo que ela logar. NULL = nunca escolheu ainda (usa o padrão local).
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS theme TEXT`);
+  // Ordem do menu lateral por pessoa (arrastando os itens) — ver profiles.sidebar_order no schema.
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sidebar_order JSONB`);
   await pool.query(`ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_theme_check`);
   await pool.query(`ALTER TABLE profiles ADD CONSTRAINT profiles_theme_check CHECK (theme IS NULL OR theme IN ('light', 'dark'))`);
   // Roteiro da sessão de ativação (checklist do que é feito com o cliente).

@@ -165,6 +165,23 @@ export async function saveOwnTheme(theme: 'light' | 'dark') {
   }
 }
 
+/** Salva a ordem do menu que a pessoa montou arrastando os itens. Mesma ideia do tema: é
+ * preferência da conta, então acompanha ela em qualquer dispositivo — e só a dela. */
+export async function saveOwnSidebarOrder(sidebarOrder: Record<string, string[]>) {
+  const profile = state.profile
+  if (!profile) return
+  // Aplica na hora e salva depois: arrastar tem que responder na mesma hora, e se o servidor
+  // falhar o menu continua na ordem nova até recarregar (nada se perde de verdade).
+  setState({ profile: { ...profile, sidebarOrder } })
+  try {
+    const updated = await api.patch<Profile>(`/api/users/${profile.id}`, { sidebarOrder })
+    setCurrentProfile(updated)
+    setState({ profile: updated })
+  } catch {
+    // Silencioso de propósito — ver comentário acima.
+  }
+}
+
 // For components that previously used supabase.auth.updateUser
 export async function updateCurrentUser(updates: { name?: string; password?: string }) {
   const profile = state.profile

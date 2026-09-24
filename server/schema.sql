@@ -61,6 +61,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   restrict_access BOOLEAN NOT NULL DEFAULT false,
   -- Preferência de tema da pessoa (não do navegador) — NULL = nunca escolheu ainda.
   theme TEXT CHECK (theme IS NULL OR theme IN ('light', 'dark')),
+  -- Ordem do menu lateral escolhida por essa pessoa, arrastando os itens: { grupo: [chave, ...] }.
+  -- NULL = nunca arrastou nada, vale a ordem padrão. É preferência pessoal: não muda o menu de
+  -- ninguém mais, e item que não está na lista (aba nova, ou que a pessoa nem enxerga) fica no fim.
+  sidebar_order JSONB,
   password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

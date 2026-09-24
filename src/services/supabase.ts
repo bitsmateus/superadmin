@@ -23,6 +23,9 @@ export interface Profile {
   /** Preferência de tema salva na conta (não no navegador) — null/undefined = nunca escolheu,
    * usa o que já estava aplicado localmente. */
   theme?: 'light' | 'dark' | null
+  /** Ordem do menu lateral que a pessoa montou arrastando os itens: { grupo: [chave, ...] }.
+   * Ausente = nunca mexeu, vale a ordem padrão. Item fora da lista (aba criada depois) vai pro fim. */
+  sidebarOrder?: Record<string, string[]> | null
   created_at: string
 }
 

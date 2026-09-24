@@ -94,22 +94,32 @@ export function CommissionSdrSection({
     void commissionsService.setEntryStatus(entry.id, entry.status === 'pago' ? 'pendente' : 'pago')
   }
 
-  // Total do período por pessoa — só essas 4, na ordem pedida (soma SDR + Suporte, tanto faz o
-  // papel). Separado por Contrato porque só se paga comissão do que já está Assinado — Pendente é
-  // só um "a caminho", não entra na conta de pagamento ainda.
+  // Total do período por pessoa. Os nomes fixos aparecem sempre (mesmo zerados, pra comparar o
+  // time); quem tiver lançamento e não estiver na lista entra também — senão um closer novo (o
+  // caso do Ian) somava centenas de reais e não aparecia em lugar nenhum. Duas leituras: por PAPEL
+  // (quanto veio de SDR e quanto de fechamento) e por CONTRATO (só o Assinado entra no pagamento;
+  // Pendente é um "a caminho").
   const totalsByPerson = React.useMemo(() => {
-    const totals = new Map<string, { assinado: number; pendente: number }>(
-      TOTAL_NAMES.map((n) => [n, { assinado: 0, pendente: 0 }]),
-    )
+    const vazio = () => ({ sdr: 0, closer: 0, assinado: 0, pendente: 0 })
+    const totals = new Map<string, ReturnType<typeof vazio>>(TOTAL_NAMES.map((n) => [n, vazio()]))
     for (const e of entries) {
-      const match = TOTAL_NAMES.find((n) => n.toLowerCase() === e.person.trim().toLowerCase())
-      if (!match) continue
-      const t = totals.get(match)!
+      const pessoa = e.person.trim()
+      if (!pessoa) continue
+      const chave = TOTAL_NAMES.find((n) => n.toLowerCase() === pessoa.toLowerCase()) ?? pessoa
+      const t = totals.get(chave) ?? vazio()
+      if (e.typeLabel === CLOSER_TYPE_LABEL) t.closer += e.amountCents
+      else t.sdr += e.amountCents
       if (e.contratoAssinado) t.assinado += e.amountCents
       else t.pendente += e.amountCents
+      totals.set(chave, t)
     }
     return totals
   }, [entries])
+
+  const pessoasDoTotal = React.useMemo(() => {
+    const extras = [...totalsByPerson.keys()].filter((n) => !TOTAL_NAMES.includes(n))
+    return [...TOTAL_NAMES, ...extras.sort()]
+  }, [totalsByPerson])
 
   return (
     <div className="mt-4 space-y-4">
@@ -135,20 +145,28 @@ export function CommissionSdrSection({
           </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[420px]">
+          <table className="w-full min-w-[620px]">
             <thead>
               <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                 <th className="px-4 py-2.5">Pessoa</th>
+                <th className="px-4 py-2.5 text-right">Como SDR</th>
+                <th className="px-4 py-2.5 text-right">Como closer</th>
                 <th className="px-4 py-2.5 text-right">Assinado</th>
                 <th className="px-4 py-2.5 text-right">Pendente</th>
               </tr>
             </thead>
             <tbody>
-              {TOTAL_NAMES.map((name) => {
-                const t = totalsByPerson.get(name)!
+              {pessoasDoTotal.map((name) => {
+                const t = totalsByPerson.get(name) ?? { sdr: 0, closer: 0, assinado: 0, pendente: 0 }
                 return (
                   <tr key={name} className="border-b border-line/60 last:border-0">
                     <td className="px-4 py-2.5 text-sm font-medium text-foreground">{name}</td>
+                    <td className="px-4 py-2.5 text-right text-sm tabular-nums text-foreground/70">
+                      {formatBRLCents(t.sdr)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-sm tabular-nums text-foreground/70">
+                      {formatBRLCents(t.closer)}
+                    </td>
                     <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-success">
                       {formatBRLCents(t.assinado)}
                     </td>

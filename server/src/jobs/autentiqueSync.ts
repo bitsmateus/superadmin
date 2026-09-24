@@ -84,11 +84,76 @@ export async function consultarDocumento(
   }
 }
 
+/** minúsculo, sem acento, só letras/números — pra comparar "Casa do Cartucho" com o nome do
+ * documento lá ("Casa do Cartucho e Impressora") ignorando maiúscula/pontuação. */
+function normalizarNome(s: string | null | undefined): string {
+  return (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Documentos recentes do Autentique (uma consulta por rodada, não uma por contrato). */
+async function listarDocumentosRecentes(token: string): Promise<{ id: string; name: string }[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'query { documents(limit: 60, page: 1) { data { id name } } }' }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { data?: { documents?: { data?: { id: string; name: string }[] } } };
+    return json.data?.documents?.data ?? [];
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Liga sozinho o contrato ao documento do Autentique pelo NOME do cliente, pra quem não colou o ID.
+ * Colar o ID à mão era o passo que ninguém fazia (18 dos 27 contratos estavam sem), e sem ele a
+ * assinatura nunca chegava aqui. Só aceita quando UM único documento recente casa com o nome —
+ * dois candidatos ou nenhum, não mexe (marcar o contrato errado como assinado seria pior).
+ */
+async function vincularDocumentosPeloNome(token: string): Promise<void> {
+  const semId = await query<{ id: string; company: string | null; name: string | null }>(
+    `SELECT ct.id, c.company, c.name FROM contracts ct JOIN clients c ON c.id = ct.client_id
+     WHERE ct.autentique_document_id IS NULL AND ct.status <> 'assinado'`
+  );
+  if (!semId.length) return;
+
+  const docs = await listarDocumentosRecentes(token);
+  if (!docs.length) return;
+
+  for (const c of semId) {
+    const alvo = normalizarNome(c.company) || normalizarNome(c.name);
+    // Nome curto casa com qualquer coisa por containment — exige um mínimo pra evitar falso positivo.
+    if (alvo.length < 6) continue;
+    const casaram = docs.filter((d) => {
+      const n = normalizarNome(d.name);
+      return !!n && (n.includes(alvo) || alvo.includes(n));
+    });
+    if (casaram.length !== 1) continue;
+    await query(
+      `UPDATE contracts SET autentique_document_id = $1, updated_at = NOW()
+       WHERE id = $2 AND autentique_document_id IS NULL`,
+      [casaram[0].id, c.id]
+    );
+    console.log('[autentique-sync] documento ligado pelo nome:', c.company ?? c.name, '->', casaram[0].name);
+  }
+}
+
 /** Uma passada: confere todos os contratos pendentes que têm ID do Autentique colado.
  * `dryRun` só informa o que faria, sem gravar nada (usado pra testar com dado real). */
 export async function verificarContratosPendentes(opts: { dryRun?: boolean } = {}): Promise<void> {
   const token = await obterToken();
   if (!token) return;
+
+  // Primeiro tenta achar o documento de quem não colou o ID — assim a checagem abaixo já pega
+  // esses contratos na mesma rodada.
+  if (!opts.dryRun) await vincularDocumentosPeloNome(token);
 
   const contratos = await query<{ id: string; client_id: string | null; autentique_document_id: string }>(
     `SELECT id, client_id, autentique_document_id FROM contracts

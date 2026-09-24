@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ClipboardList, Clock, Download, Eye,
@@ -119,7 +120,25 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const changeTab = (next: Tab) => { setTab(next); setSelectedId(null) }
 
   const listForTab = tab === 'assinados' ? signedContractsInRange : tab === 'pendentes-contrato' ? pendingContractsInRange : []
-  const selected = listForTab.find((c) => c.id === selectedId) ?? null
+  // Cai pra lista completa quando o contrato aberto está fora do período filtrado — é o caso de
+  // quem chegou por link direto (?contrato=<id>, vindo da aba Vendas): abrir por id sempre funciona.
+  const selected =
+    listForTab.find((c) => c.id === selectedId) ?? allContracts.find((c) => c.id === selectedId) ?? null
+
+  // Link direto pro contrato de uma venda. Abre a aba certa pelo status e limpa o parâmetro, pra
+  // não reabrir sozinho quando a pessoa fechar o detalhe e navegar pela tela.
+  const [searchParams, setSearchParams] = useSearchParams()
+  React.useEffect(() => {
+    const alvoId = searchParams.get('contrato')
+    if (!alvoId) return
+    const alvo = allContracts.find((c) => c.id === alvoId)
+    if (!alvo) return
+    setTab(alvo.status === 'assinado' ? 'assinados' : 'pendentes-contrato')
+    setSelectedId(alvoId)
+    const limpo = new URLSearchParams(searchParams)
+    limpo.delete('contrato')
+    setSearchParams(limpo, { replace: true })
+  }, [searchParams, allContracts, setSearchParams])
 
   // O pdfData completo (base64) não vem na listagem (campo pesado) — busca sob demanda ao abrir
   // o detalhe de um contrato específico, mesmo padrão do ClientDrawer com loadFullClient.

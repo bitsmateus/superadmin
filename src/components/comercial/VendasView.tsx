@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { Award, Loader2, Plus, RotateCcw, ShoppingBag, Trash2, TrendingUp, Wrench } from 'lucide-react'
+import { Award, FileText, Loader2, Plus, RotateCcw, ShoppingBag, Trash2, TrendingUp, Wrench } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -15,6 +16,7 @@ import {
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
 import { useCommissionEntries, useCommissionTypes } from '@/hooks/useCommissions'
+import { useContracts } from '@/hooks/useContracts'
 import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt } from '@/hooks/useMonthFilter'
 import { leadBoardsService } from '@/services/leadBoards'
 import { commissionsService } from '@/services/commissions'
@@ -92,7 +94,7 @@ export function VendasView({ pageId }: { pageId: string }) {
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
   const [onlyPending, setOnlyPending] = React.useState(false)
   // Filtro vindo do painel de pendências (só um por vez — é "me mostre o que falta AGORA").
-  const [foco, setFoco] = React.useState<'nenhum' | 'contrato' | 'sem_comissao'>('nenhum')
+  const [foco, setFoco] = React.useState<'nenhum' | 'contrato' | 'sem_comissao' | 'sem_contrato'>('nenhum')
   // Recorte por pessoa: vale pra lista, pros cards de resumo, pras pendências e pras comissões —
   // é "me mostre só o Arthur", não só um filtro da tabela.
   const [sdrFiltro, setSdrFiltro] = React.useState('')
@@ -104,6 +106,7 @@ export function VendasView({ pageId }: { pageId: string }) {
   // pra não ter dois seletores de data mostrando praticamente a mesma coisa em telas diferentes.
   const commissionTypes = useCommissionTypes()
   const commissionEntries = useCommissionEntries()
+  const contratos = useContracts()
   const commissionsInPeriod = React.useMemo(
     () => commissionEntries.filter(
       (e) => monthOverlapsRange(e.month, from, to) && (!sdrFiltro || e.person === sdrFiltro),
@@ -155,12 +158,29 @@ export function VendasView({ pageId }: { pageId: string }) {
     [commissionsInPeriod],
   )
 
+  // Contrato de cada venda: o vínculo (contracts.venda_lead_id) aponta pro lead do CRM ou, em venda
+  // avulsa, pra própria linha da venda — por isso as duas chaves.
+  const contratoPorVenda = React.useMemo(() => {
+    const porLead = new Map<string, { id: string; assinado: boolean }>()
+    for (const c of contratos) {
+      if (!c.vendaLeadId) continue
+      porLead.set(c.vendaLeadId, { id: c.id, assinado: c.status === 'assinado' })
+    }
+    const mapa = new Map<string, { id: string; assinado: boolean }>()
+    for (const r of rows) {
+      const achado = (r.vendaOrigemId && porLead.get(r.vendaOrigemId)) || porLead.get(r.id)
+      if (achado) mapa.set(r.id, achado)
+    }
+    return mapa
+  }, [contratos, rows])
+
   const noPeriodo = React.useMemo(() => {
     return doPeriodo
       .filter((r) => !onlyPending || r.mrrPendente || r.implPendente)
       .filter((r) => foco !== 'contrato' || !r.contratoAssinado)
       .filter((r) => foco !== 'sem_comissao' || !vendasComComissao.has(r.id))
-  }, [doPeriodo, onlyPending, foco, vendasComComissao])
+      .filter((r) => foco !== 'sem_contrato' || !contratoPorVenda.has(r.id))
+  }, [doPeriodo, onlyPending, foco, vendasComComissao, contratoPorVenda])
 
   const pendencias = React.useMemo(() => {
     const base = doPeriodo.filter((r) => !r.vendaRevertida)
@@ -169,8 +189,9 @@ export function VendasView({ pageId }: { pageId: string }) {
       cobranca: base.filter((r) => r.mrrPendente || r.implPendente).length,
       semComissao: base.filter((r) => !vendasComComissao.has(r.id)).length,
       comissaoIncompleta: commissionsInPeriod.filter((c) => !c.typeId || c.amountCents <= 0).length,
+      semContrato: base.filter((r) => !contratoPorVenda.has(r.id)).length,
     }
-  }, [doPeriodo, vendasComComissao, commissionsInPeriod])
+  }, [doPeriodo, vendasComComissao, commissionsInPeriod, contratoPorVenda])
 
   // Revertida continua visível (o histórico importa) mas fora da conta.
   const validas = React.useMemo(() => noPeriodo.filter((r) => !r.vendaRevertida), [noPeriodo])
@@ -372,6 +393,12 @@ export function VendasView({ pageId }: { pageId: string }) {
             onClick={() => setOnlyPending((v) => !v)}
           />
           <PendenciaChip
+            label="sem contrato gerado"
+            count={pendencias.semContrato}
+            active={foco === 'sem_contrato'}
+            onClick={() => setFoco((f) => (f === 'sem_contrato' ? 'nenhum' : 'sem_contrato'))}
+          />
+          <PendenciaChip
             label="sem comissão lançada"
             count={pendencias.semComissao}
             active={foco === 'sem_comissao'}
@@ -474,6 +501,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <VendaRow
                     key={r.id}
                     row={r}
+                    contrato={contratoPorVenda.get(r.id) ?? null}
                     selected={selectedIds.has(r.id)}
                     onToggleSelect={() => toggleSelect(r.id)}
                     // A linha daqui é uma CÓPIA que o sistema cria sozinho ao marcar "Vendido" —
@@ -750,11 +778,14 @@ function ObservacoesCell({ value, onSave }: { value: string; onSave: (next: stri
 
 function VendaRow({
   row,
+  contrato,
   selected,
   onToggleSelect,
   onOpenLead,
 }: {
   row: LeadRow
+  /** Contrato gerado pra essa venda na aba Contrato (null = ainda não existe). */
+  contrato: { id: string; assinado: boolean } | null
   selected: boolean
   onToggleSelect: () => void
   onOpenLead: () => void
@@ -844,6 +875,7 @@ function VendaRow({
         </button>
       </td>
       <td className="px-4 py-3">
+        <div className="flex items-center gap-1.5">
         <button
           type="button"
           onClick={() => {
@@ -861,6 +893,20 @@ function VendaRow({
         >
           {row.contratoAssinado ? 'Assinado' : 'Pendente'}
         </button>
+        {contrato ? (
+          <Link
+            to={`/financeiro/contrato?contrato=${contrato.id}`}
+            title={contrato.assinado ? 'Abrir o contrato (assinado)' : 'Abrir o contrato (ainda não assinado lá)'}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/35 hover:bg-accent/10 hover:text-accent"
+          >
+            <FileText className="h-3.5 w-3.5" />
+          </Link>
+        ) : (
+          <span title="Nenhum contrato gerado na aba Contrato pra essa venda" className="text-[10px] text-foreground/25">
+            sem doc
+          </span>
+        )}
+        </div>
       </td>
       <PendenteValueCell
         value={row.valorMrr}

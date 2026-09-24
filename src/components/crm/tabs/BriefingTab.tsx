@@ -33,6 +33,7 @@ import {
   Server as ServerIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { LeadDataButton } from '@/components/comercial/LeadLinkPanel'
 import { Section } from '../ClientDrawer'
 import { CreateTenantModal } from '../CreateTenantModal'
 import { Button } from '@/components/ui/Button'
@@ -89,7 +90,7 @@ const SITE_GOAL_LABELS: Record<SiteGoal, string> = {
   outros: 'Outros',
 }
 
-type SubView = 'briefing' | 'automation' | 'sessao'
+type SubView = 'briefing' | 'automation'
 
 const emptyConfig: BriefingConfig = {
   connectionTypes: [],
@@ -135,6 +136,12 @@ export function BriefingTab({ client }: { client: Client }) {
   const [signOpen, setSignOpen] = React.useState(false)
   const [signNumber, setSignNumber] = React.useState(client.briefingNumber ?? '')
   const [editing, setEditing] = React.useState(false)
+  // A configuração só é editável até o cliente preencher o briefing; depois de gerado o link ela
+  // recolhe (seta pra abrir) e, com o briefing preenchido, trava de vez (só leitura).
+  const [configOpen, setConfigOpen] = React.useState(status === 'not_sent')
+  const configLocked = status === 'filled' || status === 'approved'
+  // "Link do briefing" também nasce recolhido; abre na seta.
+  const [linkOpen, setLinkOpen] = React.useState(false)
 
   // Fluxo da ficha: enquanto não houver contrato assinado, o briefing fica
   // bloqueado e mostramos o passo "marcar contrato assinado".
@@ -161,9 +168,16 @@ export function BriefingTab({ client }: { client: Client }) {
     setConfig(client.briefingConfig ?? emptyConfig)
     setRevisionNote(client.briefingRevisionNote ?? '')
     setEditing(false)
+    setConfigOpen((client.briefingStatus ?? 'not_sent') === 'not_sent')
+    setLinkOpen(false)
   }, [client.id])
 
+  React.useEffect(() => {
+    if (status !== 'not_sent') setConfigOpen(false)
+  }, [status])
+
   const updateConfig = (patch: Partial<BriefingConfig>) => {
+    if (configLocked) return
     const next = { ...config, ...patch }
     setConfig(next)
     db.updateClient(client.id, {
@@ -292,20 +306,41 @@ export function BriefingTab({ client }: { client: Client }) {
       <>
       {/* ── Configuração do briefing ── */}
       <Section
+        className={cn(!configOpen && '[&>header]:mb-0')}
         title={
-          <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setConfigOpen((o) => !o)}
+            aria-expanded={configOpen}
+            className="flex items-center gap-2 text-left"
+          >
+            {configOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-foreground/50" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-foreground/50" />
+            )}
             <SlidersHorizontal className="h-3.5 w-3.5 text-accent" />
             Configuração do briefing
-          </span>
+          </button>
         }
         action={
-          configComplete ? (
-            <Badge tone="success">Completo</Badge>
-          ) : (
-            <Badge tone="neutral">Incompleto</Badge>
-          )
+          <span className="flex items-center gap-2">
+            <LeadDataButton clientId={client.id} />
+            {configComplete ? (
+              <Badge tone="success">Completo</Badge>
+            ) : (
+              <Badge tone="neutral">Incompleto</Badge>
+            )}
+          </span>
         }
       >
+        {configOpen && (
+        <fieldset disabled={configLocked} className={cn('m-0 min-w-0 border-0 p-0', configLocked && 'opacity-70')}>
+        {configLocked && (
+          <p className="mb-3 text-[11px] text-foreground/50">
+            Configuração travada — o cliente já preencheu o briefing, então as opções não podem mais ser alteradas.
+          </p>
+        )}
         <div className="space-y-4">
           <ConfigGroup label="Forma de Conexão *">
             {CONNECTION_OPTIONS.map((opt) => (
@@ -412,9 +447,9 @@ export function BriefingTab({ client }: { client: Client }) {
                 onChange={(e) =>
                   updateConfig({ externalAutomationNotes: e.target.value })
                 }
-                onBlur={() =>
-                  db.updateClient(client.id, { briefingConfig: config })
-                }
+                onBlur={() => {
+                  if (!configLocked) db.updateClient(client.id, { briefingConfig: config })
+                }}
                 placeholder="O que precisamos do cliente para a automação externa?"
                 rows={3}
                 className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
@@ -422,6 +457,8 @@ export function BriefingTab({ client }: { client: Client }) {
             )}
           </div>
         </div>
+        </fieldset>
+        )}
       </Section>
 
       {/* ── Gerar link (quando ainda não enviado) ── */}
@@ -459,14 +496,27 @@ export function BriefingTab({ client }: { client: Client }) {
       {/* ── Link gerado ── */}
       {link && status !== 'not_sent' && (
         <Section
+          className={cn(!linkOpen && '[&>header]:mb-0')}
           title={
-            <span className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setLinkOpen((o) => !o)}
+              aria-expanded={linkOpen}
+              className="flex items-center gap-2 text-left"
+            >
+              {linkOpen ? (
+                <ChevronDown className="h-3.5 w-3.5 text-foreground/50" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-foreground/50" />
+              )}
               <FileText className="h-3.5 w-3.5 text-accent" />
               Link do briefing
-            </span>
+            </button>
           }
           action={<BriefingStatusBadge status={status} />}
         >
+          {linkOpen && (
+          <>
           <p className="text-xs text-foreground/55">
             Enviado em {formatDate(client.briefingSentAt)}.
           </p>
@@ -500,6 +550,8 @@ export function BriefingTab({ client }: { client: Client }) {
             <div className="mt-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
               Revisão solicitada: {client.briefingRevisionNote}
             </div>
+          )}
+          </>
           )}
         </Section>
       )}
@@ -578,7 +630,6 @@ export function BriefingTab({ client }: { client: Client }) {
             <AutomationView client={client} />
           )}
 
-          {subView === 'sessao' && <SessionView client={client} />}
         </>
       )}
       </>
@@ -1077,12 +1128,6 @@ function SubTabs({
         onClick={() => onChange('automation')}
         icon={<Wand2 className="h-3.5 w-3.5" />}
         label="Automação"
-      />
-      <SubTabBtn
-        active={value === 'sessao'}
-        onClick={() => onChange('sessao')}
-        icon={<CalendarClock className="h-3.5 w-3.5" />}
-        label="Sessão"
       />
     </div>
   )

@@ -389,11 +389,9 @@ export function OverviewTab({ client }: { client: Client }) {
       {/* Tenant vinculado — editável (permite vincular clientes antigos à mão) */}
       <TenantLinkSection client={client} />
 
-      {/* Pendências do cliente — trava a entrada na fila de configuração */}
-      <ReadinessSection client={client} />
-
-      {/* Progresso da config de API Oficial e de IA */}
-      <ConfigProgressSection client={client} />
+      {/* "Prontidão para configurar" (ReadinessSection) e "Progresso da configuração"
+          (ConfigProgressSection) saíram da Visão Geral — vão ser reposicionados em outro lugar.
+          Os componentes continuam definidos neste arquivo, só não são mais renderizados aqui. */}
 
       {/* Timeline */}
       <Section
@@ -749,14 +747,27 @@ function OaRow({ label, value }: { label: string; value?: string }) {
 function TenantLinkSection({ client }: { client: Client }) {
   const servers = useAuthStore((s) => s.servers)
   const serverName = servers.find((sv) => sv.id === client.tenantServerId)?.name
+  // Começa fechado — só abre na seta; é campo de consulta/ajuste raro, não precisa ocupar a tela.
+  const [open, setOpen] = React.useState(false)
 
   return (
     <Section
+      className={cn(!open && '[&>header]:mb-0')}
       title={
-        <span className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex items-center gap-2 text-left"
+        >
+          {open ? (
+            <ChevronDown className="h-3.5 w-3.5 text-foreground/50" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-foreground/50" />
+          )}
           <ServerIcon className="h-3.5 w-3.5 text-accent" />
           Tenant vinculado
-        </span>
+        </button>
       }
       action={
         serverName ? (
@@ -766,6 +777,8 @@ function TenantLinkSection({ client }: { client: Client }) {
         ) : null
       }
     >
+      {open && (
+      <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <FieldLabel>Servidor</FieldLabel>
@@ -828,6 +841,8 @@ function TenantLinkSection({ client }: { client: Client }) {
         Necessário para listar os canais e reconciliar o status. Clientes antigos podem não ter o
         token — cole aqui o <strong>API Token do tenant</strong> para vincular.
       </p>
+      </>
+      )}
     </Section>
   )
 }

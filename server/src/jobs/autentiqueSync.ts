@@ -1,5 +1,6 @@
 import { query, queryOne } from '../db.js';
 import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
+import { propagarContratoAssinado } from '../lib/contractSignal.js';
 
 /**
  * "Assinou no Autentique -> marca como assinado aqui", sem depender de webhook.
@@ -111,6 +112,7 @@ export async function verificarContratosPendentes(opts: { dryRun?: boolean } = {
       [c.id, info.assinadoEm]
     );
     if (c.client_id) await advanceClientToBriefing(c.client_id);
+    await propagarContratoAssinado(c.id, true);
     console.log('[autentique-sync] contrato marcado como assinado:', c.id, '(documento', c.autentique_document_id + ')');
   }
 }

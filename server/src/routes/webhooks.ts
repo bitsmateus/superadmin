@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { query, queryOne } from '../db.js';
 import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
+import { propagarContratoAssinado } from '../lib/contractSignal.js';
 import { restrictedBoardFilter } from './leadBoards.js';
 import { sendPushToUsers } from '../lib/webPush.js';
 
@@ -109,6 +110,7 @@ export async function webhookRoutes(app: FastifyInstance) {
     if (contract.client_id) {
       await advanceClientToBriefing(contract.client_id);
     }
+    await propagarContratoAssinado(contract.id, true);
 
     return reply.status(200).send({ ok: true, matched: true });
     });

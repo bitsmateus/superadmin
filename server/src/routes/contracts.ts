@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify';
-import { query } from '../db.js';
+import { query, queryOne } from '../db.js';
 import { restrictedBoardFilter } from './leadBoards.js';
 import { renderContractPdf } from '../lib/contractPdf.js';
 import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
+import { propagarContratoAssinado } from '../lib/contractSignal.js';
+import { findMatchingLeadRowId } from '../lib/leadMatch.js';
 
 /**
  * Aba Contrato (Dashboard Comercial) — modelo(s) padrão + contratos gerados por cliente. Reusa a
@@ -83,12 +85,27 @@ export async function contractRoutes(app: FastifyInstance) {
       const allowed = await restrictedBoardFilter(sub, role);
       if (allowed !== null && !allowed.includes(boardId)) return reply.status(403).send({ message: 'Acesso negado' });
 
+      // Sem vínculo informado, tenta achar sozinho a lead do mesmo prospect (telefone primeiro,
+      // nome/empresa depois — só aceita match inequívoco, ver leadMatch.ts). É esse vínculo que faz
+      // a assinatura chegar na venda e na comissão; antes dependia de alguém lembrar de clicar em
+      // "Vincular lead" em cada contrato, e quase nenhum tinha. Continua trocável à mão na tela.
+      let vendaLeadId = req.body.vendaLeadId ?? null;
+      if (!vendaLeadId && req.body.clientId) {
+        const cliente = await queryOne<{ phone: string | null; name: string | null; company: string | null }>(
+          'SELECT phone, name, company FROM clients WHERE id = $1',
+          [req.body.clientId]
+        );
+        if (cliente) {
+          vendaLeadId = await findMatchingLeadRowId(cliente.phone, cliente.name, cliente.company);
+        }
+      }
+
       const [contract] = await query(
         `INSERT INTO contracts (board_id, template_id, campos, conteudo, venda_lead_id, client_id, pdf_data, pdf_filename)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
         [
           boardId, req.body.templateId ?? null, JSON.stringify(req.body.campos ?? {}), req.body.conteudo ?? '',
-          req.body.vendaLeadId ?? null, req.body.clientId ?? null,
+          vendaLeadId, req.body.clientId ?? null,
           req.body.pdfData ?? null, req.body.pdfFilename ?? null,
         ]
       );
@@ -139,6 +156,10 @@ export async function contractRoutes(app: FastifyInstance) {
       // implementações da mesma regra (ver server/src/lib/briefingHandoff.ts).
       if (req.body.status === 'assinado' && contract.client_id) {
         await advanceClientToBriefing(contract.client_id);
+      }
+      // Assinar (ou desmarcar) reflete na venda e nas comissões dela — um clique só pro mesmo fato.
+      if (req.body.status !== undefined) {
+        void propagarContratoAssinado(contract.id, req.body.status === 'assinado');
       }
       return contract;
     }

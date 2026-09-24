@@ -90,7 +90,7 @@ const SITE_GOAL_LABELS: Record<SiteGoal, string> = {
   outros: 'Outros',
 }
 
-type SubView = 'briefing' | 'automation' | 'sessao'
+type SubView = 'briefing' | 'automation'
 
 const emptyConfig: BriefingConfig = {
   connectionTypes: [],
@@ -630,7 +630,6 @@ export function BriefingTab({ client }: { client: Client }) {
             <AutomationView client={client} />
           )}
 
-          {subView === 'sessao' && <SessionView client={client} />}
         </>
       )}
       </>
@@ -1129,12 +1128,6 @@ function SubTabs({
         onClick={() => onChange('automation')}
         icon={<Wand2 className="h-3.5 w-3.5" />}
         label="Automação"
-      />
-      <SubTabBtn
-        active={value === 'sessao'}
-        onClick={() => onChange('sessao')}
-        icon={<CalendarClock className="h-3.5 w-3.5" />}
-        label="Sessão"
       />
     </div>
   )

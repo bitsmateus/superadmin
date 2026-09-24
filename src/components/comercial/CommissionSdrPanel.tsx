@@ -58,13 +58,15 @@ export function RegisterCommissionButton({ onClick }: { onClick: () => void }) {
 /** Comissão SDR (tabela dos lançamentos) + Total por pessoa — `entries` já vem filtrada pro
  * período que a tela host estiver mostrando (mesmo período da lista de Vendas). */
 export function CommissionSdrSection({
-  entries, types, periodLabel, somenteIncompletos = false,
+  entries, types, periodLabel, somenteIncompletos = false, onOpenLead,
 }: {
   entries: CommissionEntry[]
   types: CommissionType[]
   periodLabel: string
   /** Ligado pelo painel de pendências: mostra só o que falta preencher (sem tipo ou sem valor). */
   somenteIncompletos?: boolean
+  /** Abre os dados da lead a partir do lançamento (recebe a linha da venda ligada a ele). */
+  onOpenLead?: (vendaLeadId: string) => void
 }) {
   const incompleto = (e: CommissionEntry) => !e.typeId || e.amountCents <= 0
   const visiveis = React.useMemo(
@@ -103,7 +105,7 @@ export function CommissionSdrSection({
 
   return (
     <div className="mt-4 space-y-4">
-      <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} />
+      <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} onOpenLead={onOpenLead} />
 
       {byCloser.length > 0 && (
         <EntriesTable
@@ -111,6 +113,7 @@ export function CommissionSdrSection({
           entries={byCloser}
           onToggle={toggleStatus}
           types={types}
+          onOpenLead={onOpenLead}
           hint="Valor por faixa de volume do mês — o sistema lança e recalcula sozinho."
         />
       )}
@@ -165,12 +168,14 @@ function EntriesTable({
   onToggle,
   types,
   hint,
+  onOpenLead,
 }: {
   title: string
   entries: CommissionEntry[]
   onToggle: (entry: CommissionEntry) => void
   types: CommissionType[]
   hint?: string
+  onOpenLead?: (vendaLeadId: string) => void
 }) {
   const total = entries.reduce((sum, e) => sum + e.amountCents, 0)
   const [deleting, setDeleting] = React.useState<CommissionEntry | null>(null)
@@ -211,7 +216,7 @@ function EntriesTable({
                     className={cn('border-b border-line/60 last:border-0 hover:bg-elevate/[0.04]', incomplete && 'bg-warning/[0.04]')}
                   >
                     <td className="px-4 py-3 text-sm">
-                      <NomeCell entry={e} />
+                      <NomeCell entry={e} onOpenLead={onOpenLead} />
                     </td>
                     <td className="px-4 py-3">
                       <PersonCell entry={e} />
@@ -298,10 +303,25 @@ function EntriesTable({
   )
 }
 
-/** Nome do cliente/venda (mesmo nome da aba Vendas), editável no lugar. */
-function NomeCell({ entry }: { entry: CommissionEntry }) {
+/** Nome do cliente/venda. Em lançamento LIGADO a uma venda o nome vem de lá e se atualiza sozinho,
+ * então aqui ele não se edita — clicar abre os dados da lead, pra saber de quem é a comissão sem
+ * precisar caçar na lista de cima. Lançamento manual (sem venda) segue editável no lugar. */
+function NomeCell({ entry, onOpenLead }: { entry: CommissionEntry; onOpenLead?: (vendaLeadId: string) => void }) {
   const [editing, setEditing] = React.useState(false)
   const [value, setValue] = React.useState(entry.nome)
+
+  if (entry.vendaLeadId && onOpenLead) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenLead(entry.vendaLeadId!)}
+        title="Ver dados do lead"
+        className="rounded px-1.5 py-0.5 text-left font-medium text-foreground underline decoration-dotted underline-offset-2 hover:bg-elevate/[0.06] hover:text-accent"
+      >
+        {entry.nome || 'Sem nome'}
+      </button>
+    )
+  }
 
   if (editing) {
     return (

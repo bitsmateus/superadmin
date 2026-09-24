@@ -121,19 +121,6 @@ export function VendasView({ pageId }: { pageId: string }) {
     return () => { cancelado = true }
   }, [rows.length])
   const [fichaClientId, setFichaClientId] = React.useState<string | null>(null)
-
-  // Comissão de cada venda (todas, sem filtro de período): alimenta a última bolinha do semáforo.
-  const comissaoPorVenda = React.useMemo(() => {
-    const mapa = new Map<string, { total: number; incompletas: number }>()
-    for (const c of commissionEntries) {
-      if (!c.vendaLeadId) continue
-      const atual = mapa.get(c.vendaLeadId) ?? { total: 0, incompletas: 0 }
-      atual.total += 1
-      if (!c.typeId || c.amountCents <= 0) atual.incompletas += 1
-      mapa.set(c.vendaLeadId, atual)
-    }
-    return mapa
-  }, [commissionEntries])
   const commissionsInPeriod = React.useMemo(
     () => commissionEntries.filter(
       (e) => monthOverlapsRange(e.month, from, to) && (!sdrFiltro || e.person === sdrFiltro),
@@ -500,7 +487,7 @@ export function VendasView({ pageId }: { pageId: string }) {
         {/* Lista */}
         <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px]">
+            <table className="w-full min-w-[880px]">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                   <th className="w-10 px-4 py-3">
@@ -514,7 +501,6 @@ export function VendasView({ pageId }: { pageId: string }) {
                     />
                   </th>
                   <th className="px-4 py-3">Nome</th>
-                  <th className="w-24 px-4 py-3" title="Vendida · Contrato gerado · Assinado · Ficha · Cobrança · Comissão">Etapas</th>
                   <th className="w-28 px-4 py-3">SDR</th>
                   <th className="w-32 px-4 py-3">Fechou</th>
                   <th className="w-24 px-4 py-3">Funil</th>
@@ -529,7 +515,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="px-4 py-10 text-center text-sm text-foreground/40">
+                    <td colSpan={11} className="px-4 py-10 text-center text-sm text-foreground/40">
                       {onlyPending ? 'Nenhuma venda pendente de pagamento neste período.' : 'Nenhuma venda neste período.'}
                     </td>
                   </tr>
@@ -540,7 +526,6 @@ export function VendasView({ pageId }: { pageId: string }) {
                     row={r}
                     contrato={contratoPorVenda.get(r.id) ?? null}
                     ficha={fichas[r.id]}
-                    comissao={comissaoPorVenda.get(r.id)}
                     onAbrirCliente={setFichaClientId}
                     selected={selectedIds.has(r.id)}
                     onToggleSelect={() => toggleSelect(r.id)}
@@ -557,7 +542,6 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                     <td />
                     <td className="px-4 py-3">Total</td>
-                    <td />
                     <td />
                     <td />
                     <td />
@@ -697,46 +681,6 @@ function SummaryCard({
       </div>
       <div className="mt-3 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{value}</div>
     </div>
-  )
-}
-
-/**
- * Semáforo da venda: a mesma sequência que toda venda percorre, numa coluna só. Verde = etapa
- * concluída, âmbar = onde a venda parou, cinza = ainda não chegou lá. É o resumo do que já está
- * espalhado pela linha (contrato, ficha, bolinhas de cobrança) mais a comissão, que fica na tabela
- * de baixo — a ideia é bater o olho em vez de ler cinco lugares.
- */
-function SemaforoEtapas({
-  row, temContrato, ficha, comissao,
-}: {
-  row: LeadRow
-  temContrato: boolean
-  ficha: { status: string } | undefined
-  comissao: { total: number; incompletas: number } | undefined
-}) {
-  const etapas = [
-    { nome: 'Vendida', ok: true },
-    { nome: 'Contrato gerado', ok: temContrato },
-    { nome: 'Contrato assinado', ok: row.contratoAssinado },
-    { nome: 'Ficha preenchida', ok: ficha?.status === 'preenchida' },
-    { nome: 'Cobrança paga', ok: !row.mrrPendente && !row.implPendente },
-    { nome: 'Comissão completa', ok: !!comissao && comissao.total > 0 && comissao.incompletas === 0 },
-  ]
-  const primeiraPendente = etapas.findIndex((e) => !e.ok)
-  const resumo = etapas.map((e) => `${e.ok ? '✓' : '·'} ${e.nome}`).join('  ·  ')
-
-  return (
-    <span className="flex items-center gap-1" title={resumo}>
-      {etapas.map((e, i) => (
-        <span
-          key={e.nome}
-          className={cn(
-            'h-2 w-2 rounded-full',
-            e.ok ? 'bg-success' : i === primeiraPendente ? 'bg-amber-400' : 'bg-elevate/[0.15]',
-          )}
-        />
-      ))}
-    </span>
   )
 }
 
@@ -898,7 +842,6 @@ function VendaRow({
   row,
   contrato,
   ficha,
-  comissao,
   selected,
   onToggleSelect,
   onOpenLead,
@@ -909,8 +852,6 @@ function VendaRow({
   contrato: { id: string; assinado: boolean } | null
   /** Estado da ficha de cadastro do cliente dessa venda. */
   ficha: { status: string; clientId: string | null } | undefined
-  /** Quantos lançamentos de comissão essa venda tem, e quantos ainda estão sem tipo/valor. */
-  comissao: { total: number; incompletas: number } | undefined
   selected: boolean
   onToggleSelect: () => void
   onOpenLead: () => void
@@ -969,9 +910,6 @@ function VendaRow({
             </span>
           )}
         </button>
-      </td>
-      <td className="px-4 py-3">
-        <SemaforoEtapas row={row} temContrato={!!contrato} ficha={ficha} comissao={comissao} />
       </td>
       <td className={cn('px-4 py-3 text-sm text-foreground/70', row.vendaRevertida && 'line-through')}>
         {row.sdr || '—'}

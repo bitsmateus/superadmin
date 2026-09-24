@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Bot, Download, Loader2, Send, Sparkles, AlertCircle } from 'lucide-react'
+import { Bot, Download, Loader2, Sparkles, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Section } from '../ClientDrawer'
 import { chatbotFlowApi, type ChatbotFlowState } from '@/api/chatbotFlow'
@@ -23,7 +23,7 @@ export function ChatbotTab({ client }: { client: Client }) {
   const [data, setData] = React.useState<ChatbotFlowState | null>(null)
   const [edited, setEdited] = React.useState<FlowSpec | null>(null)
   const [loading, setLoading] = React.useState(true)
-  const [busy, setBusy] = React.useState<'generate' | 'save' | 'publish' | null>(null)
+  const [busy, setBusy] = React.useState<'generate' | 'save' | null>(null)
   const [errors, setErrors] = React.useState<string[]>([])
 
   const hasBriefingFlow = Boolean(client.briefingData?.chatbotFlow)
@@ -96,19 +96,6 @@ export function ChatbotTab({ client }: { client: Client }) {
     URL.revokeObjectURL(url)
   }
 
-  const publish = async () => {
-    setBusy('publish')
-    try {
-      await chatbotFlowApi.publish(client.id)
-      setData((d) => (d ? { ...d, publishedAt: new Date().toISOString() } : d))
-      toast.success('Fluxo enviado ao tenant')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Falha ao enviar')
-    } finally {
-      setBusy(null)
-    }
-  }
-
   // Edição inline (imutável)
   const patchStep = (i: number, patch: Partial<FlowStep>) => {
     setEdited((s) =>
@@ -161,14 +148,6 @@ export function ChatbotTab({ client }: { client: Client }) {
               <>
                 <Button variant="secondary" onClick={download} leftIcon={<Download className="h-4 w-4" />}>
                   Baixar JSON
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={publish}
-                  loading={busy === 'publish'}
-                  leftIcon={busy !== 'publish' ? <Send className="h-4 w-4" /> : undefined}
-                >
-                  Enviar para o tenant
                 </Button>
               </>
             )}

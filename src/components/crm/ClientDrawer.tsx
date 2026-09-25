@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ClipboardList,
   ExternalLink,
+  Folder,
   Link2,
   ListChecks,
   Loader2,
@@ -52,14 +53,19 @@ interface TabDef {
   icon: React.ReactNode
 }
 
+// Abas principais. "Entrega" é uma pasta: as abas de FOLDER_DEFS ficam só dentro dela.
 const TAB_DEFS: TabDef[] = [
   { value: 'overview', label: 'Visão Geral', icon: <Activity className="h-3.5 w-3.5" /> },
-  { value: 'briefing', label: 'Briefing', icon: <MessageSquare className="h-3.5 w-3.5" /> },
   { value: 'setup', label: 'Configuração', icon: <Settings2 className="h-3.5 w-3.5" /> },
+  { value: 'folder', label: 'Entrega', icon: <Folder className="h-3.5 w-3.5" /> },
+  { value: 'ficha', label: 'Ficha de cadastro', icon: <ClipboardList className="h-3.5 w-3.5" /> },
+]
+
+const FOLDER_DEFS: TabDef[] = [
+  { value: 'briefing', label: 'Briefing', icon: <MessageSquare className="h-3.5 w-3.5" /> },
   { value: 'chatbot', label: 'Chatbot', icon: <Bot className="h-3.5 w-3.5" /> },
   { value: 'delivery', label: 'Entrega', icon: <ListChecks className="h-3.5 w-3.5" /> },
   { value: 'followup', label: 'Follow-up', icon: <Send className="h-3.5 w-3.5" /> },
-  { value: 'ficha', label: 'Ficha de cadastro', icon: <ClipboardList className="h-3.5 w-3.5" /> },
 ]
 
 const CRM_LEAD_TAB_DEF: TabDef = { value: 'crmLead', label: 'Lead do CRM', icon: <Link2 className="h-3.5 w-3.5" /> }
@@ -77,7 +83,8 @@ export interface ClientDrawerProps {
 }
 
 export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLeadTab }: ClientDrawerProps) {
-  const tabDefs = showCrmLeadTab ? [...TAB_DEFS, CRM_LEAD_TAB_DEF] : TAB_DEFS
+  const folderDefs = showCrmLeadTab ? [...FOLDER_DEFS, CRM_LEAD_TAB_DEF] : FOLDER_DEFS
+  const tabDefs = TAB_DEFS
   const client = useClient(clientId ?? undefined)
   // Carrega os campos pesados (ex.: contract_file) que a listagem em massa
   // omite pra aliviar o boot.
@@ -85,6 +92,14 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
     if (clientId) void db.loadFullClient(clientId)
   }, [clientId])
   const [tab, setTab] = React.useState('overview')
+  const [folderTab, setFolderTab] = React.useState('briefing')
+  // Leva pra qualquer aba, inclusive as que ficam dentro da pasta "Entrega".
+  const goTo = (t: string) => {
+    if (FOLDER_DEFS.some((f) => f.value === t) || t === CRM_LEAD_TAB_DEF.value) {
+      setFolderTab(t)
+      setTab('folder')
+    } else setTab(t)
+  }
   const [stageMenu, setStageMenu] = React.useState(false)
   const stageMenuRef = React.useRef<HTMLDivElement>(null)
   useOutsideClose(stageMenuRef, stageMenu, () => setStageMenu(false))
@@ -107,6 +122,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
 
   React.useEffect(() => {
     setTab('overview')
+    setFolderTab('briefing')
     setStageMenu(false)
     setConfirmArchive(false)
     setConfirmTenantStatus(false)
@@ -347,15 +363,37 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
 
         <div className="p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
-          {tab === 'briefing' && <BriefingTab client={client} />}
-          {tab === 'setup' && <SetupPanel client={client} onGoTo={setTab} showAdvanced />}
-          {tab === 'chatbot' && (
-            <ChatbotTab client={client} onGenerated={() => markSetupItemDone(client, 'flow_generated', 'Chatbot/IA gerado')} />
+          {tab === 'setup' && <SetupPanel client={client} onGoTo={goTo} showAdvanced />}
+          {tab === 'folder' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {folderDefs.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => setFolderTab(f.value)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                      folderTab === f.value
+                        ? 'bg-accent/10 text-accent ring-1 ring-accent/25'
+                        : 'text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground',
+                    )}
+                  >
+                    {f.icon}
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              {folderTab === 'briefing' && <BriefingTab client={client} />}
+              {folderTab === 'chatbot' && (
+                <ChatbotTab client={client} onGenerated={() => markSetupItemDone(client, 'flow_generated', 'Chatbot/IA gerado')} />
+              )}
+              {folderTab === 'delivery' && <DeliveryTab client={client} />}
+              {folderTab === 'followup' && <FollowUpTab client={client} />}
+              {folderTab === 'crmLead' && showCrmLeadTab && <CrmLeadTab client={client} />}
+            </div>
           )}
-          {tab === 'delivery' && <DeliveryTab client={client} />}
-          {tab === 'followup' && <FollowUpTab client={client} />}
           {tab === 'ficha' && <FichaTab client={client} />}
-          {tab === 'crmLead' && showCrmLeadTab && <CrmLeadTab client={client} />}
         </div>
       </Drawer>
 

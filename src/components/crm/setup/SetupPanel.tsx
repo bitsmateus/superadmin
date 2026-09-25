@@ -18,7 +18,8 @@ import { Input } from '@/components/ui/Input'
 import { CreateTenantModal } from '@/components/crm/CreateTenantModal'
 import { ChatbotTab } from '@/components/crm/tabs/ChatbotTab'
 import { N8nAiSection } from '@/components/crm/tabs/N8nAiSection'
-import { AutomationView } from '@/components/crm/tabs/BriefingTab'
+import { AutomationView, BriefingTab } from '@/components/crm/tabs/BriefingTab'
+import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import {
   completeClientDelivery,
@@ -51,6 +52,8 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
   const [tenantModal, setTenantModal] = React.useState(false)
   const [flowOpen, setFlowOpen] = React.useState(false)
   const [advancedOpen, setAdvancedOpen] = React.useState(false)
+  // "Abrir Briefing": a tela do briefing em pop-up, sem sair da aba.
+  const [briefingModal, setBriefingModal] = React.useState(false)
   const [date, setDate] = React.useState(client.deliveryDate ?? '')
 
   // Ao concluir uma etapa, a próxima abre sozinha.
@@ -94,19 +97,22 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
     briefing: (
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {client.briefingStatus && client.briefingStatus !== 'not_sent' ? (
-          link && (
-            <Button size="sm" variant="secondary" onClick={copyLink} leftIcon={<Copy className="h-3.5 w-3.5" />}>
-              Copiar link do briefing
+          <>
+            {link && (
+              <Button size="sm" variant="secondary" onClick={copyLink} leftIcon={<Copy className="h-3.5 w-3.5" />}>
+                Copiar link do briefing
+              </Button>
+            )}
+            <Button size="sm" variant="secondary" onClick={() => setBriefingModal(true)}>
+              Abrir Briefing
             </Button>
-          )
+          </>
         ) : (
           <>
             <p className="text-xs text-foreground/55">Configure e envie o briefing pela aba Briefing do cliente.</p>
-            {onGoTo && (
-              <Button size="sm" onClick={() => onGoTo('briefing')}>
-                Abrir Briefing
-              </Button>
-            )}
+            <Button size="sm" onClick={() => setBriefingModal(true)}>
+              Abrir Briefing
+            </Button>
           </>
         )}
       </div>
@@ -271,6 +277,10 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
           )}
         </div>
       )}
+
+      <Modal open={briefingModal} onClose={() => setBriefingModal(false)} title={`Briefing — ${client.company || client.name}`} size="2xl">
+        <BriefingTab client={client} />
+      </Modal>
 
       <CreateTenantModal client={client} open={tenantModal} onClose={() => setTenantModal(false)} />
     </div>

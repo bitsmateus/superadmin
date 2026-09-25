@@ -45,6 +45,7 @@ import { api } from '@/services/api'
 import { usersApi } from '@/api/users'
 import { queuesApi, extractQueueId } from '@/api/queues'
 import { chatbotFlowApi } from '@/api/chatbotFlow'
+import { BriefingMeeting } from '../BriefingMeeting'
 import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
@@ -282,6 +283,8 @@ export function BriefingTab({ client }: { client: Client }) {
 
   return (
     <div className="space-y-5">
+      <BriefingMeeting client={client} />
+
       {needsContractSign && (
         <Section
           title={

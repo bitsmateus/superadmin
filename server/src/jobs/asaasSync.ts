@@ -22,6 +22,9 @@ const INTERVALO_PADRAO_MIN = 15;
 
 type Customer = { id: string; name: string; email: string | null; cpfCnpj: string | null; phone: string | null; mobilePhone: string | null };
 type Subscription = { id: string; customer: string; value: number; status: string; cycle: string; nextDueDate: string | null };
+/** O que um cliente paga por mês: a SOMA das assinaturas ativas dele, mais a maior delas como
+ * referência (é a que fica guardada em asaas_subscription_id). */
+type Mensalidade = { total: number; principal: Subscription };
 
 async function config(): Promise<{ chave: string; base: string; intervalo: number } | null> {
   const row = await queryOne<{ asaas_api_key: string | null; asaas_environment: string | null; asaas_sync_interval_min: number | null }>(
@@ -84,13 +87,18 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
     listar<Subscription>(cfg.base, cfg.chave, '/subscriptions'),
   ]);
 
-  const assinaturaAtiva = new Map<string, Subscription>();
+  // Mais de uma assinatura ativa no mesmo cliente são cobranças que SOMAM (serviços diferentes
+  // na mesma conta), não alternativas — o que ele paga por mês é a soma delas.
+  const assinaturaAtiva = new Map<string, Mensalidade>();
   for (const s of subscriptions) {
     if (s.status !== 'ACTIVE') continue;
-    // Mais de uma assinatura ativa no mesmo customer: fica a de maior valor (é a principal;
-    // as menores costumam ser adicionais já embutidos no que a pessoa chama de "mensalidade").
     const atual = assinaturaAtiva.get(s.customer);
-    if (!atual || (s.value ?? 0) > (atual.value ?? 0)) assinaturaAtiva.set(s.customer, s);
+    if (!atual) {
+      assinaturaAtiva.set(s.customer, { total: s.value ?? 0, principal: s });
+    } else {
+      atual.total += s.value ?? 0;
+      if ((s.value ?? 0) > (atual.principal.value ?? 0)) atual.principal = s;
+    }
   }
 
   const clientes = await query<{
@@ -169,27 +177,28 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
 
     const assinatura = assinaturaAtiva.get(customerId);
     if (!assinatura) continue;
-    resultado.mrrLigado += assinatura.value ?? 0;
+    resultado.mrrLigado += assinatura.total;
 
     // O valor que vale é o que está sendo cobrado. Só mexe quando muda de verdade, pra não
     // carimbar updated_at de meio mundo a cada rodada.
     const atual = Math.round(Number(cl.monthly_value ?? 0) * 100);
-    const doAsaas = Math.round((assinatura.value ?? 0) * 100);
+    const doAsaas = Math.round(assinatura.total * 100);
     if (doAsaas && doAsaas !== atual) {
       resultado.valoresAtualizados++;
       if (!opts.dryRun) {
-        const diaVencimento = assinatura.nextDueDate ? Number(assinatura.nextDueDate.slice(8, 10)) : null;
+        const venc = assinatura.principal.nextDueDate;
+        const diaVencimento = venc ? Number(venc.slice(8, 10)) : null;
         await query(
           `UPDATE clients
            SET monthly_value = $1, asaas_subscription_id = $2,
                due_day = COALESCE($3, due_day), updated_at = NOW()
            WHERE id = $4`,
-          [(assinatura.value ?? 0).toFixed(2), assinatura.id, diaVencimento, cl.id]
+          [assinatura.total.toFixed(2), assinatura.principal.id, diaVencimento, cl.id]
         );
       }
     } else if (!opts.dryRun) {
       await query('UPDATE clients SET asaas_subscription_id = $1 WHERE id = $2 AND asaas_subscription_id IS DISTINCT FROM $1', [
-        assinatura.id, cl.id,
+        assinatura.principal.id, cl.id,
       ]);
     }
   }

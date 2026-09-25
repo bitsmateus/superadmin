@@ -55,6 +55,15 @@ const UNIDADE_CURTA: Record<Unidade, string> = {
 
 type Sugestao = { mrrCents: number; implCents: number; origem: string }
 
+/** O termo digitado bate com esse cliente? Nome, empresa e telefone por texto; CNPJ pelos dígitos
+ * dos dois lados, pra achar tanto "05.490.849/0001-04" quanto "05490849". */
+function casaComBusca(c: Client, termo: string): boolean {
+  if (!termo) return true
+  if ([c.name, c.company, c.phone].some((v) => (v ?? '').toLowerCase().includes(termo))) return true
+  const digitos = termo.replace(/\D/g, '')
+  return digitos.length >= 3 && (c.cnpj ?? '').replace(/\D/g, '').includes(digitos)
+}
+
 function centsDoCliente(valor: number | undefined): number {
   return Math.round((valor ?? 0) * 100)
 }
@@ -158,16 +167,17 @@ export function FinanceiroClientesGeralPage() {
         if (status === 'cancelados') return c.stage === 'churned'
         return true
       })
-      .filter((c) => {
-        if (!termo) return true
-        if ([c.name, c.company, c.phone].some((v) => (v ?? '').toLowerCase().includes(termo))) return true
-        // CNPJ: compara só os dígitos dos dois lados, então acha tanto quem digita
-        // "05.490.849/0001-04" quanto "05490849" ou o número colado.
-        const digitos = termo.replace(/\D/g, '')
-        return digitos.length >= 3 && (c.cnpj ?? '').replace(/\D/g, '').includes(digitos)
-      })
+      .filter((c) => casaComBusca(c, termo))
       .sort((a, b) => centsDoCliente(b.monthlyValue) - centsDoCliente(a.monthlyValue) || (a.name ?? '').localeCompare(b.name ?? ''))
   }, [clients, busca, status, unidadeAtiva, verSemEmpresa])
+
+  // Busca que encontra em OUTRA situação (ex.: o cliente existe, mas está cancelado e o filtro
+  // está em "Só ativos"): sem isso a tela dizia "nenhum cliente" e parecia que o cadastro sumiu.
+  const escondidosPeloFiltro = React.useMemo(() => {
+    const termo = busca.trim().toLowerCase()
+    if (!termo || lista.length) return 0
+    return clients.filter((c) => !c.archivedAt && casaComBusca(c, termo)).length
+  }, [clients, busca, lista.length])
 
   const semValorComSugestao = React.useMemo(
     () => lista.filter((c) => (c.monthlyValue ?? 0) === 0 && sugestoes[c.id]?.mrrCents),
@@ -355,7 +365,23 @@ export function FinanceiroClientesGeralPage() {
                     {lista.length === 0 && (
                       <tr>
                         <td colSpan={8} className="px-4 py-10 text-center text-sm text-foreground/40">
-                          {semEmpresa.length > 0 && !verSemEmpresa
+                          {escondidosPeloFiltro > 0 ? (
+                            <>
+                              <span>
+                                {escondidosPeloFiltro === 1
+                                  ? 'Achei 1 cliente com essa busca, mas ele está fora dos filtros atuais'
+                                  : `Achei ${escondidosPeloFiltro} clientes com essa busca, mas estão fora dos filtros atuais`}
+                                {status === 'ativos' ? ' (cancelado, e a lista está em "Só ativos").' : '.'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => { setStatus('todos'); setVerSemEmpresa(false) }}
+                                className="ml-2 font-medium text-accent hover:underline"
+                              >
+                                Mostrar assim mesmo
+                              </button>
+                            </>
+                          ) : semEmpresa.length > 0 && !verSemEmpresa
                             ? 'Nenhum cliente nesta empresa ainda — use o aviso acima pra classificar quem está sem.'
                             : 'Nenhum cliente com esses filtros.'}
                         </td>

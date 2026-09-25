@@ -404,7 +404,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         </button>
       </div>
 
-      <nav className="mt-2 flex flex-1 flex-col gap-0.5 px-3">
+      <nav className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-4">
         {/* Suporte — grupo expansível com subpáginas */}
         {suporte.length > 0 && (
         <>

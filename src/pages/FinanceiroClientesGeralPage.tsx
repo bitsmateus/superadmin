@@ -110,16 +110,17 @@ export function FinanceiroClientesGeralPage() {
   const sincronizarAsaas = async () => {
     setSincronizando(true)
     try {
-      const r = await api.post<{ desde: string | null; vinculados: number; valoresAtualizados: number }>(
-        '/api/asaas/sync',
-      )
+      const r = await api.post<{
+        desde: string | null; vinculados: number; valoresAtualizados: number; criados: number; cancelados: number
+      }>('/api/asaas/sync')
       await db.refresh()
-      const corte = r.desde ? ` (assinaturas criadas a partir de ${r.desde.split('-').reverse().join('/')})` : ''
-      toast.success(
-        r.valoresAtualizados || r.vinculados
-          ? `Asaas lido${corte}: ${r.valoresAtualizados} mensalidade(s) atualizada(s), ${r.vinculados} cliente(s) ligado(s)`
-          : `Asaas lido${corte}: nada novo pra trazer`,
-      )
+      const mudancas = [
+        r.criados && `${r.criados} cliente(s) criado(s)`,
+        r.cancelados && `${r.cancelados} cancelado(s)`,
+        r.vinculados && `${r.vinculados} ligado(s) a uma cobrança`,
+        r.valoresAtualizados && `${r.valoresAtualizados} mensalidade(s) atualizada(s)`,
+      ].filter(Boolean)
+      toast.success(mudancas.length ? `Asaas lido: ${mudancas.join(', ')}` : 'Asaas lido: nada mudou desde a última vez')
     } catch (err) {
       toast.error('Falha ao ler o Asaas: ' + (err as Error).message)
     } finally {
@@ -243,7 +244,7 @@ export function FinanceiroClientesGeralPage() {
             variant="secondary"
             onClick={sincronizarAsaas}
             disabled={sincronizando}
-            title="Traz do Asaas as assinaturas novas (as antigas ficam como estão)"
+            title="Lê o Asaas agora: cobrança nova vira cliente, cobrança removida vira cancelamento"
             className="ml-auto"
           >
             {sincronizando

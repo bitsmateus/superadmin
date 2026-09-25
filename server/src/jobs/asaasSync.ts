@@ -1,31 +1,50 @@
 import { query, queryOne } from '../db.js';
 
 /**
- * Asaas -> painel: quem é cliente de quem, e quanto cada um paga de verdade.
+ * Asaas -> painel. O Asaas manda no dinheiro: é lá que a cobrança existe, e é de lá que a tela
+ * "Clientes Geral" tira mensalidade, quem virou cliente e quem deixou de ser.
  *
- * A mensalidade nunca existiu no cadastro do cliente (nasceu no Suporte, onde ninguém preenchia
- * valor), então a tela "Clientes Geral" dependia de digitação manual. Quem sabe o valor de verdade
- * é o Asaas: é lá que a assinatura é cobrada. Este job liga cada cliente ao customer do Asaas e
- * copia o valor da assinatura ATIVA pra monthly_value.
+ * As três regras, uma frase cada:
  *
- * O casamento é heurístico, na mesma escada de sempre e sempre exigindo UM único candidato:
- * CNPJ/CPF (o mais forte, vem da ficha de cadastro) -> e-mail -> telefone (últimos 8 dígitos) ->
- * nome/empresa. Vínculo já gravado (asaas_customer_id) não é recalculado: confirmação manual
- * ou de rodada anterior vale mais que heurística.
+ *  1. CRIOU COBRANÇA LÁ, NASCE CLIENTE AQUI. Assinatura nova sem cadastro correspondente cria o
+ *     cliente com nome, empresa, telefone e mensalidade vindos do Asaas. Empresa do grupo e valor
+ *     de implementação ficam em branco de propósito — são decisão de gente, preenchidas na tela.
  *
- * Direção única, Asaas -> painel. Nada aqui cria, altera ou cancela cobrança lá.
+ *  2. REMOVEU A COBRANÇA LÁ, VIRA CANCELADO AQUI. A linha que aponta pra uma assinatura que saiu
+ *     do ar (cancelada, expirada ou apagada) registra o cancelamento com a data de hoje e sai dos
+ *     ativos. Motivo e observação ficam pra preencher depois, na aba Cancelamentos.
+ *
+ *  3. MUDOU O VALOR LÁ, MUDA AQUI. Quem já está ligado acompanha o valor da própria assinatura,
+ *     sempre — mesma ideia: se mexeu no Asaas, mexe aqui; se não mexeu, nada se move sozinho.
+ *
+ * O que o Asaas NÃO decide: empresa do grupo, implementação, nome editado à mão e a divisão de um
+ * mesmo CNPJ em várias linhas (a JLF tem três cobranças, duas da NX Digital e uma da NX Sistema).
+ * Por isso o vínculo forte é a ASSINATURA (clients.asaas_subscription_id), não o cliente: cada
+ * linha da tela vale pela cobrança dela.
+ *
+ * A DATA DE CORTE (settings.asaas_sync_since) vale só pra criar vínculo NOVO: assinatura antiga que
+ * ficou sem par — cobrança fora do Asaas, cadastro duplicado, caso ainda em análise — não é mais
+ * caçada a cada 15 minutos. Quem já está ligado continua sendo acompanhado, seja de quando for.
+ *
+ * Direção única: nada aqui cria, altera ou cancela cobrança no Asaas.
  */
 
 const API = 'https://api.asaas.com/v3';
 const SANDBOX = 'https://sandbox.asaas.com/api/v3';
 const INTERVALO_PADRAO_MIN = 15;
 
-type Customer = { id: string; name: string; email: string | null; cpfCnpj: string | null; phone: string | null; mobilePhone: string | null };
+/** Trava de segurança: se uma rodada quiser cancelar mais gente do que isso de uma vez, algo está
+ * errado (resposta parcial da API, chave trocada, conta errada) — não aplica e avisa no log. */
+const MAX_CANCELAMENTOS_POR_RODADA = 15;
+
+type Customer = {
+  id: string; name: string; email: string | null; cpfCnpj: string | null;
+  phone: string | null; mobilePhone: string | null;
+};
 type Subscription = {
   id: string; customer: string; value: number; status: string; cycle: string;
-  nextDueDate: string | null; dateCreated: string | null;
+  nextDueDate: string | null; dateCreated: string | null; deleted?: boolean;
 };
-
 
 async function config(): Promise<{ chave: string; base: string; intervalo: number; desde: string | null } | null> {
   const row = await queryOne<{
@@ -78,16 +97,20 @@ const normaliza = (s: string | null | undefined) =>
 const MIN_NOME = 8;
 
 export interface ResultadoSync {
-  /** Data de corte em vigor ('YYYY-MM-DD') — assinatura mais antiga que isso não é tocada. */
+  /** Data de corte em vigor ('YYYY-MM-DD') — antes dela, só acompanha quem já está ligado. */
   desde: string | null;
   clientes: number;
   customers: number;
   assinaturasAtivas: number;
+  /** Cadastros que já existiam e passaram a apontar pra uma cobrança nesta rodada. */
   vinculados: number;
   porCriterio: Record<string, number>;
+  /** Cadastros criados a partir de cobrança nova. */
+  criados: number;
   valoresAtualizados: number;
+  /** Clientes que viraram cancelados porque a cobrança saiu do ar no Asaas. */
+  cancelados: number;
   mrrLigado: number;
-  semVinculo: number;
 }
 
 export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise<ResultadoSync | null> {
@@ -99,40 +122,99 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
     listar<Subscription>(cfg.base, cfg.chave, '/subscriptions'),
   ]);
 
-  // Quem manda no valor é a ASSINATURA, não o cliente. Um mesmo CNPJ pode ter cobranças que
-  // pertencem a empresas diferentes do grupo (a JLF tem três: duas da NX Digital e uma da NX
-  // Sistema), e cada uma vira uma linha própria na tela — por isso o vínculo forte é
-  // clients.asaas_subscription_id.
-  // DATA DE CORTE: o job só olha assinatura criada de `asaas_sync_since` em diante. O que veio
-  // antes já foi conferido e arrumado à mão (divisão entre as empresas do grupo, cadastros
-  // duplicados juntados, valores cobrados por fora) — varrer tudo de novo a cada 15 minutos
-  // desmancharia esse trabalho. Sem data configurada, olha tudo (primeira carga).
+  const customerPorId = new Map(customers.map((k) => [k.id, k]));
+  const assinaturaPorId = new Map(subscriptions.map((s) => [s.id, s]));
+  const estaAtiva = (s: Subscription | undefined) => !!s && s.status === 'ACTIVE' && !s.deleted;
   const ativasPorCustomer = new Map<string, Subscription[]>();
-  const assinaturaPorId = new Map<string, Subscription>();
   for (const s of subscriptions) {
-    if (s.status !== 'ACTIVE') continue;
-    if (cfg.desde && (s.dateCreated ?? '') < cfg.desde) continue;
-    assinaturaPorId.set(s.id, s);
+    if (!estaAtiva(s)) continue;
     ativasPorCustomer.set(s.customer, [...(ativasPorCustomer.get(s.customer) ?? []), s]);
   }
+  const ehNova = (s: Subscription) => !cfg.desde || (s.dateCreated ?? '') >= cfg.desde;
 
   const clientes = await query<{
-    id: string; name: string; company: string; phone: string; email: string;
+    id: string; name: string; company: string; phone: string; email: string; stage: string;
     cnpj: string | null; asaas_customer_id: string | null; asaas_subscription_id: string | null;
     monthly_value: string | null;
   }>(
-    `SELECT id, name, company, phone, email,
+    `SELECT id, name, company, phone, email, stage::text AS stage,
             COALESCE(NULLIF(cnpj, ''), ficha_cadastro->>'cnpj') AS cnpj,
             asaas_customer_id, asaas_subscription_id, monthly_value
      FROM clients WHERE archived_at IS NULL`
   );
 
-  // Assinatura que já tem dono: ninguém mais pode reivindicar (senão a mesma cobrança entraria
-  // duas vezes no total, e a divisão feita à mão entre as empresas do grupo seria desfeita).
-  const assinaturasComDono = new Set(
-    clientes.map((c) => c.asaas_subscription_id).filter(Boolean) as string[]
-  );
+  const resultado: ResultadoSync = {
+    desde: cfg.desde,
+    clientes: clientes.length,
+    customers: customers.length,
+    assinaturasAtivas: [...ativasPorCustomer.values()].reduce((n, l) => n + l.length, 0),
+    vinculados: 0,
+    porCriterio: {},
+    criados: 0,
+    valoresAtualizados: 0,
+    cancelados: 0,
+    mrrLigado: 0,
+  };
 
+  // Cobrança que já tem dono não pode ser reivindicada por outro cadastro: é o que impede a mesma
+  // mensalidade de entrar duas vezes no total e o que preserva a divisão feita à mão.
+  const assinaturasComDono = new Set(clientes.map((c) => c.asaas_subscription_id).filter(Boolean) as string[]);
+  const customersComDono = new Set(clientes.map((c) => c.asaas_customer_id).filter(Boolean) as string[]);
+
+  // ------------------------------------------------------------- 1. quem já está ligado
+  const paraCancelar: typeof clientes = [];
+
+  for (const cl of clientes) {
+    if (!cl.asaas_subscription_id) continue;
+    const s = assinaturaPorId.get(cl.asaas_subscription_id);
+
+    if (!estaAtiva(s)) {
+      // A cobrança saiu do ar lá. Quem já está cancelado aqui não precisa de nada.
+      if (cl.stage !== 'churned') paraCancelar.push(cl);
+      continue;
+    }
+
+    resultado.mrrLigado += s!.value ?? 0;
+    const atual = Math.round(Number(cl.monthly_value ?? 0) * 100);
+    const doAsaas = Math.round((s!.value ?? 0) * 100);
+    if (doAsaas === atual) continue;
+
+    resultado.valoresAtualizados++;
+    if (opts.dryRun) continue;
+    const venc = s!.nextDueDate;
+    await query(
+      `UPDATE clients SET monthly_value = $1, due_day = COALESCE($2, due_day), updated_at = NOW()
+       WHERE id = $3`,
+      [(s!.value ?? 0).toFixed(2), venc ? Number(venc.slice(8, 10)) : null, cl.id]
+    );
+  }
+
+  if (paraCancelar.length > MAX_CANCELAMENTOS_POR_RODADA) {
+    console.error(
+      `[asaas-sync] ABORTADO: ${paraCancelar.length} clientes cairiam pra cancelado numa rodada só ` +
+      `(limite ${MAX_CANCELAMENTOS_POR_RODADA}). Nada foi alterado — confira a conta/chave do Asaas.`
+    );
+  } else {
+    for (const cl of paraCancelar) {
+      resultado.cancelados++;
+      if (opts.dryRun) continue;
+      // Motivo e observação ficam pra depois: o registro entra na hora só pra tirar o cliente dos
+      // ativos, e o "por quê" é preenchido na aba Cancelamentos. asaas_removido já nasce marcado —
+      // a baixa lá foi exatamente o que disparou isso.
+      await query(
+        `INSERT INTO client_cancellations (client_id, canceled_at, motivo, observacao, mrr_cents, asaas_removido)
+         VALUES ($1, CURRENT_DATE, 'Cobrança removida no Asaas', '', $2, true)`,
+        [cl.id, Math.round(Number(cl.monthly_value ?? 0) * 100)]
+      );
+      await query(
+        `UPDATE clients SET stage = 'churned', stage_updated_at = NOW(), updated_at = NOW() WHERE id = $1`,
+        [cl.id]
+      );
+      console.log('[asaas-sync] cancelado (cobrança removida lá):', cl.name);
+    }
+  }
+
+  // --------------------------------------------- 2. cadastro que já existe, cobrança é nova
   const porDoc = new Map<string, Customer[]>();
   const porEmail = new Map<string, Customer[]>();
   const porTelefone = new Map<string, Customer[]>();
@@ -144,30 +226,14 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
     const t = fimDoTelefone(k.mobilePhone || k.phone);
     if (t) porTelefone.set(t, [...(porTelefone.get(t) ?? []), k]);
   }
-
-  const resultado: ResultadoSync = {
-    desde: cfg.desde,
-    clientes: clientes.length,
-    customers: customers.length,
-    assinaturasAtivas: assinaturaPorId.size,
-    vinculados: 0,
-    porCriterio: {},
-    valoresAtualizados: 0,
-    mrrLigado: 0,
-    semVinculo: 0,
-  };
-
-  // Um customer do Asaas pertence a UM cadastro só. Sem isso, dois cadastros do mesmo cliente
-  // (acontece: "Ateliê do sorriso" e "Alex Machado" são a mesma pessoa) recebiam a mesma
-  // assinatura e a mensalidade era contada duas vezes no total da tela.
-  const customersJaUsados = new Set(clientes.map((c) => c.asaas_customer_id).filter(Boolean) as string[]);
+  const unico = (lista: Customer[] | undefined) => (lista && lista.length === 1 ? lista[0] : null);
 
   for (const cl of clientes) {
+    if (cl.asaas_subscription_id) continue;
+
     let customerId = cl.asaas_customer_id;
     let criterio = 'já ligado';
-
     if (!customerId) {
-      const unico = (lista: Customer[] | undefined) => (lista && lista.length === 1 ? lista[0] : null);
       const doc = soDigitos(cl.cnpj);
       const achado =
         (doc.length >= 11 ? unico(porDoc.get(doc)) : null) ??
@@ -182,56 +248,66 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
           });
           return casaram.length === 1 ? casaram[0] : null;
         })();
-
-      if (!achado || customersJaUsados.has(achado.id)) { resultado.semVinculo++; continue; }
-      customerId = achado.id;
-      customersJaUsados.add(customerId);
+      if (!achado || customersComDono.has(achado.id)) continue;
       criterio =
         doc.length >= 11 && porDoc.get(doc)?.length === 1 ? 'cnpj'
         : porEmail.get((cl.email ?? '').trim().toLowerCase())?.length === 1 ? 'email'
         : porTelefone.get(fimDoTelefone(cl.phone) ?? '')?.length === 1 ? 'telefone'
         : 'nome';
-      resultado.vinculados++;
-      resultado.porCriterio[criterio] = (resultado.porCriterio[criterio] ?? 0) + 1;
-      if (!opts.dryRun) {
-        await query('UPDATE clients SET asaas_customer_id = $1, updated_at = NOW() WHERE id = $2', [customerId, cl.id]);
-      }
+      customerId = achado.id;
     }
 
-    // Linha que já aponta pra uma assinatura vale só por ela — é assim que a JLF fica com uma
-    // linha de R$ 2.000 e outra de R$ 1.700 sem uma sobrescrever a outra.
-    const daLinha = cl.asaas_subscription_id ? assinaturaPorId.get(cl.asaas_subscription_id) : null;
-    const semDono = (ativasPorCustomer.get(customerId) ?? []).filter((s) => !assinaturasComDono.has(s.id));
-    const usar = daLinha ? [daLinha] : semDono;
-    if (!usar.length) continue;
-    for (const s of usar) assinaturasComDono.add(s.id);
+    // Só entra cobrança NOVA: o que ficou sem par no passado já foi conferido à mão.
+    const livres = (ativasPorCustomer.get(customerId) ?? [])
+      .filter((s) => !assinaturasComDono.has(s.id) && ehNova(s));
+    if (!livres.length) continue;
 
-    const total = usar.reduce((soma, s) => soma + (s.value ?? 0), 0);
-    const principal = usar.reduce((maior, s) => ((s.value ?? 0) > (maior.value ?? 0) ? s : maior), usar[0]);
+    const principal = livres.reduce((maior, s) => ((s.value ?? 0) > (maior.value ?? 0) ? s : maior), livres[0]);
+    const total = livres.reduce((soma, s) => soma + (s.value ?? 0), 0);
+    for (const s of livres) assinaturasComDono.add(s.id);
+    customersComDono.add(customerId);
+    resultado.vinculados++;
+    resultado.porCriterio[criterio] = (resultado.porCriterio[criterio] ?? 0) + 1;
     resultado.mrrLigado += total;
+    if (opts.dryRun) continue;
 
-    // O valor que vale é o que está sendo cobrado. Só mexe quando muda de verdade, pra não
-    // carimbar updated_at de meio mundo a cada rodada.
-    const atual = Math.round(Number(cl.monthly_value ?? 0) * 100);
-    const doAsaas = Math.round(total * 100);
-    if (doAsaas && doAsaas !== atual) {
-      resultado.valoresAtualizados++;
-      if (!opts.dryRun) {
-        const venc = principal.nextDueDate;
-        const diaVencimento = venc ? Number(venc.slice(8, 10)) : null;
-        await query(
-          `UPDATE clients
-           SET monthly_value = $1, asaas_subscription_id = $2,
-               due_day = COALESCE($3, due_day), updated_at = NOW()
-           WHERE id = $4`,
-          [total.toFixed(2), principal.id, diaVencimento, cl.id]
-        );
-      }
-    } else if (!opts.dryRun) {
-      await query('UPDATE clients SET asaas_subscription_id = $1 WHERE id = $2 AND asaas_subscription_id IS DISTINCT FROM $1', [
-        principal.id, cl.id,
-      ]);
-    }
+    const venc = principal.nextDueDate;
+    await query(
+      `UPDATE clients
+       SET asaas_customer_id = $1, asaas_subscription_id = $2, monthly_value = $3,
+           due_day = COALESCE($4, due_day), updated_at = NOW()
+       WHERE id = $5`,
+      [customerId, principal.id, total.toFixed(2), venc ? Number(venc.slice(8, 10)) : null, cl.id]
+    );
+    console.log('[asaas-sync] cobrança nova ligada a', cl.name, `(por ${criterio})`);
+  }
+
+  // ------------------------------------------------------ 3. cobrança nova sem ninguém aqui
+  for (const s of subscriptions) {
+    if (!estaAtiva(s) || !ehNova(s)) continue;
+    if (assinaturasComDono.has(s.id) || customersComDono.has(s.customer)) continue;
+    const k = customerPorId.get(s.customer);
+    if (!k) continue;
+
+    assinaturasComDono.add(s.id);
+    customersComDono.add(s.customer);
+    resultado.criados++;
+    resultado.mrrLigado += s.value ?? 0;
+    if (opts.dryRun) continue;
+
+    const venc = s.nextDueDate;
+    // Nasce como cliente ativo (a cobrança já existe), sem empresa do grupo e sem implementação:
+    // esses dois são escolha de gente e aparecem na tela como pendência a preencher.
+    await query(
+      `INSERT INTO clients (name, company, email, phone, cnpj, stage, monthly_value, due_day,
+                            asaas_customer_id, asaas_subscription_id)
+       VALUES ($1, $1, $2, $3, $4, 'active', $5, $6, $7, $8)`,
+      [
+        k.name, k.email ?? '', k.mobilePhone || k.phone || '', soDigitos(k.cpfCnpj),
+        (s.value ?? 0).toFixed(2), venc ? Number(venc.slice(8, 10)) : null, k.id, s.id,
+      ]
+    );
+    console.log('[asaas-sync] cliente criado a partir de cobrança nova:', k.name, `R$ ${s.value}`);
   }
 
   if (!opts.dryRun) {
@@ -249,10 +325,10 @@ export function startAsaasSync(): void {
     rodando = true;
     try {
       const r = await sincronizarAsaas();
-      if (r) {
+      if (r && (r.criados || r.cancelados || r.vinculados || r.valoresAtualizados)) {
         console.log(
-          `[asaas-sync] (desde ${r.desde ?? 'sempre'}) ${r.vinculados} vínculo(s) novo(s), ` +
-          `${r.valoresAtualizados} valor(es) atualizado(s), ${r.semVinculo} cliente(s) sem par`
+          `[asaas-sync] ${r.criados} cliente(s) criado(s), ${r.cancelados} cancelado(s), ` +
+          `${r.vinculados} ligado(s), ${r.valoresAtualizados} valor(es) atualizado(s)`
         );
       }
     } catch (err) {

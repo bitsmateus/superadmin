@@ -38,11 +38,27 @@ export async function sendMail(opts: {
     auth: { user: smtp.user, pass: smtp.password },
   });
 
-  await transporter.sendMail({
-    from: smtp.fromName ? `"${smtp.fromName}" <${smtp.fromEmail}>` : smtp.fromEmail,
-    to: opts.to,
-    subject: opts.subject,
-    html: opts.html,
-    attachments: opts.attachments,
-  });
+  const send = (fromEmail: string, replyTo?: string) =>
+    transporter.sendMail({
+      from: smtp.fromName ? `"${smtp.fromName}" <${fromEmail}>` : fromEmail,
+      replyTo,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      attachments: opts.attachments,
+    });
+
+  try {
+    await send(smtp.fromEmail || smtp.user);
+  } catch (err) {
+    // Servidor recusou o remetente (ex.: "Sender address rejected: not owned by user"): o e-mail de
+    // remetente configurado não pertence à conta que faz o login no SMTP. Reenvia pela própria conta
+    // do SMTP, mantendo o remetente configurado como "responder para".
+    const msg = err instanceof Error ? err.message : '';
+    if (/sender address rejected|not owned by user/i.test(msg) && smtp.user && smtp.user.includes('@') && smtp.user !== smtp.fromEmail) {
+      await send(smtp.user, smtp.fromEmail || undefined);
+      return;
+    }
+    throw err;
+  }
 }

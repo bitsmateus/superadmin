@@ -730,7 +730,6 @@ function CancelarClienteModal({ cliente, onClose }: { cliente: Client | null; on
   const [data, setData] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [motivo, setMotivo] = React.useState(MOTIVOS[0])
   const [observacao, setObservacao] = React.useState('')
-  const [valorRaw, setValorRaw] = React.useState('')
   const [multaRaw, setMultaRaw] = React.useState('')
   const [asaasRemovido, setAsaasRemovido] = React.useState(false)
   const [salvando, setSalvando] = React.useState(false)
@@ -740,12 +739,13 @@ function CancelarClienteModal({ cliente, onClose }: { cliente: Client | null; on
     setData(new Date().toISOString().slice(0, 10))
     setMotivo(MOTIVOS[0])
     setObservacao('')
-    setValorRaw(cliente.monthlyValue ? prettifyCurrencyRaw(String(Math.round(cliente.monthlyValue * 100))) : '')
     setMultaRaw('')
     setAsaasRemovido(false)
   }, [cliente])
 
   if (!cliente) return null
+
+  const mrrCents = Math.round((cliente.monthlyValue ?? 0) * 100)
 
   const confirmar = async () => {
     setSalvando(true)
@@ -754,7 +754,7 @@ function CancelarClienteModal({ cliente, onClose }: { cliente: Client | null; on
       canceledAt: data,
       motivo,
       observacao: observacao.trim(),
-      mrrCents: parseBRLCents(valorRaw),
+      mrrCents,
       multaCents: parseBRLCents(multaRaw),
       asaasRemovido,
     })
@@ -777,12 +777,11 @@ function CancelarClienteModal({ cliente, onClose }: { cliente: Client | null; on
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-foreground/60">Mensalidade que sai</label>
-            <Input
-              value={valorRaw}
-              onChange={(e) => setValorRaw(sanitizeCurrencyRaw(e.target.value))}
-              placeholder="0,00"
-              className="text-right tabular-nums"
-            />
+            {/* Não é campo: é a mensalidade do próprio cliente, registrada como está hoje. Digitar
+                de novo só criaria chance de errar o valor que já está na tela. */}
+            <p className="rounded-lg border border-line bg-elevate/[0.04] px-3 py-2 text-right text-sm font-medium tabular-nums text-danger">
+              {formatBRLCents(mrrCents)}
+            </p>
           </div>
         </div>
 

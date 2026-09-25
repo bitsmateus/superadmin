@@ -83,7 +83,7 @@ interface Cartaz {
   precoQuilo: string
   temaId: string
   fonte: string
-  // Afinação manual de tamanho (-6 a +6) de cada peça do cartaz — o nome já encolhe sozinho
+  // Afinação manual de tamanho (-6 a +6; o preço vai até +15) de cada peça do cartaz — o nome já encolhe sozinho
   // conforme o texto cresce, mas dá pra ajustar tudo na mão também.
   ajusteNome: number
   ajusteSubtitulo: number
@@ -232,30 +232,9 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
   const fontePrecoInteiro = escalar(250, dados.ajustePreco)
   const fontePrecoCentavos = escalar(150, dados.ajustePreco)
 
-  // Auto-ajuste do preço: o slider define o tamanho desejado, mas se ele não couber no espaço livre
-  // entre o peso e o avulso/logo, encolhe só o necessário (junto com a bolinha) em vez de vazar por
-  // cima dos outros textos ou ser cortado. Mede com offset* (não é afetado por transform, então
-  // funciona mesmo dentro da prévia reduzida).
-  const areaPrecoRef = React.useRef<HTMLDivElement>(null)
-  const conteudoPrecoRef = React.useRef<HTMLDivElement>(null)
-  const [escalaPreco, setEscalaPreco] = React.useState(1)
-  React.useLayoutEffect(() => {
-    const area = areaPrecoRef.current
-    const conteudo = conteudoPrecoRef.current
-    if (!area || !conteudo) return
-    const medir = () => {
-      if (!area.clientWidth || !area.clientHeight) return
-      const w = conteudo.offsetWidth * (dados.mostrarBolinhaPreco ? 1.28 : 1) + 12
-      const h = conteudo.offsetHeight * (dados.mostrarBolinhaPreco ? 1.08 : 1) + 12
-      const proxima = Math.min(1, area.clientWidth / w, area.clientHeight / h)
-      setEscalaPreco((atual) => (Math.abs(atual - proxima) < 0.005 ? atual : proxima))
-    }
-    medir()
-    const ro = new ResizeObserver(medir)
-    ro.observe(area)
-    ro.observe(conteudo)
-    return () => ro.disconnect()
-  }, [dados.mostrarBolinhaPreco])
+  // O preço mantém sempre o tamanho definido pelo slider (base 250px, +10% por passo, até +15) — não
+  // encolhe mais sozinho quando entram unidade, fundo amarelo, "a partir de" etc. Se passar do espaço,
+  // quem manda é o operador (diminui no slider).
 
   const blocoAvulso = dados.mostrarPrecoAvulsoCaixa && (
     <div
@@ -436,11 +415,9 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
         </div>
 
         {/* Preço gigante — a "bolinha" amarela é um fundo orgânico atrás dos números. O line-height
-            apertado (0.86) deixa vírgula/centavos coladinhos; o auto-ajuste (escalaPreco) encolhe o
-            conjunto quando o tamanho pedido não cabe no espaço livre, pra nunca vazar por cima do
-            "a partir de X un" nem das linhas de baixo. */}
+            apertado (0.86) deixa vírgula/centavos coladinhos; o tamanho vem só do slider
+            (sem encolher sozinho). */}
         <div
-          ref={areaPrecoRef}
           style={{
             flex: 1,
             display: 'flex',
@@ -457,8 +434,6 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transform: escalaPreco < 1 ? `scale(${escalaPreco})` : undefined,
-              transformOrigin: 'center',
             }}
           >
             {dados.mostrarBolinhaPreco && (
@@ -475,7 +450,6 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
               />
             )}
             <div
-              ref={conteudoPrecoRef}
               style={{
                 position: 'relative',
                 zIndex: 1,
@@ -887,7 +861,10 @@ export function MercadoNunesPage() {
   React.useEffect(() => {
     const ajustar = () => {
       const largura = Math.min(window.innerWidth - 48, 620)
-      setEscala(Math.min(0.62, Math.max(0.28, largura / A4_W)))
+      // No desktop a prévia é fixa na tela (105px do topo + legenda): a folha inteira precisa caber na altura
+      // visível, senão o rodapé some e só dá pra ver diminuindo o zoom do navegador.
+      const alturaLivre = window.innerWidth > 900 ? window.innerHeight - 105 - 44 : Infinity
+      setEscala(Math.max(0.2, Math.min(0.62, Math.max(0.28, largura / A4_W), alturaLivre / A4_H)))
     }
     ajustar()
     window.addEventListener('resize', ajustar)
@@ -1023,7 +1000,7 @@ export function MercadoNunesPage() {
             <SliderAjuste label="Subtítulo" valor={cartaz.ajusteSubtitulo} onChange={(v) => set('ajusteSubtitulo', v)} />
             <SliderAjuste label="Faixa (topo)" valor={cartaz.ajusteFaixa} onChange={(v) => set('ajusteFaixa', v)} />
             <SliderAjuste label="Peso / tamanho" valor={cartaz.ajustePeso} onChange={(v) => set('ajustePeso', v)} />
-            <SliderAjuste label="Preço" valor={cartaz.ajustePreco} onChange={(v) => set('ajustePreco', v)} />
+            <SliderAjuste label="Preço" valor={cartaz.ajustePreco} max={15} onChange={(v) => set('ajustePreco', v)} />
           </Card>
 
           <Card titulo="Preço">
@@ -1762,15 +1739,15 @@ function Card({ titulo, dica, children }: { titulo: string; dica?: string; child
   )
 }
 
-function SliderAjuste({ label, valor, onChange }: { label: string; valor: number; onChange: (v: number) => void }) {
+function SliderAjuste({ label, valor, onChange, min = -6, max = 6 }: { label: string; valor: number; onChange: (v: number) => void; min?: number; max?: number }) {
   return (
     <label style={{ display: 'block' }}>
       <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#5B534D', marginBottom: 4 }}>{label}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <input
           type="range"
-          min={-6}
-          max={6}
+          min={min}
+          max={max}
           step={1}
           value={valor}
           onChange={(e) => onChange(Number(e.target.value))}

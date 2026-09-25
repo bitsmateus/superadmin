@@ -28,7 +28,6 @@ import {
 } from '@/constants/checklist'
 import { buildFollowUps, DEFAULT_FOLLOWUP_TEMPLATES } from '@/constants/followup'
 import {
-  openAccessEmail,
   buildAccessEmail,
   buildAccessDeliveryEmail,
   buildWelcomeMessage,
@@ -49,6 +48,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 export function DeliveryTab({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [downloadingAccess, setDownloadingAccess] = React.useState(false)
+  const [emailingAccess, setEmailingAccess] = React.useState(false)
   const [deliveryDate, setDeliveryDate] = React.useState(
     client.deliveryDate ?? '',
   )
@@ -169,18 +169,37 @@ export function DeliveryTab({ client }: { client: Client }) {
     }
   }
 
-  const emailAccess = () => {
-    if (!client.email?.trim()) {
+  // "Enviar por e-mail": manda direto pelo SMTP configurado em Configurações (com o PDF de acessos
+  // em anexo) — não abre mais o programa de e-mail do computador.
+  const emailAccess = async () => {
+    const to = client.email?.trim()
+    if (!to) {
       toast.error('Cliente sem e-mail cadastrado (Visão Geral).')
       return
     }
-    openAccessEmail({ client, server: tenantServer })
-    if (!handoff.find((i) => i.id === 'handoff_access_sent')?.checked) {
-      const next = setChecklistItem(handoff, 'handoff_access_sent', true, user)
-      db.updateClient(client.id, { deliveryHandoffChecklist: next })
-      db.addLog(client.id, 'Acessos enviados', `E-mail de acessos aberto para ${client.email}`)
+    setEmailingAccess(true)
+    try {
+      const html = renderAccessSheetHtml({ client, server: tenantServer })
+      const pdf = await api.postForBlob(`/api/clients/${client.id}/access-pdf`, { html })
+      const { subject, html: body } = buildAccessDeliveryEmail({ client, server: tenantServer })
+      await api.post(`/api/clients/${client.id}/send-access-email`, {
+        to,
+        subject,
+        html: body,
+        attachmentBase64: await blobToBase64(pdf),
+        attachmentFilename: 'acessos.pdf',
+      })
+      if (!handoff.find((i) => i.id === 'handoff_access_sent')?.checked) {
+        const next = setChecklistItem(handoff, 'handoff_access_sent', true, user)
+        db.updateClient(client.id, { deliveryHandoffChecklist: next })
+      }
+      db.addLog(client.id, 'Acessos enviados', `E-mail enviado por SMTP para ${to}`)
+      toast.success(`E-mail de acessos enviado para ${to}`)
+    } catch (err) {
+      toast.error(`Falha ao enviar pelo SMTP: ${(err as Error).message} (confira Configurações → e-mail)`)
+    } finally {
+      setEmailingAccess(false)
     }
-    toast.success('E-mail de acessos pronto no seu cliente de e-mail')
   }
 
   const saveMeeting = () => {
@@ -292,6 +311,7 @@ export function DeliveryTab({ client }: { client: Client }) {
               size="sm"
               variant="secondary"
               onClick={emailAccess}
+              loading={emailingAccess}
               leftIcon={<Mail className="h-3.5 w-3.5" />}
             >
               Enviar por e-mail
@@ -418,7 +438,7 @@ export function DeliveryTab({ client }: { client: Client }) {
                 disabled={!canComplete}
                 leftIcon={<PartyPopper className="h-4 w-4" />}
               >
-                Concluir entrega
+                Concluir entrega (100% finalizado)
               </Button>
             </div>
           </>

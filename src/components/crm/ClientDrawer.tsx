@@ -44,7 +44,7 @@ import { tenantsApi } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { getServerById } from '@/store/authStore'
 import { NEXT_STAGE, PIPELINE_STAGES, PREV_STAGE, STAGE_COLORS } from '@/constants/stageColors'
-import { asText, cn, initials, isTenantActive } from '@/lib/utils'
+import { asText, cn, initials, tenantActiveState } from '@/lib/utils'
 import type { PipelineStage } from '@/types/client'
 
 interface TabDef {
@@ -112,7 +112,8 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
   const canDelete = canDeleteClient(profile?.role)
   const canToggleTenant = canManageTenantStatus(profile?.role)
   const tenantQ = useTenant(client?.tenantServerId ?? undefined, client?.tenantId ?? undefined)
-  const tenantIsActive = tenantQ.data ? isTenantActive(tenantQ.data) : true
+  // Sem status reconhecível = trata como ativo (nunca oferece "reativar" por engano).
+  const tenantIsActive = (tenantQ.data ? tenantActiveState(tenantQ.data) : null) ?? true
 
   // "Acessar sistema": abre o login e já copia o e-mail de suporte (evita ter
   // que voltar aqui só para copiá-lo antes de logar). A lógica vive em

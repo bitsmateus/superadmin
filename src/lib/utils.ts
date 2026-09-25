@@ -123,3 +123,28 @@ export function initials(name?: string): string {
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('')
 }
+
+/**
+ * Lê o status de um tenant vindo do NX em formatos variados (status texto/número/booleano, active,
+ * is_active, isActive, ou tudo dentro de { tenant } / { data }). Devolve null quando não dá pra saber —
+ * quem chama deve tratar como "ativo" pra não oferecer "reativar" por engano.
+ */
+export function tenantActiveState(raw: unknown): boolean | null {
+  const t = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const src = (t.tenant && typeof t.tenant === 'object' ? t.tenant : t.data && typeof t.data === 'object' ? t.data : t) as Record<string, unknown>
+  const read = (v: unknown): boolean | null => {
+    if (typeof v === 'boolean') return v
+    if (typeof v === 'number') return v === 1 ? true : v === 0 ? false : null
+    if (typeof v === 'string') {
+      const s = v.trim().toLowerCase()
+      if (['active', 'ativo', 'enabled', 'enable', '1', 'true', 'on'].includes(s)) return true
+      if (['inactive', 'inativo', 'disabled', 'disable', '0', 'false', 'off', 'blocked', 'suspended'].includes(s)) return false
+    }
+    return null
+  }
+  for (const k of ['status', 'active', 'is_active', 'isActive', 'enabled']) {
+    const r = read(src[k])
+    if (r !== null) return r
+  }
+  return null
+}

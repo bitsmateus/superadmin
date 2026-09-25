@@ -140,15 +140,14 @@ export function computeSetup(client: Client, tree: ChecklistItem[] = setupTree(c
     step('test', fromTree(tree, ['support_tested'], client)),
     step('delivery', [
       { id: 'delivery_date', label: 'Data da entrega definida', checked: Boolean(client.deliveryDate), manual: false },
-      { id: 'delivery_done', label: 'Entrega realizada ao cliente', checked: delivered, manual: false },
-      { id: 'delivery_final', label: '100% finalizado', checked: client.stage === 'active', manual: false },
+      { id: 'delivery_done', label: '100% finalizado (Entregas Recentes)', checked: delivered, manual: false },
     ]),
   ]
 
   const firstOpen = steps.findIndex((s) => !s.done)
   const floorKey = MIN_STEP_BY_STAGE[client.stage]
   const floorIdx = floorKey ? SETUP_STEP_ORDER.indexOf(floorKey) : 0
-  const currentIdx = firstOpen === -1 || client.stage === 'active' ? -1 : Math.max(firstOpen, floorIdx)
+  const currentIdx = firstOpen === -1 || client.stage === 'active' || client.stage === 'delivered' ? -1 : Math.max(firstOpen, floorIdx)
 
   // Etapas antes da atual contam como concluídas (o cliente já passou por elas).
   const resolved = steps.map((s, i) => (currentIdx === -1 || i < currentIdx ? { ...s, done: true } : s))

@@ -18,15 +18,13 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { CreateTenantModal } from '@/components/crm/CreateTenantModal'
 import { ChatbotTab } from '@/components/crm/tabs/ChatbotTab'
+import { DeliveryTab } from '@/components/crm/tabs/DeliveryTab'
 import { N8nAiSection } from '@/components/crm/tabs/N8nAiSection'
 import { AutomationView, BriefingTab } from '@/components/crm/tabs/BriefingTab'
 import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import {
-  completeClientDelivery,
-  finalizeClient,
   markSetupItemDone,
-  saveDeliveryDate,
   toggleSetupItem,
 } from '@/lib/setupActions'
 import { SETUP_STEP_ORDER, computeSetup, type SetupItem, type SetupStep, type SetupStepKey } from '@/lib/setupSteps'
@@ -55,7 +53,6 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
   const [advancedOpen, setAdvancedOpen] = React.useState(false)
   // "Abrir Briefing": a tela do briefing em pop-up, sem sair da aba.
   const [briefingModal, setBriefingModal] = React.useState(false)
-  const [date, setDate] = React.useState(client.deliveryDate ?? '')
 
   // Ao concluir uma etapa, a próxima abre sozinha.
   const prevCurrent = React.useRef(state.current)
@@ -65,7 +62,6 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
       prevCurrent.current = state.current
     }
   }, [state.current])
-  React.useEffect(() => setDate(client.deliveryDate ?? ''), [client.id, client.deliveryDate])
 
   const toggle = (item: SetupItem) => {
     if (!item.checked && !user) {
@@ -92,7 +88,6 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
     }
   }
 
-  const delivered = state.steps.find((s) => s.key === 'delivery')?.items.find((i) => i.id === 'delivery_done')?.checked
 
   const extras: Record<SetupStepKey, React.ReactNode> = {
     briefing: (
@@ -167,60 +162,8 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
         Converse com o número de suporte para testar o chatbot/IA antes de entregar.
       </p>
     ),
-    delivery: (
-      <div className="space-y-2 pt-1">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="w-56">
-            <Input
-              label="Data e hora da entrega"
-              type="datetime-local"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!date || date === (client.deliveryDate ?? '')}
-            onClick={() => {
-              saveDeliveryDate(client, date, user)
-              toast.success('Data da entrega salva')
-            }}
-            leftIcon={<CalendarCheck className="h-3.5 w-3.5" />}
-          >
-            Salvar data
-          </Button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            disabled={!client.deliveryDate || Boolean(delivered)}
-            onClick={() => {
-              completeClientDelivery(client)
-              toast.success('Entrega concluída · em Entregas Recentes')
-            }}
-            leftIcon={<PartyPopper className="h-3.5 w-3.5" />}
-          >
-            Marcar entrega realizada
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!delivered || client.stage === 'active'}
-            onClick={() => {
-              finalizeClient(client)
-              toast.success('Cliente 100% finalizado · Ativo')
-            }}
-            leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
-          >
-            Marcar 100% finalizado
-          </Button>
-        </div>
-        {client.deliveryDate && (
-          <p className="text-[11px] text-foreground/45">Entrega marcada para {formatDate(client.deliveryDate)}.</p>
-        )}
-      </div>
-    ),
+    // Todas as opções da entrega (acessos, e-mail SMTP, links, reunião, concluir) — as mesmas da aba Entrega.
+    delivery: <DeliveryTab client={client} />,
   }
 
   return (

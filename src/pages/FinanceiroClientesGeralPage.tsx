@@ -105,13 +105,15 @@ export function FinanceiroClientesGeralPage() {
   const sincronizarAsaas = async () => {
     setSincronizando(true)
     try {
-      const r = await api.post<{ vinculados: number; valoresAtualizados: number; mrrLigado: number; semVinculo: number }>(
+      const r = await api.post<{ desde: string | null; vinculados: number; valoresAtualizados: number }>(
         '/api/asaas/sync',
       )
       await db.refresh()
+      const corte = r.desde ? ` (assinaturas criadas a partir de ${r.desde.split('-').reverse().join('/')})` : ''
       toast.success(
-        `Asaas lido: ${r.valoresAtualizados} mensalidade(s) atualizada(s), ${r.vinculados} cliente(s) ligado(s) agora` +
-        (r.semVinculo ? ` — ${r.semVinculo} sem par lá` : ''),
+        r.valoresAtualizados || r.vinculados
+          ? `Asaas lido${corte}: ${r.valoresAtualizados} mensalidade(s) atualizada(s), ${r.vinculados} cliente(s) ligado(s)`
+          : `Asaas lido${corte}: nada novo pra trazer`,
       )
     } catch (err) {
       toast.error('Falha ao ler o Asaas: ' + (err as Error).message)
@@ -236,7 +238,7 @@ export function FinanceiroClientesGeralPage() {
             variant="secondary"
             onClick={sincronizarAsaas}
             disabled={sincronizando}
-            title="Relê as assinaturas do Asaas e atualiza as mensalidades"
+            title="Traz do Asaas as assinaturas novas (as antigas ficam como estão)"
             className="ml-auto"
           >
             {sincronizando

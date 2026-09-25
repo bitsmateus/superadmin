@@ -1188,6 +1188,7 @@ END $$`);
   await pool.query(`ALTER TABLE client_cancellations ADD COLUMN IF NOT EXISTS multa_cents INT NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE client_cancellations ADD COLUMN IF NOT EXISTS asaas_removido BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS asaas_last_sync_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS asaas_sync_since DATE`);
   // Empresa do grupo que atende o cliente (Clientes Geral) — ver schema.sql.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS unidade TEXT`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS cnpj TEXT`);

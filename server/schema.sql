@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS settings (
   asaas_sync_interval_min INT DEFAULT 15,
   -- Última vez que o painel leu as assinaturas do Asaas (ver jobs/asaasSync.ts).
   asaas_last_sync_at TIMESTAMPTZ,
+  -- Data de corte da leitura: assinatura criada ANTES disso não é mais tocada pelo job. Protege o
+  -- que já foi conferido e arrumado à mão de ser reescrito a cada rodada.
+  asaas_sync_since DATE,
   default_tenant_password TEXT,
   default_access_password TEXT,
   support_phone TEXT,

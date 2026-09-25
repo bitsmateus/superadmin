@@ -21,12 +21,19 @@ const SANDBOX = 'https://sandbox.asaas.com/api/v3';
 const INTERVALO_PADRAO_MIN = 15;
 
 type Customer = { id: string; name: string; email: string | null; cpfCnpj: string | null; phone: string | null; mobilePhone: string | null };
-type Subscription = { id: string; customer: string; value: number; status: string; cycle: string; nextDueDate: string | null };
+type Subscription = {
+  id: string; customer: string; value: number; status: string; cycle: string;
+  nextDueDate: string | null; dateCreated: string | null;
+};
 
 
-async function config(): Promise<{ chave: string; base: string; intervalo: number } | null> {
-  const row = await queryOne<{ asaas_api_key: string | null; asaas_environment: string | null; asaas_sync_interval_min: number | null }>(
-    'SELECT asaas_api_key, asaas_environment, asaas_sync_interval_min FROM settings WHERE id = true'
+async function config(): Promise<{ chave: string; base: string; intervalo: number; desde: string | null } | null> {
+  const row = await queryOne<{
+    asaas_api_key: string | null; asaas_environment: string | null;
+    asaas_sync_interval_min: number | null; asaas_sync_since: string | null;
+  }>(
+    `SELECT asaas_api_key, asaas_environment, asaas_sync_interval_min, asaas_sync_since
+     FROM settings WHERE id = true`
   );
   const chave = (process.env.ASAAS_API_KEY ?? row?.asaas_api_key ?? '').trim();
   if (!chave) return null;
@@ -34,6 +41,7 @@ async function config(): Promise<{ chave: string; base: string; intervalo: numbe
     chave,
     base: (row?.asaas_environment ?? 'production') === 'production' ? API : SANDBOX,
     intervalo: row?.asaas_sync_interval_min ?? INTERVALO_PADRAO_MIN,
+    desde: row?.asaas_sync_since ? String(row.asaas_sync_since).slice(0, 10) : null,
   };
 }
 
@@ -66,6 +74,8 @@ const normaliza = (s: string | null | undefined) =>
 const MIN_NOME = 8;
 
 export interface ResultadoSync {
+  /** Data de corte em vigor ('YYYY-MM-DD') — assinatura mais antiga que isso não é tocada. */
+  desde: string | null;
   clientes: number;
   customers: number;
   assinaturasAtivas: number;
@@ -89,10 +99,15 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
   // pertencem a empresas diferentes do grupo (a JLF tem três: duas da NX Digital e uma da NX
   // Sistema), e cada uma vira uma linha própria na tela — por isso o vínculo forte é
   // clients.asaas_subscription_id.
+  // DATA DE CORTE: o job só olha assinatura criada de `asaas_sync_since` em diante. O que veio
+  // antes já foi conferido e arrumado à mão (divisão entre as empresas do grupo, cadastros
+  // duplicados juntados, valores cobrados por fora) — varrer tudo de novo a cada 15 minutos
+  // desmancharia esse trabalho. Sem data configurada, olha tudo (primeira carga).
   const ativasPorCustomer = new Map<string, Subscription[]>();
   const assinaturaPorId = new Map<string, Subscription>();
   for (const s of subscriptions) {
     if (s.status !== 'ACTIVE') continue;
+    if (cfg.desde && (s.dateCreated ?? '') < cfg.desde) continue;
     assinaturaPorId.set(s.id, s);
     ativasPorCustomer.set(s.customer, [...(ativasPorCustomer.get(s.customer) ?? []), s]);
   }
@@ -127,6 +142,7 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
   }
 
   const resultado: ResultadoSync = {
+    desde: cfg.desde,
     clientes: clientes.length,
     customers: customers.length,
     assinaturasAtivas: assinaturaPorId.size,
@@ -231,8 +247,8 @@ export function startAsaasSync(): void {
       const r = await sincronizarAsaas();
       if (r) {
         console.log(
-          `[asaas-sync] ${r.vinculados} vínculo(s) novo(s), ${r.valoresAtualizados} valor(es) atualizado(s), ` +
-          `MRR ligado R$ ${r.mrrLigado.toFixed(2)}, ${r.semVinculo} cliente(s) sem par`
+          `[asaas-sync] (desde ${r.desde ?? 'sempre'}) ${r.vinculados} vínculo(s) novo(s), ` +
+          `${r.valoresAtualizados} valor(es) atualizado(s), ${r.semVinculo} cliente(s) sem par`
         );
       }
     } catch (err) {

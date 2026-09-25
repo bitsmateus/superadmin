@@ -86,7 +86,7 @@ const GENERATOR_SYSTEM = `Você é um engenheiro de prompts sênior que cria age
 - Se o briefing tiver um fluxo de atendimento/menus/campos a coletar/transferências, incorpore fielmente.
 - Não use nenhum outro trecho com chaves duplas {{ }} além dos 4 placeholders. Não escreva JSON. Não use o marcador [[LOCALIZACAO]].
 - Tamanho: completo mas enxuto (tipicamente 1.500 a 3.500 palavras).
-- Em "warnings" liste, em frases curtas, o que faltou no briefing e o operador deve confirmar (ex.: "Horário de funcionamento não informado", "Valores não informados — agente foi instruído a não falar preços").`;
+- Em "warnings" liste o que faltou no briefing e o operador deve confirmar. ESCREVA PARA UMA PESSOA NÃO TÉCNICA: português simples e direto, uma frase curta cada, dizendo o que falta e o que o agente fará por causa disso. PROIBIDO citar nomes de campos, chaves, código ou termos técnicos (nada de "aiAttendanceFlow", "mainFlow", "prompt", "JSON", "campo"). Exemplos bons: "Não sei o horário de atendimento da loja — o agente não vai informar horários.", "Preços não informados — o agente vai encaminhar quem perguntar valor para o Comercial.", "Não há regras de troca e garantia — o agente vai passar essas dúvidas para o Suporte." Máximo de 6 avisos, só os que realmente importam.`;
 
 interface AnthropicBlock {
   type: string;
@@ -101,7 +101,8 @@ export interface GeneratedAgent {
 }
 
 function trimBriefing(b: Record<string, unknown> | null): string {
-  const clean = JSON.stringify(b ?? {}, (_k, v) => {
+  const clean = JSON.stringify(b ?? {}, (k, v) => {
+    if (k === 'mainFlow') return undefined; // campo antigo, sempre vazio nos briefings novos
     if (typeof v === 'string' && v.length > 1500) return v.slice(0, 1500) + '…';
     return v;
   });
@@ -489,10 +490,10 @@ export function buildN8nWorkflow(input: N8nBuildInput): { json: Record<string, u
   const filas: Record<string, string> = {};
   for (const s of input.sectors) {
     if (s.queueId) filas[s.key] = s.queueId;
-    else warnings.push(`Fila "${s.name}" sem queueId — a IA não conseguirá transferir para ela até você preencher em "Split Mensagens" (CFG.filas).`);
+    else warnings.push(`A fila "${s.name}" não foi encontrada no NX — sem ela a IA não consegue passar o atendimento para esse setor. Crie a fila no NX e clique em "Gerar novamente".`);
   }
   if (input.pendingQueueId) filas.pendente = input.pendingQueueId;
-  else warnings.push('Fila "Pendente" não encontrada — transferências para "pendente" e falhas técnicas não vão mover o ticket.');
+  else warnings.push('A fila "Pendente" não foi encontrada no NX — sem ela, quando a IA não souber para onde mandar (ou der algum erro), o atendimento não será movido. Crie a fila "Pendente" no NX e clique em "Gerar novamente".');
 
   const cfg = {
     agente: input.agentName,

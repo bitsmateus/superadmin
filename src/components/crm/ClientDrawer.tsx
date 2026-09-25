@@ -10,6 +10,7 @@ import {
   ListChecks,
   Loader2,
   MessageSquare,
+  Power,
   Send,
   Trash2,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ import { Drawer } from '@/components/ui/Drawer'
 import { Tabs } from '@/components/ui/Tabs'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { StageBadge } from './StageBadge'
 import { OverviewTab } from './tabs/OverviewTab'
@@ -31,10 +33,14 @@ import { CrmLeadTab } from './tabs/CrmLeadTab'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
-import { canDeleteClient } from '@/services/supabase'
+import { useTenant } from '@/hooks/useTenants'
+import { canDeleteClient, canManageTenantStatus } from '@/services/supabase'
 import { db } from '@/services/db'
+import { tenantsApi } from '@/api/tenants'
+import { extractErrorMessage } from '@/api/client'
+import { getServerById } from '@/store/authStore'
 import { NEXT_STAGE, PIPELINE_STAGES, PREV_STAGE, STAGE_COLORS } from '@/constants/stageColors'
-import { asText, cn, initials } from '@/lib/utils'
+import { asText, cn, initials, isTenantActive } from '@/lib/utils'
 import type { PipelineStage } from '@/types/client'
 
 interface TabDef {
@@ -79,9 +85,15 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
   const stageMenuRef = React.useRef<HTMLDivElement>(null)
   useOutsideClose(stageMenuRef, stageMenu, () => setStageMenu(false))
   const [confirmArchive, setConfirmArchive] = React.useState(false)
+  const [confirmTenantStatus, setConfirmTenantStatus] = React.useState(false)
+  const [tenantStatusConfirmText, setTenantStatusConfirmText] = React.useState('')
+  const [tenantStatusBusy, setTenantStatusBusy] = React.useState(false)
   const [user] = useCurrentUser()
   const { profile } = useAuth()
   const canDelete = canDeleteClient(profile?.role)
+  const canToggleTenant = canManageTenantStatus(profile?.role)
+  const tenantQ = useTenant(client?.tenantServerId ?? undefined, client?.tenantId ?? undefined)
+  const tenantIsActive = tenantQ.data ? isTenantActive(tenantQ.data) : true
 
   // "Acessar sistema": abre o login e já copia o e-mail de suporte (evita ter
   // que voltar aqui só para copiá-lo antes de logar). A lógica vive em
@@ -93,6 +105,8 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
     setTab('overview')
     setStageMenu(false)
     setConfirmArchive(false)
+    setConfirmTenantStatus(false)
+    setTenantStatusConfirmText('')
   }, [clientId])
 
   if (!clientId || !client) {
@@ -135,6 +149,37 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
     toast.success('Cliente arquivado · veja em "Arquivados"')
     setConfirmArchive(false)
     onClose()
+  }
+
+  const tenantName = asText(client.tenantName || client.company || client.name, 'tenant')
+  const tenantStatusMatches =
+    tenantStatusConfirmText.trim().toLowerCase() === tenantName.trim().toLowerCase()
+
+  const toggleTenantStatus = async () => {
+    if (!client.tenantId || !client.tenantServerId) return
+    const server = getServerById(client.tenantServerId)
+    if (!server) {
+      toast.error('Servidor do tenant não encontrado em Configurações')
+      return
+    }
+    const nextStatus = tenantIsActive ? 'inactive' : 'active'
+    setTenantStatusBusy(true)
+    try {
+      await tenantsApi.update(server, { id: client.tenantId, status: nextStatus })
+      await tenantQ.refetch()
+      db.addLog(
+        client.id,
+        nextStatus === 'inactive' ? 'Tenant inativado' : 'Tenant reativado',
+        user ? `Por ${user}` : undefined,
+      )
+      toast.success(nextStatus === 'inactive' ? 'Tenant inativado' : 'Tenant reativado')
+      setConfirmTenantStatus(false)
+      setTenantStatusConfirmText('')
+    } catch (err) {
+      toast.error(extractErrorMessage(err))
+    } finally {
+      setTenantStatusBusy(false)
+    }
   }
 
   return (
@@ -244,16 +289,36 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                 Acessar sistema
               </Button>
               {extraHeaderAction}
-              {canDelete && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmArchive(true)}
-                  aria-label="Arquivar cliente"
-                  title="Arquivar cliente"
-                  className="ml-auto rounded-md p-2.5 text-foreground/40 hover:bg-danger/10 hover:text-danger transition-colors lg:p-2"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+              {(canToggleTenant || canDelete) && (
+                <div className="ml-auto flex items-center gap-1">
+                  {canToggleTenant && client.tenantId && client.tenantServerId && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmTenantStatus(true)}
+                      aria-label={tenantIsActive ? 'Inativar tenant' : 'Reativar tenant'}
+                      title={tenantIsActive ? 'Inativar tenant' : 'Reativar tenant'}
+                      className={cn(
+                        'rounded-md p-2.5 transition-colors lg:p-2',
+                        tenantIsActive
+                          ? 'text-foreground/40 hover:bg-warning/10 hover:text-warning'
+                          : 'text-foreground/40 hover:bg-success/10 hover:text-success',
+                      )}
+                    >
+                      <Power className="h-4 w-4" />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmArchive(true)}
+                      aria-label="Arquivar cliente"
+                      title="Arquivar cliente"
+                      className="rounded-md p-2.5 text-foreground/40 hover:bg-danger/10 hover:text-danger transition-colors lg:p-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -311,6 +376,57 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
           ? Ele sai do pipeline e da lista de clientes, mas você pode restaurá-lo
           ou excluí-lo permanentemente na tela <strong>Arquivados</strong>.
         </p>
+      </Modal>
+
+      <Modal
+        open={confirmTenantStatus}
+        onClose={() => {
+          setConfirmTenantStatus(false)
+          setTenantStatusConfirmText('')
+        }}
+        title={tenantIsActive ? 'Inativar tenant' : 'Reativar tenant'}
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setConfirmTenantStatus(false)
+                setTenantStatusConfirmText('')
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant={tenantIsActive ? 'danger' : 'primary'}
+              onClick={toggleTenantStatus}
+              disabled={!tenantStatusMatches}
+              loading={tenantStatusBusy}
+            >
+              {tenantIsActive ? 'Inativar' : 'Reativar'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-foreground/70">
+            {tenantIsActive ? (
+              <>
+                Isso bloqueia o acesso do cliente ao sistema imediatamente. Para confirmar, digite o nome do
+                tenant:
+              </>
+            ) : (
+              <>Isso libera o acesso do cliente ao sistema novamente. Para confirmar, digite o nome do tenant:</>
+            )}{' '}
+            <span className="font-semibold text-foreground">{tenantName}</span>
+          </p>
+          <Input
+            value={tenantStatusConfirmText}
+            onChange={(e) => setTenantStatusConfirmText(e.target.value)}
+            placeholder={tenantName}
+            autoFocus
+          />
+        </div>
       </Modal>
     </>
   )

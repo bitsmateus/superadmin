@@ -50,3 +50,8 @@ export function canDeleteClient(role: UserRole | null | undefined): boolean {
 export function canManageUsers(role: UserRole | null | undefined): boolean {
   return role === 'admin'
 }
+
+/** Inativar/reativar o tenant no NX — liberado também pro suporte (a pedido). */
+export function canManageTenantStatus(role: UserRole | null | undefined): boolean {
+  return role === 'admin' || role === 'supervisor' || role === 'suporte'
+}

@@ -32,7 +32,11 @@ async function config(): Promise<{ chave: string; base: string; intervalo: numbe
     asaas_api_key: string | null; asaas_environment: string | null;
     asaas_sync_interval_min: number | null; asaas_sync_since: string | null;
   }>(
-    `SELECT asaas_api_key, asaas_environment, asaas_sync_interval_min, asaas_sync_since
+    // asaas_sync_since sai como TEXTO 'YYYY-MM-DD' de propósito: como DATE ele volta como objeto
+    // Date, e o texto dele ("Fri Sep 25") comparado com a data do Asaas ("2026-09-25") barrava
+    // TODAS as assinaturas — inclusive as novas, que era justamente o que devia passar.
+    `SELECT asaas_api_key, asaas_environment, asaas_sync_interval_min,
+            TO_CHAR(asaas_sync_since, 'YYYY-MM-DD') AS asaas_sync_since
      FROM settings WHERE id = true`
   );
   const chave = (process.env.ASAAS_API_KEY ?? row?.asaas_api_key ?? '').trim();
@@ -41,7 +45,7 @@ async function config(): Promise<{ chave: string; base: string; intervalo: numbe
     chave,
     base: (row?.asaas_environment ?? 'production') === 'production' ? API : SANDBOX,
     intervalo: row?.asaas_sync_interval_min ?? INTERVALO_PADRAO_MIN,
-    desde: row?.asaas_sync_since ? String(row.asaas_sync_since).slice(0, 10) : null,
+    desde: row?.asaas_sync_since ?? null,
   };
 }
 

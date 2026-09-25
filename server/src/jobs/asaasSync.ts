@@ -22,9 +22,7 @@ const INTERVALO_PADRAO_MIN = 15;
 
 type Customer = { id: string; name: string; email: string | null; cpfCnpj: string | null; phone: string | null; mobilePhone: string | null };
 type Subscription = { id: string; customer: string; value: number; status: string; cycle: string; nextDueDate: string | null };
-/** O que um cliente paga por mês: a SOMA das assinaturas ativas dele, mais a maior delas como
- * referência (é a que fica guardada em asaas_subscription_id). */
-type Mensalidade = { total: number; principal: Subscription };
+
 
 async function config(): Promise<{ chave: string; base: string; intervalo: number } | null> {
   const row = await queryOne<{ asaas_api_key: string | null; asaas_environment: string | null; asaas_sync_interval_min: number | null }>(
@@ -87,28 +85,33 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
     listar<Subscription>(cfg.base, cfg.chave, '/subscriptions'),
   ]);
 
-  // Mais de uma assinatura ativa no mesmo cliente são cobranças que SOMAM (serviços diferentes
-  // na mesma conta), não alternativas — o que ele paga por mês é a soma delas.
-  const assinaturaAtiva = new Map<string, Mensalidade>();
+  // Quem manda no valor é a ASSINATURA, não o cliente. Um mesmo CNPJ pode ter cobranças que
+  // pertencem a empresas diferentes do grupo (a JLF tem três: duas da NX Digital e uma da NX
+  // Sistema), e cada uma vira uma linha própria na tela — por isso o vínculo forte é
+  // clients.asaas_subscription_id.
+  const ativasPorCustomer = new Map<string, Subscription[]>();
+  const assinaturaPorId = new Map<string, Subscription>();
   for (const s of subscriptions) {
     if (s.status !== 'ACTIVE') continue;
-    const atual = assinaturaAtiva.get(s.customer);
-    if (!atual) {
-      assinaturaAtiva.set(s.customer, { total: s.value ?? 0, principal: s });
-    } else {
-      atual.total += s.value ?? 0;
-      if ((s.value ?? 0) > (atual.principal.value ?? 0)) atual.principal = s;
-    }
+    assinaturaPorId.set(s.id, s);
+    ativasPorCustomer.set(s.customer, [...(ativasPorCustomer.get(s.customer) ?? []), s]);
   }
 
   const clientes = await query<{
     id: string; name: string; company: string; phone: string; email: string;
-    cnpj: string | null; asaas_customer_id: string | null; monthly_value: string | null;
+    cnpj: string | null; asaas_customer_id: string | null; asaas_subscription_id: string | null;
+    monthly_value: string | null;
   }>(
     `SELECT id, name, company, phone, email,
             COALESCE(NULLIF(cnpj, ''), ficha_cadastro->>'cnpj') AS cnpj,
-            asaas_customer_id, monthly_value
+            asaas_customer_id, asaas_subscription_id, monthly_value
      FROM clients WHERE archived_at IS NULL`
+  );
+
+  // Assinatura que já tem dono: ninguém mais pode reivindicar (senão a mesma cobrança entraria
+  // duas vezes no total, e a divisão feita à mão entre as empresas do grupo seria desfeita).
+  const assinaturasComDono = new Set(
+    clientes.map((c) => c.asaas_subscription_id).filter(Boolean) as string[]
   );
 
   const porDoc = new Map<string, Customer[]>();
@@ -126,7 +129,7 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
   const resultado: ResultadoSync = {
     clientes: clientes.length,
     customers: customers.length,
-    assinaturasAtivas: assinaturaAtiva.size,
+    assinaturasAtivas: assinaturaPorId.size,
     vinculados: 0,
     porCriterio: {},
     valoresAtualizados: 0,
@@ -175,30 +178,38 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
       }
     }
 
-    const assinatura = assinaturaAtiva.get(customerId);
-    if (!assinatura) continue;
-    resultado.mrrLigado += assinatura.total;
+    // Linha que já aponta pra uma assinatura vale só por ela — é assim que a JLF fica com uma
+    // linha de R$ 2.000 e outra de R$ 1.700 sem uma sobrescrever a outra.
+    const daLinha = cl.asaas_subscription_id ? assinaturaPorId.get(cl.asaas_subscription_id) : null;
+    const semDono = (ativasPorCustomer.get(customerId) ?? []).filter((s) => !assinaturasComDono.has(s.id));
+    const usar = daLinha ? [daLinha] : semDono;
+    if (!usar.length) continue;
+    for (const s of usar) assinaturasComDono.add(s.id);
+
+    const total = usar.reduce((soma, s) => soma + (s.value ?? 0), 0);
+    const principal = usar.reduce((maior, s) => ((s.value ?? 0) > (maior.value ?? 0) ? s : maior), usar[0]);
+    resultado.mrrLigado += total;
 
     // O valor que vale é o que está sendo cobrado. Só mexe quando muda de verdade, pra não
     // carimbar updated_at de meio mundo a cada rodada.
     const atual = Math.round(Number(cl.monthly_value ?? 0) * 100);
-    const doAsaas = Math.round(assinatura.total * 100);
+    const doAsaas = Math.round(total * 100);
     if (doAsaas && doAsaas !== atual) {
       resultado.valoresAtualizados++;
       if (!opts.dryRun) {
-        const venc = assinatura.principal.nextDueDate;
+        const venc = principal.nextDueDate;
         const diaVencimento = venc ? Number(venc.slice(8, 10)) : null;
         await query(
           `UPDATE clients
            SET monthly_value = $1, asaas_subscription_id = $2,
                due_day = COALESCE($3, due_day), updated_at = NOW()
            WHERE id = $4`,
-          [assinatura.total.toFixed(2), assinatura.principal.id, diaVencimento, cl.id]
+          [total.toFixed(2), principal.id, diaVencimento, cl.id]
         );
       }
     } else if (!opts.dryRun) {
       await query('UPDATE clients SET asaas_subscription_id = $1 WHERE id = $2 AND asaas_subscription_id IS DISTINCT FROM $1', [
-        assinatura.principal.id, cl.id,
+        principal.id, cl.id,
       ]);
     }
   }

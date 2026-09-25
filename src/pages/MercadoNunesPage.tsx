@@ -1218,57 +1218,15 @@ export function MercadoNunesPage() {
             </Card>
           )}
 
-          {/* Fica na coluna de edição (não na da prévia) de propósito: essa lista cresce muito —
-              loja com muitos layouts salvos — e se morasse dentro do painel fixo da prévia, ela
-              transbordaria pra fora da tela sem jeito de rolar até o fim. Aqui ela rola junto com
-              o resto do formulário, sem nunca competir com a prévia por espaço. Última opção da
-              coluna de propósito — é a menos usada no dia a dia. */}
-          <Card titulo="Layouts pré-prontos" dica="Salva o cartaz inteiro (texto, preço, cor, fonte…) pra voltar exatamente assim depois.">
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                value={nomeNovoLayout}
-                onChange={(e) => setNomeNovoLayout(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && salvarLayoutAtual()}
-                placeholder="Nome do layout"
-                style={{ ...inputEstilo, flex: 1 }}
-              />
-              <button
-                type="button"
-                onClick={salvarLayoutAtual}
-                disabled={!nomeNovoLayout.trim() || salvandoLayout}
-                style={{ ...botaoSecundario, whiteSpace: 'nowrap', opacity: nomeNovoLayout.trim() && !salvandoLayout ? 1 : 0.5 }}
-              >
-                {salvandoLayout ? 'Salvando…' : 'Salvar atual'}
-              </button>
-            </div>
-            {/* Só os SEM pasta — os organizados em pasta ficam só dentro do menu "Layouts",
-                senão essa lista voltaria a crescer do mesmo jeito que antes. */}
-            {carregandoLayouts ? (
-              <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Carregando layouts…</p>
-            ) : layoutsSemPasta.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                {layoutsSemPasta.map(renderLayoutRow)}
-              </div>
-            ) : layouts.length > 0 ? (
-              <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>
-                Todos os layouts estão organizados em pastas — veja no menu "Layouts" abaixo.
-              </p>
-            ) : (
-              <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>Nenhum layout salvo ainda.</p>
-            )}
-            {pastas.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAbaMenuLayouts('salvos')
-                  setMenuLayoutsAberto(true)
-                }}
-                style={{ ...botaoSecundario, textAlign: 'left' }}
-              >
-                📁 Ver {pastas.length} pasta{pastas.length > 1 ? 's' : ''} de layouts
-              </button>
-            )}
-          </Card>
+          {/* Só o botão "Layouts" (o mesmo do cabeçalho): a lista de layouts e as pastas ficam dentro do
+              menu, não mais na tela principal. */}
+          <button
+            type="button"
+            onClick={() => setMenuLayoutsAberto(true)}
+            style={{ ...botaoSecundario, whiteSpace: 'nowrap', alignSelf: 'flex-start' }}
+          >
+            📁 Layouts
+          </button>
         </div>
 
         {/* ── Prévia: position:fixed de verdade (não sticky) — fica sempre no mesmo lugar da tela,

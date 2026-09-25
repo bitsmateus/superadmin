@@ -1906,11 +1906,10 @@ function BriefingViewer({
 
       {(data.greetingMessage ||
         data.offHoursMessage ||
-        data.mainFlow ||
-        data.chatbotFlow ||
+        (!data.useAI && (data.mainFlow || data.chatbotFlow)) ||
         data.departments.length > 0) && (
         <Accordion title={<SectionTitle icon={<MessageSquare className="h-3.5 w-3.5" />}>5. Chatbot</SectionTitle>} defaultOpen>
-          {data.chatbotFlow && (
+          {data.chatbotFlow && !data.useAI && (
             <div className="mb-2 space-y-2 rounded-lg border border-line bg-elevate/[0.02] p-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-foreground/40">
                 Roteiro do chatbot
@@ -1952,7 +1951,7 @@ function BriefingViewer({
               )}
             </div>
           )}
-          {data.mainFlow && <Row k="Fluxo principal" v={data.mainFlow} />}
+          {!data.useAI && data.mainFlow && <Row k="Fluxo principal" v={data.mainFlow} />}
           <Row k="Saudação" v={data.greetingMessage} />
           {data.offHoursEnabled === false ? (
             <Row k="Fora do horário" v="Cliente optou por não enviar mensagem automática" />

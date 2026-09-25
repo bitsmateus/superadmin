@@ -30,6 +30,7 @@ import { buildFollowUps, DEFAULT_FOLLOWUP_TEMPLATES } from '@/constants/followup
 import {
   buildAccessEmail,
   buildAccessDeliveryEmail,
+  buildAccessDetailsEmail,
   buildWelcomeMessage,
   renderAccessSheetHtml,
 } from '@/lib/accessSheet'
@@ -169,8 +170,8 @@ export function DeliveryTab({ client }: { client: Client }) {
     }
   }
 
-  // "Enviar por e-mail": manda direto pelo SMTP configurado em Configurações (com o PDF de acessos
-  // em anexo) — não abre mais o programa de e-mail do computador.
+  // "Enviar por e-mail": manda direto pelo SMTP configurado em Configurações, com os acessos deste
+  // cliente no corpo do e-mail (sem PDF) — não abre mais o programa de e-mail do computador.
   const emailAccess = async () => {
     const to = client.email?.trim()
     if (!to) {
@@ -179,16 +180,9 @@ export function DeliveryTab({ client }: { client: Client }) {
     }
     setEmailingAccess(true)
     try {
-      const html = renderAccessSheetHtml({ client, server: tenantServer })
-      const pdf = await api.postForBlob(`/api/clients/${client.id}/access-pdf`, { html })
-      const { subject, html: body } = buildAccessDeliveryEmail({ client, server: tenantServer })
-      await api.post(`/api/clients/${client.id}/send-access-email`, {
-        to,
-        subject,
-        html: body,
-        attachmentBase64: await blobToBase64(pdf),
-        attachmentFilename: 'acessos.pdf',
-      })
+      // Só os acessos deste cliente, escritos no corpo do e-mail (sem PDF).
+      const { subject, html } = buildAccessDetailsEmail({ client, server: tenantServer })
+      await api.post(`/api/clients/${client.id}/send-access-email`, { to, subject, html })
       if (!handoff.find((i) => i.id === 'handoff_access_sent')?.checked) {
         const next = setChecklistItem(handoff, 'handoff_access_sent', true, user)
         db.updateClient(client.id, { deliveryHandoffChecklist: next })

@@ -135,6 +135,24 @@ export function buildAccessDeliveryEmail({ client, server }: AccessSheetParams):
   return { subject: `Acessos do sistema — ${company}`, html: paragraphs.join('\n') }
 }
 
+/** E-mail com os acessos DESTE cliente escritos no próprio corpo (link, usuários e senhas), sem anexo. */
+export function buildAccessDetailsEmail(params: AccessSheetParams): { subject: string; html: string } {
+  const { subject, body } = buildAccessEmail(params)
+  const html = body
+    .split('
+')
+    .map((line) => {
+      if (!line.trim()) return '<br />'
+      const safe = escapeHtml(line).replace(/^(s+)/, (m) => '&nbsp;'.repeat(m.length))
+      return /^— .* —$/.test(line.trim())
+        ? `<p style="margin:12px 0 4px"><strong>${safe}</strong></p>`
+        : `<p style="margin:2px 0">${safe}</p>`
+    })
+    .join('
+')
+  return { subject, html }
+}
+
 /** Abre o cliente de e-mail (mailto) com os acessos prontos para enviar. */
 export function openAccessEmail(params: AccessSheetParams): void {
   const { subject, body } = buildAccessEmail(params)

@@ -59,6 +59,15 @@ function centsDoCliente(valor: number | undefined): number {
   return Math.round((valor ?? 0) * 100)
 }
 
+/** CNPJ/CPF guardado só com dígitos — aqui ganha a pontuação pra leitura. Documento com tamanho
+ * fora do padrão aparece como está, sem tentar formatar à força. */
+function formatarCnpj(raw: string): string {
+  const d = raw.replace(/\D/g, '')
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+  return raw
+}
+
 /**
  * CLIENTES GERAL (Financeiro) — a base de clientes inteira numa tela só: quem é, quem atende,
  * quanto paga de mensalidade, quanto pagou de implementação, e quem cancelou em cada mês.
@@ -151,7 +160,11 @@ export function FinanceiroClientesGeralPage() {
       })
       .filter((c) => {
         if (!termo) return true
-        return [c.name, c.company, c.phone].some((v) => (v ?? '').toLowerCase().includes(termo))
+        if ([c.name, c.company, c.phone].some((v) => (v ?? '').toLowerCase().includes(termo))) return true
+        // CNPJ: compara só os dígitos dos dois lados, então acha tanto quem digita
+        // "05.490.849/0001-04" quanto "05490849" ou o número colado.
+        const digitos = termo.replace(/\D/g, '')
+        return digitos.length >= 3 && (c.cnpj ?? '').replace(/\D/g, '').includes(digitos)
       })
       .sort((a, b) => centsDoCliente(b.monthlyValue) - centsDoCliente(a.monthlyValue) || (a.name ?? '').localeCompare(b.name ?? ''))
   }, [clients, busca, status, unidadeAtiva, verSemEmpresa])
@@ -297,7 +310,7 @@ export function FinanceiroClientesGeralPage() {
                 <Input
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar por cliente, empresa ou telefone…"
+                  placeholder="Buscar por cliente, empresa, telefone ou CNPJ…"
                   className="pl-9"
                 />
               </div>
@@ -452,7 +465,12 @@ function LinhaCliente({ cliente, sugestao, onAbrir, onCancelar, onAplicarSugesta
           {cliente.name || '—'}
         </button>
       </td>
-      <td className="px-4 py-2.5 text-sm text-foreground/70">{cliente.company || '—'}</td>
+      <td className="px-4 py-2.5 text-sm text-foreground/70">
+        {cliente.company || '—'}
+        {cliente.cnpj && (
+          <span className="block text-[11px] tabular-nums text-foreground/35">{formatarCnpj(cliente.cnpj)}</span>
+        )}
+      </td>
       <td className="px-4 py-2.5 text-sm tabular-nums text-foreground/60">{cliente.phone || '—'}</td>
       <td className="px-4 py-2.5">
         <select

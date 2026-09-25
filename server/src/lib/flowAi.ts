@@ -88,10 +88,10 @@ Regras de formato (limites do WhatsApp — obrigatórias):
 
 Regras de conteúdo:
 - Português do Brasil, mensagens curtas e cordiais, emojis com parcimônia.
-- Comece com um passo de boas-vindas que apresenta as opções principais.
-- Colete o mínimo necessário (ex.: identificação, o que a pessoa quer) antes de encerrar.
-- Todo caminho termina em um passo "end" (encerramento) — ou numa transferência para setor.
-- Use transferToQueue (com o NOME do setor) quando o briefing indicar que aquele assunto é atendido por uma pessoa/setor.
+- O fluxo é SÓ O FLUXO INICIAL: UM ÚNICO passo "menu" (o passo inicial), com a mensagem de boas-vindas e uma opção para cada setor/assunto principal, cada opção transferindo direto para a fila (transferToQueue com o NOME do setor).
+- NÃO crie passos "ask" (coleta de nome, descrição, dados) e NÃO crie passos "end" (encerramento, agradecimento). Coleta de dados e mensagens de encerramento/saudação de transferência são tratadas pelas configurações do chatbot, fora do fluxo.
+- Só crie SUBMENUS (outros passos "menu") quando o briefing pedir explicitamente mais opções dentro de um assunto (menu com "aberto pela opção…") ou quando houver mais de 10 opções no menu principal. Nesse caso, o submenu também transfere direto para as filas.
+- Nunca invente setores: use apenas os do briefing.
 - Cada opção de menu tem "next" OU "transferToQueue", nunca os dois.
 - ids em kebab-case, únicos, curtos (ex.: "boas-vindas", "cnpj", "produto").`;
 
@@ -132,10 +132,8 @@ export function buildBriefingSummary(
           `${m.parentOption ? `aberto pela opção "${m.parentOption}" — ` : ''}${m.question ?? ''} — opções: ${(m.options ?? []).join(', ')}`,
         ),
       );
-    put('Dados a coletar antes de transferir', cf.collectFields);
     if (Array.isArray(cf.transfers))
       cf.transfers.forEach((t) => put('Transferência', `"${t.option}" → setor ${t.department}`));
-    put('Mensagem de encerramento', cf.closingMessage);
   }
 
   // Campos de IA já preenchidos (reaproveita contexto).

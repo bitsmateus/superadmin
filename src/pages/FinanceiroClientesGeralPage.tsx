@@ -32,9 +32,14 @@ const MOTIVOS = [
   'Outro',
 ]
 
-/** Etapas do cliente que contam como "cliente de verdade" no mês: já passou do contrato e está
- * rodando. Quem está em contrato/briefing/setup ainda não paga mensalidade, e 'churned' saiu. */
-const ETAPAS_ATIVAS = new Set(['active', 'delivered', 'delivery', 'setup_done'])
+/** Etapas ANTES da assinatura do contrato. Esta tela é de cliente — quem ainda está negociando ou
+ * esperando o contrato voltar assinado não entra, nem na lista nem na conta do MRR: ainda não é
+ * receita, é proposta. Depois de assinar (briefing, setup, entrega, ativo) já conta. */
+const ETAPAS_ANTES_DO_CONTRATO = new Set(['lead', 'welcome', 'contract'])
+
+function jaEhCliente(c: Client): boolean {
+  return !c.archivedAt && !ETAPAS_ANTES_DO_CONTRATO.has(c.stage)
+}
 
 type Unidade = 'nx_sistema' | 'nx_digital' | 'netscale'
 type Aba = Unidade | 'cancelamentos'
@@ -139,12 +144,12 @@ export function FinanceiroClientesGeralPage() {
   )
 
   const unidadeAtiva: Unidade | null = aba === 'cancelamentos' ? null : aba
-  const semEmpresa = React.useMemo(() => clients.filter((c) => !c.archivedAt && !c.unidade), [clients])
+  const semEmpresa = React.useMemo(() => clients.filter((c) => jaEhCliente(c) && !c.unidade), [clients])
 
   // Os números do topo seguem a aba: em "NX SISTEMA", é o MRR da NX Sistema.
   const ativos = React.useMemo(
     () => clients.filter((c) => {
-      if (c.archivedAt || !ETAPAS_ATIVAS.has(c.stage)) return false
+      if (!jaEhCliente(c) || c.stage === 'churned') return false
       return unidadeAtiva ? c.unidade === unidadeAtiva : true
     }),
     [clients, unidadeAtiva],
@@ -162,7 +167,7 @@ export function FinanceiroClientesGeralPage() {
   const lista = React.useMemo(() => {
     const termo = busca.trim().toLowerCase()
     return clients
-      .filter((c) => !c.archivedAt)
+      .filter(jaEhCliente)
       .filter((c) => (verSemEmpresa ? !c.unidade : c.unidade === unidadeAtiva))
       .filter((c) => {
         if (status === 'ativos') return c.stage !== 'churned'
@@ -178,7 +183,7 @@ export function FinanceiroClientesGeralPage() {
   const escondidosPeloFiltro = React.useMemo(() => {
     const termo = busca.trim().toLowerCase()
     if (!termo || lista.length) return 0
-    return clients.filter((c) => !c.archivedAt && casaComBusca(c, termo)).length
+    return clients.filter((c) => jaEhCliente(c) && casaComBusca(c, termo)).length
   }, [clients, busca, lista.length])
 
   const semValorComSugestao = React.useMemo(
@@ -275,7 +280,7 @@ export function FinanceiroClientesGeralPage() {
               ativa={aba === u.valor}
               onClick={() => { setAba(u.valor); setVerSemEmpresa(false) }}
             >
-              {u.label} ({clients.filter((c) => !c.archivedAt && c.unidade === u.valor).length})
+              {u.label} ({clients.filter((c) => jaEhCliente(c) && c.unidade === u.valor).length})
             </AbaBotao>
           ))}
           <AbaBotao ativa={aba === 'cancelamentos'} onClick={() => setAba('cancelamentos')}>

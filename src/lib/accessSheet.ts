@@ -139,17 +139,15 @@ export function buildAccessDeliveryEmail({ client, server }: AccessSheetParams):
 export function buildAccessDetailsEmail(params: AccessSheetParams): { subject: string; html: string } {
   const { subject, body } = buildAccessEmail(params)
   const html = body
-    .split('
-')
+    .split(/\r?\n/)
     .map((line) => {
       if (!line.trim()) return '<br />'
-      const safe = escapeHtml(line).replace(/^(s+)/, (m) => '&nbsp;'.repeat(m.length))
+      const safe = escapeHtml(line).replace(/^(\s+)/, (m) => '&nbsp;'.repeat(m.length))
       return /^— .* —$/.test(line.trim())
         ? `<p style="margin:12px 0 4px"><strong>${safe}</strong></p>`
         : `<p style="margin:2px 0">${safe}</p>`
     })
-    .join('
-')
+    .join('')
   return { subject, html }
 }
 

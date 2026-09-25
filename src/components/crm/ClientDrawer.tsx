@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Power,
   Send,
+  Settings2,
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -26,6 +27,7 @@ import { StageBadge } from './StageBadge'
 import { OverviewTab } from './tabs/OverviewTab'
 import { BriefingTab } from './tabs/BriefingTab'
 import { ChatbotTab } from './tabs/ChatbotTab'
+import { SetupPanel } from './setup/SetupPanel'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
 import { FichaTab } from './tabs/FichaTab'
@@ -36,6 +38,7 @@ import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useTenant } from '@/hooks/useTenants'
 import { canDeleteClient, canManageTenantStatus } from '@/services/supabase'
 import { db } from '@/services/db'
+import { markSetupItemDone } from '@/lib/setupActions'
 import { tenantsApi } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { getServerById } from '@/store/authStore'
@@ -52,6 +55,7 @@ interface TabDef {
 const TAB_DEFS: TabDef[] = [
   { value: 'overview', label: 'Visão Geral', icon: <Activity className="h-3.5 w-3.5" /> },
   { value: 'briefing', label: 'Briefing', icon: <MessageSquare className="h-3.5 w-3.5" /> },
+  { value: 'setup', label: 'Configuração', icon: <Settings2 className="h-3.5 w-3.5" /> },
   { value: 'chatbot', label: 'Chatbot', icon: <Bot className="h-3.5 w-3.5" /> },
   { value: 'delivery', label: 'Entrega', icon: <ListChecks className="h-3.5 w-3.5" /> },
   { value: 'followup', label: 'Follow-up', icon: <Send className="h-3.5 w-3.5" /> },
@@ -344,7 +348,10 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
         <div className="p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
           {tab === 'briefing' && <BriefingTab client={client} />}
-          {tab === 'chatbot' && <ChatbotTab client={client} />}
+          {tab === 'setup' && <SetupPanel client={client} onGoTo={setTab} showAdvanced />}
+          {tab === 'chatbot' && (
+            <ChatbotTab client={client} onGenerated={() => markSetupItemDone(client, 'flow_generated', 'Chatbot/IA gerado')} />
+          )}
           {tab === 'delivery' && <DeliveryTab client={client} />}
           {tab === 'followup' && <FollowUpTab client={client} />}
           {tab === 'ficha' && <FichaTab client={client} />}

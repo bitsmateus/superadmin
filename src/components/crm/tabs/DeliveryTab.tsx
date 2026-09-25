@@ -266,7 +266,7 @@ export function DeliveryTab({ client }: { client: Client }) {
             />
           </div>
           <span className="text-[11px] text-foreground/50">
-            Editar em <span className="text-accent">Briefing → Automação</span>
+            Editar em <span className="text-accent">Configuração</span>
           </span>
         </div>
       </div>

@@ -164,6 +164,11 @@ export function enrichChecklistFromBriefing(
     result.push(carry('ia_configured', iaLabel, iaChildren))
   }
 
+  // Chatbot/IA gerado (arquivo do chatbot ou IA do n8n) — marcado sozinho ao gerar.
+  if (!cfg || cfg.automationTypes.some((t) => t === 'chatbot' || t === 'ia_basica' || t === 'ia_avancada')) {
+    result.push(carry('flow_generated', 'Fluxo do chatbot/IA gerado'))
+  }
+
   // Fixed remaining
   result.push(carry('users_assigned', 'Usuários', [
     carry('users_assigned_queues_channels', 'Filas e Canais atribuídos'),

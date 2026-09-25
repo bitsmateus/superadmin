@@ -47,6 +47,7 @@ import type {
 } from '@/types/ticket'
 import type { TeamMember } from '@/hooks/useTeam'
 import type { PipelineStage } from '@/types/client'
+import { SetupBoard } from '@/components/setup/SetupBoard'
 import { SupportKanbanBoard, DONE_LIMIT, columnKeyOf } from '@/components/support/SupportKanbanBoard'
 import { TaskUpdatesPane } from '@/components/support/TaskUpdatesPane'
 import {
@@ -124,9 +125,9 @@ export function SupportWorkspacePage() {
   // a chave do localStorage leva o id da cópia, senão alternar aqui mudaria a tela original também.
   const supportView = useSupportView()
   const viewStorageKey = supportView ? `${VIEW_KEY}:${supportView.pageId}` : VIEW_KEY
-  const [view, setView] = React.useState<'list' | 'kanban'>(() => {
+  const [view, setView] = React.useState<'list' | 'kanban' | 'setup'>(() => {
     const saved = localStorage.getItem(viewStorageKey)
-    if (saved === 'kanban' || saved === 'list') return saved
+    if (saved === 'kanban' || saved === 'list' || saved === 'setup') return saved
     // Sem escolha anterior nessa cópia, vale o modo definido ao duplicar.
     return supportView?.config.view === 'kanban' ? 'kanban' : 'list'
   })
@@ -277,12 +278,17 @@ export function SupportWorkspacePage() {
             <ViewBtn active={view === 'kanban'} onClick={() => setView('kanban')} icon={<KanbanSquare className="h-4 w-4" />}>
               Kanban
             </ViewBtn>
+            <ViewBtn active={view === 'setup'} onClick={() => setView('setup')} icon={<Settings2 className="h-4 w-4" />}>
+              Configuração
+            </ViewBtn>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_340px]">
           <div>
-            {view === 'list' ? (
+            {view === 'setup' ? (
+              <SetupBoard clients={clients} />
+            ) : view === 'list' ? (
               <ListView
                 tasks={filtered}
                 columns={columns}

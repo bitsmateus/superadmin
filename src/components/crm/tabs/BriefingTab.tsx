@@ -130,7 +130,8 @@ export function BriefingTab({ client }: { client: Client }) {
   const [revisionNote, setRevisionNote] = React.useState(
     client.briefingRevisionNote ?? '',
   )
-  const [subView, setSubView] = React.useState<SubView>('briefing')
+  // A sub-aba "Automação" (checklist de criação) mudou pra aba "Configuração" do cliente.
+  const [subView] = React.useState<SubView>('briefing')
   const [config, setConfig] = React.useState<BriefingConfig>(
     client.briefingConfig ?? emptyConfig,
   )
@@ -576,7 +577,6 @@ export function BriefingTab({ client }: { client: Client }) {
 
       {showSubTabs && (
         <>
-          <SubTabs value={subView} onChange={setSubView} />
 
           {subView === 'briefing' && client.briefingData && (
             editing ? (
@@ -627,9 +627,6 @@ export function BriefingTab({ client }: { client: Client }) {
             )
           )}
 
-          {subView === 'automation' && (
-            <AutomationView client={client} />
-          )}
 
         </>
       )}
@@ -1166,7 +1163,7 @@ function SubTabBtn({
 
 // ── Automation view ───────────────────────────────────────────────────────────
 
-function AutomationView({ client }: { client: Client }) {
+export function AutomationView({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [tenantModalOpen, setTenantModalOpen] = React.useState(false)
   const [creatingUsers, setCreatingUsers] = React.useState(false)

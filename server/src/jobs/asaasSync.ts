@@ -97,7 +97,8 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
     id: string; name: string; company: string; phone: string; email: string;
     cnpj: string | null; asaas_customer_id: string | null; monthly_value: string | null;
   }>(
-    `SELECT id, name, company, phone, email, ficha_cadastro->>'cnpj' AS cnpj,
+    `SELECT id, name, company, phone, email,
+            COALESCE(NULLIF(cnpj, ''), ficha_cadastro->>'cnpj') AS cnpj,
             asaas_customer_id, monthly_value
      FROM clients WHERE archived_at IS NULL`
   );
@@ -125,6 +126,11 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
     semVinculo: 0,
   };
 
+  // Um customer do Asaas pertence a UM cadastro só. Sem isso, dois cadastros do mesmo cliente
+  // (acontece: "Ateliê do sorriso" e "Alex Machado" são a mesma pessoa) recebiam a mesma
+  // assinatura e a mensalidade era contada duas vezes no total da tela.
+  const customersJaUsados = new Set(clientes.map((c) => c.asaas_customer_id).filter(Boolean) as string[]);
+
   for (const cl of clientes) {
     let customerId = cl.asaas_customer_id;
     let criterio = 'já ligado';
@@ -146,8 +152,9 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
           return casaram.length === 1 ? casaram[0] : null;
         })();
 
-      if (!achado) { resultado.semVinculo++; continue; }
+      if (!achado || customersJaUsados.has(achado.id)) { resultado.semVinculo++; continue; }
       customerId = achado.id;
+      customersJaUsados.add(customerId);
       criterio =
         doc.length >= 11 && porDoc.get(doc)?.length === 1 ? 'cnpj'
         : porEmail.get((cl.email ?? '').trim().toLowerCase())?.length === 1 ? 'email'

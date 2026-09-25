@@ -168,6 +168,9 @@ CREATE TABLE IF NOT EXISTS clients (
   phone TEXT NOT NULL,
   company TEXT NOT NULL,
   responsavel TEXT,
+  -- CNPJ/CPF só dígitos — identidade forte do cliente (é por ele que o Asaas casa com o painel).
+  -- Herdado da ficha de cadastro quando ela existe; preenchido à mão ou pelo Asaas nos demais.
+  cnpj TEXT,
   -- Qual empresa do grupo atende esse cliente: 'nx_sistema' | 'nx_digital' | 'netscale'.
   -- NULL = ainda não classificado (a tela "Clientes Geral" separa por aqui).
   unidade TEXT,

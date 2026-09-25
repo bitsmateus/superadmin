@@ -42,6 +42,7 @@ type ClientRow = {
   responsavel_comercial: string | null
   responsavel_entrega: string | null
   unidade: string | null
+  cnpj: string | null
   channel_notify_enabled: boolean | null
   channel_notify_number: string | null
   stage: PipelineStage
@@ -112,6 +113,7 @@ function rowToClient(r: ClientRow): Client {
     responsavel: r.responsavel ?? undefined,
     responsavelComercial: r.responsavel_comercial ?? undefined,
     unidade: (r.unidade as Client['unidade']) ?? undefined,
+    cnpj: r.cnpj ?? undefined,
     responsavelEntrega: r.responsavel_entrega ?? undefined,
     channelNotifyEnabled: r.channel_notify_enabled ?? false,
     channelNotifyNumber: r.channel_notify_number ?? undefined,
@@ -183,6 +185,7 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('responsavel' in patch) out.responsavel = patch.responsavel ?? null
   if ('responsavelComercial' in patch) out.responsavel_comercial = patch.responsavelComercial ?? null
   if ('unidade' in patch) out.unidade = patch.unidade ?? null
+  if ('cnpj' in patch) out.cnpj = patch.cnpj ?? null
   if ('responsavelEntrega' in patch) out.responsavel_entrega = patch.responsavelEntrega ?? null
   if ('channelNotifyEnabled' in patch) out.channel_notify_enabled = patch.channelNotifyEnabled ?? false
   if ('channelNotifyNumber' in patch) out.channel_notify_number = patch.channelNotifyNumber ?? null

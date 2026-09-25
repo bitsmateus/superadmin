@@ -1190,6 +1190,12 @@ END $$`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS asaas_last_sync_at TIMESTAMPTZ`);
   // Empresa do grupo que atende o cliente (Clientes Geral) — ver schema.sql.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS unidade TEXT`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS cnpj TEXT`);
+  // Quem já tinha ficha preenchida ganha o CNPJ na coluna nova (antes só existia dentro do JSON).
+  await pool.query(
+    `UPDATE clients SET cnpj = regexp_replace(ficha_cadastro->>'cnpj', '\D', '', 'g')
+     WHERE cnpj IS NULL AND COALESCE(ficha_cadastro->>'cnpj', '') <> ''`
+  );
 
   // Contas a Pagar (Financeiro) — board estilo Monday, lista contínua de grupos criados à mão
   // (ex.: "Abril 2026", "Folha de pagamento"), sem filtro de mês. Ver comentário em schema.sql.

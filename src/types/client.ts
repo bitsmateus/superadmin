@@ -315,6 +315,8 @@ export interface Client {
   responsavel?: string
   /** Responsável comercial (nome/e-mail de um usuário da equipe). */
   responsavelComercial?: string
+  /** CNPJ/CPF só dígitos — é por ele que o Asaas casa com o cadastro daqui. */
+  cnpj?: string
   /** Empresa do grupo que atende esse cliente — separa as abas de "Clientes Geral". */
   unidade?: 'nx_sistema' | 'nx_digital' | 'netscale'
   /** Responsável pela entrega (nome/e-mail de um usuário da equipe). */

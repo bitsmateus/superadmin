@@ -428,7 +428,7 @@ export function PipelinePage() {
         subtitle={
           copyPageId
             ? `${membership?.size ?? 0} cliente(s) nesta aba`
-            : `${clients.filter((c) => SUPPORT_VISIBLE_STAGES.includes(c.stage)).length} cliente(s) no funil`
+            : `${clients.filter((c) => (SUPPORT_VISIBLE_STAGES as PipelineStage[]).includes(c.stage)).length} cliente(s) no funil`
         }
         rightSlot={
           <div className="flex items-center gap-2">

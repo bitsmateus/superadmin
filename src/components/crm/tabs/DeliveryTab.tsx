@@ -30,7 +30,8 @@ import { buildFollowUps, DEFAULT_FOLLOWUP_TEMPLATES } from '@/constants/followup
 import {
   buildAccessEmail,
   buildAccessDeliveryEmail,
-  buildAccessDetailsEmail,
+  accessRecipients,
+  buildUserAccessEmail,
   buildWelcomeMessage,
   renderAccessSheetHtml,
 } from '@/lib/accessSheet'
@@ -173,27 +174,37 @@ export function DeliveryTab({ client }: { client: Client }) {
   // "Enviar por e-mail": manda direto pelo SMTP configurado em Configurações, com os acessos deste
   // cliente no corpo do e-mail (sem PDF) — não abre mais o programa de e-mail do computador.
   const emailAccess = async () => {
-    const to = client.email?.trim()
-    if (!to) {
-      toast.error('Cliente sem e-mail cadastrado (Visão Geral).')
+    // Cada usuário do briefing recebe, no PRÓPRIO e-mail, só o seu acesso (link + login + senha dele).
+    const recipients = accessRecipients(client)
+    if (recipients.length === 0) {
+      toast.error('Nenhum usuário com e-mail no briefing para receber o acesso.')
       return
     }
     setEmailingAccess(true)
-    try {
-      // Só os acessos deste cliente, escritos no corpo do e-mail (sem PDF).
-      const { subject, html } = buildAccessDetailsEmail({ client, server: tenantServer })
-      await api.post(`/api/clients/${client.id}/send-access-email`, { to, subject, html })
-      if (!handoff.find((i) => i.id === 'handoff_access_sent')?.checked) {
+    const sent: string[] = []
+    const failed: string[] = []
+    let lastError = ''
+    for (const r of recipients) {
+      try {
+        const { subject, html } = buildUserAccessEmail({ client, server: tenantServer }, r)
+        // eslint-disable-next-line no-await-in-loop
+        await api.post(`/api/clients/${client.id}/send-access-email`, { to: r.email, subject, html })
+        sent.push(r.email)
+      } catch (err) {
+        failed.push(r.email)
+        lastError = (err as Error).message
+      }
+    }
+    setEmailingAccess(false)
+    if (sent.length > 0) {
+      if (!handoff.find((i) => i.id === 'handoff_access_sent')?.checked && failed.length === 0) {
         const next = setChecklistItem(handoff, 'handoff_access_sent', true, user)
         db.updateClient(client.id, { deliveryHandoffChecklist: next })
       }
-      db.addLog(client.id, 'Acessos enviados', `E-mail enviado por SMTP para ${to}`)
-      toast.success(`E-mail de acessos enviado para ${to}`)
-    } catch (err) {
-      toast.error(`Falha ao enviar pelo SMTP: ${(err as Error).message} (confira Configurações → e-mail)`)
-    } finally {
-      setEmailingAccess(false)
+      db.addLog(client.id, 'Acessos enviados', `Cada usuário recebeu o próprio acesso por SMTP: ${sent.join(', ')}`)
     }
+    if (failed.length === 0) toast.success(`Acesso enviado para ${sent.length} usuário(s), cada um com o seu`)
+    else toast.error(`${sent.length} enviado(s), ${failed.length} falhou(ram) (${failed.join(', ')}): ${lastError}`)
   }
 
   const saveMeeting = () => {

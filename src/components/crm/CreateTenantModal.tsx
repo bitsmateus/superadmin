@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/Input'
 import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
 import { queuesApi, extractQueueId } from '@/api/queues'
 import { chatbotFlowApi } from '@/api/chatbotFlow'
-import { usersApi } from '@/api/users'
+import { usersApi, existingUserEmails, friendlyUserError } from '@/api/users'
 import { extractErrorMessage } from '@/api/client'
 import { useAuthStore, type ServerConfig } from '@/store/authStore'
 import { useCurrentUser } from '@/hooks/useClients'
@@ -722,8 +722,15 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       (a.name ?? '').localeCompare(b.name ?? '', 'pt-BR', { sensitivity: 'base' }),
     )
     let success = 0
+    let already = 0
     const failures: string[] = []
+    // Tentar de novo não pode falhar por usuário que já foi criado: pula quem já existe no tenant.
+    const existing = await existingUserEmails(server, prov.apiId ?? '')
     for (const u of briefingUsers) {
+      if (u.email && existing.has(u.email.trim().toLowerCase())) {
+        already++
+        continue
+      }
       try {
         // eslint-disable-next-line no-await-in-loop
         await usersApi.create(
@@ -743,10 +750,11 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
         )
         success++
       } catch (err) {
-        failures.push(`${u.name}: ${extractErrorMessage(err, 'falha')}`)
+        console.error('[provision] createUser falhou', u.email, (err as { response?: { status?: number; data?: unknown } })?.response)
+        failures.push(`${u.name}: ${friendlyUserError(extractErrorMessage(err, 'falha'))}`)
       }
     }
-    if (success > 0) {
+    if (success > 0 || (already > 0 && failures.length === 0)) {
       db.updateClient(client.id, {
         deliveryChecklist: setChecklistItem(currentChecklist(), 'users_created', true, user),
       })
@@ -755,7 +763,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
     if (failures.length > 0) {
       throw new Error(`${success} criado(s), ${failures.length} falharam: ${failures[0]}`)
     }
-    return `${success} usuário(s)`
+    return already > 0 ? `${success} novo(s) · ${already} já existia(m)` : `${success} usuário(s)`
   }
 
   return undefined

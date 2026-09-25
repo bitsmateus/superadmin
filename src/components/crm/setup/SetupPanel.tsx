@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import {
+  AlertTriangle,
   Bot,
   CalendarCheck,
   CheckCircle2,
@@ -96,6 +97,14 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
   const extras: Record<SetupStepKey, React.ReactNode> = {
     briefing: (
       <div className="flex flex-wrap items-center gap-2 pt-1">
+        {(client.briefingStatus === 'sent' || client.briefingStatus === 'revision') && (
+          <div className="flex w-full items-center gap-2 rounded-lg border border-warning/30 bg-warning/[0.07] px-3 py-2 text-xs text-foreground/80">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" />
+            {client.briefingStatus === 'revision'
+              ? 'Revisão solicitada — aguardando o cliente ajustar e reenviar o briefing.'
+              : `Aguardando o cliente preencher o briefing${client.briefingSentAt ? ` (enviado em ${formatDate(client.briefingSentAt)})` : ''}. Esta etapa só conclui quando ele preencher.`}
+          </div>
+        )}
         {client.briefingStatus && client.briefingStatus !== 'not_sent' ? (
           <>
             {link && (
@@ -128,7 +137,7 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
           {client.tenantId ? 'Recriar tenant' : 'Criar tenant'}
         </Button>
         <p className="mt-1.5 text-[11px] text-foreground/45">
-          Cria o tenant e já cria usuários, canais e filas do briefing.
+          Cria a empresa no sistema (tenant) e já cria usuários, canais e filas do briefing.
         </p>
       </div>
     ),

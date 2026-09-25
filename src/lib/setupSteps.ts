@@ -12,7 +12,7 @@ export const SETUP_STEP_ORDER: SetupStepKey[] = ['briefing', 'tenant', 'config',
 
 export const SETUP_STEP_LABEL: Record<SetupStepKey, string> = {
   briefing: 'Briefing',
-  tenant: 'Tenant',
+  tenant: 'Criação da empresa',
   config: 'Configuração',
   test: 'Teste',
   delivery: 'Entrega',
@@ -63,8 +63,9 @@ const MIN_STEP_BY_STAGE: Partial<Record<PipelineStage, SetupStepKey>> = {
   delivered: 'delivery',
 }
 
-const TENANT_IDS = ['tenant_created', 'users_created', 'queues_created', 'channels_created', 'api_oficial']
+const TENANT_IDS = ['tenant_created', 'users_created', 'queues_created', 'channels_created']
 const CONFIG_IDS = [
+  'api_oficial',
   'flow_generated',
   'chatbot_configured',
   'ia_configured',
@@ -126,12 +127,13 @@ function step(key: SetupStepKey, items: SetupItem[]): SetupStep {
 }
 
 export function computeSetup(client: Client, tree: ChecklistItem[] = setupTree(client)): SetupState {
-  const briefingSent = Boolean(client.briefingStatus && client.briefingStatus !== 'not_sent')
+  // O briefing só conta como concluído quando o cliente PREENCHE (enviar o link não basta).
+  const briefingSent = client.briefingStatus === 'filled' || client.briefingStatus === 'approved'
   const delivered = Boolean(client.deliveryCompletedAt) || client.stage === 'delivered' || client.stage === 'active'
 
   const steps: SetupStep[] = [
     step('briefing', [
-      { id: 'briefing_sent', label: 'Briefing enviado ao cliente', checked: briefingSent, manual: false },
+      { id: 'briefing_sent', label: 'Briefing preenchido pelo cliente', checked: briefingSent, manual: false },
     ]),
     step('tenant', fromTree(tree, TENANT_IDS, client)),
     step('config', fromTree(tree, CONFIG_IDS, client)),

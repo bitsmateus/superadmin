@@ -42,7 +42,7 @@ import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
-import { usersApi } from '@/api/users'
+import { usersApi, existingUserEmails, friendlyUserError } from '@/api/users'
 import { queuesApi, extractQueueId } from '@/api/queues'
 import { chatbotFlowApi } from '@/api/chatbotFlow'
 import { BriefingMeeting } from '../BriefingMeeting'
@@ -1358,9 +1358,15 @@ export function AutomationView({ client }: { client: Client }) {
     if (createdQueues.length > 0) await chatbotFlowApi.saveQueues(client.id, createdQueues).catch(() => {})
 
     let success = 0
+    let already = 0
     const failures: string[] = []
+    const existing = await existingUserEmails(server, client.tenantApiId)
     // Cria em ordem alfabética — casa com a listagem da plataforma NX.
     for (const u of sortUsersByName(briefingUsers)) {
+      if (u.email && existing.has(u.email.trim().toLowerCase())) {
+        already++
+        continue
+      }
       try {
         await usersApi.create(
           server,
@@ -1379,14 +1385,14 @@ export function AutomationView({ client }: { client: Client }) {
         )
         success++
       } catch (err) {
-        failures.push(`${u.name}: ${extractErrorMessage(err, 'falha')}`)
+        failures.push(`${u.name}: ${friendlyUserError(extractErrorMessage(err, 'falha'))}`)
       }
     }
     setCreatingUsers(false)
 
-    if (success > 0 || queuesCreated > 0) {
+    if (success > 0 || queuesCreated > 0 || (already > 0 && failures.length === 0)) {
       let next = tree
-      if (success > 0) next = setChecklistItem(next, 'users_created', true, user)
+      if (success > 0 || (already > 0 && failures.length === 0)) next = setChecklistItem(next, 'users_created', true, user)
       if (queuesCreated > 0) next = setChecklistItem(next, 'queues_created', true, 'Sistema')
       db.updateClient(client.id, { deliveryChecklist: next })
     }

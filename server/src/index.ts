@@ -35,6 +35,7 @@ import { pushRoutes } from './routes/push.js';
 import { briefingTemplateRoutes } from './routes/briefingTemplate.js';
 import { templateRequestRoutes } from './routes/templateRequests.js';
 import { massCampaignRoutes } from './routes/massCampaigns.js';
+import { acougueRoutes } from './routes/acougue.js';
 import { mercadoNunesRoutes } from './routes/mercadoNunes.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startFollowUpDigest } from './jobs/followUpDigest.js';
@@ -71,6 +72,13 @@ async function main() {
     }
     // "Deslogar" alguém em Equipe marca profiles.session_invalidated_at — qualquer token emitido
     // antes disso (iat, em segundos) já não vale mais, mesmo sem ter expirado de verdade ainda.
+    // Token do açougue (/mercadonunes/acougue) tem login próprio e NÃO vale no painel — sem isso um
+    // acesso de açougue passaria por aqui (o sub dele não existe em profiles, então a checagem
+    // abaixo não pegaria) e entraria nas rotas internas.
+    if ((req.user as { scope?: string }).scope) {
+      reply.status(403).send({ message: 'Token sem acesso ao painel' });
+      return;
+    }
     const { sub, iat } = req.user as { sub: string; iat?: number };
     if (sub && iat) {
       const profile = await queryOne<{ session_invalidated_at: string | null }>(
@@ -116,6 +124,7 @@ async function main() {
   await app.register(templateRequestRoutes);
   await app.register(massCampaignRoutes);
   await app.register(mercadoNunesRoutes);
+  await app.register(acougueRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

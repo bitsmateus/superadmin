@@ -126,6 +126,12 @@ const MercadoNunesPage = React.lazy(() =>
     default: m.MercadoNunesPage,
   })),
 )
+// Rateio do boi — mesma família do gerador de cartazes, mas com login próprio (mostra custo/margem).
+const AcouguePage = React.lazy(() =>
+  import('./pages/AcouguePage').then((m) => ({
+    default: m.AcouguePage,
+  })),
+)
 
 export default function App() {
   return (
@@ -136,6 +142,7 @@ export default function App() {
         <Route path="/template/:token" element={<TemplateRequestPublicPage />} />
         <Route path="/laundry/:token" element={<LaundryPortalPage />} />
         <Route path="/mercadonunes" element={<MercadoNunesPage />} />
+        <Route path="/mercadonunes/acougue" element={<AcouguePage />} />
         <Route path="/pendencias/:token" element={<PendenciasPublicPage />} />
         <Route path="/ficha" element={<FichaPublicPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />

@@ -1387,6 +1387,42 @@ END $$`);
     END IF;
   END $$`);
 
+  // ── Açougue do Mercado Nunes (/mercadonunes/acougue) ──────────────────────────────
+  // Login PRÓPRIO dessa ferramenta (e-mail + senha só dela) — nada a ver com `profiles`, que é o
+  // painel interno: quem trabalha no açougue não precisa (nem deve) ter conta no TenantHub.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_acougue_usuarios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL UNIQUE,
+    nome TEXT,
+    senha_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  // Uma "base" = uma compra que vira vários cortes (boi desossado, boi campo, sem costela, suíno…).
+  // Os cortes ficam em JSONB porque são uma lista curta editada sempre inteira pela tela.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_acougue_bases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    unidade TEXT NOT NULL DEFAULT 'kg',
+    custo NUMERIC NOT NULL DEFAULT 0,
+    peso_peca NUMERIC,
+    margem NUMERIC NOT NULL DEFAULT 0,
+    arredondamento TEXT NOT NULL DEFAULT 'nenhum',
+    cortes JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  // Cada "aplicar" guarda a tabela inteira como ficou — dá pra olhar o que era o preço mês passado.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_acougue_historico (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    base_id UUID REFERENCES mn_acougue_bases(id) ON DELETE CASCADE,
+    base_nome TEXT NOT NULL,
+    custo_kg NUMERIC NOT NULL,
+    margem NUMERIC NOT NULL,
+    usuario TEXT,
+    cortes JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+
   console.log('[db] migrations applied');
 }
 

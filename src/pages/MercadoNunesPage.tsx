@@ -519,7 +519,19 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
 const STORAGE_KEY = 'mercadonunes.fila.v1'
 
 export function MercadoNunesPage() {
-  const [cartaz, setCartaz] = React.useState<Cartaz>({ ...CARTAZ_PADRAO, id: 'atual' })
+  const [cartaz, setCartaz] = React.useState<Cartaz>(() => {
+    // Veio do açougue (/mercadonunes/acougue) pelo botão de plaquinha de um corte: já abre com o
+    // nome e o preço novo preenchidos, pra só imprimir.
+    const q = new URLSearchParams(window.location.search)
+    const produto = q.get('produto')?.trim()
+    const preco = q.get('preco')?.trim()
+    return {
+      ...CARTAZ_PADRAO,
+      id: 'atual',
+      ...(produto ? { produto: produto.toUpperCase() } : {}),
+      ...(preco ? { preco } : {}),
+    }
+  })
   const [fila, setFila] = React.useState<Cartaz[]>(() => {
     try {
       const cru = localStorage.getItem(STORAGE_KEY)
@@ -929,6 +941,9 @@ export function MercadoNunesPage() {
               Preencha, veja a prévia e imprima em folha A4.
             </p>
           </div>
+          <a href="/mercadonunes/acougue" style={{ ...botaoSecundario, whiteSpace: 'nowrap', textDecoration: 'none' }}>
+            🥩 Açougue
+          </a>
           <button
             type="button"
             onClick={() => setMenuLayoutsAberto(true)}

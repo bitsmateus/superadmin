@@ -60,6 +60,14 @@ const UNIDADE_CURTA: Record<Unidade, string> = {
 
 type Sugestao = { mrrCents: number; implCents: number; origem: string }
 
+/** Ver server/src/jobs/asaasSync.ts (buscarValoresAsaas) — valor da assinatura no Asaas pra
+ *  conferir do lado do que foi preenchido à mão. */
+type ValorAsaas = {
+  valorCents: number
+  temCustomerSemAssinaturaAtiva: boolean
+  criterio: 'já ligado' | 'cnpj' | 'email' | 'telefone' | 'nome'
+}
+
 /** O termo digitado bate com esse cliente? Nome, empresa e telefone por texto; CNPJ pelos dígitos
  * dos dois lados, pra achar tanto "05.490.849/0001-04" quanto "05490849". */
 function casaComBusca(c: Client, termo: string): boolean {
@@ -114,6 +122,7 @@ export function FinanceiroClientesGeralPage() {
         desde: string | null; vinculados: number; valoresAtualizados: number; criados: number; cancelados: number
       }>('/api/asaas/sync')
       await db.refresh()
+      carregarValoresAsaas()
       const mudancas = [
         r.criados && `${r.criados} cliente(s) criado(s)`,
         r.cancelados && `${r.cancelados} cancelado(s)`,
@@ -137,6 +146,21 @@ export function FinanceiroClientesGeralPage() {
       .catch(() => { if (!cancelado) setSugestoes({}) })
     return () => { cancelado = true }
   }, [])
+
+  // Valor que o Asaas tem pra cada cliente, pra conferir do lado do que foi preenchido à mão —
+  // só leitura, não muda nada aqui nem lá (ver GET /api/asaas/valores). Sem chave configurada, a
+  // coluna some sozinha (asaasIndisponivel), sem quebrar o resto da tela.
+  const [valoresAsaas, setValoresAsaas] = React.useState<Record<string, ValorAsaas>>({})
+  const [asaasIndisponivel, setAsaasIndisponivel] = React.useState(false)
+  const [carregandoAsaas, setCarregandoAsaas] = React.useState(true)
+  const carregarValoresAsaas = React.useCallback(() => {
+    setCarregandoAsaas(true)
+    api.get<Record<string, ValorAsaas>>('/api/asaas/valores')
+      .then((res) => { setValoresAsaas(res); setAsaasIndisponivel(false) })
+      .catch(() => { setValoresAsaas({}); setAsaasIndisponivel(true) })
+      .finally(() => setCarregandoAsaas(false))
+  }, [])
+  React.useEffect(() => { carregarValoresAsaas() }, [carregarValoresAsaas])
 
   const bounds = React.useMemo(() => monthIdBounds(mes), [mes])
   const cancelamentosDoMes = React.useMemo(
@@ -239,13 +263,19 @@ export function FinanceiroClientesGeralPage() {
             </button>
           )}
 
+          {asaasIndisponivel && !carregandoAsaas && (
+            <span className="ml-auto text-xs text-foreground/40" title="Configure a chave em Configurações → Asaas pra ver a coluna 'Valor no Asaas'.">
+              Coluna "Valor no Asaas" indisponível — Asaas não configurado
+            </span>
+          )}
+
           <Button
             size="sm"
             variant="secondary"
             onClick={sincronizarAsaas}
             disabled={sincronizando}
             title="Lê o Asaas agora: cobrança nova vira cliente, cobrança removida vira cancelamento"
-            className="ml-auto"
+            className={asaasIndisponivel && !carregandoAsaas ? '' : 'ml-auto'}
           >
             {sincronizando
               ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -356,7 +386,7 @@ export function FinanceiroClientesGeralPage() {
 
             <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-sm">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[980px]">
+                <table className="w-full min-w-[1120px]">
                   <thead>
                     <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                       <th className="px-4 py-3">Cliente</th>
@@ -364,6 +394,9 @@ export function FinanceiroClientesGeralPage() {
                       <th className="w-40 px-4 py-3">Telefone</th>
                       <th className="w-40 px-4 py-3">Empresa do grupo</th>
                       <th className="w-40 px-4 py-3 text-right">Mensalidade</th>
+                      <th className="w-40 px-4 py-3 text-right" title="Valor da assinatura no Asaas — só pra conferir, não é editável aqui.">
+                        Valor no Asaas
+                      </th>
                       <th className="w-40 px-4 py-3 text-right">Implementação</th>
                       <th className="w-28 px-4 py-3">Situação</th>
                       <th className="w-28 px-2 py-3" />
@@ -372,7 +405,7 @@ export function FinanceiroClientesGeralPage() {
                   <tbody>
                     {lista.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-10 text-center text-sm text-foreground/40">
+                        <td colSpan={9} className="px-4 py-10 text-center text-sm text-foreground/40">
                           {escondidosPeloFiltro > 0 ? (
                             <>
                               <span>
@@ -400,6 +433,8 @@ export function FinanceiroClientesGeralPage() {
                         key={c.id}
                         cliente={c}
                         sugestao={sugestoes[c.id]}
+                        valorAsaas={valoresAsaas[c.id]}
+                        carregandoAsaas={carregandoAsaas}
                         onAbrir={() => setDrawerId(c.id)}
                         onCancelar={() => setCancelando(c)}
                         onAplicarSugestao={() => aplicarSugestao(c)}
@@ -413,6 +448,11 @@ export function FinanceiroClientesGeralPage() {
                         <td /><td /><td />
                         <td className="px-4 py-3 text-right tabular-nums text-success">
                           {formatBRLCents(lista.reduce((a, c) => a + centsDoCliente(c.monthlyValue), 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-foreground/60">
+                          {asaasIndisponivel
+                            ? '—'
+                            : formatBRLCents(lista.reduce((a, c) => a + (valoresAsaas[c.id]?.valorCents ?? 0), 0))}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-success">
                           {formatBRLCents(lista.reduce((a, c) => a + centsDoCliente(c.implementationValue), 0))}
@@ -476,9 +516,11 @@ function Card({ icon, label, value, hint, tone }: {
   )
 }
 
-function LinhaCliente({ cliente, sugestao, onAbrir, onCancelar, onAplicarSugestao }: {
+function LinhaCliente({ cliente, sugestao, valorAsaas, carregandoAsaas, onAbrir, onCancelar, onAplicarSugestao }: {
   cliente: Client
   sugestao: Sugestao | undefined
+  valorAsaas: ValorAsaas | undefined
+  carregandoAsaas: boolean
   onAbrir: () => void
   onCancelar: () => void
   onAplicarSugestao: () => void
@@ -534,6 +576,9 @@ function LinhaCliente({ cliente, sugestao, onAbrir, onCancelar, onAplicarSugesta
             usar {formatBRLCents(sugestao!.mrrCents)} da venda
           </button>
         )}
+      </td>
+      <td className="px-4 py-2.5 text-right">
+        <CelulaValorAsaas valor={valorAsaas} mensalidadeCents={centsDoCliente(cliente.monthlyValue)} carregando={carregandoAsaas} />
       </td>
       <td className="px-4 py-2.5 text-right">
         <CelulaValor
@@ -606,6 +651,45 @@ function CelulaValor({ cents, onSalvar }: { cents: number; onSalvar: (cents: num
       placeholder="0,00"
       className="w-full rounded bg-elevate/[0.06] px-1 py-0.5 text-right text-sm tabular-nums text-foreground outline-none ring-1 ring-accent/40"
     />
+  )
+}
+
+const CRITERIO_LABEL: Record<ValorAsaas['criterio'], string> = {
+  'já ligado': 'cliente já vinculado ao Asaas',
+  cnpj: 'achado por CNPJ — ainda não vinculado, confira antes de confiar',
+  email: 'achado por e-mail — ainda não vinculado, confira antes de confiar',
+  telefone: 'achado por telefone — ainda não vinculado, confira antes de confiar',
+  nome: 'achado por nome — ainda não vinculado, confira antes de confiar',
+}
+
+/** Só leitura — o valor do Asaas não se edita aqui, é o que a pessoa usa pra conferir se a
+ * mensalidade digitada à mão bate. Verde = bate, laranja = diferente, cinza = não achou no Asaas. */
+function CelulaValorAsaas({ valor, mensalidadeCents, carregando }: {
+  valor: ValorAsaas | undefined
+  mensalidadeCents: number
+  carregando: boolean
+}) {
+  if (carregando && !valor) {
+    return <span className="block text-right text-xs text-foreground/25">carregando…</span>
+  }
+  if (!valor) {
+    return <span className="block text-right text-sm text-foreground/25" title="Não achei esse cliente no Asaas (nem por CNPJ, e-mail, telefone ou nome).">—</span>
+  }
+  if (valor.temCustomerSemAssinaturaAtiva) {
+    return (
+      <span className="block text-right text-xs text-foreground/40" title={CRITERIO_LABEL[valor.criterio]}>
+        sem assinatura ativa
+      </span>
+    )
+  }
+  const bate = valor.valorCents === mensalidadeCents
+  return (
+    <span
+      className={cn('block text-right text-sm tabular-nums', bate ? 'text-foreground/50' : 'text-warning font-medium')}
+      title={`${CRITERIO_LABEL[valor.criterio]}${bate ? '' : ' — diferente da mensalidade preenchida'}`}
+    >
+      {formatBRLCents(valor.valorCents)}
+    </span>
   )
 }
 

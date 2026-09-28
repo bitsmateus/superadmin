@@ -673,7 +673,8 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       sessionId: (prov as Record<string, unknown>).sessionId as string | number | undefined,
       urlServiceStatus: null,
       urlMessageStatus: null,
-      userId: (prov.userId ?? 1) as string | number,
+      // Sem userId: o canal/API não deve ficar vinculado a nenhum usuário
+      // (antes caía no admin "SUPORTE NX" criado junto com o tenant, ou no id 1).
       authToken: prov.apiToken,
       tenant: tenantId,
     })

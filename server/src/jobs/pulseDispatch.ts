@@ -16,6 +16,10 @@ const DEFAULT_TEMPLATE = 'pulso_satisfacao';
 // Limite de quantos pulsos manda por rodada (1x/dia) — evita disparar pra base inteira de uma vez
 // na primeira ativação; quem fica de fora hoje entra na fila do dia seguinte (ORDER BY estável).
 const DEFAULT_LIMIT = 15;
+// Pausa entre um envio e outro — mandar tudo de uma vez (15 mensagens em segundos) parece disparo
+// em massa e pode acender alerta de spam na própria Meta/WABA. 50s entre cada um imita o ritmo de
+// alguém mandando na mão.
+const DEFAULT_DELAY_MS = 50_000;
 
 interface ElegivelRow {
   id: string;
@@ -24,7 +28,11 @@ interface ElegivelRow {
   phone: string | null;
 }
 
-async function dispatchOnce(days: number, templateName: string, limit: number): Promise<void> {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function dispatchOnce(days: number, templateName: string, limit: number, delayMs: number): Promise<void> {
   const eligible = await query<ElegivelRow>(
     `SELECT c.id, c.name, c.company, c.phone
      FROM clients c
@@ -41,7 +49,9 @@ async function dispatchOnce(days: number, templateName: string, limit: number): 
   if (eligible.length === 0) return;
 
   let enviados = 0;
-  for (const c of eligible) {
+  for (let i = 0; i < eligible.length; i++) {
+    const c = eligible[i];
+    if (i > 0) await sleep(delayMs); // espera ANTES de cada envio a partir do segundo — nunca depois do último
     const empresa = (c.company && c.company.trim()) || c.name;
     const res = await sendOfficialTemplate(c.phone as string, templateName, [empresa]);
     if (!res.ok) {
@@ -69,10 +79,14 @@ export function startPulseDispatch(): void {
   const days = Math.max(1, Number(process.env.PULSE_DISPATCH_DAYS) || DEFAULT_DAYS);
   const templateName = (process.env.PULSE_TEMPLATE_NAME || DEFAULT_TEMPLATE).trim();
   const limit = Math.max(1, Number(process.env.PULSE_DISPATCH_LIMIT) || DEFAULT_LIMIT);
+  const delayMs = Math.max(0, Number(process.env.PULSE_DISPATCH_DELAY_MS) || DEFAULT_DELAY_MS);
   const tick = () => {
-    dispatchOnce(days, templateName, limit).catch((err) => console.error('[pulse-dispatch] erro', err));
+    dispatchOnce(days, templateName, limit, delayMs).catch((err) => console.error('[pulse-dispatch] erro', err));
   };
   setTimeout(tick, 45_000);
   setInterval(tick, INTERVAL_MS);
-  console.log(`[pulse-dispatch] agendador ativo (1x/dia, ate ${limit} por rodada, ${days} dia(s) sem pulso, template "${templateName}")`);
+  console.log(
+    `[pulse-dispatch] agendador ativo (1x/dia, ate ${limit} por rodada, ${Math.round(delayMs / 1000)}s entre cada envio, ` +
+    `${days} dia(s) sem pulso, template "${templateName}")`,
+  );
 }

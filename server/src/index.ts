@@ -46,6 +46,7 @@ import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
 import { startMassCampaignDispatch } from './jobs/massCampaignDispatch.js';
 import { startAutentiqueSync } from './jobs/autentiqueSync.js';
 import { startPulseSweep } from './jobs/pulseSweep.js';
+import { startPulseDispatch } from './jobs/pulseDispatch.js';
 import { startAsaasSync } from './jobs/asaasSync.js';
 import { startRecorraiSync } from './jobs/recorraiSync.js';
 
@@ -159,6 +160,7 @@ async function main() {
   startAsaasSync();
   startRecorraiSync();
   startPulseSweep();
+  startPulseDispatch();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

@@ -13,6 +13,9 @@ import { sendOfficialTemplate } from '../lib/officialApi.js';
 const INTERVAL_MS = 24 * 60 * 60 * 1000; // 1x/dia
 const DEFAULT_DAYS = 30;
 const DEFAULT_TEMPLATE = 'pulso_satisfacao';
+// Limite de quantos pulsos manda por rodada (1x/dia) — evita disparar pra base inteira de uma vez
+// na primeira ativação; quem fica de fora hoje entra na fila do dia seguinte (ORDER BY estável).
+const DEFAULT_LIMIT = 15;
 
 interface ElegivelRow {
   id: string;
@@ -21,7 +24,7 @@ interface ElegivelRow {
   phone: string | null;
 }
 
-async function dispatchOnce(days: number, templateName: string): Promise<void> {
+async function dispatchOnce(days: number, templateName: string, limit: number): Promise<void> {
   const eligible = await query<ElegivelRow>(
     `SELECT c.id, c.name, c.company, c.phone
      FROM clients c
@@ -31,8 +34,9 @@ async function dispatchOnce(days: number, templateName: string): Promise<void> {
          SELECT 1 FROM client_pulses p
          WHERE p.client_id = c.id AND p.sent_at > NOW() - ($1 || ' days')::interval
        )
-     ORDER BY c.company NULLS LAST, c.name`,
-    [days],
+     ORDER BY c.company NULLS LAST, c.name
+     LIMIT $2`,
+    [days, limit],
   );
   if (eligible.length === 0) return;
 
@@ -64,10 +68,11 @@ export function startPulseDispatch(): void {
   }
   const days = Math.max(1, Number(process.env.PULSE_DISPATCH_DAYS) || DEFAULT_DAYS);
   const templateName = (process.env.PULSE_TEMPLATE_NAME || DEFAULT_TEMPLATE).trim();
+  const limit = Math.max(1, Number(process.env.PULSE_DISPATCH_LIMIT) || DEFAULT_LIMIT);
   const tick = () => {
-    dispatchOnce(days, templateName).catch((err) => console.error('[pulse-dispatch] erro', err));
+    dispatchOnce(days, templateName, limit).catch((err) => console.error('[pulse-dispatch] erro', err));
   };
   setTimeout(tick, 45_000);
   setInterval(tick, INTERVAL_MS);
-  console.log(`[pulse-dispatch] agendador ativo (1x/dia, ${days} dia(s) sem pulso, template "${templateName}")`);
+  console.log(`[pulse-dispatch] agendador ativo (1x/dia, ate ${limit} por rodada, ${days} dia(s) sem pulso, template "${templateName}")`);
 }

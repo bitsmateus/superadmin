@@ -48,7 +48,9 @@ function signalSummary(item: ChurnRiskItem): string {
         : 'Respondeu "não" no pulso de satisfação',
     )
   }
-  if (item.signals.payment) parts.push('Pagamento em atraso')
+  if (item.signals.payment) {
+    parts.push(`Pagamento em atraso${d.paymentSource === 'recorrai' ? ' (Recorrai)' : d.paymentSource === 'asaas' ? ' (Asaas)' : ''}`)
+  }
   if (item.signals.channels) parts.push(`${d.channelsTotal} canal(is) desconectado(s)`)
   if (item.signals.tickets) {
     const t: string[] = []
@@ -192,6 +194,8 @@ export function ChurnRiskPage() {
                         <Badge tone="danger">
                           <CreditCard className="h-3 w-3" />
                           Pagamento em atraso
+                          {item.details.paymentSource === 'recorrai' && ' · Recorrai'}
+                          {item.details.paymentSource === 'asaas' && ' · Asaas'}
                         </Badge>
                       )}
                       {item.signals.channels && (

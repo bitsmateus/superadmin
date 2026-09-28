@@ -47,6 +47,7 @@ import { startMassCampaignDispatch } from './jobs/massCampaignDispatch.js';
 import { startAutentiqueSync } from './jobs/autentiqueSync.js';
 import { startPulseSweep } from './jobs/pulseSweep.js';
 import { startAsaasSync } from './jobs/asaasSync.js';
+import { startRecorraiSync } from './jobs/recorraiSync.js';
 
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
@@ -156,6 +157,7 @@ async function main() {
   startMassCampaignDispatch();
   startAutentiqueSync();
   startAsaasSync();
+  startRecorraiSync();
   startPulseSweep();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);

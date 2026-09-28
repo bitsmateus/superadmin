@@ -1449,6 +1449,14 @@ END $$`);
     END IF;
   END $$`);
 
+  // Recorrai: segunda fonte de payment_status (além do Asaas), só pra quem não é cobrado por lá —
+  // ver server/src/jobs/recorraiSync.ts. Reaproveita o enum payment_status (pending/paid/overdue) já
+  // usado pelo Asaas, num campo espelho separado, pro Risco de Churn considerar os dois sem duplicar
+  // a coluna principal (que continua sendo só do Asaas).
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS recorrai_customer_id TEXT`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS recorrai_payment_status payment_status`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS recorrai_synced_at TIMESTAMPTZ`);
+
   console.log('[db] migrations applied');
 }
 

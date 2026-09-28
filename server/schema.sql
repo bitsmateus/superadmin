@@ -206,6 +206,12 @@ CREATE TABLE IF NOT EXISTS clients (
   monthly_value NUMERIC,
   due_day INT CHECK (due_day IS NULL OR (due_day BETWEEN 1 AND 31)),
   payment_status payment_status,
+  -- Segunda fonte de pagamento (Recorrai), só pra quem não é cobrado via Asaas — ver
+  -- server/src/jobs/recorraiSync.ts. Campo espelho separado: payment_status acima continua sendo só
+  -- do Asaas, esse aqui alimenta o mesmo sinal de "atraso" no painel de Risco de Churn.
+  recorrai_customer_id TEXT,
+  recorrai_payment_status payment_status,
+  recorrai_synced_at TIMESTAMPTZ,
   last_payment_check TIMESTAMPTZ,
   payments JSONB NOT NULL DEFAULT '[]',
   extra_links JSONB NOT NULL DEFAULT '[]',

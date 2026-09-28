@@ -15,6 +15,8 @@ export interface ChurnRiskDetails {
   pulseResponse: 'sim' | 'nao' | null
   pulseSentAt: string | null
   paymentStatus: string | null
+  /** De qual fonte veio o paymentStatus acima — Asaas ou Recorrai, nunca as duas pro mesmo cliente. */
+  paymentSource: 'asaas' | 'recorrai' | null
   channelsDisconnected: number
   channelsTotal: number
   ticketsReopened: number

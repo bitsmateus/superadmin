@@ -4,10 +4,15 @@ import { reconcileChannels } from './channels.js';
 
 /**
  * Painel "Risco de Churn": cruza os sinais que já existem espalhados pelo sistema — pulso de
- * satisfação (client_pulses), pagamento em atraso (Asaas, clients.payment_status), canais
+ * satisfação (client_pulses), pagamento em atraso (Asaas OU Recorrai — ver detalhe abaixo), canais
  * desconectados (NX Monitor, reconcileChannels — mesma reconciliação da tela Canais) e tickets
  * reabertos/com SLA estourado — e devolve só os clientes ativos com pelo menos um sinal aceso.
  * Nada aqui decide nada sozinho; é só leitura pro time priorizar quem ligar.
+ *
+ * Pagamento tem DUAS fontes, nunca as duas ao mesmo tempo pro mesmo cliente: quem é cobrado via
+ * Asaas usa clients.payment_status; quem não é (server/src/jobs/recorraiSync.ts só mexe nesse
+ * grupo) usa o campo espelho clients.recorrai_payment_status. O sinal "pagamento em atraso" acende
+ * se QUALQUER UM dos dois disser 'overdue'.
  */
 
 interface ClientRow {
@@ -18,6 +23,8 @@ interface ClientRow {
   phone: string | null;
   payment_status: string | null;
   asaas_customer_id: string | null;
+  recorrai_payment_status: string | null;
+  recorrai_customer_id: string | null;
   responsavel: string | null;
   responsavel_entrega: string | null;
 }
@@ -40,6 +47,7 @@ export async function churnRiskRoutes(app: FastifyInstance) {
   app.get('/api/churn-risk', { onRequest: [app.authenticate] }, async (req) => {
     const clients = await query<ClientRow>(
       `SELECT id, name, company, stage, phone, payment_status, asaas_customer_id,
+              recorrai_payment_status, recorrai_customer_id,
               responsavel, responsavel_entrega
        FROM clients
        WHERE stage <> 'churned' AND archived_at IS NULL`,
@@ -103,6 +111,7 @@ export async function churnRiskRoutes(app: FastifyInstance) {
         pulseResponse: string | null;
         pulseSentAt: string | null;
         paymentStatus: string | null;
+        paymentSource: 'asaas' | 'recorrai' | null;
         channelsDisconnected: number;
         channelsTotal: number;
         ticketsReopened: number;
@@ -115,7 +124,11 @@ export async function churnRiskRoutes(app: FastifyInstance) {
       const pulseSignal = Boolean(
         pulse && (pulse.status === 'sem_resposta' || (pulse.status === 'respondido' && pulse.response === 'nao')),
       );
-      const paymentSignal = Boolean(c.asaas_customer_id && c.payment_status === 'overdue');
+      // Nunca as duas fontes ao mesmo tempo pro mesmo cliente (recorraiSync só mexe em quem não tem
+      // asaas_customer_id) — mas o "ou" aqui é de propósito, pra não depender dessa garantia externa.
+      const asaasOverdue = Boolean(c.asaas_customer_id && c.payment_status === 'overdue');
+      const recorraiOverdue = Boolean(c.recorrai_customer_id && c.recorrai_payment_status === 'overdue');
+      const paymentSignal = asaasOverdue || recorraiOverdue;
       const ch = channelsByClient.get(c.id);
       const channelsSignal = Boolean(ch && ch.total > 0 && ch.disconnected === ch.total);
       const tk = ticketSignalByClient.get(c.id);
@@ -135,7 +148,8 @@ export async function churnRiskRoutes(app: FastifyInstance) {
           pulseStatus: pulse?.status ?? null,
           pulseResponse: pulse?.response ?? null,
           pulseSentAt: pulse?.sent_at ?? null,
-          paymentStatus: c.payment_status,
+          paymentStatus: asaasOverdue ? c.payment_status : recorraiOverdue ? c.recorrai_payment_status : (c.payment_status ?? c.recorrai_payment_status),
+          paymentSource: asaasOverdue ? 'asaas' : recorraiOverdue ? 'recorrai' : c.asaas_customer_id ? 'asaas' : c.recorrai_customer_id ? 'recorrai' : null,
           channelsDisconnected: ch?.disconnected ?? 0,
           channelsTotal: ch?.total ?? 0,
           ticketsReopened: tk?.reopened ?? 0,

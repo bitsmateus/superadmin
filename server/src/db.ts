@@ -1457,6 +1457,29 @@ END $$`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS recorrai_payment_status payment_status`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS recorrai_synced_at TIMESTAMPTZ`);
 
+  // Registro manual de risco de churn (painel Risco de Churn) — alguém do time marca "isso é risco"
+  // mesmo sem nenhum sinal automático (pulso/pagamento/canal/ticket) ter acendido. resolved_at NULL
+  // = flag ativa; só uma ativa por cliente por vez (a rota resolve a anterior antes de criar outra).
+  await pool.query(`CREATE TABLE IF NOT EXISTS client_churn_flags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    severity TEXT NOT NULL DEFAULT 'atencao' CHECK (severity IN ('atencao','alto','critico')),
+    reason TEXT NOT NULL DEFAULT '',
+    created_by TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ,
+    resolved_by TEXT
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS client_churn_flags_client_idx ON client_churn_flags(client_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS client_churn_flags_active_idx ON client_churn_flags(client_id) WHERE resolved_at IS NULL`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_client_churn_flags ON client_churn_flags;
+      CREATE TRIGGER notify_client_churn_flags AFTER INSERT OR UPDATE OR DELETE ON client_churn_flags
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

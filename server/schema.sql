@@ -841,6 +841,23 @@ CREATE TABLE IF NOT EXISTS client_pulses (
 CREATE INDEX IF NOT EXISTS client_pulses_client_idx ON client_pulses(client_id);
 CREATE INDEX IF NOT EXISTS client_pulses_status_idx ON client_pulses(status);
 
+-- ---------- client_churn_flags ----------
+-- Registro manual de risco de churn (painel Risco de Churn) — alguém do time marca "isso é risco"
+-- mesmo sem sinal automático nenhum ter acendido. resolved_at NULL = flag ativa; só uma ativa por
+-- cliente por vez.
+CREATE TABLE IF NOT EXISTS client_churn_flags (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  severity TEXT NOT NULL DEFAULT 'atencao' CHECK (severity IN ('atencao','alto','critico')),
+  reason TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ,
+  resolved_by TEXT
+);
+CREATE INDEX IF NOT EXISTS client_churn_flags_client_idx ON client_churn_flags(client_id);
+CREATE INDEX IF NOT EXISTS client_churn_flags_active_idx ON client_churn_flags(client_id) WHERE resolved_at IS NULL;
+
 -- ---------- LISTEN/NOTIFY triggers for realtime ----------
 CREATE OR REPLACE FUNCTION notify_db_change() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
@@ -896,6 +913,10 @@ CREATE TRIGGER notify_nps AFTER INSERT OR UPDATE OR DELETE ON nps_responses
 
 DROP TRIGGER IF EXISTS notify_client_pulses ON client_pulses;
 CREATE TRIGGER notify_client_pulses AFTER INSERT OR UPDATE OR DELETE ON client_pulses
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_client_churn_flags ON client_churn_flags;
+CREATE TRIGGER notify_client_churn_flags AFTER INSERT OR UPDATE OR DELETE ON client_churn_flags
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 DROP TRIGGER IF EXISTS notify_stage_history ON stage_history;

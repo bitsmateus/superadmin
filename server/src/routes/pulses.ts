@@ -1,19 +1,23 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import crypto from 'crypto';
 import { query, queryOne } from '../db.js';
 
 /**
  * "Pulso de satisfação": pergunta curta (sim/não) mandada de tempos em tempos pelo WhatsApp, pra
  * pegar sinal de insatisfação antes do cliente virar cancelamento. Quem manda de fato é o n8n (tem
- * a credencial do canal do cliente) — este arquivo só decide QUEM recebe (POST /api/pulses/queue,
- * chamado pelo painel/uma automação com o JWT do time) e registra a resposta que volta (rotas
- * públicas, chamadas pelo n8n quando a mensagem do cliente chega).
+ * a credencial do canal do cliente) — este arquivo só decide QUEM recebe (POST /api/pulses/queue) e
+ * registra a resposta que volta (rotas públicas, chamadas pelo n8n quando a mensagem do cliente
+ * chega).
  *
  * Segurança das rotas públicas: como não existe um token por-recurso aqui (a "chave" que a pessoa
  * tem é só o próprio telefone, que não dá pra colocar numa URL como token), seguem o MESMO padrão já
  * usado pra outra integração máquina-a-máquina do projeto (webhook do Meta Lead Ads, ver
  * server/src/routes/webhooks.ts): um token fixo em env, comparado em tempo constante contra o header
  * `Authorization: Bearer <token>`. Sem o token configurado, a rota recusa (nunca abre sem proteção).
+ *
+ * POST /api/pulses/queue é quem o n8n chama periodicamente pra saber quem disparar — um JWT de
+ * login (7 dias) não dá pra manter numa automação, então essa rota aceita o JWT do painel OU o
+ * mesmo PULSES_WEBHOOK_TOKEN das rotas públicas (ver `hasPulsesToken` no preHandler dela).
  */
 
 const DEFAULT_QUESTION =
@@ -29,18 +33,25 @@ function last11Digits(raw: string | null | undefined): string {
   return digits.slice(-11);
 }
 
-function checkPulsesToken(req: { headers: Record<string, unknown> }, reply: { status: (n: number) => { send: (b: unknown) => void } }): boolean {
+/** Verifica o Bearer token contra PULSES_WEBHOOK_TOKEN, em tempo constante. Não mexe na resposta —
+ *  quem chama decide o que fazer com o resultado (rota pública recusa; /queue cai pro JWT). */
+function hasPulsesToken(req: FastifyRequest): boolean {
   const token = process.env.PULSES_WEBHOOK_TOKEN;
-  if (!token) {
-    reply.status(500).send({ message: 'Webhook de pulso não configurado no servidor (PULSES_WEBHOOK_TOKEN)' });
-    return false;
-  }
+  if (!token) return false;
   const authHeader = (req.headers['authorization'] as string | undefined) ?? '';
   const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
   const providedBuf = Buffer.from(provided, 'utf8');
   const expectedBuf = Buffer.from(token, 'utf8');
-  const valid = providedBuf.length === expectedBuf.length && crypto.timingSafeEqual(providedBuf, expectedBuf);
-  if (!valid) {
+  return providedBuf.length === expectedBuf.length && crypto.timingSafeEqual(providedBuf, expectedBuf);
+}
+
+/** Usado pelas rotas PÚBLICAS (check/respond): exige o token fixo, sem alternativa. */
+function requirePulsesToken(req: FastifyRequest, reply: FastifyReply): boolean {
+  if (!process.env.PULSES_WEBHOOK_TOKEN) {
+    reply.status(500).send({ message: 'Webhook de pulso não configurado no servidor (PULSES_WEBHOOK_TOKEN)' });
+    return false;
+  }
+  if (!hasPulsesToken(req)) {
     reply.status(401).send({ message: 'Não autorizado' });
     return false;
   }
@@ -83,10 +94,17 @@ export async function pulseRoutes(app: FastifyInstance) {
   );
 
   // POST /api/pulses/queue — seleciona quem recebe um pulso agora e registra (status 'aguardando').
-  // Devolve a lista pro n8n de fato mandar a mensagem no WhatsApp de cada um.
+  // Devolve a lista pro n8n de fato mandar a mensagem no WhatsApp de cada um. Aceita o JWT do painel
+  // (uso manual, ex.: um admin disparando na hora) OU o PULSES_WEBHOOK_TOKEN (n8n, automação
+  // recorrente) — o token fixo é checado primeiro pra não gastar uma consulta ao banco à toa.
   app.post<{ Body: { days?: number; question?: string } }>(
     '/api/pulses/queue',
-    { onRequest: [app.authenticate] },
+    {
+      preHandler: async (req, reply) => {
+        if (hasPulsesToken(req)) return;
+        await app.authenticate(req, reply);
+      },
+    },
     async (req) => {
       const days = Math.min(365, Math.max(1, Number(req.body?.days) || 30));
       const template = (req.body?.question ?? '').trim() || DEFAULT_QUESTION;
@@ -142,7 +160,7 @@ export async function pulseRoutes(app: FastifyInstance) {
   // POST /api/public/pulses/check — o n8n chama antes de interpretar a resposta do cliente, pra
   // saber se existe um pulso 'aguardando' pra esse telefone e qual foi a pergunta mandada.
   app.post<{ Body: { phone?: string } }>('/api/public/pulses/check', async (req, reply) => {
-    if (!checkPulsesToken(req, reply)) return;
+    if (!requirePulsesToken(req, reply)) return;
     const phone = last11Digits(req.body?.phone);
     if (!phone) return reply.status(400).send({ message: 'phone é obrigatório' });
 
@@ -156,7 +174,7 @@ export async function pulseRoutes(app: FastifyInstance) {
 
   // POST /api/public/pulses/respond — o n8n chama quando a resposta (sim/não) chega no WhatsApp.
   app.post<{ Body: { phone?: string; response?: string } }>('/api/public/pulses/respond', async (req, reply) => {
-    if (!checkPulsesToken(req, reply)) return;
+    if (!requirePulsesToken(req, reply)) return;
     const phone = last11Digits(req.body?.phone);
     const response = (req.body?.response ?? '').trim().toLowerCase();
     if (!phone) return reply.status(400).send({ message: 'phone é obrigatório' });

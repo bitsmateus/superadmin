@@ -817,6 +817,24 @@ CREATE TABLE IF NOT EXISTS nps_responses (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ---------- client_pulses ----------
+-- "Pulso de satisfação": pergunta curta (sim/não) mandada pelo WhatsApp de tempos em tempos, de fora
+-- (o n8n é quem manda de fato — ver server/src/routes/pulses.ts). Alimenta o painel de Risco de Churn
+-- junto com payment_status (Asaas), canais (NX Monitor) e tickets.
+CREATE TABLE IF NOT EXISTS client_pulses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  phone TEXT,
+  question TEXT NOT NULL,
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  status TEXT NOT NULL DEFAULT 'aguardando' CHECK (status IN ('aguardando','respondido','sem_resposta')),
+  response TEXT CHECK (response IS NULL OR response IN ('sim','nao')),
+  responded_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS client_pulses_client_idx ON client_pulses(client_id);
+CREATE INDEX IF NOT EXISTS client_pulses_status_idx ON client_pulses(status);
+
 -- ---------- LISTEN/NOTIFY triggers for realtime ----------
 CREATE OR REPLACE FUNCTION notify_db_change() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
@@ -868,6 +886,10 @@ CREATE TRIGGER notify_ticket_messages AFTER INSERT ON ticket_messages
 
 DROP TRIGGER IF EXISTS notify_nps ON nps_responses;
 CREATE TRIGGER notify_nps AFTER INSERT OR UPDATE OR DELETE ON nps_responses
+  FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+
+DROP TRIGGER IF EXISTS notify_client_pulses ON client_pulses;
+CREATE TRIGGER notify_client_pulses AFTER INSERT OR UPDATE OR DELETE ON client_pulses
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 DROP TRIGGER IF EXISTS notify_stage_history ON stage_history;

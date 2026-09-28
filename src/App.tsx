@@ -83,6 +83,9 @@ const CommandCenterPage = React.lazy(() =>
 const TeamPerformancePage = React.lazy(() =>
   import('./pages/TeamPerformancePage').then((m) => ({ default: m.TeamPerformancePage })),
 )
+const ChurnRiskPage = React.lazy(() =>
+  import('./pages/ChurnRiskPage').then((m) => ({ default: m.ChurnRiskPage })),
+)
 const SupportWorkspacePage = React.lazy(() =>
   import('./pages/SupportWorkspacePage').then((m) => ({ default: m.SupportWorkspacePage })),
 )
@@ -191,6 +194,7 @@ export default function App() {
           <Route path="/followups" element={<FollowUpsPage />} />
           <Route path="/comando" element={<CommandCenterPage />} />
           <Route path="/equipe" element={<TeamPerformancePage />} />
+          <Route path="/risco-churn" element={<ChurnRiskPage />} />
           <Route path="/auditoria" element={<AuditLogPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />

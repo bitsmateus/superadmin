@@ -37,12 +37,15 @@ import { templateRequestRoutes } from './routes/templateRequests.js';
 import { massCampaignRoutes } from './routes/massCampaigns.js';
 import { acougueRoutes } from './routes/acougue.js';
 import { mercadoNunesRoutes } from './routes/mercadoNunes.js';
+import { pulseRoutes } from './routes/pulses.js';
+import { churnRiskRoutes } from './routes/churnRisk.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startFollowUpDigest } from './jobs/followUpDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
 import { startMassCampaignDispatch } from './jobs/massCampaignDispatch.js';
 import { startAutentiqueSync } from './jobs/autentiqueSync.js';
+import { startPulseSweep } from './jobs/pulseSweep.js';
 import { startAsaasSync } from './jobs/asaasSync.js';
 
 async function main() {
@@ -125,6 +128,8 @@ async function main() {
   await app.register(massCampaignRoutes);
   await app.register(mercadoNunesRoutes);
   await app.register(acougueRoutes);
+  await app.register(pulseRoutes);
+  await app.register(churnRiskRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -151,6 +156,7 @@ async function main() {
   startMassCampaignDispatch();
   startAutentiqueSync();
   startAsaasSync();
+  startPulseSweep();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

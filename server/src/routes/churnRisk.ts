@@ -1,13 +1,20 @@
 import { FastifyInstance } from 'fastify';
 import { query } from '../db.js';
-import { reconcileChannels } from './channels.js';
+import { getChannelsCached } from './channels.js';
 
 /**
  * Painel "Risco de Churn": cruza os sinais que já existem espalhados pelo sistema — pulso de
  * satisfação (client_pulses), pagamento em atraso (Asaas OU Recorrai — ver detalhe abaixo), canais
- * desconectados (NX Monitor, reconcileChannels — mesma reconciliação da tela Canais) e tickets
- * reabertos/com SLA estourado — e devolve só os clientes ativos com pelo menos um sinal aceso.
- * Nada aqui decide nada sozinho; é só leitura pro time priorizar quem ligar.
+ * desconectados (NX Monitor, mesma reconciliação da tela Canais, mas lida do cache de
+ * `channelAlerts.ts` — ver getChannelsCached) e tickets reabertos/com SLA estourado — e devolve só
+ * os clientes ativos com pelo menos um sinal aceso. Nada aqui decide nada sozinho; é só leitura pro
+ * time priorizar quem ligar.
+ *
+ * Canais usa o CACHE, não `reconcileChannels()` direto: essa reconciliação é uma rodada de chamadas
+ * ao vivo pra NX + provedores por tenant (por isso a tela Canais demora) — chamar de novo aqui
+ * deixava o painel inteiro tão lento quanto abrir a tela Canais do zero. `channelAlerts.ts` já
+ * reconcilia tudo a cada 3 min em background; o cache só cai pra uma chamada ao vivo se ainda não
+ * tiver nada (logo depois do boot) ou aquele job estiver desligado.
  *
  * Pagamento tem DUAS fontes, nunca as duas ao mesmo tempo pro mesmo cliente: quem é cobrado via
  * Asaas usa clients.payment_status; quem não é (server/src/jobs/recorraiSync.ts só mexe nesse
@@ -82,11 +89,12 @@ export async function churnRiskRoutes(app: FastifyInstance) {
       ticketSignalByClient.set(t.client_id, cur);
     }
 
-    // Canais: reconciliação ao vivo (mesma lógica da tela Canais). Resiliente — sem NX Monitor
-    // configurado, ou se a reconciliação falhar, esse sinal só fica de fora dos demais.
+    // Canais: lido do cache (ver getChannelsCached) — quase sempre instantâneo, já que
+    // channelAlerts.ts alimenta ele a cada 3 min. Resiliente — sem NX Monitor configurado, ou se a
+    // reconciliação falhar, esse sinal só fica de fora dos demais.
     const channelsByClient = new Map<string, { total: number; disconnected: number }>();
     try {
-      const { channels } = await reconcileChannels();
+      const { channels } = await getChannelsCached();
       for (const ch of channels) {
         if (!ch.client_id) continue;
         const cur = channelsByClient.get(ch.client_id) ?? { total: 0, disconnected: 0 };

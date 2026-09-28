@@ -324,6 +324,13 @@ export interface ValorAsaas {
   /** Já estava ligado (asaas_customer_id) ou achou agora por CNPJ/email/telefone/nome — só
    *  informativo, pra saber se é um valor "confirmado" ou um "candidato" a conferir. */
   criterio: 'já ligado' | 'cnpj' | 'email' | 'telefone' | 'nome';
+  /** id do customer no Asaas — junto com subscriptionId, dá pra vincular manualmente (a tela
+   *  Clientes Geral só chama o PATCH /api/clients/:id que já existe, gravando asaas_customer_id +
+   *  asaas_subscription_id) quando criterio !== 'já ligado' e a pessoa confirma o candidato. */
+  customerId: string;
+  /** Assinatura "principal" (maior valor, entre as ativas) — a que o vínculo manual grava em
+   *  clients.asaas_subscription_id, mesmo critério de `sincronizarAsaas`. Null sem assinatura ativa. */
+  subscriptionId: string | null;
 }
 
 /**
@@ -407,10 +414,15 @@ export async function buscarValoresAsaas(): Promise<Record<string, ValorAsaas> |
 
     const ativas = ativasPorCustomer.get(customerId) ?? [];
     const total = ativas.reduce((soma, s) => soma + (s.value ?? 0), 0);
+    const principal = ativas.length
+      ? ativas.reduce((maior, s) => ((s.value ?? 0) > (maior.value ?? 0) ? s : maior), ativas[0])
+      : null;
     out[cl.id] = {
       valorCents: Math.round(total * 100),
       temCustomerSemAssinaturaAtiva: ativas.length === 0,
       criterio,
+      customerId,
+      subscriptionId: principal?.id ?? null,
     };
   }
   return out;

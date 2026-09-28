@@ -44,6 +44,9 @@ function jaEhCliente(c: Client): boolean {
 type Unidade = 'nx_sistema' | 'nx_digital' | 'netscale'
 type Aba = Unidade | 'cancelamentos'
 type FiltroStatus = 'ativos' | 'cancelados' | 'todos'
+/** Filtro pela coluna "Valor no Asaas": com cobrança ativa lá, sem nenhuma (não achou ou achou sem
+ *  assinatura ativa), ou achou mas o valor diverge do que está preenchido à mão. */
+type FiltroAsaas = 'todos' | 'com_cobranca' | 'sem_cobranca' | 'divergente'
 
 /** As três empresas do grupo, na ordem em que aparecem nas abas. O cliente é classificado na
  * própria lista; quem ainda não foi classificado não some — aparece no aviso do topo. */
@@ -66,6 +69,8 @@ type ValorAsaas = {
   valorCents: number
   temCustomerSemAssinaturaAtiva: boolean
   criterio: 'já ligado' | 'cnpj' | 'email' | 'telefone' | 'nome'
+  customerId: string
+  subscriptionId: string | null
 }
 
 /** O termo digitado bate com esse cliente? Nome, empresa e telefone por texto; CNPJ pelos dígitos
@@ -109,6 +114,7 @@ export function FinanceiroClientesGeralPage() {
   const [mes, setMes] = React.useState(currentMonthId())
   const [busca, setBusca] = React.useState('')
   const [status, setStatus] = React.useState<FiltroStatus>('ativos')
+  const [filtroAsaas, setFiltroAsaas] = React.useState<FiltroAsaas>('todos')
   const [drawerId, setDrawerId] = React.useState<string | null>(null)
   const [cancelando, setCancelando] = React.useState<Client | null>(null)
 
@@ -199,9 +205,18 @@ export function FinanceiroClientesGeralPage() {
         if (status === 'cancelados') return c.stage === 'churned'
         return true
       })
+      .filter((c) => {
+        if (filtroAsaas === 'todos') return true
+        const v = valoresAsaas[c.id]
+        const temCobranca = !!v && !v.temCustomerSemAssinaturaAtiva
+        if (filtroAsaas === 'com_cobranca') return temCobranca
+        if (filtroAsaas === 'sem_cobranca') return !temCobranca
+        // divergente: achou cobrança ativa e o valor difere do preenchido à mão
+        return temCobranca && v!.valorCents !== centsDoCliente(c.monthlyValue)
+      })
       .filter((c) => casaComBusca(c, termo))
       .sort((a, b) => centsDoCliente(b.monthlyValue) - centsDoCliente(a.monthlyValue) || (a.name ?? '').localeCompare(b.name ?? ''))
-  }, [clients, busca, status, unidadeAtiva, verSemEmpresa])
+  }, [clients, busca, status, unidadeAtiva, verSemEmpresa, filtroAsaas, valoresAsaas])
 
   // Busca que encontra em OUTRA situação (ex.: o cliente existe, mas está cancelado e o filtro
   // está em "Só ativos"): sem isso a tela dizia "nenhum cliente" e parecia que o cadastro sumiu.
@@ -223,6 +238,20 @@ export function FinanceiroClientesGeralPage() {
     if ((cliente.monthlyValue ?? 0) === 0 && s.mrrCents) patch.monthlyValue = s.mrrCents / 100
     if ((cliente.implementationValue ?? 0) === 0 && s.implCents) patch.implementationValue = s.implCents / 100
     if (Object.keys(patch).length) void db.updateClient(cliente.id, patch)
+  }
+
+  // Confirma o candidato achado por CNPJ/e-mail/telefone/nome (coluna "Valor no Asaas") como o
+  // vínculo de verdade do cliente — mesmos 3 campos que a sincronização automática grava quando liga
+  // um cliente novo (asaas_customer_id, asaas_subscription_id, monthly_value). Dali em diante o job
+  // periódico passa a acompanhar esse cliente sozinho, igual quem já nasceu vinculado.
+  const vincularAsaas = (cliente: Client, valor: ValorAsaas) => {
+    db.updateClient(cliente.id, {
+      asaasCustomerId: valor.customerId,
+      asaasSubscriptionId: valor.subscriptionId ?? undefined,
+      monthlyValue: valor.valorCents / 100,
+    })
+    setValoresAsaas((prev) => ({ ...prev, [cliente.id]: { ...valor, criterio: 'já ligado' } }))
+    toast.success(`Vinculado ao Asaas — ${formatBRLCents(valor.valorCents)}`)
   }
 
   return (
@@ -371,6 +400,18 @@ export function FinanceiroClientesGeralPage() {
                 <option value="cancelados">Só cancelados</option>
                 <option value="todos">Todos</option>
               </select>
+              <select
+                value={filtroAsaas}
+                onChange={(e) => setFiltroAsaas(e.target.value as FiltroAsaas)}
+                disabled={asaasIndisponivel}
+                title={asaasIndisponivel ? 'Asaas não configurado' : 'Filtra pela coluna "Valor no Asaas"'}
+                className="rounded-lg border border-line bg-card px-3 py-2 text-sm text-foreground outline-none disabled:opacity-40"
+              >
+                <option value="todos">Asaas: todos</option>
+                <option value="com_cobranca">Com cobrança no Asaas</option>
+                <option value="sem_cobranca">Sem cobrança no Asaas</option>
+                <option value="divergente">Valor divergente</option>
+              </select>
               {semValorComSugestao.length > 0 && (
                 <Button
                   size="sm"
@@ -438,6 +479,7 @@ export function FinanceiroClientesGeralPage() {
                         onAbrir={() => setDrawerId(c.id)}
                         onCancelar={() => setCancelando(c)}
                         onAplicarSugestao={() => aplicarSugestao(c)}
+                        onVincularAsaas={(valor) => vincularAsaas(c, valor)}
                       />
                     ))}
                   </tbody>
@@ -516,7 +558,7 @@ function Card({ icon, label, value, hint, tone }: {
   )
 }
 
-function LinhaCliente({ cliente, sugestao, valorAsaas, carregandoAsaas, onAbrir, onCancelar, onAplicarSugestao }: {
+function LinhaCliente({ cliente, sugestao, valorAsaas, carregandoAsaas, onAbrir, onCancelar, onAplicarSugestao, onVincularAsaas }: {
   cliente: Client
   sugestao: Sugestao | undefined
   valorAsaas: ValorAsaas | undefined
@@ -524,6 +566,7 @@ function LinhaCliente({ cliente, sugestao, valorAsaas, carregandoAsaas, onAbrir,
   onAbrir: () => void
   onCancelar: () => void
   onAplicarSugestao: () => void
+  onVincularAsaas: (valor: ValorAsaas) => void
 }) {
   const cancelado = cliente.stage === 'churned'
   const semMrr = (cliente.monthlyValue ?? 0) === 0
@@ -578,7 +621,12 @@ function LinhaCliente({ cliente, sugestao, valorAsaas, carregandoAsaas, onAbrir,
         )}
       </td>
       <td className="px-4 py-2.5 text-right">
-        <CelulaValorAsaas valor={valorAsaas} mensalidadeCents={centsDoCliente(cliente.monthlyValue)} carregando={carregandoAsaas} />
+        <CelulaValorAsaas
+          valor={valorAsaas}
+          mensalidadeCents={centsDoCliente(cliente.monthlyValue)}
+          carregando={carregandoAsaas}
+          onVincular={onVincularAsaas}
+        />
       </td>
       <td className="px-4 py-2.5 text-right">
         <CelulaValor
@@ -662,12 +710,14 @@ const CRITERIO_LABEL: Record<ValorAsaas['criterio'], string> = {
   nome: 'achado por nome — ainda não vinculado, confira antes de confiar',
 }
 
-/** Só leitura — o valor do Asaas não se edita aqui, é o que a pessoa usa pra conferir se a
- * mensalidade digitada à mão bate. Verde = bate, laranja = diferente, cinza = não achou no Asaas. */
-function CelulaValorAsaas({ valor, mensalidadeCents, carregando }: {
+/** Valor do Asaas em si não se edita aqui — só o botão "Vincular" grava algo, e só quando o
+ * candidato ainda não é o vínculo oficial do cliente (criterio !== 'já ligado'). Verde/neutro =
+ * bate, laranja = diferente, cinza = não achou no Asaas. */
+function CelulaValorAsaas({ valor, mensalidadeCents, carregando, onVincular }: {
   valor: ValorAsaas | undefined
   mensalidadeCents: number
   carregando: boolean
+  onVincular: (valor: ValorAsaas) => void
 }) {
   if (carregando && !valor) {
     return <span className="block text-right text-xs text-foreground/25">carregando…</span>
@@ -675,6 +725,7 @@ function CelulaValorAsaas({ valor, mensalidadeCents, carregando }: {
   if (!valor) {
     return <span className="block text-right text-sm text-foreground/25" title="Não achei esse cliente no Asaas (nem por CNPJ, e-mail, telefone ou nome).">—</span>
   }
+  const candidato = valor.criterio !== 'já ligado'
   if (valor.temCustomerSemAssinaturaAtiva) {
     return (
       <span className="block text-right text-xs text-foreground/40" title={CRITERIO_LABEL[valor.criterio]}>
@@ -684,12 +735,24 @@ function CelulaValorAsaas({ valor, mensalidadeCents, carregando }: {
   }
   const bate = valor.valorCents === mensalidadeCents
   return (
-    <span
-      className={cn('block text-right text-sm tabular-nums', bate ? 'text-foreground/50' : 'text-warning font-medium')}
-      title={`${CRITERIO_LABEL[valor.criterio]}${bate ? '' : ' — diferente da mensalidade preenchida'}`}
-    >
-      {formatBRLCents(valor.valorCents)}
-    </span>
+    <div>
+      <span
+        className={cn('block text-right text-sm tabular-nums', bate ? 'text-foreground/50' : 'text-warning font-medium')}
+        title={`${CRITERIO_LABEL[valor.criterio]}${bate ? '' : ' — diferente da mensalidade preenchida'}`}
+      >
+        {formatBRLCents(valor.valorCents)}
+      </span>
+      {candidato && (
+        <button
+          type="button"
+          onClick={() => onVincular(valor)}
+          title={`Achado ${CRITERIO_LABEL[valor.criterio]} — clique pra confirmar esse vínculo com o Asaas (grava id do cliente/assinatura e atualiza a mensalidade).`}
+          className="mt-0.5 block w-full text-right text-[11px] text-accent hover:underline"
+        >
+          vincular
+        </button>
+      )}
+    </div>
   )
 }
 

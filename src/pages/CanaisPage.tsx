@@ -7,6 +7,7 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  FileSpreadsheet,
   KeyRound,
   Link2,
   Loader2,
@@ -48,6 +49,7 @@ import { db } from '@/services/db'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { asText, cn, normalizeWhatsappNumber } from '@/lib/utils'
+import { downloadCsv } from '@/lib/csv'
 import { timeAgo } from '@/lib/time'
 
 const STATUS_META: Record<
@@ -262,6 +264,26 @@ export function CanaisPage() {
 
   const nothing = !isLoading && groups.length === 0 && filteredOrphans.length === 0
 
+  // Exporta os clientes dos tenants visíveis (respeita busca/status/tipo/notificação) —
+  // ex.: com "Tipo" = WABA, exporta só quem usa canal WABA.
+  const onExportClients = () => {
+    const rows: (string | number)[][] = []
+    const seen = new Set<string>()
+    for (const g of groups) {
+      const clientId = g.channels[0]?.client_id
+      if (!clientId || seen.has(clientId)) continue
+      seen.add(clientId)
+      rows.push([g.label, asText(clientsById.get(clientId)?.phone, '')])
+    }
+    if (rows.length === 0) {
+      toast.error('Nenhum cliente encontrado para os filtros atuais')
+      return
+    }
+    const suffix = typeFilter !== 'all' ? `-${typeFilter}` : ''
+    downloadCsv(`clientes-canais${suffix}_${new Date().toISOString().slice(0, 10)}.csv`, ['nome', 'telefone'], rows)
+    toast.success(`${rows.length} cliente(s) exportado(s)`)
+  }
+
   return (
     <>
       <TopBar
@@ -336,6 +358,14 @@ export function CanaisPage() {
             containerClassName="sm:max-w-sm"
           />
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onExportClients}
+              leftIcon={<FileSpreadsheet className="h-3.5 w-3.5" />}
+            >
+              Exportar Excel
+            </Button>
             <Button
               size="sm"
               variant="secondary"

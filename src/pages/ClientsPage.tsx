@@ -36,6 +36,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { db } from '@/services/db'
 import { canSeeFinancials, canDeleteClient } from '@/services/supabase'
 import { matchTenantsToClients } from '@/services/tenantImport'
+import { downloadCsv } from '@/lib/csv'
 import { asText, initials, normalizeText } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
 import type { PipelineStage } from '@/types/client'
@@ -119,7 +120,8 @@ export function ClientsPage() {
       toast.error('Nenhum cliente para exportar')
       return
     }
-    exportClientsCsv(filtered)
+    const rows = filtered.map((c) => [asText(c.name), asText(c.phone)])
+    downloadCsv(`clientes_${new Date().toISOString().slice(0, 10)}.csv`, ['nome', 'telefone'], rows)
     toast.success(`${filtered.length} cliente(s) exportado(s)`)
   }
 
@@ -495,31 +497,6 @@ function StagePillFilter({
       {style.label} · {count}
     </button>
   )
-}
-
-function exportClientsCsv(clients: { name: string; phone: string }[]) {
-  const header = ['nome', 'telefone']
-  const lines = [header.join(';')]
-  for (const c of clients) {
-    lines.push([csvEscape(asText(c.name)), csvEscape(asText(c.phone))].join(';'))
-  }
-  // BOM (﻿) faz o Excel interpretar UTF-8 corretamente (acentos).
-  const blob = new Blob(['﻿', lines.join('\n')], {
-    type: 'text/csv;charset=utf-8',
-  })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `clientes_${new Date().toISOString().slice(0, 10)}.csv`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
-}
-
-function csvEscape(v: string): string {
-  if (/[";\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`
-  return v
 }
 
 function summarizeNextAction(

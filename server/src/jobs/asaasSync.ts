@@ -316,6 +316,118 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
   return resultado;
 }
 
+export interface ValorAsaas {
+  /** Soma das assinaturas ativas achadas pra esse cliente, em centavos. */
+  valorCents: number;
+  /** Achou o customer no Asaas mas nenhuma assinatura ativa (cobrança cancelada/pausada lá). */
+  temCustomerSemAssinaturaAtiva: boolean;
+  /** Já estava ligado (asaas_customer_id) ou achou agora por CNPJ/email/telefone/nome — só
+   *  informativo, pra saber se é um valor "confirmado" ou um "candidato" a conferir. */
+  criterio: 'já ligado' | 'cnpj' | 'email' | 'telefone' | 'nome';
+  /** id do customer no Asaas — junto com subscriptionId, dá pra vincular manualmente (a tela
+   *  Clientes Geral só chama o PATCH /api/clients/:id que já existe, gravando asaas_customer_id +
+   *  asaas_subscription_id) quando criterio !== 'já ligado' e a pessoa confirma o candidato. */
+  customerId: string;
+  /** Assinatura "principal" (maior valor, entre as ativas) — a que o vínculo manual grava em
+   *  clients.asaas_subscription_id, mesmo critério de `sincronizarAsaas`. Null sem assinatura ativa. */
+  subscriptionId: string | null;
+}
+
+/**
+ * Mesma busca da seção 2 de `sincronizarAsaas` (CNPJ > e-mail > telefone > nome), mas SÓ LEITURA —
+ * não grava nada em `clients`, não conta como sincronização. Serve pra tela Clientes Geral mostrar
+ * o valor que o Asaas tem pra cada cliente do LADO do valor preenchido à mão (que hoje é editado
+ * livremente, mesmo quando o cliente já está ligado — essa função é só o "confere aí" visual; quem
+ * de fato mantém `clients.monthly_value` em dia com o Asaas continua sendo o job periódico).
+ */
+export async function buscarValoresAsaas(): Promise<Record<string, ValorAsaas> | null> {
+  const cfg = await config();
+  if (!cfg) return null;
+
+  const [customers, subscriptions] = await Promise.all([
+    listar<Customer>(cfg.base, cfg.chave, '/customers'),
+    listar<Subscription>(cfg.base, cfg.chave, '/subscriptions'),
+  ]);
+
+  const estaAtiva = (s: Subscription) => s.status === 'ACTIVE' && !s.deleted;
+  const ativasPorCustomer = new Map<string, Subscription[]>();
+  for (const s of subscriptions) {
+    if (!estaAtiva(s)) continue;
+    ativasPorCustomer.set(s.customer, [...(ativasPorCustomer.get(s.customer) ?? []), s]);
+  }
+  const customerIds = new Set(customers.map((k) => k.id));
+
+  const porDoc = new Map<string, Customer[]>();
+  const porEmail = new Map<string, Customer[]>();
+  const porTelefone = new Map<string, Customer[]>();
+  for (const k of customers) {
+    const d = soDigitos(k.cpfCnpj);
+    if (d.length >= 11) porDoc.set(d, [...(porDoc.get(d) ?? []), k]);
+    const e = (k.email ?? '').trim().toLowerCase();
+    if (e) porEmail.set(e, [...(porEmail.get(e) ?? []), k]);
+    const t = fimDoTelefone(k.mobilePhone || k.phone);
+    if (t) porTelefone.set(t, [...(porTelefone.get(t) ?? []), k]);
+  }
+  const unico = (lista: Customer[] | undefined) => (lista && lista.length === 1 ? lista[0] : null);
+
+  const clientes = await query<{
+    id: string; name: string; company: string | null; phone: string | null; email: string | null;
+    cnpj: string | null; asaas_customer_id: string | null;
+  }>(
+    `SELECT id, name, company, phone, email,
+            COALESCE(NULLIF(cnpj, ''), ficha_cadastro->>'cnpj') AS cnpj,
+            asaas_customer_id
+     FROM clients WHERE archived_at IS NULL`
+  );
+
+  const out: Record<string, ValorAsaas> = {};
+  for (const cl of clientes) {
+    let customerId: string | null = cl.asaas_customer_id;
+    let criterio: ValorAsaas['criterio'] = 'já ligado';
+    // Já ligado, mas o vínculo aponta pra um customer que sumiu do Asaas (raro): trata como
+    // "não achado" em vez de mostrar um valor de um customer inexistente.
+    if (customerId && !customerIds.has(customerId)) customerId = null;
+
+    if (!customerId) {
+      const doc = soDigitos(cl.cnpj);
+      const achado =
+        (doc.length >= 11 ? unico(porDoc.get(doc)) : null) ??
+        unico(porEmail.get((cl.email ?? '').trim().toLowerCase())) ??
+        unico(porTelefone.get(fimDoTelefone(cl.phone) ?? '')) ??
+        (() => {
+          const alvo = normaliza(cl.company) || normaliza(cl.name);
+          if (alvo.length < MIN_NOME) return null;
+          const casaram = customers.filter((k) => {
+            const n = normaliza(k.name);
+            return n.length >= MIN_NOME && (n.includes(alvo) || alvo.includes(n));
+          });
+          return casaram.length === 1 ? casaram[0] : null;
+        })();
+      if (!achado) continue; // sem candidato nenhum — fica de fora (front trata como "—")
+      criterio =
+        doc.length >= 11 && porDoc.get(doc)?.length === 1 ? 'cnpj'
+        : porEmail.get((cl.email ?? '').trim().toLowerCase())?.length === 1 ? 'email'
+        : porTelefone.get(fimDoTelefone(cl.phone) ?? '')?.length === 1 ? 'telefone'
+        : 'nome';
+      customerId = achado.id;
+    }
+
+    const ativas = ativasPorCustomer.get(customerId) ?? [];
+    const total = ativas.reduce((soma, s) => soma + (s.value ?? 0), 0);
+    const principal = ativas.length
+      ? ativas.reduce((maior, s) => ((s.value ?? 0) > (maior.value ?? 0) ? s : maior), ativas[0])
+      : null;
+    out[cl.id] = {
+      valorCents: Math.round(total * 100),
+      temCustomerSemAssinaturaAtiva: ativas.length === 0,
+      criterio,
+      customerId,
+      subscriptionId: principal?.id ?? null,
+    };
+  }
+  return out;
+}
+
 let rodando = false;
 
 /** Liga a sincronização periódica (intervalo configurado em Configurações; 15 min por padrão). */

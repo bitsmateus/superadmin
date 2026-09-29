@@ -20,7 +20,7 @@ function errorsOf(err: unknown): string[] {
   return Array.isArray(body?.errors) ? body!.errors! : []
 }
 
-export function ChatbotTab({ client }: { client: Client }) {
+export function ChatbotTab({ client, onGenerated }: { client: Client; onGenerated?: () => void }) {
   const [data, setData] = React.useState<ChatbotFlowState | null>(null)
   const [edited, setEdited] = React.useState<FlowSpec | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -54,6 +54,7 @@ export function ChatbotTab({ client }: { client: Client }) {
       setData(r)
       setEdited(r.spec)
       toast.success('Fluxo gerado com IA')
+      onGenerated?.()
     } catch (err) {
       const errs = errorsOf(err)
       setErrors(errs)
@@ -204,7 +205,7 @@ export function ChatbotTab({ client }: { client: Client }) {
         </div>
       </Section>
 
-      <N8nAiSection client={client} />
+      <N8nAiSection client={client} onGenerated={onGenerated} />
 
       {/* Preview em árvore (editável) */}
       {edited && (

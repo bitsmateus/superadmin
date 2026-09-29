@@ -35,14 +35,20 @@ import { pushRoutes } from './routes/push.js';
 import { briefingTemplateRoutes } from './routes/briefingTemplate.js';
 import { templateRequestRoutes } from './routes/templateRequests.js';
 import { massCampaignRoutes } from './routes/massCampaigns.js';
+import { acougueRoutes } from './routes/acougue.js';
 import { mercadoNunesRoutes } from './routes/mercadoNunes.js';
+import { pulseRoutes } from './routes/pulses.js';
+import { churnRiskRoutes } from './routes/churnRisk.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startFollowUpDigest } from './jobs/followUpDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
 import { startTenantUsersSync } from './jobs/syncTenantUsers.js';
 import { startMassCampaignDispatch } from './jobs/massCampaignDispatch.js';
 import { startAutentiqueSync } from './jobs/autentiqueSync.js';
+import { startPulseSweep } from './jobs/pulseSweep.js';
+import { startPulseDispatch } from './jobs/pulseDispatch.js';
 import { startAsaasSync } from './jobs/asaasSync.js';
+import { startRecorraiSync } from './jobs/recorraiSync.js';
 
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
@@ -71,6 +77,13 @@ async function main() {
     }
     // "Deslogar" alguém em Equipe marca profiles.session_invalidated_at — qualquer token emitido
     // antes disso (iat, em segundos) já não vale mais, mesmo sem ter expirado de verdade ainda.
+    // Token do açougue (/mercadonunes/acougue) tem login próprio e NÃO vale no painel — sem isso um
+    // acesso de açougue passaria por aqui (o sub dele não existe em profiles, então a checagem
+    // abaixo não pegaria) e entraria nas rotas internas.
+    if ((req.user as { scope?: string }).scope) {
+      reply.status(403).send({ message: 'Token sem acesso ao painel' });
+      return;
+    }
     const { sub, iat } = req.user as { sub: string; iat?: number };
     if (sub && iat) {
       const profile = await queryOne<{ session_invalidated_at: string | null }>(
@@ -116,6 +129,9 @@ async function main() {
   await app.register(templateRequestRoutes);
   await app.register(massCampaignRoutes);
   await app.register(mercadoNunesRoutes);
+  await app.register(acougueRoutes);
+  await app.register(pulseRoutes);
+  await app.register(churnRiskRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -142,6 +158,9 @@ async function main() {
   startMassCampaignDispatch();
   startAutentiqueSync();
   startAsaasSync();
+  startRecorraiSync();
+  startPulseSweep();
+  startPulseDispatch();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

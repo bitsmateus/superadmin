@@ -80,7 +80,7 @@ function sectorNames(spec: FlowSpec): string[] {
  * Endpoint configurável por env (default segue o padrão listXxxData do NX).
  */
 async function fetchQueueMap(tenant: { baseUrl: string; apiId: string; token: string }): Promise<Record<string, string>> {
-  const pathTpl = process.env.CHATBOT_FLOW_LIST_QUEUES_PATH || '/v2/api/external/{apiId}/listQueueData';
+  const pathTpl = process.env.CHATBOT_FLOW_LIST_QUEUES_PATH || '/v2/api/external/{apiId}/listQueues';
   const path = pathTpl.replace('{apiId}', encodeURIComponent(tenant.apiId));
   const url = new URL(path, tenant.baseUrl + '/').toString();
   const map: Record<string, string> = {};

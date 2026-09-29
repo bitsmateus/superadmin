@@ -4,11 +4,12 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
-  ChevronDown,
   ClipboardList,
   Clock,
   ExternalLink,
+  Headphones,
   KanbanSquare,
+  ListChecks,
   ListTodo,
   MessageCircle,
   Pencil,
@@ -16,7 +17,6 @@ import {
   Plus,
   Send,
   Settings2,
-  StickyNote,
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -27,8 +27,8 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
-import { useAllReminders } from '@/hooks/useTickets'
-import { useClients, useSettings } from '@/hooks/useClients'
+import { useAllReminders, useTickets } from '@/hooks/useTickets'
+import { useClients, useCurrentUser, useSettings } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useTeam, teamMemberLabel } from '@/hooks/useTeam'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
@@ -47,7 +47,17 @@ import type {
 } from '@/types/ticket'
 import type { TeamMember } from '@/hooks/useTeam'
 import type { PipelineStage } from '@/types/client'
-import { SupportKanbanBoard, DONE_LIMIT, columnKeyOf } from '@/components/support/SupportKanbanBoard'
+import { SetupBoard } from '@/components/setup/SetupBoard'
+import { SetupPanel } from '@/components/crm/setup/SetupPanel'
+import { toggleSetupItem } from '@/lib/setupActions'
+import {
+  buildUnifiedItems,
+  sortUnified,
+  UNIFIED_KIND_LABEL,
+  type UnifiedItem,
+  type UnifiedKind,
+} from '@/lib/unifiedTasks'
+import { SupportKanbanBoard } from '@/components/support/SupportKanbanBoard'
 import { TaskUpdatesPane } from '@/components/support/TaskUpdatesPane'
 import {
   PRIORITY_META,
@@ -97,8 +107,10 @@ function slaDueFromStage(stage: string): string | null {
 // ── Página ────────────────────────────────────────────────────────────────────
 export function SupportWorkspacePage() {
   const reminders = useAllReminders()
+  const tickets = useTickets()
   const clients = useClients()
   const team = useTeam()
+  const [currentUserName] = useCurrentUser()
   // Arthur e Luis são SDR do Comercial, não do Suporte — saem só dos seletores de "Responsável"
   // dessa página (filtro e atribuição de tarefa); continuam valendo normalmente em qualquer lugar
   // que já tinha tarefa atribuída a eles (knownOwnerIds abaixo usa a lista completa, não essa).
@@ -124,9 +136,9 @@ export function SupportWorkspacePage() {
   // a chave do localStorage leva o id da cópia, senão alternar aqui mudaria a tela original também.
   const supportView = useSupportView()
   const viewStorageKey = supportView ? `${VIEW_KEY}:${supportView.pageId}` : VIEW_KEY
-  const [view, setView] = React.useState<'list' | 'kanban'>(() => {
+  const [view, setView] = React.useState<'list' | 'kanban' | 'setup'>(() => {
     const saved = localStorage.getItem(viewStorageKey)
-    if (saved === 'kanban' || saved === 'list') return saved
+    if (saved === 'kanban' || saved === 'list' || saved === 'setup') return saved
     // Sem escolha anterior nessa cópia, vale o modo definido ao duplicar.
     return supportView?.config.view === 'kanban' ? 'kanban' : 'list'
   })
@@ -177,6 +189,53 @@ export function SupportWorkspacePage() {
     for (const t of team) m.set(t.id, teamMemberLabel(t))
     return m
   }, [team])
+
+  // ── Lista unificada (visão "Lista"): tarefa manual + ticket de suporte +
+  // cliente em implementação, uma lista só, ordenada por prioridade e prazo.
+  // Kanban e Configuração continuam lendo direto de `reminders`/`clients` —
+  // não duplicam dado, só essa visão combina os três na hora de exibir.
+  const unifiedItems = React.useMemo(
+    () =>
+      sortUnified(
+        buildUnifiedItems({ reminders, tickets, clients, team, slaByStage: settings.slaByStage, companyOf }),
+      ),
+    [reminders, tickets, clients, team, settings.slaByStage, companyOf],
+  )
+  const unifiedFiltered = React.useMemo(() => {
+    return unifiedItems.filter((it) => {
+      if (filterPerson && it.ownerId !== filterPerson) return false
+      if (quick === 'mine' && it.ownerId !== myId) return false
+      if (quick === 'unassigned' && it.ownerId && knownOwnerIds.has(it.ownerId)) return false
+      if (quick === 'overdue' && bucketOf(it.dueAt) !== 'overdue') return false
+      if (quick === 'today' && bucketOf(it.dueAt) !== 'today') return false
+      return true
+    })
+  }, [unifiedItems, filterPerson, quick, myId, knownOwnerIds])
+
+  // "Configuração" (implementação) abre no mesmo painel que já existe dentro do cliente/SetupBoard.
+  const [setupOpenId, setSetupOpenId] = React.useState<string | null>(null)
+  const setupOpenClient = setupOpenId ? clients.find((c) => c.id === setupOpenId) : undefined
+
+  const completeUnified = (item: UnifiedItem) => {
+    if (item.kind === 'task' && item.reminder) {
+      void ticketsService.completeReminder(item.reminder.id)
+    } else if (item.kind === 'ticket' && item.ticket) {
+      void ticketsService.updateTicket(item.ticket.id, { status: 'resolved' })
+    } else if (item.kind === 'setup' && item.client && item.setupPending?.manual) {
+      if (!currentUserName) {
+        toast.error('Defina seu nome em Configurações antes de marcar itens.')
+        return
+      }
+      const { advanced } = toggleSetupItem(item.client, item.setupPending.id, item.setupPending.label, currentUserName)
+      if (advanced) toast.success('Configuração completa → Pronto para Entrega')
+    }
+  }
+
+  const openUnified = (item: UnifiedItem) => {
+    if (item.kind === 'task' && item.reminder) setEditing(item.reminder)
+    else if (item.kind === 'ticket' && item.ticket) navigate(`/tickets/${item.ticket.id}`)
+    else if (item.kind === 'setup' && item.client) setSetupOpenId(item.client.id)
+  }
 
   // Base p/ as contagens dos chips: abertas, filtradas só por tipo/pessoa (não
   // pelo filtro rápido) — assim "Atrasadas (N)" não zera ao escolher "Hoje".
@@ -277,17 +336,22 @@ export function SupportWorkspacePage() {
             <ViewBtn active={view === 'kanban'} onClick={() => setView('kanban')} icon={<KanbanSquare className="h-4 w-4" />}>
               Kanban
             </ViewBtn>
+            <ViewBtn active={view === 'setup'} onClick={() => setView('setup')} icon={<Settings2 className="h-4 w-4" />}>
+              Configuração
+            </ViewBtn>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_340px]">
           <div>
-            {view === 'list' ? (
-              <ListView
-                tasks={filtered}
-                columns={columns}
-                companyOf={companyOf}
-                onEdit={setEditing}
+            {view === 'setup' ? (
+              <SetupBoard clients={clients} />
+            ) : view === 'list' ? (
+              <UnifiedListView
+                items={unifiedFiltered}
+                teamMap={teamMap}
+                onEdit={openUnified}
+                onComplete={completeUnified}
                 onOpenClient={(id) => navigate(`/clients?open=${id}`)}
               />
             ) : (
@@ -326,54 +390,58 @@ export function SupportWorkspacePage() {
           onClose={() => setEditing(undefined)}
         />
       )}
+
+      <Modal
+        open={Boolean(setupOpenClient)}
+        onClose={() => setSetupOpenId(null)}
+        title={setupOpenClient ? setupOpenClient.company || setupOpenClient.name : ''}
+        size="lg"
+      >
+        {setupOpenClient && (
+          <SetupPanel
+            client={setupOpenClient}
+            onGoTo={() => {
+              setSetupOpenId(null)
+              navigate(`/clients?open=${setupOpenClient.id}`)
+            }}
+          />
+        )}
+      </Modal>
     </>
   )
 }
 
-// ── Lista agrupada por coluna (Pendentes/Iniciado/Fazendo/Feito) ─────────────
-function ListView({
-  tasks,
-  columns,
-  companyOf,
+// ── Lista unificada (tarefa manual + ticket de suporte + implementação) ─────
+const KIND_BADGE: Record<UnifiedKind, { tone: 'neutral' | 'info' | 'warning'; icon: React.ReactNode }> = {
+  task: { tone: 'neutral', icon: <ListTodo className="h-3 w-3" /> },
+  ticket: { tone: 'info', icon: <Headphones className="h-3 w-3" /> },
+  setup: { tone: 'warning', icon: <ListChecks className="h-3 w-3" /> },
+}
+
+function UnifiedListView({
+  items,
+  teamMap,
   onEdit,
+  onComplete,
   onOpenClient,
 }: {
-  tasks: Reminder[]
-  columns: SupportColumn[]
-  companyOf: (id?: string | null) => string | undefined
-  onEdit: (r: Reminder) => void
+  items: UnifiedItem[]
+  teamMap: Map<string, string>
+  onEdit: (item: UnifiedItem) => void
+  onComplete: (item: UnifiedItem) => void
   onOpenClient: (id: string) => void
 }) {
-  // Prioridade agora é filtro (clicável, some se clicar de novo), não agrupamento — o agrupamento
-  // virou por coluna (Pendentes/Iniciado/Fazendo/Feito, as mesmas do Kanban), pra bater com o que
-  // já aparece lá.
+  // Prioridade é filtro (clicável, some se clicar de novo) — a lista em si não separa por
+  // tipo/coluna, só ordena por prioridade e depois prazo mais próximo (já vem assim de `sortUnified`).
   const [priorityFilter, setPriorityFilter] = React.useState<'all' | ReminderPriority>('all')
 
-  const filteredTasks = React.useMemo(
-    () => (priorityFilter === 'all' ? tasks : tasks.filter((r) => (r.priority ?? 'normal') === priorityFilter)),
-    [tasks, priorityFilter],
+  const filteredItems = React.useMemo(
+    () => (priorityFilter === 'all' ? items : items.filter((i) => i.priority === priorityFilter)),
+    [items, priorityFilter],
   )
 
-  const byColumn = React.useMemo(() => {
-    const map = new Map<string, Reminder[]>()
-    for (const c of columns) map.set(c.key, [])
-    for (const r of filteredTasks) map.get(columnKeyOf(r, columns))?.push(r)
-
-    const dueTime = (r: Reminder) => (r.dueAt ? new Date(r.dueAt).getTime() : Number.MAX_SAFE_INTEGER)
-    const prioRank = (r: Reminder) => PRIORITY_ORDER.indexOf(r.priority ?? 'normal')
-    const doneTime = (r: Reminder) => (r.completedAt ? new Date(r.completedAt).getTime() : 0)
-    for (const c of columns) {
-      const list = map.get(c.key)!
-      if (c.isDone) list.sort((a, b) => doneTime(b) - doneTime(a))
-      else list.sort((a, b) => prioRank(a) - prioRank(b) || dueTime(a) - dueTime(b))
-    }
-    return map
-  }, [filteredTasks, columns])
-
-  const hasAny = columns.some((c) => (byColumn.get(c.key)?.length ?? 0) > 0)
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="mr-0.5 text-[11px] font-medium text-foreground/40">Prioridade:</span>
         {PRIORITY_ORDER.map((p) => (
@@ -390,109 +458,48 @@ function ListView({
         ))}
       </div>
 
-      {!hasAny && (
+      {filteredItems.length === 0 && (
         <div className="rounded-2xl border border-line bg-card px-4 py-10 text-center text-sm text-foreground/45">
-          Nenhuma tarefa aqui. Crie a primeira em “Nova tarefa”. 🎯
+          Nenhuma pendência aqui. 🎯
         </div>
       )}
 
-      {columns.map((c) => {
-        const all = byColumn.get(c.key) ?? []
-        if (all.length === 0) return null
-        return (
-          <TaskSection
-            key={c.id}
-            column={c}
-            tasks={all}
-            companyOf={companyOf}
-            onEdit={onEdit}
+      <ul className="space-y-2">
+        {filteredItems.map((item) => (
+          <UnifiedRow
+            key={item.id}
+            item={item}
+            owner={item.ownerId ? teamMap.get(item.ownerId) : undefined}
+            onEdit={() => onEdit(item)}
+            onComplete={() => onComplete(item)}
             onOpenClient={onOpenClient}
           />
-        )
-      })}
+        ))}
+      </ul>
     </div>
   )
 }
 
-function TaskSection({
-  column,
-  tasks,
-  companyOf,
+function UnifiedRow({
+  item,
+  owner,
   onEdit,
+  onComplete,
   onOpenClient,
 }: {
-  column: SupportColumn
-  tasks: Reminder[]
-  companyOf: (id?: string | null) => string | undefined
-  onEdit: (r: Reminder) => void
-  onOpenClient: (id: string) => void
-}) {
-  // "Feito" nasce fechada (clica no cabeçalho pra ver o que já foi feito) — o resto continua
-  // sempre aberto, igual antes.
-  const [open, setOpen] = React.useState(!column.isDone)
-  const shown = column.isDone ? tasks.slice(0, DONE_LIMIT) : tasks
-
-  return (
-    // Faixa colorida à esquerda (cor da coluna) separando os quadros — mesmo estilo já usado nas
-    // etapas do Pipeline (STAGE_COLORS, borderLeft de 3px).
-    <section
-      className="overflow-hidden rounded-xl border border-line bg-card"
-      style={{ borderLeft: `3px solid ${column.color}` }}
-    >
-      <h3
-        onClick={column.isDone ? () => setOpen((o) => !o) : undefined}
-        className={cn(
-          'flex items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wider',
-          column.isDone && 'cursor-pointer select-none',
-        )}
-      >
-        <span className="text-foreground/70">{column.name}</span>
-        <span className="rounded-full bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] text-foreground/50">
-          {tasks.length}
-        </span>
-        {column.isDone && (
-          <ChevronDown className={cn('h-3.5 w-3.5 text-foreground/35 transition-transform', !open && '-rotate-90')} />
-        )}
-      </h3>
-      {open && (
-        <div className="border-t border-line/60 p-3">
-          <ul className="space-y-2">
-            {shown.map((r) => (
-              <TaskRow
-                key={r.id}
-                r={r}
-                company={companyOf(r.clientId)}
-                onEdit={() => onEdit(r)}
-                onOpenClient={onOpenClient}
-                done={column.isDone}
-              />
-            ))}
-          </ul>
-          {tasks.length > shown.length && (
-            <p className="mt-2 text-[11px] text-foreground/40">
-              +{tasks.length - shown.length} concluída(s) mais antiga(s)
-            </p>
-          )}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function TaskRow({
-  r,
-  company,
-  onEdit,
-  onOpenClient,
-  done,
-}: {
-  r: Reminder
-  company?: string
+  item: UnifiedItem
+  owner?: string
   onEdit: () => void
+  onComplete: () => void
   onOpenClient: (id: string) => void
-  done?: boolean
 }) {
-  const prio = PRIORITY_META[r.priority ?? 'normal']
+  const prio = PRIORITY_META[item.priority]
+  const badge = KIND_BADGE[item.kind]
+  // Ticket/tarefa manual sempre dá pra concluir direto; implementação só quando o item pendente
+  // é do checklist (marcável à mão) — os derivados (briefing preenchido, entrega 100%…) concluem
+  // sozinhos por outra ação, então só abrem o painel.
+  const canComplete = item.kind !== 'setup' || Boolean(item.setupPending?.manual)
+
   return (
     <li
       onClick={onEdit}
@@ -500,33 +507,27 @@ function TaskRow({
     >
       <button
         type="button"
-        title={done ? 'Reabrir' : 'Concluir'}
+        title={canComplete ? 'Concluir' : 'Abrir'}
+        disabled={!canComplete}
         onClick={(e) => {
           e.stopPropagation()
-          if (done) void ticketsService.reopenReminder(r.id)
-          else void ticketsService.completeReminder(r.id)
+          if (canComplete) onComplete()
+          else onEdit()
         }}
         className={cn(
           'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ring-1 transition-colors lg:h-5 lg:w-5',
-          done
-            ? 'bg-success/15 text-success ring-success/30'
-            : 'text-foreground/30 ring-line hover:bg-success/10 hover:text-success hover:ring-success/30',
+          canComplete
+            ? 'text-foreground/30 ring-line hover:bg-success/10 hover:text-success hover:ring-success/30'
+            : 'cursor-default text-foreground/15 ring-line/60',
         )}
       >
         <CheckCircle2 className="h-3.5 w-3.5" />
       </button>
 
-      {/* Só o essencial: prioridade, nome da demanda, empresa e prazo — o resto (tipo,
-          responsável, anotação) fica pra quem abrir "Editar". */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <p
-            className={cn(
-              'inline-block rounded-md border border-line px-2 py-1 text-sm font-semibold leading-snug',
-              done ? 'text-foreground/40 line-through' : 'text-foreground/70',
-            )}
-          >
-            {r.title}
+          <p className="inline-block rounded-md border border-line px-2 py-1 text-sm font-semibold leading-snug text-foreground/70">
+            {item.title}
           </p>
           <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
             <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', prio.dot)} />
@@ -534,31 +535,43 @@ function TaskRow({
           </span>
         </div>
 
-        {company && (
-          <div className="mt-1 flex items-center gap-1.5">
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <Badge tone={badge.tone}>
+            {badge.icon}
+            {UNIFIED_KIND_LABEL[item.kind]}
+          </Badge>
+          {owner && <span className="text-[11px] text-foreground/45">{owner}</span>}
+          {!owner && <span className="text-[11px] text-foreground/35">Sem responsável</span>}
+        </div>
+
+        {item.company && (
+          <div className="mt-1.5 flex items-center gap-1.5">
             <Building2 className="h-3 w-3 shrink-0 text-foreground/35" />
-            <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/55">{company}</span>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); if (r.clientId) onOpenClient(r.clientId) }}
-              title="Abrir cliente"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded text-accent transition-colors hover:bg-accent/10 lg:h-5 lg:w-5"
-            >
-              <ExternalLink className="h-3 w-3" />
-            </button>
+            <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/55">{item.company}</span>
+            {item.clientId && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onOpenClient(item.clientId!) }}
+                title="Abrir cliente"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded text-accent transition-colors hover:bg-accent/10 lg:h-5 lg:w-5"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </button>
+            )}
           </div>
         )}
 
-        {r.dueAt && (
+        {item.dueAt && (
           <div className="mt-2 border-t border-line/60 pt-2">
             <span
               className={cn(
                 'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1',
-                dueChipCls(r.dueAt),
+                dueChipCls(item.dueAt),
               )}
             >
               <Clock className="h-2.5 w-2.5" />
-              {fmtDue(r.dueAt)}
+              {fmtDue(item.dueAt)}
+              {item.kind === 'setup' && item.overdueDays ? ` · ${item.overdueDays}d além do prazo` : ''}
             </span>
           </div>
         )}
@@ -567,12 +580,14 @@ function TaskRow({
       {/* stopPropagation aqui em cima (não dá pra fazer isso dentro do IconBtn, que não repassa o
           evento) — senão clicar em Editar/Excluir também dispararia o onClick do <li>. */}
       <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-        <IconBtn title="Editar" onClick={onEdit}>
+        <IconBtn title="Abrir" onClick={onEdit}>
           <Pencil className="h-3.5 w-3.5" />
         </IconBtn>
-        <IconBtn title="Excluir" danger onClick={() => void ticketsService.deleteReminder(r.id)}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </IconBtn>
+        {item.kind === 'task' && item.reminder && (
+          <IconBtn title="Excluir" danger onClick={() => void ticketsService.deleteReminder(item.reminder!.id)}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </IconBtn>
+        )}
       </div>
     </li>
   )

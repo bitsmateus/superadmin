@@ -80,3 +80,21 @@ export const usersApi = {
     return unwrap<UserStatusResponse>(data)
   },
 }
+
+/** Traduz os códigos de erro do NX ao criar usuário em algo que o operador entende. */
+export function friendlyUserError(msg: string): string {
+  if (/ERR_CREATE_USER/i.test(msg)) {
+    return 'o NX recusou criar o usuário — o e-mail provavelmente já existe (em outro tenant ou neste) ou o limite de usuários foi atingido'
+  }
+  return msg
+}
+
+/** E-mails (minúsculos) dos usuários que já existem no tenant — pra não tentar criar de novo. */
+export async function existingUserEmails(server: ServerConfig, apiId: string): Promise<Set<string>> {
+  try {
+    const list = await usersApi.list(server, { apiId })
+    return new Set(list.map((u) => String((u as { email?: string }).email ?? '').trim().toLowerCase()).filter(Boolean))
+  } catch {
+    return new Set()
+  }
+}

@@ -135,6 +135,51 @@ export function buildAccessDeliveryEmail({ client, server }: AccessSheetParams):
   return { subject: `Acessos do sistema — ${company}`, html: paragraphs.join('\n') }
 }
 
+/** E-mail com os acessos DESTE cliente escritos no próprio corpo (link, usuários e senhas), sem anexo. */
+export function buildAccessDetailsEmail(params: AccessSheetParams): { subject: string; html: string } {
+  const { subject, body } = buildAccessEmail(params)
+  const html = body
+    .split(/\r?\n/)
+    .map((line) => {
+      if (!line.trim()) return '<br />'
+      const safe = escapeHtml(line).replace(/^(\s+)/, (m) => '&nbsp;'.repeat(m.length))
+      return /^— .* —$/.test(line.trim())
+        ? `<p style="margin:12px 0 4px"><strong>${safe}</strong></p>`
+        : `<p style="margin:2px 0">${safe}</p>`
+    })
+    .join('')
+  return { subject, html }
+}
+
+/** Usuários do briefing (nome + e-mail) — cada um recebe só o próprio acesso. */
+export function accessRecipients(client: Client): { name: string; email: string }[] {
+  return briefingUserEmails(client)
+}
+
+/** E-mail individual: só o acesso de UMA pessoa (link + o login e a senha dela), sem os dos outros usuários. */
+export function buildUserAccessEmail(
+  { client, server }: AccessSheetParams,
+  user: { name: string; email: string },
+): { subject: string; html: string } {
+  const company = client.company || client.name || ''
+  const loginUrl = server?.loginUrl || ''
+  const supportPhone = db.getSettings().supportPhone ?? SUPPORT_PHONE
+  const first = user.name.trim().split(/\s+/)[0]
+  const html = [
+    `<p>Olá, ${escapeHtml(first)}!</p>`,
+    `<p>Seguem os seus dados de acesso ao sistema de atendimento da <strong>${escapeHtml(company)}</strong>:</p>`,
+    loginUrl ? `<p style="margin:2px 0">Endereço: <a href="${escapeHtml(loginUrl)}">${escapeHtml(loginUrl)}</a></p>` : '',
+    `<p style="margin:2px 0">Login (e-mail): <strong>${escapeHtml(user.email)}</strong></p>`,
+    `<p style="margin:2px 0">Senha: <strong>${escapeHtml(generateUserPassword(user.name))}</strong></p>`,
+    `<p>⚠️ Por segurança, troque a senha no primeiro acesso (Perfil &gt; Alterar senha).</p>`,
+    `<p>Qualquer dúvida, fale com o nosso suporte: ${escapeHtml(supportPhone)}</p>`,
+    `<p>NX Digital</p>`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+  return { subject: `Seu acesso ao sistema — ${company}`, html }
+}
+
 /** Abre o cliente de e-mail (mailto) com os acessos prontos para enviar. */
 export function openAccessEmail(params: AccessSheetParams): void {
   const { subject, body } = buildAccessEmail(params)

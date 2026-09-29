@@ -6,11 +6,14 @@ import {
   ChevronLeft,
   ClipboardList,
   ExternalLink,
+  Folder,
   Link2,
   ListChecks,
   Loader2,
   MessageSquare,
+  Power,
   Send,
+  Settings2,
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,11 +22,13 @@ import { Drawer } from '@/components/ui/Drawer'
 import { Tabs } from '@/components/ui/Tabs'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { StageBadge } from './StageBadge'
 import { OverviewTab } from './tabs/OverviewTab'
 import { BriefingTab } from './tabs/BriefingTab'
 import { ChatbotTab } from './tabs/ChatbotTab'
+import { SetupPanel } from './setup/SetupPanel'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
 import { FichaTab } from './tabs/FichaTab'
@@ -31,10 +36,15 @@ import { CrmLeadTab } from './tabs/CrmLeadTab'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
-import { canDeleteClient } from '@/services/supabase'
+import { useTenant } from '@/hooks/useTenants'
+import { canDeleteClient, canManageTenantStatus } from '@/services/supabase'
 import { db } from '@/services/db'
+import { markSetupItemDone } from '@/lib/setupActions'
+import { tenantsApi } from '@/api/tenants'
+import { extractErrorMessage } from '@/api/client'
+import { getServerById } from '@/store/authStore'
 import { NEXT_STAGE, PIPELINE_STAGES, PREV_STAGE, STAGE_COLORS } from '@/constants/stageColors'
-import { asText, cn, initials } from '@/lib/utils'
+import { asText, cn, initials, tenantActiveState } from '@/lib/utils'
 import type { PipelineStage } from '@/types/client'
 
 interface TabDef {
@@ -43,13 +53,19 @@ interface TabDef {
   icon: React.ReactNode
 }
 
+// Abas principais. "Entrega" é uma pasta: as abas de FOLDER_DEFS ficam só dentro dela.
 const TAB_DEFS: TabDef[] = [
   { value: 'overview', label: 'Visão Geral', icon: <Activity className="h-3.5 w-3.5" /> },
+  { value: 'setup', label: 'Configuração', icon: <Settings2 className="h-3.5 w-3.5" /> },
+  { value: 'folder', label: 'Entrega', icon: <Folder className="h-3.5 w-3.5" /> },
+  { value: 'ficha', label: 'Ficha de cadastro', icon: <ClipboardList className="h-3.5 w-3.5" /> },
+]
+
+const FOLDER_DEFS: TabDef[] = [
   { value: 'briefing', label: 'Briefing', icon: <MessageSquare className="h-3.5 w-3.5" /> },
   { value: 'chatbot', label: 'Chatbot', icon: <Bot className="h-3.5 w-3.5" /> },
   { value: 'delivery', label: 'Entrega', icon: <ListChecks className="h-3.5 w-3.5" /> },
   { value: 'followup', label: 'Follow-up', icon: <Send className="h-3.5 w-3.5" /> },
-  { value: 'ficha', label: 'Ficha de cadastro', icon: <ClipboardList className="h-3.5 w-3.5" /> },
 ]
 
 const CRM_LEAD_TAB_DEF: TabDef = { value: 'crmLead', label: 'Lead do CRM', icon: <Link2 className="h-3.5 w-3.5" /> }
@@ -67,7 +83,8 @@ export interface ClientDrawerProps {
 }
 
 export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLeadTab }: ClientDrawerProps) {
-  const tabDefs = showCrmLeadTab ? [...TAB_DEFS, CRM_LEAD_TAB_DEF] : TAB_DEFS
+  const folderDefs = showCrmLeadTab ? [...FOLDER_DEFS, CRM_LEAD_TAB_DEF] : FOLDER_DEFS
+  const tabDefs = TAB_DEFS
   const client = useClient(clientId ?? undefined)
   // Carrega os campos pesados (ex.: contract_file) que a listagem em massa
   // omite pra aliviar o boot.
@@ -75,13 +92,28 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
     if (clientId) void db.loadFullClient(clientId)
   }, [clientId])
   const [tab, setTab] = React.useState('overview')
+  const [folderTab, setFolderTab] = React.useState('briefing')
+  // Leva pra qualquer aba, inclusive as que ficam dentro da pasta "Entrega".
+  const goTo = (t: string) => {
+    if (FOLDER_DEFS.some((f) => f.value === t) || t === CRM_LEAD_TAB_DEF.value) {
+      setFolderTab(t)
+      setTab('folder')
+    } else setTab(t)
+  }
   const [stageMenu, setStageMenu] = React.useState(false)
   const stageMenuRef = React.useRef<HTMLDivElement>(null)
   useOutsideClose(stageMenuRef, stageMenu, () => setStageMenu(false))
   const [confirmArchive, setConfirmArchive] = React.useState(false)
+  const [confirmTenantStatus, setConfirmTenantStatus] = React.useState(false)
+  const [tenantStatusConfirmText, setTenantStatusConfirmText] = React.useState('')
+  const [tenantStatusBusy, setTenantStatusBusy] = React.useState(false)
   const [user] = useCurrentUser()
   const { profile } = useAuth()
   const canDelete = canDeleteClient(profile?.role)
+  const canToggleTenant = canManageTenantStatus(profile?.role)
+  const tenantQ = useTenant(client?.tenantServerId ?? undefined, client?.tenantId ?? undefined)
+  // Sem status reconhecível = trata como ativo (nunca oferece "reativar" por engano).
+  const tenantIsActive = (tenantQ.data ? tenantActiveState(tenantQ.data) : null) ?? true
 
   // "Acessar sistema": abre o login e já copia o e-mail de suporte (evita ter
   // que voltar aqui só para copiá-lo antes de logar). A lógica vive em
@@ -91,8 +123,11 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
 
   React.useEffect(() => {
     setTab('overview')
+    setFolderTab('briefing')
     setStageMenu(false)
     setConfirmArchive(false)
+    setConfirmTenantStatus(false)
+    setTenantStatusConfirmText('')
   }, [clientId])
 
   if (!clientId || !client) {
@@ -135,6 +170,37 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
     toast.success('Cliente arquivado · veja em "Arquivados"')
     setConfirmArchive(false)
     onClose()
+  }
+
+  const tenantName = asText(client.tenantName || client.company || client.name, 'tenant')
+  const tenantStatusMatches =
+    tenantStatusConfirmText.trim().toLowerCase() === tenantName.trim().toLowerCase()
+
+  const toggleTenantStatus = async () => {
+    if (!client.tenantId || !client.tenantServerId) return
+    const server = getServerById(client.tenantServerId)
+    if (!server) {
+      toast.error('Servidor do tenant não encontrado em Configurações')
+      return
+    }
+    const nextStatus = tenantIsActive ? 'inactive' : 'active'
+    setTenantStatusBusy(true)
+    try {
+      await tenantsApi.update(server, { id: client.tenantId, status: nextStatus })
+      await tenantQ.refetch()
+      db.addLog(
+        client.id,
+        nextStatus === 'inactive' ? 'Tenant inativado' : 'Tenant reativado',
+        user ? `Por ${user}` : undefined,
+      )
+      toast.success(nextStatus === 'inactive' ? 'Tenant inativado' : 'Tenant reativado')
+      setConfirmTenantStatus(false)
+      setTenantStatusConfirmText('')
+    } catch (err) {
+      toast.error(extractErrorMessage(err))
+    } finally {
+      setTenantStatusBusy(false)
+    }
   }
 
   return (
@@ -244,16 +310,36 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                 Acessar sistema
               </Button>
               {extraHeaderAction}
-              {canDelete && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmArchive(true)}
-                  aria-label="Arquivar cliente"
-                  title="Arquivar cliente"
-                  className="ml-auto rounded-md p-2.5 text-foreground/40 hover:bg-danger/10 hover:text-danger transition-colors lg:p-2"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+              {(canToggleTenant || canDelete) && (
+                <div className="ml-auto flex items-center gap-1">
+                  {canToggleTenant && client.tenantId && client.tenantServerId && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmTenantStatus(true)}
+                      aria-label={tenantIsActive ? 'Inativar tenant' : 'Reativar tenant'}
+                      title={tenantIsActive ? 'Inativar tenant' : 'Reativar tenant'}
+                      className={cn(
+                        'rounded-md p-2.5 transition-colors lg:p-2',
+                        tenantIsActive
+                          ? 'text-foreground/40 hover:bg-warning/10 hover:text-warning'
+                          : 'text-foreground/40 hover:bg-success/10 hover:text-success',
+                      )}
+                    >
+                      <Power className="h-4 w-4" />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmArchive(true)}
+                      aria-label="Arquivar cliente"
+                      title="Arquivar cliente"
+                      className="rounded-md p-2.5 text-foreground/40 hover:bg-danger/10 hover:text-danger transition-colors lg:p-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -278,12 +364,37 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
 
         <div className="p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
-          {tab === 'briefing' && <BriefingTab client={client} />}
-          {tab === 'chatbot' && <ChatbotTab client={client} />}
-          {tab === 'delivery' && <DeliveryTab client={client} />}
-          {tab === 'followup' && <FollowUpTab client={client} />}
+          {tab === 'setup' && <SetupPanel client={client} onGoTo={goTo} showAdvanced />}
+          {tab === 'folder' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {folderDefs.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => setFolderTab(f.value)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                      folderTab === f.value
+                        ? 'bg-accent/10 text-accent ring-1 ring-accent/25'
+                        : 'text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground',
+                    )}
+                  >
+                    {f.icon}
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              {folderTab === 'briefing' && <BriefingTab client={client} />}
+              {folderTab === 'chatbot' && (
+                <ChatbotTab client={client} onGenerated={() => markSetupItemDone(client, 'flow_generated', 'Chatbot/IA gerado')} />
+              )}
+              {folderTab === 'delivery' && <DeliveryTab client={client} />}
+              {folderTab === 'followup' && <FollowUpTab client={client} />}
+              {folderTab === 'crmLead' && showCrmLeadTab && <CrmLeadTab client={client} />}
+            </div>
+          )}
           {tab === 'ficha' && <FichaTab client={client} />}
-          {tab === 'crmLead' && showCrmLeadTab && <CrmLeadTab client={client} />}
         </div>
       </Drawer>
 
@@ -311,6 +422,57 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
           ? Ele sai do pipeline e da lista de clientes, mas você pode restaurá-lo
           ou excluí-lo permanentemente na tela <strong>Arquivados</strong>.
         </p>
+      </Modal>
+
+      <Modal
+        open={confirmTenantStatus}
+        onClose={() => {
+          setConfirmTenantStatus(false)
+          setTenantStatusConfirmText('')
+        }}
+        title={tenantIsActive ? 'Inativar tenant' : 'Reativar tenant'}
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setConfirmTenantStatus(false)
+                setTenantStatusConfirmText('')
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant={tenantIsActive ? 'danger' : 'primary'}
+              onClick={toggleTenantStatus}
+              disabled={!tenantStatusMatches}
+              loading={tenantStatusBusy}
+            >
+              {tenantIsActive ? 'Inativar' : 'Reativar'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-foreground/70">
+            {tenantIsActive ? (
+              <>
+                Isso bloqueia o acesso do cliente ao sistema imediatamente. Para confirmar, digite o nome do
+                tenant:
+              </>
+            ) : (
+              <>Isso libera o acesso do cliente ao sistema novamente. Para confirmar, digite o nome do tenant:</>
+            )}{' '}
+            <span className="font-semibold text-foreground">{tenantName}</span>
+          </p>
+          <Input
+            value={tenantStatusConfirmText}
+            onChange={(e) => setTenantStatusConfirmText(e.target.value)}
+            placeholder={tenantName}
+            autoFocus
+          />
+        </div>
       </Modal>
     </>
   )

@@ -44,7 +44,7 @@ async function buildFollowUpMessage(): Promise<string | null> {
   const clients = await query<ClientRow>(
     `SELECT company, name, stage, followup_active, followups
      FROM clients
-     WHERE stage IN ('active', 'delivered') AND followup_active = true`
+     WHERE stage IN ('active', 'delivered') AND followup_active = true AND archived_at IS NULL`
   );
 
   const lines: string[] = [];

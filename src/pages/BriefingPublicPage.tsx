@@ -140,9 +140,10 @@ function buildSections(cfg: BriefingConfig | null): SectionKey[] {
     return sections
   }
   if (cfg.automationTypes.includes('site')) sections.push('site')
-  if (cfg.automationTypes.includes('chatbot')) sections.push('chatbot')
-  if (cfg.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada'))
-    sections.push('ia')
+  const hasIa = cfg.automationTypes.some((t) => t === 'ia_basica' || t === 'ia_avancada')
+  // Cliente com IA no atendimento não preenche o roteiro de chatbot — a IA conduz a conversa.
+  if (cfg.automationTypes.includes('chatbot') && !hasIa) sections.push('chatbot')
+  if (hasIa) sections.push('ia')
   if (cfg.hasExternalAutomation) sections.push('automacao_externa')
   sections.push('observacoes')
   return sections

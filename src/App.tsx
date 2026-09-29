@@ -83,6 +83,9 @@ const CommandCenterPage = React.lazy(() =>
 const TeamPerformancePage = React.lazy(() =>
   import('./pages/TeamPerformancePage').then((m) => ({ default: m.TeamPerformancePage })),
 )
+const ChurnRiskPage = React.lazy(() =>
+  import('./pages/ChurnRiskPage').then((m) => ({ default: m.ChurnRiskPage })),
+)
 const SupportWorkspacePage = React.lazy(() =>
   import('./pages/SupportWorkspacePage').then((m) => ({ default: m.SupportWorkspacePage })),
 )
@@ -126,6 +129,12 @@ const MercadoNunesPage = React.lazy(() =>
     default: m.MercadoNunesPage,
   })),
 )
+// Rateio do boi — mesma família do gerador de cartazes, mas com login próprio (mostra custo/margem).
+const AcouguePage = React.lazy(() =>
+  import('./pages/AcouguePage').then((m) => ({
+    default: m.AcouguePage,
+  })),
+)
 
 export default function App() {
   return (
@@ -136,6 +145,7 @@ export default function App() {
         <Route path="/template/:token" element={<TemplateRequestPublicPage />} />
         <Route path="/laundry/:token" element={<LaundryPortalPage />} />
         <Route path="/mercadonunes" element={<MercadoNunesPage />} />
+        <Route path="/mercadonunes/acougue" element={<AcouguePage />} />
         <Route path="/pendencias/:token" element={<PendenciasPublicPage />} />
         <Route path="/ficha" element={<FichaPublicPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />
@@ -184,6 +194,7 @@ export default function App() {
           <Route path="/followups" element={<FollowUpsPage />} />
           <Route path="/comando" element={<CommandCenterPage />} />
           <Route path="/equipe" element={<TeamPerformancePage />} />
+          <Route path="/risco-churn" element={<ChurnRiskPage />} />
           <Route path="/auditoria" element={<AuditLogPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />

@@ -414,6 +414,31 @@ export async function reconcileChannels(): Promise<{
   return { channels, orphans, archivedOrphans, errors, providerErrors, unlinkedTenants };
 }
 
+type ReconcileResult = Awaited<ReturnType<typeof reconcileChannels>>;
+
+/**
+ * Cache em memória do resultado de `reconcileChannels()` — a reconciliação é uma rodada de
+ * chamadas ao vivo pra NX + provedores (UAZAPI/Evolution) por TENANT, então é lenta de propósito
+ * (12s de timeout por chamada, mapPool com limite de concorrência). A tela Canais chama
+ * `reconcileChannels()` direto (sem cache) porque a pessoa está ali pedindo o dado mais fresco
+ * possível — não mexe nisso. Quem só precisa saber "esse cliente tá com canal caído?" sem estar
+ * na tela Canais (ex.: painel de Risco de Churn) usa este cache: `channelAlerts.ts` já reconcilia
+ * tudo a cada 3 min em background, então lê daqui é gratuito quase sempre — só cai pra uma chamada
+ * ao vivo se o cache ainda não foi preenchido (logo depois do boot) ou o job estiver desligado.
+ */
+let channelsCache: { data: ReconcileResult; at: number } | null = null;
+
+export function setChannelsCache(data: ReconcileResult): void {
+  channelsCache = { data, at: Date.now() };
+}
+
+export async function getChannelsCached(maxAgeMs = 5 * 60_000): Promise<ReconcileResult> {
+  if (channelsCache && Date.now() - channelsCache.at < maxAgeMs) return channelsCache.data;
+  const data = await reconcileChannels();
+  channelsCache = { data, at: Date.now() };
+  return data;
+}
+
 export async function channelsRoutes(app: FastifyInstance) {
   app.get('/api/channels', { onRequest: [app.authenticate] }, async () => {
     const { channels, orphans, archivedOrphans, errors, providerErrors, unlinkedTenants } =

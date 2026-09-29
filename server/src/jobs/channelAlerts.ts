@@ -1,5 +1,5 @@
 import { query } from '../db.js';
-import { reconcileChannels, type ReconciledChannel } from '../routes/channels.js';
+import { reconcileChannels, setChannelsCache, type ReconciledChannel } from '../routes/channels.js';
 import { sendOfficialTemplate, spDateTimeShort, TUTORIAL_URL } from '../lib/officialApi.js';
 import { sendToSupportGroupId } from '../lib/supportGroup.js';
 
@@ -77,7 +77,12 @@ async function markAlerted(channelKey: string) {
 async function runOnce() {
   // Reconcilia SEMPRE (mesmo sem ninguém com aviso ligado) — o histórico de
   // quedas/retornos dos relatórios precisa rastrear todos os canais.
-  const { channels } = await reconcileChannels();
+  const result = await reconcileChannels();
+  const { channels } = result;
+  // Alimenta o cache lido pelo painel de Risco de Churn (ver getChannelsCached em routes/channels.ts)
+  // — já que essa reconciliação está sendo feita de qualquer forma, aproveita pra quem só precisa do
+  // status, sem cobrar mais uma rodada de chamadas ao vivo pros provedores.
+  setChannelsCache(result);
   if (channels.length === 0) return;
 
   // Tenants (clientes) com a notificação de canais ligada → número que recebe.

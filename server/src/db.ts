@@ -1387,6 +1387,99 @@ END $$`);
     END IF;
   END $$`);
 
+  // ── Açougue do Mercado Nunes (/mercadonunes/acougue) ──────────────────────────────
+  // Login PRÓPRIO dessa ferramenta (e-mail + senha só dela) — nada a ver com `profiles`, que é o
+  // painel interno: quem trabalha no açougue não precisa (nem deve) ter conta no TenantHub.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_acougue_usuarios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL UNIQUE,
+    nome TEXT,
+    senha_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  // Uma "base" = uma compra que vira vários cortes (boi desossado, boi campo, sem costela, suíno…).
+  // Os cortes ficam em JSONB porque são uma lista curta editada sempre inteira pela tela.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_acougue_bases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    unidade TEXT NOT NULL DEFAULT 'kg',
+    custo NUMERIC NOT NULL DEFAULT 0,
+    peso_peca NUMERIC,
+    margem NUMERIC NOT NULL DEFAULT 0,
+    arredondamento TEXT NOT NULL DEFAULT 'nenhum',
+    cortes JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  // Cada "aplicar" guarda a tabela inteira como ficou — dá pra olhar o que era o preço mês passado.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_acougue_historico (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    base_id UUID REFERENCES mn_acougue_bases(id) ON DELETE CASCADE,
+    base_nome TEXT NOT NULL,
+    custo_kg NUMERIC NOT NULL,
+    margem NUMERIC NOT NULL,
+    usuario TEXT,
+    cortes JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+
+  // ── Pulso de satisfação + Risco de Churn ───────────────────────────────────────────
+  // "Pulso": pergunta curta (sim/não) mandada de fora pelo WhatsApp de tempos em tempos — o n8n é
+  // quem manda de fato (ver server/src/routes/pulses.ts); aqui só decidimos quem recebe e
+  // registramos a resposta. Alimenta o painel de Risco de Churn junto com payment_status (Asaas),
+  // canais (NX Monitor) e tickets.
+  await pool.query(`CREATE TABLE IF NOT EXISTS client_pulses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    phone TEXT,
+    question TEXT NOT NULL,
+    sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status TEXT NOT NULL DEFAULT 'aguardando' CHECK (status IN ('aguardando','respondido','sem_resposta')),
+    response TEXT CHECK (response IS NULL OR response IN ('sim','nao')),
+    responded_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS client_pulses_client_idx ON client_pulses(client_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS client_pulses_status_idx ON client_pulses(status)`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_client_pulses ON client_pulses;
+      CREATE TRIGGER notify_client_pulses AFTER INSERT OR UPDATE OR DELETE ON client_pulses
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
+  // Recorrai: segunda fonte de payment_status (além do Asaas), só pra quem não é cobrado por lá —
+  // ver server/src/jobs/recorraiSync.ts. Reaproveita o enum payment_status (pending/paid/overdue) já
+  // usado pelo Asaas, num campo espelho separado, pro Risco de Churn considerar os dois sem duplicar
+  // a coluna principal (que continua sendo só do Asaas).
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS recorrai_customer_id TEXT`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS recorrai_payment_status payment_status`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS recorrai_synced_at TIMESTAMPTZ`);
+
+  // Registro manual de risco de churn (painel Risco de Churn) — alguém do time marca "isso é risco"
+  // mesmo sem nenhum sinal automático (pulso/pagamento/canal/ticket) ter acendido. resolved_at NULL
+  // = flag ativa; só uma ativa por cliente por vez (a rota resolve a anterior antes de criar outra).
+  await pool.query(`CREATE TABLE IF NOT EXISTS client_churn_flags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    severity TEXT NOT NULL DEFAULT 'atencao' CHECK (severity IN ('atencao','alto','critico')),
+    reason TEXT NOT NULL DEFAULT '',
+    created_by TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ,
+    resolved_by TEXT
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS client_churn_flags_client_idx ON client_churn_flags(client_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS client_churn_flags_active_idx ON client_churn_flags(client_id) WHERE resolved_at IS NULL`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_client_churn_flags ON client_churn_flags;
+      CREATE TRIGGER notify_client_churn_flags AFTER INSERT OR UPDATE OR DELETE ON client_churn_flags
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

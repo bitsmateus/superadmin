@@ -96,7 +96,7 @@ async function buildDigest(): Promise<string> {
   const clients = await query<ClientRow>(
     `SELECT company, name, stage, briefing_status, delivery_date, followup_active, followups
      FROM clients
-     WHERE stage <> 'churned'`
+     WHERE stage <> 'churned' AND archived_at IS NULL`
   );
   const nowMs = now.getTime();
   const pipeline: string[] = [];
@@ -163,7 +163,8 @@ async function maybeRunBriefingReminders(now: Date): Promise<void> {
     `SELECT briefing_number, briefing_token, company, name
      FROM clients
      WHERE briefing_status = 'sent'
-       AND briefing_number IS NOT NULL AND briefing_number <> ''`
+       AND briefing_number IS NOT NULL AND briefing_number <> ''
+       AND archived_at IS NULL`
   );
 
   let sent = 0;

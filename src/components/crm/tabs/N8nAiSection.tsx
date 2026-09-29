@@ -7,7 +7,7 @@ import { Section } from '../ClientDrawer'
 import { n8nFlowApi, type N8nFlowState } from '@/api/n8nFlow'
 import type { Client } from '@/types/client'
 
-export function N8nAiSection({ client }: { client: Client }) {
+export function N8nAiSection({ client, onGenerated }: { client: Client; onGenerated?: () => void }) {
   const [state, setState] = React.useState<N8nFlowState | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [busy, setBusy] = React.useState<'generate' | 'save' | null>(null)
@@ -39,6 +39,7 @@ export function N8nAiSection({ client }: { client: Client }) {
       setState(s)
       setPrompt(s.flow?.prompt ?? '')
       toast.success('IA do n8n gerada')
+      onGenerated?.()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Falha ao gerar')
     } finally {

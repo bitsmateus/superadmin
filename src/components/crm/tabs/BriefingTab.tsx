@@ -42,9 +42,10 @@ import { Modal } from '@/components/ui/Modal'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { api } from '@/services/api'
-import { usersApi } from '@/api/users'
+import { usersApi, existingUserEmails, friendlyUserError } from '@/api/users'
 import { queuesApi, extractQueueId } from '@/api/queues'
 import { chatbotFlowApi } from '@/api/chatbotFlow'
+import { BriefingMeeting } from '../BriefingMeeting'
 import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
@@ -130,7 +131,8 @@ export function BriefingTab({ client }: { client: Client }) {
   const [revisionNote, setRevisionNote] = React.useState(
     client.briefingRevisionNote ?? '',
   )
-  const [subView, setSubView] = React.useState<SubView>('briefing')
+  // A sub-aba "Automação" (checklist de criação) mudou pra aba "Configuração" do cliente.
+  const [subView] = React.useState<SubView>('briefing')
   const [config, setConfig] = React.useState<BriefingConfig>(
     client.briefingConfig ?? emptyConfig,
   )
@@ -281,6 +283,8 @@ export function BriefingTab({ client }: { client: Client }) {
 
   return (
     <div className="space-y-5">
+      <BriefingMeeting client={client} />
+
       {needsContractSign && (
         <Section
           title={
@@ -576,7 +580,6 @@ export function BriefingTab({ client }: { client: Client }) {
 
       {showSubTabs && (
         <>
-          <SubTabs value={subView} onChange={setSubView} />
 
           {subView === 'briefing' && client.briefingData && (
             editing ? (
@@ -627,9 +630,6 @@ export function BriefingTab({ client }: { client: Client }) {
             )
           )}
 
-          {subView === 'automation' && (
-            <AutomationView client={client} />
-          )}
 
         </>
       )}
@@ -1166,7 +1166,7 @@ function SubTabBtn({
 
 // ── Automation view ───────────────────────────────────────────────────────────
 
-function AutomationView({ client }: { client: Client }) {
+export function AutomationView({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [tenantModalOpen, setTenantModalOpen] = React.useState(false)
   const [creatingUsers, setCreatingUsers] = React.useState(false)
@@ -1358,9 +1358,15 @@ function AutomationView({ client }: { client: Client }) {
     if (createdQueues.length > 0) await chatbotFlowApi.saveQueues(client.id, createdQueues).catch(() => {})
 
     let success = 0
+    let already = 0
     const failures: string[] = []
+    const existing = await existingUserEmails(server, client.tenantApiId)
     // Cria em ordem alfabética — casa com a listagem da plataforma NX.
     for (const u of sortUsersByName(briefingUsers)) {
+      if (u.email && existing.has(u.email.trim().toLowerCase())) {
+        already++
+        continue
+      }
       try {
         await usersApi.create(
           server,
@@ -1379,14 +1385,14 @@ function AutomationView({ client }: { client: Client }) {
         )
         success++
       } catch (err) {
-        failures.push(`${u.name}: ${extractErrorMessage(err, 'falha')}`)
+        failures.push(`${u.name}: ${friendlyUserError(extractErrorMessage(err, 'falha'))}`)
       }
     }
     setCreatingUsers(false)
 
-    if (success > 0 || queuesCreated > 0) {
+    if (success > 0 || queuesCreated > 0 || (already > 0 && failures.length === 0)) {
       let next = tree
-      if (success > 0) next = setChecklistItem(next, 'users_created', true, user)
+      if (success > 0 || (already > 0 && failures.length === 0)) next = setChecklistItem(next, 'users_created', true, user)
       if (queuesCreated > 0) next = setChecklistItem(next, 'queues_created', true, 'Sistema')
       db.updateClient(client.id, { deliveryChecklist: next })
     }
@@ -1906,11 +1912,10 @@ function BriefingViewer({
 
       {(data.greetingMessage ||
         data.offHoursMessage ||
-        data.mainFlow ||
-        data.chatbotFlow ||
+        (!data.useAI && (data.mainFlow || data.chatbotFlow)) ||
         data.departments.length > 0) && (
         <Accordion title={<SectionTitle icon={<MessageSquare className="h-3.5 w-3.5" />}>5. Chatbot</SectionTitle>} defaultOpen>
-          {data.chatbotFlow && (
+          {data.chatbotFlow && !data.useAI && (
             <div className="mb-2 space-y-2 rounded-lg border border-line bg-elevate/[0.02] p-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-foreground/40">
                 Roteiro do chatbot
@@ -1952,7 +1957,7 @@ function BriefingViewer({
               )}
             </div>
           )}
-          {data.mainFlow && <Row k="Fluxo principal" v={data.mainFlow} />}
+          {!data.useAI && data.mainFlow && <Row k="Fluxo principal" v={data.mainFlow} />}
           <Row k="Saudação" v={data.greetingMessage} />
           {data.offHoursEnabled === false ? (
             <Row k="Fora do horário" v="Cliente optou por não enviar mensagem automática" />

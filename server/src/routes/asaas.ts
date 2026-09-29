@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { queryOne } from '../db.js';
-import { sincronizarAsaas } from '../jobs/asaasSync.js';
+import { sincronizarAsaas, buscarValoresAsaas } from '../jobs/asaasSync.js';
 
 /**
  * Asaas visto pelo painel. A chave fica só aqui no servidor (ver settings.asaas_api_key): o
@@ -35,4 +35,16 @@ export async function asaasRoutes(app: FastifyInstance) {
       }
     }
   );
+
+  // GET /api/asaas/valores — valor da assinatura no Asaas por cliente, pra Clientes Geral mostrar
+  // do lado do valor preenchido à mão. Só leitura: não cria vínculo nem grava nada em `clients`.
+  app.get('/api/asaas/valores', { onRequest: [app.authenticate] }, async (_req, reply) => {
+    try {
+      const valores = await buscarValoresAsaas();
+      if (!valores) return reply.status(400).send({ message: 'Asaas não configurado (falta a chave de API em Configurações).' });
+      return valores;
+    } catch (err) {
+      return reply.status(502).send({ message: (err as Error).message });
+    }
+  });
 }

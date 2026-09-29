@@ -14,6 +14,7 @@ import {
   Copy,
   FileSearch,
   FileText,
+  HeartCrack,
   LayoutDashboard,
   LifeBuoy,
   LogOut,
@@ -74,7 +75,7 @@ const suporteItems = [
   { to: '/tenants', label: 'Tenants', icon: Building2 },
 ]
 
-const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/canais', '/tenants', '/nps']
+const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/canais', '/tenants', '/nps', '/risco-churn']
 
 /** Intercala cópias ("Duplicar") logo depois do item original de cada rota. A cópia herda só o
  * ícone; o nome, o id e a ROTA são próprios dela: `/visao/<id>`, que abre a mesma tela do original
@@ -283,6 +284,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     [
       ...suporteItems,
       ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
+      ...(seeFinancials ? [{ to: '/risco-churn', label: 'Risco de Churn', icon: HeartCrack }] : []),
     ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to)),
     duplicatesByKey,
   )
@@ -404,7 +406,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         </button>
       </div>
 
-      <nav className="mt-2 flex flex-1 flex-col gap-0.5 px-3">
+      <nav className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-4">
         {/* Suporte — grupo expansível com subpáginas */}
         {suporte.length > 0 && (
         <>

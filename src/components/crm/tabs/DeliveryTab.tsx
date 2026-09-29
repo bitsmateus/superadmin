@@ -28,12 +28,14 @@ import {
 } from '@/constants/checklist'
 import { buildFollowUps, DEFAULT_FOLLOWUP_TEMPLATES } from '@/constants/followup'
 import {
-  openAccessEmail,
   buildAccessEmail,
   buildAccessDeliveryEmail,
+  accessRecipients,
+  buildUserAccessEmail,
   buildWelcomeMessage,
   renderAccessSheetHtml,
 } from '@/lib/accessSheet'
+import { resolveClientServerId } from '@/lib/accessSystem'
 import { asText, cn, formatDate, slugify } from '@/lib/utils'
 import type { Client, ChecklistItem } from '@/types/client'
 
@@ -49,13 +51,17 @@ function blobToBase64(blob: Blob): Promise<string> {
 export function DeliveryTab({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [downloadingAccess, setDownloadingAccess] = React.useState(false)
+  const [emailingAccess, setEmailingAccess] = React.useState(false)
   const [deliveryDate, setDeliveryDate] = React.useState(
     client.deliveryDate ?? '',
   )
   const [deliveryNotes, setDeliveryNotes] = React.useState(
     client.deliveryNotes ?? '',
   )
-  const tenantServer = useServerById(client.tenantServerId)
+  // "Criado em" (platformApp/Web/Chat) manda — é o campo que a pessoa vê e corrige na tela; sem
+  // isso o e-mail/PDF de acesso podia mandar pro servidor errado quando alguém corrigia o "Criado
+  // em" depois de criar o tenant sem mexer em tenantServerId (ver src/lib/accessSystem.ts).
+  const tenantServer = useServerById(resolveClientServerId(client))
 
   React.useEffect(() => {
     setDeliveryDate(client.deliveryDate ?? '')
@@ -169,18 +175,40 @@ export function DeliveryTab({ client }: { client: Client }) {
     }
   }
 
-  const emailAccess = () => {
-    if (!client.email?.trim()) {
-      toast.error('Cliente sem e-mail cadastrado (Visão Geral).')
+  // "Enviar por e-mail": manda direto pelo SMTP configurado em Configurações, com os acessos deste
+  // cliente no corpo do e-mail (sem PDF) — não abre mais o programa de e-mail do computador.
+  const emailAccess = async () => {
+    // Cada usuário do briefing recebe, no PRÓPRIO e-mail, só o seu acesso (link + login + senha dele).
+    const recipients = accessRecipients(client)
+    if (recipients.length === 0) {
+      toast.error('Nenhum usuário com e-mail no briefing para receber o acesso.')
       return
     }
-    openAccessEmail({ client, server: tenantServer })
-    if (!handoff.find((i) => i.id === 'handoff_access_sent')?.checked) {
-      const next = setChecklistItem(handoff, 'handoff_access_sent', true, user)
-      db.updateClient(client.id, { deliveryHandoffChecklist: next })
-      db.addLog(client.id, 'Acessos enviados', `E-mail de acessos aberto para ${client.email}`)
+    setEmailingAccess(true)
+    const sent: string[] = []
+    const failed: string[] = []
+    let lastError = ''
+    for (const r of recipients) {
+      try {
+        const { subject, html } = buildUserAccessEmail({ client, server: tenantServer }, r)
+        // eslint-disable-next-line no-await-in-loop
+        await api.post(`/api/clients/${client.id}/send-access-email`, { to: r.email, subject, html })
+        sent.push(r.email)
+      } catch (err) {
+        failed.push(r.email)
+        lastError = (err as Error).message
+      }
     }
-    toast.success('E-mail de acessos pronto no seu cliente de e-mail')
+    setEmailingAccess(false)
+    if (sent.length > 0) {
+      if (!handoff.find((i) => i.id === 'handoff_access_sent')?.checked && failed.length === 0) {
+        const next = setChecklistItem(handoff, 'handoff_access_sent', true, user)
+        db.updateClient(client.id, { deliveryHandoffChecklist: next })
+      }
+      db.addLog(client.id, 'Acessos enviados', `Cada usuário recebeu o próprio acesso por SMTP: ${sent.join(', ')}`)
+    }
+    if (failed.length === 0) toast.success(`Acesso enviado para ${sent.length} usuário(s), cada um com o seu`)
+    else toast.error(`${sent.length} enviado(s), ${failed.length} falhou(ram) (${failed.join(', ')}): ${lastError}`)
   }
 
   const saveMeeting = () => {
@@ -266,7 +294,7 @@ export function DeliveryTab({ client }: { client: Client }) {
             />
           </div>
           <span className="text-[11px] text-foreground/50">
-            Editar em <span className="text-accent">Briefing → Automação</span>
+            Editar em <span className="text-accent">Configuração</span>
           </span>
         </div>
       </div>
@@ -292,6 +320,7 @@ export function DeliveryTab({ client }: { client: Client }) {
               size="sm"
               variant="secondary"
               onClick={emailAccess}
+              loading={emailingAccess}
               leftIcon={<Mail className="h-3.5 w-3.5" />}
             >
               Enviar por e-mail
@@ -418,7 +447,7 @@ export function DeliveryTab({ client }: { client: Client }) {
                 disabled={!canComplete}
                 leftIcon={<PartyPopper className="h-4 w-4" />}
               >
-                Concluir entrega
+                Concluir entrega (100% finalizado)
               </Button>
             </div>
           </>

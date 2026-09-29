@@ -19,6 +19,7 @@ import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
 import { useCommissionEntries, useCommissionTypes } from '@/hooks/useCommissions'
 import { useContracts } from '@/hooks/useContracts'
+import { contractsService } from '@/services/contracts'
 import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt } from '@/hooks/useMonthFilter'
 import { leadBoardsService } from '@/services/leadBoards'
 import { commissionsService } from '@/services/commissions'
@@ -948,9 +949,10 @@ function VendaRow({
           onClick={() => {
             const proximo = !row.contratoAssinado
             leadBoardsService.updateRow(row.id, { contratoAssinado: proximo })
-            // O servidor também marca os lançamentos de comissão dessa venda; isso aqui só
-            // antecipa na tela, pra não parecer que ficou pra trás.
+            // O servidor também marca os lançamentos de comissão e o contrato dessa venda; estas
+            // duas chamadas só antecipam na tela, pra nada parecer que ficou pra trás.
             commissionsService.marcarContratoDaVenda(row.id, proximo)
+            if (contrato) void contractsService.updateContract(contrato.id, { status: proximo ? 'assinado' : 'pendente' })
           }}
           title={row.contratoAssinado ? 'Assinado — clique pra marcar como pendente' : 'Pendente — clique pra marcar como assinado'}
           className={cn(

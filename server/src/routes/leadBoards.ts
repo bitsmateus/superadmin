@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
+import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { findMatchingClientId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 
 /**
@@ -1102,6 +1103,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       void propagarComissao(req.params.id, patch);
       // Mudou quem fechou a venda (ou o SDR dela): a comissão de fechamento acompanha.
       if ('closer' in patch || 'sdr' in patch) void sincronizarComissaoCloser(req.params.id);
+      // ...e marcar "Assinado" na venda assina o CONTRATO daquela venda também — o caminho
+      // contrário (contrato -> venda -> comissão) já existia; agora os dois lados andam juntos.
+      if ('contrato_assinado' in patch) {
+        void propagarAssinaturaDaVenda(req.params.id, patch.contrato_assinado === true);
+      }
 
       if (before) {
         void (async () => {

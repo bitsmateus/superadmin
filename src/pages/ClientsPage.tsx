@@ -7,6 +7,7 @@ import {
   Building2,
   CreditCard,
   Download,
+  FileSpreadsheet,
   Mail,
   Phone,
   PlusCircle,
@@ -113,6 +114,15 @@ export function ClientsPage() {
     })
   }, [clients, search, stageFilter])
 
+  const onExportExcel = () => {
+    if (filtered.length === 0) {
+      toast.error('Nenhum cliente para exportar')
+      return
+    }
+    exportClientsCsv(filtered)
+    toast.success(`${filtered.length} cliente(s) exportado(s)`)
+  }
+
   const stageCounts = React.useMemo(() => {
     const counts: Record<string, number> = { all: clients.length }
     for (const c of clients)
@@ -151,6 +161,13 @@ export function ClientsPage() {
         subtitle={`${clients.length} cliente(s) no CRM`}
         rightSlot={
           <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+            <Button
+              variant="secondary"
+              onClick={onExportExcel}
+              leftIcon={<FileSpreadsheet className="h-4 w-4" />}
+            >
+              Exportar Excel
+            </Button>
             <Button
               variant="secondary"
               onClick={() => setImportOpen(true)}
@@ -478,6 +495,31 @@ function StagePillFilter({
       {style.label} · {count}
     </button>
   )
+}
+
+function exportClientsCsv(clients: { name: string; phone: string }[]) {
+  const header = ['nome', 'telefone']
+  const lines = [header.join(';')]
+  for (const c of clients) {
+    lines.push([csvEscape(asText(c.name)), csvEscape(asText(c.phone))].join(';'))
+  }
+  // BOM (﻿) faz o Excel interpretar UTF-8 corretamente (acentos).
+  const blob = new Blob(['﻿', lines.join('\n')], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `clientes_${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function csvEscape(v: string): string {
+  if (/[";\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`
+  return v
 }
 
 function summarizeNextAction(

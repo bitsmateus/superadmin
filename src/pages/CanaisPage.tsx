@@ -70,6 +70,20 @@ function StatusBadge({ status }: { status: NxChannelStatus | null }) {
   )
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  uazapi: 'UAZAPI',
+  evo: 'Evolution',
+  evolution: 'Evolution',
+  baileys: 'Baileys',
+  zapi: 'Z-API',
+  waba: 'WhatsApp Business API',
+  whatsapp: 'WhatsApp',
+}
+
+function typeLabel(type: string) {
+  return TYPE_LABELS[type.toLowerCase()] ?? type
+}
+
 export function CanaisPage() {
   const { data, isLoading, isError, error, isFetching, refetch } = useNxChannels()
   const [view, setView] = React.useState<'canais' | 'relatorios'>(
@@ -77,6 +91,7 @@ export function CanaisPage() {
   )
   const [search, setSearch] = React.useState(useSupportViewText('search'))
   const [statusFilter, setStatusFilter] = React.useState<NxChannelStatus | 'all'>('all')
+  const [typeFilter, setTypeFilter] = React.useState<string>('all')
   const [notifyFilter, setNotifyFilter] = React.useState<'all' | 'on' | 'off'>(
     useSupportViewValue<'all' | 'on' | 'off'>('notifyFilter', 'all'),
   )
@@ -189,14 +204,21 @@ export function CanaisPage() {
     return blobParts.map((x) => asText(x).toLowerCase()).join(' ').includes(q)
   }
 
+  const channelTypes = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const c of channels) if (c.type) set.add(c.type)
+    return [...set].sort((a, b) => typeLabel(a).localeCompare(typeLabel(b)))
+  }, [channels])
+
   const filteredChannels = React.useMemo(() => {
     return channels.filter((c) => {
       if (onlyDivergent && !c.divergent) return false
       if (statusFilter !== 'all' && c.effective_status !== statusFilter) return false
+      if (typeFilter !== 'all' && c.type !== typeFilter) return false
       return matchSearch([c.name, c.client_name, c.client_company, c.number, c.waba_id])
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channels, search, statusFilter, onlyDivergent])
+  }, [channels, search, statusFilter, typeFilter, onlyDivergent])
 
   const filteredOrphans = React.useMemo(() => {
     if (onlyDivergent) return []
@@ -365,6 +387,16 @@ export function CanaisPage() {
                   { value: 'disconnected', label: 'Desconectados' },
                   { value: 'connecting', label: 'Conectando' },
                   { value: 'unknown', label: 'Desconhecido' },
+                ]}
+              />
+            </div>
+            <div className="w-44">
+              <Select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                options={[
+                  { value: 'all', label: 'Todos os tipos' },
+                  ...channelTypes.map((t) => ({ value: t, label: typeLabel(t) })),
                 ]}
               />
             </div>

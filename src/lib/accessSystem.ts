@@ -6,12 +6,28 @@ import type { Client } from '@/types/client'
 
 /** Subconjunto do cliente necessário para acessar o sistema — permite chamar
  *  a ação com o Client completo ou com um objeto mínimo. */
-export type AccessTarget = Pick<Client, 'supportEmail' | 'tenantServerId'>
+export type AccessTarget = Pick<Client, 'supportEmail' | 'tenantServerId' | 'platformApp' | 'platformWeb' | 'platformChat'>
 
-/** URL de login do sistema do cliente: a do servidor vinculado ao tenant, ou a
- *  URL global configurada em Configurações. */
+/**
+ * Qual servidor (chat/app/web) vale pra esse cliente: SEMPRE o que está marcado em "Criado em"
+ * (platformApp/platformWeb/platformChat, editável na Visão Geral) — é o campo que a pessoa vê e
+ * corrige na tela, então é ele quem manda. tenantServerId (gravado só na hora de criar o tenant)
+ * fica de fallback pra quem nunca teve o "Criado em" tocado — sem isso os dois campos podem
+ * divergir (alguém corrige o "Criado em" depois e o botão "Acessar sistema" continua abrindo o
+ * servidor antigo).
+ */
+export function resolveClientServerId(client?: AccessTarget | null): string | undefined {
+  if (!client) return undefined
+  if (client.platformChat) return 'chat'
+  if (client.platformApp) return 'app'
+  if (client.platformWeb) return 'web'
+  return client.tenantServerId
+}
+
+/** URL de login do sistema do cliente: a do servidor marcado em "Criado em" (ou tenantServerId, se
+ *  isso nunca foi definido), ou a URL global configurada em Configurações. */
 export function accessUrlFor(client?: AccessTarget | null): string {
-  const fromServer = getServerById(client?.tenantServerId)?.loginUrl
+  const fromServer = getServerById(resolveClientServerId(client))?.loginUrl
   return fromServer ?? useAccessStore.getState().systemUrl
 }
 

@@ -35,6 +35,7 @@ import {
   buildWelcomeMessage,
   renderAccessSheetHtml,
 } from '@/lib/accessSheet'
+import { resolveClientServerId } from '@/lib/accessSystem'
 import { asText, cn, formatDate, slugify } from '@/lib/utils'
 import type { Client, ChecklistItem } from '@/types/client'
 
@@ -57,7 +58,10 @@ export function DeliveryTab({ client }: { client: Client }) {
   const [deliveryNotes, setDeliveryNotes] = React.useState(
     client.deliveryNotes ?? '',
   )
-  const tenantServer = useServerById(client.tenantServerId)
+  // "Criado em" (platformApp/Web/Chat) manda — é o campo que a pessoa vê e corrige na tela; sem
+  // isso o e-mail/PDF de acesso podia mandar pro servidor errado quando alguém corrigia o "Criado
+  // em" depois de criar o tenant sem mexer em tenantServerId (ver src/lib/accessSystem.ts).
+  const tenantServer = useServerById(resolveClientServerId(client))
 
   React.useEffect(() => {
     setDeliveryDate(client.deliveryDate ?? '')

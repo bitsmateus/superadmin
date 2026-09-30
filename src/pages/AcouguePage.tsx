@@ -61,6 +61,34 @@ const novoCorte = (): Corte => ({
   ativo: true,
 })
 
+// Lista de cortes bovinos mais comuns, pra não ter que digitar um por um numa base nova — entra só
+// o nome (participação/índice ficam em 0/1, a pessoa preenche ou usa "Calcular índices pelos preços
+// de hoje" depois de colocar o preço praticado de cada um).
+const CORTES_BOVINOS_PADRAO = [
+  'Capa coxão mole bovino',
+  'Coxão mole bovino',
+  'Patinho bovino',
+  'Filé mignon',
+  'Músculo traseiro',
+  'Lagartão bovino',
+  'Costela bovina ripa',
+  'Contrafilé bovino',
+  'Lombo bovino',
+  'Costilhar bovino',
+  'Agulha bovina',
+  'Acém bovino',
+  'Paleta grossa',
+  'Vazio bovino',
+  'Picanha',
+  'Tatu bovino',
+  'Alcatra bovina',
+  'Coxão fora bovino',
+  'Maminha bovina',
+  'Carne moída segunda',
+  'Músculo dianteiro',
+  'Granito bovino',
+]
+
 export function AcouguePage() {
   const [usuario, setUsuario] = React.useState<AcougueUsuario | null>(null)
   const [carregandoSessao, setCarregandoSessao] = React.useState(true)
@@ -266,6 +294,22 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     setSujo(true)
   }
   const [sujo, setSujo] = React.useState(false)
+
+  /** Acrescenta os cortes bovinos padrão que ainda não existem nessa base (compara por nome, sem
+   *  acento/maiúscula) — não mexe em quem já está cadastrado. */
+  const adicionarCortesPadrao = () => {
+    if (!base) return
+    const normaliza = (s: string) =>
+      s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+    const jaTem = new Set(base.cortes.map((c) => normaliza(c.nome)))
+    const faltando = CORTES_BOVINOS_PADRAO.filter((nome) => !jaTem.has(normaliza(nome)))
+    if (faltando.length === 0) {
+      toast.message('Todos esses cortes já estão cadastrados nessa base')
+      return
+    }
+    patch({ cortes: [...base.cortes, ...faltando.map((nome) => ({ ...novoCorte(), nome }))] })
+    toast.success(`${faltando.length} corte(s) adicionado(s) — falta preencher participação e índice de cada um`)
+  }
 
   // Salva sozinho 1,2s depois da última tecla — ninguém no açougue vai lembrar de clicar "salvar".
   React.useEffect(() => {
@@ -708,13 +752,23 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                     </tbody>
                   </table>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => patch({ cortes: [...base.cortes, novoCorte()] })}
-                  style={{ ...botaoSecundario, marginTop: 10, alignSelf: 'flex-start' }}
-                >
-                  + Adicionar corte
-                </button>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => patch({ cortes: [...base.cortes, novoCorte()] })}
+                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
+                  >
+                    + Adicionar corte
+                  </button>
+                  <button
+                    type="button"
+                    onClick={adicionarCortesPadrao}
+                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
+                    title="Acrescenta os cortes bovinos mais comuns que ainda não estão nessa base"
+                  >
+                    + Cortes padrão (bovino)
+                  </button>
+                </div>
               </Card>
             </>
           )}

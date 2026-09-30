@@ -75,7 +75,7 @@ interface ReconcileError {
   error: string | null;
 }
 
-async function fetchJson(url: string, headers: Record<string, string>, timeoutMs = 12_000, method = 'GET') {
+async function fetchJson(url: string, headers: Record<string, string>, timeoutMs = 8_000, method = 'GET') {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -195,20 +195,77 @@ export async function reconcileChannels(): Promise<{
   );
   const clientById = new Map(allClients.map((c) => [c.id, c]));
 
-  // 1) Canais da NX por tenant.
-  const perClient = await mapPool(clients, 6, async (c) => {
-    const base = (c.tenant_server_id && serverBase[c.tenant_server_id]) || '';
-    if (!base) return { client: c, channels: [] as Record<string, unknown>[], error: 'servidor sem baseUrl' };
-    const url = `${base}/v2/api/external/${encodeURIComponent(c.tenant_api_id!)}/listChannels`;
-    try {
-      const r = await fetchJson(url, { Accept: 'application/json', Authorization: `Bearer ${c.tenant_api_token}` });
-      if (!r.ok) return { client: c, channels: [], error: `NX ${r.status}` };
-      const data = (r.body as { data?: unknown })?.data;
-      return { client: c, channels: Array.isArray(data) ? (data as Record<string, unknown>[]) : [], error: null };
-    } catch (err) {
-      return { client: c, channels: [], error: String(err).slice(0, 120) };
-    }
-  });
+  // 1) Canais da NX por tenant + 2) instâncias dos provedores (UAZAPI/Evolution) —
+  // três rodadas de chamadas ao vivo independentes entre si, então rodam em paralelo
+  // em vez de uma depois da outra (isso sozinho já cortava boa parte dos ~20s).
+  const [perClient, uazapiInstances, evoInstances] = await Promise.all([
+    mapPool(clients, 12, async (c) => {
+      const base = (c.tenant_server_id && serverBase[c.tenant_server_id]) || '';
+      if (!base) return { client: c, channels: [] as Record<string, unknown>[], error: 'servidor sem baseUrl' };
+      const url = `${base}/v2/api/external/${encodeURIComponent(c.tenant_api_id!)}/listChannels`;
+      try {
+        const r = await fetchJson(url, { Accept: 'application/json', Authorization: `Bearer ${c.tenant_api_token}` });
+        if (!r.ok) return { client: c, channels: [], error: `NX ${r.status}` };
+        const data = (r.body as { data?: unknown })?.data;
+        return { client: c, channels: Array.isArray(data) ? (data as Record<string, unknown>[]) : [], error: null };
+      } catch (err) {
+        return { client: c, channels: [], error: String(err).slice(0, 120) };
+      }
+    }),
+    (async () => {
+      const list: { server: string; token: string; name: string; number: string | null; status: ChannelStatus }[] = [];
+      if (uazapiServers.length === 0) return list;
+      await mapPool(uazapiServers, 6, async (sv) => {
+        const base = (sv.url ?? '').replace(/\/$/, '');
+        try {
+          const r = await fetchJson(`${base}/instance/all`, { Accept: 'application/json', admintoken: sv.token ?? '' });
+          if (!r.ok) {
+            providerErrors.push(`UAZAPI ${base}: HTTP ${r.status}`);
+            return;
+          }
+          const arr = asInstanceArray(r.body);
+          for (const inst of arr) {
+            const token = (inst.token as string) || '';
+            if (!token) continue;
+            list.push({
+              server: base,
+              token,
+              name: pickStr(inst, 'name', 'profileName', 'instanceName') ?? token,
+              number: pickStr(inst, 'number', 'phone', 'owner', 'wid'),
+              status: normStatus(inst.status ?? inst.state),
+            });
+          }
+        } catch (err) {
+          providerErrors.push(`UAZAPI ${base}: ${String(err).slice(0, 80)}`);
+        }
+      });
+      return list;
+    })(),
+    (async () => {
+      const list: { name: string; number: string | null; status: ChannelStatus }[] = [];
+      if (!evoOn) return list;
+      try {
+        const r = await fetchJson(`${evoBase}/instance/fetchInstances`, { Accept: 'application/json', apikey: evoKey });
+        if (!r.ok) {
+          providerErrors.push(`Evolution: HTTP ${r.status}`);
+        } else {
+          for (const raw of asInstanceArray(r.body)) {
+            const inner = (raw.instance && typeof raw.instance === 'object' ? raw.instance : raw) as Record<string, unknown>;
+            const name = pickStr(inner, 'instanceName', 'name');
+            if (!name) continue;
+            list.push({
+              name,
+              number: pickStr(inner, 'number', 'owner', 'ownerJid')?.split('@')[0] ?? null,
+              status: normStatus(inner.connectionStatus ?? inner.state ?? inner.status),
+            });
+          }
+        }
+      } catch (err) {
+        providerErrors.push(`Evolution: ${String(err).slice(0, 80)}`);
+      }
+      return list;
+    })(),
+  ]);
 
   const channels: ReconciledChannel[] = [];
   // Identidades já representadas por canais da NX (p/ detectar avulsos).
@@ -248,58 +305,6 @@ export async function reconcileChannels(): Promise<{
         divergent: false,
         effective_status: nxStatus,
       });
-    }
-  }
-
-  // 2) Instâncias dos provedores (todas) — p/ status real e p/ achar avulsos.
-  const uazapiInstances: { server: string; token: string; name: string; number: string | null; status: ChannelStatus }[] = [];
-  if (uazapiServers.length > 0) {
-    await mapPool(uazapiServers, 4, async (sv) => {
-      const base = (sv.url ?? '').replace(/\/$/, '');
-      try {
-        const r = await fetchJson(`${base}/instance/all`, { Accept: 'application/json', admintoken: sv.token ?? '' });
-        if (!r.ok) {
-          providerErrors.push(`UAZAPI ${base}: HTTP ${r.status}`);
-          return;
-        }
-        const arr = asInstanceArray(r.body);
-        for (const inst of arr) {
-          const token = (inst.token as string) || '';
-          if (!token) continue;
-          uazapiInstances.push({
-            server: base,
-            token,
-            name: pickStr(inst, 'name', 'profileName', 'instanceName') ?? token,
-            number: pickStr(inst, 'number', 'phone', 'owner', 'wid'),
-            status: normStatus(inst.status ?? inst.state),
-          });
-        }
-      } catch (err) {
-        providerErrors.push(`UAZAPI ${base}: ${String(err).slice(0, 80)}`);
-      }
-    });
-  }
-
-  const evoInstances: { name: string; number: string | null; status: ChannelStatus }[] = [];
-  if (evoOn) {
-    try {
-      const r = await fetchJson(`${evoBase}/instance/fetchInstances`, { Accept: 'application/json', apikey: evoKey });
-      if (!r.ok) {
-        providerErrors.push(`Evolution: HTTP ${r.status}`);
-      } else {
-        for (const raw of asInstanceArray(r.body)) {
-          const inner = (raw.instance && typeof raw.instance === 'object' ? raw.instance : raw) as Record<string, unknown>;
-          const name = pickStr(inner, 'instanceName', 'name');
-          if (!name) continue;
-          evoInstances.push({
-            name,
-            number: pickStr(inner, 'number', 'owner', 'ownerJid')?.split('@')[0] ?? null,
-            status: normStatus(inner.connectionStatus ?? inner.state ?? inner.status),
-          });
-        }
-      }
-    } catch (err) {
-      providerErrors.push(`Evolution: ${String(err).slice(0, 80)}`);
     }
   }
 

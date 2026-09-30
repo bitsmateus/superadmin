@@ -68,7 +68,17 @@ async function dispatchOnce(days: number, templateName: string, limit: number, d
   console.log(`[pulse-dispatch] ${enviados}/${eligible.length} pulso(s) disparado(s) via template "${templateName}"`);
 }
 
+// DESLIGADO — a pedido, o disparo automático de pulso (e qualquer mensagem que ele tentasse mandar)
+// fica fora do ar até alguém tirar esse `return` manualmente no código e revisar de novo. Não
+// depende mais de PULSE_DISPATCH no ambiente: mesmo que essa env esteja "on" em algum lugar, o job
+// nem entra na fila do setInterval.
+const HARD_DISABLED = true;
+
 export function startPulseDispatch(): void {
+  if (HARD_DISABLED) {
+    console.log('[pulse-dispatch] desativado no código (HARD_DISABLED) — não manda nada, não entra na fila de jobs');
+    return;
+  }
   // Desligado até o template ser aprovado na Meta — ligar com PULSE_DISPATCH=on no ambiente
   // (opcionalmente PULSE_TEMPLATE_NAME se o nome final do template aprovado for diferente de
   // "pulso_satisfacao", e PULSE_DISPATCH_DAYS pra mudar a frequência de 30 dias).

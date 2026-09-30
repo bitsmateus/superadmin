@@ -41,3 +41,23 @@ export function parseCsv(text: string): string[][] {
 
   return rows.filter((r) => r.some((c) => c.trim() !== ''))
 }
+
+function csvEscape(v: string | number): string {
+  const s = String(v)
+  if (/[";\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
+}
+
+/** Baixa um CSV com ";" (compatível com Excel pt-BR) e BOM (acentos corretos). */
+export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const lines = [headers, ...rows].map((row) => row.map(csvEscape).join(';'))
+  const blob = new Blob(['﻿', lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}

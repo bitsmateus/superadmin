@@ -97,6 +97,10 @@ export async function pulseRoutes(app: FastifyInstance) {
   // Devolve a lista pro n8n de fato mandar a mensagem no WhatsApp de cada um. Aceita o JWT do painel
   // (uso manual, ex.: um admin disparando na hora) OU o PULSES_WEBHOOK_TOKEN (n8n, automação
   // recorrente) — o token fixo é checado primeiro pra não gastar uma consulta ao banco à toa.
+  //
+  // DESLIGADO a pedido: devolve sempre vazio, sem consultar nada, então nenhum cliente novo entra
+  // na fila e o n8n não tem quem mandar mensagem — junto com pulseDispatch.ts desativado, isso tira
+  // do ar qualquer envio automático de pulso. Pra religar, tirar o `if (PULSES_DISABLED)` abaixo.
   app.post<{ Body: { days?: number; question?: string } }>(
     '/api/pulses/queue',
     {
@@ -106,6 +110,9 @@ export async function pulseRoutes(app: FastifyInstance) {
       },
     },
     async (req) => {
+      const PULSES_DISABLED = true;
+      if (PULSES_DISABLED) return { queued: 0, items: [], disabled: true };
+
       const days = Math.min(365, Math.max(1, Number(req.body?.days) || 30));
       const template = (req.body?.question ?? '').trim() || DEFAULT_QUESTION;
 

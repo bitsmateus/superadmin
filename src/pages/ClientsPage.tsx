@@ -7,6 +7,7 @@ import {
   Building2,
   CreditCard,
   Download,
+  FileSpreadsheet,
   Mail,
   Phone,
   PlusCircle,
@@ -35,6 +36,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { db } from '@/services/db'
 import { canSeeFinancials, canDeleteClient } from '@/services/supabase'
 import { matchTenantsToClients } from '@/services/tenantImport'
+import { downloadCsv } from '@/lib/csv'
 import { asText, initials, normalizeText } from '@/lib/utils'
 import { daysSince, timeAgo } from '@/lib/time'
 import type { PipelineStage } from '@/types/client'
@@ -113,6 +115,16 @@ export function ClientsPage() {
     })
   }, [clients, search, stageFilter])
 
+  const onExportExcel = () => {
+    if (filtered.length === 0) {
+      toast.error('Nenhum cliente para exportar')
+      return
+    }
+    const rows = filtered.map((c) => [asText(c.name), asText(c.phone)])
+    downloadCsv(`clientes_${new Date().toISOString().slice(0, 10)}.csv`, ['nome', 'telefone'], rows)
+    toast.success(`${filtered.length} cliente(s) exportado(s)`)
+  }
+
   const stageCounts = React.useMemo(() => {
     const counts: Record<string, number> = { all: clients.length }
     for (const c of clients)
@@ -151,6 +163,13 @@ export function ClientsPage() {
         subtitle={`${clients.length} cliente(s) no CRM`}
         rightSlot={
           <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+            <Button
+              variant="secondary"
+              onClick={onExportExcel}
+              leftIcon={<FileSpreadsheet className="h-4 w-4" />}
+            >
+              Exportar Excel
+            </Button>
             <Button
               variant="secondary"
               onClick={() => setImportOpen(true)}

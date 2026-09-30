@@ -68,6 +68,8 @@ interface SdrMetrics {
   total: number
   agendados: number
   noShow: number
+  /** Reuniões que comprovadamente aconteceram (o lead seguiu pra proposta/follow-up/venda). */
+  compareceu: number
   vendas: number
   pctAgendamento: number
   pctComparecimento: number
@@ -176,7 +178,7 @@ function SdrCard({ metrics, boards, onOpenLead }: { metrics: SdrMetrics; boards:
       </div>
       <div className="grid grid-cols-3 gap-2">
         <RingStat icon={<Calendar className="h-3 w-3" />} label="Agendada" color="#4F8EF7" of={m.total} ratio={m.pctAgendamento} matches={m.agendadosRows} boards={boards} onOpenLead={onOpenLead} />
-        <RingStat icon={<UserCheck className="h-3 w-3" />} label="Comparecimento" color="#06B6D4" of={m.agendados} ratio={m.pctComparecimento} matches={m.compareceuRows} boards={boards} onOpenLead={onOpenLead} />
+        <RingStat icon={<UserCheck className="h-3 w-3" />} label="Comparecimento" color="#06B6D4" of={m.compareceu + m.noShow} ratio={m.pctComparecimento} matches={m.compareceuRows} boards={boards} onOpenLead={onOpenLead} />
         <RingStat icon={<ShoppingBag className="h-3 w-3" />} label="Venda" color="#22C55E" of={m.agendados} ratio={m.pctAgendamentoVenda} matches={m.vendasRows} boards={boards} onOpenLead={onOpenLead} />
       </div>
     </div>
@@ -248,7 +250,9 @@ export function SdrMetricsGrid({ rows, boards, onOpenLead, title }: { rows: Lead
   const milestones = useLeadMilestones()
   const sdrLabels = useLeadLabels('sdr')
   const milestoneById = React.useMemo(
-    () => new Map(milestones.map((m) => [m.id, { milestone: m.milestone, everAgendada: m.everAgendada }])),
+    () => new Map(milestones.map((m) => [
+      m.id, { milestone: m.milestone, everAgendada: m.everAgendada, everCompareceu: m.everCompareceu },
+    ])),
     [milestones],
   )
   // Nasce com o mês atual e o anterior já como pills (além de "Personalizado") — os dois recortes
@@ -257,7 +261,10 @@ export function SdrMetricsGrid({ rows, boards, onOpenLead, title }: { rows: Lead
 
   const bySdr = React.useMemo<SdrMetrics[]>(() => {
     const bounds = monthFilter.bounds
-    const buckets = new Map<string, { totalRows: LeadRow[]; agendadosRows: LeadRow[]; noShowRows: LeadRow[]; vendasRows: LeadRow[] }>()
+    const buckets = new Map<string, {
+      totalRows: LeadRow[]; agendadosRows: LeadRow[]; noShowRows: LeadRow[]
+      compareceuRows: LeadRow[]; vendasRows: LeadRow[]
+    }>()
     for (const r of rows) {
       // O período filtra a LEVA de leads (quem nasceu nesse mês) — não cada marco individualmente.
       // Uma vez que o lead entrou na leva do mês, ele carrega o funil inteiro dali: se agendou, fica
@@ -265,29 +272,34 @@ export function SdrMetricsGrid({ rows, boards, onOpenLead, title }: { rows: Lead
       // status — mudar a etiqueta não tira ele da contagem de quem já agendou.
       if (!withinBounds(r.createdAt, bounds)) continue
       const name = r.sdr || 'Sem SDR'
-      const b = buckets.get(name) ?? { totalRows: [], agendadosRows: [], noShowRows: [], vendasRows: [] }
+      const b = buckets.get(name) ?? { totalRows: [], agendadosRows: [], noShowRows: [], compareceuRows: [], vendasRows: [] }
       const info = milestoneById.get(r.id)
       b.totalRows.push(r)
       if (info?.everAgendada) b.agendadosRows.push(r)
+      if (info?.everCompareceu) b.compareceuRows.push(r)
       if (info?.milestone === MILESTONE_NO_SHOW) b.noShowRows.push(r)
       else if (info?.milestone === MILESTONE_VENDIDO) b.vendasRows.push(r)
       buckets.set(name, b)
     }
     return Array.from(buckets.entries())
       .map(([name, b]) => {
-        const noShowIds = new Set(b.noShowRows.map((r) => r.id))
-        // Comparecimento = quem agendou e NÃO ficou marcado como no-show (inclusive quem já
-        // seguiu pra proposta/follow-up/venda) — taxa de show, não de no-show.
-        const compareceuRows = b.agendadosRows.filter((r) => !noShowIds.has(r.id))
+        // Comparecimento é medido pela PROVA de que a reunião aconteceu (o lead seguiu pra
+        // proposta/follow-up/venda), e a taxa sai sobre as reuniões que já tiveram desfecho —
+        // compareceu + não compareceu. Quem ainda está só "Reunião agendada" fica de fora da
+        // conta: a reunião pode estar marcada pra frente, e contar como falta punia o SDR por
+        // uma reunião que nem chegou a acontecer.
+        const compareceuRows = b.compareceuRows
+        const comDesfecho = compareceuRows.length + b.noShowRows.length
         return {
           sdr: name,
           color: sdrLabels.find((l) => l.name === name)?.color ?? '#9CA3AF',
           total: b.totalRows.length,
           agendados: b.agendadosRows.length,
           noShow: b.noShowRows.length,
+          compareceu: compareceuRows.length,
           vendas: b.vendasRows.length,
           pctAgendamento: b.totalRows.length > 0 ? b.agendadosRows.length / b.totalRows.length : 0,
-          pctComparecimento: b.agendadosRows.length > 0 ? compareceuRows.length / b.agendadosRows.length : 0,
+          pctComparecimento: comDesfecho > 0 ? compareceuRows.length / comDesfecho : 0,
           pctAgendamentoVenda: b.agendadosRows.length > 0 ? b.vendasRows.length / b.agendadosRows.length : (b.vendasRows.length > 0 ? 1 : 0),
           totalRows: b.totalRows,
           agendadosRows: b.agendadosRows,

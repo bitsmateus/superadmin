@@ -196,7 +196,10 @@ export function PainelMensalPage() {
       return !!markedDate && markedDate <= untilIso
     })
     const noShowAteHoje = agendadosAteHoje.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_NO_SHOW)
-    const comparecimentos = agendadosAteHoje.length - noShowAteHoje.length
+    // Comparecimento pela PROVA de que a reunião aconteceu (seguiu pra proposta/follow-up/venda),
+    // e não por "agendou e não deu no-show" — que contava como presente quem ainda tem a reunião
+    // marcada pra frente. Mesma régua do Dashboard Comercial.
+    const comparecimentos = agendadosAteHoje.filter((r) => milestoneById.get(r.id)?.everCompareceu).length
     const vendasFechadas = monthCohort.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_VENDIDO)
 
     const vendasRows = vendasBoard

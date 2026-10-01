@@ -33,19 +33,45 @@ export async function relatorioComercialRoutes(app: FastifyInstance) {
       'SELECT relatorio_token FROM settings WHERE id = true'
     );
     // Token comprido de versão anterior (UUID) vira curto na primeira visita — o endereço com
-    // 36 caracteres não cabia na barra do navegador nem numa mensagem.
-    if (atual?.relatorio_token && atual.relatorio_token.length <= 12) return { token: atual.relatorio_token };
+    // 36 caracteres não cabia na barra do navegador nem numa mensagem. Nome escolhido à mão
+    // (sempre com letra) fica como está, por maior que seja.
+    const guardado = atual?.relatorio_token;
+    const ehUuidAntigo = !!guardado && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(guardado);
+    if (guardado && !ehUuidAntigo) return { token: guardado };
     const token = tokenCurto();
     await query('UPDATE settings SET relatorio_token = $1 WHERE id = true', [token]);
     return { token };
   });
 
-  /** Gera um token novo e invalida o anterior. */
-  app.post('/api/relatorio-comercial/link', { onRequest: [app.authenticate] }, async () => {
-    const token = tokenCurto();
-    await query('UPDATE settings SET relatorio_token = $1 WHERE id = true', [token]);
-    return { token };
-  });
+  /**
+   * Troca o endereço. Sem `nome`, sorteia um código; com `nome`, usa o que a pessoa escolheu
+   * (ex.: "internomes" -> /relatorio/internomes), que é mais fácil de ditar e de reconhecer numa
+   * conversa. Nos dois casos o anterior para de funcionar na hora.
+   *
+   * Nome escolhido é, por natureza, adivinhável — quem souber o padrão chega no relatório. Vale a
+   * troca enquanto o que sai dali é número agregado do mês; se um dia o link mostrar dado de
+   * cliente, volta a fazer sentido exigir código sorteado.
+   */
+  app.post<{ Body: { nome?: string } }>(
+    '/api/relatorio-comercial/link',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const pedido = (req.body?.nome ?? '').trim().toLowerCase();
+      let token: string;
+      if (pedido) {
+        // Só o que sobrevive numa URL sem confundir ninguém: letras, números e hífen.
+        const limpo = pedido.replace(/[^a-z0-9-]/g, '');
+        if (limpo.length < 4 || limpo.length > 40) {
+          return reply.status(400).send({ message: 'Use de 4 a 40 letras, números ou hífen.' });
+        }
+        token = limpo;
+      } else {
+        token = tokenCurto();
+      }
+      await query('UPDATE settings SET relatorio_token = $1 WHERE id = true', [token]);
+      return { token };
+    }
+  );
 
   // ---------------- público (sem login) ----------------
 

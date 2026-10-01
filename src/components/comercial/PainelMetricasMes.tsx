@@ -377,18 +377,41 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
 function BotaoLinkPublico({ monthId }: { monthId: string }) {
   const [ocupado, setOcupado] = React.useState(false)
 
-  const pegarLink = async (novo: boolean) => {
+  const copiar = async (token: string, aviso: string) => {
+    // Endereço legível e sem o mês na ponta: quem abre cai no mês mais recente e troca no seletor.
+    await navigator.clipboard.writeText(`${window.location.origin}/relatorio/${token}`)
+    toast.success(aviso)
+  }
+
+  const pegarLink = async () => {
     setOcupado(true)
     try {
-      const { token } = novo
-        ? await api.post<{ token: string }>('/api/relatorio-comercial/link')
-        : await api.get<{ token: string }>('/api/relatorio-comercial/link')
-      // Endereço curto e sem o mês na ponta: quem abre cai no mês mais recente e troca no seletor.
-      const url = `${window.location.origin}/r/${token}`
-      await navigator.clipboard.writeText(url)
-      toast.success(novo ? 'Link novo gerado e copiado — o anterior parou de funcionar' : 'Link do relatório copiado')
+      const { token } = await api.get<{ token: string }>('/api/relatorio-comercial/link')
+      await copiar(token, 'Link do relatório copiado')
     } catch (err) {
-      toast.error('Falha ao gerar o link: ' + (err as Error).message)
+      toast.error('Falha ao pegar o link: ' + (err as Error).message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  /** Escolher o nome do endereço (ex.: "internomes" -> /relatorio/internomes). */
+  const trocarNome = async () => {
+    const atual = await api.get<{ token: string }>('/api/relatorio-comercial/link').catch(() => ({ token: '' }))
+    const escolhido = window.prompt(
+      `Nome do endereço do relatório (letras, números e hífen).
+
+Vai ficar assim: ${window.location.origin}/relatorio/SEU-NOME
+O endereço anterior para de funcionar na hora.`,
+      atual.token,
+    )
+    if (escolhido === null) return
+    setOcupado(true)
+    try {
+      const { token } = await api.post<{ token: string }>('/api/relatorio-comercial/link', { nome: escolhido.trim() })
+      await copiar(token, `Endereço novo: /relatorio/${token} — copiado. O anterior parou de funcionar.`)
+    } catch (err) {
+      toast.error('Não deu pra usar esse nome: ' + (err as Error).message)
     } finally {
       setOcupado(false)
     }
@@ -399,7 +422,7 @@ function BotaoLinkPublico({ monthId }: { monthId: string }) {
       <button
         type="button"
         disabled={ocupado}
-        onClick={() => void pegarLink(false)}
+        onClick={() => void pegarLink()}
         title="Copia o link público (somente leitura) deste relatório"
         className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-foreground/60 hover:bg-elevate/[0.06] hover:text-foreground"
       >
@@ -409,14 +432,11 @@ function BotaoLinkPublico({ monthId }: { monthId: string }) {
       <button
         type="button"
         disabled={ocupado}
-        onClick={() => {
-          if (!window.confirm('Gerar um link novo? Os links já compartilhados param de funcionar.')) return
-          void pegarLink(true)
-        }}
-        title="Gera um link novo e invalida os anteriores"
+        onClick={() => void trocarNome()}
+        title="Escolher o nome do endereço (o anterior para de funcionar)"
         className="border-l border-line px-2 py-1 text-[11px] text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
       >
-        novo
+        nome
       </button>
     </span>
   )

@@ -46,8 +46,8 @@ export function GraficoRosca({ fatias, total, rotuloTotal, vazio = 'Sem dados no
   let acumulado = 0
 
   return (
-    <div className="flex flex-wrap items-center gap-5">
-      <svg viewBox="0 0 140 140" className="h-[140px] w-[140px] shrink-0" role="img">
+    <div className="flex flex-wrap items-center justify-center gap-4 sm:justify-start sm:gap-5">
+      <svg viewBox="0 0 140 140" className="aspect-square w-[120px] shrink-0 sm:w-[140px]" role="img">
         <circle cx="70" cy="70" r={raio} fill="none" stroke="currentColor" strokeWidth="16" className="text-elevate/[0.06]" />
         {comValor.map((f) => {
           const fracao = f.valor / soma
@@ -80,7 +80,7 @@ export function GraficoRosca({ fatias, total, rotuloTotal, vazio = 'Sem dados no
         )}
       </svg>
 
-      <ul className="min-w-[150px] flex-1 space-y-1.5">
+      <ul className="w-full flex-1 space-y-1.5 sm:w-auto sm:min-w-[150px]">
         {fatias.map((f) => (
           <li key={f.nome} className="flex items-center gap-2 text-xs">
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: f.cor }} />
@@ -135,7 +135,7 @@ export function GraficoMeta({ titulo, realizado, meta, rotuloRealizado, rotuloMe
     <div className="group rounded-2xl bg-elevate/[0.03] p-3 text-center ring-1 ring-line/60 transition-colors hover:bg-elevate/[0.05]">
       <p className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/45">{titulo}</p>
 
-      <div className="relative mx-auto mt-2 h-[124px] w-[124px]">
+      <div className="relative mx-auto mt-2 aspect-square w-full max-w-[124px]">
         <svg viewBox="0 0 128 128" className="h-full w-full overflow-visible" role="img">
           <g transform="rotate(135 64 64)">
             <circle

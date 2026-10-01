@@ -45,6 +45,16 @@ const soNumero = (c: number) => Math.round(c / 100).toLocaleString('pt-BR')
 const compacto = (c: number) => `R$ ${Math.round(c / 100).toLocaleString('pt-BR')}`
 const pct = (r: number) => `${(r * 100).toFixed(1)}%`
 
+const MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+]
+/** '2026-09' -> 'Setembro/2026' — no seletor, o id cru não diz nada pra quem recebe o link. */
+const rotuloMes = (id: string) => {
+  const [y, m] = id.split('-').map(Number)
+  return `${MESES[m - 1] ?? id}/${y}`
+}
+
 /**
  * Relatório comercial em link público — o mesmo painel do mês que a equipe vê, só pra ler.
  *
@@ -99,7 +109,7 @@ export function RelatorioPublicoPage() {
   const d = dados
 
   return (
-    <div className="min-h-screen bg-bg px-4 py-6 sm:px-6 lg:px-10">
+    <div className="min-h-screen overflow-x-hidden bg-bg px-3 py-4 sm:px-6 sm:py-6 lg:px-10">
       <div className="mx-auto max-w-6xl space-y-4">
         {/* cabeçalho */}
         <header className="flex flex-wrap items-center gap-3 rounded-2xl bg-card p-4 shadow-sm">
@@ -114,7 +124,7 @@ export function RelatorioPublicoPage() {
               onChange={(e) => setParams(e.target.value ? { mes: e.target.value } : {})}
               className="ml-auto rounded-lg border border-line bg-card px-3 py-2 text-sm text-foreground outline-none"
             >
-              {d.meses.map((m) => <option key={m} value={m}>{m}</option>)}
+              {d.meses.map((m) => <option key={m} value={m}>{rotuloMes(m)}</option>)}
             </select>
           )}
         </header>

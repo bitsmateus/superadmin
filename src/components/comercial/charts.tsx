@@ -115,52 +115,70 @@ export function GraficoMeta({ titulo, realizado, meta, rotuloRealizado, rotuloMe
   const fracao = meta > 0 ? Math.min(realizado / meta, 1) : 0
   const bateu = meta > 0 && realizado >= meta
   const porcento = meta > 0 ? Math.round((realizado / meta) * 100) : 0
-  const raio = 46
-  // Arco de 270° começando embaixo à esquerda.
+  const valor = String(rotuloRealizado ?? realizado)
+
+  // Arco de 270° (o vão embaixo é onde a leitura começa e termina). Traço fino e raio grande
+  // deixam o miolo livre pro número — era ele encostando no arco quando o valor crescia.
+  const raio = 52
+  const traco = 8
   const comprimento = (2 * Math.PI * raio * 270) / 360
+  // O número ocupa o quadrado inscrito no círculo interno; passando de ~8 caracteres ele precisa
+  // encolher pra não bater na curva. Medida por caractere mesmo — é previsível e não depende de
+  // medir o DOM depois de desenhar.
+  const tamanhoDoValor =
+    valor.length <= 4 ? 'text-[22px]'
+    : valor.length <= 7 ? 'text-[19px]'
+    : valor.length <= 10 ? 'text-[16px]'
+    : 'text-[14px]'
 
   return (
-    <div className="rounded-xl bg-elevate/[0.03] p-3 text-center">
-      <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-foreground/55">{titulo}</p>
-      <div className="relative mx-auto mt-1 h-[120px] w-[120px]">
-        <svg viewBox="0 0 120 120" className="h-full w-full" role="img">
-          <g transform="rotate(135 60 60)">
+    <div className="group rounded-2xl bg-elevate/[0.03] p-3 text-center ring-1 ring-line/60 transition-colors hover:bg-elevate/[0.05]">
+      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/45">{titulo}</p>
+
+      <div className="relative mx-auto mt-2 h-[124px] w-[124px]">
+        <svg viewBox="0 0 128 128" className="h-full w-full overflow-visible" role="img">
+          <g transform="rotate(135 64 64)">
             <circle
-              cx="60" cy="60" r={raio} fill="none" stroke="currentColor" strokeWidth="11" strokeLinecap="round"
-              strokeDasharray={`${comprimento} 999`} className="text-elevate/[0.08]"
+              cx="64" cy="64" r={raio} fill="none" stroke="currentColor" strokeWidth={traco} strokeLinecap="round"
+              strokeDasharray={`${comprimento} 999`} className="text-elevate/[0.07]"
             />
             {/* Com 0% o traço arredondado deixava um pingo de cor solto no começo do arco —
                 parecia sujeira na tela. Sem progresso, nenhum traço. */}
             {fracao > 0 && (
               <circle
-                cx="60" cy="60" r={raio} fill="none" stroke={cor} strokeWidth="11" strokeLinecap="round"
+                cx="64" cy="64" r={raio} fill="none" stroke={cor} strokeWidth={traco} strokeLinecap="round"
                 strokeDasharray={`${comprimento * fracao} 999`}
+                className="transition-[stroke-dasharray] duration-700 ease-out"
               />
             )}
           </g>
         </svg>
-        {/* O número vai em HTML, não em <text>: assim ele quebra linha e encolhe sozinho quando o
-            valor é grande (R$ 16.000,00 não cabe numa linha só de SVG). */}
-        <div className="absolute inset-0 grid place-items-center px-3">
-          <span className="text-center text-[19px] font-bold leading-tight tracking-tight text-foreground">
-            {rotuloRealizado ?? realizado}
+
+        {/* O número vai em HTML, não em <text>: assim ele encolhe sozinho quando o valor é grande
+            e nunca encosta na curva. */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 px-2">
+          <span className={cn('font-bold leading-none tracking-tight text-foreground', tamanhoDoValor)}>
+            {valor}
+          </span>
+          <span className={cn(
+            'text-[11px] font-semibold tabular-nums',
+            meta <= 0 ? 'text-foreground/25' : bateu ? 'text-success' : 'text-foreground/45',
+          )}>
+            {meta <= 0 ? '—' : `${porcento}%`}
           </span>
         </div>
       </div>
-      <p className="mt-0.5 text-[12px] font-medium text-foreground/60">
-        {meta > 0 ? `de ${rotuloMeta ?? meta}` : 'sem meta definida'}
+
+      <p className="mt-2 text-[12px] font-medium text-foreground/55">
+        {meta > 0 ? `meta ${rotuloMeta ?? meta}` : 'sem meta definida'}
       </p>
-      <p className={cn(
-        'mt-1 text-[15px] font-bold tabular-nums',
-        meta <= 0 ? 'text-foreground/30' : bateu ? 'text-success' : 'text-foreground',
-      )}>
-        {meta <= 0 ? '—' : bateu ? `${porcento}% ✓` : `${porcento}%`}
+      <p className={cn('text-[11px]', bateu ? 'font-medium text-success' : 'text-foreground/40')}>
+        {meta <= 0
+          ? 'defina no mês'
+          : bateu
+            ? 'meta batida'
+            : `faltam ${rotuloMeta ? faltamEmTexto(meta - realizado, rotuloMeta) : meta - realizado}`}
       </p>
-      {meta > 0 && !bateu && (
-        <p className="text-[11px] text-foreground/45">
-          faltam {rotuloMeta ? faltamEmTexto(meta - realizado, rotuloMeta) : meta - realizado}
-        </p>
-      )}
     </div>
   )
 }

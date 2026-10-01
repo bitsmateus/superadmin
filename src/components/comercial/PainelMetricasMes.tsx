@@ -29,6 +29,9 @@ function limitesDoMes(id: string): { from: string; to: string } {
 }
 
 const money = (cents: number) => formatBRLCents(Math.round(cents))
+/** Só o número, sem "R$" — dentro do arco da meta o símbolo rouba espaço do que importa, e a
+ * linha de baixo ("meta R$ 25.000") já diz que é dinheiro. */
+const soNumero = (cents: number) => Math.round(cents / 100).toLocaleString('pt-BR')
 const pct = (r: number) => `${(r * 100).toFixed(1)}%`
 
 /**
@@ -241,7 +244,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             titulo="Receita total"
             realizado={dados.entrouCents}
             meta={metaReceitaCents}
-            rotuloRealizado={formatBRLCompact(dados.entrouCents)}
+            rotuloRealizado={soNumero(dados.entrouCents)}
             rotuloMeta={formatBRLCompact(metaReceitaCents)}
             cor="var(--viz-2)"
           />
@@ -249,7 +252,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             titulo="MRR novo"
             realizado={dados.mrrCents}
             meta={parseBRLCents(month.metaMrr)}
-            rotuloRealizado={formatBRLCompact(dados.mrrCents)}
+            rotuloRealizado={soNumero(dados.mrrCents)}
             rotuloMeta={formatBRLCompact(parseBRLCents(month.metaMrr))}
             cor="var(--viz-1)"
           />
@@ -257,7 +260,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             titulo="Implementação"
             realizado={dados.implCents}
             meta={parseBRLCents(month.metaImpl)}
-            rotuloRealizado={formatBRLCompact(dados.implCents)}
+            rotuloRealizado={soNumero(dados.implCents)}
             rotuloMeta={formatBRLCompact(parseBRLCents(month.metaImpl))}
             cor="var(--viz-3)"
           />

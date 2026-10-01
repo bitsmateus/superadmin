@@ -34,6 +34,16 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
   // palavras dele, e nem toda anotação merece virar etiqueta fixa da aba.
   const aceitaTextoLivre = field === 'tipo'
   const [textoLivre, setTextoLivre] = React.useState('')
+  // Balão de leitura: o Tipo agora guarda frase inteira, e na célula ela sai cortada. Segurar o
+  // mouse em cima por um instante mostra o texto completo, maior, sem precisar abrir nada.
+  const [balao, setBalao] = React.useState<{ top: number; left: number; largura: number } | null>(null)
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const cancelarBalao = React.useCallback(() => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+    setBalao(null)
+  }, [])
+  React.useEffect(() => cancelarBalao, [cancelarBalao])
   const [manageOpen, setManageOpen] = React.useState(false)
   const [coords, setCoords] = React.useState<{ top?: number; bottom?: number; left: number } | null>(null)
   const btnRef = React.useRef<HTMLButtonElement>(null)
@@ -68,6 +78,19 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
         ref={btnRef}
         type="button"
         onClick={openPicker}
+        onMouseEnter={() => {
+          if (!aceitaTextoLivre || !value || open) return
+          timerRef.current = setTimeout(() => {
+            const r = btnRef.current?.getBoundingClientRect()
+            if (!r) return
+            // Nasce acima da célula; coladinho na borda esquerda dela, com largura mínima
+            // confortável pra frase não voltar a quebrar em pedacinhos.
+            const largura = Math.max(r.width, 240)
+            const left = Math.min(Math.max(r.left, 8), window.innerWidth - largura - 8)
+            setBalao({ top: r.top, left, largura })
+          }, 700)
+        }}
+        onMouseLeave={cancelarBalao}
         title={!value && required ? 'Obrigatório' : undefined}
         className={cn(
           'flex h-full min-h-[34px] w-full items-center truncate px-2.5 py-1.5 text-sm font-medium',
@@ -83,6 +106,22 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
       >
         {value ? value : required ? 'Obrigatório' : 'Selecionar…'}
       </button>
+
+      {balao && !open && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: balao.top,
+            left: balao.left,
+            width: balao.largura,
+            transform: 'translateY(-100%)',
+          }}
+          className="pointer-events-none z-50 -mt-1 rounded-lg bg-card px-3 py-2 text-sm leading-snug text-foreground shadow-xl ring-1 ring-line"
+        >
+          {value}
+        </div>,
+        document.body,
+      )}
 
       {open && coords && createPortal(
         <div

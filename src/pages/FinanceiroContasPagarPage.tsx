@@ -182,7 +182,12 @@ export function FinanceiroContasPagarPage() {
         {tab === 'comissoes' && <ComissoesTab entries={commissionsInMonth} monthHint={monthHint} />}
       </div>
       <NewGroupModal open={newGroupOpen} onClose={() => setNewGroupOpen(false)} defaultMonth={defaultMonth} />
-      <FixedCatalogModal open={catalogOpen} onClose={() => setCatalogOpen(false)} />
+      <FixedCatalogModal
+        open={catalogOpen}
+        onClose={() => setCatalogOpen(false)}
+        groupIdsDoMes={groupsInMonth.map((g) => g.id)}
+        rotuloMes={monthLabelPt(filter.selected)}
+      />
     </>
   )
 }
@@ -1186,7 +1191,13 @@ function DuplicateGroupModal({
   )
 }
 
-function FixedCatalogModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function FixedCatalogModal({ open, onClose, groupIdsDoMes, rotuloMes }: {
+  open: boolean
+  onClose: () => void
+  /** Grupos do mês que está aberto — origem do botão "trazer os fixos deste mês pra cá". */
+  groupIdsDoMes: string[]
+  rotuloMes: string
+}) {
   const catalog = usePayableCatalog()
   const [newNome, setNewNome] = React.useState('')
   const [newValor, setNewValor] = React.useState('')
@@ -1209,6 +1220,24 @@ function FixedCatalogModal({ open, onClose }: { open: boolean; onClose: () => vo
           precisar duplicar manualmente. Editar aqui só vale pra meses futuros: os meses já criados continuam
           independentes, edite ou apague neles à vontade.
         </p>
+
+        {groupIdsDoMes.length > 0 && (
+          <button
+            type="button"
+            onClick={async () => {
+              const quantos = await payablesService.salvarFixosNoCatalogo(groupIdsDoMes)
+              toast.success(
+                quantos
+                  ? `${quantos} item(ns) de ${rotuloMes} registrado(s) aqui`
+                  : `Tudo que está como Fixo em ${rotuloMes} já está nesta lista`,
+              )
+            }}
+            className="flex w-full items-center gap-2 rounded-xl bg-accent/5 px-3 py-2 text-left text-xs text-accent ring-1 ring-accent/20 hover:bg-accent/10"
+          >
+            <Repeat className="h-3.5 w-3.5 shrink-0" />
+            Registrar aqui tudo que está como Fixo em {rotuloMes}
+          </button>
+        )}
         <div className="divide-y divide-line rounded-xl border border-line">
           {sorted.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-foreground/40">Nenhum item padrão ainda — adicione um abaixo.</p>

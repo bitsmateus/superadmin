@@ -244,6 +244,44 @@ export const payablesService = {
     }
   },
 
+  /**
+   * O contrário de aplicarFixosNoMes: pega o que está marcado como Fixo no mês e registra no
+   * catálogo o que ainda não está lá.
+   *
+   * Na prática o mês é onde a conta nasce — alguém lança "Hetzner" em outubro e só depois percebe
+   * que aquilo se repete todo mês. Sem isso, teria que digitar tudo de novo no catálogo; aqui é um
+   * clique, e o que já existe não é duplicado nem tem o valor sobrescrito.
+   */
+  async salvarFixosNoCatalogo(groupIds: string[]): Promise<number> {
+    const normaliza = (t: string) =>
+      t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+    const jaNoCatalogo = new Set(catalog.map((c) => normaliza(c.nome)))
+    const candidatos = entries
+      .filter((e) => groupIds.includes(e.groupId) && e.categoria === 'fixo' && e.elemento.trim())
+      .filter((e) => !jaNoCatalogo.has(normaliza(e.elemento)))
+      .sort((a, b) => a.position - b.position)
+
+    const novos: typeof candidatos = []
+    for (const e of candidatos) {
+      // Dois itens de mesmo nome no mesmo mês entram uma vez só.
+      if (jaNoCatalogo.has(normaliza(e.elemento))) continue
+      jaNoCatalogo.add(normaliza(e.elemento))
+      novos.push(e)
+    }
+    if (!novos.length) return 0
+
+    try {
+      for (const e of novos) {
+        await api.post('/api/payables-fixed-catalog', { nome: e.elemento.trim(), valorCents: e.previstoCents })
+      }
+      await reload()
+      return novos.length
+    } catch (err) {
+      toast.error('Falha ao salvar no catálogo: ' + (err as Error).message)
+      return 0
+    }
+  },
+
   async updateEntry(id: string, patch: {
     groupId?: string; elemento?: string; descricao?: string; categoria?: PayableCategoria | null
     previstoCents?: number; comissaoCents?: number | null

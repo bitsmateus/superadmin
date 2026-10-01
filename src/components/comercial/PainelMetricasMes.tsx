@@ -10,7 +10,7 @@ import { useLeadMilestones } from '@/hooks/useLeadMilestones'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useCommercialMonths } from '@/hooks/useCommercialMonths'
 import { commercialMonthsService, type CommercialMonth } from '@/services/commercialMonths'
-import { formatBRLCents, parseBRLCents } from '@/lib/currency'
+import { formatBRLCents, formatBRLCompact, parseBRLCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
@@ -234,24 +234,24 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             titulo="Receita total"
             realizado={dados.entrouCents}
             meta={metaReceitaCents}
-            rotuloRealizado={money(dados.entrouCents)}
-            rotuloMeta={money(metaReceitaCents)}
+            rotuloRealizado={formatBRLCompact(dados.entrouCents)}
+            rotuloMeta={formatBRLCompact(metaReceitaCents)}
             cor="var(--viz-2)"
           />
           <GraficoMeta
             titulo="MRR novo"
             realizado={dados.mrrCents}
             meta={parseBRLCents(month.metaMrr)}
-            rotuloRealizado={money(dados.mrrCents)}
-            rotuloMeta={money(parseBRLCents(month.metaMrr))}
+            rotuloRealizado={formatBRLCompact(dados.mrrCents)}
+            rotuloMeta={formatBRLCompact(parseBRLCents(month.metaMrr))}
             cor="var(--viz-1)"
           />
           <GraficoMeta
             titulo="Implementação"
             realizado={dados.implCents}
             meta={parseBRLCents(month.metaImpl)}
-            rotuloRealizado={money(dados.implCents)}
-            rotuloMeta={money(parseBRLCents(month.metaImpl))}
+            rotuloRealizado={formatBRLCompact(dados.implCents)}
+            rotuloMeta={formatBRLCompact(parseBRLCents(month.metaImpl))}
             cor="var(--viz-3)"
           />
           <GraficoMeta titulo="Vendas" realizado={dados.vendas} meta={month.metaVendas} cor="var(--viz-2)" />

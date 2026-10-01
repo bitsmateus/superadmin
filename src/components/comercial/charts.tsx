@@ -114,40 +114,63 @@ export function GraficoMeta({ titulo, realizado, meta, rotuloRealizado, rotuloMe
 }) {
   const fracao = meta > 0 ? Math.min(realizado / meta, 1) : 0
   const bateu = meta > 0 && realizado >= meta
+  const porcento = meta > 0 ? Math.round((realizado / meta) * 100) : 0
   const raio = 46
   // Arco de 270° começando embaixo à esquerda.
   const comprimento = (2 * Math.PI * raio * 270) / 360
 
   return (
     <div className="rounded-xl bg-elevate/[0.03] p-3 text-center">
-      <p className="truncate text-[11px] font-medium uppercase tracking-wider text-foreground/45">{titulo}</p>
-      <svg viewBox="0 0 120 120" className="mx-auto mt-1 h-[108px] w-[108px]" role="img">
-        <g transform="rotate(135 60 60)">
-          <circle
-            cx="60" cy="60" r={raio} fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round"
-            strokeDasharray={`${comprimento} 999`} className="text-elevate/[0.08]"
-          />
-          <circle
-            cx="60" cy="60" r={raio} fill="none" stroke={cor} strokeWidth="10" strokeLinecap="round"
-            strokeDasharray={`${comprimento * fracao} 999`}
-          />
-        </g>
-        <text x="60" y="58" textAnchor="middle" className="fill-foreground text-[17px] font-semibold">
-          {rotuloRealizado ?? realizado}
-        </text>
-        <text x="60" y="74" textAnchor="middle" className="fill-foreground/40 text-[9px]">
-          {meta > 0 ? `meta ${rotuloMeta ?? meta}` : 'sem meta'}
-        </text>
-      </svg>
-      <p className={cn('text-[11px] font-medium', bateu ? 'text-success' : 'text-foreground/50')}>
-        {meta <= 0
-          ? 'defina a meta no mês'
-          : bateu
-            ? `meta batida (${Math.round((realizado / meta) * 100)}%)`
-            : `${Math.round(fracao * 100)}% da meta`}
+      <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-foreground/55">{titulo}</p>
+      <div className="relative mx-auto mt-1 h-[120px] w-[120px]">
+        <svg viewBox="0 0 120 120" className="h-full w-full" role="img">
+          <g transform="rotate(135 60 60)">
+            <circle
+              cx="60" cy="60" r={raio} fill="none" stroke="currentColor" strokeWidth="11" strokeLinecap="round"
+              strokeDasharray={`${comprimento} 999`} className="text-elevate/[0.08]"
+            />
+            {/* Com 0% o traço arredondado deixava um pingo de cor solto no começo do arco —
+                parecia sujeira na tela. Sem progresso, nenhum traço. */}
+            {fracao > 0 && (
+              <circle
+                cx="60" cy="60" r={raio} fill="none" stroke={cor} strokeWidth="11" strokeLinecap="round"
+                strokeDasharray={`${comprimento * fracao} 999`}
+              />
+            )}
+          </g>
+        </svg>
+        {/* O número vai em HTML, não em <text>: assim ele quebra linha e encolhe sozinho quando o
+            valor é grande (R$ 16.000,00 não cabe numa linha só de SVG). */}
+        <div className="absolute inset-0 grid place-items-center px-3">
+          <span className="text-center text-[19px] font-bold leading-tight tracking-tight text-foreground">
+            {rotuloRealizado ?? realizado}
+          </span>
+        </div>
+      </div>
+      <p className="mt-0.5 text-[12px] font-medium text-foreground/60">
+        {meta > 0 ? `de ${rotuloMeta ?? meta}` : 'sem meta definida'}
       </p>
+      <p className={cn(
+        'mt-1 text-[15px] font-bold tabular-nums',
+        meta <= 0 ? 'text-foreground/30' : bateu ? 'text-success' : 'text-foreground',
+      )}>
+        {meta <= 0 ? '—' : bateu ? `${porcento}% ✓` : `${porcento}%`}
+      </p>
+      {meta > 0 && !bateu && (
+        <p className="text-[11px] text-foreground/45">
+          faltam {rotuloMeta ? faltamEmTexto(meta - realizado, rotuloMeta) : meta - realizado}
+        </p>
+      )}
     </div>
   )
+}
+
+/** Formata o que falta no mesmo "sabor" do rótulo da meta (dinheiro ou contagem). */
+function faltamEmTexto(resto: number, rotuloMeta: string): string {
+  if (!rotuloMeta.includes('R$')) return String(Math.max(resto, 0))
+  // Mesma forma curta do rótulo da meta (sem centavos) — "faltam R$ 25.000" lê melhor que
+  // "faltam R$ 25.000,00" num espaço desse tamanho.
+  return `R$ ${Math.round(Math.max(resto, 0) / 100).toLocaleString('pt-BR')}`
 }
 
 /* ------------------------------------------------------------------ funil */

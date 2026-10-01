@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   AlertCircle,
@@ -39,6 +40,7 @@ import { api } from '@/services/api'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useAuth } from '@/hooks/useAuth'
 import { useLeadBoards, useLeadRow } from '@/hooks/useLeadBoards'
+import { useContracts } from '@/hooks/useContracts'
 import { useLeadNotes } from '@/hooks/useLeadNotes'
 import { useLeadEvents } from '@/hooks/useLeadEvents'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
@@ -55,14 +57,51 @@ import type { LeadEvent, LeadNoteAttachment } from '@/types/leadBoard'
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024
 
+/** Ids que representam a MESMA venda: a linha da aba Vendas e o lead de origem no CRM. */
+function leadRowsDaVenda(leadRowId: string): string[] {
+  return leadBoardsService.getRows().filter((r) => r.vendaOrigemId === leadRowId).map((r) => r.id)
+}
+
 export interface LeadDetailModalProps {
   leadRowId: string | null
   onClose: () => void
+  /** Mostra o botão "Ver contrato" no cabeçalho. Só a aba Vendas liga isso: é lá que contrato é
+   * assunto — no CRM o lead ainda nem chegou nessa etapa. */
+  mostrarContrato?: boolean
 }
 
 type FichaStatus = {
   status: 'preenchida' | 'pendente' | 'nao_atrelada' | 'erro'
   clientId: string | null
+}
+
+/**
+ * Verde = essa venda já tem contrato gerado (clique abre ele na aba Contrato). Vermelho = ainda
+ * não tem — o clique leva pra aba Contrato, onde ele é criado. Mesma lógica de cor da ficha, pra
+ * bater o olho e saber o que falta sem abrir nada.
+ */
+function VerContratoButton({ contratoId, assinado }: { contratoId: string | null; assinado: boolean }) {
+  const navigate = useNavigate()
+  const title = contratoId
+    ? assinado
+      ? 'Contrato gerado e assinado — clique pra abrir'
+      : 'Contrato gerado, ainda não assinado — clique pra abrir'
+    : 'Nenhum contrato gerado pra essa venda — clique pra ir até a aba Contrato'
+
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={() => navigate(contratoId ? `/financeiro/contrato?contrato=${contratoId}` : '/financeiro/contrato')}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors focus-ring',
+        contratoId ? 'bg-success/10 text-success hover:bg-success/20' : 'bg-danger/10 text-danger hover:bg-danger/20',
+      )}
+    >
+      <FileText className="h-3.5 w-3.5" />
+      Ver contrato
+    </button>
+  )
 }
 
 /** Verde = cliente ligado a essa lead já preencheu a ficha (clique abre o cadastro dele). Vermelho
@@ -113,7 +152,7 @@ function FichaCadastroButton({ ficha, onOpenClient }: { ficha: FichaStatus | nul
 
 /** Casca do modal: guarda o cadastro do cliente aberto pelo botão "Ficha de cadastro", que abre
  * por cima da lead (fora do portal dela, pra não herdar a animação/camada do modal). */
-export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
+export function LeadDetailModal({ leadRowId, onClose, mostrarContrato }: LeadDetailModalProps) {
   const [fichaClientId, setFichaClientId] = React.useState<string | null>(null)
   React.useEffect(() => { if (!leadRowId) setFichaClientId(null) }, [leadRowId])
 
@@ -124,6 +163,7 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
         onClose={onClose}
         onOpenFichaClient={setFichaClientId}
         fichaDrawerOpen={!!fichaClientId}
+        mostrarContrato={mostrarContrato}
       />
       <ClientDrawer clientId={fichaClientId} onClose={() => setFichaClientId(null)} />
     </>
@@ -131,11 +171,24 @@ export function LeadDetailModal({ leadRowId, onClose }: LeadDetailModalProps) {
 }
 
 function LeadDetailModalInner({
-  leadRowId, onClose, onOpenFichaClient, fichaDrawerOpen,
+  leadRowId, onClose, onOpenFichaClient, fichaDrawerOpen, mostrarContrato,
 }: LeadDetailModalProps & { onOpenFichaClient: (id: string) => void; fichaDrawerOpen: boolean }) {
   const row = useLeadRow(leadRowId)
   const boards = useLeadBoards()
   const board = boards.find((b) => b.id === row?.boardId)
+
+  // Contrato dessa venda. O vínculo (contracts.venda_lead_id) tanto pode apontar pra linha da aba
+  // Vendas quanto pro lead de origem no CRM — a modal pode ter sido aberta por qualquer um dos
+  // dois, então procura pelos dois lados.
+  const contratos = useContracts()
+  const contratoDaVenda = React.useMemo(() => {
+    if (!mostrarContrato || !row) return null
+    const ids = new Set([row.id, row.vendaOrigemId].filter(Boolean) as string[])
+    const copiaDaVenda = leadRowsDaVenda(row.id)
+    for (const id of copiaDaVenda) ids.add(id)
+    const achado = contratos.find((c) => c.vendaLeadId && ids.has(c.vendaLeadId))
+    return achado ? { id: achado.id, assinado: achado.status === 'assinado' } : null
+  }, [contratos, row, mostrarContrato])
 
   React.useEffect(() => {
     if (!leadRowId) return
@@ -184,6 +237,9 @@ function LeadDetailModalInner({
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <FichaCadastroButton ficha={ficha} onOpenClient={onOpenFichaClient} />
+            {mostrarContrato && (
+              <VerContratoButton contratoId={contratoDaVenda?.id ?? null} assinado={!!contratoDaVenda?.assinado} />
+            )}
             <a
               href="https://gruponxdigital.com/planos"
               target="_blank"

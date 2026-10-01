@@ -645,7 +645,7 @@ export function VendasView({ pageId }: { pageId: string }) {
         onClose={() => setTrashOpen(false)}
         boardId={board.id}
       />
-      <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
+      <LeadDetailModal mostrarContrato leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
       <ClientDrawer clientId={fichaClientId} onClose={() => setFichaClientId(null)} />
       <RegisterCommissionModal
         open={commissionRegisterOpen}

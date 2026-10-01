@@ -383,7 +383,8 @@ function BotaoLinkPublico({ monthId }: { monthId: string }) {
       const { token } = novo
         ? await api.post<{ token: string }>('/api/relatorio-comercial/link')
         : await api.get<{ token: string }>('/api/relatorio-comercial/link')
-      const url = `${window.location.origin}/relatorio/${token}?mes=${monthId}`
+      // Endereço curto e sem o mês na ponta: quem abre cai no mês mais recente e troca no seletor.
+      const url = `${window.location.origin}/r/${token}`
       await navigator.clipboard.writeText(url)
       toast.success(novo ? 'Link novo gerado e copiado — o anterior parou de funcionar' : 'Link do relatório copiado')
     } catch (err) {

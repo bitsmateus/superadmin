@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomInt } from 'crypto';
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { montarRelatorioDoMes, mesesDisponiveis } from '../lib/relatorioComercial.js';
@@ -14,6 +14,16 @@ import { montarRelatorioDoMes, mesesDisponiveis } from '../lib/relatorioComercia
  *
  * A rota pública devolve SÓ números agregados: nenhum nome de lead, telefone ou valor por cliente.
  */
+/** Alfabeto sem 0/O/1/l/I: o link é lido em voz alta e digitado à mão, e esses pares são a
+ * fonte clássica de "não abre aqui". 8 caracteres dão 35^8 combinações — adivinhar é inviável. */
+const ALFABETO = 'abcdefghijkmnpqrstuvwxyz23456789';
+
+function tokenCurto(): string {
+  let saida = '';
+  for (let i = 0; i < 8; i++) saida += ALFABETO[randomInt(ALFABETO.length)];
+  return saida;
+}
+
 export async function relatorioComercialRoutes(app: FastifyInstance) {
   // ---------------- interno (precisa de login) ----------------
 
@@ -22,15 +32,17 @@ export async function relatorioComercialRoutes(app: FastifyInstance) {
     const atual = await queryOne<{ relatorio_token: string | null }>(
       'SELECT relatorio_token FROM settings WHERE id = true'
     );
-    if (atual?.relatorio_token) return { token: atual.relatorio_token };
-    const token = randomUUID();
+    // Token comprido de versão anterior (UUID) vira curto na primeira visita — o endereço com
+    // 36 caracteres não cabia na barra do navegador nem numa mensagem.
+    if (atual?.relatorio_token && atual.relatorio_token.length <= 12) return { token: atual.relatorio_token };
+    const token = tokenCurto();
     await query('UPDATE settings SET relatorio_token = $1 WHERE id = true', [token]);
     return { token };
   });
 
   /** Gera um token novo e invalida o anterior. */
   app.post('/api/relatorio-comercial/link', { onRequest: [app.authenticate] }, async () => {
-    const token = randomUUID();
+    const token = tokenCurto();
     await query('UPDATE settings SET relatorio_token = $1 WHERE id = true', [token]);
     return { token };
   });

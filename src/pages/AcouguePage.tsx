@@ -61,37 +61,41 @@ const novoCorte = (): Corte => ({
   ativo: true,
 })
 
-// Lista de cortes bovinos + % de participação, calibrada com a pesagem real de um boi de 85 kg
-// desossado (custo R$34/kg) que o Mercado Nunes passou — cada % é peso do corte ÷ 85 kg. Entra só
-// a participação; índice/preço hoje a pessoa preenche (ou usa "Calcular índices pelos preços de
-// hoje" depois de lançar o preço praticado de cada um). "Paleta grossa" veio em duas pesagens
-// separadas na mensagem (0,600 kg + 5,312 kg) — somei as duas num corte só. A soma das % dá ~97,1%
-// (82,53 kg dos 85 kg) — os ~2,9 kg que faltam não foram discriminados por corte na pesagem (perda
-// de processo/itens não destacados); quem usar esse modelo pode ajustar à mão se quiser fechar 100%.
-const CORTES_BOVINOS_PADRAO: { nome: string; participacao: number }[] = [
-  { nome: 'Capa coxão mole bovino', participacao: 1.53 },
-  { nome: 'Coxão mole bovino', participacao: 4.76 },
-  { nome: 'Patinho bovino', participacao: 7.52 },
-  { nome: 'Filé mignon', participacao: 1.88 },
-  { nome: 'Músculo traseiro', participacao: 3.51 },
-  { nome: 'Lagartão bovino', participacao: 1.65 },
-  { nome: 'Costela bovina ripa', participacao: 17.07 },
-  { nome: 'Contrafilé bovino', participacao: 5.54 },
-  { nome: 'Lombo bovino', participacao: 4.45 },
-  { nome: 'Costilhar bovino', participacao: 0.91 },
-  { nome: 'Agulha bovina', participacao: 4.68 },
-  { nome: 'Acém bovino', participacao: 3.66 },
-  { nome: 'Paleta grossa', participacao: 6.96 },
-  { nome: 'Vazio bovino', participacao: 2.84 },
-  { nome: 'Picanha', participacao: 1.4 },
-  { nome: 'Tatu bovino', participacao: 2.08 },
-  { nome: 'Alcatra bovina', participacao: 3.69 },
-  { nome: 'Coxão fora bovino', participacao: 2.61 },
-  { nome: 'Maminha bovina', participacao: 1.18 },
-  { nome: 'Carne moída segunda', participacao: 5.04 },
-  { nome: 'Músculo dianteiro', participacao: 6.61 },
-  { nome: 'Granito bovino', participacao: 3.38 },
-  { nome: 'Sebo bovino', participacao: 4.15 },
+// Lista de cortes bovinos + % de participação + preço praticado hoje — vem direto da tela
+// "Simulação do Açougue" do sistema antigo (Max Work) do Mercado Nunes: 28 cortes, %Rat. soma
+// exatamente 100% (é o rateio de verdade que eles já usam, não uma estimativa de uma pesagem só).
+// "codigo" é o número de produto (coluna "Prod.") de lá — só referência, não entra em nenhuma conta
+// aqui. Como já veio com o preço praticado de cada corte, também preenche "Preço hoje" — falta só
+// abrir "Calcular índices pelos preços de hoje" pra terminar de configurar.
+const CORTES_BOVINOS_PADRAO: { nome: string; codigo: string; participacao: number; precoAtual: number }[] = [
+  { nome: 'Agulha bovina', codigo: '75', participacao: 6.00, precoAtual: 33.75 },
+  { nome: 'Alcatra bovina', codigo: '62', participacao: 4.00, precoAtual: 66.90 },
+  { nome: 'Capa coxão mole bovino', codigo: '148', participacao: 0.90, precoAtual: 43.25 },
+  { nome: 'Carne bovina recorte moída', codigo: '160', participacao: 2.50, precoAtual: 18.25 },
+  { nome: 'Charque bovino', codigo: '251', participacao: 0.10, precoAtual: 52.90 },
+  { nome: 'Contrafilé bovino', codigo: '67', participacao: 9.00, precoAtual: 67.95 },
+  { nome: 'Costela bovina minga', codigo: '110', participacao: 5.40, precoAtual: 21.75 },
+  { nome: 'Costela bovina ripa', codigo: '188', participacao: 6.32, precoAtual: 31.75 },
+  { nome: 'Costilhar bovino', codigo: '82', participacao: 0.77, precoAtual: 42.75 },
+  { nome: 'Coxão fora bovino', codigo: '69', participacao: 3.60, precoAtual: 47.95 },
+  { nome: 'Coxão mole bovino', codigo: '60', participacao: 5.85, precoAtual: 57.90 },
+  { nome: 'Filé mignon bovino', codigo: '65', participacao: 1.40, precoAtual: 99.90 },
+  { nome: 'Granito bovino', codigo: '83', participacao: 3.90, precoAtual: 43.75 },
+  { nome: 'Lombo bovino', codigo: '61', participacao: 5.00, precoAtual: 54.85 },
+  { nome: 'Maminha bovina', codigo: '68', participacao: 2.50, precoAtual: 69.75 },
+  { nome: 'Músculo dianteiro bovino moído', codigo: '71', participacao: 7.00, precoAtual: 24.45 },
+  { nome: 'Músculo traseiro bovino', codigo: '132', participacao: 3.50, precoAtual: 37.75 },
+  { nome: 'Paleta grossa bovina', codigo: '73', participacao: 6.80, precoAtual: 47.25 },
+  { nome: 'Patinho bovino', codigo: '145', participacao: 7.60, precoAtual: 53.75 },
+  { nome: 'Picanha bovina', codigo: '63', participacao: 1.24, precoAtual: 119.00 },
+  { nome: 'Tatu bovino', codigo: '70', participacao: 1.50, precoAtual: 47.90 },
+  { nome: 'Vazio bovino', codigo: '66', participacao: 2.00, precoAtual: 57.85 },
+  { nome: 'Retalho bovino', codigo: '338', participacao: 6.50, precoAtual: 1.95 },
+  { nome: 'Acém bovino', codigo: '74', participacao: 6.00, precoAtual: 44.95 },
+  { nome: 'Frescal bovino', codigo: '225', participacao: 0.40, precoAtual: 56.90 },
+  { nome: 'Entranha bovina', codigo: '375', participacao: 0.20, precoAtual: 59.95 },
+  { nome: 'Cordão de filé mignon bovino', codigo: '376', participacao: 0.01, precoAtual: 46.75 },
+  { nome: 'Costela bovina resfriada', codigo: '379', participacao: 0.01, precoAtual: 54.90 },
 ]
 
 export function AcouguePage() {
@@ -300,10 +304,11 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
   }
   const [sujo, setSujo] = React.useState(false)
 
-  /** Acrescenta os cortes bovinos padrão (com % de participação já calibrada) — quem ainda não
-   *  existe na base entra novo; quem já existe mas está com participação 0 (nunca foi preenchido)
-   *  ganha a % do modelo também. Corte que já tem uma participação diferente de 0 não é tocado —
-   *  não sobrescreve o que já foi ajustado à mão. Compara nome sem acento/maiúscula. */
+  /** Acrescenta os cortes bovinos padrão (nome + código + participação + preço de hoje, vindos da
+   *  planilha do sistema antigo) — quem ainda não existe na base entra novo; quem já existe mas
+   *  está com participação/código/preço vazio ganha o valor do modelo nesse campo específico. Campo
+   *  que já tem valor não é tocado — não sobrescreve o que foi ajustado à mão. Compara nome sem
+   *  acento/maiúscula. */
   const adicionarCortesPadrao = () => {
     if (!base) return
     const normaliza = (s: string) =>
@@ -314,28 +319,37 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     let atualizados = 0
     const cortesAtualizados = base.cortes.map((c) => {
       const modelo = CORTES_BOVINOS_PADRAO.find((m) => normaliza(m.nome) === normaliza(c.nome))
-      if (modelo && (c.participacao ?? 0) === 0) {
-        atualizados++
-        return { ...c, participacao: modelo.participacao }
-      }
-      return c
+      if (!modelo) return c
+      const ajustes: Partial<Corte> = {}
+      if ((c.participacao ?? 0) === 0) ajustes.participacao = modelo.participacao
+      if (!c.codigo?.trim()) ajustes.codigo = modelo.codigo
+      if ((c.precoAtual ?? 0) === 0) ajustes.precoAtual = modelo.precoAtual
+      if (Object.keys(ajustes).length === 0) return c
+      atualizados++
+      return { ...c, ...ajustes }
     })
     const paraAdicionar = CORTES_BOVINOS_PADRAO.filter((m) => !porNome.has(normaliza(m.nome)))
     novos = paraAdicionar.length
 
     if (novos === 0 && atualizados === 0) {
-      toast.message('Todos esses cortes já estão cadastrados e com participação preenchida')
+      toast.message('Todos esses cortes já estão cadastrados e preenchidos')
       return
     }
     patch({
       cortes: [
         ...cortesAtualizados,
-        ...paraAdicionar.map((m) => ({ ...novoCorte(), nome: m.nome, participacao: m.participacao })),
+        ...paraAdicionar.map((m) => ({
+          ...novoCorte(),
+          nome: m.nome,
+          codigo: m.codigo,
+          participacao: m.participacao,
+          precoAtual: m.precoAtual,
+        })),
       ],
     })
     const partes = [
       novos > 0 && `${novos} corte(s) adicionado(s)`,
-      atualizados > 0 && `${atualizados} com participação preenchida`,
+      atualizados > 0 && `${atualizados} atualizado(s)`,
     ].filter(Boolean)
     toast.success(partes.join(' · '))
   }
@@ -775,9 +789,9 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                     type="button"
                     onClick={adicionarCortesPadrao}
                     style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
-                    title="Acrescenta os cortes bovinos mais comuns, já com a % de participação calibrada no boi de 85kg"
+                    title="Acrescenta os 28 cortes do rateio oficial de vocês (código, % de participação e preço de hoje)"
                   >
-                    + Cortes padrão (bovino, com % calibrada)
+                    + Cortes padrão (rateio oficial)
                   </button>
                 </div>
               </Card>

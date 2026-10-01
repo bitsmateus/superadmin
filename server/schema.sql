@@ -1084,6 +1084,9 @@ CREATE TABLE IF NOT EXISTS commercial_months (
   -- Metas do mês (0 = sem meta definida, o gráfico some).
   meta_vendas INT NOT NULL DEFAULT 0,
   meta_mrr TEXT NOT NULL DEFAULT '0,00',
+  -- Meta de implementação (entrada). A meta GERAL de receita é a soma das duas — não tem campo
+  -- próprio de propósito: assim os três números nunca se contradizem.
+  meta_impl TEXT NOT NULL DEFAULT '0,00',
   meta_leads INT NOT NULL DEFAULT 0,
   meta_agendamentos INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

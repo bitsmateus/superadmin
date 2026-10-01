@@ -35,7 +35,8 @@ export async function commercialMonthRoutes(app: FastifyInstance) {
     Params: { id: string };
     Body: {
       investimentoTrafego?: string; leadsGerados?: number; leadsMql?: number; permanenciaMedia?: number
-      custosExtras?: string; metaVendas?: number; metaMrr?: string; metaLeads?: number; metaAgendamentos?: number
+      custosExtras?: string; metaVendas?: number; metaMrr?: string; metaImpl?: string
+      metaLeads?: number; metaAgendamentos?: number
     };
   }>('/api/commercial-months/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const sets: string[] = [];
@@ -48,6 +49,7 @@ export async function commercialMonthRoutes(app: FastifyInstance) {
     if (req.body.custosExtras !== undefined) { sets.push(`custos_extras = $${i++}`); params.push(req.body.custosExtras); }
     if (req.body.metaVendas !== undefined) { sets.push(`meta_vendas = $${i++}`); params.push(req.body.metaVendas); }
     if (req.body.metaMrr !== undefined) { sets.push(`meta_mrr = $${i++}`); params.push(req.body.metaMrr); }
+    if (req.body.metaImpl !== undefined) { sets.push(`meta_impl = $${i++}`); params.push(req.body.metaImpl); }
     if (req.body.metaLeads !== undefined) { sets.push(`meta_leads = $${i++}`); params.push(req.body.metaLeads); }
     if (req.body.metaAgendamentos !== undefined) { sets.push(`meta_agendamentos = $${i++}`); params.push(req.body.metaAgendamentos); }
     if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });

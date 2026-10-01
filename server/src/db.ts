@@ -1196,6 +1196,7 @@ END $$`);
   await pool.query(`ALTER TABLE commercial_months ADD COLUMN IF NOT EXISTS custos_extras TEXT NOT NULL DEFAULT '0,00'`);
   await pool.query(`ALTER TABLE commercial_months ADD COLUMN IF NOT EXISTS meta_vendas INT NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE commercial_months ADD COLUMN IF NOT EXISTS meta_mrr TEXT NOT NULL DEFAULT '0,00'`);
+  await pool.query(`ALTER TABLE commercial_months ADD COLUMN IF NOT EXISTS meta_impl TEXT NOT NULL DEFAULT '0,00'`);
   await pool.query(`ALTER TABLE commercial_months ADD COLUMN IF NOT EXISTS meta_leads INT NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE commercial_months ADD COLUMN IF NOT EXISTS meta_agendamentos INT NOT NULL DEFAULT 0`);
   // Quem já tinha ficha preenchida ganha o CNPJ na coluna nova (antes só existia dentro do JSON).

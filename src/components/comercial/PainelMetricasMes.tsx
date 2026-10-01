@@ -153,6 +153,8 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
     )
   }
 
+  const metaReceitaCents = parseBRLCents(month.metaMrr) + parseBRLCents(month.metaImpl)
+
   const corSdr = (nome: string) => sdrLabels.find((l) => l.name === nome)?.color ?? 'var(--viz-3)'
   const fatiasSdr: FatiaGrafico[] = Array.from(dados.porSdr.entries())
     .map(([nome, v]) => ({ nome, valor: v.qtd, cor: corSdr(nome), rotulo: String(v.qtd) }))
@@ -216,9 +218,26 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             <Target className="h-4 w-4" />
           </span>
           Metas de {rotuloMes(monthId)}
+          {metaReceitaCents > 0 && (
+            <span className="ml-auto text-xs font-normal text-foreground/45">
+              {money(dados.entrouCents)} de {money(metaReceitaCents)}
+              {dados.entrouCents < metaReceitaCents
+                ? ` — faltam ${money(metaReceitaCents - dados.entrouCents)}`
+                : ' — meta batida'}
+            </span>
+          )}
         </div>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <GraficoMeta titulo="Vendas" realizado={dados.vendas} meta={month.metaVendas} cor="var(--viz-2)" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+          {/* A meta GERAL é a soma das duas de receita — sem campo próprio, pra nunca contradizer
+              as partes (9k de MRR + 16k de implementação = 25k, sempre). */}
+          <GraficoMeta
+            titulo="Receita total"
+            realizado={dados.entrouCents}
+            meta={metaReceitaCents}
+            rotuloRealizado={money(dados.entrouCents)}
+            rotuloMeta={money(metaReceitaCents)}
+            cor="var(--viz-2)"
+          />
           <GraficoMeta
             titulo="MRR novo"
             realizado={dados.mrrCents}
@@ -227,6 +246,15 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             rotuloMeta={money(parseBRLCents(month.metaMrr))}
             cor="var(--viz-1)"
           />
+          <GraficoMeta
+            titulo="Implementação"
+            realizado={dados.implCents}
+            meta={parseBRLCents(month.metaImpl)}
+            rotuloRealizado={money(dados.implCents)}
+            rotuloMeta={money(parseBRLCents(month.metaImpl))}
+            cor="var(--viz-3)"
+          />
+          <GraficoMeta titulo="Vendas" realizado={dados.vendas} meta={month.metaVendas} cor="var(--viz-2)" />
           <GraficoMeta titulo="Leads" realizado={dados.leadsGerados} meta={month.metaLeads} cor="var(--viz-1)" />
           <GraficoMeta titulo="Agendamentos" realizado={dados.agendados.length} meta={month.metaAgendamentos} cor="var(--viz-3)" />
         </div>
@@ -344,6 +372,9 @@ function EditorDoMes({ month }: { month: CommercialMonth }) {
         onSave={(v) => salvar({ permanenciaMedia: v })} />
       <CampoNumero label="Meta de vendas" value={month.metaVendas} onSave={(v) => salvar({ metaVendas: v })} />
       <CampoMoeda label="Meta de MRR" value={month.metaMrr} onSave={(v) => salvar({ metaMrr: v })} />
+      <CampoMoeda label="Meta de implementação" value={month.metaImpl}
+        hint={`geral: ${formatBRLCents(parseBRLCents(month.metaMrr) + parseBRLCents(month.metaImpl))}`}
+        onSave={(v) => salvar({ metaImpl: v })} />
       <CampoNumero label="Meta de leads" value={month.metaLeads} onSave={(v) => salvar({ metaLeads: v })} />
       <CampoNumero label="Meta de agendamentos" value={month.metaAgendamentos} onSave={(v) => salvar({ metaAgendamentos: v })} />
     </div>

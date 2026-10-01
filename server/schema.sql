@@ -80,6 +80,9 @@ CREATE TABLE IF NOT EXISTS settings (
   -- Data de corte da leitura: assinatura criada ANTES disso não é mais tocada pelo job. Protege o
   -- que já foi conferido e arrumado à mão de ser reescrito a cada rodada.
   asaas_sync_since DATE,
+  -- Token do link público do relatório comercial (ver routes/relatorioComercial.ts). Trocar o
+  -- valor derruba todos os links antigos de uma vez.
+  relatorio_token TEXT,
   default_tenant_password TEXT,
   default_access_password TEXT,
   support_phone TEXT,

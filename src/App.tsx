@@ -105,6 +105,9 @@ const PendenciasPublicPage = React.lazy(() =>
     default: m.PendenciasPublicPage,
   })),
 )
+const RelatorioPublicoPage = React.lazy(() =>
+  import('./pages/RelatorioPublicoPage').then((m) => ({ default: m.RelatorioPublicoPage })),
+)
 const FichaPublicPage = React.lazy(() =>
   import('./pages/FichaPublicPage').then((m) => ({ default: m.FichaPublicPage })),
 )
@@ -148,6 +151,7 @@ export default function App() {
         <Route path="/mercadonunes/acougue" element={<AcouguePage />} />
         <Route path="/pendencias/:token" element={<PendenciasPublicPage />} />
         <Route path="/ficha" element={<FichaPublicPage />} />
+        <Route path="/relatorio/:token" element={<RelatorioPublicoPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />
         <Route path="/nps/:token" element={<NpsPublicPage />} />
 

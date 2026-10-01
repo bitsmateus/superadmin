@@ -1,8 +1,10 @@
 import * as React from 'react'
 import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
-  ArrowRight, CalendarDays, ChevronDown, DollarSign, Pencil, Target, TrendingUp, Users, Zap,
+  ArrowRight, CalendarDays, ChevronDown, DollarSign, Link2, Pencil, Target, TrendingUp, Users, Zap,
 } from 'lucide-react'
+import { api } from '@/services/api'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { MILESTONE_NO_SHOW, MILESTONE_VENDIDO } from '@/components/comercial/LeadDashboardView'
 import { GraficoBarras, GraficoFunil, GraficoMeta, GraficoRosca, type FatiaGrafico } from '@/components/comercial/charts'
@@ -188,6 +190,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             {editando ? 'Fechar' : 'Investimento, custos e metas'}
             <ChevronDown className={cn('h-3 w-3 transition-transform', editando && 'rotate-180')} />
           </button>
+          <BotaoLinkPublico monthId={monthId} />
           <Link
             to="/comercial-dashboard-mensal"
             className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10"
@@ -363,6 +366,58 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Copia o link público do relatório. O link não tem login: quem recebe vê o painel do mês só pra
+ * ler, sem nome de lead nem valor por cliente. "Gerar link novo" troca o token e derruba os links
+ * que já circularam — é assim que se revoga um que foi longe demais.
+ */
+function BotaoLinkPublico({ monthId }: { monthId: string }) {
+  const [ocupado, setOcupado] = React.useState(false)
+
+  const pegarLink = async (novo: boolean) => {
+    setOcupado(true)
+    try {
+      const { token } = novo
+        ? await api.post<{ token: string }>('/api/relatorio-comercial/link')
+        : await api.get<{ token: string }>('/api/relatorio-comercial/link')
+      const url = `${window.location.origin}/relatorio/${token}?mes=${monthId}`
+      await navigator.clipboard.writeText(url)
+      toast.success(novo ? 'Link novo gerado e copiado — o anterior parou de funcionar' : 'Link do relatório copiado')
+    } catch (err) {
+      toast.error('Falha ao gerar o link: ' + (err as Error).message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center overflow-hidden rounded-lg ring-1 ring-line">
+      <button
+        type="button"
+        disabled={ocupado}
+        onClick={() => void pegarLink(false)}
+        title="Copia o link público (somente leitura) deste relatório"
+        className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-foreground/60 hover:bg-elevate/[0.06] hover:text-foreground"
+      >
+        <Link2 className="h-3 w-3" />
+        Link público
+      </button>
+      <button
+        type="button"
+        disabled={ocupado}
+        onClick={() => {
+          if (!window.confirm('Gerar um link novo? Os links já compartilhados param de funcionar.')) return
+          void pegarLink(true)
+        }}
+        title="Gera um link novo e invalida os anteriores"
+        className="border-l border-line px-2 py-1 text-[11px] text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
+      >
+        novo
+      </button>
+    </span>
   )
 }
 

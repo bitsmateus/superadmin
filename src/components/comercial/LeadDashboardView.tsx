@@ -276,7 +276,9 @@ export function SdrMetricsGrid({ rows, boards, onOpenLead, title }: { rows: Lead
       const info = milestoneById.get(r.id)
       b.totalRows.push(r)
       if (info?.everAgendada) b.agendadosRows.push(r)
-      if (info?.everCompareceu) b.compareceuRows.push(r)
+      // Comparecimento vive DENTRO de quem agendou: quem foi direto pra proposta, sem reunião
+      // marcada, não entra nem no denominador nem aqui.
+      if (info?.everAgendada && info?.everCompareceu) b.compareceuRows.push(r)
       if (info?.milestone === MILESTONE_NO_SHOW) b.noShowRows.push(r)
       else if (info?.milestone === MILESTONE_VENDIDO) b.vendasRows.push(r)
       buckets.set(name, b)

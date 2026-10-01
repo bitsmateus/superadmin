@@ -261,6 +261,11 @@ const POST_AGENDAMENTO_STATUSES = [
  * pra semana que vem. */
 const POS_REUNIAO_STATUSES = ['Proposta Enviada', 'Follow-up Propostas', MILESTONE_VENDIDO];
 
+/** As DUAS etapas que provam que existiu reunião marcada — comparecida ou não. É o único jeito de
+ * entrar na conta de "Reunião agendada": proposta enviada direto do primeiro contato, sem reunião
+ * no meio, não é agendamento e não pode inflar o funil. */
+const REUNIAO_STATUSES = [MILESTONE_AGENDADA, 'Reunião não comparecida'];
+
 /**
  * Sincroniza o registro de venda quando o status de um lead muda.
  *
@@ -1319,15 +1324,14 @@ export async function leadBoardRoutes(app: FastifyInstance) {
 
     const boardFilter = allowed !== null ? 'AND lr.board_id = ANY($5)' : '';
     const params: unknown[] = [
-      MILESTONE_STATUSES, POST_AGENDAMENTO_STATUSES, MILESTONE_AGENDADA, POS_REUNIAO_STATUSES,
+      MILESTONE_STATUSES, REUNIAO_STATUSES, MILESTONE_AGENDADA, POS_REUNIAO_STATUSES,
     ];
     if (allowed !== null) params.push(allowed);
 
-    // "ever_agendada" = o lead CHEGOU à reunião em algum momento: ou está hoje num status do
-    // caminho (agendada, no-show, proposta, follow-up, vendido), ou já passou por um deles na
-    // história. Conta pelo caminho inteiro, e não só por "teve evento de Reunião agendada", porque
-    // quem pula direto pra "Proposta Enviada" ou "Vendido" teve reunião do mesmo jeito — exigir a
-    // etiqueta de agendamento deixava esses de fora do funil.
+    // "ever_agendada" = o lead teve REUNIÃO MARCADA em algum momento: está hoje em "Reunião
+    // agendada"/"Reunião não comparecida", ou passou por uma delas na história. Proposta enviada
+    // direto do primeiro contato NÃO conta — é venda sem reunião, e deixar entrar inflava o
+    // denominador do funil com quem nunca agendou nada.
     const everAgendadaSql = `(
       lr.status = ANY($2)
       OR EXISTS (

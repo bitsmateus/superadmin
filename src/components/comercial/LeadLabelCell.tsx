@@ -30,6 +30,10 @@ export interface LeadLabelCellProps {
 export function LeadLabelCell({ field, value, onChange, required, pageId }: LeadLabelCellProps) {
   const labels = useLeadLabels(field, pageId)
   const [open, setOpen] = React.useState(false)
+  // "Tipo" aceita texto livre além das etiquetas: ali o SDR anota o que o lead é/quer com as
+  // palavras dele, e nem toda anotação merece virar etiqueta fixa da aba.
+  const aceitaTextoLivre = field === 'tipo'
+  const [textoLivre, setTextoLivre] = React.useState('')
   const [manageOpen, setManageOpen] = React.useState(false)
   const [coords, setCoords] = React.useState<{ top?: number; bottom?: number; left: number } | null>(null)
   const btnRef = React.useRef<HTMLButtonElement>(null)
@@ -41,6 +45,7 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
   const current = labels.find((l) => l.name === value)
 
   const openPicker = () => {
+    setTextoLivre(labels.some((l) => l.name === value) ? '' : value)
     const rect = btnRef.current?.getBoundingClientRect()
     if (rect) {
       const left = Math.min(rect.left, window.innerWidth - 328)
@@ -67,9 +72,14 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
         className={cn(
           'flex h-full min-h-[34px] w-full items-center truncate px-2.5 py-1.5 text-sm font-medium',
           field === 'tipo' ? 'justify-start text-left' : 'justify-center text-center',
-          value ? 'text-white' : required ? 'bg-danger/10 text-danger ring-1 ring-inset ring-danger/30' : 'text-foreground/30',
+          // Texto livre (sem etiqueta correspondente) fica como anotação, não como chip colorido:
+          // pintar de cinza-chumbo faria parecer uma etiqueta que ninguém configurou.
+          value && (current || !aceitaTextoLivre) ? 'text-white'
+            : value ? 'text-foreground/75'
+            : required ? 'bg-danger/10 text-danger ring-1 ring-inset ring-danger/30'
+            : 'text-foreground/30',
         )}
-        style={value ? { backgroundColor: current?.color ?? '#9CA3AF' } : undefined}
+        style={value && (current || !aceitaTextoLivre) ? { backgroundColor: current?.color ?? '#9CA3AF' } : undefined}
       >
         {value ? value : required ? 'Obrigatório' : 'Selecionar…'}
       </button>
@@ -84,6 +94,32 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
           }}
           className="z-50 flex max-h-[60vh] w-72 flex-col rounded-xl border border-line bg-card p-2.5 shadow-xl"
         >
+          {aceitaTextoLivre && (
+            <div className="mb-2">
+              <input
+                autoFocus
+                value={textoLivre}
+                onChange={(e) => setTextoLivre(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { onChange(textoLivre.trim()); setOpen(false) }
+                  if (e.key === 'Escape') setOpen(false)
+                }}
+                placeholder="Escreva aqui ou escolha abaixo…"
+                className="w-full rounded-md bg-elevate/[0.06] px-2.5 py-2 text-sm text-foreground outline-none ring-1 ring-line placeholder:text-foreground/30 focus:ring-accent/40"
+              />
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="text-[10px] text-foreground/35">Enter pra salvar o texto</span>
+                <button
+                  type="button"
+                  disabled={!textoLivre.trim() && !value}
+                  onClick={() => { onChange(textoLivre.trim()); setOpen(false) }}
+                  className="rounded-md px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10 disabled:opacity-40"
+                >
+                  Usar este texto
+                </button>
+              </div>
+            </div>
+          )}
           <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-1.5 overflow-y-auto">
             {field !== 'ligacao' && (
               <button

@@ -80,7 +80,14 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
     const investimentoCents = parseBRLCents(month?.investimentoTrafego ?? '0')
     const extrasCents = parseBRLCents(month?.custosExtras ?? '0')
     const custoTotalCents = investimentoCents + extrasCents
-    const leadsGerados = month?.leadsGerados ?? 0
+    // Leads do mês: vale o número DIGITADO (o que o tráfego entregou, que é o que casa com o
+    // investimento); sem ele preenchido, usa o que o CRM tem — melhor um número real do que zero.
+    // Um só, usado no CPL, no funil e na meta: antes a meta olhava só o digitado e mostrava 0 de
+    // 400 com o CRM cheio de lead.
+    const leadsGerados = month?.leadsGerados || rows.filter((r) => {
+      const d = r.createdAt.slice(0, 10)
+      return d >= from && d <= to
+    }).length
     const permanencia = month?.permanenciaMedia ?? 0
 
     const vendas = vendasDoMes.length
@@ -196,8 +203,8 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
           <Kpi titulo="CAC" valor={money(dados.cacCents)} nota="custo por venda do funil" editavel onEditar={() => setEditando(true)} />
           <Kpi titulo="ROI / ROAS" valor={pct(dados.roi)} nota={`ROAS ${dados.roas.toFixed(1)}x · receita ÷ custo`}
             tom={dados.roi >= 0 ? 'bom' : 'ruim'} />
-          <Kpi titulo="Total de leads" valor={String(dados.leadsGerados || dados.leva.length)}
-            nota={dados.leadsGerados ? `${dados.leva.length} no CRM` : 'do CRM'} />
+          <Kpi titulo="Total de leads" valor={String(dados.leadsGerados)}
+            nota={month.leadsGerados ? `${dados.leva.length} no CRM` : 'contados no CRM'} />
           <Kpi titulo="Agendamentos" valor={String(dados.agendados.length)} nota={`${pct(dados.taxaLeadAgend)} dos leads`} />
           <Kpi titulo="Vendas" valor={String(dados.vendas)} nota={`${dados.vendasFunil.length} pelo funil`} tom="bom" />
           <Kpi titulo="Reuniões realizadas" valor={String(dados.compareceram.length)} nota={`${pct(dados.taxaComparecimento)} de comparecimento`} />
@@ -272,7 +279,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
           <GraficoFunil
             cor="var(--viz-1)"
             etapas={[
-              { nome: 'Leads', valor: dados.leadsGerados || dados.leva.length },
+              { nome: 'Leads', valor: dados.leadsGerados },
               { nome: 'Reuniões agendadas', valor: dados.agendados.length, conversao: pct(dados.taxaLeadAgend) },
               { nome: 'Reuniões realizadas', valor: dados.compareceram.length, conversao: pct(dados.taxaComparecimento) },
               { nome: 'Vendas', valor: dados.vendasFunil.length, conversao: pct(dados.taxaReuniaoVenda) },

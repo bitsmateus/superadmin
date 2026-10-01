@@ -107,7 +107,7 @@ export async function payablesRoutes(app: FastifyInstance) {
 
   app.get('/api/payables-entries', { onRequest: [app.authenticate] }, async () => {
     const rows = await query('SELECT * FROM payables_entries ORDER BY position, created_at');
-    for (const r of rows as Record<string, unknown>[]) delete r.boleto_data;
+    for (const r of rows as Record<string, unknown>[]) { delete r.boleto_data; delete r.comprovante_data; }
     return rows;
   });
 
@@ -163,7 +163,9 @@ export async function payablesRoutes(app: FastifyInstance) {
     groupId?: string; elemento?: string; descricao?: string; categoria?: string | null
     previstoCents?: number; comissaoCents?: number | null
     realCents?: number | null; status?: string; data?: string | null
-    boletoData?: string | null; boletoFilename?: string | null; notas?: string; position?: number
+    boletoData?: string | null; boletoFilename?: string | null
+    comprovanteData?: string | null; comprovanteFilename?: string | null
+    notas?: string; position?: number
   } }>(
     '/api/payables-entries/:id',
     { onRequest: [app.authenticate] },
@@ -183,6 +185,8 @@ export async function payablesRoutes(app: FastifyInstance) {
       if (b.data !== undefined) { sets.push(`data = $${i++}`); params.push(b.data); }
       if (b.boletoData !== undefined) { sets.push(`boleto_data = $${i++}`); params.push(b.boletoData); }
       if (b.boletoFilename !== undefined) { sets.push(`boleto_filename = $${i++}`); params.push(b.boletoFilename); }
+      if (b.comprovanteData !== undefined) { sets.push(`comprovante_data = $${i++}`); params.push(b.comprovanteData); }
+      if (b.comprovanteFilename !== undefined) { sets.push(`comprovante_filename = $${i++}`); params.push(b.comprovanteFilename); }
       if (b.notas !== undefined) { sets.push(`notas = $${i++}`); params.push(b.notas.trim()); }
       if (b.position !== undefined) { sets.push(`position = $${i++}`); params.push(b.position); }
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });

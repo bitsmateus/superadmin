@@ -1190,6 +1190,9 @@ END $$`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS asaas_last_sync_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS asaas_sync_since DATE`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS relatorio_token TEXT`);
+  // Comprovante de pagamento das contas a pagar (separado do boleto) — ver schema.sql.
+  await pool.query(`ALTER TABLE payables_entries ADD COLUMN IF NOT EXISTS comprovante_data TEXT`);
+  await pool.query(`ALTER TABLE payables_entries ADD COLUMN IF NOT EXISTS comprovante_filename TEXT`);
   // Empresa do grupo que atende o cliente (Clientes Geral) — ver schema.sql.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS unidade TEXT`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS cnpj TEXT`);

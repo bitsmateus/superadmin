@@ -1241,6 +1241,10 @@ CREATE TABLE IF NOT EXISTS payables_entries (
   data DATE,
   boleto_data TEXT,
   boleto_filename TEXT,
+  -- Comprovante do PAGAMENTO (recibo/transferência), separado do boleto: um é a cobrança que
+  -- chegou, o outro é a prova de que foi pago. Guardar só o boleto deixava "pago" sem lastro.
+  comprovante_data TEXT,
+  comprovante_filename TEXT,
   notas TEXT NOT NULL DEFAULT '',
   position INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

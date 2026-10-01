@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
+import { GraficoRosca } from '@/components/comercial/charts'
 import { DatePickerField } from '@/components/comercial/DatePickerField'
 import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt, useMonthFilter, type MonthFilter } from '@/hooks/useMonthFilter'
 import { usePayableCatalog, usePayableEntries, usePayableGroups } from '@/hooks/usePayables'
@@ -19,7 +20,7 @@ import {
 } from '@/services/payables'
 import { useCommissionEntries } from '@/hooks/useCommissions'
 import { commissionsService, type CommissionEntry, type CommissionRole } from '@/services/commissions'
-import { formatBRLCents, parseBRLCents, prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
+import { formatBRLCents, formatBRLCompact, parseBRLCents, prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
 const MAX_BOLETO_BYTES = 10 * 1024 * 1024
@@ -173,25 +174,40 @@ export function FinanceiroContasPagarPage() {
  * de preencher). Reaproveitado tanto na visão geral (todos os grupos) quanto no resumo de cada
  * grupo (só os itens dele) — mesma conta, escopo diferente. */
 function computeStats(entries: PayableEntry[]) {
+  const hoje = new Date().toISOString().slice(0, 10)
   let previsto = 0, pago = 0, pendente = 0, fixo = 0, variavel = 0
+  let contas = 0, contasPagas = 0, vencidas = 0, vencidasCents = 0, pagasSemComprovante = 0
   for (const e of entries) {
     previsto += e.previstoCents
-    if (e.status === 'pago') pago += e.realCents ?? e.previstoCents
-    else pendente += e.previstoCents
+    contas += 1
+    if (e.status === 'pago') {
+      pago += e.realCents ?? e.previstoCents
+      contasPagas += 1
+      // Pago sem comprovante anexado: a conta fecha, mas não tem prova guardada.
+      if (!e.comprovanteFilename) pagasSemComprovante += 1
+    } else {
+      pendente += e.previstoCents
+      // Vencida = tinha data pra pagar, a data passou e ninguém marcou como pago.
+      if (e.data && e.data.slice(0, 10) < hoje) { vencidas += 1; vencidasCents += e.previstoCents }
+    }
     if (e.categoria === 'fixo') fixo += e.previstoCents
     else if (e.categoria === 'variavel') variavel += e.previstoCents
   }
-  return { previsto, pago, pendente, fixo, variavel }
+  return {
+    previsto, pago, pendente, fixo, variavel,
+    contas, contasPagas, vencidas, vencidasCents, pagasSemComprovante,
+  }
 }
 
 function computeCommissionStats(commissionEntries: CommissionEntry[]) {
-  let total = 0, pago = 0, pendente = 0
+  let total = 0, pago = 0, pendente = 0, contas = 0, contasPagas = 0
   for (const c of commissionEntries) {
     total += c.amountCents
-    if (c.status === 'pago') pago += c.amountCents
+    contas += 1
+    if (c.status === 'pago') { pago += c.amountCents; contasPagas += 1 }
     else pendente += c.amountCents
   }
-  return { total, pago, pendente }
+  return { total, pago, pendente, contas, contasPagas }
 }
 
 /** Visão geral no topo — soma os grupos do mês selecionado + as comissões assinadas do mesmo mês,
@@ -204,13 +220,97 @@ function OverviewCards({ entries, commissions }: { entries: PayableEntry[]; comm
   const pendenteGeral = totals.pendente + commTotals.pendente
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       <OverviewCard icon={<Wallet className="h-4 w-4" />} label="Previsto (total)" value={formatBRLCents(previstoGeral)} tone="info" />
       <OverviewCard icon={<CheckCircle2 className="h-4 w-4" />} label="Pago" value={formatBRLCents(pagoGeral)} tone="success" />
       <OverviewCard icon={<CalendarClock className="h-4 w-4" />} label="A pagar / agendado" value={formatBRLCents(pendenteGeral)} tone="warning" />
       <OverviewCard icon={<Repeat className="h-4 w-4" />} label="Fixo" value={formatBRLCents(totals.fixo)} tone="info" />
       <OverviewCard icon={<Shuffle className="h-4 w-4" />} label="Variável" value={formatBRLCents(totals.variavel)} tone="warning" />
       <OverviewCard icon={<Users className="h-4 w-4" />} label="Comissões (assinadas)" value={formatBRLCents(commTotals.total)} tone="purple" />
+      </div>
+
+      <ResumoDoMes totals={totals} commTotals={commTotals}
+        previstoGeral={previstoGeral} pagoGeral={pagoGeral} pendenteGeral={pendenteGeral} />
+    </div>
+  )
+}
+
+/**
+ * O estado do mês em uma olhada: quanto do total já foi pago (em dinheiro e em quantidade de
+ * contas), o que venceu e ninguém pagou, e como o dinheiro se divide entre fixo, variável e
+ * comissão. Os seis cartões de cima dizem os valores; isto aqui diz se o mês está em dia.
+ */
+function ResumoDoMes({ totals, commTotals, previstoGeral, pagoGeral, pendenteGeral }: {
+  totals: ReturnType<typeof computeStats>
+  commTotals: ReturnType<typeof computeCommissionStats>
+  previstoGeral: number
+  pagoGeral: number
+  pendenteGeral: number
+}) {
+  const contas = totals.contas + commTotals.contas
+  const pagas = totals.contasPagas + commTotals.contasPagas
+  const fracao = previstoGeral > 0 ? pagoGeral / previstoGeral : 0
+  const outros = Math.max(totals.previsto - totals.fixo - totals.variavel, 0)
+
+  if (!contas) return null
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-[1fr_320px]">
+      <div className="rounded-2xl bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="text-sm font-semibold text-foreground">
+            {pagas} de {contas} {contas === 1 ? 'conta paga' : 'contas pagas'}
+          </span>
+          <span className="text-xs text-foreground/50">
+            {formatBRLCents(pagoGeral)} de {formatBRLCents(previstoGeral)}
+            {pendenteGeral > 0 && ` · faltam ${formatBRLCents(pendenteGeral)}`}
+          </span>
+        </div>
+        <div className="mt-2 h-3 overflow-hidden rounded-full bg-elevate/[0.06]">
+          <div
+            className="h-full rounded-full bg-success transition-[width] duration-500"
+            style={{ width: `${Math.round(fracao * 100)}%` }}
+            title={`${Math.round(fracao * 100)}% do previsto já foi pago`}
+          />
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {totals.vencidas > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-danger/10 px-2.5 py-1 text-xs font-medium text-danger">
+              <CalendarClock className="h-3.5 w-3.5" />
+              {totals.vencidas} vencida(s) · {formatBRLCents(totals.vencidasCents)}
+            </span>
+          )}
+          {totals.pagasSemComprovante > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning">
+              <FileText className="h-3.5 w-3.5" />
+              {totals.pagasSemComprovante} paga(s) sem comprovante
+            </span>
+          )}
+          {totals.vencidas === 0 && totals.pagasSemComprovante === 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Nada vencido e todo pagamento com comprovante
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-card p-4 shadow-sm">
+        <p className="mb-2 text-sm font-semibold text-foreground">Para onde vai o dinheiro</p>
+        <GraficoRosca
+          total={formatBRLCompact(previstoGeral)}
+          rotuloTotal="no mês"
+          vazio="Sem contas lançadas"
+          fatias={[
+            { nome: 'Fixo', valor: totals.fixo, cor: 'var(--viz-1)', rotulo: formatBRLCompact(totals.fixo) },
+            { nome: 'Variável', valor: totals.variavel, cor: 'var(--viz-3)', rotulo: formatBRLCompact(totals.variavel) },
+            { nome: 'Comissões', valor: commTotals.total, cor: 'var(--viz-2)', rotulo: formatBRLCompact(commTotals.total) },
+            ...(outros > 0 ? [{ nome: 'Sem categoria', valor: outros, cor: '#9CA3AF', rotulo: formatBRLCompact(outros) }] : []),
+          ]}
+        />
+      </div>
     </div>
   )
 }
@@ -384,6 +484,7 @@ function GroupCard({
                 <th className="w-32 px-3 py-2.5">Status</th>
                 <th className="w-36 px-3 py-2.5">Data</th>
                 <th className="w-40 px-3 py-2.5">Boleto</th>
+                <th className="w-40 px-3 py-2.5">Comprovante</th>
                 <th className="px-3 py-2.5">Notas</th>
                 <th className="w-10 px-2 py-2.5" />
               </tr>
@@ -532,7 +633,8 @@ function EntryRow({ entry }: { entry: PayableEntry }) {
       <td className="px-3 py-2 text-right text-sm"><MoneyCell entry={entry} field="realCents" /></td>
       <td className="px-3 py-2 text-sm"><StatusCell entry={entry} /></td>
       <td className="px-3 py-2 text-sm"><DateCell entry={entry} /></td>
-      <td className="px-3 py-2 text-sm"><BoletoCell entry={entry} /></td>
+      <td className="px-3 py-2 text-sm"><ArquivoCell entry={entry} tipo="boleto" /></td>
+      <td className="px-3 py-2 text-sm"><ArquivoCell entry={entry} tipo="comprovante" /></td>
       <td className="px-3 py-2 text-sm"><NotasCell entry={entry} /></td>
       <td className="px-2 py-2">
         <button
@@ -722,13 +824,28 @@ function NotasCell({ entry }: { entry: PayableEntry }) {
   )
 }
 
-function BoletoCell({ entry }: { entry: PayableEntry }) {
+/** Boleto e comprovante são o mesmo anexo com papéis diferentes: um é a cobrança que chegou, o
+ * outro é a prova de que foi paga. Mesma célula, parametrizada — era copiar 70 linhas pra mudar
+ * duas palavras. */
+function ArquivoCell({ entry, tipo }: { entry: PayableEntry; tipo: 'boleto' | 'comprovante' }) {
+  const ehBoleto = tipo === 'boleto'
+  const nomeArquivo = ehBoleto ? entry.boletoFilename : entry.comprovanteFilename
+  const patchDe = (data: string | null, nome: string | null) =>
+    ehBoleto
+      ? { boletoData: data, boletoFilename: nome }
+      : { comprovanteData: data, comprovanteFilename: nome }
+
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [loading, setLoading] = React.useState(false)
 
   const handleFile = async (file: File) => {
+    // Boleto vem em PDF; comprovante quase sempre é print da transferência, então aceita imagem.
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-    if (!isPdf) { toast.error('Só é possível anexar arquivos PDF.'); return }
+    const isImagem = file.type.startsWith('image/')
+    if (!isPdf && !(isImagem && !ehBoleto)) {
+      toast.error(ehBoleto ? 'O boleto precisa ser PDF.' : 'Anexe um PDF ou uma imagem.')
+      return
+    }
     if (file.size > MAX_BOLETO_BYTES) {
       toast.error(`"${file.name}" passa de ${Math.round(MAX_BOLETO_BYTES / 1024 / 1024)}MB.`)
       return
@@ -741,7 +858,7 @@ function BoletoCell({ entry }: { entry: PayableEntry }) {
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
-      await payablesService.updateEntry(entry.id, { boletoData: dataUrl, boletoFilename: file.name })
+      await payablesService.updateEntry(entry.id, patchDe(dataUrl, file.name))
     } catch {
       toast.error('Falha ao ler o arquivo — tenta de novo.')
     } finally {
@@ -756,25 +873,26 @@ function BoletoCell({ entry }: { entry: PayableEntry }) {
   }
 
   const open = async () => {
-    let data = entry.boletoData
+    const pegar = (e?: PayableEntry) => (ehBoleto ? e?.boletoData : e?.comprovanteData) ?? null
+    let data = pegar(entry)
     if (!data) {
       await payablesService.loadFullEntry(entry.id)
-      data = payablesService.getEntries().find((e) => e.id === entry.id)?.boletoData ?? null
+      data = pegar(payablesService.getEntries().find((e) => e.id === entry.id))
     }
     if (data) window.open(data, '_blank')
   }
 
-  if (entry.boletoFilename) {
+  if (nomeArquivo) {
     return (
       <div className="flex items-center gap-1">
         <button type="button" onClick={open} className="flex min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-elevate/[0.06]">
-          <FileText className="h-3.5 w-3.5 shrink-0 text-accent" />
-          <span className="max-w-[100px] truncate text-xs text-foreground/70">{entry.boletoFilename}</span>
+          <FileText className={cn('h-3.5 w-3.5 shrink-0', ehBoleto ? 'text-accent' : 'text-success')} />
+          <span className="max-w-[100px] truncate text-xs text-foreground/70">{nomeArquivo}</span>
         </button>
         <button
           type="button"
-          onClick={() => void payablesService.updateEntry(entry.id, { boletoData: null, boletoFilename: null })}
-          title="Remover boleto"
+          onClick={() => void payablesService.updateEntry(entry.id, patchDe(null, null))}
+          title={ehBoleto ? 'Remover boleto' : 'Remover comprovante'}
           className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/30 hover:bg-danger/10 hover:text-danger"
         >
           <X className="h-3 w-3" />
@@ -792,9 +910,9 @@ function BoletoCell({ entry }: { entry: PayableEntry }) {
         className="inline-flex items-center gap-1 rounded-md border border-dashed border-line px-2 py-1 text-xs text-foreground/50 hover:border-accent/40 hover:text-accent"
       >
         {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-        Anexar
+        {!ehBoleto && entry.status === 'pago' ? 'Sem comprovante' : 'Anexar'}
       </button>
-      <input ref={inputRef} type="file" accept="application/pdf" className="hidden" onChange={pickFile} />
+      <input ref={inputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={pickFile} />
     </>
   )
 }

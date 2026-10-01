@@ -30,6 +30,9 @@ export interface PayableEntry {
   /** Só vem preenchido depois de loadFullEntry — a lista omite (pode ser um PDF grande). */
   boletoData?: string | null
   boletoFilename: string | null
+  /** Comprovante do pagamento (recibo/transferência) — só vem depois de loadFullEntry. */
+  comprovanteData?: string | null
+  comprovanteFilename: string | null
   notas: string
   position: number
   createdAt: string
@@ -49,19 +52,24 @@ type EntryRow = {
   id: string; group_id: string; elemento: string; descricao: string; categoria: PayableCategoria | null
   previsto_cents: number
   comissao_cents: number | null; real_cents: number | null; status: PayableStatus; data: string | null
-  boleto_data?: string | null; boleto_filename: string | null; notas: string; position: number; created_at: string
+  boleto_data?: string | null; boleto_filename: string | null
+  comprovante_data?: string | null; comprovante_filename: string | null
+  notas: string; position: number; created_at: string
 }
 
 function rowToGroup(r: GroupRow): PayableGroup {
   return { id: r.id, name: r.name, color: r.color, month: r.month ?? null, position: r.position, createdAt: r.created_at }
 }
-function rowToEntry(r: EntryRow, prevBoletoData?: string | null): PayableEntry {
+function rowToEntry(r: EntryRow, prevBoletoData?: string | null, prevComprovante?: string | null): PayableEntry {
   return {
     id: r.id, groupId: r.group_id, elemento: r.elemento, descricao: r.descricao ?? '', categoria: r.categoria ?? null,
     previstoCents: r.previsto_cents,
     comissaoCents: r.comissao_cents ?? null, realCents: r.real_cents ?? null, status: r.status,
     data: r.data, boletoData: 'boleto_data' in r ? (r.boleto_data ?? null) : (prevBoletoData ?? null),
-    boletoFilename: r.boleto_filename, notas: r.notas ?? '', position: r.position, createdAt: r.created_at,
+    boletoFilename: r.boleto_filename,
+    comprovanteData: 'comprovante_data' in r ? (r.comprovante_data ?? null) : (prevComprovante ?? null),
+    comprovanteFilename: r.comprovante_filename ?? null,
+    notas: r.notas ?? '', position: r.position, createdAt: r.created_at,
   }
 }
 function rowToCatalog(r: CatalogRow): PayableFixedCatalogItem {
@@ -95,7 +103,7 @@ async function reload(): Promise<void> {
     ])
     groups = groupRows.map(rowToGroup)
     const prevById = new Map(entries.map((e) => [e.id, e]))
-    entries = entryRows.map((r) => rowToEntry(r, prevById.get(r.id)?.boletoData))
+    entries = entryRows.map((r) => rowToEntry(r, prevById.get(r.id)?.boletoData, prevById.get(r.id)?.comprovanteData))
     catalog = catalogRows.map(rowToCatalog)
     loaded = true
     notify()
@@ -208,7 +216,9 @@ export const payablesService = {
     groupId?: string; elemento?: string; descricao?: string; categoria?: PayableCategoria | null
     previstoCents?: number; comissaoCents?: number | null
     realCents?: number | null; status?: PayableStatus; data?: string | null
-    boletoData?: string | null; boletoFilename?: string | null; notas?: string; position?: number
+    boletoData?: string | null; boletoFilename?: string | null
+    comprovanteData?: string | null; comprovanteFilename?: string | null
+    notas?: string; position?: number
   }): Promise<void> {
     try {
       const row = await api.patch<EntryRow>(`/api/payables-entries/${id}`, patch)

@@ -134,6 +134,23 @@ export function FinanceiroContasPagarPage() {
             <Button variant="secondary" onClick={() => setCatalogOpen(true)} leftIcon={<Settings2 className="h-4 w-4" />}>
               Itens fixos
             </Button>
+            {groupsInMonth.length > 0 && catalog.length > 0 && (
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  const quantos = await payablesService.aplicarFixosNoMes(groupsInMonth[0].id)
+                  toast.success(
+                    quantos
+                      ? `${quantos} item(ns) fixo(s) trazido(s) pro mês`
+                      : 'O mês já tem todos os itens fixos',
+                  )
+                }}
+                leftIcon={<Repeat className="h-4 w-4" />}
+                title="Traz pro mês os itens do catálogo de fixos que ainda não estão lançados"
+              >
+                Trazer fixos
+              </Button>
+            )}
             {tab !== 'comissoes' && (
               <Button onClick={() => setNewGroupOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
                 Novo grupo

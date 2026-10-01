@@ -212,6 +212,38 @@ export const payablesService = {
     }
   },
 
+  /**
+   * Põe no mês os itens do catálogo de fixos que ainda não estão lá.
+   *
+   * O catálogo é a lista do que se repete todo mês (salários, aluguel, contabilidade). Quando ele
+   * ganha um item novo, os meses já criados continuam sem ele — e o total do mês fica mentindo pra
+   * baixo até alguém reparar. Isto aqui acerta de uma vez, comparando por nome (sem acento nem
+   * maiúscula): o que já existe no mês não é duplicado, e valor digitado à mão não é sobrescrito.
+   */
+  async aplicarFixosNoMes(groupId: string): Promise<number> {
+    const doGrupo = entries.filter((e) => e.groupId === groupId)
+    const normaliza = (t: string) =>
+      t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+    const jaTem = new Set(doGrupo.map((e) => normaliza(e.elemento)))
+    const faltando = catalog
+      .filter((c) => c.ativo && !jaTem.has(normaliza(c.nome)))
+      .sort((a, b) => a.position - b.position)
+    if (!faltando.length) return 0
+
+    try {
+      for (const item of faltando) {
+        await api.post('/api/payables-entries', {
+          groupId, elemento: item.nome, categoria: 'fixo', previstoCents: item.valorCents,
+        })
+      }
+      await reload()
+      return faltando.length
+    } catch (err) {
+      toast.error('Falha ao trazer os itens fixos: ' + (err as Error).message)
+      return 0
+    }
+  },
+
   async updateEntry(id: string, patch: {
     groupId?: string; elemento?: string; descricao?: string; categoria?: PayableCategoria | null
     previstoCents?: number; comissaoCents?: number | null

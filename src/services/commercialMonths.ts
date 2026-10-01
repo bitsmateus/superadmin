@@ -11,12 +11,21 @@ export interface CommercialMonth {
   /** Leads qualificados — manual, o CRM não marca MQL. */
   leadsMql: number
   permanenciaMedia: number
+  /** Custos de aquisição fora do tráfego (ferramentas, comissão, bônus) — entram no CPL/CAC/ROI. */
+  custosExtras: string
+  /** Metas do mês. 0 = sem meta definida (o gráfico correspondente some). */
+  metaVendas: number
+  metaMrr: string
+  metaLeads: number
+  metaAgendamentos: number
   createdAt: string
 }
 
 type Row = {
   id: string; investimento_trafego: string; leads_gerados: number; leads_mql: number
-  permanencia_media: string; created_at: string
+  permanencia_media: string; custos_extras: string | null
+  meta_vendas: number | null; meta_mrr: string | null; meta_leads: number | null
+  meta_agendamentos: number | null; created_at: string
 }
 function rowToMonth(r: Row): CommercialMonth {
   return {
@@ -25,6 +34,11 @@ function rowToMonth(r: Row): CommercialMonth {
     leadsGerados: r.leads_gerados,
     leadsMql: r.leads_mql ?? 0,
     permanenciaMedia: Number(r.permanencia_media),
+    custosExtras: r.custos_extras ?? '0,00',
+    metaVendas: r.meta_vendas ?? 0,
+    metaMrr: r.meta_mrr ?? '0,00',
+    metaLeads: r.meta_leads ?? 0,
+    metaAgendamentos: r.meta_agendamentos ?? 0,
     createdAt: r.created_at,
   }
 }
@@ -79,6 +93,7 @@ export const commercialMonthsService = {
 
   async update(id: string, patch: {
     investimentoTrafego?: string; leadsGerados?: number; leadsMql?: number; permanenciaMedia?: number
+    custosExtras?: string; metaVendas?: number; metaMrr?: string; metaLeads?: number; metaAgendamentos?: number
   }): Promise<void> {
     try {
       await api.patch(`/api/commercial-months/${id}`, patch)

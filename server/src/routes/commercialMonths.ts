@@ -33,7 +33,10 @@ export async function commercialMonthRoutes(app: FastifyInstance) {
   // PATCH /api/commercial-months/:id — atualiza os campos manuais.
   app.patch<{
     Params: { id: string };
-    Body: { investimentoTrafego?: string; leadsGerados?: number; leadsMql?: number; permanenciaMedia?: number };
+    Body: {
+      investimentoTrafego?: string; leadsGerados?: number; leadsMql?: number; permanenciaMedia?: number
+      custosExtras?: string; metaVendas?: number; metaMrr?: string; metaLeads?: number; metaAgendamentos?: number
+    };
   }>('/api/commercial-months/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const sets: string[] = [];
     const params: unknown[] = [];
@@ -42,6 +45,11 @@ export async function commercialMonthRoutes(app: FastifyInstance) {
     if (req.body.leadsGerados !== undefined) { sets.push(`leads_gerados = $${i++}`); params.push(req.body.leadsGerados); }
     if (req.body.leadsMql !== undefined) { sets.push(`leads_mql = $${i++}`); params.push(req.body.leadsMql); }
     if (req.body.permanenciaMedia !== undefined) { sets.push(`permanencia_media = $${i++}`); params.push(req.body.permanenciaMedia); }
+    if (req.body.custosExtras !== undefined) { sets.push(`custos_extras = $${i++}`); params.push(req.body.custosExtras); }
+    if (req.body.metaVendas !== undefined) { sets.push(`meta_vendas = $${i++}`); params.push(req.body.metaVendas); }
+    if (req.body.metaMrr !== undefined) { sets.push(`meta_mrr = $${i++}`); params.push(req.body.metaMrr); }
+    if (req.body.metaLeads !== undefined) { sets.push(`meta_leads = $${i++}`); params.push(req.body.metaLeads); }
+    if (req.body.metaAgendamentos !== undefined) { sets.push(`meta_agendamentos = $${i++}`); params.push(req.body.metaAgendamentos); }
     if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
 
     params.push(req.params.id);

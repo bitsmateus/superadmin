@@ -43,6 +43,13 @@
   /* Skeleton shimmer */
   --skeleton-base: rgba(255, 255, 255, 0.04);
   --skeleton-shine: rgba(255, 255, 255, 0.08);
+
+  /* Cores de gráfico — tríade validada pros dois temas (separação garantida inclusive em
+   * daltonismo, e contraste suficiente contra a superfície de cada tema). Estes são os passos
+   * do tema ESCURO; [data-theme='light'] troca pelos do claro. */
+  --viz-1: #3987e5;
+  --viz-2: #199e70;
+  --viz-3: #d95926;
 }
 
 [data-theme='light'] {
@@ -70,6 +77,10 @@
 
   --skeleton-base: rgba(15, 23, 42, 0.05);
   --skeleton-shine: rgba(15, 23, 42, 0.09);
+
+  --viz-1: #2a78d6;
+  --viz-2: #1baf7a;
+  --viz-3: #eb6834;
 }
 
 html,

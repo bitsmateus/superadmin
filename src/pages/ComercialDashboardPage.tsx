@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { LeadTodayBySdr } from '@/components/comercial/LeadTodayBySdr'
 import { SdrSummaryPanel } from '@/components/comercial/SdrSummaryPanel'
+import { PainelMetricasMes } from '@/components/comercial/PainelMetricasMes'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { SdrFilterButton } from '@/components/comercial/LeadBoardsView'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted } from '@/hooks/useLeadBoards'
@@ -159,6 +160,12 @@ export function ComercialDashboardPage() {
                 </Link>
               </div>
             </div>
+
+            {/* O painel de dinheiro/metas é sempre de um MÊS inteiro — investimento, leads gerados e
+                meta não existem "por dia". Ele segue o mês do fim do período escolhido: em "Hoje" e
+                "Mês atual" mostra o mês corrente; em "Mês anterior" (ou num período personalizado)
+                mostra o mês daquela data. */}
+            <PainelMetricasMes monthId={to.slice(0, 7)} rows={pageRows} boards={boards} />
 
             <LeadTodayPanel rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
             <LeadTodayBySdr rows={rows} boards={boards} onOpenLead={setOpenLeadId} />

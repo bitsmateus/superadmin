@@ -1077,6 +1077,15 @@ CREATE TABLE IF NOT EXISTS commercial_months (
   -- Leads qualificados (MQL) do mês — manual, igual leads_gerados (o CRM não marca MQL).
   leads_mql INT NOT NULL DEFAULT 0,
   permanencia_media NUMERIC(10,2) NOT NULL DEFAULT 0,
+  -- Custos de aquisição FORA do tráfego (ferramentas, comissão, bônus, agência). Entram no CPL,
+  -- no CAC e no ROI junto com o investimento — é o que torna o CAC editável sem inventar número:
+  -- em vez de digitar o CAC pronto, a pessoa diz quanto gastou a mais e a conta se refaz.
+  custos_extras TEXT NOT NULL DEFAULT '0,00',
+  -- Metas do mês (0 = sem meta definida, o gráfico some).
+  meta_vendas INT NOT NULL DEFAULT 0,
+  meta_mrr TEXT NOT NULL DEFAULT '0,00',
+  meta_leads INT NOT NULL DEFAULT 0,
+  meta_agendamentos INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

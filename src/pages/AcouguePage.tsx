@@ -61,6 +61,34 @@ const novoCorte = (): Corte => ({
   ativo: true,
 })
 
+// Lista de cortes bovinos mais comuns, pra não ter que digitar um por um numa base nova — entra só
+// o nome (participação/índice ficam em 0/1, a pessoa preenche ou usa "Calcular índices pelos preços
+// de hoje" depois de colocar o preço praticado de cada um).
+const CORTES_BOVINOS_PADRAO = [
+  'Capa coxão mole bovino',
+  'Coxão mole bovino',
+  'Patinho bovino',
+  'Filé mignon',
+  'Músculo traseiro',
+  'Lagartão bovino',
+  'Costela bovina ripa',
+  'Contrafilé bovino',
+  'Lombo bovino',
+  'Costilhar bovino',
+  'Agulha bovina',
+  'Acém bovino',
+  'Paleta grossa',
+  'Vazio bovino',
+  'Picanha',
+  'Tatu bovino',
+  'Alcatra bovina',
+  'Coxão fora bovino',
+  'Maminha bovina',
+  'Carne moída segunda',
+  'Músculo dianteiro',
+  'Granito bovino',
+]
+
 export function AcouguePage() {
   const [usuario, setUsuario] = React.useState<AcougueUsuario | null>(null)
   const [carregandoSessao, setCarregandoSessao] = React.useState(true)
@@ -266,6 +294,22 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     setSujo(true)
   }
   const [sujo, setSujo] = React.useState(false)
+
+  /** Acrescenta os cortes bovinos padrão que ainda não existem nessa base (compara por nome, sem
+   *  acento/maiúscula) — não mexe em quem já está cadastrado. */
+  const adicionarCortesPadrao = () => {
+    if (!base) return
+    const normaliza = (s: string) =>
+      s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+    const jaTem = new Set(base.cortes.map((c) => normaliza(c.nome)))
+    const faltando = CORTES_BOVINOS_PADRAO.filter((nome) => !jaTem.has(normaliza(nome)))
+    if (faltando.length === 0) {
+      toast.message('Todos esses cortes já estão cadastrados nessa base')
+      return
+    }
+    patch({ cortes: [...base.cortes, ...faltando.map((nome) => ({ ...novoCorte(), nome }))] })
+    toast.success(`${faltando.length} corte(s) adicionado(s) — falta preencher participação e índice de cada um`)
+  }
 
   // Salva sozinho 1,2s depois da última tecla — ninguém no açougue vai lembrar de clicar "salvar".
   React.useEffect(() => {
@@ -486,30 +530,15 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
                   <Campo label={base.unidade === 'arroba' ? 'R$ por arroba' : base.unidade === 'peca' ? 'R$ pago na peça' : 'R$ por kg'}>
-                    <input
-                      inputMode="decimal"
-                      value={txt(base.custo)}
-                      onChange={(e) => patch({ custo: num(e.target.value) })}
-                      style={{ ...inputEstilo, width: 140 }}
-                    />
+                    <CampoDecimal valor={base.custo} onCommit={(n) => patch({ custo: n })} style={{ ...inputEstilo, width: 140 }} />
                   </Campo>
                   {base.unidade === 'peca' && (
                     <Campo label="Peso da peça (kg)">
-                      <input
-                        inputMode="decimal"
-                        value={txt(base.pesoPeca ?? 0)}
-                        onChange={(e) => patch({ pesoPeca: num(e.target.value) })}
-                        style={{ ...inputEstilo, width: 120 }}
-                      />
+                      <CampoDecimal valor={base.pesoPeca ?? 0} onCommit={(n) => patch({ pesoPeca: n })} style={{ ...inputEstilo, width: 120 }} />
                     </Campo>
                   )}
                   <Campo label="Margem sobre o custo (%)">
-                    <input
-                      inputMode="decimal"
-                      value={txt(base.margem)}
-                      onChange={(e) => patch({ margem: num(e.target.value) })}
-                      style={{ ...inputEstilo, width: 110 }}
-                    />
+                    <CampoDecimal valor={base.margem} onCommit={(n) => patch({ margem: n })} style={{ ...inputEstilo, width: 110 }} />
                   </Campo>
                   <Campo label="Arredondar">
                     <select
@@ -638,34 +667,31 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                               />
                             </td>
                             <td style={tdNum}>
-                              <input
-                                inputMode="decimal"
-                                value={txt(c.participacao)}
-                                onChange={(e) => setCorte(c.id, { participacao: num(e.target.value) })}
+                              <CampoDecimal
+                                valor={c.participacao}
+                                onCommit={(n) => setCorte(c.id, { participacao: n })}
                                 style={{ ...inputCelula, width: 70, textAlign: 'right' }}
                               />
                             </td>
                             <td style={tdNum}>
-                              <input
-                                inputMode="decimal"
-                                value={txt(c.quebra ?? 0)}
-                                onChange={(e) => setCorte(c.id, { quebra: num(e.target.value) })}
+                              <CampoDecimal
+                                valor={c.quebra ?? 0}
+                                onCommit={(n) => setCorte(c.id, { quebra: n })}
                                 style={{ ...inputCelula, width: 62, textAlign: 'right' }}
                               />
                             </td>
                             <td style={tdNum}>
-                              <input
-                                inputMode="decimal"
-                                value={txt(c.indice, 4)}
-                                onChange={(e) => setCorte(c.id, { indice: num(e.target.value) })}
+                              <CampoDecimal
+                                valor={c.indice}
+                                casas={4}
+                                onCommit={(n) => setCorte(c.id, { indice: n })}
                                 style={{ ...inputCelula, width: 70, textAlign: 'right' }}
                               />
                             </td>
                             <td style={tdNum}>
-                              <input
-                                inputMode="decimal"
-                                value={txt(c.precoAtual ?? 0)}
-                                onChange={(e) => setCorte(c.id, { precoAtual: num(e.target.value) })}
+                              <CampoDecimal
+                                valor={c.precoAtual ?? 0}
+                                onCommit={(n) => setCorte(c.id, { precoAtual: n })}
                                 style={{ ...inputCelula, width: 84, textAlign: 'right' }}
                               />
                             </td>
@@ -708,13 +734,23 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                     </tbody>
                   </table>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => patch({ cortes: [...base.cortes, novoCorte()] })}
-                  style={{ ...botaoSecundario, marginTop: 10, alignSelf: 'flex-start' }}
-                >
-                  + Adicionar corte
-                </button>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => patch({ cortes: [...base.cortes, novoCorte()] })}
+                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
+                  >
+                    + Adicionar corte
+                  </button>
+                  <button
+                    type="button"
+                    onClick={adicionarCortesPadrao}
+                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
+                    title="Acrescenta os cortes bovinos mais comuns que ainda não estão nessa base"
+                  >
+                    + Cortes padrão (bovino)
+                  </button>
+                </div>
               </Card>
             </>
           )}
@@ -857,6 +893,45 @@ function Numero({ titulo, valor, alerta }: { titulo: string; valor: string; aler
       <div style={{ fontSize: 11, color: '#9A928B', textTransform: 'uppercase', letterSpacing: 0.4 }}>{titulo}</div>
       <div style={{ fontSize: 17, fontWeight: 800, color: alerta ? '#B25E1B' : '#2A2622' }}>{valor}</div>
     </div>
+  )
+}
+
+/**
+ * Campo numérico com vírgula decimal (participação, quebra, índice, preço hoje). Tem estado próprio
+ * do texto digitado — antes o valor exibido vinha direto de `txt(numero)`, recalculado a cada tecla;
+ * ao digitar a vírgula, `num("43,")` virava 0 e o campo "voltava" pra "0" na hora, sem deixar
+ * terminar de digitar a casa decimal. Enquanto o campo está em foco, mostra exatamente o que a
+ * pessoa digitou; só reformata (2 casas, vírgula) ao sair do campo.
+ */
+function CampoDecimal({ valor, onCommit, casas = 2, style }: {
+  valor: number
+  onCommit: (n: number) => void
+  casas?: number
+  style?: React.CSSProperties
+}) {
+  const [raw, setRaw] = React.useState(() => txt(valor, casas))
+  const focado = React.useRef(false)
+
+  React.useEffect(() => {
+    if (!focado.current) setRaw(txt(valor, casas))
+  }, [valor, casas])
+
+  return (
+    <input
+      inputMode="decimal"
+      value={raw}
+      onFocus={() => { focado.current = true }}
+      onChange={(e) => {
+        const v = e.target.value.replace(/[^0-9,.-]/g, '')
+        setRaw(v)
+        onCommit(num(v))
+      }}
+      onBlur={() => {
+        focado.current = false
+        setRaw(txt(num(raw), casas))
+      }}
+      style={style}
+    />
   )
 }
 

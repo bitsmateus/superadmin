@@ -61,32 +61,37 @@ const novoCorte = (): Corte => ({
   ativo: true,
 })
 
-// Lista de cortes bovinos mais comuns, pra não ter que digitar um por um numa base nova — entra só
-// o nome (participação/índice ficam em 0/1, a pessoa preenche ou usa "Calcular índices pelos preços
-// de hoje" depois de colocar o preço praticado de cada um).
-const CORTES_BOVINOS_PADRAO = [
-  'Capa coxão mole bovino',
-  'Coxão mole bovino',
-  'Patinho bovino',
-  'Filé mignon',
-  'Músculo traseiro',
-  'Lagartão bovino',
-  'Costela bovina ripa',
-  'Contrafilé bovino',
-  'Lombo bovino',
-  'Costilhar bovino',
-  'Agulha bovina',
-  'Acém bovino',
-  'Paleta grossa',
-  'Vazio bovino',
-  'Picanha',
-  'Tatu bovino',
-  'Alcatra bovina',
-  'Coxão fora bovino',
-  'Maminha bovina',
-  'Carne moída segunda',
-  'Músculo dianteiro',
-  'Granito bovino',
+// Lista de cortes bovinos + % de participação, calibrada com a pesagem real de um boi de 85 kg
+// desossado (custo R$34/kg) que o Mercado Nunes passou — cada % é peso do corte ÷ 85 kg. Entra só
+// a participação; índice/preço hoje a pessoa preenche (ou usa "Calcular índices pelos preços de
+// hoje" depois de lançar o preço praticado de cada um). "Paleta grossa" veio em duas pesagens
+// separadas na mensagem (0,600 kg + 5,312 kg) — somei as duas num corte só. A soma das % dá ~97,1%
+// (82,53 kg dos 85 kg) — os ~2,9 kg que faltam não foram discriminados por corte na pesagem (perda
+// de processo/itens não destacados); quem usar esse modelo pode ajustar à mão se quiser fechar 100%.
+const CORTES_BOVINOS_PADRAO: { nome: string; participacao: number }[] = [
+  { nome: 'Capa coxão mole bovino', participacao: 1.53 },
+  { nome: 'Coxão mole bovino', participacao: 4.76 },
+  { nome: 'Patinho bovino', participacao: 7.52 },
+  { nome: 'Filé mignon', participacao: 1.88 },
+  { nome: 'Músculo traseiro', participacao: 3.51 },
+  { nome: 'Lagartão bovino', participacao: 1.65 },
+  { nome: 'Costela bovina ripa', participacao: 17.07 },
+  { nome: 'Contrafilé bovino', participacao: 5.54 },
+  { nome: 'Lombo bovino', participacao: 4.45 },
+  { nome: 'Costilhar bovino', participacao: 0.91 },
+  { nome: 'Agulha bovina', participacao: 4.68 },
+  { nome: 'Acém bovino', participacao: 3.66 },
+  { nome: 'Paleta grossa', participacao: 6.96 },
+  { nome: 'Vazio bovino', participacao: 2.84 },
+  { nome: 'Picanha', participacao: 1.4 },
+  { nome: 'Tatu bovino', participacao: 2.08 },
+  { nome: 'Alcatra bovina', participacao: 3.69 },
+  { nome: 'Coxão fora bovino', participacao: 2.61 },
+  { nome: 'Maminha bovina', participacao: 1.18 },
+  { nome: 'Carne moída segunda', participacao: 5.04 },
+  { nome: 'Músculo dianteiro', participacao: 6.61 },
+  { nome: 'Granito bovino', participacao: 3.38 },
+  { nome: 'Sebo bovino', participacao: 4.15 },
 ]
 
 export function AcouguePage() {
@@ -295,20 +300,44 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
   }
   const [sujo, setSujo] = React.useState(false)
 
-  /** Acrescenta os cortes bovinos padrão que ainda não existem nessa base (compara por nome, sem
-   *  acento/maiúscula) — não mexe em quem já está cadastrado. */
+  /** Acrescenta os cortes bovinos padrão (com % de participação já calibrada) — quem ainda não
+   *  existe na base entra novo; quem já existe mas está com participação 0 (nunca foi preenchido)
+   *  ganha a % do modelo também. Corte que já tem uma participação diferente de 0 não é tocado —
+   *  não sobrescreve o que já foi ajustado à mão. Compara nome sem acento/maiúscula. */
   const adicionarCortesPadrao = () => {
     if (!base) return
     const normaliza = (s: string) =>
       s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-    const jaTem = new Set(base.cortes.map((c) => normaliza(c.nome)))
-    const faltando = CORTES_BOVINOS_PADRAO.filter((nome) => !jaTem.has(normaliza(nome)))
-    if (faltando.length === 0) {
-      toast.message('Todos esses cortes já estão cadastrados nessa base')
+    const porNome = new Map(base.cortes.map((c) => [normaliza(c.nome), c]))
+
+    let novos = 0
+    let atualizados = 0
+    const cortesAtualizados = base.cortes.map((c) => {
+      const modelo = CORTES_BOVINOS_PADRAO.find((m) => normaliza(m.nome) === normaliza(c.nome))
+      if (modelo && (c.participacao ?? 0) === 0) {
+        atualizados++
+        return { ...c, participacao: modelo.participacao }
+      }
+      return c
+    })
+    const paraAdicionar = CORTES_BOVINOS_PADRAO.filter((m) => !porNome.has(normaliza(m.nome)))
+    novos = paraAdicionar.length
+
+    if (novos === 0 && atualizados === 0) {
+      toast.message('Todos esses cortes já estão cadastrados e com participação preenchida')
       return
     }
-    patch({ cortes: [...base.cortes, ...faltando.map((nome) => ({ ...novoCorte(), nome }))] })
-    toast.success(`${faltando.length} corte(s) adicionado(s) — falta preencher participação e índice de cada um`)
+    patch({
+      cortes: [
+        ...cortesAtualizados,
+        ...paraAdicionar.map((m) => ({ ...novoCorte(), nome: m.nome, participacao: m.participacao })),
+      ],
+    })
+    const partes = [
+      novos > 0 && `${novos} corte(s) adicionado(s)`,
+      atualizados > 0 && `${atualizados} com participação preenchida`,
+    ].filter(Boolean)
+    toast.success(partes.join(' · '))
   }
 
   // Salva sozinho 1,2s depois da última tecla — ninguém no açougue vai lembrar de clicar "salvar".
@@ -746,9 +775,9 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                     type="button"
                     onClick={adicionarCortesPadrao}
                     style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
-                    title="Acrescenta os cortes bovinos mais comuns que ainda não estão nessa base"
+                    title="Acrescenta os cortes bovinos mais comuns, já com a % de participação calibrada no boi de 85kg"
                   >
-                    + Cortes padrão (bovino)
+                    + Cortes padrão (bovino, com % calibrada)
                   </button>
                 </div>
               </Card>

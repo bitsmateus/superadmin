@@ -151,10 +151,11 @@ export default function App() {
         <Route path="/mercadonunes/acougue" element={<AcouguePage />} />
         <Route path="/pendencias/:token" element={<PendenciasPublicPage />} />
         <Route path="/ficha" element={<FichaPublicPage />} />
-        {/* /r/<token> é o endereço curto que se compartilha; /relatorio/<token> continua valendo
+        {/* /dashboard/<nome> é o endereço que se compartilha; /relatorio e /r continuam valendo
             pros links que já foram enviados. */}
-        <Route path="/r/:token" element={<RelatorioPublicoPage />} />
+        <Route path="/dashboard/:token" element={<RelatorioPublicoPage />} />
         <Route path="/relatorio/:token" element={<RelatorioPublicoPage />} />
+        <Route path="/r/:token" element={<RelatorioPublicoPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />
         <Route path="/nps/:token" element={<NpsPublicPage />} />
 

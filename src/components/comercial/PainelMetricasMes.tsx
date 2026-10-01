@@ -379,7 +379,7 @@ function BotaoLinkPublico({ monthId }: { monthId: string }) {
 
   const copiar = async (token: string, aviso: string) => {
     // Endereço legível e sem o mês na ponta: quem abre cai no mês mais recente e troca no seletor.
-    await navigator.clipboard.writeText(`${window.location.origin}/relatorio/${token}`)
+    await navigator.clipboard.writeText(`${window.location.origin}/dashboard/${token}`)
     toast.success(aviso)
   }
 
@@ -401,7 +401,7 @@ function BotaoLinkPublico({ monthId }: { monthId: string }) {
     const escolhido = window.prompt(
       `Nome do endereço do relatório (letras, números e hífen).
 
-Vai ficar assim: ${window.location.origin}/relatorio/SEU-NOME
+Vai ficar assim: ${window.location.origin}/dashboard/SEU-NOME
 O endereço anterior para de funcionar na hora.`,
       atual.token,
     )
@@ -409,7 +409,7 @@ O endereço anterior para de funcionar na hora.`,
     setOcupado(true)
     try {
       const { token } = await api.post<{ token: string }>('/api/relatorio-comercial/link', { nome: escolhido.trim() })
-      await copiar(token, `Endereço novo: /relatorio/${token} — copiado. O anterior parou de funcionar.`)
+      await copiar(token, `Endereço novo: /dashboard/${token} — copiado. O anterior parou de funcionar.`)
     } catch (err) {
       toast.error('Não deu pra usar esse nome: ' + (err as Error).message)
     } finally {

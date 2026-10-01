@@ -39,16 +39,17 @@ export function GraficoRosca({ fatias, total, rotuloTotal, vazio = 'Sem dados no
     return <p className="py-8 text-center text-xs text-foreground/35">{vazio}</p>
   }
 
-  const raio = 52
+  const raio = 56
+  const traco = 13
   const circ = 2 * Math.PI * raio
-  // 2px de respiro entre fatias, convertidos pro comprimento do traço.
-  const respiro = comValor.length > 1 ? 4 : 0
+  // Respiro de 3px entre fatias — sem ele, duas cores vizinhas viram uma mancha só.
+  const respiro = comValor.length > 1 ? 6 : 0
   let acumulado = 0
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-4 sm:justify-start sm:gap-5">
-      <svg viewBox="0 0 140 140" className="aspect-square w-[120px] shrink-0 sm:w-[140px]" role="img">
-        <circle cx="70" cy="70" r={raio} fill="none" stroke="currentColor" strokeWidth="16" className="text-elevate/[0.06]" />
+    <div className="flex flex-wrap items-center justify-center gap-4 sm:flex-nowrap sm:justify-start sm:gap-5">
+      <svg viewBox="0 0 140 140" className="aspect-square w-[124px] shrink-0 sm:w-[136px]" role="img">
+        <circle cx="70" cy="70" r={raio} fill="none" stroke="currentColor" strokeWidth={traco} className="text-elevate/[0.05]" />
         {comValor.map((f) => {
           const fracao = f.valor / soma
           const tamanho = Math.max(fracao * circ - respiro, 1)
@@ -60,39 +61,54 @@ export function GraficoRosca({ fatias, total, rotuloTotal, vazio = 'Sem dados no
               cx="70" cy="70" r={raio}
               fill="none"
               stroke={f.cor}
-              strokeWidth="16"
+              strokeWidth={traco}
               strokeLinecap="butt"
               strokeDasharray={`${tamanho} ${circ - tamanho}`}
               strokeDashoffset={offset}
               transform="rotate(-90 70 70)"
+              className="transition-[stroke-dasharray] duration-500"
             >
               <title>{`${f.nome}: ${f.rotulo ?? f.valor} (${Math.round(fracao * 100)}%)`}</title>
             </circle>
           )
         })}
-        <text x="70" y="66" textAnchor="middle" className="fill-foreground text-[18px] font-semibold">
+        <text x="70" y="68" textAnchor="middle" className="fill-foreground text-[19px] font-bold tracking-tight">
           {total ?? String(soma)}
         </text>
         {rotuloTotal && (
-          <text x="70" y="82" textAnchor="middle" className="fill-foreground/45 text-[9px] uppercase tracking-wider">
+          <text x="70" y="84" textAnchor="middle" className="fill-foreground/35 text-[9px] uppercase tracking-[0.12em]">
             {rotuloTotal}
           </text>
         )}
       </svg>
 
-      <ul className="w-full flex-1 space-y-1.5 sm:w-auto sm:min-w-[150px]">
-        {fatias.map((f) => (
-          <li key={f.nome} className="flex items-center gap-2 text-xs">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: f.cor }} />
-            <span className="truncate text-foreground/70">{f.nome}</span>
-            <span className="ml-auto shrink-0 font-medium tabular-nums text-foreground">
-              {f.rotulo ?? f.valor}
-            </span>
-            <span className="w-9 shrink-0 text-right tabular-nums text-foreground/40">
-              {soma > 0 ? `${Math.round((f.valor / soma) * 100)}%` : '—'}
-            </span>
-          </li>
-        ))}
+      {/* Cada linha carrega a própria barrinha: a rosca dá a proporção no olho, a barra deixa
+          comparar duas fatias parecidas sem medir ângulo. */}
+      <ul className="w-full min-w-0 flex-1 space-y-2">
+        {fatias.map((f) => {
+          const fracao = soma > 0 ? f.valor / soma : 0
+          const zerado = f.valor <= 0
+          return (
+            <li key={f.nome} className={cn('min-w-0', zerado && 'opacity-45')}>
+              <div className="flex items-baseline gap-2 text-xs">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: f.cor }} />
+                <span className="truncate text-foreground/70">{f.nome}</span>
+                <span className="ml-auto shrink-0 font-semibold tabular-nums text-foreground">
+                  {f.rotulo ?? f.valor}
+                </span>
+                <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-foreground/40">
+                  {Math.round(fracao * 100)}%
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-elevate/[0.06]">
+                <div
+                  className="h-full rounded-full transition-[width] duration-500"
+                  style={{ width: `${Math.max(fracao * 100, zerado ? 0 : 2)}%`, backgroundColor: f.cor }}
+                />
+              </div>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

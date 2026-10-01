@@ -5,6 +5,7 @@ import { useLeadActivity } from '@/hooks/useLeadActivity'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { todayKey, classifyLeadToday } from '@/lib/leadDates'
 import { cn } from '@/lib/utils'
+import { nomeComFuncao } from '@/lib/funcaoDoTime'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 interface SdrToday {
@@ -148,7 +149,7 @@ export function LeadTodayBySdr({ rows, boards, onOpenLead }: LeadTodayBySdrProps
                   <td className="px-3 py-2.5">
                     <span className="inline-flex items-center gap-1.5 font-medium text-foreground/70">
                       <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
-                      {m.sdr === 'Sem SDR' ? m.sdr : `SDR ${m.sdr}`}
+                      {nomeComFuncao(m.sdr)}
                     </span>
                   </td>
                   <CountCell matches={m.naoAtualizado} boards={boards} onOpenLead={onOpenLead} tone="text-warning bg-warning/10" />

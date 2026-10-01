@@ -5,6 +5,7 @@ import { useLeadMilestones } from '@/hooks/useLeadMilestones'
 import { MILESTONE_NO_SHOW, MILESTONE_VENDIDO } from '@/components/comercial/LeadDashboardView'
 import { ClickableStat } from '@/components/comercial/ClickableStat'
 import { cn } from '@/lib/utils'
+import { nomeComFuncao } from '@/lib/funcaoDoTime'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 interface SdrSummary {
@@ -72,7 +73,7 @@ function SdrSummaryCard({ s, boards, onOpenLead }: { s: SdrSummary; boards: Lead
           {initials(s.sdr)}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-foreground">{s.sdr === 'Sem SDR' ? s.sdr : `SDR ${s.sdr}`}</p>
+          <p className="truncate text-sm font-semibold text-foreground">{nomeComFuncao(s.sdr)}</p>
           <p className="text-[11px] text-foreground/40">{s.totalRows.length} lead{s.totalRows.length === 1 ? '' : 's'} no total</p>
         </div>
         <ClickableStat matches={s.totalRows} boards={boards} onOpenLead={onOpenLead}>

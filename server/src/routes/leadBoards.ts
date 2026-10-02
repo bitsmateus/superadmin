@@ -399,9 +399,8 @@ function ehQuadroReuniaoAgendada(name: string): boolean {
   return name.toLowerCase().includes('agendada');
 }
 
-/** Etiquetas do funil que andam juntas nos dois CRMs. Status fora dessa lista (Primeiro Contato,
- * Disparo em massa, Perdidos, Desqualificado...) fica só no CRM onde foi mexido — cada um
- * organiza a base dele sem bagunçar a do outro. */
+/** As etapas do funil compartilhado. Hoje TODO status atravessa o espelho (ver propagarEspelho) —
+ * esta lista ficou só como referência de quais etapas o CRM do closer já nasce tendo. */
 const ESPELHO_STATUS = [
   'Reunião agendada',
   'Reunião não comparecida',
@@ -464,6 +463,47 @@ async function statusDoQuadro(boardId: string): Promise<string | null> {
     labels.find((l) => normalizaNome(l.name) === alvo) ??
     labels.find((l) => normalizaNome(l.name).startsWith(alvo));
   return match?.name ?? null;
+}
+
+/**
+ * O quadro de mesmo nome na aba do parceiro — criando se não existir.
+ *
+ * Os dois CRMs do espelho têm que mostrar a MESMA lead no mesmo lugar: se o Arthur manda pra
+ * "Disparo em massa", a cópia do closer vai pro quadro "Disparo em massa" dele. Como o CRM do
+ * closer nasceu só com as colunas de reunião, o quadro que falta é criado na hora, no fim da
+ * lista — melhor um quadro novo do que a cópia parada numa coluna que não corresponde ao que
+ * aconteceu.
+ */
+async function quadroEquivalente(page: string, nomeQuadro: string, cor: string): Promise<string | null> {
+  const existente = await quadroDoStatus(page, nomeQuadro);
+  if (existente) return existente;
+  if (!nomeQuadro.trim()) return null;
+  const [{ max }] = await query<{ max: number | null }>(
+    'SELECT MAX(position) as max FROM lead_boards WHERE page = $1',
+    [page]
+  );
+  const [novo] = await query<{ id: string }>(
+    `INSERT INTO lead_boards (name, color, page, position) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [nomeQuadro.trim(), cor || '#9CA3AF', page, (max ?? -1) + 1]
+  );
+  console.log('[espelho] quadro criado no CRM parceiro:', page, '->', nomeQuadro);
+  return novo?.id ?? null;
+}
+
+/** A etiqueta de Status equivalente na aba do parceiro — criando com a mesma cor se faltar. */
+async function etiquetaEquivalente(page: string, status: string, corOrigem: string | null): Promise<string> {
+  const existente = await etiquetaDeStatus(page, status);
+  if (existente) return existente;
+  const [{ max }] = await query<{ max: number | null }>(
+    `SELECT MAX(position) as max FROM lead_labels WHERE field = 'status' AND page_id = $1`,
+    [page]
+  );
+  await query(
+    `INSERT INTO lead_labels (field, name, color, position, page_id) VALUES ('status', $1, $2, $3, $4)`,
+    [status, corOrigem || '#9CA3AF', (max ?? -1) + 1, page]
+  );
+  console.log('[espelho] etiqueta de status criada no CRM parceiro:', page, '->', status);
+  return status;
 }
 
 /** Cria a cópia no CRM do closer, se ainda não existir. Nunca lança: roda em background depois da
@@ -545,13 +585,11 @@ async function propagarEspelho(
 ) {
   try {
     const campos = Object.keys(patch).filter((k) => ESPELHO_CAMPOS.includes(k));
-    // Compara sem maiúscula/acento: os dois CRMs escrevem a mesma etapa de jeitos diferentes, e
-    // exigir a grafia exata fazia a etiqueta do closer ("Reunião Não Comparecida") não sincronizar.
-    const novoStatus =
-      typeof patch.status === 'string' &&
-      ESPELHO_STATUS.some((e) => normalizaNome(e) === normalizaNome(patch.status as string))
-        ? patch.status
-        : null;
+    // QUALQUER status atravessa o espelho, não só as etapas do funil: os dois CRMs mostram a mesma
+    // lead, então ela tem que estar no mesmo lugar nos dois. Quando o Arthur manda pra "Disparo em
+    // massa", a cópia do closer vai junto — antes ela ficava parada em "Reunião agendada" e os dois
+    // quadros se contradiziam.
+    const novoStatus = typeof patch.status === 'string' && patch.status.trim() ? patch.status : null;
     if (!campos.length && !novoStatus) return;
 
     // espelhoOrigemId preenchido = quem foi editado é a CÓPIA, então o parceiro é a original.
@@ -570,16 +608,23 @@ async function propagarEspelho(
       params.push(patch[k]);
     }
 
-    // Grava a etapa com o nome que ELA tem na aba do parceiro (é o nome que tem cor lá); só se o
-    // parceiro não tiver etiqueta equivalente é que vai o texto como veio.
+    // Grava a etapa com o nome que ELA tem na aba do parceiro (é o nome que tem cor lá); faltando
+    // a etiqueta, ela é criada com a mesma cor da origem, pra não aparecer cinza do outro lado.
+    const corDaOrigem = novoStatus
+      ? (await queryOne<{ color: string }>(
+          `SELECT color FROM lead_labels WHERE field = 'status' AND name = $1 LIMIT 1`,
+          [novoStatus]
+        ))?.color ?? null
+      : null;
     const statusParceiro = novoStatus
-      ? (await etiquetaDeStatus(parceiro.page, novoStatus)) ?? novoStatus
+      ? await etiquetaEquivalente(parceiro.page, novoStatus, corDaOrigem)
       : null;
     const statusMudou = !!statusParceiro && normalizaNome(statusParceiro) !== normalizaNome(parceiro.status);
     if (statusMudou) {
       sets.push(`status = $${params.length + 1}`);
       params.push(statusParceiro);
-      const quadro = await quadroDoStatus(parceiro.page, novoStatus!);
+      // O quadro acompanha: mesmo nome do status, criado na aba do parceiro se ainda não existir.
+      const quadro = await quadroEquivalente(parceiro.page, statusParceiro!, corDaOrigem ?? '#9CA3AF');
       if (quadro && quadro !== parceiro.board_id) {
         sets.push(`board_id = $${params.length + 1}`);
         params.push(quadro);

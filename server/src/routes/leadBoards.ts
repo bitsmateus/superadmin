@@ -869,18 +869,6 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       }
 
       const patch = req.body;
-      // Grupo e Status andam lado a lado: trocar o quadro (pelo select "Grupo" do modal, pelo menu
-      // "Mover" ou arrastando o card) já acerta a etiqueta de Status junto. O caminho contrário
-      // (Status -> quadro) já existia no front; sem este aqui, mover a lead deixava o Status
-      // dizendo uma coisa e o Grupo mostrando outra. Fica no servidor de propósito: assim vale pros
-      // três caminhos de uma vez e o resto da rota (linha do tempo, espelho do closer, criação da
-      // venda ao cair em "Vendido") enxerga a mudança de status como qualquer outra.
-      // Quem já manda status junto no patch tem a palavra final — não sobrescreve.
-      if (typeof patch.board_id === 'string' && !('status' in patch)) {
-        const etiqueta = await statusDoQuadro(patch.board_id);
-        if (etiqueta) patch.status = etiqueta;
-      }
-
       const sets: string[] = [];
       const params: unknown[] = [];
       let i = 1;
@@ -1051,6 +1039,17 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         if (targetBoard?.page_archived) {
           return reply.status(400).send({ message: 'Não é possível mover o lead para um quadro de uma página arquivada.' });
         }
+      }
+
+      // Grupo e Status andam lado a lado: trocar o quadro (pelo select "Grupo" do modal, pelo menu
+      // "Mover" ou arrastando o card) já acerta a etiqueta de Status junto — senão a lead fica
+      // dizendo uma coisa no grupo e outra no status. Fica no servidor de propósito: vale pros três
+      // caminhos de uma vez, e o resto da rota (linha do tempo, espelho do closer, venda ao cair em
+      // "Vendido") enxerga a mudança como qualquer outra.
+      // Quem já manda status junto no patch tem a palavra final — não sobrescreve.
+      if (typeof patch.board_id === 'string' && !('status' in patch)) {
+        const etiqueta = await statusDoQuadro(patch.board_id);
+        if (etiqueta) patch.status = etiqueta;
       }
 
       const sets: string[] = [];

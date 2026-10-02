@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { diaLocal } from '@/lib/diaLocal'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -22,7 +23,9 @@ export function monthIdBounds(id: string): { from: string; to: string } {
 }
 export function withinBounds(iso: string | null | undefined, bounds: { from: string; to: string }): boolean {
   if (!iso) return false
-  const d = iso.slice(0, 10)
+  // Dia no fuso de quem olha, não em UTC — ver diaLocal: cortar o ISO jogava lead criada à noite
+  // pro dia (e, na virada, pro mês) seguinte.
+  const d = diaLocal(iso)
   if (bounds.from && d < bounds.from) return false
   if (bounds.to && d > bounds.to) return false
   return true

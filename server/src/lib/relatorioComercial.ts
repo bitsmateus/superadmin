@@ -94,7 +94,10 @@ export async function montarRelatorioDoMes(mes: string): Promise<RelatorioComerc
           )) AS compareceu
        FROM lead_rows lr JOIN lead_boards lb ON lb.id = lr.board_id
        WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL
-         AND lr.created_at >= $1::date AND lr.created_at < $2::date
+         -- Dia em Brasília, não em UTC: lead criada às 23h do último dia do mês caía no mês
+         -- seguinte, e o relatório público divergia da tela interna.
+         AND (lr.created_at AT TIME ZONE 'America/Sao_Paulo') >= $1::date
+         AND (lr.created_at AT TIME ZONE 'America/Sao_Paulo') < $2::date
      )
      SELECT count(*) AS leads,
             count(*) FILTER (WHERE agendada) AS agendadas,
@@ -111,8 +114,10 @@ export async function montarRelatorioDoMes(mes: string): Promise<RelatorioComerc
     `SELECT lr.sdr, lr.valor_mrr, lr.valor_implementacao
      FROM lead_rows lr JOIN lead_boards lb ON lb.id = lr.board_id
      WHERE lb.is_vendas AND lr.deleted_at IS NULL AND lr.venda_revertida IS NOT TRUE
-       AND COALESCE(NULLIF(lr.fechamento, ''), to_char(lr.created_at, 'YYYY-MM-DD')) >= $1
-       AND COALESCE(NULLIF(lr.fechamento, ''), to_char(lr.created_at, 'YYYY-MM-DD')) < $2`,
+       AND COALESCE(NULLIF(lr.fechamento, ''),
+                    to_char(lr.created_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD')) >= $1
+       AND COALESCE(NULLIF(lr.fechamento, ''),
+                    to_char(lr.created_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD')) < $2`,
     [inicio, fimExclusivo]
   );
 

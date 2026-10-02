@@ -11,6 +11,7 @@ import { useLeadMilestones } from '@/hooks/useLeadMilestones'
 import { useCommercialMonths, useCommercialMonthsLoaded } from '@/hooks/useCommercialMonths'
 import { commercialMonthsService } from '@/services/commercialMonths'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
+import { diaLocal } from '@/lib/diaLocal'
 import { cn } from '@/lib/utils'
 
 const MONTH_NAMES = [
@@ -185,7 +186,7 @@ export function PainelMensalPage() {
     // que o status virou "Reunião agendada") — sem isso, todo lead sem essa data marcada sumia de
     // "até hoje" mesmo já tendo tido a reunião de verdade, o que fica pior do que o bug original.
     const monthCohort = allRows.filter((r) => {
-      const d = r.createdAt.slice(0, 10)
+      const d = diaLocal(r.createdAt)
       return d >= from && d <= to
     })
     const agendadosTotal = monthCohort.filter((r) => milestoneById.get(r.id)?.everAgendada)
@@ -207,7 +208,7 @@ export function PainelMensalPage() {
       ? allRows.filter((r) => r.boardId === vendasBoard.id && !r.vendaRevertida)
       : []
     const vendasNoMes = vendasRows.filter((r) => {
-      const d = (r.fechamento || r.createdAt).slice(0, 10)
+      const d = r.fechamento ? r.fechamento.slice(0, 10) : diaLocal(r.createdAt)
       return d >= from && d <= to
     })
 

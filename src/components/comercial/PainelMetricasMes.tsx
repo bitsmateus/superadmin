@@ -13,6 +13,7 @@ import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useCommercialMonths } from '@/hooks/useCommercialMonths'
 import { commercialMonthsService, type CommercialMonth } from '@/services/commercialMonths'
 import { formatBRLCents, formatBRLCompact, parseBRLCents } from '@/lib/currency'
+import { diaLocal } from '@/lib/diaLocal'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
@@ -63,7 +64,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
   const dados = React.useMemo(() => {
     const { from, to } = limitesDoMes(monthId)
     const leva = rows.filter((r) => {
-      const d = r.createdAt.slice(0, 10)
+      const d = diaLocal(r.createdAt)
       return d >= from && d <= to
     })
     const agendados = leva.filter((r) => milestoneById.get(r.id)?.everAgendada)
@@ -75,7 +76,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
     // preenchidos de verdade (venda avulsa inclusive, que não passou pelo funil).
     const vendasDoMes = (vendasBoard ? rows.filter((r) => r.boardId === vendasBoard.id && !r.vendaRevertida) : [])
       .filter((r) => {
-        const d = (r.fechamento || r.createdAt).slice(0, 10)
+        const d = r.fechamento ? r.fechamento.slice(0, 10) : diaLocal(r.createdAt)
         return d >= from && d <= to
       })
     const mrrCents = vendasDoMes.reduce((s, r) => s + parseBRLCents(r.valorMrr), 0)
@@ -90,7 +91,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
     // Um só, usado no CPL, no funil e na meta: antes a meta olhava só o digitado e mostrava 0 de
     // 400 com o CRM cheio de lead.
     const leadsGerados = month?.leadsGerados || rows.filter((r) => {
-      const d = r.createdAt.slice(0, 10)
+      const d = diaLocal(r.createdAt)
       return d >= from && d <= to
     }).length
     const permanencia = month?.permanenciaMedia ?? 0

@@ -354,6 +354,36 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     toast.success(partes.join(' · '))
   }
 
+  /** O sebo/gordura que sai na desossa não é um corte à venda — é peso que saiu da peça e já foi
+   *  pago, mas não vira receita nenhuma. Modelado como um corte comum com quebra=100%: entra na
+   *  conta de "peso dos cortes" (pra bater com o peso real da peça) mas pesoVendavel = participação
+   *  × (1-100%) = 0, então não recebe preço nem rateio — o custo dele é automaticamente coberto
+   *  encarecendo um pouco os cortes de verdade, exatamente como acontece na prática. Participação
+   *  começa em 0 porque isso varia de peça pra peça — a pessoa ajusta pelo que pesar dessa vez. */
+  const adicionarQuebraGeral = () => {
+    if (!base) return
+    const normaliza = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+    if (base.cortes.some((c) => normaliza(c.nome) === normaliza('Sebo / quebra geral da peça'))) {
+      toast.message('Essa base já tem a linha de quebra geral — ajuste a participação dela')
+      return
+    }
+    patch({
+      cortes: [
+        ...base.cortes,
+        { ...novoCorte(), nome: 'Sebo / quebra geral da peça', participacao: 0, quebra: 100, indice: 0 },
+      ],
+    })
+    toast.success('Adicionado — preenche a % de participação com o quanto perdeu dessa peça (ex.: 3,526kg numa peça de 83kg = 4,25%)')
+  }
+
+  /** Trava/destrava o preço de todos os cortes de uma vez — útil quando a maioria já tem preço
+   *  certo e só alguns poucos precisam recalcular. */
+  const travarTodos = (valor: boolean) => {
+    if (!base) return
+    patch({ cortes: base.cortes.map((c) => ({ ...c, travado: valor })) })
+    toast.success(valor ? 'Todos os cortes travados' : 'Todos os cortes destravados')
+  }
+
   // Salva sozinho 1,2s depois da última tecla — ninguém no açougue vai lembrar de clicar "salvar".
   React.useEffect(() => {
     if (!sujo || !base) return
@@ -572,12 +602,36 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                   ))}
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-                  <Campo label={base.unidade === 'arroba' ? 'R$ por arroba' : base.unidade === 'peca' ? 'R$ pago na peça' : 'R$ por kg'}>
-                    <CampoDecimal valor={base.custo} onCommit={(n) => patch({ custo: n })} style={{ ...inputEstilo, width: 140 }} />
-                  </Campo>
-                  {base.unidade === 'peca' && (
-                    <Campo label="Peso da peça (kg)">
-                      <CampoDecimal valor={base.pesoPeca ?? 0} onCommit={(n) => patch({ pesoPeca: n })} style={{ ...inputEstilo, width: 120 }} />
+                  {base.unidade === 'peca' ? (
+                    <>
+                      {/* Peça inteira: a pessoa sabe o peso e o preço por kg que pagou — o total é
+                          calculado sozinho (preço/kg × peso). Continua gravando em `custo` o valor
+                          TOTAL por baixo dos panos (custoPorKg já espera isso), só a exibição que
+                          muda: em vez de pedir o total, pergunta os dois números que a pessoa já tem
+                          na mão e multiplica. Preencher o peso ANTES do preço por kg — o preço por kg
+                          é sempre custo ÷ peso, então editar o peso depois de já ter um preço por kg
+                          certo mudaria o preço por kg sem querer. */}
+                      <Campo label="Peso da peça (kg)">
+                        <CampoDecimal
+                          valor={base.pesoPeca ?? 0}
+                          onCommit={(novoPeso) => patch({ pesoPeca: novoPeso })}
+                          style={{ ...inputEstilo, width: 120 }}
+                        />
+                      </Campo>
+                      <Campo label="R$ pago por kg">
+                        <CampoDecimal
+                          valor={(base.pesoPeca ?? 0) > 0 ? base.custo / (base.pesoPeca ?? 1) : 0}
+                          onCommit={(precoPorKg) => patch({ custo: Math.round(precoPorKg * (base.pesoPeca ?? 0) * 100) / 100 })}
+                          style={{ ...inputEstilo, width: 120 }}
+                        />
+                      </Campo>
+                      <Campo label="Total pago na peça">
+                        <div style={{ ...inputEstilo, width: 140, background: '#F4F1EC', color: '#7A716A' }}>{brl(base.custo)}</div>
+                      </Campo>
+                    </>
+                  ) : (
+                    <Campo label={base.unidade === 'arroba' ? 'R$ por arroba' : 'R$ por kg'}>
+                      <CampoDecimal valor={base.custo} onCommit={(n) => patch({ custo: n })} style={{ ...inputEstilo, width: 140 }} />
                     </Campo>
                   )}
                   <Campo label="Margem sobre o custo (%)">
@@ -597,6 +651,12 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                     </select>
                   </Campo>
                 </div>
+
+                {base.unidade === 'peca' && (
+                  <p style={{ margin: '8px 0 0', fontSize: 12, color: '#9A928B' }}>
+                    Preenche o peso primeiro, depois o preço por kg — o total é calculado sozinho.
+                  </p>
+                )}
 
                 <div
                   style={{
@@ -792,6 +852,30 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                     title="Acrescenta os 28 cortes do rateio oficial de vocês (código, % de participação e preço de hoje)"
                   >
                     + Cortes padrão (rateio oficial)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={adicionarQuebraGeral}
+                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
+                    title="O sebo/gordura que sai na desossa não é um corte à venda — entra como quebra geral da peça, não como um corte comum"
+                  >
+                    + Sebo / quebra geral da peça
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => travarTodos(true)}
+                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
+                    title="Trava o preço de todos os cortes de uma vez (nenhum é recalculado)"
+                  >
+                    🔒 Travar todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => travarTodos(false)}
+                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
+                    title="Destrava o preço de todos os cortes de uma vez"
+                  >
+                    🔓 Destravar todos
                   </button>
                 </div>
               </Card>

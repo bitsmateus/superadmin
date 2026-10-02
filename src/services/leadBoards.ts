@@ -396,6 +396,27 @@ export const leadBoardsService = {
     })()
   },
 
+  /**
+   * Grava a ordem manual de um quadro: `ids` na ordem final, renumerados 0, 1, 2… no servidor.
+   *
+   * Aplica na hora na tela e salva depois (uma requisição só). Se o servidor recusar, recarrega —
+   * é melhor a lista voltar pro que está salvo do que ficar numa ordem que não existe no banco.
+   */
+  reorderRows(boardId: string, ids: string[]): void {
+    const posicaoNova = new Map(ids.map((id, i) => [id, i]))
+    const copy = rows.map((r) => {
+      const pos = posicaoNova.get(r.id)
+      return pos === undefined || r.position === pos ? r : { ...r, position: pos }
+    })
+    rows = copy
+    notify()
+
+    void api.post('/api/lead-rows/reorder', { boardId, ids }).catch((err) => {
+      toast.error('Falha ao salvar a ordem: ' + (err as Error).message)
+      void reloadRows()
+    })
+  },
+
   /** Soft delete — o back só marca deleted_at, a linha continua no banco pra dar pra
    * restaurar depois pela Lixeira (ver getTrash/restoreRow). `reason` fica salvo em
    * delete_reason (só a aba Vendas pede motivo hoje). */

@@ -883,23 +883,37 @@ function BoardGroup({
     onRowDragStart(ids)
   }
 
-  /** Reordena manualmente dentro do MESMO quadro (arrastar um lead pra cima/baixo de outro).
-   * Só regrava o "position" de quem realmente mudou de lugar entre o ponto de origem e o de
-   * destino — não reindexa o quadro inteiro, importante pros quadros com centenas de leads. */
+  /**
+   * Reordena dentro do MESMO quadro (arrastar um lead pra cima/baixo de outro).
+   *
+   * Parte da ordem que está NA TELA, não da ordem de `position` guardada: quem arrasta espera que
+   * a lead pare onde foi solta e o resto fique quieto. A lista inteira do quadro é renumerada no
+   * servidor numa requisição só (ver /api/lead-rows/reorder) — antes a tela reaproveitava os
+   * valores antigos de posição, e como posição repetida é comum (um quadro com 1053 leads tinha
+   * 781 posições distintas), o empate fazia a lead voltar pro lugar ou embaralhar a lista.
+   *
+   * Leads escondidos por busca/filtro continuam na ordem relativa que já tinham — eles entram na
+   * renumeração no mesmo lugar em que estariam se estivessem visíveis.
+   */
+  // Linha sobre a qual a lead vai cair — sem isso o arraste é às cegas: você solta e descobre
+  // depois onde foi parar.
+  const [alvoDoArraste, setAlvoDoArraste] = React.useState<string | null>(null)
+
   const reorderRow = (draggedId: string, targetId: string) => {
-    const sorted = allRows.slice().sort((a, b) => a.position - b.position)
-    const positions = sorted.map((r) => r.position)
-    const fromIdx = sorted.findIndex((r) => r.id === draggedId)
-    let toIdx = sorted.findIndex((r) => r.id === targetId)
-    if (fromIdx === -1 || toIdx === -1) return
-    const [moved] = sorted.splice(fromIdx, 1)
-    if (toIdx > fromIdx) toIdx -= 1
-    sorted.splice(toIdx, 0, moved)
-    sorted.forEach((r, i) => {
-      if (r.position !== positions[i]) leadBoardsService.updateRow(r.id, { position: positions[i] })
+    const ordem = allRows.slice().sort((a, b) => {
+      const cmp = compareRowsByColumn(a, b, sortBy.key)
+      return sortBy.desc ? -cmp : cmp
     })
-    // Sem isso, o drop pode não parecer ter feito nada — a lista só reflete a nova ordem
-    // visualmente quando ordenada por posição (é literalmente a ordem que acabou de ser definida).
+    const fromIdx = ordem.findIndex((r) => r.id === draggedId)
+    let toIdx = ordem.findIndex((r) => r.id === targetId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const [movida] = ordem.splice(fromIdx, 1)
+    if (toIdx > fromIdx) toIdx -= 1
+    ordem.splice(toIdx, 0, movida)
+
+    leadBoardsService.reorderRows(board.id, ordem.map((r) => r.id))
+    // A ordem manual só aparece quando a lista está ordenada por posição — que é, literalmente, a
+    // ordem que acabou de ser definida.
     setSortBy({ key: 'position', desc: false })
   }
 
@@ -1014,9 +1028,14 @@ function BoardGroup({
                   key={row.id}
                   draggable
                   onDragStart={(e) => startDrag(e, row.id, row.nome)}
-                  onDragEnd={onRowDragEnd}
-                  onDragOver={(e) => e.preventDefault()}
+                  onDragEnd={() => { setAlvoDoArraste(null); onRowDragEnd() }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    if (draggingIds?.length && !draggingIds.includes(row.id)) setAlvoDoArraste(row.id)
+                  }}
+                  onDragLeave={() => setAlvoDoArraste((atual) => (atual === row.id ? null : atual))}
                   onDrop={(e) => {
+                    setAlvoDoArraste(null)
                     const draggedId = e.dataTransfer.getData('text/plain')
                     // Se o lead arrastado não é deste quadro, deixa o evento borbulhar pro
                     // onDrop do quadro (comportamento já existente: move de quadro).
@@ -1031,6 +1050,8 @@ function BoardGroup({
                   className={cn(
                     'group border-b border-line transition-colors',
                     draggingIds?.includes(row.id) ? 'opacity-40' : '',
+                    // Onde a lead vai cair: linha marcada em cima, como no Monday.
+                    alvoDoArraste === row.id ? 'shadow-[inset_0_2px_0_0_#4F8EF7]' : '',
                     row.vendaRevertida ? 'bg-elevate/[0.03] text-foreground/40 line-through decoration-foreground/30' : '',
                     selected ? 'bg-accent/10 hover:bg-accent/15' : 'hover:bg-accent/[0.04]',
                   )}

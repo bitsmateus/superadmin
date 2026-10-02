@@ -1051,6 +1051,46 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     }
   );
 
+  /**
+   * POST /api/lead-rows/reorder — grava a ordem manual de um quadro inteiro de uma vez.
+   *
+   * Antes a tela reaproveitava os valores de `position` que já existiam, trocando-os de dono. Só
+   * que posição repetida é a regra, não a exceção (um quadro com 1053 leads tinha 781 posições
+   * distintas): com empate, a ordenação é arbitrária e arrastar não tinha efeito previsível —
+   * a lead voltava pro lugar ou a lista inteira embaralhava.
+   *
+   * Aqui a lista chega na ordem final e os leads são renumerados 0, 1, 2… numa tacada só. Uma
+   * requisição em vez de centenas, e sem empate pra desempatar errado depois.
+   */
+  app.post<{ Body: { boardId?: string; ids?: string[] } }>(
+    '/api/lead-rows/reorder',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const boardId = req.body?.boardId;
+      const ids = req.body?.ids;
+      if (!boardId || !Array.isArray(ids) || !ids.length) {
+        return reply.status(400).send({ message: 'boardId e ids são obrigatórios' });
+      }
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null && !allowed.includes(boardId)) {
+        return reply.status(403).send({ message: 'Acesso negado' });
+      }
+
+      await query(
+        `UPDATE lead_rows lr
+         SET position = nova.pos, updated_at = NOW()
+         FROM (
+           SELECT id, (ordem - 1) AS pos
+           FROM unnest($2::uuid[]) WITH ORDINALITY AS t(id, ordem)
+         ) nova
+         WHERE lr.id = nova.id AND lr.board_id = $1 AND lr.position IS DISTINCT FROM nova.pos`,
+        [boardId, ids]
+      );
+      return reply.status(204).send();
+    }
+  );
+
   // PATCH /api/lead-rows/:id
   app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
     '/api/lead-rows/:id',

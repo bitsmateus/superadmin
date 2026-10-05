@@ -8,6 +8,7 @@ import {
   BookOpen,
   Briefcase,
   Building2,
+  CalendarDays,
   ChevronDown,
   Columns3,
   Contact,
@@ -75,11 +76,12 @@ const suporteItems = [
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/followups', label: 'Follow-ups', icon: Bell },
+  { to: '/agenda', label: 'Agenda', icon: CalendarDays },
   { to: '/canais', label: 'Canais', icon: Radio },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
 ]
 
-const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/canais', '/tenants', '/nps', '/risco-churn', '/relatorios']
+const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/agenda', '/canais', '/tenants', '/nps', '/risco-churn', '/relatorios']
 
 /** Intercala cópias ("Duplicar") logo depois do item original de cada rota. A cópia herda só o
  * ícone; o nome, o id e a ROTA são próprios dela: `/visao/<id>`, que abre a mesma tela do original

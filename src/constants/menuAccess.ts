@@ -31,6 +31,7 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   { key: 'pipeline', label: 'Pipeline', path: '/pipeline', group: 'suporte' },
   { key: 'clientes', label: 'Clientes', path: '/clients', group: 'suporte' },
   { key: 'followups', label: 'Follow-ups', path: '/followups', group: 'suporte' },
+  { key: 'agenda', label: 'Agenda', path: '/agenda', group: 'suporte' },
   { key: 'canais', label: 'Canais', path: '/canais', group: 'suporte' },
   { key: 'tenants', label: 'Tenants', path: '/tenants', group: 'suporte' },
   { key: 'configuracoes', label: 'Configurações', path: '/settings', group: 'suporte' },

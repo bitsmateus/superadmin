@@ -14,6 +14,7 @@ import { AbaMetricas } from '@/components/gestaoClientes/AbaMetricas'
 import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
+import type { Destino } from '@/lib/gcSaude'
 
 type Aba = 'visao' | 'jornada' | 'metricas' | 'estrategias' | 'relatorios' | 'notas'
 
@@ -48,6 +49,41 @@ export function ClienteNxDetalhePage() {
   React.useEffect(() => {
     void carregar()
   }, [carregar])
+
+  /**
+   * Leva pro lugar onde o sinal do semáforo se resolve. Os que moram na própria Visão geral
+   * (avaliação, serviços) rolam até o bloco e o destacam por um instante; os outros trocam de aba
+   * ou abrem a janela certa.
+   */
+  const irPara = (destino: Destino) => {
+    switch (destino) {
+      case 'jornada':
+      case 'metricas':
+      case 'relatorios':
+        setAba(destino)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      case 'notas':
+        setNotasAbertas(true)
+        return
+      case 'editar':
+        setEditando(true)
+        return
+      case 'avaliacao':
+      case 'servicos': {
+        setAba('visao')
+        // Espera a aba montar antes de procurar o bloco — ao vir de outra aba ele ainda não existe.
+        window.setTimeout(() => {
+          const alvo = document.getElementById(destino === 'avaliacao' ? 'gc-avaliacao' : 'gc-servicos')
+          if (!alvo) return
+          alvo.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          alvo.classList.add('ring-2', 'ring-accent/60')
+          window.setTimeout(() => alvo.classList.remove('ring-2', 'ring-accent/60'), 1600)
+        }, 60)
+        return
+      }
+    }
+  }
 
   const excluir = async () => {
     setExcluindo(true)
@@ -171,6 +207,7 @@ export function ClienteNxDetalhePage() {
                 detalhe={detalhe}
                 onMudou={carregar}
                 onVerNotas={() => setNotasAbertas(true)}
+                onIr={irPara}
               />
             )}
             {aba === 'jornada' && <AbaJornada jornada={detalhe.jornada} onMudou={carregar} />}

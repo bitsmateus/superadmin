@@ -401,7 +401,7 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
 
         <form
           onSubmit={criarMeta}
-          className="mt-4 grid items-end gap-3 border-t border-line pt-4 sm:grid-cols-6"
+          className="mt-4 grid items-start gap-3 border-t border-line pt-4 sm:grid-cols-6"
         >
           <Select
             label="Métrica"
@@ -419,7 +419,6 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
           />
           <Input
             label="Ponto de partida"
-            hint="vazio = valor de hoje"
             value={novaMeta.base}
             onChange={(e) => setNovaMeta((n) => ({ ...n, base: e.target.value }))}
             placeholder={formatarPorChave(novaMeta.chave, valoresDoMes[novaMeta.chave] ?? 0)}
@@ -437,10 +436,23 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
             value={novaMeta.prazo ?? prazoSugerido(novaMeta.horizonte)}
             onChange={(v) => setNovaMeta((n) => ({ ...n, prazo: v }))}
           />
-          <Button type="submit" loading={criandoMeta} leftIcon={<Plus className="h-4 w-4" />}>
-            Criar meta
-          </Button>
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-transparent" aria-hidden>
+              .
+            </span>
+            <Button
+              type="submit"
+              loading={criandoMeta}
+              leftIcon={<Plus className="h-4 w-4" />}
+              className="h-10 w-full"
+            >
+              Criar meta
+            </Button>
+          </div>
         </form>
+        <p className="mt-2 text-xs text-foreground/45">
+          Ponto de partida vazio usa o valor lançado hoje no mês — é de lá que o progresso conta.
+        </p>
       </section>
 
       {mesesLancados.length > 0 && (

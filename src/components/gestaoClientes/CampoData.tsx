@@ -29,7 +29,7 @@ export function CampoData({
       )}
       <div
         className={cn(
-          'flex h-9 items-center rounded-lg border border-line bg-transparent px-3',
+          'flex h-10 items-center rounded-lg border border-line bg-surface px-3 text-sm',
           'focus-within:border-accent/60',
         )}
       >

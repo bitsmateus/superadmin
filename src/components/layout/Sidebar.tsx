@@ -685,7 +685,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                 : 'text-foreground/50 group-hover:text-foreground/75',
             )}
           />
-          <span>Clientes NX Digital</span>
+          <span className="truncate">NX DIGITAL</span>
           <ChevronDown
             className={cn(
               'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',

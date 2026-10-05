@@ -9,7 +9,7 @@ import { CampoData } from '@/components/gestaoClientes/CampoData'
 import {
   comDerivadas, formatarMetrica, mesAtual, mesPorExtenso, numeroDigitado,
 } from '@/lib/gcMetricas'
-import { avaliarSaude } from '@/lib/gcSaude'
+import { avaliarSaude, type Destino } from '@/lib/gcSaude'
 import { AvaliacaoDoResultado, PainelSaude } from '@/components/gestaoClientes/Semaforo'
 import {
   PRIORIDADES, TIPOS_SERVICO, gestaoClientes,
@@ -227,9 +227,12 @@ export function AbaVisaoGeral({
   detalhe,
   onMudou,
   onVerNotas,
+  onIr,
 }: {
   detalhe: GcClienteDetalhe
   onMudou: () => Promise<void> | void
+  /** Chamado ao clicar num sinal do semáforo — a página sabe trocar de aba e abrir janelas. */
+  onIr?: (d: Destino) => void
   /** Leva pra aba de notas — o quadro de avisos daqui é só a prévia do que está fixado lá. */
   onVerNotas?: () => void
 }) {
@@ -257,7 +260,7 @@ export function AbaVisaoGeral({
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
-        <PainelSaude saude={avaliarSaude(cliente)}>
+        <PainelSaude saude={avaliarSaude(cliente)} onIr={onIr}>
           <AvaliacaoDoResultado
             clienteId={cliente.id}
             avaliacao={cliente.avaliacao}
@@ -280,7 +283,7 @@ export function AbaVisaoGeral({
           </dl>
         </section>
 
-        <section className="rounded-xl border border-line p-4">
+        <section id="gc-servicos" className="rounded-xl border border-line p-4 transition-shadow">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-foreground">Serviços contratados</h2>
             {!adicionando && (

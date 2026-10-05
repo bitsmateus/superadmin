@@ -1,9 +1,11 @@
 import * as React from 'react'
 import {
-  AlertTriangle, Check, CircleDot, HelpCircle, Loader2, ShieldAlert, TrendingDown,
+  AlertTriangle, Check, ChevronRight, CircleDot, HelpCircle, Loader2, ShieldAlert, TrendingDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { ROTULO_ESTADO, type Estado, type Saude, type Sinal } from '@/lib/gcSaude'
+import {
+  ROTULO_ESTADO, destinoDoSinal, type Destino, type Estado, type Saude, type Sinal,
+} from '@/lib/gcSaude'
 import {
   NIVEIS_AVALIACAO, gestaoClientes,
   type GcAvaliacao, type GcNivelAvaliacao,
@@ -154,7 +156,7 @@ export function AvaliacaoDoResultado({
   }
 
   return (
-    <div className="rounded-xl border border-line bg-elevate/[0.02] p-3">
+    <div id="gc-avaliacao" className="rounded-xl border border-line bg-elevate/[0.02] p-3 transition-shadow">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-medium text-foreground">Como está o resultado?</p>
@@ -227,10 +229,17 @@ export function AvaliacaoDoResultado({
   )
 }
 
-function LinhaSinal({ sinal }: { sinal: Sinal }) {
+/**
+ * Uma linha do semáforo. Quando a tela sabe pra onde levar, a linha inteira é clicável e mostra
+ * "ir pra…" ao passar o mouse: ver "Nenhum relatório publicado" e ter que adivinhar em qual aba
+ * se publica é exatamente o atrito que o painel existe pra tirar.
+ */
+function LinhaSinal({ sinal, onIr }: { sinal: Sinal; onIr?: (d: Destino) => void }) {
   const { ponto, icone: Icone } = ESTILO[sinal.estado]
-  return (
-    <li className="flex items-start gap-3 border-b border-line py-2 last:border-b-0">
+  const alvo = onIr ? destinoDoSinal(sinal.chave) : null
+
+  const conteudo = (
+    <>
       <span
         className={cn(
           'mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-white',
@@ -239,13 +248,33 @@ function LinhaSinal({ sinal }: { sinal: Sinal }) {
       >
         <Icone className="h-3 w-3" />
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 text-left">
         <span className="block text-sm font-medium text-foreground">{sinal.titulo}</span>
         <span className="block text-xs text-foreground/60">{sinal.detalhe}</span>
       </span>
-      <span className="shrink-0 pt-0.5">
+      <span className="flex shrink-0 items-center gap-2 pt-0.5">
+        {alvo && (
+          <span className="hidden items-center gap-0.5 text-xs text-accent opacity-0 transition-opacity group-hover:opacity-100 sm:flex">
+            {alvo.rotulo} <ChevronRight className="h-3 w-3" />
+          </span>
+        )}
         <PastilhaSaude estado={sinal.estado} />
       </span>
+    </>
+  )
+
+  if (!alvo || !onIr) {
+    return <li className="flex items-start gap-3 border-b border-line py-2 last:border-b-0">{conteudo}</li>
+  }
+  return (
+    <li className="border-b border-line last:border-b-0">
+      <button
+        type="button"
+        onClick={() => onIr(alvo.destino)}
+        className="group -mx-2 flex w-[calc(100%+1rem)] items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-elevate/[0.04]"
+      >
+        {conteudo}
+      </button>
     </li>
   )
 }
@@ -254,7 +283,16 @@ function LinhaSinal({ sinal }: { sinal: Sinal }) {
  * Painel com TODOS os passos — é o que a pessoa que cuida da conta abre pra saber o que fazer.
  * Os sinais ruins vêm primeiro: a tela é pra agir, não pra arquivar.
  */
-export function PainelSaude({ saude, children }: { saude: Saude; children?: React.ReactNode }) {
+export function PainelSaude({
+  saude,
+  children,
+  onIr,
+}: {
+  saude: Saude
+  children?: React.ReactNode
+  /** Leva pra onde o sinal se resolve. Sem isso as linhas ficam só de leitura. */
+  onIr?: (d: Destino) => void
+}) {
   const ordem: Estado[] = ['risco', 'atencao', 'neutro', 'bom', 'otimo']
   const sinais = [...saude.sinais].sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado))
 
@@ -299,7 +337,7 @@ export function PainelSaude({ saude, children }: { saude: Saude; children?: Reac
 
       <ul className="mt-3">
         {sinais.map((s) => (
-          <LinhaSinal key={s.chave} sinal={s} />
+          <LinhaSinal key={s.chave} sinal={s} onIr={onIr} />
         ))}
       </ul>
     </section>

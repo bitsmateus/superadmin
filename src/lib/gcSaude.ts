@@ -35,6 +35,35 @@ export interface Saude {
   churn: { nivel: 'baixo' | 'medio' | 'alto'; motivos: string[] }
 }
 
+/** Lugar da tela onde o sinal se resolve. */
+export type Destino =
+  | 'avaliacao' | 'servicos' | 'editar' | 'jornada' | 'metricas' | 'relatorios' | 'notas'
+
+/**
+ * Pra onde cada sinal leva ao ser clicado. Fica aqui, junto das regras, e não espalhado pela tela:
+ * sinal novo é uma linha nesta tabela, e a tela não precisa saber o que cada um significa.
+ */
+const DESTINO_DO_SINAL: Record<string, { destino: Destino; rotulo: string }> = {
+  avaliacao: { destino: 'avaliacao', rotulo: 'dar a nota' },
+  status: { destino: 'editar', rotulo: 'editar o cliente' },
+  servicos: { destino: 'servicos', rotulo: 'ver os serviços' },
+  renovacao: { destino: 'servicos', rotulo: 'ver a renovação' },
+  jornada: { destino: 'jornada', rotulo: 'abrir a jornada' },
+  pendencias: { destino: 'jornada', rotulo: 'abrir a jornada' },
+  lancamento: { destino: 'metricas', rotulo: 'lançar as métricas' },
+  leads: { destino: 'metricas', rotulo: 'ver as métricas' },
+  cpl: { destino: 'metricas', rotulo: 'ver as métricas' },
+  vendas: { destino: 'metricas', rotulo: 'lançar as vendas' },
+  retorno: { destino: 'metricas', rotulo: 'lançar a receita' },
+  metas: { destino: 'metricas', rotulo: 'definir as metas' },
+  relatorio: { destino: 'relatorios', rotulo: 'publicar o relatório' },
+  contato: { destino: 'notas', rotulo: 'registrar o contato' },
+}
+
+export function destinoDoSinal(chave: string): { destino: Destino; rotulo: string } | null {
+  return DESTINO_DO_SINAL[chave] ?? null
+}
+
 export const ROTULO_ESTADO: Record<Estado, string> = {
   otimo: 'Ótimo',
   bom: 'Bom',

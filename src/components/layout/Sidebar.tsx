@@ -111,6 +111,31 @@ const ROLE_LABELS = {
   suporte: 'Usuário',
 } as const
 
+/**
+ * Abre/fecha um grupo do menu, lembrando a escolha entre visitas (localStorage, por navegador).
+ *
+ * Nasce fechado de propósito: menu que abre tudo sozinho empurra o resto pra fora da tela e obriga
+ * a fechar à mão toda vez. Quem usa um grupo todo dia abre uma vez e ele continua aberto.
+ */
+function useGrupoAberto(chave: string): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
+  const nomeNoArmazenamento = `menu:${chave}:aberto`
+  const [aberto, setAberto] = React.useState(() => {
+    try {
+      return window.localStorage.getItem(nomeNoArmazenamento) === '1'
+    } catch {
+      // Navegador com armazenamento bloqueado (aba anônima, política do sistema): fechado é o
+      // padrão, e nada quebra por causa disso.
+      return false
+    }
+  })
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(nomeNoArmazenamento, aberto ? '1' : '0')
+    } catch { /* idem */ }
+  }, [nomeNoArmazenamento, aberto])
+  return [aberto, setAberto]
+}
+
 /** Chave estável de um item do menu pra guardar a ordem: a rota, ou o id quando é uma cópia
  * ("Duplicar"), que tem rota própria. */
 function chaveDoItem(item: { to: string; pageId?: string }): string {
@@ -268,15 +293,14 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
 
   const [archivedOpen, setArchivedOpen] = React.useState(false)
   const [supportArchiveOpen, setSupportArchiveOpen] = React.useState(false)
-  const [comercialOpen, setComercialOpen] = React.useState(() =>
-    location.pathname.startsWith('/comercial'),
-  )
-  const [financeiroOpen, setFinanceiroOpen] = React.useState(() =>
-    location.pathname.startsWith('/financeiro'),
-  )
-  const [suporteOpen, setSuporteOpen] = React.useState(() =>
-    SUPORTE_ROUTES.some((r) => (r === '/' ? location.pathname === '/' : location.pathname.startsWith(r))),
-  )
+  // Os grupos nascem FECHADOS e lembram o que a pessoa deixou aberto. Antes eles abriam sozinhos
+  // quando a URL era daquela seção — na prática o menu abria cheio no Dashboard, com dez itens de
+  // Suporte na frente, e era preciso fechar toda vez. Quem quiser ver o grupo clica nele, e ele
+  // fica assim até mandar o contrário.
+  const [comercialOpen, setComercialOpen] = useGrupoAberto('comercial')
+  const [financeiroOpen, setFinanceiroOpen] = useGrupoAberto('financeiro')
+  const [suporteOpen, setSuporteOpen] = useGrupoAberto('suporte')
+  const [clientesNxOpen, setClientesNxOpen] = useGrupoAberto('clientes-nx')
   const [newPageOpen, setNewPageOpen] = React.useState(false)
   const [pagesArchiveOpen, setPagesArchiveOpen] = React.useState(false)
 
@@ -338,12 +362,6 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const suporteActive = SUPORTE_ROUTES.some((r) =>
     r === '/' ? activePath === '/' : activePath.startsWith(r),
   )
-
-  // O grupo abre sozinho ao entrar numa cópia — o estado inicial não pode saber disso, porque
-  // as páginas do Suporte ainda não carregaram na primeira renderização.
-  React.useEffect(() => {
-    if (suporteActive) setSuporteOpen(true)
-  }, [suporteActive])
 
   const secondaryItems = withDuplicates(
     [
@@ -632,6 +650,64 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             </NavLink>
           )
         })}
+        </>
+        )}
+
+        {/* Clientes NX Digital — grupo próprio, com a sub-aba Clientes */}
+        {canSee('/comercial') && (
+        <>
+        <button
+          type="button"
+          onClick={() => setClientesNxOpen((o) => !o)}
+          className={cn(
+            'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+            location.pathname.startsWith('/clientesnxdigital')
+              ? 'text-foreground'
+              : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
+          )}
+        >
+          <Contact
+            className={cn(
+              'h-4 w-4 shrink-0',
+              location.pathname.startsWith('/clientesnxdigital')
+                ? 'text-accent'
+                : 'text-foreground/50 group-hover:text-foreground/75',
+            )}
+          />
+          <span>Clientes NX Digital</span>
+          <ChevronDown
+            className={cn(
+              'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',
+              clientesNxOpen ? '' : '-rotate-90',
+            )}
+          />
+        </button>
+        {clientesNxOpen && (
+          <NavLink
+            to="/clientesnxdigital/clientes"
+            onClick={closeOnMobile}
+            className={({ isActive }) =>
+              cn(
+                'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                isActive
+                  ? 'bg-elevate/[0.05] text-foreground'
+                  : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Users
+                  className={cn(
+                    'h-4 w-4 shrink-0',
+                    isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                  )}
+                />
+                <span className="truncate">Clientes</span>
+              </>
+            )}
+          </NavLink>
+        )}
         </>
         )}
 

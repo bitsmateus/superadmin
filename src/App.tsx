@@ -56,6 +56,9 @@ const FinanceiroVendasPage = React.lazy(() =>
 const FinanceiroContratoPage = React.lazy(() =>
   import('./pages/FinanceiroContratoPage').then((m) => ({ default: m.FinanceiroContratoPage })),
 )
+const ClientesNxDigitalPage = React.lazy(() =>
+  import('./pages/ClientesNxDigitalPage').then((m) => ({ default: m.ClientesNxDigitalPage })),
+)
 const FinanceiroClientesGeralPage = React.lazy(() =>
   import('./pages/FinanceiroClientesGeralPage').then((m) => ({ default: m.FinanceiroClientesGeralPage })),
 )
@@ -186,6 +189,9 @@ export default function App() {
           <Route path="/financeiro/gestao-interna" element={<Navigate to="/financeiro/vendas" replace />} />
           <Route path="/financeiro/contas-a-pagar" element={<FinanceiroContasPagarPage />} />
           <Route path="/financeiro/clientes-geral" element={<FinanceiroClientesGeralPage />} />
+          {/* Aba nova, ainda em branco: o endereço e o lugar no menu já existem; o conteúdo entra depois. */}
+          <Route path="/clientesnxdigital" element={<ClientesNxDigitalPage />} />
+          <Route path="/clientesnxdigital/clientes" element={<ClientesNxDigitalPage />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           {/* Uma cópia do menu Suporte tem rota só dela — ver SupportViewPage. */}
           <Route path="/visao/:pageId" element={<SupportViewPage />} />

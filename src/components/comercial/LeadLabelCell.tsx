@@ -201,7 +201,7 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
   )
 }
 
-function ManageLabelsModal({
+export function ManageLabelsModal({
   field, pageId, open, onClose,
 }: { field: LeadLabelField; pageId?: string; open: boolean; onClose: () => void }) {
   const labels = useLeadLabels(field, pageId)

@@ -11,10 +11,11 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Calendar, MessageCircle } from 'lucide-react'
+import { Calendar, MessageCircle, Settings2 } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
+import { ManageLabelsModal } from '@/components/comercial/LeadLabelCell'
 import { cn } from '@/lib/utils'
 import { formatBRLCompact, parseBRLCents } from '@/lib/currency'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
@@ -61,6 +62,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
   const labels = useLeadLabels(groupField, pageId)
 
   const [activeId, setActiveId] = React.useState<string | null>(null)
+  const [manageOpen, setManageOpen] = React.useState(false)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   const columns = React.useMemo(() => {
@@ -132,6 +134,14 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => setManageOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-foreground/50 hover:bg-elevate/[0.04]"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+          Colunas
+        </button>
       </div>
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -180,6 +190,8 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
           <div style={{ width: contentWidth, height: 1 }} />
         </div>
       </div>
+
+      <ManageLabelsModal field={groupField} pageId={pageId} open={manageOpen} onClose={() => setManageOpen(false)} />
     </div>
   )
 }
@@ -261,7 +273,7 @@ function KanbanCard({
       )}
     >
       <div className="flex items-start gap-1.5">
-        <div className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{row.nome || 'Sem nome'}</div>
+        <div className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{row.nome || 'Sem nome'}</div>
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onOpenLead(row.id) }}
@@ -276,6 +288,11 @@ function KanbanCard({
           )}
         </button>
       </div>
+      {row.lastNotePreview && (
+        <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-foreground/45">
+          {row.lastNotePreview}
+        </p>
+      )}
       {row.retornar && (
         <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-elevate/[0.05] px-1.5 py-0.5 text-[11px] text-foreground/50">
           <Calendar className="h-3 w-3" />

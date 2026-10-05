@@ -441,7 +441,11 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   -- Quem FECHOU a venda (só usado na aba Vendas). Diferente do SDR = a venda gera também a
   -- comissão de fechamento pra essa pessoa (ver sincronizarComissaoCloser). Igual ao SDR ou vazio
   -- = só a comissão de SDR, que é o caso de quem agenda e fecha a mesma venda.
-  closer TEXT NOT NULL DEFAULT ''
+  closer TEXT NOT NULL DEFAULT '',
+  -- Preview da última Atualização (lead_notes) desse lead, pro card do Kanban mostrar sem join —
+  -- ver sincronizarContagemNotas em leadBoards.ts. Vazio/NULL = nenhuma nota ainda.
+  last_note_preview TEXT NOT NULL DEFAULT '',
+  last_note_at TIMESTAMPTZ
 );
 -- Uma cópia por lead de origem — a trava que impede espelhar a mesma lead duas vezes.
 CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_espelho_origem_idx

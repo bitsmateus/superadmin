@@ -55,6 +55,8 @@ type LeadRowRow = {
   contrato_assinado?: boolean
   espelho_origem_id?: string | null
   closer?: string
+  last_note_preview?: string
+  last_note_at?: string | null
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
@@ -77,6 +79,8 @@ function rowToLead(r: LeadRowRow): LeadRow {
     contratoAssinado: r.contrato_assinado ?? false,
     espelhoOrigemId: r.espelho_origem_id ?? null,
     closer: r.closer ?? '',
+    lastNotePreview: r.last_note_preview ?? '',
+    lastNoteAt: r.last_note_at ?? null,
   }
 }
 function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
@@ -232,6 +236,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
     status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
     dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
     fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, closer: '',
+    lastNotePreview: '', lastNoteAt: null,
     position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
     mrrPendente: true, implPendente: true, observacoes: '', veioDoFunil: false,
     contratoAssinado: false, ...initial,

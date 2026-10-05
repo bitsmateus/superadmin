@@ -1497,6 +1497,11 @@ END $$`);
     END IF;
   END $$`);
 
+  // Preview da última Atualização de cada lead, pra mostrar no card do Kanban sem precisar
+  // buscar lead_notes por linha ao montar o quadro — ver sincronizarContagemNotas em leadBoards.ts.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS last_note_preview TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS last_note_at TIMESTAMPTZ`);
+
   console.log('[db] migrations applied');
 }
 

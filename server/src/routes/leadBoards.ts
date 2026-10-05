@@ -716,14 +716,29 @@ async function idCanonicoDasNotas(leadRowId: string): Promise<string> {
   return row?.espelho_origem_id ?? leadRowId;
 }
 
-/** O gatilho do banco conta as notas só na linha dona do histórico — aqui o número é refletido na
- * cópia também, pra o contador não aparecer zerado pro closer. */
+/** Tira as tags HTML do rich-text da nota (ver RichTextEditor/LeadDetailModal) pra sobrar um
+ * texto puro curto — o card do Kanban só precisa de uma prévia, não do HTML inteiro. */
+function previewTextoNota(html: string): string {
+  const texto = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return texto.length > 140 ? `${texto.slice(0, 140)}…` : texto;
+}
+
+/** O gatilho do banco conta as notas só na linha dona do histórico — aqui o número (e a prévia da
+ * última nota, pro card do Kanban) é refletido na cópia também, pra não aparecer zerado/vazio pro
+ * closer. */
 async function sincronizarContagemNotas(canonicalId: string) {
   try {
-    await query(
-      `UPDATE lead_rows SET notes_count = (SELECT count(*) FROM lead_notes WHERE lead_row_id = $1)
-       WHERE id = $1 OR espelho_origem_id = $1`,
+    const ultima = await queryOne<{ content: string; created_at: string }>(
+      'SELECT content, created_at FROM lead_notes WHERE lead_row_id = $1 ORDER BY created_at DESC LIMIT 1',
       [canonicalId]
+    );
+    await query(
+      `UPDATE lead_rows SET
+         notes_count = (SELECT count(*) FROM lead_notes WHERE lead_row_id = $1),
+         last_note_preview = $2,
+         last_note_at = $3
+       WHERE id = $1 OR espelho_origem_id = $1`,
+      [canonicalId, ultima ? previewTextoNota(ultima.content) : '', ultima?.created_at ?? null]
     );
   } catch (err) {
     console.error('[espelho] falha ao sincronizar contagem de notas', canonicalId, err);

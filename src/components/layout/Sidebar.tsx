@@ -12,6 +12,7 @@ import {
   Columns3,
   Contact,
   Copy,
+  FileBarChart,
   FileSearch,
   FileText,
   HeartCrack,
@@ -75,7 +76,7 @@ const suporteItems = [
   { to: '/tenants', label: 'Tenants', icon: Building2 },
 ]
 
-const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/canais', '/tenants', '/nps', '/risco-churn']
+const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/canais', '/tenants', '/nps', '/risco-churn', '/relatorios']
 
 /** Intercala cópias ("Duplicar") logo depois do item original de cada rota. A cópia herda só o
  * ícone; o nome, o id e a ROTA são próprios dela: `/visao/<id>`, que abre a mesma tela do original
@@ -309,6 +310,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       ...suporteItems,
       ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
       ...(seeFinancials ? [{ to: '/risco-churn', label: 'Risco de Churn', icon: HeartCrack }] : []),
+      ...(seeFinancials ? [{ to: '/relatorios', label: 'Relatórios', icon: FileBarChart }] : []),
     ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to)),
     duplicatesByKey,
   )

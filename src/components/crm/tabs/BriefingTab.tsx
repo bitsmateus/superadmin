@@ -124,7 +124,7 @@ const CHANNEL_OPTIONS: { value: BriefingChannel; label: string }[] = [
   { value: 'email', label: 'E-mail' },
 ]
 
-export function BriefingTab({ client }: { client: Client }) {
+export function BriefingTab({ client, forceOpenSections }: { client: Client; forceOpenSections?: boolean }) {
   const status: BriefingStatus = client.briefingStatus ?? 'not_sent'
   const link = buildBriefingLink(client.briefingToken)
   const [revisionOpen, setRevisionOpen] = React.useState(false)
@@ -140,11 +140,13 @@ export function BriefingTab({ client }: { client: Client }) {
   const [signNumber, setSignNumber] = React.useState(client.briefingNumber ?? '')
   const [editing, setEditing] = React.useState(false)
   // A configuração só é editável até o cliente preencher o briefing; depois de gerado o link ela
-  // recolhe (seta pra abrir) e, com o briefing preenchido, trava de vez (só leitura).
-  const [configOpen, setConfigOpen] = React.useState(status === 'not_sent')
+  // recolhe (seta pra abrir) e, com o briefing preenchido, trava de vez (só leitura). Exceto no
+  // popup de dentro da aba Configuração (forceOpenSections) — ali a pessoa quer ver tudo de cara,
+  // sem precisar clicar pra abrir cada seção.
+  const [configOpen, setConfigOpen] = React.useState(forceOpenSections || status === 'not_sent')
   const configLocked = status === 'filled' || status === 'approved'
-  // "Link do briefing" também nasce recolhido; abre na seta.
-  const [linkOpen, setLinkOpen] = React.useState(false)
+  // "Link do briefing" também nasce recolhido (abre na seta) — menos no popup, que já nasce aberto.
+  const [linkOpen, setLinkOpen] = React.useState(Boolean(forceOpenSections))
 
   // Fluxo da ficha: enquanto não houver contrato assinado, o briefing fica
   // bloqueado e mostramos o passo "marcar contrato assinado".
@@ -171,13 +173,13 @@ export function BriefingTab({ client }: { client: Client }) {
     setConfig(client.briefingConfig ?? emptyConfig)
     setRevisionNote(client.briefingRevisionNote ?? '')
     setEditing(false)
-    setConfigOpen((client.briefingStatus ?? 'not_sent') === 'not_sent')
-    setLinkOpen(false)
-  }, [client.id])
+    setConfigOpen(forceOpenSections || (client.briefingStatus ?? 'not_sent') === 'not_sent')
+    setLinkOpen(Boolean(forceOpenSections))
+  }, [client.id, forceOpenSections])
 
   React.useEffect(() => {
-    if (status !== 'not_sent') setConfigOpen(false)
-  }, [status])
+    if (!forceOpenSections && status !== 'not_sent') setConfigOpen(false)
+  }, [status, forceOpenSections])
 
   const updateConfig = (patch: Partial<BriefingConfig>) => {
     if (configLocked) return

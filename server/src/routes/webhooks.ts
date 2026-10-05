@@ -135,6 +135,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       lead_id?: string;
       nome?: string;
       telefone?: string;
+      tipo?: string;
       dor_cliente?: string;
       numero_atendentes?: string;
       raw?: Record<string, unknown>;
@@ -150,6 +151,10 @@ export async function webhookRoutes(app: FastifyInstance) {
             lead_id: { type: 'string', minLength: 1 },
             nome: { type: 'string' },
             telefone: { type: 'string' },
+            // Opcional — o formulário do Meta não tem isso nativamente, mas se o fluxo do n8n
+            // já classificar o lead antes de mandar pra cá (ex.: por palavra-chave do anúncio),
+            // manda aqui que a gente grava direto na coluna "Tipo" do quadro.
+            tipo: { type: 'string' },
             dor_cliente: { type: 'string' },
             numero_atendentes: { type: 'string' },
             raw: { type: 'object' },
@@ -247,14 +252,14 @@ export async function webhookRoutes(app: FastifyInstance) {
         `INSERT INTO lead_rows (
           board_id, nome, empresa, telefone, position,
           meta_lead_id, origem_campanha, qualificacao, lead_raw,
-          dor_cliente, numero_atendentes
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          dor_cliente, numero_atendentes, tipo
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
         ON CONFLICT (meta_lead_id) WHERE meta_lead_id IS NOT NULL DO NOTHING
         RETURNING *`,
         [
           board.id, req.body.nome ?? '', empresa, req.body.telefone ?? '', (max ?? -1) + 1,
           leadId, origemCampanha, JSON.stringify(qualificacao), JSON.stringify(raw),
-          req.body.dor_cliente ?? '', req.body.numero_atendentes ?? '',
+          req.body.dor_cliente ?? '', req.body.numero_atendentes ?? '', req.body.tipo ?? '',
         ]
       );
 

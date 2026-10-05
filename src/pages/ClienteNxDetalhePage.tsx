@@ -12,9 +12,10 @@ import { AbaJornada } from '@/components/gestaoClientes/AbaJornada'
 import { AbaHistorico } from '@/components/gestaoClientes/AbaHistorico'
 import { AbaMetricas } from '@/components/gestaoClientes/AbaMetricas'
 import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
+import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 
-type Aba = 'visao' | 'jornada' | 'metricas' | 'estrategias' | 'historico'
+type Aba = 'visao' | 'jornada' | 'metricas' | 'estrategias' | 'relatorios' | 'historico'
 
 /**
  * Detalhe do cliente de tráfego — Visão geral, Jornada e Histórico.
@@ -141,6 +142,7 @@ export function ClienteNxDetalhePage() {
                     </span>
                   ),
                 },
+                { value: 'relatorios', label: 'Relatórios' },
                 {
                   value: 'historico',
                   label: (
@@ -158,6 +160,7 @@ export function ClienteNxDetalhePage() {
             {aba === 'visao' && <AbaVisaoGeral detalhe={detalhe} onMudou={carregar} />}
             {aba === 'jornada' && <AbaJornada jornada={detalhe.jornada} onMudou={carregar} />}
             {aba === 'metricas' && <AbaMetricas clienteId={id} />}
+            {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
             {aba === 'estrategias' && (
               <AbaEstrategias estrategias={detalhe.estrategias} clienteId={id} onMudou={carregar} />
             )}

@@ -184,6 +184,61 @@ export interface GcMeta {
   status: 'ativa' | 'atingida' | 'expirada'
 }
 
+/**
+ * A foto de um relatório publicado. É auto-descritiva (cada número traz label e unidade) porque o
+ * portal e o PDF leem só ela: relatório publicado não muda, nem que a métrica do mês seja
+ * corrigida depois.
+ */
+export interface GcSnapshot {
+  versao: number
+  cliente: { nome_empresa: string; segmento?: string; cidade?: string; responsavel_nome?: string | null }
+  periodo: { inicio: string; fim: string; rotulo: string }
+  numeros: {
+    chave: string
+    label: string
+    unidade: 'reais' | 'inteiro' | 'percentual' | 'decimal'
+    valor: number | null
+    anterior?: number | null
+  }[]
+  metas?: {
+    label: string
+    unidade: 'reais' | 'inteiro' | 'percentual' | 'decimal'
+    base: number
+    meta: number
+    atual: number | null
+    progresso: number | null
+  }[]
+  jornada?: { nome: string; status: string }[]
+  estrategias?: { nome: string; status: string; feitos: number; total: number }[]
+  comentario_gestor?: string
+  proximos_passos?: string
+  publicado_em?: string
+}
+
+export interface GcRelatorio {
+  id: string
+  gc_cliente_id: string
+  periodo_inicio: string
+  periodo_fim: string
+  status: 'rascunho' | 'publicado'
+  comentario_gestor: string
+  proximos_passos: string
+  publicado_em: string | null
+  publicado_por_nome?: string | null
+  snapshot?: GcSnapshot | null
+}
+
+export interface GcLinkPublico {
+  id: string
+  gc_cliente_id: string
+  token: string
+  ativo: boolean
+  expira_em: string | null
+  created_at: string
+  acessos: string
+  ultimo_acesso: string | null
+}
+
 /** Linha da tela de Tráfego: o cliente e os números dele no mês, já pivotados por chave. */
 export interface GcLinhaTrafego {
   id: string
@@ -270,6 +325,34 @@ export const gestaoClientes = {
   atualizarMeta: (id: string, dados: Partial<Omit<GcMeta, 'id' | 'gc_cliente_id'>>) =>
     api.patch<GcMeta>(`/api/gc/metas/${id}`, dados),
   excluirMeta: (id: string) => api.delete(`/api/gc/metas/${id}`),
+
+  relatorios: (clienteId: string) => api.get<GcRelatorio[]>(`/api/gc/clientes/${clienteId}/relatorios`),
+  relatorio: (id: string) => api.get<GcRelatorio>(`/api/gc/relatorios/${id}`),
+  /** Abre ou atualiza o rascunho do período — um relatório por período, por cliente. */
+  salvarRelatorio: (
+    clienteId: string,
+    dados: { periodo_inicio: string; periodo_fim: string; comentario_gestor: string; proximos_passos: string },
+  ) => api.post<GcRelatorio>(`/api/gc/clientes/${clienteId}/relatorios`, dados),
+  publicarRelatorio: (id: string, snapshot: GcSnapshot) =>
+    api.post<GcRelatorio>(`/api/gc/relatorios/${id}/publicar`, { snapshot }),
+  despublicarRelatorio: (id: string) => api.post<GcRelatorio>(`/api/gc/relatorios/${id}/despublicar`),
+  excluirRelatorio: (id: string) => api.delete(`/api/gc/relatorios/${id}`),
+  /** PDF do relatório. Rascunho ainda não tem snapshot gravado, então manda o da tela. */
+  pdfDoRelatorio: (id: string, snapshot?: GcSnapshot) =>
+    api.postForBlob(`/api/gc/relatorios/${id}/pdf`, { snapshot }),
+
+  linkDoCliente: (clienteId: string) => api.get<GcLinkPublico | null>(`/api/gc/clientes/${clienteId}/link`),
+  gerarLink: (clienteId: string) => api.post<GcLinkPublico>(`/api/gc/clientes/${clienteId}/link`),
+  revogarLink: (clienteId: string) => api.delete(`/api/gc/clientes/${clienteId}/link`),
+
+  /** Portal do cliente (sem login) — só relatórios publicados. */
+  portal: (token: string) =>
+    api.get<{
+      cliente: { nome_empresa: string; logo_url: string | null; segmento: string }
+      relatorios: (Pick<GcRelatorio, 'id' | 'periodo_inicio' | 'periodo_fim' | 'publicado_em'> & {
+        snapshot: GcSnapshot
+      })[]
+    }>(`/api/public/cliente/${encodeURIComponent(token)}`),
 
   registrar: (
     clienteId: string,

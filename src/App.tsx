@@ -123,6 +123,9 @@ const PendenciasPublicPage = React.lazy(() =>
 const RelatorioPublicoPage = React.lazy(() =>
   import('./pages/RelatorioPublicoPage').then((m) => ({ default: m.RelatorioPublicoPage })),
 )
+const PortalClientePage = React.lazy(() =>
+  import('./pages/PortalClientePage').then((m) => ({ default: m.PortalClientePage })),
+)
 const FichaPublicPage = React.lazy(() =>
   import('./pages/FichaPublicPage').then((m) => ({ default: m.FichaPublicPage })),
 )
@@ -173,6 +176,8 @@ export default function App() {
         <Route path="/r/:token" element={<RelatorioPublicoPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />
         <Route path="/nps/:token" element={<NpsPublicPage />} />
+        {/* Portal do cliente de tráfego (módulo Clientes NX Digital) — só relatórios publicados. */}
+        <Route path="/cliente/:token" element={<PortalClientePage />} />
 
         <Route
           element={

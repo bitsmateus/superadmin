@@ -1,5 +1,8 @@
 import { FastifyInstance } from 'fastify';
+import crypto from 'node:crypto';
 import { query, queryOne, withTransaction } from '../db.js';
+import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
+import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
 
 /**
  * Módulo "Clientes NX Digital" — gestão dos clientes de tráfego.
@@ -735,4 +738,267 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     if (!apagada) return reply.status(404).send({ message: 'Estratégia não encontrada' });
     return reply.status(204).send();
   });
+
+  // ------------------------------------------------------------------ relatórios
+  // GET /api/gc/clientes/:id/relatorios — lista sem o snapshot (que é grande e só interessa quando
+  // o relatório é aberto).
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/relatorios', autenticado, async (req) => {
+    return query(
+      `SELECT r.id, r.gc_cliente_id, r.periodo_inicio, r.periodo_fim, r.status,
+              r.comentario_gestor, r.proximos_passos, r.publicado_em, p.name AS publicado_por_nome
+       FROM gc_relatorios r
+       LEFT JOIN profiles p ON p.id = r.publicado_por
+       WHERE r.gc_cliente_id = $1
+       ORDER BY r.periodo_inicio DESC`,
+      [req.params.id]
+    );
+  });
+
+  app.get<{ Params: { id: string } }>('/api/gc/relatorios/:id', autenticado, async (req, reply) => {
+    const r = await queryOne('SELECT * FROM gc_relatorios WHERE id = $1', [req.params.id]);
+    if (!r) return reply.status(404).send({ message: 'Relatório não encontrado' });
+    return r;
+  });
+
+  // POST /api/gc/clientes/:id/relatorios — abre (ou atualiza) o rascunho do período. É um por
+  // período: pedir de novo o mesmo mês não cria um segundo relatório, atualiza o texto do que já
+  // existe. Relatório já publicado não é sobrescrito por aqui — tem que despublicar antes, pra não
+  // trocar por baixo do cliente o texto do que ele já leu.
+  app.post<{
+    Params: { id: string };
+    Body: { periodo_inicio?: string; periodo_fim?: string; comentario_gestor?: string; proximos_passos?: string };
+  }>('/api/gc/clientes/:id/relatorios', autenticado, async (req, reply) => {
+    const { periodo_inicio, periodo_fim, comentario_gestor, proximos_passos } = req.body ?? {};
+    if (!periodo_inicio || !periodo_fim) {
+      return reply.status(400).send({ message: 'Informe o período do relatório' });
+    }
+    const existente = await queryOne<{ id: string; status: string }>(
+      `SELECT id, status FROM gc_relatorios
+       WHERE gc_cliente_id = $1 AND periodo_inicio = $2 AND periodo_fim = $3`,
+      [req.params.id, periodo_inicio, periodo_fim]
+    );
+    if (existente?.status === 'publicado') {
+      return reply.status(409).send({
+        message: 'Esse período já tem relatório publicado. Despublique antes de editar.',
+        id: existente.id,
+      });
+    }
+    const salvo = await queryOne(
+      `INSERT INTO gc_relatorios (gc_cliente_id, periodo_inicio, periodo_fim, comentario_gestor, proximos_passos)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (gc_cliente_id, periodo_inicio, periodo_fim)
+       DO UPDATE SET comentario_gestor = EXCLUDED.comentario_gestor,
+                     proximos_passos = EXCLUDED.proximos_passos,
+                     updated_at = NOW()
+       RETURNING *`,
+      [req.params.id, periodo_inicio, periodo_fim, comentario_gestor ?? '', proximos_passos ?? '']
+    );
+    return reply.status(201).send(salvo);
+  });
+
+  // POST /api/gc/relatorios/:id/publicar — congela o snapshot e deixa o relatório visível no
+  // portal. O snapshot vem montado da tela: ele é a foto do que o gestor viu e aprovou, e é
+  // auto-descritivo (cada número traz label e unidade) pra o portal e o PDF não precisarem
+  // recalcular nada depois.
+  app.post<{ Params: { id: string }; Body: { snapshot?: GcSnapshot } }>(
+    '/api/gc/relatorios/:id/publicar',
+    autenticado,
+    async (req, reply) => {
+      const { sub } = req.user as { sub: string };
+      const snapshot = req.body?.snapshot;
+      if (!snapshot || !Array.isArray(snapshot.numeros)) {
+        return reply.status(400).send({ message: 'snapshot inválido' });
+      }
+      const publicado = await queryOne<{ gc_cliente_id: string; periodo_inicio: string }>(
+        `UPDATE gc_relatorios
+         SET status = 'publicado', publicado_em = NOW(), publicado_por = $2,
+             snapshot = $3, updated_at = NOW()
+         WHERE id = $1 RETURNING *`,
+        [req.params.id, sub, JSON.stringify({ ...snapshot, publicado_em: new Date().toISOString() })]
+      );
+      if (!publicado) return reply.status(404).send({ message: 'Relatório não encontrado' });
+      await registrarEvento(
+        publicado.gc_cliente_id,
+        `Relatório publicado: ${snapshot.periodo?.rotulo ?? String(publicado.periodo_inicio).slice(0, 7)}`,
+        '',
+        sub
+      );
+      return publicado;
+    }
+  );
+
+  // POST /api/gc/relatorios/:id/despublicar — volta pra rascunho. O snapshot FICA guardado: se o
+  // relatório for publicado de novo sem mexer em nada, é a mesma foto.
+  app.post<{ Params: { id: string } }>(
+    '/api/gc/relatorios/:id/despublicar',
+    autenticado,
+    async (req, reply) => {
+      const r = await queryOne(
+        `UPDATE gc_relatorios SET status = 'rascunho', publicado_em = NULL, updated_at = NOW()
+         WHERE id = $1 RETURNING *`,
+        [req.params.id]
+      );
+      if (!r) return reply.status(404).send({ message: 'Relatório não encontrado' });
+      return r;
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/gc/relatorios/:id', autenticado, async (req, reply) => {
+    const apagado = await queryOne('DELETE FROM gc_relatorios WHERE id = $1 RETURNING id', [
+      req.params.id,
+    ]);
+    if (!apagado) return reply.status(404).send({ message: 'Relatório não encontrado' });
+    return reply.status(204).send();
+  });
+
+  // POST /api/gc/relatorios/:id/pdf — PDF do relatório, desenhado a partir do snapshot. Rascunho
+  // ainda não tem snapshot gravado, então a tela manda o dela no corpo da chamada pra dar pra
+  // conferir o PDF antes de publicar.
+  app.post<{ Params: { id: string }; Body: { snapshot?: GcSnapshot } }>(
+    '/api/gc/relatorios/:id/pdf',
+    autenticado,
+    async (req, reply) => {
+      const r = await queryOne<{ snapshot: GcSnapshot | null; periodo_inicio: string }>(
+        'SELECT snapshot, periodo_inicio FROM gc_relatorios WHERE id = $1',
+        [req.params.id]
+      );
+      if (!r) return reply.status(404).send({ message: 'Relatório não encontrado' });
+      const snapshot = r.snapshot ?? req.body?.snapshot;
+      if (!snapshot) {
+        return reply.status(400).send({ message: 'Relatório sem conteúdo pra gerar o PDF' });
+      }
+      try {
+        const pdf = await renderFullHtmlToPdf(montarHtmlRelatorio(snapshot));
+        const nome = `relatorio-${String(r.periodo_inicio).slice(0, 7)}.pdf`;
+        return reply
+          .header('Content-Type', 'application/pdf')
+          .header('Content-Disposition', `attachment; filename="${nome}"`)
+          .send(pdf);
+      } catch (err) {
+        app.log.error({ err }, 'falha ao gerar PDF do relatório do cliente');
+        return reply.status(500).send({ message: 'Não foi possível gerar o PDF' });
+      }
+    }
+  );
+
+  // ------------------------------------------------------------------ link do portal
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/link', autenticado, async (req) => {
+    return (
+      (await queryOne(
+        `SELECT l.*, (SELECT count(*) FROM gc_acessos_link a WHERE a.link_id = l.id) AS acessos,
+                (SELECT max(acessado_em) FROM gc_acessos_link a WHERE a.link_id = l.id) AS ultimo_acesso
+         FROM gc_links_publicos l WHERE l.gc_cliente_id = $1 AND l.ativo`,
+        [req.params.id]
+      )) ?? null
+    );
+  });
+
+  // POST /api/gc/clientes/:id/link — gera o link do portal, revogando o anterior na mesma
+  // transação: o banco tem um índice de um link ativo por cliente, e é ele que garante que não
+  // sobrem dois endereços válidos circulando com o cliente.
+  app.post<{ Params: { id: string } }>('/api/gc/clientes/:id/link', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const token = crypto.randomBytes(24).toString('base64url');
+    const link = await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE gc_links_publicos SET ativo = false, revogado_em = NOW(), updated_at = NOW()
+         WHERE gc_cliente_id = $1 AND ativo`,
+        [req.params.id]
+      );
+      const { rows } = await client.query(
+        'INSERT INTO gc_links_publicos (gc_cliente_id, token) VALUES ($1, $2) RETURNING *',
+        [req.params.id, token]
+      );
+      return rows[0];
+    });
+    await registrarEvento(req.params.id, 'Link do portal gerado', '', sub);
+    return reply.status(201).send(link);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/gc/clientes/:id/link', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const revogado = await queryOne(
+      `UPDATE gc_links_publicos SET ativo = false, revogado_em = NOW(), updated_at = NOW()
+       WHERE gc_cliente_id = $1 AND ativo RETURNING id`,
+      [req.params.id]
+    );
+    if (!revogado) return reply.status(404).send({ message: 'Esse cliente não tem link ativo' });
+    await registrarEvento(req.params.id, 'Link do portal revogado', '', sub);
+    return reply.status(204).send();
+  });
+}
+
+/**
+ * Portal do cliente — SEM login, só com o token do link.
+ *
+ * Mostra apenas relatórios PUBLICADOS, e lê os números do snapshot de cada um: o que o cliente viu
+ * continua sendo o que ele vê, mesmo que a métrica tenha sido corrigida depois. Nada de jornada
+ * interna, custo, margem ou histórico do time passa por aqui.
+ */
+export async function gestaoClientesPublicRoutes(app: FastifyInstance) {
+  app.get<{ Params: { token: string } }>('/api/public/cliente/:token', async (req, reply) => {
+    const link = await queryOne<{ id: string; gc_cliente_id: string; expira_em: string | null }>(
+      'SELECT id, gc_cliente_id, expira_em FROM gc_links_publicos WHERE token = $1 AND ativo',
+      [req.params.token]
+    );
+    if (!link) return reply.status(404).send({ message: 'Link inválido ou revogado' });
+    if (link.expira_em && new Date(link.expira_em) < new Date()) {
+      return reply.status(410).send({ message: 'Esse link expirou' });
+    }
+
+    // Hash do IP, não o IP: serve pra separar visitantes, não pra identificar quem abriu.
+    const ipHash = crypto
+      .createHash('sha256')
+      .update(String(req.ip ?? ''))
+      .digest('hex')
+      .slice(0, 32);
+    await query(
+      'INSERT INTO gc_acessos_link (link_id, ip_hash, user_agent) VALUES ($1, $2, $3)',
+      [link.id, ipHash, String(req.headers['user-agent'] ?? '').slice(0, 300)]
+    );
+
+    const cliente = await queryOne<{ nome_empresa: string; logo_url: string | null; segmento: string }>(
+      'SELECT nome_empresa, logo_url, segmento FROM gc_clientes WHERE id = $1',
+      [link.gc_cliente_id]
+    );
+    if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+
+    const relatorios = await query(
+      `SELECT id, periodo_inicio, periodo_fim, publicado_em, snapshot
+       FROM gc_relatorios
+       WHERE gc_cliente_id = $1 AND status = 'publicado'
+       ORDER BY periodo_inicio DESC`,
+      [link.gc_cliente_id]
+    );
+
+    return { cliente, relatorios };
+  });
+
+  // GET /api/public/cliente/:token/relatorio/:id/pdf — o mesmo PDF do painel, pro cliente baixar.
+  app.get<{ Params: { token: string; id: string } }>(
+    '/api/public/cliente/:token/relatorio/:id/pdf',
+    async (req, reply) => {
+      const r = await queryOne<{ snapshot: GcSnapshot | null; periodo_inicio: string }>(
+        `SELECT r.snapshot, r.periodo_inicio
+         FROM gc_relatorios r
+         JOIN gc_links_publicos l ON l.gc_cliente_id = r.gc_cliente_id AND l.ativo
+         WHERE r.id = $1 AND l.token = $2 AND r.status = 'publicado'`,
+        [req.params.id, req.params.token]
+      );
+      if (!r?.snapshot) return reply.status(404).send({ message: 'Relatório não encontrado' });
+      try {
+        const pdf = await renderFullHtmlToPdf(montarHtmlRelatorio(r.snapshot));
+        return reply
+          .header('Content-Type', 'application/pdf')
+          .header(
+            'Content-Disposition',
+            `attachment; filename="relatorio-${String(r.periodo_inicio).slice(0, 7)}.pdf"`
+          )
+          .send(pdf);
+      } catch (err) {
+        app.log.error({ err }, 'falha ao gerar PDF do portal do cliente');
+        return reply.status(500).send({ message: 'Não foi possível gerar o PDF' });
+      }
+    }
+  );
 }

@@ -13,6 +13,8 @@
  * investi e quanto isso virou em venda. O resto do detalhamento vem depois.
  */
 
+import { LOGO_NX_DATA_URL } from './gcLogoNx.js';
+
 export interface GcNumeroSnapshot {
   chave: string;
   label: string;
@@ -107,12 +109,6 @@ function variacao(n: GcNumeroSnapshot): string {
   ).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span>`;
 }
 
-const ROTULO_ETAPA: Record<string, string> = {
-  concluida: 'concluída',
-  em_andamento: 'em andamento',
-  pendente: 'pendente',
-};
-
 const ROTULO_HORIZONTE: Record<string, string> = {
   mes: 'Meta do mês',
   '6_meses': 'Meta de 6 meses',
@@ -206,16 +202,6 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
     })
     .join('');
 
-  const jornada = (snapshot.jornada ?? [])
-    .map(
-      (e) => `
-      <li class="${e.status === 'concluida' ? 'feita' : ''}">
-        <span class="bolinha ${e.status}"></span>${escapar(e.nome)}
-        <span class="estado">${ROTULO_ETAPA[e.status] ?? escapar(e.status)}</span>
-      </li>`
-    )
-    .join('');
-
   const secao = (titulo: string, conteudo: string, classe = '') =>
     conteudo.trim() ? `<section class="${classe}"><h2>${titulo}</h2>${conteudo}</section>` : '';
 
@@ -235,7 +221,9 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
   .folha { padding: 34px 38px 28px; }
 
   header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-  .marca { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: ${COR.azul}; font-weight: 700; }
+  .marca { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .14em;
+    text-transform: uppercase; color: ${COR.azul}; font-weight: 700; }
+  .logo { height: 24px; width: 24px; border-radius: 6px; object-fit: cover; }
   h1 { margin: 4px 0 0; font-size: 25px; letter-spacing: -.01em; }
   .sub { color: ${COR.tintaFraca}; font-size: 12px; margin-top: 3px; }
   .periodo {
@@ -287,14 +275,6 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
   .linha-estrategia .nome { width: 42%; }
   .linha-estrategia .passos { font-size: 11px; color: ${COR.tintaFraca}; width: 44px; text-align: right; }
 
-  ul.jornada { list-style: none; margin: 0; padding: 0; column-count: 2; column-gap: 22px; }
-  ul.jornada li { padding: 4px 0; font-size: 12px; break-inside: avoid; }
-  ul.jornada li.feita { color: ${COR.tintaFraca}; }
-  .bolinha { display: inline-block; width: 7px; height: 7px; border-radius: 99px; margin-right: 7px;
-    background: #cfd6de; vertical-align: middle; }
-  .bolinha.concluida { background: ${COR.verde}; }
-  .bolinha.em_andamento { background: ${COR.azul}; }
-  .estado { color: ${COR.tintaMaisFraca}; font-size: 10.5px; margin-left: 5px; }
 
   footer { margin-top: 26px; border-top: 1px solid ${COR.linha}; padding-top: 9px;
     color: ${COR.tintaMaisFraca}; font-size: 9.5px; display: flex; justify-content: space-between; }
@@ -304,7 +284,7 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
 <div class="folha">
   <header>
     <div>
-      <div class="marca">Grupo NX Digital</div>
+      <div class="marca"><img class="logo" src="${LOGO_NX_DATA_URL}" alt="">Grupo NX Digital</div>
       <h1>${escapar(snapshot.cliente?.nome_empresa)}</h1>
       <div class="sub">
         ${[snapshot.cliente?.segmento, snapshot.cliente?.cidade].filter(Boolean).map(escapar).join(' · ')}
@@ -348,10 +328,9 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
     snapshot.proximos_passos ? `<div class="texto-card">${escapar(snapshot.proximos_passos)}</div>` : ''
   )}
   ${secao('Estratégias em curso', estrategias)}
-  ${secao('Onde estamos na implantação', jornada ? `<ul class="jornada">${jornada}</ul>` : '')}
 
   <footer>
-    <span>Grupo NX Digital · relatório de performance</span>
+    <span style="display:flex;align-items:center;gap:6px"><img class="logo" style="height:14px;width:14px;border-radius:4px" src="${LOGO_NX_DATA_URL}" alt="">Grupo NX Digital · relatório de performance</span>
     <span>${
       snapshot.publicado_em
         ? `publicado em ${new Date(snapshot.publicado_em).toLocaleDateString('pt-BR')}`

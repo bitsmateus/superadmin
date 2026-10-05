@@ -119,7 +119,6 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
       horizonte: meta.horizonte ?? 'mes',
       prazo: meta.prazo,
     })),
-    jornada: detalhe.jornada.map((j) => ({ nome: j.nome, status: j.status })),
     estrategias: detalhe.estrategias.map((e) => ({
       nome: e.nome,
       status: e.status,

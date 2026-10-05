@@ -182,6 +182,21 @@ export async function saveOwnSidebarOrder(sidebarOrder: Record<string, string[]>
   }
 }
 
+/** Salva os itens do menu fixados pela pessoa. Mesmo padrão de saveOwnSidebarOrder: aplica na
+ * hora (o pino reage junto do clique) e salva depois, sem bloquear a UI se a rede falhar. */
+export async function saveOwnPinnedMenu(pinnedMenu: string[]) {
+  const profile = state.profile
+  if (!profile) return
+  setState({ profile: { ...profile, pinnedMenu } })
+  try {
+    const updated = await api.patch<Profile>(`/api/users/${profile.id}`, { pinnedMenu })
+    setCurrentProfile(updated)
+    setState({ profile: updated })
+  } catch {
+    // Silencioso de propósito — ver comentário acima.
+  }
+}
+
 // For components that previously used supabase.auth.updateUser
 export async function updateCurrentUser(updates: { name?: string; password?: string }) {
   const profile = state.profile

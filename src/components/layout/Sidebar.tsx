@@ -26,6 +26,7 @@ import {
   Moon,
   MoreHorizontal,
   Pencil,
+  Pin,
   SlidersHorizontal,
   PanelLeftClose,
   Plus,
@@ -45,7 +46,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import logoNx from '@/assets/logo-nx.jpg'
-import { signOut, useAuth, saveOwnTheme, saveOwnSidebarOrder } from '@/hooks/useAuth'
+import { signOut, useAuth, saveOwnTheme, saveOwnSidebarOrder, saveOwnPinnedMenu } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
 import { useMyOpenTaskCount } from '@/hooks/useTickets'
 import { useTheme } from '@/hooks/useTheme'
@@ -232,6 +233,28 @@ function useMenuArrastavel() {
   return { ordenar, arrastar }
 }
 
+/** Botão de alfinete em cada item do menu — fixa/desafixa (ver profiles.pinned_menu). Fica
+ * discreto (só aparece no hover) quando o item não está fixado, e sempre visível e colorido
+ * quando está, pra servir de lembrete do que já foi fixado sem precisar passar o mouse. */
+function PinToggle({ pinned, onToggle, className }: { pinned: boolean; onToggle: () => void; className?: string }) {
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle() }}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); onToggle() } }}
+      title={pinned ? 'Desafixar do topo' : 'Fixar no topo'}
+      className={cn(
+        'shrink-0 rounded p-1 transition-opacity hover:bg-elevate/[0.08]',
+        pinned ? 'text-amber-500 opacity-100' : 'text-foreground/30 opacity-0 group-hover:opacity-100',
+        className,
+      )}
+    >
+      <Pin className={cn('h-3.5 w-3.5', pinned && 'fill-amber-500/30')} />
+    </span>
+  )
+}
+
 export interface SidebarProps {
   open: boolean
   onClose: () => void
@@ -410,6 +433,30 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const secundariosOrdenados = ordenar('secundarios', secondaryItems)
   const arquivadosOrdenados = ordenar('arquivados', archivedItems)
 
+  // Fixados: reúne os itens de todo grupo arrastável num mapa só, pra achar pela chave quando
+  // montar a seção do topo — a MESMA chave usada em sidebar_order (ver chaveDoItem).
+  const pinnableItems = React.useMemo(
+    () => [
+      ...suporteOrdenado,
+      ...comercialOrdenado,
+      ...financeiroOrdenado,
+      ...secundariosOrdenados,
+      ...arquivadosOrdenados,
+    ],
+    [suporteOrdenado, comercialOrdenado, financeiroOrdenado, secundariosOrdenados, arquivadosOrdenados],
+  )
+  const pinnedKeys = profile?.pinnedMenu ?? []
+  const pinnedItems = React.useMemo(
+    () => pinnedKeys
+      .map((key) => pinnableItems.find((item) => chaveDoItem(item) === key))
+      .filter((item): item is (typeof pinnableItems)[number] => Boolean(item)),
+    [pinnedKeys, pinnableItems],
+  )
+  const isPinned = React.useCallback((key: string) => pinnedKeys.includes(key), [pinnedKeys])
+  const togglePin = (key: string) => {
+    void saveOwnPinnedMenu(isPinned(key) ? pinnedKeys.filter((k) => k !== key) : [...pinnedKeys, key])
+  }
+
   return (
     <aside
       className={cn(
@@ -436,6 +483,46 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       </div>
 
       <nav className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-4">
+        {/* Fixados — o que a própria pessoa marcou com o alfinete, sempre no topo de tudo e com
+            um tom de cor próprio (âmbar) pra se diferenciar do resto do menu. */}
+        {pinnedItems.length > 0 && (
+          <>
+            <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-500/80">
+              <Pin className="h-3 w-3 fill-amber-500/30" />
+              <span>Fixados</span>
+            </div>
+            {pinnedItems.map((item) => {
+              const Icon = item.icon
+              const key = chaveDoItem(item)
+              return (
+                <NavLink
+                  key={`pinned-${key}`}
+                  to={item.to}
+                  end={'end' in item ? (item.end as boolean | undefined) : undefined}
+                  onClick={closeOnMobile}
+                  className={({ isActive }) =>
+                    cn(
+                      'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm ring-1 transition-colors',
+                      isActive
+                        ? 'bg-amber-500/15 text-foreground ring-amber-500/40'
+                        : 'bg-amber-500/[0.06] text-foreground/80 ring-amber-500/20 hover:bg-amber-500/10',
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-amber-500' : 'text-amber-500/70')} />
+                      <span className="truncate">{item.label}</span>
+                      <PinToggle pinned onToggle={() => togglePin(key)} className="ml-auto" />
+                    </>
+                  )}
+                </NavLink>
+              )
+            })}
+            <div className="my-2 h-px bg-elevate/[0.05]" />
+          </>
+        )}
+
         {/* Suporte — grupo expansível com subpáginas */}
         {suporte.length > 0 && (
         <>
@@ -502,6 +589,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                         {badge > 99 ? '99+' : badge}
                       </span>
                     )}
+                    <PinToggle
+                      pinned={isPinned(chaveDoItem(item))}
+                      onToggle={() => togglePin(chaveDoItem(item))}
+                      className={badge === null ? 'ml-auto' : undefined}
+                    />
                     {isAdmin && item.pageId && item.pageId !== 'dashboard' && (
                       <SidebarPageMenu
                         pageId={item.pageId}
@@ -589,6 +681,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                         )}
                       />
                       <span className="truncate">{label}</span>
+                      <PinToggle
+                        pinned={isPinned(chaveDoItem(item))}
+                        onToggle={() => togglePin(chaveDoItem(item))}
+                        className="ml-auto"
+                      />
                     </>
                   )}
                 </NavLink>
@@ -656,6 +753,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                     )}
                   />
                   <span className="truncate">{label}</span>
+                  <PinToggle
+                    pinned={isPinned(chaveDoItem(item))}
+                    onToggle={() => togglePin(chaveDoItem(item))}
+                    className="ml-auto"
+                  />
                 </>
               )}
             </NavLink>
@@ -758,6 +860,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                   )}
                 />
                 <span className="truncate">{label}</span>
+                <PinToggle
+                  pinned={isPinned(chaveDoItem(item))}
+                  onToggle={() => togglePin(chaveDoItem(item))}
+                  className="ml-auto"
+                />
                 {isAdmin && pageId && (
                   <SidebarPageMenu pageId={pageId} pageName={label} sourceKey={sourceKey ?? pageId} />
                 )}
@@ -814,6 +921,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                         )}
                       />
                       <span className="truncate">{label}</span>
+                      <PinToggle
+                        pinned={isPinned(chaveDoItem(item))}
+                        onToggle={() => togglePin(chaveDoItem(item))}
+                        className="ml-auto"
+                      />
                       {isAdmin && pageId && (
                         <SidebarPageMenu pageId={pageId} pageName={label} sourceKey={sourceKey ?? pageId} />
                       )}

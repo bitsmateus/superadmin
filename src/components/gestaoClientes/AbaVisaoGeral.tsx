@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { DatePickerField } from '@/components/comercial/DatePickerField'
+import { numeroDigitado } from '@/lib/gcMetricas'
 import {
   TIPOS_SERVICO, gestaoClientes,
   type GcClienteDetalhe, type GcServico, type GcTipoServico,
@@ -63,9 +64,7 @@ function FormServico({
         tipo,
         descricao_plano: plano,
         // Campo em branco é "não sei ainda", não zero: zero diria que o cliente não investe nada.
-        investimento_previsto_mensal: investimento.trim()
-          ? Number(investimento.replace(/\./g, '').replace(',', '.'))
-          : null,
+        investimento_previsto_mensal: numeroDigitado(investimento),
         data_inicio: inicio,
         data_renovacao: renovacao,
       })

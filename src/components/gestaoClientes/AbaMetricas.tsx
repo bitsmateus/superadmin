@@ -9,7 +9,8 @@ import { DatePickerField } from '@/components/comercial/DatePickerField'
 import { gestaoClientes, type GcMeta, type GcMetrica } from '@/services/gestaoClientes'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, TODAS_METRICAS, comDerivadas, formatarMetrica,
-  formatarPorChave, limitesDoMes, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade, somarMeses,
+  formatarPorChave, limitesDoMes, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade,
+  numeroDigitado, somarMeses,
 } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
 
@@ -84,7 +85,11 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
     setRascunho(atual)
   }, [metricas, inicio])
 
-  const valoresDoMes = comDerivadas(rascunho)
+  // O que está digitado, já em número: sem isso "1.500,00" chegaria como NaN nas derivadas e o
+  // CPL piscaria em branco enquanto a pessoa digita.
+  const valoresDoMes = comDerivadas(
+    Object.fromEntries(Object.entries(rascunho).map(([chave, texto]) => [chave, numeroDigitado(texto)])),
+  )
 
   const salvar = async () => {
     setSalvando(true)
@@ -94,10 +99,7 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
         periodo_inicio: inicio,
         periodo_fim: fim,
         valores: Object.fromEntries(
-          METRICAS_LANCADAS.map((m) => {
-            const bruto = (rascunho[m.chave] ?? '').trim()
-            return [m.chave, bruto === '' ? null : Number(bruto.replace(/\./g, '').replace(',', '.'))]
-          }),
+          METRICAS_LANCADAS.map((m) => [m.chave, numeroDigitado(rascunho[m.chave])]),
         ),
       })
       toast.success(`Métricas de ${mesPorExtenso(periodo)} salvas`)
@@ -111,7 +113,7 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
 
   const criarMeta = async (e: React.FormEvent) => {
     e.preventDefault()
-    const alvo = Number((novaMeta.alvo || '').replace(/\./g, '').replace(',', '.'))
+    const alvo = numeroDigitado(novaMeta.alvo)
     if (!alvo) {
       toast.error('Informe o valor da meta')
       return
@@ -120,7 +122,7 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
     try {
       await gestaoClientes.criarMeta(clienteId, {
         chave_metrica: novaMeta.chave,
-        valor_base: Number((novaMeta.base || '0').replace(/\./g, '').replace(',', '.')) || 0,
+        valor_base: numeroDigitado(novaMeta.base) ?? 0,
         valor_meta: alvo,
         prazo: novaMeta.prazo,
       })

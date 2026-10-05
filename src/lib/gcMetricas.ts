@@ -134,6 +134,17 @@ export function comDerivadas(brutas: Record<string, number | string | null>): Re
   return saida
 }
 
+/**
+ * Número do jeito que a pessoa digita no Brasil: "1.500,50" → 1500.5. Campo vazio devolve null,
+ * que é diferente de zero — zero é um valor lançado, vazio é "não sei".
+ */
+export function numeroDigitado(texto: string | null | undefined): number | null {
+  const limpo = String(texto ?? '').trim()
+  if (!limpo) return null
+  const n = Number(limpo.replace(/\./g, '').replace(',', '.'))
+  return Number.isFinite(n) ? n : null
+}
+
 /** Primeiro e último dia do mês 'YYYY-MM', do jeito que `gc_metricas` guarda o período. */
 export function limitesDoMes(periodo: string): { inicio: string; fim: string } {
   const [ano, mes] = periodo.split('-').map(Number)

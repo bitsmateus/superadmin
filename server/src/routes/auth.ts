@@ -17,6 +17,8 @@ interface Profile {
   theme: 'light' | 'dark' | null;
   /** Ordem do menu lateral escolhida por essa pessoa: { grupo: [chave do item, ...] }. */
   sidebarOrder: Record<string, string[]> | null;
+  /** Itens do menu fixados por essa pessoa (chave do item) — aparecem num grupo "Fixados" no topo. */
+  pinnedMenu: string[] | null;
   created_at: string;
   /** Só preenchido quando restrictAccess=true — os itens de menu que esse usuário pode ver. */
   menuAccess?: string[];
@@ -39,7 +41,7 @@ export async function authRoutes(app: FastifyInstance) {
       const { email, password } = req.body;
       const profile = await queryOne<Profile & { password_hash: string }>(
         `SELECT id, email, name, role, area, restrict_access AS "restrictAccess", theme,
-                sidebar_order AS "sidebarOrder", created_at, password_hash
+                sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", created_at, password_hash
          FROM profiles WHERE lower(email) = lower($1)`,
         [email.trim()]
       );
@@ -63,7 +65,7 @@ export async function authRoutes(app: FastifyInstance) {
     const { sub } = req.user as { sub: string };
     const profile = await queryOne<Profile>(
       `SELECT id, email, name, role, area, restrict_access AS "restrictAccess", theme,
-              sidebar_order AS "sidebarOrder", created_at FROM profiles WHERE id = $1`,
+              sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", created_at FROM profiles WHERE id = $1`,
       [sub]
     );
     if (!profile) return reply.status(404).send({ message: 'Usuário não encontrado' });
@@ -106,22 +108,25 @@ export async function authRoutes(app: FastifyInstance) {
   );
 
   // PATCH /api/users/:id
-  app.patch<{ Params: { id: string }; Body: { name?: string; email?: string; role?: string; area?: string; restrictAccess?: boolean; password?: string; theme?: 'light' | 'dark'; sidebarOrder?: Record<string, string[]> } }>(
+  app.patch<{ Params: { id: string }; Body: { name?: string; email?: string; role?: string; area?: string; restrictAccess?: boolean; password?: string; theme?: 'light' | 'dark'; sidebarOrder?: Record<string, string[]>; pinnedMenu?: string[] } }>(
     '/api/users/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { sub, role: actorRole } = req.user as { sub: string; role: string };
       const { id } = req.params;
-      const { name, email, role, area, restrictAccess, password, theme, sidebarOrder } = req.body;
+      const { name, email, role, area, restrictAccess, password, theme, sidebarOrder, pinnedMenu } = req.body;
 
       // Tema é preferência pessoal — qualquer um pode mudar o PRÓPRIO, mas não o de outra pessoa
       // (nem admin edita o tema de outro usuário por essa rota).
       if (theme !== undefined && id !== sub) {
         return reply.status(403).send({ message: 'Só é possível alterar o próprio tema' });
       }
-      // A ordem do menu é da pessoa, igual ao tema — nem admin mexe no menu dos outros.
+      // A ordem do menu e os fixados são da pessoa, igual ao tema — nem admin mexe no menu dos outros.
       if (sidebarOrder !== undefined && id !== sub) {
         return reply.status(403).send({ message: 'Só é possível alterar o próprio menu' });
+      }
+      if (pinnedMenu !== undefined && id !== sub) {
+        return reply.status(403).send({ message: 'Só é possível alterar os próprios fixados' });
       }
 
       // Only admin can change roles or edit other users
@@ -153,6 +158,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (restrictAccess !== undefined) { sets.push(`restrict_access = $${i++}`); params.push(restrictAccess); }
       if (theme !== undefined) { sets.push(`theme = $${i++}`); params.push(theme); }
       if (sidebarOrder !== undefined) { sets.push(`sidebar_order = $${i++}`); params.push(JSON.stringify(sidebarOrder)); }
+      if (pinnedMenu !== undefined) { sets.push(`pinned_menu = $${i++}`); params.push(JSON.stringify(pinnedMenu)); }
       if (password !== undefined) {
         const hash = await bcrypt.hash(password, 10);
         sets.push(`password_hash = $${i++}`);
@@ -164,7 +170,7 @@ export async function authRoutes(app: FastifyInstance) {
       const [updated] = await query<Profile>(
         `UPDATE profiles SET ${sets.join(', ')} WHERE id = $${i}
          RETURNING id, email, name, role, area, restrict_access AS "restrictAccess", theme,
-                   sidebar_order AS "sidebarOrder", created_at`,
+                   sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", created_at`,
         params
       );
       if (!updated) return reply.status(404).send({ message: 'Usuário não encontrado' });

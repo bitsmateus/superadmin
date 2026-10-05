@@ -165,6 +165,9 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS theme TEXT`);
   // Ordem do menu lateral por pessoa (arrastando os itens) — ver profiles.sidebar_order no schema.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sidebar_order JSONB`);
+  // Itens do menu que essa pessoa fixou (aparecem num grupo "Fixados" no topo) — array de chaves
+  // (mesma chave usada em sidebar_order: pageId ou o "to" da rota).
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pinned_menu JSONB`);
   await pool.query(`ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_theme_check`);
   await pool.query(`ALTER TABLE profiles ADD CONSTRAINT profiles_theme_check CHECK (theme IS NULL OR theme IN ('light', 'dark'))`);
   // Roteiro da sessão de ativação (checklist do que é feito com o cliente).

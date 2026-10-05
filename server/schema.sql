@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS profiles (
   -- NULL = nunca arrastou nada, vale a ordem padrão. É preferência pessoal: não muda o menu de
   -- ninguém mais, e item que não está na lista (aba nova, ou que a pessoa nem enxerga) fica no fim.
   sidebar_order JSONB,
+  -- Itens do menu que essa pessoa fixou (array de chaves) — aparecem num grupo "Fixados" no topo
+  -- do menu, com destaque. NULL/vazio = ninguém fixado ainda.
+  pinned_menu JSONB,
   password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

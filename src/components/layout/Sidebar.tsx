@@ -15,8 +15,10 @@ import {
   FileBarChart,
   FileSearch,
   FileText,
+  BarChart3,
   HeartCrack,
   LayoutDashboard,
+  Lightbulb,
   LifeBuoy,
   LogOut,
   MessageCircle,
@@ -136,6 +138,13 @@ function useGrupoAberto(chave: string): [boolean, React.Dispatch<React.SetStateA
   }, [nomeNoArmazenamento, aberto])
   return [aberto, setAberto]
 }
+
+/** As sub-abas do grupo "Clientes NX Digital", na ordem em que aparecem. */
+const SUB_ABAS_CLIENTES_NX = [
+  { to: '/clientesnxdigital/clientes', label: 'Clientes', icon: Users },
+  { to: '/clientesnxdigital/trafego', label: 'Tráfego', icon: BarChart3 },
+  { to: '/clientesnxdigital/estrategias', label: 'Estratégias', icon: Lightbulb },
+]
 
 /** Chave estável de um item do menu pra guardar a ordem: a rota, ou o id quando é uma cópia
  * ("Duplicar"), que tem rota própria. */
@@ -684,32 +693,34 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             )}
           />
         </button>
-        {clientesNxOpen && (
-          <NavLink
-            to="/clientesnxdigital/clientes"
-            onClick={closeOnMobile}
-            className={({ isActive }) =>
-              cn(
-                'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
-                isActive
-                  ? 'bg-elevate/[0.05] text-foreground'
-                  : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Users
-                  className={cn(
-                    'h-4 w-4 shrink-0',
-                    isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
-                  )}
-                />
-                <span className="truncate">Clientes</span>
-              </>
-            )}
-          </NavLink>
-        )}
+        {clientesNxOpen &&
+          SUB_ABAS_CLIENTES_NX.map((sub) => (
+            <NavLink
+              key={sub.to}
+              to={sub.to}
+              onClick={closeOnMobile}
+              className={({ isActive }) =>
+                cn(
+                  'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                  isActive
+                    ? 'bg-elevate/[0.05] text-foreground'
+                    : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <sub.icon
+                    className={cn(
+                      'h-4 w-4 shrink-0',
+                      isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                    )}
+                  />
+                  <span className="truncate">{sub.label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
         </>
         )}
 

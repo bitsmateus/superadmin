@@ -513,4 +513,226 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     if (!apagado) return reply.status(404).send({ message: 'Registro não encontrado' });
     return reply.status(204).send();
   });
+
+  // ------------------------------------------------------------------ métricas
+  // GET /api/gc/clientes/:id/metricas — tudo o que já foi lançado, do mês mais novo pro mais
+  // velho. O recorte por período fica no front, que já sabe qual mês está aberto na tela.
+  app.get<{ Params: { id: string } }>(
+    '/api/gc/clientes/:id/metricas',
+    autenticado,
+    async (req) => {
+      return query(
+        `SELECT * FROM gc_metricas WHERE gc_cliente_id = $1
+         ORDER BY periodo_inicio DESC, chave`,
+        [req.params.id]
+      );
+    }
+  );
+
+  // PUT /api/gc/metricas — grava o mês inteiro de uma vez (é como a tela edita: uma coluna por
+  // métrica, um botão de salvar). Chave vazia ou valor em branco APAGA o lançamento, em vez de
+  // gravar zero: zero é um número que a pessoa digitou, branco é "não sei".
+  app.put<{
+    Body: {
+      gc_cliente_id?: string; gc_servico_id?: string | null;
+      periodo_inicio?: string; periodo_fim?: string; fonte?: string;
+      valores?: Record<string, number | string | null>;
+    };
+  }>('/api/gc/metricas', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const { gc_cliente_id, gc_servico_id, periodo_inicio, periodo_fim, fonte, valores } = req.body ?? {};
+    if (!gc_cliente_id || !periodo_inicio || !periodo_fim) {
+      return reply.status(400).send({ message: 'Informe o cliente e o período' });
+    }
+    const origem = fonte ?? 'manual';
+    for (const [chave, valor] of Object.entries(valores ?? {})) {
+      if (valor === null || valor === undefined || valor === '') {
+        await query(
+          `DELETE FROM gc_metricas
+           WHERE gc_cliente_id = $1 AND periodo_inicio = $2 AND periodo_fim = $3 AND fonte = $4 AND chave = $5`,
+          [gc_cliente_id, periodo_inicio, periodo_fim, origem, chave]
+        );
+        continue;
+      }
+      await query(
+        `INSERT INTO gc_metricas
+           (gc_cliente_id, gc_servico_id, periodo_inicio, periodo_fim, fonte, chave, valor, criado_por)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (gc_cliente_id, periodo_inicio, periodo_fim, fonte, chave)
+         DO UPDATE SET valor = EXCLUDED.valor, gc_servico_id = EXCLUDED.gc_servico_id,
+                       criado_por = EXCLUDED.criado_por, updated_at = NOW()`,
+        [gc_cliente_id, gc_servico_id || null, periodo_inicio, periodo_fim, origem, chave, Number(valor), sub]
+      );
+    }
+    return query(
+      `SELECT * FROM gc_metricas
+       WHERE gc_cliente_id = $1 AND periodo_inicio = $2 AND periodo_fim = $3
+       ORDER BY chave`,
+      [gc_cliente_id, periodo_inicio, periodo_fim]
+    );
+  });
+
+  // GET /api/gc/trafego?periodo=YYYY-MM — a visão de todos os clientes num mês, uma linha por
+  // cliente. Os números vêm pivotados ({ leads: 42, investimento: 1500 }) porque cada cliente
+  // preenche um conjunto diferente de métricas, e a tela monta as colunas a partir disso.
+  app.get<{ Querystring: { periodo?: string } }>('/api/gc/trafego', autenticado, async (req, reply) => {
+    const periodo = req.query.periodo ?? '';
+    if (!/^\d{4}-\d{2}$/.test(periodo)) {
+      return reply.status(400).send({ message: 'periodo deve ser YYYY-MM' });
+    }
+    const inicio = `${periodo}-01`;
+    return query(
+      `SELECT c.id, c.nome_empresa, c.status, c.segmento, p.name AS responsavel_nome,
+         COALESCE((
+           SELECT json_object_agg(m.chave, m.valor)
+           FROM gc_metricas m
+           WHERE m.gc_cliente_id = c.id
+             AND m.periodo_inicio = $1::date
+             AND m.periodo_fim = (date_trunc('month', $1::date) + INTERVAL '1 month - 1 day')::date
+         ), '{}'::json) AS metricas,
+         COALESCE((
+           SELECT json_agg(json_build_object('tipo', s.tipo, 'status', s.status,
+                                             'investimento_previsto_mensal', s.investimento_previsto_mensal)
+                           ORDER BY s.created_at)
+           FROM gc_servicos s WHERE s.gc_cliente_id = c.id AND s.status = 'ativo'
+         ), '[]'::json) AS servicos
+       FROM gc_clientes c
+       LEFT JOIN profiles p ON p.id = c.responsavel_id
+       WHERE c.status <> 'encerrado'
+       ORDER BY c.nome_empresa`,
+      [inicio]
+    );
+  });
+
+  // ------------------------------------------------------------------ metas
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/metas', autenticado, async (req) => {
+    return query('SELECT * FROM gc_metas WHERE gc_cliente_id = $1 ORDER BY created_at DESC', [
+      req.params.id,
+    ]);
+  });
+
+  app.post<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/api/gc/clientes/:id/metas',
+    autenticado,
+    async (req, reply) => {
+      const b = req.body ?? {};
+      if (!b.chave_metrica) return reply.status(400).send({ message: 'chave_metrica é obrigatória' });
+      const criada = await queryOne(
+        `INSERT INTO gc_metas (gc_cliente_id, chave_metrica, valor_base, data_base, valor_meta, prazo)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [
+          req.params.id, b.chave_metrica, Number(b.valor_base ?? 0) || 0, b.data_base || null,
+          Number(b.valor_meta ?? 0) || 0, b.prazo || null,
+        ]
+      );
+      return reply.status(201).send(criada);
+    }
+  );
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/api/gc/metas/:id',
+    autenticado,
+    async (req, reply) => {
+      const { sets, params } = montarUpdate(
+        ['chave_metrica', 'valor_base', 'data_base', 'valor_meta', 'prazo', 'status'],
+        req.body ?? {}
+      );
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+      params.push(req.params.id);
+      const atualizada = await queryOne(
+        `UPDATE gc_metas SET ${sets.join(', ')}, updated_at = NOW()
+         WHERE id = $${params.length} RETURNING *`,
+        params
+      );
+      if (!atualizada) return reply.status(404).send({ message: 'Meta não encontrada' });
+      return atualizada;
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/gc/metas/:id', autenticado, async (req, reply) => {
+    const apagada = await queryOne('DELETE FROM gc_metas WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!apagada) return reply.status(404).send({ message: 'Meta não encontrada' });
+    return reply.status(204).send();
+  });
+
+  // ------------------------------------------------------------------ estratégias
+  // POST /api/gc/clientes/:id/estrategias — aplica uma estratégia modelo (com os passos dela
+  // viram checklist) ou cria uma em branco. Igual à jornada, nome e passos são COPIADOS: mexer no
+  // modelo depois não reescreve o que já foi aplicado num cliente.
+  app.post<{
+    Params: { id: string };
+    Body: { estrategia_modelo_id?: string; nome?: string; objetivo?: string; responsavel_id?: string | null; data_inicio?: string | null };
+  }>('/api/gc/clientes/:id/estrategias', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const b = req.body ?? {};
+
+    let nome = (b.nome ?? '').trim();
+    let objetivo = b.objetivo ?? '';
+    let passos: { titulo: string; ordem: number }[] = [];
+    if (b.estrategia_modelo_id) {
+      const modelo = await queryOne<{ nome: string; descricao: string }>(
+        'SELECT nome, descricao FROM gc_estrategias_modelo WHERE id = $1',
+        [b.estrategia_modelo_id]
+      );
+      if (!modelo) return reply.status(404).send({ message: 'Estratégia modelo não encontrada' });
+      nome = nome || modelo.nome;
+      objetivo = objetivo || modelo.descricao;
+      passos = await query<{ titulo: string; ordem: number }>(
+        'SELECT titulo, ordem FROM gc_estrategias_modelo_itens WHERE estrategia_modelo_id = $1 ORDER BY ordem',
+        [b.estrategia_modelo_id]
+      );
+    }
+    if (!nome) return reply.status(400).send({ message: 'Informe o nome da estratégia' });
+
+    const criada = await withTransaction(async (client) => {
+      const { rows: nova } = await client.query(
+        `INSERT INTO gc_cliente_estrategias
+           (gc_cliente_id, estrategia_modelo_id, nome, objetivo, responsavel_id, data_inicio)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [
+          req.params.id, b.estrategia_modelo_id || null, nome, objetivo,
+          b.responsavel_id || null, b.data_inicio || null,
+        ]
+      );
+      for (const passo of passos) {
+        await client.query(
+          `INSERT INTO gc_checklist_itens (gc_cliente_id, gc_cliente_estrategia_id, titulo, ordem)
+           VALUES ($1, $2, $3, $4)`,
+          [req.params.id, nova[0].id, passo.titulo, passo.ordem]
+        );
+      }
+      return nova[0];
+    });
+
+    await registrarEvento(req.params.id, `Estratégia aplicada: ${criada.nome}`, '', sub);
+    return reply.status(201).send(criada);
+  });
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/api/gc/estrategias/:id',
+    autenticado,
+    async (req, reply) => {
+      const { sets, params } = montarUpdate(
+        ['nome', 'objetivo', 'status', 'data_inicio', 'responsavel_id'],
+        req.body ?? {}
+      );
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+      params.push(req.params.id);
+      const atualizada = await queryOne(
+        `UPDATE gc_cliente_estrategias SET ${sets.join(', ')}, updated_at = NOW()
+         WHERE id = $${params.length} RETURNING *`,
+        params
+      );
+      if (!atualizada) return reply.status(404).send({ message: 'Estratégia não encontrada' });
+      return atualizada;
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/gc/estrategias/:id', autenticado, async (req, reply) => {
+    const apagada = await queryOne('DELETE FROM gc_cliente_estrategias WHERE id = $1 RETURNING id', [
+      req.params.id,
+    ]);
+    if (!apagada) return reply.status(404).send({ message: 'Estratégia não encontrada' });
+    return reply.status(204).send();
+  });
 }

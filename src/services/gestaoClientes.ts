@@ -161,6 +161,40 @@ export type GcServicoEntrada = Partial<{
   status: 'ativo' | 'pausado' | 'cancelado'
 }>
 
+/** Um lançamento de métrica — um valor, de uma chave, num período. */
+export interface GcMetrica {
+  id: string
+  gc_cliente_id: string
+  gc_servico_id: string | null
+  periodo_inicio: string
+  periodo_fim: string
+  fonte: 'manual' | 'central' | 'meta_ads' | 'google_ads'
+  chave: string
+  valor: string
+}
+
+export interface GcMeta {
+  id: string
+  gc_cliente_id: string
+  chave_metrica: string
+  valor_base: string
+  data_base: string | null
+  valor_meta: string
+  prazo: string | null
+  status: 'ativa' | 'atingida' | 'expirada'
+}
+
+/** Linha da tela de Tráfego: o cliente e os números dele no mês, já pivotados por chave. */
+export interface GcLinhaTrafego {
+  id: string
+  nome_empresa: string
+  status: GcStatusCliente
+  segmento: string
+  responsavel_nome: string | null
+  metricas: Record<string, string>
+  servicos: { tipo: GcTipoServico; status: string; investimento_previsto_mensal: string | null }[]
+}
+
 export const gestaoClientes = {
   modelos: () => api.get<GcModelos>('/api/gc/modelos'),
 
@@ -195,6 +229,47 @@ export const gestaoClientes = {
     dados: Partial<{ concluido: boolean; titulo: string; prazo: string | null; responsavel_id: string | null }>,
   ) => api.patch<GcChecklistItem>(`/api/gc/checklist/${id}`, dados),
   excluirItem: (id: string) => api.delete(`/api/gc/checklist/${id}`),
+
+  /** Aplica uma estratégia modelo (os passos dela viram checklist) ou cria uma em branco. */
+  criarEstrategia: (
+    clienteId: string,
+    dados: {
+      estrategia_modelo_id?: string
+      nome?: string
+      objetivo?: string
+      responsavel_id?: string | null
+      data_inicio?: string | null
+    },
+  ) => api.post<GcEstrategia>(`/api/gc/clientes/${clienteId}/estrategias`, dados),
+  atualizarEstrategia: (
+    id: string,
+    dados: Partial<{
+      nome: string; objetivo: string; status: GcEstrategia['status']
+      data_inicio: string | null; responsavel_id: string | null
+    }>,
+  ) => api.patch<GcEstrategia>(`/api/gc/estrategias/${id}`, dados),
+  excluirEstrategia: (id: string) => api.delete(`/api/gc/estrategias/${id}`),
+
+  metricas: (clienteId: string) => api.get<GcMetrica[]>(`/api/gc/clientes/${clienteId}/metricas`),
+  /** Grava o mês inteiro de uma vez. Valor vazio apaga o lançamento (branco ≠ zero). */
+  salvarMetricas: (dados: {
+    gc_cliente_id: string
+    periodo_inicio: string
+    periodo_fim: string
+    valores: Record<string, number | string | null>
+  }) => api.put<GcMetrica[]>('/api/gc/metricas', dados),
+
+  trafego: (periodo: string) =>
+    api.get<GcLinhaTrafego[]>(`/api/gc/trafego?periodo=${encodeURIComponent(periodo)}`),
+
+  metas: (clienteId: string) => api.get<GcMeta[]>(`/api/gc/clientes/${clienteId}/metas`),
+  criarMeta: (
+    clienteId: string,
+    dados: { chave_metrica: string; valor_base?: number; data_base?: string | null; valor_meta: number; prazo?: string | null },
+  ) => api.post<GcMeta>(`/api/gc/clientes/${clienteId}/metas`, dados),
+  atualizarMeta: (id: string, dados: Partial<Omit<GcMeta, 'id' | 'gc_cliente_id'>>) =>
+    api.patch<GcMeta>(`/api/gc/metas/${id}`, dados),
+  excluirMeta: (id: string) => api.delete(`/api/gc/metas/${id}`),
 
   registrar: (
     clienteId: string,

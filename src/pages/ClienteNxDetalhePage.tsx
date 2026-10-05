@@ -10,9 +10,11 @@ import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
 import { AbaVisaoGeral } from '@/components/gestaoClientes/AbaVisaoGeral'
 import { AbaJornada } from '@/components/gestaoClientes/AbaJornada'
 import { AbaHistorico } from '@/components/gestaoClientes/AbaHistorico'
+import { AbaMetricas } from '@/components/gestaoClientes/AbaMetricas'
+import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 
-type Aba = 'visao' | 'jornada' | 'historico'
+type Aba = 'visao' | 'jornada' | 'metricas' | 'estrategias' | 'historico'
 
 /**
  * Detalhe do cliente de tráfego — Visão geral, Jornada e Histórico.
@@ -127,6 +129,18 @@ export function ClienteNxDetalhePage() {
                     </span>
                   ),
                 },
+                { value: 'metricas', label: 'Métricas e metas' },
+                {
+                  value: 'estrategias',
+                  label: (
+                    <span className="flex items-center gap-1.5">
+                      Estratégias
+                      <span className="text-xs tabular-nums text-foreground/45">
+                        {detalhe.estrategias.length}
+                      </span>
+                    </span>
+                  ),
+                },
                 {
                   value: 'historico',
                   label: (
@@ -143,6 +157,10 @@ export function ClienteNxDetalhePage() {
 
             {aba === 'visao' && <AbaVisaoGeral detalhe={detalhe} onMudou={carregar} />}
             {aba === 'jornada' && <AbaJornada jornada={detalhe.jornada} onMudou={carregar} />}
+            {aba === 'metricas' && <AbaMetricas clienteId={id} />}
+            {aba === 'estrategias' && (
+              <AbaEstrategias estrategias={detalhe.estrategias} clienteId={id} onMudou={carregar} />
+            )}
             {aba === 'historico' && (
               <AbaHistorico historico={detalhe.historico} clienteId={id} onMudou={carregar} />
             )}

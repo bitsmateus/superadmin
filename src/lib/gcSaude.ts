@@ -79,6 +79,15 @@ export function progressoDaMeta(meta: GcMeta, atual: number | null | undefined):
 
 const PIOR: Estado[] = ['neutro', 'otimo', 'bom', 'atencao', 'risco']
 
+/** A nota do gestor vira estado do semáforo. 'regular' é atenção; 'ruim' é risco, sem meio-termo. */
+const ESTADO_DA_NOTA: Record<NonNullable<GcClienteLista['avaliacao']>['nivel'], Estado> = {
+  otimo: 'otimo',
+  bom: 'bom',
+  regular: 'atencao',
+  ruim: 'risco',
+}
+
+
 /**
  * Monta o semáforo de um cliente a partir da linha da lista (que já traz atrasos, último contato,
  * último relatório, metas e os números do mês e do mês anterior).
@@ -86,8 +95,30 @@ const PIOR: Estado[] = ['neutro', 'otimo', 'bom', 'atencao', 'risco']
 export function avaliarSaude(c: GcClienteLista): Saude {
   const sinais: Sinal[] = []
   const mes = comDerivadas(c.metricas_mes ?? {})
+  const avaliacao = c.avaliacao ?? null
   const anterior = comDerivadas(c.metricas_mes_anterior ?? {})
   const temLancamento = Object.keys(c.metricas_mes ?? {}).length > 0
+
+  // ---------------------------------------------------------------- a nota do gestor
+  // Vem primeiro de propósito: é o julgamento de quem acompanha o cliente, e ele manda no resto.
+  if (avaliacao) {
+    sinais.push({
+      chave: 'avaliacao',
+      titulo: 'Resultado, na sua avaliação',
+      estado: ESTADO_DA_NOTA[avaliacao.nivel],
+      detalhe:
+        avaliacao.comentario?.trim() ||
+        `Avaliado como "${avaliacao.nivel}"${avaliacao.autor_nome ? ` por ${avaliacao.autor_nome}` : ''}`,
+      pesaNoChurn: avaliacao.nivel === 'ruim' || avaliacao.nivel === 'regular',
+    })
+  } else {
+    sinais.push({
+      chave: 'avaliacao',
+      titulo: 'Resultado, na sua avaliação',
+      estado: 'neutro',
+      detalhe: 'Ninguém disse ainda se o resultado deste mês está bom ou ruim',
+    })
+  }
 
   // ---------------------------------------------------------------- cadastro e contrato
   if (c.status !== 'ativo') {
@@ -323,6 +354,16 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   else if (contagem.otimo >= 4) nivel = 'otimo'
   else nivel = 'bom'
 
+  // Quem acompanha o cliente manda. Marcou "ruim", o cliente aparece em risco por mais verde que
+  // esteja o resto — e marcar "ótimo" NÃO apaga um prazo vencido nem um mês sem contato, porque
+  // esses continuam sendo fatos. Só quando não há nada em atenção nem em risco a nota vale pros
+  // dois lados: aí o que resta é opinião, e a de quem conhece o cliente vale mais que a contagem.
+  if (avaliacao) {
+    const daNota = ESTADO_DA_NOTA[avaliacao.nivel]
+    nivel =
+      contagem.risco === 0 && contagem.atencao === 0 ? daNota : piorEstado([nivel, daNota])
+  }
+
   const motivos = sinais
     .filter((s) => s.pesaNoChurn && (s.estado === 'risco' || s.estado === 'atencao'))
     .map((s) => s.detalhe)
@@ -332,6 +373,52 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   }
 
   return { nivel, rotulo: ROTULO_ESTADO[nivel], sinais, contagem, churn }
+}
+
+/** Peso da prioridade definida à mão. Alta primeiro, baixa por último. */
+const PESO_PRIORIDADE: Record<string, number> = { alta: 0, media: 1, baixa: 2 }
+
+/** Quão grave está o cliente, do pior pro melhor. */
+const PESO_ESTADO: Record<Estado, number> = { risco: 0, atencao: 1, neutro: 2, bom: 3, otimo: 4 }
+
+/**
+ * A fila de atendimento: em que ordem olhar os clientes hoje.
+ *
+ * Três critérios, nesta ordem: a PRIORIDADE que a equipe definiu à mão (um cliente grande continua
+ * sendo o primeiro mesmo estando verde), depois a gravidade do semáforo, depois quantas pendências
+ * estão vencidas. Empate resolve por nome, pra lista não dançar a cada carga.
+ *
+ * A prioridade vem antes do semáforo de propósito: o semáforo diz o que está pegando fogo, a
+ * prioridade diz de quem é o fogo que importa.
+ */
+export function compararPorPrioridade(
+  a: { cliente: GcClienteLista; saude: Saude },
+  b: { cliente: GcClienteLista; saude: Saude },
+): number {
+  const prioridade =
+    (PESO_PRIORIDADE[a.cliente.prioridade ?? 'media'] ?? 1) -
+    (PESO_PRIORIDADE[b.cliente.prioridade ?? 'media'] ?? 1)
+  if (prioridade !== 0) return prioridade
+
+  const gravidade = PESO_ESTADO[a.saude.nivel] - PESO_ESTADO[b.saude.nivel]
+  if (gravidade !== 0) return gravidade
+
+  const atrasados = Number(b.cliente.itens_atrasados ?? 0) - Number(a.cliente.itens_atrasados ?? 0)
+  if (atrasados !== 0) return atrasados
+
+  return a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa)
+}
+
+/** Só a gravidade, pra quem quiser ver os piores primeiro ignorando a prioridade combinada. */
+export function compararPorGravidade(
+  a: { cliente: GcClienteLista; saude: Saude },
+  b: { cliente: GcClienteLista; saude: Saude },
+): number {
+  const gravidade = PESO_ESTADO[a.saude.nivel] - PESO_ESTADO[b.saude.nivel]
+  if (gravidade !== 0) return gravidade
+  const atrasados = Number(b.cliente.itens_atrasados ?? 0) - Number(a.cliente.itens_atrasados ?? 0)
+  if (atrasados !== 0) return atrasados
+  return a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa)
 }
 
 /** O pior estado de uma lista — usado quando se agrupa sinais num bloco só. */

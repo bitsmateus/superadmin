@@ -7,7 +7,8 @@ import { Select } from '@/components/ui/Select'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import {
-  gestaoClientes, type GcClienteEntrada, type GcClienteLista, type GcStatusCliente,
+  PRIORIDADES, gestaoClientes,
+  type GcClienteEntrada, type GcClienteLista, type GcStatusCliente,
 } from '@/services/gestaoClientes'
 
 /** Data vinda do banco ('2026-10-05T00:00:00.000Z' ou '2026-10-05') no formato que o campo usa. */
@@ -57,6 +58,7 @@ export function ModalCliente({
       segmento: cliente?.segmento ?? '',
       responsavel_id: cliente?.responsavel_id ?? '',
       status: cliente?.status ?? 'ativo',
+      prioridade: cliente?.prioridade ?? 'media',
       data_inicio: soData(cliente?.data_inicio),
       observacoes_gerais: cliente?.observacoes_gerais ?? '',
     })
@@ -166,6 +168,13 @@ export function ModalCliente({
           options={STATUS.map((s) => ({ value: s.valor, label: s.label }))}
           value={form.status ?? 'ativo'}
           onChange={(e) => mudar('status')(e.target.value)}
+        />
+        <Select
+          label="Prioridade de atendimento"
+          hint="define a ordem da fila na lista de clientes"
+          options={PRIORIDADES.map((p) => ({ value: p.valor, label: p.label }))}
+          value={form.prioridade ?? 'media'}
+          onChange={(e) => mudar('prioridade')(e.target.value)}
         />
         <CampoData
           label="Início"

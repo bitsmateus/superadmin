@@ -13,6 +13,15 @@ import { api } from '@/services/api'
  */
 
 export type GcStatusCliente = 'ativo' | 'pausado' | 'encerrado'
+
+/** Quem a equipe atende primeiro quando o dia não dá pra todos. */
+export type GcPrioridade = 'alta' | 'media' | 'baixa'
+
+export const PRIORIDADES: { valor: GcPrioridade; label: string; ajuda: string }[] = [
+  { valor: 'alta', label: 'Alta', ajuda: 'conta grande ou momento delicado — olhar todo dia' },
+  { valor: 'media', label: 'Média', ajuda: 'acompanhamento normal' },
+  { valor: 'baixa', label: 'Baixa', ajuda: 'rodando sozinho, revisar de vez em quando' },
+]
 export type GcStatusEtapa = 'pendente' | 'em_andamento' | 'concluida'
 export type GcTipoServico =
   | 'trafego_meta' | 'trafego_google' | 'central_ia' | 'site' | 'automacao' | 'outro'
@@ -119,6 +128,7 @@ export interface GcClienteLista {
   responsavel_id: string | null
   responsavel_nome: string | null
   status: GcStatusCliente
+  prioridade: GcPrioridade
   data_inicio: string | null
   observacoes_gerais: string
   created_at: string
@@ -142,6 +152,8 @@ export interface GcClienteLista {
   /** Números do mês de referência e do anterior, pivotados por chave. */
   metricas_mes: Record<string, string>
   metricas_mes_anterior: Record<string, string>
+  /** Como o gestor avaliou o resultado DESTE mês. Null = ninguém deu nota ainda. */
+  avaliacao: GcAvaliacao | null
 }
 
 export interface GcClienteDetalhe {
@@ -172,6 +184,7 @@ export type GcClienteEntrada = Partial<{
   logo_url: string
   responsavel_id: string | null
   status: GcStatusCliente
+  prioridade: GcPrioridade
   data_inicio: string | null
   observacoes_gerais: string
 }>
@@ -195,6 +208,24 @@ export interface GcMetrica {
   fonte: 'manual' | 'central' | 'meta_ads' | 'google_ads'
   chave: string
   valor: string
+}
+
+/** A nota que uma pessoa dá pro resultado do mês — o julgamento, não o cálculo. */
+export type GcNivelAvaliacao = 'otimo' | 'bom' | 'regular' | 'ruim'
+
+export const NIVEIS_AVALIACAO: { valor: GcNivelAvaliacao; label: string; ajuda: string }[] = [
+  { valor: 'otimo', label: 'Ótimo', ajuda: 'resultado acima do combinado' },
+  { valor: 'bom', label: 'Bom', ajuda: 'dentro do esperado' },
+  { valor: 'regular', label: 'Regular', ajuda: 'entregou, mas abaixo do que dava' },
+  { valor: 'ruim', label: 'Ruim', ajuda: 'resultado não veio — precisa de ação' },
+]
+
+export interface GcAvaliacao {
+  nivel: GcNivelAvaliacao
+  comentario: string
+  atualizado_em: string | null
+  autor_nome: string | null
+  periodo_inicio: string
 }
 
 /** Horizonte da meta: a mesma métrica tem alvo pro mês, pro semestre e pro ano. */
@@ -341,6 +372,20 @@ export const gestaoClientes = {
     }>,
   ) => api.patch<GcEstrategia>(`/api/gc/estrategias/${id}`, dados),
   excluirEstrategia: (id: string) => api.delete(`/api/gc/estrategias/${id}`),
+
+  /** A nota do mês. Sem período, o servidor usa o mês de hoje em Brasília. */
+  avaliar: (
+    clienteId: string,
+    dados: { nivel: GcNivelAvaliacao; comentario?: string; periodo?: string },
+  ) => api.put<GcAvaliacao>(`/api/gc/clientes/${clienteId}/avaliacao`, dados),
+  limparAvaliacao: (clienteId: string, periodo?: string) =>
+    api.delete(
+      `/api/gc/clientes/${clienteId}/avaliacao${periodo ? `?periodo=${encodeURIComponent(periodo)}` : ''}`,
+    ),
+  avaliacoes: (clienteId: string) =>
+    api.get<(GcAvaliacao & { id: string; periodo_fim: string })[]>(
+      `/api/gc/clientes/${clienteId}/avaliacoes`,
+    ),
 
   metricas: (clienteId: string) => api.get<GcMetrica[]>(`/api/gc/clientes/${clienteId}/metricas`),
   /** Grava o mês inteiro de uma vez. Valor vazio apaga o lançamento (branco ≠ zero). */

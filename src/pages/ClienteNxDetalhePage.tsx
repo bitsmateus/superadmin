@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, MessageSquare, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
 import { AbaVisaoGeral } from '@/components/gestaoClientes/AbaVisaoGeral'
 import { AbaJornada } from '@/components/gestaoClientes/AbaJornada'
-import { AbaNotas } from '@/components/gestaoClientes/AbaNotas'
+import { ModalNotas, PainelNotas } from '@/components/gestaoClientes/PainelNotas'
 import { AbaMetricas } from '@/components/gestaoClientes/AbaMetricas'
 import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
@@ -32,6 +32,7 @@ export function ClienteNxDetalhePage() {
   const [aba, setAba] = React.useState<Aba>('visao')
   const [editando, setEditando] = React.useState(false)
   const [confirmandoExclusao, setConfirmandoExclusao] = React.useState(false)
+  const [notasAbertas, setNotasAbertas] = React.useState(false)
   const [excluindo, setExcluindo] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
@@ -82,6 +83,14 @@ export function ClienteNxDetalhePage() {
                 onClick={() => setConfirmandoExclusao(true)}
               >
                 Excluir
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<MessageSquare className="h-4 w-4" />}
+                onClick={() => setNotasAbertas(true)}
+              >
+                Notas
               </Button>
               <Button
                 variant="secondary"
@@ -161,7 +170,7 @@ export function ClienteNxDetalhePage() {
               <AbaVisaoGeral
                 detalhe={detalhe}
                 onMudou={carregar}
-                onVerNotas={() => setAba('notas')}
+                onVerNotas={() => setNotasAbertas(true)}
               />
             )}
             {aba === 'jornada' && <AbaJornada jornada={detalhe.jornada} onMudou={carregar} />}
@@ -171,11 +180,22 @@ export function ClienteNxDetalhePage() {
               <AbaEstrategias estrategias={detalhe.estrategias} clienteId={id} onMudou={carregar} />
             )}
             {aba === 'notas' && (
-              <AbaNotas historico={detalhe.historico} clienteId={id} onMudou={carregar} />
+              <PainelNotas historico={detalhe.historico} clienteId={id} onMudou={carregar} />
             )}
           </>
         )}
       </div>
+
+      {detalhe && (
+        <ModalNotas
+          aberto={notasAbertas}
+          onFechar={() => setNotasAbertas(false)}
+          titulo={nome}
+          historico={detalhe.historico}
+          clienteId={id}
+          onMudou={carregar}
+        />
+      )}
 
       <ModalCliente
         aberto={editando}

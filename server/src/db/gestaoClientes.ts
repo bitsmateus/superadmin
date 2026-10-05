@@ -227,6 +227,27 @@ const TABELAS = [
   )`,
   `CREATE INDEX IF NOT EXISTS gc_acessos_link_idx ON gc_acessos_link (link_id, acessado_em DESC)`,
 
+  // ---------------------------------------------------------------- avaliação do gestor
+  // A nota que uma PESSOA dá pro resultado do mês. O semáforo automático olha números e prazos;
+  // isso aqui é o julgamento de quem acompanha o cliente — e, quando os dois discordam, quem manda
+  // é esta tabela (ver src/lib/gcSaude.ts).
+  //
+  // É por período porque resultado é do mês: dizer "esse cliente está ruim" sem dizer quando
+  // apagaria a história de um cliente que estava mal em agosto e virou o jogo em outubro.
+  `CREATE TABLE IF NOT EXISTS gc_avaliacoes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    periodo_inicio DATE NOT NULL,
+    periodo_fim DATE NOT NULL,
+    nivel TEXT NOT NULL CHECK (nivel IN ('otimo','bom','regular','ruim')),
+    comentario TEXT NOT NULL DEFAULT '',
+    autor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS gc_avaliacao_por_periodo
+     ON gc_avaliacoes (gc_cliente_id, periodo_inicio, periodo_fim)`,
+
   // ---------------------------------------------------------------- acréscimos (colunas novas)
   // Vêm como ALTER porque as tabelas acima já existem em produção. Idempotentes, como o resto.
 
@@ -237,6 +258,17 @@ const TABELAS = [
      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gc_metas_horizonte') THEN
        ALTER TABLE gc_metas ADD CONSTRAINT gc_metas_horizonte
          CHECK (horizonte IN ('mes','6_meses','12_meses'));
+     END IF;
+   END $$`,
+
+  // Prioridade de atendimento, definida à mão: qual cliente a equipe olha primeiro quando o dia
+  // não dá pra todos. É diferente do semáforo — um cliente pode estar verde e ainda assim ser o
+  // mais importante da carteira (ou estar vermelho e ser pequeno).
+  `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS prioridade TEXT NOT NULL DEFAULT 'media'`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gc_clientes_prioridade') THEN
+       ALTER TABLE gc_clientes ADD CONSTRAINT gc_clientes_prioridade
+         CHECK (prioridade IN ('alta','media','baixa'));
      END IF;
    END $$`,
 

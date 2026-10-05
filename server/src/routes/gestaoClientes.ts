@@ -18,7 +18,8 @@ import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js'
 /** Só deixa passar as colunas que a tela realmente edita — o resto do body é ignorado. */
 const CAMPOS_CLIENTE = [
   'nome_empresa', 'nome_contato', 'whatsapp_contato', 'email_contato', 'cnpj', 'cidade',
-  'segmento', 'logo_url', 'responsavel_id', 'status', 'data_inicio', 'observacoes_gerais',
+  'segmento', 'logo_url', 'responsavel_id', 'status', 'prioridade', 'data_inicio',
+  'observacoes_gerais',
 ] as const;
 
 const CAMPOS_SERVICO = [
@@ -199,7 +200,13 @@ const SQL_CLIENTES = `
       ) ORDER BY g.created_at)
       FROM gc_metas g WHERE g.gc_cliente_id = c.id), '[]'::json) AS metas,
     ${pivotMetricas('$1')} AS metricas_mes,
-    ${pivotMetricas('$2')} AS metricas_mes_anterior
+    ${pivotMetricas('$2')} AS metricas_mes_anterior,
+    (SELECT json_build_object(
+        'nivel', a.nivel, 'comentario', a.comentario, 'atualizado_em', a.updated_at,
+        'autor_nome', pa.name, 'periodo_inicio', a.periodo_inicio)
+      FROM gc_avaliacoes a
+      LEFT JOIN profiles pa ON pa.id = a.autor_id
+      WHERE a.gc_cliente_id = c.id AND a.periodo_inicio = $1::date) AS avaliacao
   FROM gc_clientes c
   LEFT JOIN profiles p ON p.id = c.responsavel_id`;
 
@@ -803,6 +810,72 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     if (!apagada) return reply.status(404).send({ message: 'Estratégia não encontrada' });
     return reply.status(204).send();
   });
+
+  // ------------------------------------------------------------------ avaliação do gestor
+  // GET /api/gc/clientes/:id/avaliacoes — a régua do cliente mês a mês, pra ver se melhorou.
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/avaliacoes', autenticado, async (req) => {
+    return query(
+      `SELECT a.*, p.name AS autor_nome
+       FROM gc_avaliacoes a LEFT JOIN profiles p ON p.id = a.autor_id
+       WHERE a.gc_cliente_id = $1 ORDER BY a.periodo_inicio DESC`,
+      [req.params.id]
+    );
+  });
+
+  // PUT /api/gc/clientes/:id/avaliacao — como ESTÁ o resultado, na opinião de quem acompanha.
+  // Sem período no corpo, vale o mês de hoje em Brasília: é o caso de sempre, e obrigar a tela a
+  // mandar a data só criaria chance de ela mandar o mês errado na virada.
+  app.put<{
+    Params: { id: string };
+    Body: { nivel?: string; comentario?: string; periodo?: string };
+  }>('/api/gc/clientes/:id/avaliacao', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const { nivel, comentario, periodo } = req.body ?? {};
+    if (!nivel || !['otimo', 'bom', 'regular', 'ruim'].includes(nivel)) {
+      return reply.status(400).send({ message: 'nivel deve ser otimo, bom, regular ou ruim' });
+    }
+    const [inicio] = mesesDeReferencia(periodo);
+
+    const anterior = await queryOne<{ nivel: string }>(
+      'SELECT nivel FROM gc_avaliacoes WHERE gc_cliente_id = $1 AND periodo_inicio = $2',
+      [req.params.id, inicio]
+    );
+    const salva = await queryOne<{ nivel: string }>(
+      `INSERT INTO gc_avaliacoes (gc_cliente_id, periodo_inicio, periodo_fim, nivel, comentario, autor_id)
+       VALUES ($1, $2, (date_trunc('month', $2::date) + INTERVAL '1 month - 1 day')::date, $3, $4, $5)
+       ON CONFLICT (gc_cliente_id, periodo_inicio, periodo_fim)
+       DO UPDATE SET nivel = EXCLUDED.nivel, comentario = EXCLUDED.comentario,
+                     autor_id = EXCLUDED.autor_id, updated_at = NOW()
+       RETURNING *`,
+      [req.params.id, inicio, nivel, comentario ?? '', sub]
+    );
+
+    // Só registra quando a nota MUDA: salvar o comentário de novo não é um acontecimento, e o
+    // histórico viraria uma lista de "avaliou como bom" repetida.
+    if (anterior?.nivel !== nivel) {
+      await registrarEvento(
+        req.params.id,
+        `Resultado de ${String(inicio).slice(0, 7).split('-').reverse().join('/')}: ${nivel}`,
+        comentario ?? '',
+        sub
+      );
+    }
+    return salva;
+  });
+
+  app.delete<{ Params: { id: string }; Querystring: { periodo?: string } }>(
+    '/api/gc/clientes/:id/avaliacao',
+    autenticado,
+    async (req, reply) => {
+      const [inicio] = mesesDeReferencia(req.query.periodo);
+      const apagada = await queryOne(
+        'DELETE FROM gc_avaliacoes WHERE gc_cliente_id = $1 AND periodo_inicio = $2 RETURNING id',
+        [req.params.id, inicio]
+      );
+      if (!apagada) return reply.status(404).send({ message: 'Esse mês não tem avaliação' });
+      return reply.status(204).send();
+    }
+  );
 
   // ------------------------------------------------------------------ relatórios
   // GET /api/gc/clientes/:id/relatorios — lista sem o snapshot (que é grande e só interessa quando

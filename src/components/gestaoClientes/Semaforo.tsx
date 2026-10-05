@@ -1,6 +1,13 @@
 import * as React from 'react'
-import { AlertTriangle, Check, CircleDot, HelpCircle, ShieldAlert, TrendingDown } from 'lucide-react'
+import {
+  AlertTriangle, Check, CircleDot, HelpCircle, Loader2, ShieldAlert, TrendingDown,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { ROTULO_ESTADO, type Estado, type Saude, type Sinal } from '@/lib/gcSaude'
+import {
+  NIVEIS_AVALIACAO, gestaoClientes,
+  type GcAvaliacao, type GcNivelAvaliacao,
+} from '@/services/gestaoClientes'
 import { cn } from '@/lib/utils'
 
 /**
@@ -85,6 +92,141 @@ export function FaixaDeSinais({ saude }: { saude: Saude }) {
   )
 }
 
+const CORES_NOTA: Record<GcNivelAvaliacao, string> = {
+  otimo: 'border-success/40 bg-success/15 text-success',
+  bom: 'border-accent/40 bg-accent/15 text-accent',
+  regular: 'border-warning/40 bg-warning/15 text-warning',
+  ruim: 'border-danger/40 bg-danger/15 text-danger',
+}
+
+/**
+ * A nota que VOCÊ dá pro resultado do mês.
+ *
+ * O semáforo automático só enxerga número e prazo. Quem acompanha o cliente sabe coisas que não
+ * estão em lugar nenhum: que ele sumiu, que o resultado veio mas não era o combinado, que o mês
+ * foi ruim por um motivo já resolvido. Esta nota é esse julgamento, e ela PUXA o semáforo pra
+ * baixo quando é pior que o automático — marcar "ótimo" não apaga um prazo vencido.
+ *
+ * É por mês: dizer "esse cliente está ruim" sem dizer quando apagaria a história de quem estava
+ * mal em agosto e virou o jogo em outubro.
+ */
+export function AvaliacaoDoResultado({
+  clienteId,
+  avaliacao,
+  periodoRotulo,
+  onMudou,
+}: {
+  clienteId: string
+  avaliacao: GcAvaliacao | null
+  /** "Outubro de 2026" — deixa claro que a nota é daquele mês, não do cliente pra sempre. */
+  periodoRotulo: string
+  onMudou: () => Promise<void> | void
+}) {
+  const [comentario, setComentario] = React.useState(avaliacao?.comentario ?? '')
+  const [salvando, setSalvando] = React.useState<GcNivelAvaliacao | null>(null)
+  const [escrevendo, setEscrevendo] = React.useState(false)
+
+  // Trocar de cliente (ou recarregar depois de salvar) tem que trazer o comentário do servidor.
+  React.useEffect(() => {
+    setComentario(avaliacao?.comentario ?? '')
+    setEscrevendo(false)
+  }, [avaliacao?.comentario, avaliacao?.periodo_inicio, clienteId])
+
+  const salvar = async (nivel: GcNivelAvaliacao, texto = comentario) => {
+    setSalvando(nivel)
+    try {
+      await gestaoClientes.avaliar(clienteId, { nivel, comentario: texto })
+      await onMudou()
+    } catch (err) {
+      toast.error('Falha ao salvar a avaliação: ' + (err as Error).message)
+    } finally {
+      setSalvando(null)
+    }
+  }
+
+  const limpar = async () => {
+    try {
+      await gestaoClientes.limparAvaliacao(clienteId)
+      await onMudou()
+    } catch (err) {
+      toast.error('Falha ao limpar: ' + (err as Error).message)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-line bg-elevate/[0.02] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-foreground">Como está o resultado?</p>
+          <p className="text-xs text-foreground/50">
+            Sua avaliação de {periodoRotulo.toLowerCase()} — é ela que manda no semáforo
+          </p>
+        </div>
+        {avaliacao?.atualizado_em && (
+          <p className="text-xs text-foreground/40">
+            {avaliacao.autor_nome ? `${avaliacao.autor_nome} · ` : ''}
+            {new Date(avaliacao.atualizado_em).toLocaleDateString('pt-BR')}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        {NIVEIS_AVALIACAO.map((n) => {
+          const escolhido = avaliacao?.nivel === n.valor
+          return (
+            <button
+              key={n.valor}
+              type="button"
+              title={n.ajuda}
+              disabled={salvando !== null}
+              onClick={() => void salvar(n.valor)}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
+                escolhido
+                  ? CORES_NOTA[n.valor]
+                  : 'border-line text-foreground/55 hover:border-foreground/25 hover:text-foreground',
+              )}
+            >
+              {salvando === n.valor && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {n.label}
+            </button>
+          )
+        })}
+        {avaliacao && (
+          <button type="button" onClick={() => void limpar()} className="px-2 text-xs text-foreground/40 hover:text-danger">
+            limpar
+          </button>
+        )}
+      </div>
+
+      {avaliacao && (escrevendo || avaliacao.comentario) && (
+        <textarea
+          rows={2}
+          value={comentario}
+          onChange={(e) => setComentario(e.target.value)}
+          onFocus={() => setEscrevendo(true)}
+          onBlur={() => {
+            // Salva ao sair do campo: um botão "salvar comentário" só pra isso seria um clique a
+            // mais em algo que a pessoa já terminou de escrever.
+            if (comentario !== (avaliacao.comentario ?? '')) void salvar(avaliacao.nivel, comentario)
+          }}
+          placeholder="Por que está assim? (fica junto da avaliação e no histórico do cliente)"
+          className="mt-2.5 w-full resize-y rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground/30 focus:border-accent/60"
+        />
+      )}
+      {avaliacao && !escrevendo && !avaliacao.comentario && (
+        <button
+          type="button"
+          onClick={() => setEscrevendo(true)}
+          className="mt-2 text-xs text-foreground/45 hover:text-accent"
+        >
+          + escrever o porquê
+        </button>
+      )}
+    </div>
+  )
+}
+
 function LinhaSinal({ sinal }: { sinal: Sinal }) {
   const { ponto, icone: Icone } = ESTILO[sinal.estado]
   return (
@@ -112,7 +254,7 @@ function LinhaSinal({ sinal }: { sinal: Sinal }) {
  * Painel com TODOS os passos — é o que a pessoa que cuida da conta abre pra saber o que fazer.
  * Os sinais ruins vêm primeiro: a tela é pra agir, não pra arquivar.
  */
-export function PainelSaude({ saude }: { saude: Saude }) {
+export function PainelSaude({ saude, children }: { saude: Saude; children?: React.ReactNode }) {
   const ordem: Estado[] = ['risco', 'atencao', 'neutro', 'bom', 'otimo']
   const sinais = [...saude.sinais].sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado))
 
@@ -130,6 +272,8 @@ export function PainelSaude({ saude }: { saude: Saude }) {
           <PastilhaSaude estado={tomChurn} texto={`Risco de churn: ${saude.churn.nivel}`} />
         </div>
       </div>
+
+      {children && <div className="mt-3">{children}</div>}
 
       <div className="mt-3">
         <FaixaDeSinais saude={saude} />

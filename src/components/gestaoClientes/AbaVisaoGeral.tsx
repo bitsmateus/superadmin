@@ -6,11 +6,13 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
-import { comDerivadas, formatarMetrica, numeroDigitado } from '@/lib/gcMetricas'
-import { avaliarSaude } from '@/lib/gcSaude'
-import { PainelSaude } from '@/components/gestaoClientes/Semaforo'
 import {
-  TIPOS_SERVICO, gestaoClientes,
+  comDerivadas, formatarMetrica, mesAtual, mesPorExtenso, numeroDigitado,
+} from '@/lib/gcMetricas'
+import { avaliarSaude } from '@/lib/gcSaude'
+import { AvaliacaoDoResultado, PainelSaude } from '@/components/gestaoClientes/Semaforo'
+import {
+  PRIORIDADES, TIPOS_SERVICO, gestaoClientes,
   type GcClienteDetalhe, type GcServico, type GcTipoServico,
 } from '@/services/gestaoClientes'
 
@@ -255,7 +257,14 @@ export function AbaVisaoGeral({
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
-        <PainelSaude saude={avaliarSaude(cliente)} />
+        <PainelSaude saude={avaliarSaude(cliente)}>
+          <AvaliacaoDoResultado
+            clienteId={cliente.id}
+            avaliacao={cliente.avaliacao}
+            periodoRotulo={mesPorExtenso(mesAtual())}
+            onMudou={onMudou}
+          />
+        </PainelSaude>
 
         <section className="rounded-xl border border-line p-4">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Cadastro</h2>
@@ -371,6 +380,21 @@ export function AbaVisaoGeral({
               <span className="tabular-nums text-foreground/85">
                 {detalhe.jornada.filter((j) => j.status === 'concluida').length} de{' '}
                 {detalhe.jornada.length}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-foreground/60">Prioridade</span>
+              <span
+                className={
+                  cliente.prioridade === 'alta'
+                    ? 'font-medium text-danger'
+                    : cliente.prioridade === 'baixa'
+                      ? 'text-foreground/50'
+                      : 'text-foreground/85'
+                }
+                title={PRIORIDADES.find((p) => p.valor === cliente.prioridade)?.ajuda}
+              >
+                {PRIORIDADES.find((p) => p.valor === (cliente.prioridade ?? 'media'))?.label}
               </span>
             </div>
             <div className="flex items-center justify-between">

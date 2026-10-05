@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, Plus, Search, ShieldAlert, Users } from 'lucide-react'
+import { ArrowUpDown, Loader2, Plus, Search, ShieldAlert, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -11,10 +11,12 @@ import { Tabs } from '@/components/ui/Tabs'
 import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import {
-  TIPOS_SERVICO, gestaoClientes, progressoDoCliente,
-  type GcClienteLista, type GcStatusCliente,
+  NIVEIS_AVALIACAO, PRIORIDADES, TIPOS_SERVICO, gestaoClientes, progressoDoCliente,
+  type GcClienteLista, type GcNivelAvaliacao, type GcPrioridade, type GcStatusCliente,
 } from '@/services/gestaoClientes'
-import { avaliarSaude, type Saude } from '@/lib/gcSaude'
+import {
+  avaliarSaude, compararPorGravidade, compararPorPrioridade, type Saude,
+} from '@/lib/gcSaude'
 import { formatarMetrica, mesPorExtenso, mesAtual } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
 
@@ -29,6 +31,33 @@ const TOM_DO_STATUS: Record<GcStatusCliente, 'success' | 'warning' | 'neutral'> 
   ativo: 'success',
   pausado: 'warning',
   encerrado: 'neutral',
+}
+
+const ESTILO_PRIORIDADE: Record<GcPrioridade, string> = {
+  alta: 'border-danger/30 bg-danger/10 text-danger',
+  media: 'border-line bg-elevate/[0.04] text-foreground/60',
+  baixa: 'border-line bg-transparent text-foreground/40',
+}
+
+/** Como a lista é ordenada. "Fila" é o padrão: prioridade combinada, depois gravidade. */
+type Ordem = 'fila' | 'gravidade' | 'nome'
+
+const ORDENS: { valor: Ordem; label: string }[] = [
+  { valor: 'fila', label: 'Ordem de prioridade' },
+  { valor: 'gravidade', label: 'Pior primeiro' },
+  { valor: 'nome', label: 'Nome' },
+]
+
+/** A nota do gestor pintada do jeito que ela aparece no detalhe. */
+const CORES_NOTA: Record<GcNivelAvaliacao, string> = {
+  otimo: 'text-success',
+  bom: 'text-accent',
+  regular: 'text-warning',
+  ruim: 'text-danger',
+}
+
+function rotuloNota(nivel: GcNivelAvaliacao): string {
+  return NIVEIS_AVALIACAO.find((n) => n.valor === nivel)?.label ?? nivel
 }
 
 function rotuloServico(tipo: string): string {
@@ -114,6 +143,7 @@ export function ClientesNxDigitalPage() {
   const [busca, setBusca] = React.useState('')
   const [aba, setAba] = React.useState<GcStatusCliente | 'todos'>('ativo')
   const [soProblemas, setSoProblemas] = React.useState(false)
+  const [ordem, setOrdem] = React.useState<Ordem>('fila')
   const [modalAberto, setModalAberto] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
@@ -125,6 +155,18 @@ export function ClientesNxDigitalPage() {
       setCarregando(false)
     }
   }, [])
+
+  // Mudar a prioridade é o tipo de coisa que se faz olhando a lista inteira, então ela é editável
+  // aqui mesmo — abrir o cadastro do cliente só pra isso seria um desvio no meio do raciocínio.
+  const mudarPrioridade = async (id: string, prioridade: GcPrioridade) => {
+    setClientes((atual) => atual.map((c) => (c.id === id ? { ...c, prioridade } : c)))
+    try {
+      await gestaoClientes.atualizar(id, { prioridade })
+    } catch (err) {
+      toast.error('Falha ao mudar a prioridade: ' + (err as Error).message)
+      await carregar()
+    }
+  }
 
   React.useEffect(() => {
     void carregar()
@@ -149,6 +191,14 @@ export function ClientesNxDigitalPage() {
     )
   })
 
+  const ordenados = [...visiveis].sort(
+    ordem === 'fila'
+      ? compararPorPrioridade
+      : ordem === 'gravidade'
+        ? compararPorGravidade
+        : (a, b) => a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa),
+  )
+
   const contagem = (status: GcStatusCliente | 'todos') =>
     status === 'todos' ? clientes.length : clientes.filter((c) => c.status === status).length
 
@@ -159,6 +209,8 @@ export function ClientesNxDigitalPage() {
   const semLancamento = ativos.filter(
     ({ cliente }) => Object.keys(cliente.metricas_mes ?? {}).length === 0,
   ).length
+  const semNota = ativos.filter(({ cliente }) => !cliente.avaliacao).length
+  const altaPrioridade = ativos.filter(({ cliente }) => cliente.prioridade === 'alta').length
   const investimentoDoMes = ativos.reduce(
     (soma, { cliente }) => soma + Number(cliente.metricas_mes?.investimento ?? 0),
     0,
@@ -183,11 +235,13 @@ export function ClientesNxDigitalPage() {
 
       <div className="space-y-4 px-4 pb-10 lg:px-6">
         {!carregando && clientes.length > 0 && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Indicador
               rotulo="Clientes ativos"
               valor={String(ativos.length)}
-              ajuda={`${clientes.length} no total`}
+              ajuda={
+                altaPrioridade > 0 ? `${altaPrioridade} de prioridade alta` : `${clientes.length} no total`
+              }
             />
             <Indicador
               rotulo="Em risco"
@@ -202,6 +256,12 @@ export function ClientesNxDigitalPage() {
               valor={String(semLancamento)}
               ajuda={`métricas de ${mesPorExtenso(mesAtual()).toLowerCase()}`}
               tom={semLancamento > 0 ? 'warning' : undefined}
+            />
+            <Indicador
+              rotulo="Sem a sua nota"
+              valor={String(semNota)}
+              ajuda="você ainda não disse se o mês foi bom"
+              tom={semNota > 0 ? 'warning' : undefined}
             />
             <Indicador
               rotulo="Investimento do mês"
@@ -236,12 +296,26 @@ export function ClientesNxDigitalPage() {
                 só quem precisa de atenção
               </Button>
             )}
+            <label className="flex items-center gap-1.5 text-xs text-foreground/50">
+              <ArrowUpDown className="h-3.5 w-3.5" />
+              <select
+                value={ordem}
+                onChange={(e) => setOrdem(e.target.value as Ordem)}
+                className="h-9 rounded-lg border border-line bg-transparent px-2 text-sm text-foreground outline-none focus:border-accent/60"
+              >
+                {ORDENS.map((o) => (
+                  <option key={o.valor} value={o.valor}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar por empresa, contato, cidade, CNPJ…"
               leftIcon={<Search className="h-4 w-4" />}
-              containerClassName="sm:w-72"
+              containerClassName="sm:w-64"
             />
           </div>
         </div>
@@ -250,7 +324,7 @@ export function ClientesNxDigitalPage() {
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-foreground/60">
             <Loader2 className="h-4 w-4 animate-spin" /> Carregando clientes…
           </div>
-        ) : visiveis.length === 0 ? (
+        ) : ordenados.length === 0 ? (
           <EmptyState
             icon={<Users className="h-6 w-6" />}
             title={clientes.length === 0 ? 'Nenhum cliente cadastrado' : 'Nada com esse filtro'}
@@ -273,7 +347,9 @@ export function ClientesNxDigitalPage() {
               <table className="w-full text-sm">
                 <thead className="bg-elevate/[0.02] text-left text-xs uppercase tracking-wide text-foreground/50">
                   <tr>
+                    <th className="px-4 py-2.5 font-medium">#</th>
                     <th className="px-4 py-2.5 font-medium">Empresa</th>
+                    <th className="px-4 py-2.5 font-medium">Prioridade</th>
                     <th className="px-4 py-2.5 font-medium">Como está</th>
                     <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Serviços</th>
                     <th className="px-4 py-2.5 font-medium">Etapa atual</th>
@@ -282,12 +358,14 @@ export function ClientesNxDigitalPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visiveis.map(({ cliente: c, saude }) => (
+                  {ordenados.map(({ cliente: c, saude }, i) => (
                     <LinhaCliente
                       key={c.id}
+                      posicao={ordem === 'nome' ? null : i + 1}
                       cliente={c}
                       saude={saude}
                       onAbrir={() => navegar(`/clientesnxdigital/clientes/${c.id}`)}
+                      onPrioridade={(p) => void mudarPrioridade(c.id, p)}
                     />
                   ))}
                 </tbody>
@@ -309,11 +387,16 @@ export function ClientesNxDigitalPage() {
 function LinhaCliente({
   cliente: c,
   saude,
+  posicao,
   onAbrir,
+  onPrioridade,
 }: {
   cliente: GcClienteLista
   saude: Saude
+  /** Lugar na fila. Null quando a lista está em ordem alfabética, onde o número não diria nada. */
+  posicao: number | null
   onAbrir: () => void
+  onPrioridade: (p: GcPrioridade) => void
 }) {
   // O pior sinal explica a pastilha: "Risco" sozinho não diz o que foi, e é isso que faz a pessoa
   // abrir o cliente certo em vez de abrir todos.
@@ -327,6 +410,20 @@ function LinhaCliente({
       onClick={onAbrir}
       className="cursor-pointer border-t border-line transition-colors hover:bg-elevate/[0.03]"
     >
+      <td className="w-10 px-4 py-3 text-center">
+        {posicao === null ? (
+          <span className="text-foreground/20">—</span>
+        ) : (
+          <span
+            className={cn(
+              'text-sm font-semibold tabular-nums',
+              posicao <= 3 ? 'text-foreground' : 'text-foreground/35',
+            )}
+          >
+            {posicao}
+          </span>
+        )}
+      </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line bg-elevate/[0.04] text-xs font-semibold text-foreground/70">
@@ -340,6 +437,23 @@ function LinhaCliente({
           </span>
         </div>
       </td>
+      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+        <select
+          value={c.prioridade ?? 'media'}
+          onChange={(e) => onPrioridade(e.target.value as GcPrioridade)}
+          title={PRIORIDADES.find((p) => p.valor === (c.prioridade ?? 'media'))?.ajuda}
+          className={cn(
+            'rounded-full border px-2 py-0.5 text-xs font-medium outline-none transition-colors',
+            ESTILO_PRIORIDADE[c.prioridade ?? 'media'],
+          )}
+        >
+          {PRIORIDADES.map((p) => (
+            <option key={p.valor} value={p.valor} className="bg-surface text-foreground">
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </td>
       <td className="px-4 py-3">
         <PastilhaSaude estado={saude.nivel} />
         {pior && (saude.nivel === 'risco' || saude.nivel === 'atencao') && (
@@ -347,10 +461,15 @@ function LinhaCliente({
             {pior.titulo}: {pior.detalhe}
           </span>
         )}
-        {saude.churn.nivel !== 'baixo' && (
-          <span className="mt-1 block text-xs text-danger/80">
-            churn {saude.churn.nivel}
+        {c.avaliacao ? (
+          <span className={cn('mt-1 block text-xs', CORES_NOTA[c.avaliacao.nivel])}>
+            sua nota do mês: {rotuloNota(c.avaliacao.nivel)}
           </span>
+        ) : (
+          <span className="mt-1 block text-xs text-foreground/35">sem nota sua neste mês</span>
+        )}
+        {saude.churn.nivel !== 'baixo' && (
+          <span className="mt-0.5 block text-xs text-danger/80">churn {saude.churn.nivel}</span>
         )}
       </td>
       <td className="hidden px-4 py-3 lg:table-cell">

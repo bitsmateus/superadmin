@@ -5,11 +5,14 @@ import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { gestaoClientes, type GcLinhaTrafego } from '@/services/gestaoClientes'
+import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
+import { gestaoClientes, type GcClienteLista } from '@/services/gestaoClientes'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
-  mesAtual, mesPorExtenso, somarMeses,
+  mesAtual, mesPorExtenso, somarMeses, variacaoDaMetrica,
 } from '@/lib/gcMetricas'
+import { avaliarSaude, type Saude } from '@/lib/gcSaude'
+import { cn } from '@/lib/utils'
 
 /** As colunas da tabela: o que foi lançado e, depois, o que sai da conta. */
 const COLUNAS = [...METRICAS_LANCADAS, ...METRICAS_DERIVADAS]
@@ -18,11 +21,11 @@ const COLUNAS = [...METRICAS_LANCADAS, ...METRICAS_DERIVADAS]
  * Soma do mês. Métricas de volume somam; as derivadas são recalculadas em cima da soma, nunca
  * somadas ou tiradas na média — média de CPL de clientes com verbas diferentes não quer dizer nada.
  */
-function totalDoMes(linhas: GcLinhaTrafego[]): Record<string, number> {
+function totalDoMes(linhas: GcClienteLista[], campo: 'metricas_mes' | 'metricas_mes_anterior') {
   const soma: Record<string, number | string> = {}
   for (const l of linhas) {
     for (const m of METRICAS_LANCADAS) {
-      const v = l.metricas?.[m.chave]
+      const v = l[campo]?.[m.chave]
       if (v === undefined || v === null || v === '') continue
       soma[m.chave] = Number(soma[m.chave] ?? 0) + Number(v)
     }
@@ -30,16 +33,28 @@ function totalDoMes(linhas: GcLinhaTrafego[]): Record<string, number> {
   return comDerivadas(soma)
 }
 
+/** Variação do total contra o mês anterior, com a cor certa pra métrica. */
+function Variacao({ chave, atual, anterior }: { chave: string; atual?: number; anterior?: number }) {
+  const v = variacaoDaMetrica(chave, atual, anterior)
+  if (!v || Math.abs(v.pct) < 0.5) return null
+  return (
+    <span className={cn('text-xs font-medium', v.boa ? 'text-success' : 'text-danger')}>
+      {v.pct > 0 ? '▲' : '▼'} {Math.abs(v.pct).toFixed(0)}% vs. mês anterior
+    </span>
+  )
+}
+
 /**
  * CLIENTES NX DIGITAL → Tráfego.
  *
- * Os números de todos os clientes num mês, uma linha por cliente, e o total embaixo. É a tela de
- * "como foi o mês" — pra mexer no número de um cliente, o lugar é a aba Métricas dele.
+ * Os números de todos os clientes num mês, uma linha por cliente, com o total embaixo e o semáforo
+ * de cada um na frente. É a tela de "como foi o mês" — pra mexer no número de um cliente, o lugar
+ * é a aba Métricas dele.
  */
 export function TrafegoNxPage() {
   const navegar = useNavigate()
   const [periodo, setPeriodo] = React.useState(mesAtual())
-  const [linhas, setLinhas] = React.useState<GcLinhaTrafego[]>([])
+  const [linhas, setLinhas] = React.useState<GcClienteLista[]>([])
   const [carregando, setCarregando] = React.useState(true)
 
   React.useEffect(() => {
@@ -59,11 +74,22 @@ export function TrafegoNxPage() {
     }
   }, [periodo])
 
+  const comSaude = React.useMemo(
+    () => linhas.map((c) => ({ cliente: c, saude: avaliarSaude(c) })),
+    [linhas],
+  )
+
   // Cliente sem número nenhum no mês continua na lista, no fim: ver quem ficou sem lançamento é
   // metade do uso desta tela.
-  const comNumeros = linhas.filter((l) => Object.keys(l.metricas ?? {}).length > 0)
-  const semNumeros = linhas.filter((l) => Object.keys(l.metricas ?? {}).length === 0)
-  const total = totalDoMes(linhas)
+  const comNumeros = comSaude.filter(
+    ({ cliente }) => Object.keys(cliente.metricas_mes ?? {}).length > 0,
+  )
+  const semNumeros = comSaude.filter(
+    ({ cliente }) => Object.keys(cliente.metricas_mes ?? {}).length === 0,
+  )
+  const total = totalDoMes(linhas, 'metricas_mes')
+  const totalAnterior = totalDoMes(linhas, 'metricas_mes_anterior')
+  const emRisco = comSaude.filter(({ saude }) => saude.nivel === 'risco').length
 
   return (
     <>
@@ -114,20 +140,40 @@ export function TrafegoNxPage() {
         ) : (
           <>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {['investimento', 'leads', 'cpl', 'receita'].map((chave) => {
+              {(['investimento', 'leads', 'vendas', 'receita'] as const).map((chave) => {
                 const def = COLUNAS.find((c) => c.chave === chave)!
                 return (
                   <div key={chave} className="rounded-xl border border-line p-4">
                     <p className="text-xs uppercase tracking-wide text-foreground/45">{def.label}</p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+                    <p className="mt-0.5 text-2xl font-semibold tabular-nums text-foreground">
                       {formatarMetrica(total[chave] ?? null, def.unidade)}
                     </p>
-                    <p className="mt-0.5 text-xs text-foreground/45">
-                      {comNumeros.length} de {linhas.length} clientes com lançamento
-                    </p>
+                    <Variacao chave={chave} atual={total[chave]} anterior={totalAnterior[chave]} />
                   </div>
                 )
               })}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-foreground/60">
+              <span>
+                <strong className="text-foreground">{comNumeros.length}</strong> de {linhas.length}{' '}
+                clientes com lançamento
+              </span>
+              <span>
+                Retorno médio da carteira:{' '}
+                <strong className="text-foreground">
+                  {total.roas === undefined ? '—' : `${total.roas.toFixed(2).replace('.', ',')}x`}
+                </strong>
+              </span>
+              <span>
+                CPL da carteira:{' '}
+                <strong className="text-foreground">{formatarMetrica(total.cpl ?? null, 'reais')}</strong>
+              </span>
+              {emRisco > 0 && (
+                <span className="text-danger">
+                  {emRisco} cliente(s) em risco — a coluna "Como está" aponta o motivo
+                </span>
+              )}
             </div>
 
             <div className="overflow-hidden rounded-xl border border-line">
@@ -136,6 +182,7 @@ export function TrafegoNxPage() {
                   <thead className="bg-elevate/[0.02] text-left text-xs uppercase tracking-wide text-foreground/50">
                     <tr>
                       <th className="sticky left-0 bg-surface px-4 py-2.5 font-medium">Cliente</th>
+                      <th className="px-3 py-2.5 font-medium">Como está</th>
                       {COLUNAS.map((c) => (
                         <th key={c.chave} className="px-3 py-2.5 text-right font-medium" title={c.ajuda}>
                           {c.label}
@@ -144,35 +191,19 @@ export function TrafegoNxPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...comNumeros, ...semNumeros].map((l) => {
-                      const v = comDerivadas(l.metricas ?? {})
-                      return (
-                        <tr
-                          key={l.id}
-                          onClick={() => navegar(`/clientesnxdigital/clientes/${l.id}`)}
-                          className="cursor-pointer border-t border-line transition-colors hover:bg-elevate/[0.03]"
-                        >
-                          <td className="sticky left-0 whitespace-nowrap bg-surface px-4 py-2.5">
-                            <span className="block font-medium text-foreground">{l.nome_empresa}</span>
-                            <span className="block text-xs text-foreground/45">
-                              {l.responsavel_nome ?? 'sem responsável'}
-                            </span>
-                          </td>
-                          {COLUNAS.map((c) => (
-                            <td
-                              key={c.chave}
-                              className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-foreground/75"
-                            >
-                              {formatarMetrica(v[c.chave] ?? null, c.unidade)}
-                            </td>
-                          ))}
-                        </tr>
-                      )
-                    })}
+                    {[...comNumeros, ...semNumeros].map(({ cliente: l, saude }) => (
+                      <Linha
+                        key={l.id}
+                        cliente={l}
+                        saude={saude}
+                        onAbrir={() => navegar(`/clientesnxdigital/clientes/${l.id}`)}
+                      />
+                    ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-line bg-elevate/[0.03] font-medium">
                       <td className="sticky left-0 bg-surface px-4 py-2.5 text-foreground">Total</td>
+                      <td />
                       {COLUNAS.map((c) => (
                         <td
                           key={c.chave}
@@ -195,5 +226,55 @@ export function TrafegoNxPage() {
         )}
       </div>
     </>
+  )
+}
+
+function Linha({
+  cliente: l,
+  saude,
+  onAbrir,
+}: {
+  cliente: GcClienteLista
+  saude: Saude
+  onAbrir: () => void
+}) {
+  const v = comDerivadas(l.metricas_mes ?? {})
+  const anterior = comDerivadas(l.metricas_mes_anterior ?? {})
+  return (
+    <tr
+      onClick={onAbrir}
+      className="cursor-pointer border-t border-line transition-colors hover:bg-elevate/[0.03]"
+    >
+      <td className="sticky left-0 whitespace-nowrap bg-surface px-4 py-2.5">
+        <span className="block font-medium text-foreground">{l.nome_empresa}</span>
+        <span className="block text-xs text-foreground/45">
+          {l.responsavel_nome ?? 'sem responsável'}
+        </span>
+      </td>
+      <td className="whitespace-nowrap px-3 py-2.5">
+        <PastilhaSaude estado={saude.nivel} />
+      </td>
+      {COLUNAS.map((c) => {
+        const variacao = variacaoDaMetrica(c.chave, v[c.chave], anterior[c.chave])
+        return (
+          <td
+            key={c.chave}
+            className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-foreground/75"
+          >
+            {formatarMetrica(v[c.chave] ?? null, c.unidade)}
+            {variacao && Math.abs(variacao.pct) >= 5 && (
+              <span
+                className={cn(
+                  'ml-1 text-[10px]',
+                  variacao.boa ? 'text-success' : 'text-danger',
+                )}
+              >
+                {variacao.pct > 0 ? '▲' : '▼'}
+              </span>
+            )}
+          </td>
+        )
+      })}
+    </tr>
   )
 }

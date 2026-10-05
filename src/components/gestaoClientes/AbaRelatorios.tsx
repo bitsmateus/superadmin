@@ -11,6 +11,7 @@ import {
   type GcClienteDetalhe, type GcLinkPublico, type GcMeta, type GcMetrica,
   type GcRelatorio, type GcSnapshot,
 } from '@/services/gestaoClientes'
+import { progressoDaMeta } from '@/lib/gcSaude'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
   limitesDoMes, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade, somarMeses,
@@ -23,14 +24,6 @@ function doPeriodo(metricas: GcMetrica[], inicio: string): Record<string, number
     if (String(m.periodo_inicio).slice(0, 10) === inicio) brutas[m.chave] = m.valor
   }
   return comDerivadas(brutas)
-}
-
-function progressoDaMeta(meta: GcMeta, atual: number | undefined): number | null {
-  if (atual === undefined) return null
-  const base = Number(meta.valor_base)
-  const alvo = Number(meta.valor_meta)
-  if (alvo === base) return atual >= alvo ? 100 : 0
-  return Math.max(0, Math.min(100, Math.round(((atual - base) / (alvo - base)) * 100)))
 }
 
 /**
@@ -107,7 +100,15 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
       unidade: m.unidade,
       valor: numeros[m.chave] ?? null,
       anterior: anteriores[m.chave] ?? null,
+      subirEhBom: m.subirEhBom !== false,
     })),
+    // O essencial escolhido aqui, pro portal e o PDF não precisarem saber quais chaves importam.
+    resumo: {
+      investimento: numeros.investimento ?? null,
+      vendas: numeros.vendas ?? null,
+      receita: numeros.receita ?? null,
+      retorno: numeros.roas ?? null,
+    },
     metas: metas.map((meta) => ({
       label: metricaLabel(meta.chave_metrica),
       unidade: metricaUnidade(meta.chave_metrica),
@@ -115,6 +116,8 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
       meta: Number(meta.valor_meta),
       atual: numeros[meta.chave_metrica] ?? null,
       progresso: progressoDaMeta(meta, numeros[meta.chave_metrica]),
+      horizonte: meta.horizonte ?? 'mes',
+      prazo: meta.prazo,
     })),
     jornada: detalhe.jornada.map((j) => ({ nome: j.nome, status: j.status })),
     estrategias: detalhe.estrategias.map((e) => ({

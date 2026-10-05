@@ -8,6 +8,9 @@
  * O snapshot é auto-descritivo (cada número traz label e unidade), então este arquivo não precisa
  * saber o que é "CPL" nem que métricas existem — ele só formata e empilha. Métrica nova aparece no
  * PDF sem mexer aqui.
+ *
+ * A primeira página responde, em letra grande, as duas perguntas que o cliente faz: quanto eu
+ * investi e quanto isso virou em venda. O resto do detalhamento vem depois.
  */
 
 export interface GcNumeroSnapshot {
@@ -17,6 +20,20 @@ export interface GcNumeroSnapshot {
   valor: number | null;
   /** Mesmo número no período anterior, quando havia — vira a comparação "vs. mês anterior". */
   anterior?: number | null;
+  /** Subir é bom? Em CPL e CAC é o contrário, e a cor da variação tem que saber disso. */
+  subirEhBom?: boolean;
+}
+
+export interface GcMetaSnapshot {
+  label: string;
+  unidade: GcNumeroSnapshot['unidade'];
+  base: number;
+  meta: number;
+  atual: number | null;
+  progresso: number | null;
+  /** 'mes' | '6_meses' | '12_meses' — agrupa as metas em blocos legíveis. */
+  horizonte?: string;
+  prazo?: string | null;
 }
 
 export interface GcSnapshot {
@@ -24,13 +41,32 @@ export interface GcSnapshot {
   cliente: { nome_empresa: string; segmento?: string; cidade?: string; responsavel_nome?: string | null };
   periodo: { inicio: string; fim: string; rotulo: string };
   numeros: GcNumeroSnapshot[];
-  metas?: { label: string; unidade: GcNumeroSnapshot['unidade']; base: number; meta: number; atual: number | null; progresso: number | null }[];
+  /** O essencial, já escolhido pela tela — evita este arquivo ter que saber quais chaves importam. */
+  resumo?: {
+    investimento: number | null;
+    vendas: number | null;
+    receita: number | null;
+    /** Receita ÷ investimento: quantos reais voltaram por real investido. */
+    retorno: number | null;
+  };
+  metas?: GcMetaSnapshot[];
   jornada?: { nome: string; status: string }[];
   estrategias?: { nome: string; status: string; feitos: number; total: number }[];
   comentario_gestor?: string;
   proximos_passos?: string;
   publicado_em?: string;
 }
+
+const COR = {
+  tinta: '#101620',
+  tintaFraca: '#5b6672',
+  tintaMaisFraca: '#8a939e',
+  linha: '#e4e8ee',
+  fundo: '#f6f8fa',
+  azul: '#2a78d6',
+  verde: '#1baf7a',
+  laranja: '#eb6834',
+};
 
 function escapar(texto: unknown): string {
   return String(texto ?? '')
@@ -54,17 +90,21 @@ export function formatarValor(valor: number | null | undefined, unidade: GcNumer
   }
 }
 
-/** Variação em relação ao período anterior, pronta pra imprimir. Sem base, não inventa nada. */
+/**
+ * Variação contra o período anterior. A cor segue o que é BOM, não o que é maior: CPL caindo é
+ * verde, mesmo sendo número menor.
+ */
 function variacao(n: GcNumeroSnapshot): string {
   if (n.anterior === null || n.anterior === undefined || n.anterior === 0) return '';
   if (n.valor === null || n.valor === undefined) return '';
   const pct = ((n.valor - n.anterior) / Math.abs(n.anterior)) * 100;
-  const sinal = pct >= 0 ? '+' : '';
-  const cor = pct >= 0 ? '#1baf7a' : '#eb6834';
-  return `<span style="color:${cor};font-size:11px;display:block;margin-top:2px">${sinal}${pct.toLocaleString(
-    'pt-BR',
-    { maximumFractionDigits: 1 }
-  )}% vs. período anterior</span>`;
+  if (Math.abs(pct) < 0.5) return `<span class="var neutra">estável</span>`;
+  const subirEhBom = n.subirEhBom !== false;
+  const bom = pct > 0 === subirEhBom;
+  const seta = pct > 0 ? '▲' : '▼';
+  return `<span class="var" style="color:${bom ? COR.verde : COR.laranja}">${seta} ${Math.abs(
+    pct
+  ).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span>`;
 }
 
 const ROTULO_ETAPA: Record<string, string> = {
@@ -73,10 +113,70 @@ const ROTULO_ETAPA: Record<string, string> = {
   pendente: 'pendente',
 };
 
+const ROTULO_HORIZONTE: Record<string, string> = {
+  mes: 'Meta do mês',
+  '6_meses': 'Meta de 6 meses',
+  '12_meses': 'Meta de 12 meses',
+};
+
+/** Pega do resumo, ou cai pra procurar a chave entre os números (snapshot antigo não tem resumo). */
+function doResumo(snapshot: GcSnapshot, campo: 'investimento' | 'vendas' | 'receita' | 'retorno'): number | null {
+  const direto = snapshot.resumo?.[campo];
+  if (direto !== undefined) return direto;
+  const chave = campo === 'retorno' ? 'roas' : campo;
+  return snapshot.numeros?.find((n) => n.chave === chave)?.valor ?? null;
+}
+
+function blocoMetas(metas: GcMetaSnapshot[]): string {
+  const grupos = ['mes', '6_meses', '12_meses'].filter((h) =>
+    metas.some((m) => (m.horizonte ?? 'mes') === h)
+  );
+  if (!grupos.length) return '';
+  return grupos
+    .map((h) => {
+      const linhas = metas
+        .filter((m) => (m.horizonte ?? 'mes') === h)
+        .map((m) => {
+          const pct = m.progresso === null || m.progresso === undefined ? 0 : m.progresso;
+          const cor = pct >= 100 ? COR.verde : pct >= 50 ? COR.azul : COR.laranja;
+          return `
+          <div class="meta">
+            <div class="meta-topo">
+              <span class="meta-nome">${escapar(m.label)}</span>
+              <span class="meta-num">
+                ${formatarValor(m.atual, m.unidade)}
+                <span class="meta-alvo">de ${formatarValor(m.meta, m.unidade)}</span>
+              </span>
+            </div>
+            <div class="barra"><span style="width:${Math.min(100, Math.max(0, pct))}%;background:${cor}"></span></div>
+            <div class="meta-pe">
+              partida ${formatarValor(m.base, m.unidade)}
+              ${m.prazo ? ` · prazo ${escapar(String(m.prazo).slice(0, 10).split('-').reverse().join('/'))}` : ''}
+              <span class="meta-pct" style="color:${cor}">${
+                m.progresso === null || m.progresso === undefined ? '—' : `${m.progresso}% do caminho`
+              }</span>
+            </div>
+          </div>`;
+        })
+        .join('');
+      return `<div class="grupo-meta"><h3>${ROTULO_HORIZONTE[h] ?? 'Meta'}</h3>${linhas}</div>`;
+    })
+    .join('');
+}
+
 /** Documento completo (com <html> e <style>), do jeito que renderFullHtmlToPdf espera. */
 export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
-  const numeros = snapshot.numeros ?? [];
-  const cartoes = numeros
+  const investimento = doResumo(snapshot, 'investimento');
+  const vendas = doResumo(snapshot, 'vendas');
+  const receita = doResumo(snapshot, 'receita');
+  const retorno = doResumo(snapshot, 'retorno');
+
+  // Os quatro do destaque não repetem na grade de baixo — lá fica o detalhamento.
+  const detalhados = (snapshot.numeros ?? []).filter(
+    (n) => !['investimento', 'vendas', 'receita', 'roas'].includes(n.chave) && n.valor !== null
+  );
+
+  const cartoes = detalhados
     .map(
       (n) => `
       <div class="cartao">
@@ -87,39 +187,37 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
     )
     .join('');
 
-  const metas = (snapshot.metas ?? [])
-    .map(
-      (m) => `
-      <tr>
-        <td>${escapar(m.label)}</td>
-        <td class="num">${formatarValor(m.base, m.unidade)}</td>
-        <td class="num">${formatarValor(m.atual, m.unidade)}</td>
-        <td class="num">${formatarValor(m.meta, m.unidade)}</td>
-        <td class="num">${m.progresso === null ? '—' : `${m.progresso}%`}</td>
-      </tr>`
-    )
+  const frase =
+    retorno !== null && retorno > 0
+      ? `Cada R$ 1,00 investido voltou como <strong>${formatarValor(retorno, 'reais')}</strong> de receita.`
+      : investimento !== null && investimento > 0
+        ? 'A receita deste período ainda não foi informada pelo cliente.'
+        : '';
+
+  const estrategias = (snapshot.estrategias ?? [])
+    .map((e) => {
+      const pct = e.total ? Math.round((e.feitos / e.total) * 100) : 0;
+      return `
+      <div class="linha-estrategia">
+        <span class="nome">${escapar(e.nome)}</span>
+        <span class="barra fina"><span style="width:${pct}%;background:${COR.azul}"></span></span>
+        <span class="passos">${e.feitos}/${e.total}</span>
+      </div>`;
+    })
     .join('');
 
   const jornada = (snapshot.jornada ?? [])
     .map(
       (e) => `
       <li class="${e.status === 'concluida' ? 'feita' : ''}">
-        ${escapar(e.nome)} <span class="estado">${ROTULO_ETAPA[e.status] ?? escapar(e.status)}</span>
+        <span class="bolinha ${e.status}"></span>${escapar(e.nome)}
+        <span class="estado">${ROTULO_ETAPA[e.status] ?? escapar(e.status)}</span>
       </li>`
     )
     .join('');
 
-  const estrategias = (snapshot.estrategias ?? [])
-    .map(
-      (e) => `
-      <li>${escapar(e.nome)} <span class="estado">${e.feitos} de ${e.total} passos · ${escapar(
-        e.status
-      )}</span></li>`
-    )
-    .join('');
-
-  const bloco = (titulo: string, conteudo: string) =>
-    conteudo.trim() ? `<section><h2>${titulo}</h2>${conteudo}</section>` : '';
+  const secao = (titulo: string, conteudo: string, classe = '') =>
+    conteudo.trim() ? `<section class="${classe}"><h2>${titulo}</h2>${conteudo}</section>` : '';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -128,65 +226,139 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
 <title>Relatório — ${escapar(snapshot.cliente?.nome_empresa)}</title>
 <style>
   * { box-sizing: border-box; }
+  @page { size: A4; margin: 0; }
   body {
-    margin: 0; padding: 32px 36px; background: #fff; color: #11161d;
-    font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    margin: 0; padding: 0; background: #fff; color: ${COR.tinta};
+    font: 13px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-print-color-adjust: exact;
   }
-  header { border-bottom: 2px solid #11161d; padding-bottom: 12px; margin-bottom: 20px; }
-  h1 { margin: 0; font-size: 20px; }
-  .sub { color: #5b6672; font-size: 12px; margin-top: 4px; }
-  section { margin-bottom: 22px; page-break-inside: avoid; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #5b6672; margin: 0 0 10px; }
+  .folha { padding: 34px 38px 28px; }
+
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .marca { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: ${COR.azul}; font-weight: 700; }
+  h1 { margin: 4px 0 0; font-size: 25px; letter-spacing: -.01em; }
+  .sub { color: ${COR.tintaFraca}; font-size: 12px; margin-top: 3px; }
+  .periodo {
+    text-align: right; font-size: 11px; color: ${COR.tintaFraca};
+    border: 1px solid ${COR.linha}; border-radius: 10px; padding: 8px 12px; white-space: nowrap;
+  }
+  .periodo strong { display: block; font-size: 14px; color: ${COR.tinta}; }
+  .regua { height: 3px; border-radius: 3px; margin: 18px 0 22px;
+    background: linear-gradient(90deg, ${COR.azul} 0%, ${COR.verde} 60%, ${COR.laranja} 100%); }
+
+  .destaque { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .destaque > div { border: 1px solid ${COR.linha}; border-radius: 14px; padding: 14px 16px; background: ${COR.fundo}; }
+  .destaque .rotulo { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: ${COR.tintaFraca}; }
+  .destaque .valor { display: block; font-size: 26px; font-weight: 700; letter-spacing: -.02em; margin-top: 4px; }
+  .destaque .ajuda { display: block; font-size: 10.5px; color: ${COR.tintaMaisFraca}; margin-top: 2px; }
+  .frase {
+    margin-top: 12px; border-left: 3px solid ${COR.verde}; background: ${COR.fundo};
+    border-radius: 0 10px 10px 0; padding: 11px 14px; font-size: 13.5px;
+  }
+
+  section { margin-top: 24px; page-break-inside: avoid; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: ${COR.tintaFraca};
+       margin: 0 0 11px; padding-bottom: 6px; border-bottom: 1px solid ${COR.linha}; }
+  h3 { font-size: 11.5px; color: ${COR.tinta}; margin: 0 0 8px; }
+
   .cartoes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .cartao { border: 1px solid #e3e7ec; border-radius: 8px; padding: 10px 12px; }
-  .rotulo { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #7a8591; }
-  .valor { display: block; font-size: 17px; font-weight: 600; margin-top: 3px; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 6px 8px; border-bottom: 1px solid #eef1f4; text-align: left; }
-  th { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #7a8591; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  ul { list-style: none; margin: 0; padding: 0; }
-  li { padding: 4px 0; border-bottom: 1px solid #f2f4f7; }
-  li.feita { color: #5b6672; }
-  .estado { color: #7a8591; font-size: 11px; }
-  .texto { white-space: pre-wrap; }
-  footer { margin-top: 28px; border-top: 1px solid #e3e7ec; padding-top: 10px; color: #7a8591; font-size: 10px; }
+  .cartao { border: 1px solid ${COR.linha}; border-radius: 11px; padding: 10px 12px; }
+  .cartao .rotulo { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; color: ${COR.tintaFraca}; }
+  .cartao .valor { display: block; font-size: 17px; font-weight: 650; margin-top: 3px; }
+  .var { display: block; font-size: 10.5px; margin-top: 2px; font-weight: 600; }
+  .var.neutra { color: ${COR.tintaMaisFraca}; font-weight: 500; }
+
+  .grupo-meta { margin-bottom: 14px; }
+  .meta { border: 1px solid ${COR.linha}; border-radius: 11px; padding: 10px 12px; margin-bottom: 7px; }
+  .meta-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .meta-nome { font-weight: 600; }
+  .meta-num { font-size: 15px; font-weight: 700; }
+  .meta-alvo { font-size: 11px; font-weight: 500; color: ${COR.tintaFraca}; }
+  .barra { display: block; height: 7px; border-radius: 99px; background: #e9edf2; overflow: hidden; margin: 7px 0 5px; }
+  .barra > span { display: block; height: 100%; border-radius: 99px; }
+  .barra.fina { height: 5px; margin: 0; flex: 1; }
+  .meta-pe { font-size: 10.5px; color: ${COR.tintaFraca}; display: flex; justify-content: space-between; gap: 10px; }
+  .meta-pct { font-weight: 600; }
+
+  .texto-card { border: 1px solid ${COR.linha}; border-left: 3px solid ${COR.azul}; border-radius: 0 11px 11px 0;
+    padding: 12px 14px; white-space: pre-wrap; }
+
+  .linha-estrategia { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #f1f4f7; }
+  .linha-estrategia .nome { width: 42%; }
+  .linha-estrategia .passos { font-size: 11px; color: ${COR.tintaFraca}; width: 44px; text-align: right; }
+
+  ul.jornada { list-style: none; margin: 0; padding: 0; column-count: 2; column-gap: 22px; }
+  ul.jornada li { padding: 4px 0; font-size: 12px; break-inside: avoid; }
+  ul.jornada li.feita { color: ${COR.tintaFraca}; }
+  .bolinha { display: inline-block; width: 7px; height: 7px; border-radius: 99px; margin-right: 7px;
+    background: #cfd6de; vertical-align: middle; }
+  .bolinha.concluida { background: ${COR.verde}; }
+  .bolinha.em_andamento { background: ${COR.azul}; }
+  .estado { color: ${COR.tintaMaisFraca}; font-size: 10.5px; margin-left: 5px; }
+
+  footer { margin-top: 26px; border-top: 1px solid ${COR.linha}; padding-top: 9px;
+    color: ${COR.tintaMaisFraca}; font-size: 9.5px; display: flex; justify-content: space-between; }
 </style>
 </head>
 <body>
+<div class="folha">
   <header>
-    <h1>${escapar(snapshot.cliente?.nome_empresa)}</h1>
-    <div class="sub">
-      Relatório de ${escapar(snapshot.periodo?.rotulo)}
-      ${snapshot.cliente?.responsavel_nome ? ` · responsável: ${escapar(snapshot.cliente.responsavel_nome)}` : ''}
+    <div>
+      <div class="marca">Grupo NX Digital</div>
+      <h1>${escapar(snapshot.cliente?.nome_empresa)}</h1>
+      <div class="sub">
+        ${[snapshot.cliente?.segmento, snapshot.cliente?.cidade].filter(Boolean).map(escapar).join(' · ')}
+        ${snapshot.cliente?.responsavel_nome ? ` · responsável: ${escapar(snapshot.cliente.responsavel_nome)}` : ''}
+      </div>
+    </div>
+    <div class="periodo">
+      relatório de
+      <strong>${escapar(snapshot.periodo?.rotulo)}</strong>
     </div>
   </header>
+  <div class="regua"></div>
 
-  ${bloco('Números do período', `<div class="cartoes">${cartoes}</div>`)}
-  ${bloco(
-    'Metas',
-    metas
-      ? `<table><thead><tr><th>Métrica</th><th class="num">Partida</th><th class="num">Hoje</th><th class="num">Meta</th><th class="num">Andado</th></tr></thead><tbody>${metas}</tbody></table>`
-      : ''
+  <div class="destaque">
+    <div>
+      <span class="rotulo">Investimento</span>
+      <span class="valor">${formatarValor(investimento, 'reais')}</span>
+      <span class="ajuda">verba aplicada em anúncios no período</span>
+    </div>
+    <div>
+      <span class="rotulo">Vendas</span>
+      <span class="valor">${formatarValor(vendas, 'inteiro')}</span>
+      <span class="ajuda">negócios fechados no período</span>
+    </div>
+    <div>
+      <span class="rotulo">Receita</span>
+      <span class="valor">${formatarValor(receita, 'reais')}</span>
+      <span class="ajuda">faturamento vindo das campanhas</span>
+    </div>
+  </div>
+  ${frase ? `<div class="frase">${frase}</div>` : ''}
+
+  ${secao('Detalhamento do período', cartoes ? `<div class="cartoes">${cartoes}</div>` : '')}
+  ${secao('Metas', blocoMetas(snapshot.metas ?? []))}
+  ${secao(
+    'Leitura do gestor',
+    snapshot.comentario_gestor ? `<div class="texto-card">${escapar(snapshot.comentario_gestor)}</div>` : ''
   )}
-  ${bloco(
-    'Comentário do gestor',
-    snapshot.comentario_gestor ? `<p class="texto">${escapar(snapshot.comentario_gestor)}</p>` : ''
-  )}
-  ${bloco(
+  ${secao(
     'Próximos passos',
-    snapshot.proximos_passos ? `<p class="texto">${escapar(snapshot.proximos_passos)}</p>` : ''
+    snapshot.proximos_passos ? `<div class="texto-card">${escapar(snapshot.proximos_passos)}</div>` : ''
   )}
-  ${bloco('Estratégias em curso', estrategias ? `<ul>${estrategias}</ul>` : '')}
-  ${bloco('Jornada', jornada ? `<ul>${jornada}</ul>` : '')}
+  ${secao('Estratégias em curso', estrategias)}
+  ${secao('Onde estamos na implantação', jornada ? `<ul class="jornada">${jornada}</ul>` : '')}
 
   <footer>
-    Grupo NX Digital · ${
+    <span>Grupo NX Digital · relatório de performance</span>
+    <span>${
       snapshot.publicado_em
-        ? `publicado em ${new Date(snapshot.publicado_em).toLocaleString('pt-BR')}`
-        : 'rascunho'
-    }
+        ? `publicado em ${new Date(snapshot.publicado_em).toLocaleDateString('pt-BR')}`
+        : 'rascunho — não publicado'
+    }</span>
   </footer>
+</div>
 </body>
 </html>`;
 }

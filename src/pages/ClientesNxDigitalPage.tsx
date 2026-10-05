@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, Plus, Search, Users } from 'lucide-react'
+import { Loader2, Plus, Search, ShieldAlert, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -9,10 +9,13 @@ import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Tabs } from '@/components/ui/Tabs'
 import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
+import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import {
   TIPOS_SERVICO, gestaoClientes, progressoDoCliente,
   type GcClienteLista, type GcStatusCliente,
 } from '@/services/gestaoClientes'
+import { avaliarSaude, type Saude } from '@/lib/gcSaude'
+import { formatarMetrica, mesPorExtenso, mesAtual } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
 
 const ABAS: { value: GcStatusCliente | 'todos'; label: string }[] = [
@@ -37,10 +40,7 @@ function BarraProgresso({ valor }: { valor: number }) {
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-20 overflow-hidden rounded-full bg-elevate/[0.08]">
-        <div
-          className="h-full rounded-full bg-accent transition-[width]"
-          style={{ width: `${valor}%` }}
-        />
+        <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${valor}%` }} />
       </div>
       <span className="text-xs tabular-nums text-foreground/60">{valor}%</span>
     </div>
@@ -56,12 +56,56 @@ function iniciais(nome: string): string {
     .join('')
 }
 
+/** Um número grande do topo. Clicável quando serve de filtro. */
+function Indicador({
+  rotulo,
+  valor,
+  ajuda,
+  tom,
+  ativo,
+  onClick,
+}: {
+  rotulo: string
+  valor: string
+  ajuda?: string
+  tom?: 'danger' | 'warning' | 'accent'
+  ativo?: boolean
+  onClick?: () => void
+}) {
+  const Elemento = onClick ? 'button' : 'div'
+  return (
+    <Elemento
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={cn(
+        'rounded-xl border px-4 py-3 text-left transition-colors',
+        ativo ? 'border-accent/50 bg-accent/[0.05]' : 'border-line',
+        onClick && !ativo && 'hover:border-foreground/20',
+      )}
+    >
+      <p className="text-xs uppercase tracking-wide text-foreground/45">{rotulo}</p>
+      <p
+        className={cn(
+          'mt-0.5 text-2xl font-semibold tabular-nums',
+          tom === 'danger' ? 'text-danger' : tom === 'warning' ? 'text-warning' : 'text-foreground',
+        )}
+      >
+        {valor}
+      </p>
+      {ajuda && <p className="text-xs text-foreground/45">{ajuda}</p>}
+    </Elemento>
+  )
+}
+
 /**
  * CLIENTES NX DIGITAL → Clientes.
  *
- * A base de clientes de tráfego: quem é, quem atende, quais serviços tem e em que ponto da jornada
- * está. Cadastro próprio do módulo (tabelas `gc_*`) — não é a mesma lista do Suporte nem a de
- * Clientes Geral do Financeiro, de propósito: aqui o que importa é a entrega, não a cobrança.
+ * A base de clientes de tráfego: quem é, quem atende, quais serviços tem, em que ponto da jornada
+ * está e — a coluna que mais importa no dia a dia — se está bem ou não. O semáforo é calculado em
+ * src/lib/gcSaude.ts, com os mesmos dados que a tela de Tráfego e o detalhe do cliente usam.
+ *
+ * Cadastro próprio do módulo (tabelas `gc_*`) — não é a lista do Suporte nem a de Clientes Geral
+ * do Financeiro, de propósito: aqui o que importa é a entrega, não a cobrança.
  */
 export function ClientesNxDigitalPage() {
   const navegar = useNavigate()
@@ -69,6 +113,7 @@ export function ClientesNxDigitalPage() {
   const [carregando, setCarregando] = React.useState(true)
   const [busca, setBusca] = React.useState('')
   const [aba, setAba] = React.useState<GcStatusCliente | 'todos'>('ativo')
+  const [soProblemas, setSoProblemas] = React.useState(false)
   const [modalAberto, setModalAberto] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
@@ -85,20 +130,39 @@ export function ClientesNxDigitalPage() {
     void carregar()
   }, [carregar])
 
+  // O semáforo é calculado uma vez por carga, não a cada render: são ~15 sinais por cliente.
+  const comSaude = React.useMemo(
+    () => clientes.map((c) => ({ cliente: c, saude: avaliarSaude(c) })),
+    [clientes],
+  )
+
   const termo = busca.trim().toLowerCase()
-  const visiveis = clientes.filter((c) => {
+  const visiveis = comSaude.filter(({ cliente: c, saude }) => {
     if (aba !== 'todos' && c.status !== aba) return false
+    if (soProblemas && saude.nivel !== 'risco' && saude.nivel !== 'atencao') return false
     if (!termo) return true
     const digitos = termo.replace(/\D/g, '')
     return (
-      [c.nome_empresa, c.nome_contato, c.cidade, c.segmento, c.responsavel_nome ?? '']
-        .some((v) => (v ?? '').toLowerCase().includes(termo)) ||
-      (digitos.length >= 3 && (c.cnpj ?? '').replace(/\D/g, '').includes(digitos))
+      [c.nome_empresa, c.nome_contato, c.cidade, c.segmento, c.responsavel_nome ?? ''].some((v) =>
+        (v ?? '').toLowerCase().includes(termo),
+      ) || (digitos.length >= 3 && (c.cnpj ?? '').replace(/\D/g, '').includes(digitos))
     )
   })
 
   const contagem = (status: GcStatusCliente | 'todos') =>
     status === 'todos' ? clientes.length : clientes.filter((c) => c.status === status).length
+
+  // Os indicadores do topo falam só dos clientes ATIVOS: cliente encerrado não tem o que cobrar.
+  const ativos = comSaude.filter(({ cliente }) => cliente.status === 'ativo')
+  const emRisco = ativos.filter(({ saude }) => saude.nivel === 'risco').length
+  const precisamAtencao = ativos.filter(({ saude }) => saude.nivel === 'atencao').length
+  const semLancamento = ativos.filter(
+    ({ cliente }) => Object.keys(cliente.metricas_mes ?? {}).length === 0,
+  ).length
+  const investimentoDoMes = ativos.reduce(
+    (soma, { cliente }) => soma + Number(cliente.metricas_mes?.investimento ?? 0),
+    0,
+  )
 
   return (
     <>
@@ -118,6 +182,35 @@ export function ClientesNxDigitalPage() {
       />
 
       <div className="space-y-4 px-4 pb-10 lg:px-6">
+        {!carregando && clientes.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Indicador
+              rotulo="Clientes ativos"
+              valor={String(ativos.length)}
+              ajuda={`${clientes.length} no total`}
+            />
+            <Indicador
+              rotulo="Em risco"
+              valor={String(emRisco)}
+              ajuda={precisamAtencao > 0 ? `+ ${precisamAtencao} pedindo atenção` : 'nenhum alerta grave'}
+              tom={emRisco > 0 ? 'danger' : undefined}
+              ativo={soProblemas}
+              onClick={() => setSoProblemas((v) => !v)}
+            />
+            <Indicador
+              rotulo="Sem lançamento"
+              valor={String(semLancamento)}
+              ajuda={`métricas de ${mesPorExtenso(mesAtual()).toLowerCase()}`}
+              tom={semLancamento > 0 ? 'warning' : undefined}
+            />
+            <Indicador
+              rotulo="Investimento do mês"
+              valor={formatarMetrica(investimentoDoMes, 'reais')}
+              ajuda="soma dos clientes ativos"
+            />
+          </div>
+        )}
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Tabs
             value={aba}
@@ -132,13 +225,25 @@ export function ClientesNxDigitalPage() {
               ),
             }))}
           />
-          <Input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por empresa, contato, cidade, CNPJ…"
-            leftIcon={<Search className="h-4 w-4" />}
-            containerClassName="sm:w-80"
-          />
+          <div className="flex items-center gap-2">
+            {soProblemas && (
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<ShieldAlert className="h-3.5 w-3.5" />}
+                onClick={() => setSoProblemas(false)}
+              >
+                só quem precisa de atenção
+              </Button>
+            )}
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por empresa, contato, cidade, CNPJ…"
+              leftIcon={<Search className="h-4 w-4" />}
+              containerClassName="sm:w-72"
+            />
+          </div>
         </div>
 
         {carregando ? (
@@ -152,7 +257,7 @@ export function ClientesNxDigitalPage() {
             description={
               clientes.length === 0
                 ? 'Cadastre o primeiro cliente de tráfego — a jornada de implantação é criada junto.'
-                : 'Mude a aba ou limpe a busca.'
+                : 'Mude a aba, limpe a busca ou desligue o filtro de atenção.'
             }
             action={
               clientes.length === 0 ? (
@@ -164,82 +269,30 @@ export function ClientesNxDigitalPage() {
           />
         ) : (
           <div className="overflow-hidden rounded-xl border border-line">
-            <table className="w-full text-sm">
-              <thead className="bg-elevate/[0.02] text-left text-xs uppercase tracking-wide text-foreground/50">
-                <tr>
-                  <th className="px-4 py-2.5 font-medium">Empresa</th>
-                  <th className="hidden px-4 py-2.5 font-medium md:table-cell">Serviços</th>
-                  <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Responsável</th>
-                  <th className="px-4 py-2.5 font-medium">Etapa atual</th>
-                  <th className="hidden px-4 py-2.5 font-medium sm:table-cell">Checklist</th>
-                  <th className="px-4 py-2.5 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visiveis.map((c) => (
-                  <tr
-                    key={c.id}
-                    onClick={() => navegar(`/clientesnxdigital/clientes/${c.id}`)}
-                    className="cursor-pointer border-t border-line transition-colors hover:bg-elevate/[0.03]"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <span
-                          className={cn(
-                            'grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line',
-                            'bg-elevate/[0.04] text-xs font-semibold text-foreground/70',
-                          )}
-                        >
-                          {iniciais(c.nome_empresa) || '—'}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium text-foreground">
-                            {c.nome_empresa}
-                          </span>
-                          <span className="block truncate text-xs text-foreground/50">
-                            {[c.nome_contato, c.cidade].filter(Boolean).join(' · ') || '—'}
-                          </span>
-                        </span>
-                      </div>
-                    </td>
-                    <td className="hidden px-4 py-3 md:table-cell">
-                      {c.servicos.length === 0 ? (
-                        <span className="text-xs text-foreground/40">—</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {c.servicos.map((s) => (
-                            <Badge key={s.id} tone={s.status === 'ativo' ? 'info' : 'neutral'}>
-                              {rotuloServico(s.tipo)}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="hidden px-4 py-3 text-foreground/70 lg:table-cell">
-                      {c.responsavel_nome ?? <span className="text-foreground/40">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-foreground/80">
-                        {c.etapa_atual ?? (
-                          <span className="text-success">Jornada concluída</span>
-                        )}
-                      </span>
-                      <span className="block text-xs text-foreground/45">
-                        {Number(c.etapas_concluidas)} de {Number(c.etapas_total)} etapas
-                      </span>
-                    </td>
-                    <td className="hidden px-4 py-3 sm:table-cell">
-                      <BarraProgresso valor={progressoDoCliente(c)} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={TOM_DO_STATUS[c.status]} dot>
-                        {ABAS.find((a) => a.value === c.status)?.label.replace(/s$/, '') ?? c.status}
-                      </Badge>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-elevate/[0.02] text-left text-xs uppercase tracking-wide text-foreground/50">
+                  <tr>
+                    <th className="px-4 py-2.5 font-medium">Empresa</th>
+                    <th className="px-4 py-2.5 font-medium">Como está</th>
+                    <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Serviços</th>
+                    <th className="px-4 py-2.5 font-medium">Etapa atual</th>
+                    <th className="hidden px-4 py-2.5 font-medium sm:table-cell">Checklist</th>
+                    <th className="px-4 py-2.5 font-medium">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {visiveis.map(({ cliente: c, saude }) => (
+                    <LinhaCliente
+                      key={c.id}
+                      cliente={c}
+                      saude={saude}
+                      onAbrir={() => navegar(`/clientesnxdigital/clientes/${c.id}`)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -250,5 +303,88 @@ export function ClientesNxDigitalPage() {
         onSalvo={(id) => navegar(`/clientesnxdigital/clientes/${id}`)}
       />
     </>
+  )
+}
+
+function LinhaCliente({
+  cliente: c,
+  saude,
+  onAbrir,
+}: {
+  cliente: GcClienteLista
+  saude: Saude
+  onAbrir: () => void
+}) {
+  // O pior sinal explica a pastilha: "Risco" sozinho não diz o que foi, e é isso que faz a pessoa
+  // abrir o cliente certo em vez de abrir todos.
+  const ordem = ['risco', 'atencao', 'neutro', 'bom', 'otimo']
+  const pior = [...saude.sinais].sort(
+    (a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado),
+  )[0]
+
+  return (
+    <tr
+      onClick={onAbrir}
+      className="cursor-pointer border-t border-line transition-colors hover:bg-elevate/[0.03]"
+    >
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line bg-elevate/[0.04] text-xs font-semibold text-foreground/70">
+            {iniciais(c.nome_empresa) || '—'}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate font-medium text-foreground">{c.nome_empresa}</span>
+            <span className="block truncate text-xs text-foreground/50">
+              {[c.nome_contato, c.responsavel_nome].filter(Boolean).join(' · ') || '—'}
+            </span>
+          </span>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <PastilhaSaude estado={saude.nivel} />
+        {pior && (saude.nivel === 'risco' || saude.nivel === 'atencao') && (
+          <span className="mt-1 block max-w-[220px] truncate text-xs text-foreground/50">
+            {pior.titulo}: {pior.detalhe}
+          </span>
+        )}
+        {saude.churn.nivel !== 'baixo' && (
+          <span className="mt-1 block text-xs text-danger/80">
+            churn {saude.churn.nivel}
+          </span>
+        )}
+      </td>
+      <td className="hidden px-4 py-3 lg:table-cell">
+        {c.servicos.length === 0 ? (
+          <span className="text-xs text-foreground/40">—</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {c.servicos.map((s) => (
+              <Badge key={s.id} tone={s.status === 'ativo' ? 'info' : 'neutral'}>
+                {rotuloServico(s.tipo)}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <span className="text-foreground/80">
+          {c.etapa_atual ?? <span className="text-success">Jornada concluída</span>}
+        </span>
+        <span className="block text-xs text-foreground/45">
+          {Number(c.etapas_concluidas)} de {Number(c.etapas_total)} etapas
+          {Number(c.itens_atrasados) > 0 && (
+            <span className="text-danger"> · {Number(c.itens_atrasados)} atrasado(s)</span>
+          )}
+        </span>
+      </td>
+      <td className="hidden px-4 py-3 sm:table-cell">
+        <BarraProgresso valor={progressoDoCliente(c)} />
+      </td>
+      <td className="px-4 py-3">
+        <Badge tone={TOM_DO_STATUS[c.status]} dot>
+          {ABAS.find((a) => a.value === c.status)?.label.replace(/s$/, '') ?? c.status}
+        </Badge>
+      </td>
+    </tr>
   )
 }

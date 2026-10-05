@@ -1,12 +1,14 @@
 import * as React from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, Pin, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { DatePickerField } from '@/components/comercial/DatePickerField'
-import { numeroDigitado } from '@/lib/gcMetricas'
+import { comDerivadas, formatarMetrica, numeroDigitado } from '@/lib/gcMetricas'
+import { avaliarSaude } from '@/lib/gcSaude'
+import { PainelSaude } from '@/components/gestaoClientes/Semaforo'
 import {
   TIPOS_SERVICO, gestaoClientes,
   type GcClienteDetalhe, type GcServico, type GcTipoServico,
@@ -122,6 +124,99 @@ function FormServico({
 }
 
 /**
+ * As notas FIXADAS do cliente, repetidas aqui de propósito: são os combinados que a pessoa precisa
+ * ver antes de falar com o cliente, e ninguém abre a aba de notas antes de uma ligação.
+ */
+function QuadroDeAvisos({
+  detalhe,
+  onVerNotas,
+}: {
+  detalhe: GcClienteDetalhe
+  onVerNotas?: () => void
+}) {
+  const fixadas = detalhe.historico.filter((h) => h.fixado)
+  return (
+    <section className="rounded-xl border border-line p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Pin className="h-4 w-4 text-accent" /> Avisos fixados
+        </h2>
+        {onVerNotas && (
+          <button
+            type="button"
+            onClick={onVerNotas}
+            className="flex items-center gap-1 text-xs text-foreground/50 transition-colors hover:text-accent"
+          >
+            abrir as notas <ArrowRight className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      {fixadas.length === 0 ? (
+        <p className="text-sm text-foreground/45">
+          Nada fixado. Na aba de notas dá pra fixar o que todo mundo precisa ver antes de falar com
+          esse cliente.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {fixadas.slice(0, 4).map((n) => (
+            <li key={n.id} className="rounded-lg border border-accent/20 bg-accent/[0.03] px-3 py-2">
+              <p className="whitespace-pre-wrap text-sm text-foreground/85">{n.descricao || n.titulo}</p>
+              <p className="mt-0.5 text-xs text-foreground/45">
+                {n.autor_nome ?? 'equipe'} ·{' '}
+                {new Date(n.created_at).toLocaleDateString('pt-BR')}
+                {(n.anexos ?? []).length > 0 ? ` · ${n.anexos.length} anexo(s)` : ''}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+/**
+ * Investido × vendido × receita do mês corrente — as três perguntas que o cliente faz e que a
+ * pessoa que cuida da conta precisa responder sem abrir outra aba.
+ */
+function ResumoDoMes({ cliente }: { cliente: GcClienteDetalhe['cliente'] }) {
+  const v = comDerivadas(cliente.metricas_mes ?? {})
+  const vazio = Object.keys(cliente.metricas_mes ?? {}).length === 0
+  if (vazio) {
+    return (
+      <p className="text-sm text-foreground/50">
+        Nada lançado neste mês ainda. Sem isso não dá pra dizer se o mês foi bom — a aba "Métricas e
+        metas" é onde entra.
+      </p>
+    )
+  }
+  const linhas: { rotulo: string; valor: string; destaque?: boolean }[] = [
+    { rotulo: 'Investido', valor: formatarMetrica(v.investimento ?? null, 'reais'), destaque: true },
+    { rotulo: 'Leads', valor: formatarMetrica(v.leads ?? null, 'inteiro') },
+    { rotulo: 'Vendas', valor: formatarMetrica(v.vendas ?? null, 'inteiro'), destaque: true },
+    { rotulo: 'Receita', valor: formatarMetrica(v.receita ?? null, 'reais'), destaque: true },
+    { rotulo: 'Retorno', valor: v.roas === undefined ? '—' : `${v.roas.toFixed(2).replace('.', ',')}x` },
+  ]
+  return (
+    <div className="space-y-1.5 text-sm">
+      {linhas.map((l) => (
+        <div key={l.rotulo} className="flex items-center justify-between gap-3">
+          <span className="text-foreground/60">{l.rotulo}</span>
+          <span
+            className={
+              l.destaque
+                ? 'font-semibold tabular-nums text-foreground'
+                : 'tabular-nums text-foreground/85'
+            }
+          >
+            {l.valor}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
  * Visão geral do cliente: o cadastro, os serviços contratados e as observações.
  *
  * O cadastro é só leitura aqui — editar abre o mesmo modal do "Novo cliente", pra não existirem
@@ -130,9 +225,12 @@ function FormServico({
 export function AbaVisaoGeral({
   detalhe,
   onMudou,
+  onVerNotas,
 }: {
   detalhe: GcClienteDetalhe
   onMudou: () => Promise<void> | void
+  /** Leva pra aba de notas — o quadro de avisos daqui é só a prévia do que está fixado lá. */
+  onVerNotas?: () => void
 }) {
   const { cliente, servicos } = detalhe
   const [adicionando, setAdicionando] = React.useState(false)
@@ -158,6 +256,8 @@ export function AbaVisaoGeral({
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
+        <PainelSaude saude={avaliarSaude(cliente)} />
+
         <section className="rounded-xl border border-line p-4">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Cadastro</h2>
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -238,6 +338,8 @@ export function AbaVisaoGeral({
       </div>
 
       <div className="space-y-4">
+        <QuadroDeAvisos detalhe={detalhe} onVerNotas={onVerNotas} />
+
         <section className="rounded-xl border border-line p-4">
           <h2 className="mb-2 text-sm font-semibold text-foreground">Observações</h2>
           {cliente.observacoes_gerais ? (
@@ -249,6 +351,11 @@ export function AbaVisaoGeral({
               Nada anotado. Use "Editar cliente" pra registrar combinados e particularidades.
             </p>
           )}
+        </section>
+
+        <section className="rounded-xl border border-line p-4">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">O mês até agora</h2>
+          <ResumoDoMes cliente={cliente} />
         </section>
 
         <section className="rounded-xl border border-line p-4">

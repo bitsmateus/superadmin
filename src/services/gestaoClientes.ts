@@ -82,6 +82,16 @@ export interface GcEstrategia {
   itens: GcChecklistItem[]
 }
 
+/** Print ou arquivo colado num registro — mesmo formato dos anexos do CRM. */
+export interface GcAnexo {
+  id: string
+  name: string
+  type: string
+  size: number
+  /** data URL (base64). Fica no banco, como o resto dos anexos do projeto. */
+  dataUrl: string
+}
+
 export interface GcRegistroHistorico {
   id: string
   gc_cliente_id: string
@@ -91,6 +101,7 @@ export interface GcRegistroHistorico {
   autor_id: string | null
   autor_nome: string | null
   fixado: boolean
+  anexos: GcAnexo[]
   created_at: string
 }
 
@@ -115,9 +126,19 @@ export interface GcClienteLista {
   etapa_atual: string | null
   etapas_total: string
   etapas_concluidas: string
+  etapas_atrasadas: string
   itens_total: string
   itens_concluidos: string
+  itens_atrasados: string
+  /** Último registro feito por uma PESSOA (evento do sistema não conta como contato). */
+  ultimo_contato: string | null
+  /** Primeiro dia do período do último relatório publicado. */
+  ultimo_relatorio: string | null
   servicos: Pick<GcServico, 'id' | 'tipo' | 'status' | 'investimento_previsto_mensal'>[]
+  metas: GcMeta[]
+  /** Números do mês de referência e do anterior, pivotados por chave. */
+  metricas_mes: Record<string, string>
+  metricas_mes_anterior: Record<string, string>
 }
 
 export interface GcClienteDetalhe {
@@ -173,10 +194,21 @@ export interface GcMetrica {
   valor: string
 }
 
+/** Horizonte da meta: a mesma métrica tem alvo pro mês, pro semestre e pro ano. */
+export type GcHorizonte = 'mes' | '6_meses' | '12_meses'
+
+export const HORIZONTES: { valor: GcHorizonte; label: string; curto: string }[] = [
+  { valor: 'mes', label: 'Meta do mês', curto: 'mês' },
+  { valor: '6_meses', label: 'Meta de 6 meses', curto: '6 meses' },
+  { valor: '12_meses', label: 'Meta de 12 meses', curto: '12 meses' },
+]
+
 export interface GcMeta {
   id: string
   gc_cliente_id: string
   chave_metrica: string
+  horizonte: GcHorizonte
+  /** Ponto de partida: onde o cliente estava quando a meta foi combinada. */
   valor_base: string
   data_base: string | null
   valor_meta: string
@@ -199,7 +231,16 @@ export interface GcSnapshot {
     unidade: 'reais' | 'inteiro' | 'percentual' | 'decimal'
     valor: number | null
     anterior?: number | null
+    /** Subir é bom? Em CPL/CAC não — é o que define a cor da variação no portal e no PDF. */
+    subirEhBom?: boolean
   }[]
+  /** O essencial pro cliente, já escolhido aqui: quanto investiu, quanto vendeu, quanto voltou. */
+  resumo?: {
+    investimento: number | null
+    vendas: number | null
+    receita: number | null
+    retorno: number | null
+  }
   metas?: {
     label: string
     unidade: 'reais' | 'inteiro' | 'percentual' | 'decimal'
@@ -207,6 +248,8 @@ export interface GcSnapshot {
     meta: number
     atual: number | null
     progresso: number | null
+    horizonte?: GcHorizonte
+    prazo?: string | null
   }[]
   jornada?: { nome: string; status: string }[]
   estrategias?: { nome: string; status: string; feitos: number; total: number }[]
@@ -239,21 +282,12 @@ export interface GcLinkPublico {
   ultimo_acesso: string | null
 }
 
-/** Linha da tela de Tráfego: o cliente e os números dele no mês, já pivotados por chave. */
-export interface GcLinhaTrafego {
-  id: string
-  nome_empresa: string
-  status: GcStatusCliente
-  segmento: string
-  responsavel_nome: string | null
-  metricas: Record<string, string>
-  servicos: { tipo: GcTipoServico; status: string; investimento_previsto_mensal: string | null }[]
-}
-
 export const gestaoClientes = {
   modelos: () => api.get<GcModelos>('/api/gc/modelos'),
 
-  listar: () => api.get<GcClienteLista[]>('/api/gc/clientes'),
+  /** Sem período, o servidor usa o mês de hoje em Brasília. */
+  listar: (periodo?: string) =>
+    api.get<GcClienteLista[]>(`/api/gc/clientes${periodo ? `?periodo=${encodeURIComponent(periodo)}` : ''}`),
   detalhe: (id: string) => api.get<GcClienteDetalhe>(`/api/gc/clientes/${id}`),
   criar: (dados: GcClienteEntrada) => api.post<GcClienteLista>('/api/gc/clientes', dados),
   atualizar: (id: string, dados: GcClienteEntrada) =>
@@ -314,13 +348,17 @@ export const gestaoClientes = {
     valores: Record<string, number | string | null>
   }) => api.put<GcMetrica[]>('/api/gc/metricas', dados),
 
+  /** Mesma forma da lista: a tela de Tráfego mostra o semáforo do mesmo jeito. */
   trafego: (periodo: string) =>
-    api.get<GcLinhaTrafego[]>(`/api/gc/trafego?periodo=${encodeURIComponent(periodo)}`),
+    api.get<GcClienteLista[]>(`/api/gc/trafego?periodo=${encodeURIComponent(periodo)}`),
 
   metas: (clienteId: string) => api.get<GcMeta[]>(`/api/gc/clientes/${clienteId}/metas`),
   criarMeta: (
     clienteId: string,
-    dados: { chave_metrica: string; valor_base?: number; data_base?: string | null; valor_meta: number; prazo?: string | null },
+    dados: {
+      chave_metrica: string; horizonte: GcHorizonte; valor_base?: number
+      data_base?: string | null; valor_meta: number; prazo?: string | null
+    },
   ) => api.post<GcMeta>(`/api/gc/clientes/${clienteId}/metas`, dados),
   atualizarMeta: (id: string, dados: Partial<Omit<GcMeta, 'id' | 'gc_cliente_id'>>) =>
     api.patch<GcMeta>(`/api/gc/metas/${id}`, dados),
@@ -356,7 +394,9 @@ export const gestaoClientes = {
 
   registrar: (
     clienteId: string,
-    dados: { tipo?: GcTipoHistorico; titulo?: string; descricao: string; fixado?: boolean },
+    dados: {
+      tipo?: GcTipoHistorico; titulo?: string; descricao: string; fixado?: boolean; anexos?: GcAnexo[]
+    },
   ) => api.post<GcRegistroHistorico>(`/api/gc/clientes/${clienteId}/historico`, dados),
   atualizarRegistro: (id: string, dados: Partial<{ titulo: string; descricao: string; fixado: boolean }>) =>
     api.patch<GcRegistroHistorico>(`/api/gc/historico/${id}`, dados),

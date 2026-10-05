@@ -1,29 +1,178 @@
 import * as React from 'react'
 import { useParams } from 'react-router-dom'
-import { FileDown, Loader2 } from 'lucide-react'
-import { gestaoClientes, type GcSnapshot } from '@/services/gestaoClientes'
+import { FileDown, Loader2, TrendingUp } from 'lucide-react'
+import { gestaoClientes, HORIZONTES, type GcSnapshot } from '@/services/gestaoClientes'
 import { formatarMetrica } from '@/lib/gcMetricas'
+import { cn } from '@/lib/utils'
 
 type Portal = Awaited<ReturnType<typeof gestaoClientes.portal>>
 
-/** Variação contra o período anterior — só quando existe base de comparação. */
-function Variacao({ atual, anterior }: { atual: number | null; anterior?: number | null }) {
+/** Pega do resumo ou cai pra procurar entre os números (relatório publicado antes do resumo existir). */
+function doResumo(s: GcSnapshot, campo: 'investimento' | 'vendas' | 'receita' | 'retorno'): number | null {
+  const direto = s.resumo?.[campo]
+  if (direto !== undefined) return direto
+  const chave = campo === 'retorno' ? 'roas' : campo
+  return s.numeros?.find((n) => n.chave === chave)?.valor ?? null
+}
+
+/**
+ * Variação contra o período anterior. A cor segue o que é BOM pra métrica, não o que é maior: CPL
+ * caindo é verde.
+ */
+function Variacao({
+  atual,
+  anterior,
+  subirEhBom = true,
+}: {
+  atual: number | null
+  anterior?: number | null
+  subirEhBom?: boolean
+}) {
   if (atual === null || anterior === null || anterior === undefined || anterior === 0) return null
   const pct = ((atual - anterior) / Math.abs(anterior)) * 100
-  const subiu = pct >= 0
+  if (Math.abs(pct) < 0.5) return <span className="text-[11px] text-foreground/40">estável</span>
+  const bom = pct > 0 === subirEhBom
   return (
-    <span className={subiu ? 'text-[11px] text-success' : 'text-[11px] text-danger'}>
-      {subiu ? '+' : ''}
-      {pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% vs. mês anterior
+    <span className={cn('text-[11px] font-medium', bom ? 'text-success' : 'text-danger')}>
+      {pct > 0 ? '▲' : '▼'} {Math.abs(pct).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% vs.
+      mês anterior
     </span>
+  )
+}
+
+/** Os três números grandes: o que entrou de verba, o que saiu de venda. */
+function Destaques({ snapshot }: { snapshot: GcSnapshot }) {
+  const investimento = doResumo(snapshot, 'investimento')
+  const vendas = doResumo(snapshot, 'vendas')
+  const receita = doResumo(snapshot, 'receita')
+  const retorno = doResumo(snapshot, 'retorno')
+  const achar = (chave: string) => snapshot.numeros?.find((n) => n.chave === chave)
+
+  const blocos = [
+    {
+      rotulo: 'Investimento',
+      valor: formatarMetrica(investimento, 'reais'),
+      ajuda: 'verba aplicada em anúncios',
+      anterior: achar('investimento')?.anterior,
+      atual: investimento,
+      subirEhBom: true,
+    },
+    {
+      rotulo: 'Vendas',
+      valor: formatarMetrica(vendas, 'inteiro'),
+      ajuda: 'negócios fechados no período',
+      anterior: achar('vendas')?.anterior,
+      atual: vendas,
+      subirEhBom: true,
+    },
+    {
+      rotulo: 'Receita',
+      valor: formatarMetrica(receita, 'reais'),
+      ajuda: 'faturamento vindo das campanhas',
+      anterior: achar('receita')?.anterior,
+      atual: receita,
+      subirEhBom: true,
+    },
+  ]
+
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {blocos.map((b) => (
+          <div key={b.rotulo} className="rounded-xl border border-line bg-elevate/[0.02] px-4 py-3">
+            <p className="text-[11px] uppercase tracking-wide text-foreground/45">{b.rotulo}</p>
+            <p className="mt-0.5 text-[26px] font-semibold leading-tight tabular-nums text-foreground">
+              {b.valor}
+            </p>
+            <p className="text-[11px] text-foreground/45">{b.ajuda}</p>
+            <Variacao atual={b.atual} anterior={b.anterior} subirEhBom={b.subirEhBom} />
+          </div>
+        ))}
+      </div>
+
+      {retorno !== null && retorno > 0 && (
+        <p className="mt-3 flex items-center gap-2 rounded-xl border-l-2 border-success bg-success/[0.05] px-4 py-3 text-sm text-foreground/85">
+          <TrendingUp className="h-4 w-4 shrink-0 text-success" />
+          Cada R$ 1,00 investido voltou como{' '}
+          <strong className="text-foreground">{formatarMetrica(retorno, 'reais')}</strong> de receita.
+        </p>
+      )}
+      {retorno === null && investimento !== null && investimento > 0 && (
+        <p className="mt-3 rounded-xl border-l-2 border-line bg-elevate/[0.02] px-4 py-3 text-sm text-foreground/60">
+          A receita deste período ainda não foi informada — com ela, este relatório mostra o retorno
+          por real investido.
+        </p>
+      )}
+    </>
+  )
+}
+
+function BlocoMetas({ snapshot }: { snapshot: GcSnapshot }) {
+  const metas = snapshot.metas ?? []
+  if (metas.length === 0) return null
+  return (
+    <section className="mt-5">
+      <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">Metas combinadas</h3>
+      <div className="space-y-3">
+        {HORIZONTES.map((h) => {
+          const doGrupo = metas.filter((m) => (m.horizonte ?? 'mes') === h.valor)
+          if (doGrupo.length === 0) return null
+          return (
+            <div key={h.valor}>
+              <p className="mb-1 text-xs font-medium text-foreground/60">{h.label}</p>
+              <ul className="space-y-2">
+                {doGrupo.map((m, i) => (
+                  <li
+                    key={i}
+                    className="flex flex-wrap items-center gap-3 rounded-xl border border-line px-3 py-2.5"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-foreground">{m.label}</span>
+                      <span className="block text-xs text-foreground/50">
+                        de {formatarMetrica(m.base, m.unidade)} para{' '}
+                        {formatarMetrica(m.meta, m.unidade)}
+                      </span>
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums text-foreground">
+                      {formatarMetrica(m.atual, m.unidade)}
+                    </span>
+                    {m.progresso !== null && m.progresso !== undefined && (
+                      <span className="flex items-center gap-2">
+                        <span className="h-1.5 w-24 overflow-hidden rounded-full bg-elevate/[0.08]">
+                          <span
+                            className={cn(
+                              'block h-full rounded-full',
+                              m.progresso >= 100 ? 'bg-success' : 'bg-accent',
+                            )}
+                            style={{ width: `${Math.max(0, Math.min(100, m.progresso))}%` }}
+                          />
+                        </span>
+                        <span className="w-10 text-right text-xs tabular-nums text-foreground/60">
+                          {m.progresso}%
+                        </span>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
 function Relatorio({ snapshot, baixar }: { snapshot: GcSnapshot; baixar: () => Promise<void> }) {
   const [baixando, setBaixando] = React.useState(false)
+  // Os três do destaque não repetem na grade de baixo — lá fica o detalhamento.
+  const detalhados = (snapshot.numeros ?? []).filter(
+    (n) => !['investimento', 'vendas', 'receita', 'roas'].includes(n.chave) && n.valor !== null,
+  )
+
   return (
     <article className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-foreground">{snapshot.periodo?.rotulo}</h2>
           {snapshot.publicado_em && (
@@ -53,86 +202,69 @@ function Relatorio({ snapshot, baixar }: { snapshot: GcSnapshot; baixar: () => P
         </button>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {(snapshot.numeros ?? [])
-          .filter((n) => n.valor !== null)
-          .map((n) => (
-            <div key={n.chave} className="rounded-xl border border-line px-3 py-2.5">
-              <p className="text-[11px] uppercase tracking-wide text-foreground/45">{n.label}</p>
-              <p className="text-xl font-semibold tabular-nums text-foreground">
-                {formatarMetrica(n.valor, n.unidade)}
-              </p>
-              <Variacao atual={n.valor} anterior={n.anterior} />
-            </div>
-          ))}
-      </div>
+      <Destaques snapshot={snapshot} />
 
-      {(snapshot.metas ?? []).length > 0 && (
+      {detalhados.length > 0 && (
         <section className="mt-5">
-          <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">Metas</h3>
-          <ul className="space-y-2">
-            {snapshot.metas!.map((m, i) => (
-              <li key={i} className="flex flex-wrap items-center gap-3 rounded-xl border border-line px-3 py-2.5">
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-foreground">{m.label}</span>
-                  <span className="block text-xs text-foreground/50">
-                    de {formatarMetrica(m.base, m.unidade)} para {formatarMetrica(m.meta, m.unidade)}
-                  </span>
-                </span>
-                <span className="text-sm tabular-nums text-foreground/80">
-                  {formatarMetrica(m.atual, m.unidade)}
-                </span>
-                {m.progresso !== null && (
-                  <span className="flex items-center gap-2">
-                    <span className="h-1.5 w-24 overflow-hidden rounded-full bg-elevate/[0.08]">
-                      <span
-                        className={
-                          m.progresso >= 100
-                            ? 'block h-full rounded-full bg-success'
-                            : 'block h-full rounded-full bg-accent'
-                        }
-                        style={{ width: `${m.progresso}%` }}
-                      />
-                    </span>
-                    <span className="w-10 text-right text-xs tabular-nums text-foreground/60">
-                      {m.progresso}%
-                    </span>
-                  </span>
-                )}
-              </li>
+          <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">
+            Detalhamento do período
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {detalhados.map((n) => (
+              <div key={n.chave} className="rounded-xl border border-line px-3 py-2.5">
+                <p className="text-[11px] uppercase tracking-wide text-foreground/45">{n.label}</p>
+                <p className="text-lg font-semibold tabular-nums text-foreground">
+                  {formatarMetrica(n.valor, n.unidade)}
+                </p>
+                <Variacao atual={n.valor} anterior={n.anterior} subirEhBom={n.subirEhBom} />
+              </div>
             ))}
-          </ul>
+          </div>
         </section>
       )}
+
+      <BlocoMetas snapshot={snapshot} />
 
       {snapshot.comentario_gestor && (
         <section className="mt-5">
           <h3 className="mb-1.5 text-xs uppercase tracking-wide text-foreground/45">
-            Comentário do gestor
+            Leitura do gestor
           </h3>
-          <p className="whitespace-pre-wrap text-sm text-foreground/85">{snapshot.comentario_gestor}</p>
+          <p className="whitespace-pre-wrap rounded-xl border-l-2 border-accent bg-accent/[0.03] px-4 py-3 text-sm text-foreground/85">
+            {snapshot.comentario_gestor}
+          </p>
         </section>
       )}
 
       {snapshot.proximos_passos && (
-        <section className="mt-5">
+        <section className="mt-4">
           <h3 className="mb-1.5 text-xs uppercase tracking-wide text-foreground/45">Próximos passos</h3>
-          <p className="whitespace-pre-wrap text-sm text-foreground/85">{snapshot.proximos_passos}</p>
+          <p className="whitespace-pre-wrap rounded-xl border-l-2 border-line bg-elevate/[0.02] px-4 py-3 text-sm text-foreground/85">
+            {snapshot.proximos_passos}
+          </p>
         </section>
       )}
 
       {(snapshot.estrategias ?? []).length > 0 && (
         <section className="mt-5">
-          <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">Em curso</h3>
-          <ul className="space-y-1">
-            {snapshot.estrategias!.map((e, i) => (
-              <li key={i} className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-foreground/85">{e.nome}</span>
-                <span className="text-xs text-foreground/50">
-                  {e.feitos} de {e.total} passos
-                </span>
-              </li>
-            ))}
+          <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">
+            O que está rodando
+          </h3>
+          <ul className="space-y-1.5">
+            {snapshot.estrategias!.map((e, i) => {
+              const pct = e.total ? Math.round((e.feitos / e.total) * 100) : 0
+              return (
+                <li key={i} className="flex items-center gap-3 text-sm">
+                  <span className="min-w-0 flex-1 truncate text-foreground/85">{e.nome}</span>
+                  <span className="h-1.5 w-24 overflow-hidden rounded-full bg-elevate/[0.08]">
+                    <span className="block h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
+                  </span>
+                  <span className="w-12 text-right text-xs text-foreground/50">
+                    {e.feitos}/{e.total}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
@@ -143,9 +275,12 @@ function Relatorio({ snapshot, baixar }: { snapshot: GcSnapshot; baixar: () => P
 /**
  * PORTAL DO CLIENTE — /cliente/:token, sem login.
  *
- * Mostra só os relatórios PUBLICADOS, lidos da foto que foi congelada na publicação. O cliente não
- * vê jornada interna, custo, margem nem o histórico do time: o que chega aqui é o que a NX
- * escolheu publicar.
+ * Mostra só os relatórios PUBLICADOS, lidos da foto que foi congelada na publicação. A primeira
+ * coisa que aparece é o que o cliente quer saber: quanto investiu, quantas vendas saíram e quanto
+ * voltou de receita.
+ *
+ * O cliente não vê jornada interna, custo, margem, semáforo nem o histórico do time: o que chega
+ * aqui é o que a NX escolheu publicar.
  */
 export function PortalClientePage() {
   const { token = '' } = useParams<{ token: string }>()
@@ -214,9 +349,7 @@ export function PortalClientePage() {
           )}
           <div>
             <h1 className="text-xl font-semibold text-foreground">{dados.cliente.nome_empresa}</h1>
-            <p className="text-xs text-foreground/50">
-              Relatórios de performance · Grupo NX Digital
-            </p>
+            <p className="text-xs text-foreground/50">Relatórios de performance · Grupo NX Digital</p>
           </div>
         </header>
 

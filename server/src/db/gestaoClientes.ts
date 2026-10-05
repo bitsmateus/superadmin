@@ -227,6 +227,24 @@ const TABELAS = [
   )`,
   `CREATE INDEX IF NOT EXISTS gc_acessos_link_idx ON gc_acessos_link (link_id, acessado_em DESC)`,
 
+  // ---------------------------------------------------------------- acréscimos (colunas novas)
+  // Vêm como ALTER porque as tabelas acima já existem em produção. Idempotentes, como o resto.
+
+  // Horizonte da meta: a mesma métrica tem alvo pro mês, pro semestre e pro ano, e misturar os
+  // três numa lista só não deixa ler nenhum ("100 leads" até quando?).
+  `ALTER TABLE gc_metas ADD COLUMN IF NOT EXISTS horizonte TEXT NOT NULL DEFAULT 'mes'`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gc_metas_horizonte') THEN
+       ALTER TABLE gc_metas ADD CONSTRAINT gc_metas_horizonte
+         CHECK (horizonte IN ('mes','6_meses','12_meses'));
+     END IF;
+   END $$`,
+
+  // Prints e arquivos colados no registro — mesmo formato dos anexos de lead_notes:
+  // [{ id, name, type, size, dataUrl }]. Fica no banco (data URL) como o resto do projeto, em vez
+  // de depender de um bucket que não existe aqui.
+  `ALTER TABLE gc_historico ADD COLUMN IF NOT EXISTS anexos JSONB NOT NULL DEFAULT '[]'`,
+
   // Índices de leitura das telas
   `CREATE INDEX IF NOT EXISTS gc_servicos_cliente_idx ON gc_servicos (gc_cliente_id)`,
   `CREATE INDEX IF NOT EXISTS gc_jornada_cliente_idx ON gc_cliente_jornada (gc_cliente_id, ordem)`,

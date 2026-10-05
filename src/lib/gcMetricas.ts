@@ -17,6 +17,12 @@ export interface GcMetricaDef {
   unidade: GcUnidade
   /** Texto de ajuda da coluna, quando o nome não basta. */
   ajuda?: string
+  /**
+   * Subir é bom? Padrão sim. Em CPL e CAC é o contrário — e é isso que decide a COR da variação:
+   * CPL caindo é verde, mesmo sendo número menor. Sem essa marcação, o relatório pintaria de
+   * vermelho justamente o mês em que o custo melhorou.
+   */
+  subirEhBom?: boolean
 }
 
 /** O que o time digita. Esta é a ordem em que aparece no editor do mês e na tela de Tráfego. */
@@ -40,6 +46,7 @@ export const METRICAS_DERIVADAS: (GcMetricaDef & {
     label: 'CPL',
     unidade: 'reais',
     ajuda: 'Investimento ÷ leads',
+    subirEhBom: false,
     calcular: (v) => (v.leads ? v.investimento / v.leads : null),
   },
   {
@@ -54,6 +61,7 @@ export const METRICAS_DERIVADAS: (GcMetricaDef & {
     label: 'CAC',
     unidade: 'reais',
     ajuda: 'Investimento ÷ vendas',
+    subirEhBom: false,
     calcular: (v) => (v.vendas ? v.investimento / v.vendas : null),
   },
   {
@@ -143,6 +151,22 @@ export function numeroDigitado(texto: string | null | undefined): number | null 
   if (!limpo) return null
   const n = Number(limpo.replace(/\./g, '').replace(',', '.'))
   return Number.isFinite(n) ? n : null
+}
+
+/**
+ * Variação percentual entre dois períodos e se ela é boa ou ruim PRA AQUELA métrica.
+ * Sem base de comparação (ou base zero), devolve null — não inventa "+100%".
+ */
+export function variacaoDaMetrica(
+  chave: string,
+  atual: number | null | undefined,
+  anterior: number | null | undefined,
+): { pct: number; boa: boolean } | null {
+  if (atual === null || atual === undefined) return null
+  if (anterior === null || anterior === undefined || anterior === 0) return null
+  const pct = ((atual - anterior) / Math.abs(anterior)) * 100
+  const subirEhBom = TODAS_METRICAS.find((m) => m.chave === chave)?.subirEhBom !== false
+  return { pct, boa: pct === 0 ? true : pct > 0 === subirEhBom }
 }
 
 /** Primeiro e último dia do mês 'YYYY-MM', do jeito que `gc_metricas` guarda o período. */

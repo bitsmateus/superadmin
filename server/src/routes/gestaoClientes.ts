@@ -138,6 +138,87 @@ async function recalcularEtapa(etapaId: string, autorId?: string) {
   }
 }
 
+/**
+ * Hoje e o começo do mês em horário de Brasília, não em UTC. Comparar prazo com `CURRENT_DATE`
+ * (UTC) joga a virada do dia pras 21h e faz item vencer antes da hora — o mesmo erro que já tinha
+ * dado nas métricas do comercial.
+ */
+const HOJE = `(NOW() AT TIME ZONE 'America/Sao_Paulo')::date`;
+
+/** Pacote de métricas de um mês, pivotado ({ leads: 42 }). `$n` é o primeiro dia do mês. */
+function pivotMetricas(parametro: string): string {
+  return `COALESCE((
+    SELECT json_object_agg(m.chave, m.valor) FROM gc_metricas m
+    WHERE m.gc_cliente_id = c.id
+      AND m.periodo_inicio = ${parametro}::date
+      AND m.periodo_fim = (date_trunc('month', ${parametro}::date) + INTERVAL '1 month - 1 day')::date
+  ), '{}'::json)`;
+}
+
+/**
+ * A consulta das telas de lista e de Tráfego. Além do cadastro, traz TUDO o que o semáforo de
+ * saúde precisa (atrasos, último contato, último relatório, números do mês e do mês anterior,
+ * metas) — numa consulta só, porque o semáforo tem que estar na lista, e um pedido por cliente
+ * ali seriam dezenas de chamadas.
+ *
+ * `$1` é o primeiro dia do mês de referência; `$2`, o do mês anterior.
+ */
+const SQL_CLIENTES = `
+  SELECT c.*, p.name AS responsavel_nome,
+    (SELECT j.nome FROM gc_cliente_jornada j
+      WHERE j.gc_cliente_id = c.id AND j.status <> 'concluida'
+      ORDER BY j.ordem, j.created_at LIMIT 1) AS etapa_atual,
+    (SELECT count(*) FROM gc_cliente_jornada j WHERE j.gc_cliente_id = c.id) AS etapas_total,
+    (SELECT count(*) FROM gc_cliente_jornada j
+      WHERE j.gc_cliente_id = c.id AND j.status = 'concluida') AS etapas_concluidas,
+    (SELECT count(*) FROM gc_cliente_jornada j
+      WHERE j.gc_cliente_id = c.id AND j.status <> 'concluida' AND j.prazo IS NOT NULL
+        AND j.prazo < ${HOJE}) AS etapas_atrasadas,
+    (SELECT count(*) FROM gc_checklist_itens i WHERE i.gc_cliente_id = c.id) AS itens_total,
+    (SELECT count(*) FROM gc_checklist_itens i
+      WHERE i.gc_cliente_id = c.id AND i.concluido) AS itens_concluidos,
+    (SELECT count(*) FROM gc_checklist_itens i
+      WHERE i.gc_cliente_id = c.id AND NOT i.concluido
+        AND i.prazo IS NOT NULL AND i.prazo < ${HOJE}) AS itens_atrasados,
+    -- Último contato = o que uma PESSOA registrou. Evento do sistema não conta: "etapa concluída"
+    -- não é conversa com o cliente, e contar isso faria um cliente abandonado parecer ativo.
+    (SELECT max(h.created_at) FROM gc_historico h
+      WHERE h.gc_cliente_id = c.id AND h.tipo <> 'evento_sistema') AS ultimo_contato,
+    (SELECT max(r.periodo_inicio) FROM gc_relatorios r
+      WHERE r.gc_cliente_id = c.id AND r.status = 'publicado') AS ultimo_relatorio,
+    COALESCE((SELECT json_agg(json_build_object(
+        'id', s.id, 'tipo', s.tipo, 'status', s.status,
+        'investimento_previsto_mensal', s.investimento_previsto_mensal
+      ) ORDER BY s.created_at)
+      FROM gc_servicos s WHERE s.gc_cliente_id = c.id), '[]'::json) AS servicos,
+    COALESCE((SELECT json_agg(json_build_object(
+        'id', g.id, 'chave_metrica', g.chave_metrica, 'horizonte', g.horizonte,
+        'valor_base', g.valor_base, 'valor_meta', g.valor_meta, 'prazo', g.prazo,
+        'data_base', g.data_base, 'status', g.status
+      ) ORDER BY g.created_at)
+      FROM gc_metas g WHERE g.gc_cliente_id = c.id), '[]'::json) AS metas,
+    ${pivotMetricas('$1')} AS metricas_mes,
+    ${pivotMetricas('$2')} AS metricas_mes_anterior
+  FROM gc_clientes c
+  LEFT JOIN profiles p ON p.id = c.responsavel_id`;
+
+/** O mês de hoje em Brasília, 'YYYY-MM'. Em UTC, de madrugada o mês podia ser o seguinte. */
+function mesDeHoje(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+  }).format(new Date());
+}
+
+/** 'YYYY-MM' → primeiro dia daquele mês e do mês anterior. Sem mês, usa o de hoje em Brasília. */
+function mesesDeReferencia(periodo?: string): [string, string] {
+  const mes = /^\d{4}-\d{2}$/.test(periodo ?? '') ? periodo! : mesDeHoje();
+  const [ano, m] = mes.split('-').map(Number);
+  const anterior = m === 1 ? `${ano - 1}-12` : `${ano}-${String(m - 1).padStart(2, '0')}`;
+  return [`${mes}-01`, `${anterior}-01`];
+}
+
 export async function gestaoClientesRoutes(app: FastifyInstance) {
   const autenticado = { onRequest: [app.authenticate] };
 
@@ -162,40 +243,20 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   });
 
   // ------------------------------------------------------------------ clientes
-  // GET /api/gc/clientes — lista da tela, já com etapa atual e progresso do checklist. São poucas
+  // GET /api/gc/clientes?periodo=YYYY-MM — lista da tela, com o que o semáforo precisa. São poucas
   // dezenas de clientes, então não vale paginar: a tela filtra no front igual ao resto do painel.
-  app.get('/api/gc/clientes', autenticado, async () => {
-    return query(
-      `SELECT c.*, p.name AS responsavel_nome,
-         (SELECT j.nome FROM gc_cliente_jornada j
-           WHERE j.gc_cliente_id = c.id AND j.status <> 'concluida'
-           ORDER BY j.ordem, j.created_at LIMIT 1) AS etapa_atual,
-         (SELECT count(*) FROM gc_cliente_jornada j WHERE j.gc_cliente_id = c.id) AS etapas_total,
-         (SELECT count(*) FROM gc_cliente_jornada j
-           WHERE j.gc_cliente_id = c.id AND j.status = 'concluida') AS etapas_concluidas,
-         (SELECT count(*) FROM gc_checklist_itens i WHERE i.gc_cliente_id = c.id) AS itens_total,
-         (SELECT count(*) FROM gc_checklist_itens i
-           WHERE i.gc_cliente_id = c.id AND i.concluido) AS itens_concluidos,
-         COALESCE((SELECT json_agg(json_build_object(
-             'id', s.id, 'tipo', s.tipo, 'status', s.status,
-             'investimento_previsto_mensal', s.investimento_previsto_mensal
-           ) ORDER BY s.created_at)
-           FROM gc_servicos s WHERE s.gc_cliente_id = c.id), '[]'::json) AS servicos
-       FROM gc_clientes c
-       LEFT JOIN profiles p ON p.id = c.responsavel_id
-       ORDER BY c.nome_empresa`
-    );
+  app.get<{ Querystring: { periodo?: string } }>('/api/gc/clientes', autenticado, async (req) => {
+    const [mes, anterior] = mesesDeReferencia(req.query.periodo);
+    return query(`${SQL_CLIENTES} ORDER BY c.nome_empresa`, [mes, anterior]);
   });
 
   // GET /api/gc/clientes/:id — tudo do cliente numa tacada: a tela de detalhe abre as abas
   // Visão geral, Jornada, Estratégias e Histórico sem ida e volta ao servidor.
   app.get<{ Params: { id: string } }>('/api/gc/clientes/:id', autenticado, async (req, reply) => {
-    const cliente = await queryOne(
-      `SELECT c.*, p.name AS responsavel_nome
-       FROM gc_clientes c LEFT JOIN profiles p ON p.id = c.responsavel_id
-       WHERE c.id = $1`,
-      [req.params.id]
-    );
+    // A MESMA consulta da lista, filtrada num cliente: o detalhe mostra o semáforo, e ele tem que
+    // sair igualzinho ao da lista — dois caminhos pro mesmo cálculo é como eles se separam.
+    const [mes, anterior] = mesesDeReferencia();
+    const cliente = await queryOne(`${SQL_CLIENTES} WHERE c.id = $3`, [mes, anterior, req.params.id]);
     if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
 
     const [servicos, jornada, estrategias, historico] = await Promise.all([
@@ -479,17 +540,26 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   // ------------------------------------------------------------------ histórico
   app.post<{
     Params: { id: string };
-    Body: { tipo?: string; titulo?: string; descricao?: string; fixado?: boolean };
+    Body: {
+      tipo?: string; titulo?: string; descricao?: string; fixado?: boolean;
+      anexos?: { id: string; name: string; type: string; size: number; dataUrl: string }[];
+    };
   }>('/api/gc/clientes/:id/historico', autenticado, async (req, reply) => {
     const { sub } = req.user as { sub: string };
-    const { tipo, titulo, descricao, fixado } = req.body ?? {};
-    if (!descricao?.trim() && !titulo?.trim()) {
-      return reply.status(400).send({ message: 'Escreva algo no registro' });
+    const { tipo, titulo, descricao, fixado, anexos } = req.body ?? {};
+    const comAnexo = Array.isArray(anexos) && anexos.length > 0;
+    // Print colado sem texto é um registro válido ("olha o que apareceu no painel") — por isso o
+    // anexo também conta como conteúdo.
+    if (!descricao?.trim() && !titulo?.trim() && !comAnexo) {
+      return reply.status(400).send({ message: 'Escreva algo ou anexe um print' });
     }
     const criado = await queryOne(
-      `INSERT INTO gc_historico (gc_cliente_id, tipo, titulo, descricao, autor_id, fixado)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [req.params.id, tipo ?? 'nota', titulo ?? '', descricao ?? '', sub, fixado ?? false]
+      `INSERT INTO gc_historico (gc_cliente_id, tipo, titulo, descricao, autor_id, fixado, anexos)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        req.params.id, tipo ?? 'nota', titulo ?? '', descricao ?? '', sub, fixado ?? false,
+        JSON.stringify(anexos ?? []),
+      ]
     );
     return reply.status(201).send(criado);
   });
@@ -498,7 +568,13 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     '/api/gc/historico/:id',
     autenticado,
     async (req, reply) => {
-      const { sets, params } = montarUpdate(['tipo', 'titulo', 'descricao', 'fixado'], req.body ?? {});
+      const corpo = { ...(req.body ?? {}) };
+      // JSONB precisa chegar como texto JSON; mandar o array cru viraria "{...}" do Postgres.
+      if (corpo.anexos !== undefined) corpo.anexos = JSON.stringify(corpo.anexos);
+      const { sets, params } = montarUpdate(
+        ['tipo', 'titulo', 'descricao', 'fixado', 'anexos'],
+        corpo
+      );
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       params.push(req.params.id);
       const atualizado = await queryOne(
@@ -583,35 +659,22 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     if (!/^\d{4}-\d{2}$/.test(periodo)) {
       return reply.status(400).send({ message: 'periodo deve ser YYYY-MM' });
     }
-    const inicio = `${periodo}-01`;
+    // Mesma consulta da lista: a tela de Tráfego mostra o semáforo do mesmo jeito, e dois
+    // caminhos diferentes pros mesmos números é como eles começam a discordar.
+    const [mes, anterior] = mesesDeReferencia(periodo);
     return query(
-      `SELECT c.id, c.nome_empresa, c.status, c.segmento, p.name AS responsavel_nome,
-         COALESCE((
-           SELECT json_object_agg(m.chave, m.valor)
-           FROM gc_metricas m
-           WHERE m.gc_cliente_id = c.id
-             AND m.periodo_inicio = $1::date
-             AND m.periodo_fim = (date_trunc('month', $1::date) + INTERVAL '1 month - 1 day')::date
-         ), '{}'::json) AS metricas,
-         COALESCE((
-           SELECT json_agg(json_build_object('tipo', s.tipo, 'status', s.status,
-                                             'investimento_previsto_mensal', s.investimento_previsto_mensal)
-                           ORDER BY s.created_at)
-           FROM gc_servicos s WHERE s.gc_cliente_id = c.id AND s.status = 'ativo'
-         ), '[]'::json) AS servicos
-       FROM gc_clientes c
-       LEFT JOIN profiles p ON p.id = c.responsavel_id
-       WHERE c.status <> 'encerrado'
-       ORDER BY c.nome_empresa`,
-      [inicio]
+      `${SQL_CLIENTES} WHERE c.status <> 'encerrado' ORDER BY c.nome_empresa`,
+      [mes, anterior]
     );
   });
 
   // ------------------------------------------------------------------ metas
   app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/metas', autenticado, async (req) => {
-    return query('SELECT * FROM gc_metas WHERE gc_cliente_id = $1 ORDER BY created_at DESC', [
-      req.params.id,
-    ]);
+    return query(
+      `SELECT * FROM gc_metas WHERE gc_cliente_id = $1
+       ORDER BY CASE horizonte WHEN 'mes' THEN 0 WHEN '6_meses' THEN 1 ELSE 2 END, created_at`,
+      [req.params.id]
+    );
   });
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>(
@@ -621,11 +684,12 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       const b = req.body ?? {};
       if (!b.chave_metrica) return reply.status(400).send({ message: 'chave_metrica é obrigatória' });
       const criada = await queryOne(
-        `INSERT INTO gc_metas (gc_cliente_id, chave_metrica, valor_base, data_base, valor_meta, prazo)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        `INSERT INTO gc_metas
+           (gc_cliente_id, chave_metrica, valor_base, data_base, valor_meta, prazo, horizonte)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
         [
           req.params.id, b.chave_metrica, Number(b.valor_base ?? 0) || 0, b.data_base || null,
-          Number(b.valor_meta ?? 0) || 0, b.prazo || null,
+          Number(b.valor_meta ?? 0) || 0, b.prazo || null, b.horizonte || 'mes',
         ]
       );
       return reply.status(201).send(criada);
@@ -637,7 +701,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     autenticado,
     async (req, reply) => {
       const { sets, params } = montarUpdate(
-        ['chave_metrica', 'valor_base', 'data_base', 'valor_meta', 'prazo', 'status'],
+        ['chave_metrica', 'valor_base', 'data_base', 'valor_meta', 'prazo', 'status', 'horizonte'],
         req.body ?? {}
       );
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });

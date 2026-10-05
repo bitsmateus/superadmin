@@ -9,13 +9,13 @@ import { Modal } from '@/components/ui/Modal'
 import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
 import { AbaVisaoGeral } from '@/components/gestaoClientes/AbaVisaoGeral'
 import { AbaJornada } from '@/components/gestaoClientes/AbaJornada'
-import { AbaHistorico } from '@/components/gestaoClientes/AbaHistorico'
+import { AbaNotas } from '@/components/gestaoClientes/AbaNotas'
 import { AbaMetricas } from '@/components/gestaoClientes/AbaMetricas'
 import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 
-type Aba = 'visao' | 'jornada' | 'metricas' | 'estrategias' | 'relatorios' | 'historico'
+type Aba = 'visao' | 'jornada' | 'metricas' | 'estrategias' | 'relatorios' | 'notas'
 
 /**
  * Detalhe do cliente de tráfego — Visão geral, Jornada e Histórico.
@@ -144,10 +144,10 @@ export function ClienteNxDetalhePage() {
                 },
                 { value: 'relatorios', label: 'Relatórios' },
                 {
-                  value: 'historico',
+                  value: 'notas',
                   label: (
                     <span className="flex items-center gap-1.5">
-                      Histórico
+                      Notas e histórico
                       <span className="text-xs tabular-nums text-foreground/45">
                         {detalhe.historico.length}
                       </span>
@@ -157,15 +157,21 @@ export function ClienteNxDetalhePage() {
               ]}
             />
 
-            {aba === 'visao' && <AbaVisaoGeral detalhe={detalhe} onMudou={carregar} />}
+            {aba === 'visao' && (
+              <AbaVisaoGeral
+                detalhe={detalhe}
+                onMudou={carregar}
+                onVerNotas={() => setAba('notas')}
+              />
+            )}
             {aba === 'jornada' && <AbaJornada jornada={detalhe.jornada} onMudou={carregar} />}
             {aba === 'metricas' && <AbaMetricas clienteId={id} />}
             {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
             {aba === 'estrategias' && (
               <AbaEstrategias estrategias={detalhe.estrategias} clienteId={id} onMudou={carregar} />
             )}
-            {aba === 'historico' && (
-              <AbaHistorico historico={detalhe.historico} clienteId={id} onMudou={carregar} />
+            {aba === 'notas' && (
+              <AbaNotas historico={detalhe.historico} clienteId={id} onMudou={carregar} />
             )}
           </>
         )}

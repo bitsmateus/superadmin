@@ -7,6 +7,7 @@ import { broadcast } from './sse.js';
 import { authRoutes } from './routes/auth.js';
 import { clientRoutes } from './routes/clients.js';
 import { clientCancellationRoutes } from './routes/clientCancellations.js';
+import { gestaoClientesRoutes } from './routes/gestaoClientes.js';
 import { asaasRoutes } from './routes/asaas.js';
 import { relatorioComercialRoutes } from './routes/relatorioComercial.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -101,6 +102,7 @@ async function main() {
   await app.register(authRoutes);
   await app.register(clientRoutes);
   await app.register(clientCancellationRoutes);
+  await app.register(gestaoClientesRoutes);
   await app.register(asaasRoutes);
   await app.register(relatorioComercialRoutes);
   await app.register(settingsRoutes);

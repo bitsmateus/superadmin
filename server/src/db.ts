@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { DEFAULT_CONTRACT_HTML } from './data/contractTemplateSeed.js';
+import { criarEstruturaGestaoClientes } from './db/gestaoClientes.js';
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -88,6 +89,8 @@ async function freeUpSlug(cleanId: string, staleWithSuffixId: string) {
 
 /** Idempotent schema migrations — safe to run on every startup. */
 export async function runMigrations() {
+  // Módulo "Clientes NX Digital": cadastro próprio, ilhado do resto (ver db/gestaoClientes.ts).
+  await criarEstruturaGestaoClientes(pool);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tenant_api_token TEXT`);
   // Espaço de Suporte: tarefas/pendências/reuniões/anotações.

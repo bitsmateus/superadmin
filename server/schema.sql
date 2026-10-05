@@ -1345,6 +1345,18 @@ CREATE TRIGGER notify_mercadonunes_layouts AFTER INSERT OR UPDATE OR DELETE ON m
   FOR EACH ROW EXECUTE FUNCTION notify_db_change();
 
 -- =====================================================================
+-- MÓDULO "CLIENTES NX DIGITAL" (tabelas gc_*)
+-- =====================================================================
+-- As 15 tabelas do módulo de gestão de clientes de tráfego NÃO estão
+-- escritas aqui de propósito: elas são criadas por
+-- server/src/db/gestaoClientes.ts, que roda a cada boot dentro de
+-- runMigrations() e é todo CREATE ... IF NOT EXISTS. Duplicar o DDL
+-- nos dois lugares só criaria divergência silenciosa entre o banco novo
+-- e o banco antigo. Instalação nova: rode este schema e suba o servidor
+-- uma vez — as tabelas gc_* e os modelos padrão (jornada e estratégias)
+-- nascem no primeiro boot.
+
+-- =====================================================================
 -- APÓS RODAR ESTE SCHEMA:
 -- Crie o primeiro usuário admin com:
 --   INSERT INTO profiles (email, name, role, password_hash)

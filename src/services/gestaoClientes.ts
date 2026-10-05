@@ -134,7 +134,10 @@ export interface GcClienteLista {
   ultimo_contato: string | null
   /** Primeiro dia do período do último relatório publicado. */
   ultimo_relatorio: string | null
-  servicos: Pick<GcServico, 'id' | 'tipo' | 'status' | 'investimento_previsto_mensal'>[]
+  servicos: Pick<
+    GcServico,
+    'id' | 'tipo' | 'status' | 'investimento_previsto_mensal' | 'data_renovacao'
+  >[]
   metas: GcMeta[]
   /** Números do mês de referência e do anterior, pivotados por chave. */
   metricas_mes: Record<string, string>

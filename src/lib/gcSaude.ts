@@ -51,6 +51,14 @@ function diasDesde(iso: string | null | undefined): number | null {
   return Math.floor((Date.now() - quando) / 86400000)
 }
 
+/** Dias daqui até uma data 'YYYY-MM-DD' (negativo = já passou). */
+function diasAte(data: string | null | undefined): number | null {
+  if (!data) return null
+  const quando = new Date(`${data}T12:00:00`).getTime()
+  if (Number.isNaN(quando)) return null
+  return Math.round((quando - Date.now()) / 86400000)
+}
+
 /** Quanto do prazo da meta já passou, de 0 a 1 — é com isso que se sabe se ela está no ritmo. */
 function tempoDecorrido(meta: GcMeta): number | null {
   if (!meta.prazo || !meta.data_base) return null
@@ -119,6 +127,28 @@ export function avaliarSaude(c: GcClienteLista): Saude {
               : 'Nenhum serviço cadastrado',
         },
   )
+
+  // Renovação é hora de churn: se ninguém conversou antes da data, o cliente decide sozinho.
+  const renovacoes = (c.servicos ?? [])
+    .filter((s) => s.status === 'ativo' && s.data_renovacao)
+    .map((s) => diasAte(String(s.data_renovacao).slice(0, 10)))
+    .filter((d): d is number => d !== null)
+    .sort((a, b) => a - b)
+  if (renovacoes.length > 0) {
+    const proxima = renovacoes[0]
+    sinais.push({
+      chave: 'renovacao',
+      titulo: 'Renovação do contrato',
+      estado: proxima < 0 ? 'risco' : proxima <= 30 ? 'atencao' : 'otimo',
+      detalhe:
+        proxima < 0
+          ? `Venceu há ${Math.abs(proxima)} dia(s) e não foi renovado`
+          : proxima === 0
+            ? 'Vence hoje'
+            : `Em ${proxima} dia(s)`,
+      pesaNoChurn: true,
+    })
+  }
 
   // ---------------------------------------------------------------- implantação e pendências
   const etapas = Number(c.etapas_total ?? 0)

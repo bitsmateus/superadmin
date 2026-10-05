@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
-import { DatePickerField } from '@/components/comercial/DatePickerField'
+import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { comDerivadas, formatarMetrica, numeroDigitado } from '@/lib/gcMetricas'
 import { avaliarSaude } from '@/lib/gcSaude'
 import { PainelSaude } from '@/components/gestaoClientes/Semaforo'
@@ -102,14 +102,13 @@ function FormServico({
             placeholder="O que está contratado nesse serviço"
           />
         </div>
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-foreground/70">Início</label>
-          <DatePickerField value={inicio} onChange={setInicio} />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-foreground/70">Renovação</label>
-          <DatePickerField value={renovacao} onChange={setRenovacao} />
-        </div>
+        <CampoData label="Início" value={inicio} onChange={setInicio} />
+        <CampoData
+          label="Renovação"
+          value={renovacao}
+          onChange={setRenovacao}
+          hint="avisa quando o contrato chega perto do fim"
+        />
       </div>
       <div className="mt-3 flex justify-end gap-2">
         <Button variant="ghost" size="sm" type="button" onClick={onCancelar}>

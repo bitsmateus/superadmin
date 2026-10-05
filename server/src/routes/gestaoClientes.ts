@@ -188,7 +188,8 @@ const SQL_CLIENTES = `
       WHERE r.gc_cliente_id = c.id AND r.status = 'publicado') AS ultimo_relatorio,
     COALESCE((SELECT json_agg(json_build_object(
         'id', s.id, 'tipo', s.tipo, 'status', s.status,
-        'investimento_previsto_mensal', s.investimento_previsto_mensal
+        'investimento_previsto_mensal', s.investimento_previsto_mensal,
+        'data_renovacao', s.data_renovacao
       ) ORDER BY s.created_at)
       FROM gc_servicos s WHERE s.gc_cliente_id = c.id), '[]'::json) AS servicos,
     COALESCE((SELECT json_agg(json_build_object(

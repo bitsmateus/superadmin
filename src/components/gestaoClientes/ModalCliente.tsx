@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { DatePickerField } from '@/components/comercial/DatePickerField'
+import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import {
   gestaoClientes, type GcClienteEntrada, type GcClienteLista, type GcStatusCliente,
@@ -167,13 +167,11 @@ export function ModalCliente({
           value={form.status ?? 'ativo'}
           onChange={(e) => mudar('status')(e.target.value)}
         />
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-foreground/70">Início</label>
-          <DatePickerField
-            value={form.data_inicio ?? ''}
-            onChange={(v) => setForm((f) => ({ ...f, data_inicio: v }))}
-          />
-        </div>
+        <CampoData
+          label="Início"
+          value={form.data_inicio ?? null}
+          onChange={(v) => setForm((f) => ({ ...f, data_inicio: v }))}
+        />
         <div className="sm:col-span-2">
           <Textarea
             label="Observações"

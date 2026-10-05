@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { DatePickerField } from '@/components/comercial/DatePickerField'
+import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import {
   HORIZONTES, gestaoClientes,
@@ -432,13 +432,11 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
             placeholder={metricaUnidade(novaMeta.chave) === 'reais' ? '0,00' : '0'}
             inputMode="decimal"
           />
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-foreground/70">Prazo</label>
-            <DatePickerField
-              value={novaMeta.prazo ?? prazoSugerido(novaMeta.horizonte)}
-              onChange={(v) => setNovaMeta((n) => ({ ...n, prazo: v }))}
-            />
-          </div>
+          <CampoData
+            label="Prazo"
+            value={novaMeta.prazo ?? prazoSugerido(novaMeta.horizonte)}
+            onChange={(v) => setNovaMeta((n) => ({ ...n, prazo: v }))}
+          />
           <Button type="submit" loading={criandoMeta} leftIcon={<Plus className="h-4 w-4" />}>
             Criar meta
           </Button>

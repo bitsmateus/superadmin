@@ -231,7 +231,7 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
       )}
 
       <Modal open={briefingModal} onClose={() => setBriefingModal(false)} title={`Briefing — ${client.company || client.name}`} size="2xl">
-        <BriefingTab client={client} />
+        <BriefingTab client={client} forceOpenSections />
       </Modal>
 
       <CreateTenantModal client={client} open={tenantModal} onClose={() => setTenantModal(false)} />

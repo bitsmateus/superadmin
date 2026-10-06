@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
+import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
 import {
   HORIZONTES, gestaoClientes,
   type GcHorizonte, type GcMeta, type GcMetrica,
@@ -13,7 +14,7 @@ import {
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, TODAS_METRICAS, comDerivadas, formatarMetrica,
   formatarPorChave, limitesDoMes, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade,
-  numeroDigitado, somarMeses, variacaoDaMetrica,
+  numeroDigitado, somarMeses, validarMetricas, variacaoDaMetrica,
 } from '@/lib/gcMetricas'
 import { progressoDaMeta } from '@/lib/gcSaude'
 import { cn } from '@/lib/utils'
@@ -213,16 +214,27 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
   )
   const valoresAnteriores = doMes(metricas, limitesDoMes(somarMeses(periodo, -1)).inicio)
 
-  const salvar = async () => {
+  const [avisos, setAvisos] = React.useState<string[] | null>(null)
+
+  const salvar = async (ignorarAvisos = false) => {
+    const valores = Object.fromEntries(
+      METRICAS_LANCADAS.map((m) => [m.chave, numeroDigitado(rascunho[m.chave])]),
+    )
+    if (!ignorarAvisos) {
+      const achados = validarMetricas(valores)
+      if (achados.length > 0) {
+        setAvisos(achados)
+        return
+      }
+    }
+    setAvisos(null)
     setSalvando(true)
     try {
       await gestaoClientes.salvarMetricas({
         gc_cliente_id: clienteId,
         periodo_inicio: inicio,
         periodo_fim: fim,
-        valores: Object.fromEntries(
-          METRICAS_LANCADAS.map((m) => [m.chave, numeroDigitado(rascunho[m.chave])]),
-        ),
+        valores,
       })
       toast.success(`Métricas de ${mesPorExtenso(periodo)} salvas`)
       await carregar()
@@ -308,7 +320,7 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <Button onClick={salvar} loading={salvando}>
+          <Button onClick={() => void salvar()} loading={salvando}>
             Salvar o mês
           </Button>
         </div>
@@ -454,6 +466,13 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
           Ponto de partida vazio usa o valor lançado hoje no mês — é de lá que o progresso conta.
         </p>
       </section>
+
+      <ModalAvisos
+        avisos={avisos}
+        salvando={salvando}
+        onCorrigir={() => setAvisos(null)}
+        onSalvarMesmoAssim={() => void salvar(true)}
+      />
 
       {mesesLancados.length > 0 && (
         <section className="overflow-hidden rounded-xl border border-line">

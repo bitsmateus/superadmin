@@ -976,6 +976,31 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       if (!snapshot || !Array.isArray(snapshot.numeros)) {
         return reply.status(400).send({ message: 'snapshot inválido' });
       }
+      // Relatório pro cliente sem número ou sem a leitura do gestor é relatório vazio. A tela já
+      // desabilita o botão, mas a regra precisa valer AQUI: quem chama a API direto, ou uma tela
+      // desatualizada, publicaria uma página em branco pro cliente.
+      const alvo = await queryOne<{
+        gc_cliente_id: string; periodo_inicio: string; periodo_fim: string; comentario_gestor: string;
+      }>(
+        'SELECT gc_cliente_id, periodo_inicio, periodo_fim, comentario_gestor FROM gc_relatorios WHERE id = $1',
+        [req.params.id]
+      );
+      if (!alvo) return reply.status(404).send({ message: 'Relatório não encontrado' });
+      const lancadas = await queryOne<{ total: string }>(
+        `SELECT count(*) AS total FROM gc_metricas
+         WHERE gc_cliente_id = $1 AND periodo_inicio >= $2 AND periodo_fim <= $3`,
+        [alvo.gc_cliente_id, alvo.periodo_inicio, alvo.periodo_fim]
+      );
+      const faltando: string[] = [];
+      if (Number(lancadas?.total ?? 0) === 0) faltando.push('métricas lançadas no período');
+      if (!alvo.comentario_gestor?.trim()) faltando.push('comentário do gestor');
+      if (faltando.length > 0) {
+        return reply.status(400).send({
+          message: `Pra publicar falta: ${faltando.join(' e ')}.`,
+          faltando,
+        });
+      }
+
       const publicado = await queryOne<{ gc_cliente_id: string; periodo_inicio: string }>(
         `UPDATE gc_relatorios
          SET status = 'publicado', publicado_em = NOW(), publicado_por = $2,

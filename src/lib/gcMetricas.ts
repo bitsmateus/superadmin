@@ -169,6 +169,45 @@ export function variacaoDaMetrica(
   return { pct, boa: pct === 0 ? true : pct > 0 === subirEhBom }
 }
 
+/**
+ * Confere se os números lançados fazem sentido entre si. Devolve a lista de avisos (vazia = tudo
+ * coerente). É AVISO, não bloqueio: existem casos legítimos (lead que veio de outra origem, venda
+ * de lead de meses atrás), e travar o salvamento faria a pessoa digitar número falso pra passar.
+ *
+ * Só compara pares em que os DOIS lados foram preenchidos — campo vazio é "não sei", e não dá pra
+ * dizer que "leads > cliques" se ninguém lançou os cliques.
+ */
+export function validarMetricas(valores: Record<string, number | null | undefined>): string[] {
+  const avisos: string[] = []
+  const v = (chave: string): number | null => {
+    const x = valores[chave]
+    return x === null || x === undefined || Number.isNaN(x) ? null : x
+  }
+  const { impressoes, cliques, leads, vendas } = {
+    impressoes: v('impressoes'), cliques: v('cliques'), leads: v('leads'), vendas: v('vendas'),
+  }
+
+  if (impressoes !== null && cliques !== null && cliques > impressoes) {
+    // CTR acima de 100% é a mesma contradição vista de outro ângulo: um aviso só, com os dois nomes.
+    const ctr = impressoes > 0 ? (cliques / impressoes) * 100 : null
+    avisos.push(
+      `Cliques (${cliques.toLocaleString('pt-BR')}) maior que impressões (${impressoes.toLocaleString('pt-BR')})` +
+        (ctr !== null ? ` — o CTR ficaria em ${ctr.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%` : ''),
+    )
+  }
+  if (cliques !== null && leads !== null && leads > cliques) {
+    avisos.push(
+      `Leads (${leads.toLocaleString('pt-BR')}) maior que cliques (${cliques.toLocaleString('pt-BR')})`,
+    )
+  }
+  if (leads !== null && vendas !== null && vendas > leads) {
+    avisos.push(
+      `Vendas (${vendas.toLocaleString('pt-BR')}) maior que leads (${leads.toLocaleString('pt-BR')})`,
+    )
+  }
+  return avisos
+}
+
 /** Primeiro e último dia do mês 'YYYY-MM', do jeito que `gc_metricas` guarda o período. */
 export function limitesDoMes(periodo: string): { inicio: string; fim: string } {
   const [ano, mes] = periodo.split('-').map(Number)

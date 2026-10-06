@@ -152,6 +152,11 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
       toast.success('Rascunho salvo')
     })
 
+  // O que falta pra poder publicar — a tela mostra e o servidor confere de novo.
+  const faltaParaPublicar: string[] = []
+  if (Object.keys(numeros).length === 0) faltaParaPublicar.push('lançar as métricas do mês')
+  if (!comentario.trim()) faltaParaPublicar.push('escrever o comentário do gestor')
+
   const publicar = () =>
     agir('publicar', async () => {
       // Publicar sem rascunho salvo é o caso comum (a pessoa escreve e publica de uma vez), então
@@ -245,6 +250,12 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
                 <Button
                   size="sm"
                   loading={ocupado === 'publicar'}
+                  disabled={faltaParaPublicar.length > 0}
+                  title={
+                    faltaParaPublicar.length > 0
+                      ? `Pra publicar falta ${faltaParaPublicar.join(' e ')}`
+                      : undefined
+                  }
                   leftIcon={<Send className="h-4 w-4" />}
                   onClick={publicar}
                 >
@@ -254,6 +265,13 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
             )}
           </div>
         </div>
+
+        {doMes?.status !== 'publicado' && faltaParaPublicar.length > 0 && (
+          <p className="mb-3 rounded-lg border border-warning/25 bg-warning/[0.05] px-3 py-2 text-xs text-foreground/75">
+            Pra publicar, falta: <strong>{faltaParaPublicar.join(' e ')}</strong>. Relatório sem número
+            ou sem a leitura do gestor chegaria vazio pro cliente.
+          </p>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[...METRICAS_LANCADAS, ...METRICAS_DERIVADAS].map((m) => (

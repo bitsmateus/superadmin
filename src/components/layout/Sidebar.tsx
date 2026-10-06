@@ -119,25 +119,23 @@ const ROLE_LABELS = {
 } as const
 
 /**
- * Abre/fecha um grupo do menu, lembrando a escolha entre visitas (localStorage, por navegador).
- *
- * Nasce fechado de propósito: menu que abre tudo sozinho empurra o resto pra fora da tela e obriga
- * a fechar à mão toda vez. Quem usa um grupo todo dia abre uma vez e ele continua aberto.
+ * Abre/fecha um grupo do menu. A escolha vale enquanto a ABA do navegador está aberta (sessionStorage):
+ * ao fechar a aba e voltar, todos os grupos aparecem FECHADOS, pra escolher a aba certa com um clique.
+ * Recarregar a página na mesma aba mantém como estava.
  */
 function useGrupoAberto(chave: string): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
   const nomeNoArmazenamento = `menu:${chave}:aberto`
   const [aberto, setAberto] = React.useState(() => {
     try {
-      return window.localStorage.getItem(nomeNoArmazenamento) === '1'
+      return window.sessionStorage.getItem(nomeNoArmazenamento) === '1'
     } catch {
-      // Navegador com armazenamento bloqueado (aba anônima, política do sistema): fechado é o
-      // padrão, e nada quebra por causa disso.
+      // Armazenamento bloqueado: fechado é o padrão, e nada quebra por causa disso.
       return false
     }
   })
   React.useEffect(() => {
     try {
-      window.localStorage.setItem(nomeNoArmazenamento, aberto ? '1' : '0')
+      window.sessionStorage.setItem(nomeNoArmazenamento, aberto ? '1' : '0')
     } catch { /* idem */ }
   }, [nomeNoArmazenamento, aberto])
   return [aberto, setAberto]
@@ -344,7 +342,6 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const [newPageOpen, setNewPageOpen] = React.useState(false)
   const [pagesArchiveOpen, setPagesArchiveOpen] = React.useState(false)
   const [newDemandaPageOpen, setNewDemandaPageOpen] = React.useState(false)
-  const [demandasArchiveOpen, setDemandasArchiveOpen] = React.useState(false)
 
   const suporte = withDuplicates(
     [
@@ -804,16 +801,6 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             {demandasItems.length === 0 && (
               <p className="px-3 py-2 pl-5 text-xs text-foreground/35">Nenhuma aba ainda — use o + pra criar.</p>
             )}
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setDemandasArchiveOpen(true)}
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm text-foreground/45 transition-colors hover:bg-elevate/[0.03] hover:text-foreground/80"
-              >
-                <Archive className="h-4 w-4 shrink-0 text-foreground/40" />
-                <span>Abas arquivadas</span>
-              </button>
-            )}
           </>
         )}
         </>
@@ -1145,7 +1132,6 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         onCreated={(id) => { navigate(`/demandas/${id}`); closeOnMobile() }}
         section="demandas"
       />
-      <ArchivedComercialPagesModal open={demandasArchiveOpen} onClose={() => setDemandasArchiveOpen(false)} section="demandas" />
       <ArchivedSupportPagesModal open={supportArchiveOpen} onClose={() => setSupportArchiveOpen(false)} />
     </aside>
   )

@@ -5,6 +5,10 @@ import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
 import { validarMetricas } from '../lib/gcValidacao.js';
 import { garantirRecorrentes } from '../lib/gcRecorrentes.js';
+import {
+  CHAVES_PLANEJAMENTO, HORIZONTES_PLANEJAMENTO, baseDoPontoA, diffDeCampos, somarMesesNaData,
+  type Mudanca, type PontoA,
+} from '../lib/gcPlanejamento.js';
 
 /**
  * Módulo "Clientes NX Digital" — gestão dos clientes de tráfego.
@@ -217,6 +221,15 @@ const SQL_CLIENTES = `
       FROM gc_metas g WHERE g.gc_cliente_id = c.id), '[]'::json) AS metas,
     (SELECT r.status FROM gc_relatorios r
       WHERE r.gc_cliente_id = c.id AND r.periodo_inicio = $1::date LIMIT 1) AS relatorio_mes,
+    to_char($1::date, 'YYYY-MM') AS periodo_referencia,
+    -- Ponto A e curva do planejamento: o semáforo ("Metas combinadas") compara o realizado do mês
+    -- com a projeção, e pra isso precisa disso na lista, sem um pedido por cliente.
+    (SELECT json_build_object(
+        'curva', pl.curva,
+        'data_diagnostico', to_char(pl.data_diagnostico, 'YYYY-MM-DD'),
+        'leads', pl.leads_mes, 'investimento', pl.investimento_mes, 'ticket', pl.ticket_medio,
+        'conversao', pl.taxa_conversao, 'receita', pl.faturamento_mensal)
+      FROM gc_planejamento pl WHERE pl.gc_cliente_id = c.id) AS planejamento,
     ${pivotMetricas('$1')} AS metricas_mes,
     ${pivotMetricas('$2')} AS metricas_mes_anterior,
     (SELECT json_build_object(
@@ -1325,6 +1338,227 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     }
   );
 
+  // ------------------------------------------------------------------ planejamento do cliente
+  type Num = number | null;
+  const numero = (v: unknown): Num => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const texto = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+  /** O planejamento do cliente no formato que a tela edita: ponto A, textos e metas por horizonte. */
+  async function lerPlanejamento(clienteId: string) {
+    const p = await queryOne<Record<string, unknown>>(
+      `SELECT situacao_atual, leads_mes, investimento_mes, ticket_medio, taxa_conversao, faturamento_mensal,
+              to_char(data_diagnostico, 'YYYY-MM-DD') AS data_diagnostico, curva,
+              portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo
+       FROM gc_planejamento WHERE gc_cliente_id = $1`,
+      [clienteId]
+    );
+    const cenarios = await query<{ horizonte: string; onde_quer_chegar: string; estrategia: string; premissas: string }>(
+      'SELECT horizonte, onde_quer_chegar, estrategia, premissas FROM gc_planejamento_cenarios WHERE gc_cliente_id = $1',
+      [clienteId]
+    );
+    // Se existirem duas metas ativas da mesma métrica e horizonte (dá pra criar na aba antiga), vale
+    // a mais recente — é a que o editor atualiza.
+    const metas = await query<{ horizonte: string; chave_metrica: string; valor_meta: string }>(
+      `SELECT DISTINCT ON (horizonte, chave_metrica) horizonte, chave_metrica, valor_meta
+       FROM gc_metas
+       WHERE gc_cliente_id = $1 AND status = 'ativa' AND horizonte = ANY($2) AND chave_metrica = ANY($3)
+       ORDER BY horizonte, chave_metrica, created_at DESC`,
+      [clienteId, [...HORIZONTES_PLANEJAMENTO], [...CHAVES_PLANEJAMENTO]]
+    );
+    const porHorizonte: Record<string, {
+      onde_quer_chegar: string; estrategia: string; premissas: string; metas: Record<string, number>;
+    }> = {};
+    for (const h of HORIZONTES_PLANEJAMENTO) {
+      const t = cenarios.find((c) => c.horizonte === h);
+      porHorizonte[h] = {
+        onde_quer_chegar: t?.onde_quer_chegar ?? '',
+        estrategia: t?.estrategia ?? '',
+        premissas: t?.premissas ?? '',
+        metas: Object.fromEntries(
+          metas.filter((m) => m.horizonte === h).map((m) => [m.chave_metrica, Number(m.valor_meta)])
+        ),
+      };
+    }
+    return {
+      existe: !!p,
+      atual: {
+        situacao_atual: texto(p?.situacao_atual),
+        leads_mes: numero(p?.leads_mes),
+        investimento_mes: numero(p?.investimento_mes),
+        ticket_medio: numero(p?.ticket_medio),
+        taxa_conversao: numero(p?.taxa_conversao),
+        faturamento_mensal: numero(p?.faturamento_mensal),
+        data_diagnostico: (p?.data_diagnostico as string | null) ?? null,
+      },
+      curva: ((p?.curva as string) ?? 'linear') as 'linear' | 'composta',
+      portal: {
+        ativo: Boolean(p?.portal_ativo),
+        mostrar_situacao: Boolean(p?.portal_mostrar_situacao),
+        mostrar_objetivo: Boolean(p?.portal_mostrar_objetivo),
+      },
+      cenarios: porHorizonte,
+    };
+  }
+
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/planejamento', autenticado, async (req) => {
+    return lerPlanejamento(req.params.id);
+  });
+
+  app.get<{ Params: { id: string } }>(
+    '/api/gc/clientes/:id/planejamento/historico',
+    autenticado,
+    async (req) => {
+      return query(
+        `SELECT h.id, h.alterado_em, h.mudancas, p.name AS autor_nome
+         FROM gc_planejamento_historico h LEFT JOIN profiles p ON p.id = h.alterado_por
+         WHERE h.gc_cliente_id = $1 ORDER BY h.alterado_em DESC LIMIT 100`,
+        [req.params.id]
+      );
+    }
+  );
+
+  // PUT /api/gc/clientes/:id/planejamento — grava o planejamento INTEIRO de uma vez: ponto A, curva,
+  // opções do portal e, por horizonte, os três textos e os seis números. Tudo numa transação, com o
+  // diff contra o que estava gravado indo pro histórico.
+  //
+  // Os números das metas vão pra gc_metas (horizontes 6_meses e 12_meses), não pra tabela própria:
+  //  - meta que já existe só tem o VALOR atualizado — base, data e prazo ficam como estavam, pra
+  //    não mexer no progresso do que já foi combinado;
+  //  - meta nova nasce com a base calculada do ponto A e o prazo a 6 ou 12 meses do diagnóstico;
+  //  - campo deixado em branco no editor APAGA aquela meta (foi a pessoa que limpou).
+  type CorpoPlanejamento = {
+    atual?: Record<string, unknown>;
+    curva?: string;
+    portal?: { ativo?: boolean; mostrar_situacao?: boolean; mostrar_objetivo?: boolean };
+    cenarios?: Record<string, { onde_quer_chegar?: string; estrategia?: string; premissas?: string; metas?: Record<string, unknown> }>;
+  };
+  app.put<{ Params: { id: string }; Body: CorpoPlanejamento }>(
+    '/api/gc/clientes/:id/planejamento',
+    autenticado,
+    async (req, reply) => {
+      const { sub } = req.user as { sub: string };
+      const corpo = req.body ?? {};
+      const a = corpo.atual ?? {};
+      const curva = corpo.curva ?? 'linear';
+      if (!['linear', 'composta'].includes(curva)) return reply.status(400).send({ message: 'curva inválida' });
+
+      const taxa = numero(a.taxa_conversao);
+      if (taxa !== null && (taxa < 0 || taxa > 100)) {
+        return reply.status(400).send({ message: 'A taxa de conversão fica entre 0 e 100' });
+      }
+      const pontoA: PontoA = {
+        leads_mes: numero(a.leads_mes), investimento_mes: numero(a.investimento_mes),
+        ticket_medio: numero(a.ticket_medio), taxa_conversao: taxa, faturamento_mensal: numero(a.faturamento_mensal),
+      };
+      for (const [k, v] of Object.entries(pontoA)) {
+        if (v !== null && v < 0) return reply.status(400).send({ message: `${k} não pode ser negativo` });
+      }
+      const dataDiag = typeof a.data_diagnostico === 'string' && a.data_diagnostico ? a.data_diagnostico.slice(0, 10) : null;
+
+      const antes = await lerPlanejamento(req.params.id);
+
+      await withTransaction(async (client) => {
+        await client.query(
+          `INSERT INTO gc_planejamento
+             (gc_cliente_id, situacao_atual, leads_mes, investimento_mes, ticket_medio, taxa_conversao,
+              faturamento_mensal, data_diagnostico, curva, portal_ativo, portal_mostrar_situacao,
+              portal_mostrar_objetivo, atualizado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           ON CONFLICT (gc_cliente_id) DO UPDATE SET
+             situacao_atual = EXCLUDED.situacao_atual, leads_mes = EXCLUDED.leads_mes,
+             investimento_mes = EXCLUDED.investimento_mes, ticket_medio = EXCLUDED.ticket_medio,
+             taxa_conversao = EXCLUDED.taxa_conversao, faturamento_mensal = EXCLUDED.faturamento_mensal,
+             data_diagnostico = EXCLUDED.data_diagnostico, curva = EXCLUDED.curva,
+             portal_ativo = EXCLUDED.portal_ativo,
+             portal_mostrar_situacao = EXCLUDED.portal_mostrar_situacao,
+             portal_mostrar_objetivo = EXCLUDED.portal_mostrar_objetivo,
+             atualizado_por = EXCLUDED.atualizado_por, updated_at = NOW()`,
+          [
+            req.params.id, texto(a.situacao_atual), pontoA.leads_mes, pontoA.investimento_mes,
+            pontoA.ticket_medio, pontoA.taxa_conversao, pontoA.faturamento_mensal, dataDiag, curva,
+            Boolean(corpo.portal?.ativo), Boolean(corpo.portal?.mostrar_situacao),
+            Boolean(corpo.portal?.mostrar_objetivo), sub,
+          ]
+        );
+
+        const base = baseDoPontoA(pontoA);
+        for (const h of HORIZONTES_PLANEJAMENTO) {
+          const c = corpo.cenarios?.[h];
+          if (!c) continue;
+          await client.query(
+            `INSERT INTO gc_planejamento_cenarios (gc_cliente_id, horizonte, onde_quer_chegar, estrategia, premissas)
+             VALUES ($1,$2,$3,$4,$5)
+             ON CONFLICT (gc_cliente_id, horizonte) DO UPDATE SET
+               onde_quer_chegar = EXCLUDED.onde_quer_chegar, estrategia = EXCLUDED.estrategia,
+               premissas = EXCLUDED.premissas, updated_at = NOW()`,
+            [req.params.id, h, texto(c.onde_quer_chegar), texto(c.estrategia), texto(c.premissas)]
+          );
+
+          const meses = h === '6_meses' ? 6 : 12;
+          for (const chave of CHAVES_PLANEJAMENTO) {
+            if (!(chave in (c.metas ?? {}))) continue;
+            const valor = numero((c.metas ?? {})[chave]);
+            const existente = await client.query(
+              `SELECT id FROM gc_metas WHERE gc_cliente_id = $1 AND horizonte = $2 AND chave_metrica = $3
+                 AND status = 'ativa' ORDER BY created_at DESC LIMIT 1`,
+              [req.params.id, h, chave]
+            );
+            if (valor === null) {
+              if (existente.rows[0]) await client.query('DELETE FROM gc_metas WHERE id = $1', [existente.rows[0].id]);
+              continue;
+            }
+            if (existente.rows[0]) {
+              await client.query(
+                `UPDATE gc_metas SET valor_meta = $2, prazo = COALESCE(prazo, $3::date), updated_at = NOW() WHERE id = $1`,
+                [existente.rows[0].id, valor, dataDiag ? somarMesesNaData(dataDiag, meses) : null]
+              );
+            } else {
+              await client.query(
+                `INSERT INTO gc_metas (gc_cliente_id, chave_metrica, horizonte, valor_base, data_base, valor_meta, prazo)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                [
+                  req.params.id, chave, h, base[chave] ?? 0, dataDiag, valor,
+                  dataDiag ? somarMesesNaData(dataDiag, meses) : null,
+                ]
+              );
+            }
+          }
+        }
+      });
+
+      const depois = await lerPlanejamento(req.params.id);
+
+      // O que mudou, por escopo — vira UMA linha de histórico.
+      const mudancas: Mudanca[] = [
+        ...diffDeCampos('atual', { ...antes.atual, curva: antes.curva, portal_ativo: antes.portal.ativo,
+            portal_mostrar_situacao: antes.portal.mostrar_situacao, portal_mostrar_objetivo: antes.portal.mostrar_objetivo },
+          { ...depois.atual, curva: depois.curva, portal_ativo: depois.portal.ativo,
+            portal_mostrar_situacao: depois.portal.mostrar_situacao, portal_mostrar_objetivo: depois.portal.mostrar_objetivo }),
+      ];
+      for (const h of HORIZONTES_PLANEJAMENTO) {
+        const a0 = antes.cenarios[h];
+        const d0 = depois.cenarios[h];
+        const planos = (x: typeof a0) => ({
+          onde_quer_chegar: x.onde_quer_chegar, estrategia: x.estrategia, premissas: x.premissas,
+          ...Object.fromEntries(CHAVES_PLANEJAMENTO.map((k) => [k, x.metas[k] ?? null])),
+        });
+        mudancas.push(...diffDeCampos(h, planos(a0), planos(d0)));
+      }
+      if (mudancas.length > 0) {
+        await query(
+          'INSERT INTO gc_planejamento_historico (gc_cliente_id, alterado_por, mudancas) VALUES ($1,$2,$3)',
+          [req.params.id, sub, JSON.stringify(mudancas)]
+        );
+        await registrarEvento(req.params.id, 'Planejamento atualizado', `${mudancas.length} alteração(ões)`, sub);
+      }
+      return depois;
+    }
+  );
+
   // ------------------------------------------------------------------ relatórios
   // GET /api/gc/clientes/:id/relatorios — lista sem o snapshot (que é grande e só interessa quando
   // o relatório é aberto).
@@ -1576,6 +1810,87 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
  * continua sendo o que ele vê, mesmo que a métrica tenha sido corrigida depois. Nada de jornada
  * interna, custo, margem ou histórico do time passa por aqui.
  */
+/**
+ * O bloco "Nossa jornada" do portal: ponto de partida, metas de 6 e 12 meses e o realizado, pro
+ * gráfico de realizado × projeção. Só existe se alguém LIGOU, cliente a cliente.
+ *
+ * O que NUNCA sai daqui: a estratégia e as premissas (nem são lidas do banco). A situação de hoje e
+ * o "onde quer chegar" só saem se a pessoa marcou cada um — e o texto que sai é o escrito, sem
+ * resumo nem edição.
+ *
+ * O realizado vem só dos meses com relatório PUBLICADO: o portal inteiro mostra só o que a equipe
+ * revisou e liberou, e número lançado mas ainda não revisado (ou incoerente) não pode vazar por
+ * aqui antes do relatório.
+ */
+async function jornadaDoPortal(clienteId: string) {
+  const p = await queryOne<{
+    situacao_atual: string; leads_mes: string | null; investimento_mes: string | null;
+    ticket_medio: string | null; taxa_conversao: string | null; faturamento_mensal: string | null;
+    data_diagnostico: string | null; curva: string; portal_ativo: boolean;
+    portal_mostrar_situacao: boolean; portal_mostrar_objetivo: boolean;
+  }>(
+    `SELECT situacao_atual, leads_mes, investimento_mes, ticket_medio, taxa_conversao, faturamento_mensal,
+            to_char(data_diagnostico, 'YYYY-MM-DD') AS data_diagnostico, curva,
+            portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo
+     FROM gc_planejamento WHERE gc_cliente_id = $1`,
+    [clienteId]
+  );
+  if (!p?.portal_ativo) return null;
+
+  const n = (v: string | null) => (v === null ? null : Number(v));
+  const metas = await query<{ horizonte: string; chave_metrica: string; valor_meta: string }>(
+    `SELECT DISTINCT ON (horizonte, chave_metrica) horizonte, chave_metrica, valor_meta
+     FROM gc_metas
+     WHERE gc_cliente_id = $1 AND status = 'ativa' AND horizonte = ANY($2) AND chave_metrica = ANY($3)
+     ORDER BY horizonte, chave_metrica, created_at DESC`,
+    [clienteId, [...HORIZONTES_PLANEJAMENTO], [...CHAVES_PLANEJAMENTO]]
+  );
+  const objetivos = p.portal_mostrar_objetivo
+    ? await query<{ horizonte: string; onde_quer_chegar: string }>(
+        'SELECT horizonte, onde_quer_chegar FROM gc_planejamento_cenarios WHERE gc_cliente_id = $1',
+        [clienteId]
+      )
+    : [];
+
+  const cenarios: Record<string, { metas: Record<string, number>; objetivo: string | null }> = {};
+  for (const h of HORIZONTES_PLANEJAMENTO) {
+    cenarios[h] = {
+      metas: Object.fromEntries(metas.filter((m) => m.horizonte === h).map((m) => [m.chave_metrica, Number(m.valor_meta)])),
+      objetivo: objetivos.find((o) => o.horizonte === h)?.onde_quer_chegar?.trim() || null,
+    };
+  }
+
+  const realizado: Record<string, Record<string, number>> = { leads: {}, vendas: {}, receita: {}, investimento: {} };
+  const publicados = (
+    await query<{ dia: string }>(
+      `SELECT to_char(periodo_inicio, 'YYYY-MM-DD') AS dia FROM gc_relatorios
+       WHERE gc_cliente_id = $1 AND status = 'publicado'`,
+      [clienteId]
+    )
+  ).map((r) => r.dia);
+  if (publicados.length > 0) {
+    const linhas = await query<{ chave: string; mes: string; valor: string }>(
+      `SELECT chave, to_char(periodo_inicio, 'YYYY-MM') AS mes, valor
+       FROM gc_metricas
+       WHERE gc_cliente_id = $1 AND periodo_inicio = ANY($2::date[]) AND chave = ANY($3)`,
+      [clienteId, publicados, Object.keys(realizado)]
+    );
+    for (const l of linhas) realizado[l.chave][l.mes] = Number(l.valor);
+  }
+
+  return {
+    data_diagnostico: p.data_diagnostico,
+    curva: p.curva,
+    situacao: p.portal_mostrar_situacao ? p.situacao_atual.trim() || null : null,
+    atual: {
+      leads: n(p.leads_mes), investimento: n(p.investimento_mes), ticket: n(p.ticket_medio),
+      conversao: n(p.taxa_conversao), receita: n(p.faturamento_mensal),
+    },
+    cenarios,
+    realizado,
+  };
+}
+
 export async function gestaoClientesPublicRoutes(app: FastifyInstance) {
   app.get<{ Params: { token: string } }>('/api/public/cliente/:token', async (req, reply) => {
     const link = await queryOne<{ id: string; gc_cliente_id: string; expira_em: string | null }>(
@@ -1612,7 +1927,7 @@ export async function gestaoClientesPublicRoutes(app: FastifyInstance) {
       [link.gc_cliente_id]
     );
 
-    return { cliente, relatorios };
+    return { cliente, relatorios, jornada: await jornadaDoPortal(link.gc_cliente_id) };
   });
 
   // GET /api/public/cliente/:token/relatorio/:id/pdf — o mesmo PDF do painel, pro cliente baixar.

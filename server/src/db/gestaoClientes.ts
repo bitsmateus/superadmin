@@ -272,6 +272,56 @@ const TABELAS = [
      END IF;
    END $$`,
 
+  // ---------------------------------------------------------------- planejamento do cliente
+  // O ponto A (situação de hoje, com números fixos de partida) e os textos dos cenários de 6 e 12
+  // meses. Os NÚMEROS das metas desses cenários não ficam aqui: reaproveitam gc_metas, nos
+  // horizontes '6_meses' e '12_meses', pra existir uma tabela de metas só e o que se define aqui
+  // aparecer também em "Metas combinadas". Aqui moram só o que a tabela de metas não guarda: o
+  // diagnóstico e os textos.
+  `CREATE TABLE IF NOT EXISTS gc_planejamento (
+    gc_cliente_id UUID PRIMARY KEY REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    -- "Situação de hoje", em texto livre. Leitura interna.
+    situacao_atual TEXT NOT NULL DEFAULT '',
+    -- Números fixos de partida (o ponto A). NULL = não informado, que é diferente de zero.
+    leads_mes NUMERIC(14,2),
+    investimento_mes NUMERIC(14,2),
+    ticket_medio NUMERIC(14,2),
+    -- Percentual de leads que viram venda (ex.: 8 = 8%).
+    taxa_conversao NUMERIC(6,2),
+    faturamento_mensal NUMERIC(14,2),
+    data_diagnostico DATE,
+    -- Como a meta se distribui mês a mês entre o ponto A e o horizonte.
+    curva TEXT NOT NULL DEFAULT 'linear' CHECK (curva IN ('linear','composta')),
+    -- Portal do cliente: o bloco "Nossa jornada" só aparece se alguém LIGAR, cliente a cliente. E os
+    -- dois textos que podem ir pra lá também são opt-in; estratégia e premissas nunca vão.
+    portal_ativo BOOLEAN NOT NULL DEFAULT false,
+    portal_mostrar_situacao BOOLEAN NOT NULL DEFAULT false,
+    portal_mostrar_objetivo BOOLEAN NOT NULL DEFAULT false,
+    atualizado_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS gc_planejamento_cenarios (
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    horizonte TEXT NOT NULL CHECK (horizonte IN ('6_meses','12_meses')),
+    onde_quer_chegar TEXT NOT NULL DEFAULT '',
+    estrategia TEXT NOT NULL DEFAULT '',
+    premissas TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (gc_cliente_id, horizonte)
+  )`,
+  // Histórico de alterações: UMA linha por salvamento, com o que mudou (campo, antes, depois).
+  // Só INSERT — é registro, não cadastro.
+  `CREATE TABLE IF NOT EXISTS gc_planejamento_historico (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    alterado_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    alterado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    mudancas JSONB NOT NULL DEFAULT '[]'
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_planejamento_historico_idx
+     ON gc_planejamento_historico (gc_cliente_id, alterado_em DESC)`,
+
   // Rotina mensal: itens que nascem sozinhos todo mês (publicar o relatório, alinhar com o cliente),
   // com prazo automático. Não pertencem a etapa nem a estratégia — são do CLIENTE, no mês de
   // referência —, então a regra de "dono" do item ganha uma terceira forma.

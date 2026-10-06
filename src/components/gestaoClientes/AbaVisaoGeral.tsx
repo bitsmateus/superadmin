@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
+import { RotinaMensal } from '@/components/gestaoClientes/RotinaMensal'
 import {
   comDerivadas, formatarMetrica, mesAtual, mesPorExtenso, numeroDigitado,
 } from '@/lib/gcMetricas'
@@ -350,6 +351,8 @@ export function AbaVisaoGeral({
 
       <div className="space-y-4">
         <QuadroDeAvisos detalhe={detalhe} onVerNotas={onVerNotas} />
+
+        <RotinaMensal itens={detalhe.rotina ?? []} onMudou={onMudou} />
 
         <section className="rounded-xl border border-line p-4">
           <h2 className="mb-2 text-sm font-semibold text-foreground">Observações</h2>

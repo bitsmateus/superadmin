@@ -272,6 +272,32 @@ const TABELAS = [
      END IF;
    END $$`,
 
+  // Rotina mensal: itens que nascem sozinhos todo mês (publicar o relatório, alinhar com o cliente),
+  // com prazo automático. Não pertencem a etapa nem a estratégia — são do CLIENTE, no mês de
+  // referência —, então a regra de "dono" do item ganha uma terceira forma.
+  `ALTER TABLE gc_checklist_itens ADD COLUMN IF NOT EXISTS recorrente_chave TEXT`,
+  `ALTER TABLE gc_checklist_itens ADD COLUMN IF NOT EXISTS mes_referencia DATE`,
+  `ALTER TABLE gc_checklist_itens DROP CONSTRAINT IF EXISTS gc_checklist_dono`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gc_checklist_dono_v2') THEN
+       ALTER TABLE gc_checklist_itens ADD CONSTRAINT gc_checklist_dono_v2 CHECK (
+         (gc_cliente_jornada_id IS NOT NULL AND gc_cliente_estrategia_id IS NULL AND recorrente_chave IS NULL)
+         OR (gc_cliente_jornada_id IS NULL AND gc_cliente_estrategia_id IS NOT NULL AND recorrente_chave IS NULL)
+         OR (gc_cliente_jornada_id IS NULL AND gc_cliente_estrategia_id IS NULL AND recorrente_chave IS NOT NULL)
+       );
+     END IF;
+   END $$`,
+  // Registro do que JÁ FOI GERADO por cliente/rotina/mês. É ele (e não a existência do item) que
+  // decide se gera: apagar um item que não faz sentido pra aquele cliente não pode fazer ele
+  // ressuscitar na próxima abertura da tela.
+  `CREATE TABLE IF NOT EXISTS gc_recorrentes_gerados (
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    chave TEXT NOT NULL,
+    mes_referencia DATE NOT NULL,
+    gerado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (gc_cliente_id, chave, mes_referencia)
+  )`,
+
   // Cliente de teste ou arquivado: continua existindo e aparecendo nas listas, mas fica FORA dos
   // totais (investimento, leads, risco...). É diferente de "encerrado", que é um cliente que saiu —
   // teste é cadastro que nunca foi cliente de verdade e não pode inflar a carteira.

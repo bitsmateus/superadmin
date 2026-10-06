@@ -166,12 +166,26 @@ export interface GcClienteLista {
   relatorio_mes: 'rascunho' | 'publicado' | null
 }
 
+/** Um item da rotina mensal do cliente — nasce sozinho, com prazo, pro mês que fechou. */
+export interface GcItemRotina {
+  id: string
+  titulo: string
+  prazo: string | null
+  concluido: boolean
+  concluido_em: string | null
+  recorrente_chave: string
+  mes_referencia: string
+  atrasado: boolean
+}
+
 export interface GcClienteDetalhe {
   cliente: GcClienteLista
   servicos: GcServico[]
   jornada: GcEtapaJornada[]
   estrategias: GcEstrategia[]
   historico: GcRegistroHistorico[]
+  /** Rotina mensal dos últimos meses (relatório, alinhamento). */
+  rotina: GcItemRotina[]
 }
 
 export interface GcModeloEstrategia {
@@ -218,7 +232,8 @@ export interface GcPendencia {
   prazo: string | null
   cliente_id: string
   cliente_nome: string
-  origem: 'jornada' | 'estrategia'
+  /** 'rotina' = item da rotina mensal (relatório, alinhamento), que nasce sozinho todo mês. */
+  origem: 'jornada' | 'estrategia' | 'rotina'
   origem_nome: string
   /** Em cascata: item, depois etapa/estratégia, depois o cliente. */
   responsavel_id: string | null

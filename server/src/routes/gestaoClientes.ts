@@ -4,6 +4,7 @@ import { query, queryOne, withTransaction } from '../db.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
 import { validarMetricas } from '../lib/gcValidacao.js';
+import { garantirRecorrentes } from '../lib/gcRecorrentes.js';
 
 /**
  * Módulo "Clientes NX Digital" — gestão dos clientes de tráfego.
@@ -176,9 +177,12 @@ const SQL_CLIENTES = `
     (SELECT count(*) FROM gc_cliente_jornada j
       WHERE j.gc_cliente_id = c.id AND j.status <> 'concluida' AND j.prazo IS NOT NULL
         AND j.prazo < ${HOJE}) AS etapas_atrasadas,
-    (SELECT count(*) FROM gc_checklist_itens i WHERE i.gc_cliente_id = c.id) AS itens_total,
+    -- Progresso da IMPLANTAÇÃO: os itens da rotina mensal ficam de fora, senão todo mês um item novo
+    -- em aberto puxaria o percentual de um cliente já implantado pra baixo.
     (SELECT count(*) FROM gc_checklist_itens i
-      WHERE i.gc_cliente_id = c.id AND i.concluido) AS itens_concluidos,
+      WHERE i.gc_cliente_id = c.id AND i.recorrente_chave IS NULL) AS itens_total,
+    (SELECT count(*) FROM gc_checklist_itens i
+      WHERE i.gc_cliente_id = c.id AND i.concluido AND i.recorrente_chave IS NULL) AS itens_concluidos,
     (SELECT count(*) FROM gc_checklist_itens i
       WHERE i.gc_cliente_id = c.id AND NOT i.concluido
         AND i.prazo IS NOT NULL AND i.prazo < ${HOJE}) AS itens_atrasados,
@@ -324,6 +328,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   // GET /api/gc/clientes?periodo=YYYY-MM — lista da tela, com o que o semáforo precisa. São poucas
   // dezenas de clientes, então não vale paginar: a tela filtra no front igual ao resto do painel.
   app.get<{ Querystring: { periodo?: string } }>('/api/gc/clientes', autenticado, async (req) => {
+    await garantirRecorrentes();
     const [mes, anterior] = mesesDeReferencia(req.query.periodo);
     return query(`${SQL_CLIENTES} ORDER BY c.nome_empresa`, [mes, anterior]);
   });
@@ -333,11 +338,12 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/gc/clientes/:id', autenticado, async (req, reply) => {
     // A MESMA consulta da lista, filtrada num cliente: o detalhe mostra o semáforo, e ele tem que
     // sair igualzinho ao da lista — dois caminhos pro mesmo cálculo é como eles se separam.
+    await garantirRecorrentes();
     const [mes, anterior] = mesesDeReferencia();
     const cliente = await queryOne(`${SQL_CLIENTES} WHERE c.id = $3`, [mes, anterior, req.params.id]);
     if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
 
-    const [servicos, jornada, estrategias, historico] = await Promise.all([
+    const [servicos, jornada, estrategias, historico, rotina] = await Promise.all([
       query('SELECT * FROM gc_servicos WHERE gc_cliente_id = $1 ORDER BY created_at', [req.params.id]),
       query(
         `SELECT j.*, p.name AS responsavel_nome, COALESCE(
@@ -372,9 +378,20 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
          ORDER BY h.fixado DESC, h.created_at DESC`,
         [req.params.id]
       ),
+      // Itens da rotina mensal: dos 6 últimos meses, que é o que dá pra agir. Mais antigo que isso
+      // é histórico, e o histórico do cliente já guarda.
+      query(
+        `SELECT i.id, i.titulo, i.prazo, i.concluido, i.concluido_em, i.recorrente_chave, i.mes_referencia,
+                (NOT i.concluido AND i.prazo IS NOT NULL AND i.prazo < ${HOJE}) AS atrasado
+         FROM gc_checklist_itens i
+         WHERE i.gc_cliente_id = $1 AND i.recorrente_chave IS NOT NULL
+           AND i.mes_referencia >= (date_trunc('month', ${HOJE}) - INTERVAL '6 months')::date
+         ORDER BY i.mes_referencia DESC, i.ordem`,
+        [req.params.id]
+      ),
     ]);
 
-    return { cliente, servicos, jornada, estrategias, historico };
+    return { cliente, servicos, jornada, estrategias, historico, rotina };
   });
 
   // POST /api/gc/clientes — cria o cliente E a jornada dele na mesma transação. Cliente sem
@@ -1205,11 +1222,14 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   // porque quase ninguém atribui item por item, e filtrar só pelo campo do item deixaria quase
   // tudo "sem responsável". Atraso é comparado em horário de Brasília.
   app.get('/api/gc/pendencias', autenticado, async () => {
+    await garantirRecorrentes();
     return query(
       `SELECT i.id, i.titulo, i.prazo, i.ordem,
          c.id AS cliente_id, c.nome_empresa AS cliente_nome,
-         CASE WHEN i.gc_cliente_jornada_id IS NOT NULL THEN 'jornada' ELSE 'estrategia' END AS origem,
-         COALESCE(j.nome, e.nome) AS origem_nome,
+         CASE WHEN i.recorrente_chave IS NOT NULL THEN 'rotina'
+              WHEN i.gc_cliente_jornada_id IS NOT NULL THEN 'jornada'
+              ELSE 'estrategia' END AS origem,
+         COALESCE(j.nome, e.nome, 'Rotina mensal') AS origem_nome,
          COALESCE(i.responsavel_id, j.responsavel_id, e.responsavel_id, c.responsavel_id) AS responsavel_id,
          pr.name AS responsavel_nome,
          (i.prazo IS NOT NULL AND i.prazo < ${HOJE}) AS atrasado
@@ -1419,6 +1439,16 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         [req.params.id, sub, JSON.stringify({ ...snapshot, publicado_em: new Date().toISOString() })]
       );
       if (!publicado) return reply.status(404).send({ message: 'Relatório não encontrado' });
+      // O item "Publicar o relatório de <mês>" da rotina mensal se conclui sozinho: fazer a mesma
+      // coisa duas vezes (publicar e depois marcar o item) é como o item fica aberto e atrasado
+      // por esquecimento mesmo com o relatório já entregue.
+      await query(
+        `UPDATE gc_checklist_itens
+         SET concluido = true, concluido_por = $3, concluido_em = NOW(), updated_at = NOW()
+         WHERE gc_cliente_id = $1 AND recorrente_chave = 'relatorio' AND NOT concluido
+           AND mes_referencia = (SELECT periodo_inicio FROM gc_relatorios WHERE id = $2)`,
+        [publicado.gc_cliente_id, req.params.id, sub]
+      );
       await registrarEvento(
         publicado.gc_cliente_id,
         `Relatório publicado: ${snapshot.periodo?.rotulo ?? String(publicado.periodo_inicio).slice(0, 7)}`,

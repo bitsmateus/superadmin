@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, Check, CheckCircle2, ExternalLink, Loader2 } from 'lucide-react'
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ExternalLink, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -8,6 +8,23 @@ import { cn } from '@/lib/utils'
 
 function prazoBr(prazo: string | null): string {
   return prazo ? String(prazo).slice(0, 10).split('-').reverse().join('/') : 'sem prazo'
+}
+
+const CHAVE_AGRUPAR = 'gc:pendencias:agrupar'
+
+function lerAgrupar(): boolean {
+  try {
+    // Agrupado por cliente é o padrão: é como se trabalha ("o que falta pro Shopbike?").
+    return window.localStorage.getItem(CHAVE_AGRUPAR) !== '0'
+  } catch {
+    return true
+  }
+}
+
+const ROTULO_ORIGEM: Record<GcPendencia['origem'], string> = {
+  jornada: 'etapa',
+  estrategia: 'estratégia',
+  rotina: 'rotina',
 }
 
 /** Um seletor simples — o <Select> do projeto traz rótulo e margem demais pra uma barra de filtros. */
@@ -44,8 +61,8 @@ function Filtro({
  * Pendências da carteira: os itens de checklist ABERTOS de todos os clientes, numa lista só.
  *
  * É o "o que está pendente?" sem abrir cliente por cliente. Dá pra filtrar por responsável, por
- * cliente e por atrasados, e concluir direto na linha — o servidor recalcula a etapa/estratégia do
- * item, como na tela do cliente.
+ * cliente e por atrasados, agrupar por cliente e concluir direto na linha — o servidor recalcula a
+ * etapa/estratégia do item, como na tela do cliente.
  *
  * O responsável mostrado cai em cascata (item → etapa/estratégia → cliente): quase ninguém atribui
  * item por item, e filtrar só pelo campo do item deixaria quase tudo "sem responsável".
@@ -56,6 +73,8 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
   const [responsavel, setResponsavel] = React.useState('')
   const [cliente, setCliente] = React.useState('')
   const [soAtrasados, setSoAtrasados] = React.useState(false)
+  const [agrupar, setAgrupar] = React.useState(lerAgrupar)
+  const [fechados, setFechados] = React.useState<Set<string>>(new Set())
   const [concluindo, setConcluindo] = React.useState<Set<string>>(new Set())
 
   const carregar = React.useCallback(async () => {
@@ -71,6 +90,15 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
   React.useEffect(() => {
     void carregar()
   }, [carregar])
+
+  const alternarAgrupar = (valor: boolean) => {
+    setAgrupar(valor)
+    try {
+      window.localStorage.setItem(CHAVE_AGRUPAR, valor ? '1' : '0')
+    } catch {
+      /* sem armazenamento: vale até recarregar */
+    }
+  }
 
   const responsaveis = React.useMemo(() => {
     const mapa = new Map<string, string>()
@@ -93,6 +121,22 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
   })
   const atrasados = itens.filter((i) => i.atrasado).length
 
+  // Grupos por cliente: quem tem mais atrasadas vem primeiro — é o que pede ação —, depois por nome.
+  const grupos = React.useMemo(() => {
+    const mapa = new Map<string, { id: string; nome: string; itens: GcPendencia[] }>()
+    for (const i of visiveis) {
+      const g = mapa.get(i.cliente_id) ?? { id: i.cliente_id, nome: i.cliente_nome, itens: [] }
+      g.itens.push(i)
+      mapa.set(i.cliente_id, g)
+    }
+    return [...mapa.values()].sort((a, b) => {
+      const atrasoA = a.itens.filter((x) => x.atrasado).length
+      const atrasoB = b.itens.filter((x) => x.atrasado).length
+      return atrasoB - atrasoA || a.nome.localeCompare(b.nome)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itens, responsavel, cliente, soAtrasados])
+
   const concluir = async (item: GcPendencia) => {
     // Sai da lista na hora; se o servidor recusar, volta. Esperar a ida e volta pra cada clique
     // faria concluir 10 itens parecer um trabalho de 10 esperas.
@@ -111,6 +155,57 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
       })
     }
   }
+
+  const linha = (i: GcPendencia, mostrarCliente: boolean) => (
+    <li key={i.id} className="group flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
+      <button
+        type="button"
+        disabled={concluindo.has(i.id)}
+        onClick={() => void concluir(i)}
+        className={cn(
+          'grid h-5 w-5 shrink-0 place-items-center rounded border transition-colors',
+          i.atrasado ? 'border-danger hover:bg-danger/10' : 'border-line hover:border-success hover:bg-success/10',
+        )}
+        aria-label="Concluir"
+        title="Marcar como concluído"
+      >
+        <Check className="h-3 w-3 text-transparent group-hover:text-success" />
+      </button>
+      <span className="min-w-0 flex-1">
+        <span className={cn('block truncate text-sm', i.atrasado ? 'text-danger' : 'text-foreground/90')}>
+          {i.titulo}
+        </span>
+        <span className="block truncate text-xs text-foreground/50">
+          {mostrarCliente ? `${i.cliente_nome} · ` : ''}
+          {ROTULO_ORIGEM[i.origem]}: {i.origem_nome}
+        </span>
+      </span>
+      <span className="hidden shrink-0 text-xs text-foreground/55 sm:block">
+        {i.responsavel_nome ?? 'sem responsável'}
+      </span>
+      <span className="w-24 shrink-0 text-right">
+        {i.atrasado ? (
+          <Badge tone="danger">
+            <AlertTriangle className="mr-1 h-3 w-3" />
+            {prazoBr(i.prazo)}
+          </Badge>
+        ) : (
+          <span className="text-xs text-foreground/45">{prazoBr(i.prazo)}</span>
+        )}
+      </span>
+      {!agrupar && (
+        <button
+          type="button"
+          onClick={() => onAbrirCliente(i.cliente_id)}
+          className="shrink-0 text-foreground/30 transition-colors hover:text-accent"
+          aria-label="Abrir cliente"
+          title="Abrir o cliente"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </li>
+  )
 
   if (carregando) {
     return (
@@ -177,6 +272,15 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
           />
           só atrasadas
         </label>
+        <label className="flex cursor-pointer items-center gap-1.5 text-sm text-foreground/70">
+          <input
+            type="checkbox"
+            checked={agrupar}
+            onChange={(e) => alternarAgrupar(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-line"
+          />
+          agrupar por cliente
+        </label>
         {(responsavel || cliente || soAtrasados) && (
           <button
             type="button"
@@ -202,59 +306,48 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
               : 'Mude os filtros ou limpe a seleção.'
           }
         />
+      ) : agrupar ? (
+        <div className="space-y-3">
+          {grupos.map((g) => {
+            const atrasoDoGrupo = g.itens.filter((x) => x.atrasado).length
+            const fechado = fechados.has(g.id)
+            return (
+              <section key={g.id} className="overflow-hidden rounded-xl border border-line">
+                <header className="flex items-center gap-3 bg-elevate/[0.02] px-4 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFechados((atual) => {
+                        const novo = new Set(atual)
+                        if (novo.has(g.id)) novo.delete(g.id)
+                        else novo.add(g.id)
+                        return novo
+                      })
+                    }
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
+                    <ChevronDown
+                      className={cn('h-4 w-4 shrink-0 text-foreground/40 transition-transform', fechado && '-rotate-90')}
+                    />
+                    <span className="truncate text-sm font-semibold text-foreground">{g.nome}</span>
+                    <span className="text-xs text-foreground/45">{g.itens.length} em aberto</span>
+                    {atrasoDoGrupo > 0 && <Badge tone="danger">{atrasoDoGrupo} atrasada(s)</Badge>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAbrirCliente(g.id)}
+                    className="flex shrink-0 items-center gap-1 text-xs text-foreground/45 transition-colors hover:text-accent"
+                  >
+                    abrir cliente <ExternalLink className="h-3 w-3" />
+                  </button>
+                </header>
+                {!fechado && <ul className="border-t border-line">{g.itens.map((i) => linha(i, false))}</ul>}
+              </section>
+            )
+          })}
+        </div>
       ) : (
-        <ul className="overflow-hidden rounded-xl border border-line">
-          {visiveis.map((i) => (
-            <li
-              key={i.id}
-              className="group flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0"
-            >
-              <button
-                type="button"
-                disabled={concluindo.has(i.id)}
-                onClick={() => void concluir(i)}
-                className={cn(
-                  'grid h-5 w-5 shrink-0 place-items-center rounded border transition-colors',
-                  i.atrasado ? 'border-danger hover:bg-danger/10' : 'border-line hover:border-success hover:bg-success/10',
-                )}
-                aria-label="Concluir"
-                title="Marcar como concluído"
-              >
-                <Check className="h-3 w-3 text-transparent group-hover:text-success" />
-              </button>
-              <span className="min-w-0 flex-1">
-                <span className={cn('block truncate text-sm', i.atrasado ? 'text-danger' : 'text-foreground/90')}>
-                  {i.titulo}
-                </span>
-                <span className="block truncate text-xs text-foreground/50">
-                  {i.cliente_nome} · {i.origem === 'jornada' ? 'etapa' : 'estratégia'}: {i.origem_nome}
-                </span>
-              </span>
-              <span className="hidden shrink-0 text-xs text-foreground/55 sm:block">
-                {i.responsavel_nome ?? 'sem responsável'}
-              </span>
-              <span className="w-24 shrink-0 text-right">
-                {i.atrasado ? (
-                  <Badge tone="danger">
-                    <AlertTriangle className="mr-1 h-3 w-3" />
-                    {prazoBr(i.prazo)}
-                  </Badge>
-                ) : (
-                  <span className="text-xs text-foreground/45">{prazoBr(i.prazo)}</span>
-                )}
-              </span>
-              <button
-                type="button"
-                onClick={() => onAbrirCliente(i.cliente_id)}
-                className="shrink-0 text-foreground/30 transition-colors hover:text-accent"
-                aria-label="Abrir cliente"
-                title="Abrir o cliente"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <ul className="overflow-hidden rounded-xl border border-line">{visiveis.map((i) => linha(i, true))}</ul>
       )}
     </div>
   )

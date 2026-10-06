@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BarChart3, ChevronLeft, ChevronRight, Columns3, Loader2, Pencil, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
+import { FaixaLancamento } from '@/components/gestaoClientes/FaixaLancamento'
+import { useLancamentoPendente } from '@/hooks/useLancamentoPendente'
 import { avisosDoErro, gestaoClientes, type GcClienteLista } from '@/services/gestaoClientes'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
@@ -109,17 +111,31 @@ export function TrafegoNxPage() {
   const [rascunho, setRascunho] = React.useState<Rascunho>({})
   const [avisos, setAvisos] = React.useState<string[] | null>(null)
   const [salvando, setSalvando] = React.useState(false)
+  // Versão dos dados lançados: sobe depois de salvar e faz a faixa de "faltam X" se recalcular.
+  const [versao, setVersao] = React.useState(0)
+  const pendencia = useLancamentoPendente(versao)
+  const [params, setParams] = useSearchParams()
+  // Mês cuja grade deve abrir assim que os dados dele chegarem (vem do atalho da faixa).
+  const [abrirGrade, setAbrirGrade] = React.useState<string | null>(null)
+  const [periodoCarregado, setPeriodoCarregado] = React.useState('')
+  const ultimoPedido = React.useRef('')
   const refMenu = React.useRef<HTMLDivElement>(null)
   useOutsideClose(refMenu, menuColunas, () => setMenuColunas(false))
 
   const carregar = React.useCallback(async () => {
     setCarregando(true)
+    ultimoPedido.current = periodo
     try {
-      setLinhas(await gestaoClientes.trafego(periodo))
+      const r = await gestaoClientes.trafego(periodo)
+      // Resposta de um mês que já não é o pedido (a pessoa trocou de mês no meio) é descartada: sem
+      // isso, os números de outubro apareciam sob o título "Setembro".
+      if (ultimoPedido.current !== periodo) return
+      setLinhas(r)
+      setPeriodoCarregado(periodo)
     } catch (err) {
       toast.error('Falha ao carregar o tráfego: ' + (err as Error).message)
     } finally {
-      setCarregando(false)
+      if (ultimoPedido.current === periodo) setCarregando(false)
     }
   }, [periodo])
 
@@ -128,6 +144,18 @@ export function TrafegoNxPage() {
     setEditando(false)
     void carregar()
   }, [carregar])
+
+  // Atalho da faixa de outras telas: /trafego?lancar=2026-09 abre a grade daquele mês.
+  React.useEffect(() => {
+    const pedido = params.get('lancar')
+    if (pedido && /^\d{4}-\d{2}$/.test(pedido)) {
+      setPeriodo(pedido)
+      setAbrirGrade(pedido)
+      setParams({}, { replace: true })
+    }
+    // Só na entrada: depois disso quem manda é o estado, não a URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const alternarExtra = (chave: string) => {
     setExtras((atual) => {
@@ -190,6 +218,15 @@ export function TrafegoNxPage() {
     setEditando(true)
   }
 
+  // Abre a grade quando os dados do mês pedido chegaram — antes disso `linhas` ainda é de outro mês.
+  React.useEffect(() => {
+    if (abrirGrade && !carregando && periodoCarregado === abrirGrade && linhas.length > 0) {
+      setRascunho(rascunhoInicial(linhas))
+      setEditando(true)
+      setAbrirGrade(null)
+    }
+  }, [abrirGrade, carregando, periodoCarregado, linhas])
+
   const original = React.useMemo(() => rascunhoInicial(linhas), [linhas])
 
   /** Só o que MUDOU: salvar 11 clientes quando 2 foram editados reescreveria 9 sem motivo. */
@@ -237,6 +274,7 @@ export function TrafegoNxPage() {
       })
       toast.success(`${mesPorExtenso(periodo)} salvo — ${r.clientes} cliente(s) atualizado(s)`)
       setEditando(false)
+      setVersao((v) => v + 1)
       await carregar()
     } catch (err) {
       const doServidor = avisosDoErro(err)
@@ -296,6 +334,16 @@ export function TrafegoNxPage() {
       />
 
       <div className="space-y-4 px-4 pb-10 lg:px-6">
+        {!editando && (
+          <FaixaLancamento
+            pendencia={pendencia}
+            onLancar={(p) => {
+              setPeriodo(p)
+              setAbrirGrade(p)
+            }}
+          />
+        )}
+
         {carregando ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-foreground/60">
             <Loader2 className="h-4 w-4 animate-spin" /> Carregando…

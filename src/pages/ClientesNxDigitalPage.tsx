@@ -12,6 +12,8 @@ import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { KanbanClientes, type ColunaKanban } from '@/components/gestaoClientes/KanbanClientes'
 import { ModalMoverEtapa } from '@/components/gestaoClientes/ModalMoverEtapa'
+import { FaixaLancamento } from '@/components/gestaoClientes/FaixaLancamento'
+import { useLancamentoPendente } from '@/hooks/useLancamentoPendente'
 import {
   NIVEIS_AVALIACAO, PRIORIDADES, TIPOS_SERVICO, gestaoClientes, progressoDoCliente,
   type GcClienteLista, type GcNivelAvaliacao, type GcPreviaMover, type GcPrioridade,
@@ -179,6 +181,7 @@ export function ClientesNxDigitalPage() {
   const [soProblemas, setSoProblemas] = React.useState(false)
   const [ordem, setOrdem] = React.useState<Ordem>('fila')
   const [modalAberto, setModalAberto] = React.useState(false)
+  const pendencia = useLancamentoPendente()
   const [visao, setVisao] = React.useState<Visao>(lerVisao)
   const [colunas, setColunas] = React.useState<ColunaKanban[]>([])
   const [mover, setMover] = React.useState<{
@@ -324,6 +327,11 @@ export function ClientesNxDigitalPage() {
       />
 
       <div className="space-y-4 px-4 pb-10 lg:px-6">
+        <FaixaLancamento
+          pendencia={pendencia}
+          onLancar={(p) => navegar(`/clientesnxdigital/trafego?lancar=${p}`)}
+        />
+
         {!carregando && clientes.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Indicador

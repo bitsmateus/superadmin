@@ -573,6 +573,11 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       const { sub } = req.user as { sub: string };
       const body = req.body ?? {};
       if (!body.tipo) return reply.status(400).send({ message: 'tipo é obrigatório' });
+      // Sem a data de renovação ninguém é avisado de que o contrato está acabando — e renovação é a
+      // hora em que o cliente decide sozinho se fica. Por isso é obrigatória já no cadastro.
+      if (!body.data_renovacao) {
+        return reply.status(400).send({ message: 'Informe a data de renovação do serviço' });
+      }
       const informados = CAMPOS_SERVICO.filter((c) => body[c] !== undefined);
       const campos = ['gc_cliente_id', ...informados];
       const valores = [req.params.id, ...informados.map((c) => (body[c] === '' ? null : body[c]))];
@@ -590,6 +595,10 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     '/api/gc/servicos/:id',
     autenticado,
     async (req, reply) => {
+      // Dá pra trocar a data, não dá pra apagá-la: serviço sem renovação deixa de ser acompanhado.
+      if ('data_renovacao' in (req.body ?? {}) && !(req.body ?? {}).data_renovacao) {
+        return reply.status(400).send({ message: 'A data de renovação é obrigatória — troque por outra em vez de apagar' });
+      }
       const { sets, params } = montarUpdate(CAMPOS_SERVICO, req.body ?? {});
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       params.push(req.params.id);

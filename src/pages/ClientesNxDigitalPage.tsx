@@ -20,7 +20,8 @@ import {
   type GcStatusCliente,
 } from '@/services/gestaoClientes'
 import {
-  avaliarSaude, compararPorGravidade, compararPorPrioridade, contaNoTotal, type Saude,
+  DIAS_AVISO_RENOVACAO, avaliarSaude, compararPorGravidade, compararPorPrioridade, contaNoTotal,
+  type Saude,
 } from '@/lib/gcSaude'
 import { formatarMetrica, mesPorExtenso, mesAtual } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
@@ -534,7 +535,7 @@ export function ClientesNxDigitalPage() {
 function Renovacao({ data }: { data: string | null }) {
   const dias = diasAteData(data)
   if (dias === null) return <span className="text-xs text-foreground/35">sem data</span>
-  const urgente = dias <= 30
+  const urgente = dias <= DIAS_AVISO_RENOVACAO
   return (
     <span className={urgente ? 'text-danger' : 'text-foreground/80'}>
       {dataBr(data)}

@@ -2,7 +2,7 @@ import * as React from 'react'
 import { GripVertical } from 'lucide-react'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { PRIORIDADES, progressoDoCliente, type GcClienteLista, type GcPrioridade } from '@/services/gestaoClientes'
-import type { Saude } from '@/lib/gcSaude'
+import { DIAS_AVISO_RENOVACAO, type Saude } from '@/lib/gcSaude'
 import { cn } from '@/lib/utils'
 
 export interface ColunaKanban {
@@ -172,11 +172,11 @@ export function KanbanClientes({
                         </span>
                       </div>
 
-                      {(Number(c.itens_atrasados) > 0 || (renov !== null && renov <= 30)) && (
+                      {(Number(c.itens_atrasados) > 0 || (renov !== null && renov <= DIAS_AVISO_RENOVACAO)) && (
                         <p className="mt-1.5 text-[11px] text-danger">
                           {Number(c.itens_atrasados) > 0 && `${Number(c.itens_atrasados)} atrasado(s)`}
-                          {Number(c.itens_atrasados) > 0 && renov !== null && renov <= 30 && ' · '}
-                          {renov !== null && renov <= 30 &&
+                          {Number(c.itens_atrasados) > 0 && renov !== null && renov <= DIAS_AVISO_RENOVACAO && ' · '}
+                          {renov !== null && renov <= DIAS_AVISO_RENOVACAO &&
                             (renov < 0 ? `renovação venceu há ${Math.abs(renov)}d` : `renova em ${renov}d`)}
                         </p>
                       )}

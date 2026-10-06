@@ -41,6 +41,12 @@ export interface Saude {
   churn: { nivel: 'baixo' | 'medio' | 'alto' | 'indefinido'; motivos: string[] }
 }
 
+/**
+ * A partir de quantos dias pro fim do contrato o cliente passa a pedir atenção. 45 dá tempo de
+ * conversar, propor e fechar a renovação — com 30 já é correria.
+ */
+export const DIAS_AVISO_RENOVACAO = 45
+
 /** Lugar da tela onde o sinal se resolve. */
 export type Destino =
   | 'avaliacao' | 'servicos' | 'editar' | 'jornada' | 'metricas' | 'relatorios' | 'notas'
@@ -54,6 +60,7 @@ const DESTINO_DO_SINAL: Record<string, { destino: Destino; rotulo: string }> = {
   status: { destino: 'editar', rotulo: 'editar o cliente' },
   servicos: { destino: 'servicos', rotulo: 'ver os serviços' },
   renovacao: { destino: 'servicos', rotulo: 'ver a renovação' },
+  renovacao_sem_data: { destino: 'servicos', rotulo: 'informar a renovação' },
   jornada: { destino: 'jornada', rotulo: 'abrir a jornada' },
   pendencias: { destino: 'jornada', rotulo: 'abrir a jornada' },
   lancamento: { destino: 'metricas', rotulo: 'lançar as métricas' },
@@ -194,6 +201,19 @@ export function avaliarSaude(c: GcClienteLista): Saude {
         },
   )
 
+  // Serviço ativo SEM data de renovação: ninguém vai ser avisado de que o contrato acaba. É o caso
+  // dos clientes trazidos da base, e por isso aparece como atenção em vez de passar em branco.
+  const semDataDeRenovacao = (c.servicos ?? []).filter((s) => s.status === 'ativo' && !s.data_renovacao)
+  if (semDataDeRenovacao.length > 0) {
+    sinais.push({
+      chave: 'renovacao_sem_data',
+      titulo: 'Data de renovação',
+      estado: 'atencao',
+      detalhe: `${semDataDeRenovacao.length} serviço(s) ativo(s) sem data de renovação — sem ela ninguém é avisado do fim do contrato`,
+      pesaNoChurn: true,
+    })
+  }
+
   // Renovação é hora de churn: se ninguém conversou antes da data, o cliente decide sozinho.
   const renovacoes = (c.servicos ?? [])
     .filter((s) => s.status === 'ativo' && s.data_renovacao)
@@ -205,7 +225,7 @@ export function avaliarSaude(c: GcClienteLista): Saude {
     sinais.push({
       chave: 'renovacao',
       titulo: 'Renovação do contrato',
-      estado: proxima <= 30 ? 'atencao' : 'otimo',
+      estado: proxima <= DIAS_AVISO_RENOVACAO ? 'atencao' : 'otimo',
       detalhe:
         proxima < 0
           ? `Venceu há ${Math.abs(proxima)} dia(s) e não foi renovado`

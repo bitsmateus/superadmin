@@ -5,12 +5,12 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
-import { CampoData } from '@/components/gestaoClientes/CampoData'
+import { CampoData, DataMiuda } from '@/components/gestaoClientes/CampoData'
 import { RotinaMensal } from '@/components/gestaoClientes/RotinaMensal'
 import {
   comDerivadas, formatarMetrica, mesAtual, mesPorExtenso, numeroDigitado,
 } from '@/lib/gcMetricas'
-import { avaliarSaude, type Destino } from '@/lib/gcSaude'
+import { DIAS_AVISO_RENOVACAO, avaliarSaude, type Destino } from '@/lib/gcSaude'
 import { AvaliacaoDoResultado, PainelSaude } from '@/components/gestaoClientes/Semaforo'
 import {
   PRIORIDADES, TIPOS_SERVICO, gestaoClientes,
@@ -44,6 +44,33 @@ function Campo({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
   )
 }
 
+/**
+ * Aviso de renovação de um serviço: sem data, vencida, ou chegando (menos de 45 dias). Só pra
+ * serviço ativo — um serviço cancelado não renova, e avisar dele seria ruído.
+ */
+function AvisoDeRenovacao({ data, ativo }: { data: string | null; ativo: boolean }) {
+  if (!ativo) return null
+  if (!data) {
+    return (
+      <span className="mt-0.5 block text-xs font-medium text-danger">
+        Sem data de renovação — informe ao lado pra ser avisado do fim do contrato
+      </span>
+    )
+  }
+  const quando = new Date(`${String(data).slice(0, 10)}T12:00:00`).getTime()
+  const dias = Math.round((quando - Date.now()) / 86400000)
+  if (dias > DIAS_AVISO_RENOVACAO) return null
+  return (
+    <span className="mt-0.5 block text-xs font-medium text-danger">
+      {dias < 0
+        ? `Renovação venceu há ${Math.abs(dias)} dia(s)`
+        : dias === 0
+          ? 'Renovação vence hoje'
+          : `Renova em ${dias} dia(s) — hora de conversar com o cliente`}
+    </span>
+  )
+}
+
 /** Serviço novo — aparece no fim da lista quando a pessoa clica em "Adicionar serviço". */
 function FormServico({
   clienteId,
@@ -63,6 +90,10 @@ function FormServico({
 
   const salvar = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!renovacao) {
+      toast.error('Informe a data de renovação do serviço')
+      return
+    }
     setSalvando(true)
     try {
       await gestaoClientes.criarServico(clienteId, {
@@ -107,10 +138,10 @@ function FormServico({
         </div>
         <CampoData label="Início" value={inicio} onChange={setInicio} />
         <CampoData
-          label="Renovação"
+          label="Renovação *"
           value={renovacao}
           onChange={setRenovacao}
-          hint="avisa quando o contrato chega perto do fim"
+          hint={`obrigatória — o painel avisa quando faltar menos de ${DIAS_AVISO_RENOVACAO} dias`}
         />
       </div>
       <div className="mt-3 flex justify-end gap-2">
@@ -249,6 +280,20 @@ export function AbaVisaoGeral({
     }
   }
 
+  const trocarRenovacao = async (id: string, data: string | null) => {
+    // A data é obrigatória: o seletor deixa limpar, mas o servidor recusa — então nem tenta.
+    if (!data) {
+      toast.error('A data de renovação é obrigatória — escolha outra data em vez de apagar')
+      return
+    }
+    try {
+      await gestaoClientes.atualizarServico(id, { data_renovacao: data })
+      await onMudou()
+    } catch (err) {
+      toast.error('Falha ao salvar: ' + (err as Error).message)
+    }
+  }
+
   const trocarStatus = async (id: string, status: GcServico['status']) => {
     try {
       await gestaoClientes.atualizarServico(id, { status })
@@ -315,9 +360,17 @@ export function AbaVisaoGeral({
                     {TIPOS_SERVICO.find((t) => t.valor === s.tipo)?.label ?? s.tipo}
                   </span>
                   <span className="block truncate text-xs text-foreground/50">
-                    {s.descricao_plano || 'sem descrição'} · início {dataBr(s.data_inicio)} ·
-                    renovação {dataBr(s.data_renovacao)}
+                    {s.descricao_plano || 'sem descrição'} · início {dataBr(s.data_inicio)}
                   </span>
+                  <AvisoDeRenovacao data={s.data_renovacao} ativo={s.status === 'ativo'} />
+                </span>
+                <span className="flex shrink-0 items-center gap-1.5 text-xs text-foreground/50">
+                  renova
+                  <DataMiuda
+                    value={s.data_renovacao ? String(s.data_renovacao).slice(0, 10) : null}
+                    atrasado={!s.data_renovacao && s.status === 'ativo'}
+                    onChange={(v) => void trocarRenovacao(s.id, v)}
+                  />
                 </span>
                 <span className="text-sm tabular-nums text-foreground/80">
                   {reais(s.investimento_previsto_mensal)}

@@ -146,6 +146,12 @@ export interface GcClienteLista {
   ultimo_contato: string | null
   /** Primeiro dia do período do último relatório publicado. */
   ultimo_relatorio: string | null
+  /** Última vez que o cliente abriu o portal. Null = nunca abriu (ou nunca teve link). */
+  ultimo_acesso_portal: string | null
+  /** A renovação mais próxima entre os serviços ativos. */
+  proxima_renovacao: string | null
+  /** Id do MODELO da etapa atual — é o que coloca o card na coluna certa do Kanban. */
+  etapa_atual_modelo_id: string | null
   servicos: Pick<
     GcServico,
     'id' | 'tipo' | 'status' | 'investimento_previsto_mensal' | 'data_renovacao'
@@ -181,6 +187,18 @@ export interface GcModeloEstrategia {
 export interface GcModelos {
   etapas: { id: string; nome: string; ordem: number; itens: { id: string; titulo: string }[] }[]
   estrategias: GcModeloEstrategia[]
+}
+
+/** O que mover um cliente de etapa faria — a base da janela de confirmação. */
+export interface GcPreviaMover {
+  origem?: string
+  destino?: string
+  sem_mudanca?: boolean
+  ok?: boolean
+  /** Etapas que ficariam pra trás e seriam concluídas, com quantos itens ainda faltavam. */
+  fechar?: { nome: string; itens_abertos: number }[]
+  /** Etapas reabertas (voltar no tempo), com quantos itens marcados seriam desmarcados. */
+  reabrir?: { nome: string; itens_marcados: number }[]
 }
 
 /** Um item de checklist ABERTO, de qualquer cliente que conta nos totais. */
@@ -363,6 +381,17 @@ export const gestaoClientes = {
   excluirPassoDeModelo: (id: string) => api.delete(`/api/gc/modelos/passos/${id}`),
 
   pendencias: () => api.get<GcPendencia[]>('/api/gc/pendencias'),
+
+  /**
+   * Leva o cliente pra outra etapa. SEM `confirmar` só descreve o que aconteceria (etapas que seriam
+   * concluídas ou reabertas); COM `confirmar` executa. Mover mexe em checklist, então a tela mostra
+   * a prévia antes. `etapaModeloId` = 'fim' leva pra jornada concluída.
+   */
+  moverEtapa: (clienteId: string, etapaModeloId: string, confirmar = false) =>
+    api.post<GcPreviaMover>(`/api/gc/clientes/${clienteId}/mover-etapa`, {
+      etapa_modelo_id: etapaModeloId,
+      confirmar,
+    }),
 
   /** Sem período, o servidor usa o mês de hoje em Brasília. */
   listar: (periodo?: string) =>

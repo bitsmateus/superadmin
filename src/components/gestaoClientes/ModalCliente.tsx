@@ -73,6 +73,12 @@ export function ModalCliente({
       toast.error('Informe o nome da empresa')
       return
     }
+    // Cliente sem dono é cliente que ninguém acompanha: é o responsável que aparece na lista de
+    // pendências e nos filtros. O servidor também recusa, mas avisar aqui evita a ida e volta.
+    if (!form.responsavel_id) {
+      toast.error('Escolha o responsável pelo cliente')
+      return
+    }
     setSalvando(true)
     try {
       const salvo = cliente
@@ -89,7 +95,7 @@ export function ModalCliente({
   }
 
   const opcoesResponsavel = [
-    { value: '', label: '— Sem responsável —' },
+    { value: '', label: '— Escolha o responsável —' },
     ...(perfis ?? [])
       .map((p) => ({ value: p.id, label: (p.name && p.name.trim()) || p.email }))
       .sort((a, b) => a.label.localeCompare(b.label)),
@@ -159,7 +165,7 @@ export function ModalCliente({
           placeholder="Odontologia, advocacia, posto…"
         />
         <Select
-          label="Responsável"
+          label="Responsável *"
           options={opcoesResponsavel}
           value={form.responsavel_id ?? ''}
           onChange={(e) => mudar('responsavel_id')(e.target.value)}

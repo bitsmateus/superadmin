@@ -187,6 +187,17 @@ const SQL_CLIENTES = `
       WHERE h.gc_cliente_id = c.id AND h.tipo <> 'evento_sistema') AS ultimo_contato,
     (SELECT max(r.periodo_inicio) FROM gc_relatorios r
       WHERE r.gc_cliente_id = c.id AND r.status = 'publicado') AS ultimo_relatorio,
+    -- Quando o cliente abriu o portal pela última vez: responde "ele está lendo o que mandamos?".
+    (SELECT max(a.acessado_em) FROM gc_acessos_link a
+      JOIN gc_links_publicos l ON l.id = a.link_id
+      WHERE l.gc_cliente_id = c.id) AS ultimo_acesso_portal,
+    -- Próxima renovação entre os serviços ATIVOS (a mais cedo, vencida ou não).
+    (SELECT min(s.data_renovacao) FROM gc_servicos s
+      WHERE s.gc_cliente_id = c.id AND s.status = 'ativo' AND s.data_renovacao IS NOT NULL) AS proxima_renovacao,
+    -- Id do MODELO da etapa atual: é com ele que o Kanban sabe em que coluna o cliente está.
+    (SELECT j.etapa_id FROM gc_cliente_jornada j
+      WHERE j.gc_cliente_id = c.id AND j.status <> 'concluida'
+      ORDER BY j.ordem, j.created_at LIMIT 1) AS etapa_atual_modelo_id,
     COALESCE((SELECT json_agg(json_build_object(
         'id', s.id, 'tipo', s.tipo, 'status', s.status,
         'investimento_previsto_mensal', s.investimento_previsto_mensal,
@@ -347,6 +358,11 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     const body = req.body ?? {};
     const nome = String(body.nome_empresa ?? '').trim();
     if (!nome) return reply.status(400).send({ message: 'nome_empresa é obrigatório' });
+    // Cliente sem dono é cliente que ninguém acompanha — e é o responsável que aparece na lista de
+    // pendências e no filtro. Por isso é obrigatório já no cadastro.
+    if (!body.responsavel_id) {
+      return reply.status(400).send({ message: 'Escolha o responsável pelo cliente' });
+    }
 
     const criado = await withTransaction(async (client) => {
       const campos = CAMPOS_CLIENTE.filter((c) => body[c] !== undefined);
@@ -377,7 +393,12 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       );
       if (!anterior) return reply.status(404).send({ message: 'Cliente não encontrado' });
 
-      const { sets, params } = montarUpdate(CAMPOS_CLIENTE, req.body ?? {});
+      // Tirar o responsável (mandar vazio) não pode: troca-se por outra pessoa, não se deixa sem dono.
+      const corpo = req.body ?? {};
+      if ('responsavel_id' in corpo && !corpo.responsavel_id) {
+        return reply.status(400).send({ message: 'O responsável é obrigatório — escolha outra pessoa em vez de remover' });
+      }
+      const { sets, params } = montarUpdate(CAMPOS_CLIENTE, corpo);
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       params.push(req.params.id);
       const atualizado = await queryOne(
@@ -401,6 +422,105 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     if (!apagado) return reply.status(404).send({ message: 'Cliente não encontrado' });
     return reply.status(204).send();
   });
+
+  // ------------------------------------------------------------------ mover de etapa (Kanban)
+  // POST /api/gc/clientes/:id/mover-etapa — leva o cliente pra outra etapa da jornada.
+  //
+  // Mover NÃO é só trocar uma etiqueta: pra frente, as etapas que ficam pra trás são concluídas
+  // (com os itens delas); pra trás, as etapas reabertas voltam a ter os itens desmarcados. Por isso
+  // a rota tem DOIS passos: sem `confirmar` ela só descreve o que aconteceria, e a tela mostra isso
+  // numa janela de confirmação; com `confirmar: true` ela executa. Arrastar um card sem saber que
+  // isso fecha 17 itens de checklist seria um efeito escondido demais.
+  //
+  // `etapa_modelo_id` = 'fim' leva pra "jornada concluída".
+  app.post<{ Params: { id: string }; Body: { etapa_modelo_id?: string; confirmar?: boolean } }>(
+    '/api/gc/clientes/:id/mover-etapa',
+    autenticado,
+    async (req, reply) => {
+      const { sub } = req.user as { sub: string };
+      const { etapa_modelo_id, confirmar } = req.body ?? {};
+      if (!etapa_modelo_id) return reply.status(400).send({ message: 'Informe a etapa de destino' });
+
+      const jornada = await query<{
+        id: string; nome: string; status: string; etapa_id: string | null; abertos: string; marcados: string;
+      }>(
+        `SELECT j.id, j.nome, j.status, j.etapa_id,
+           count(i.id) FILTER (WHERE NOT i.concluido) AS abertos,
+           count(i.id) FILTER (WHERE i.concluido) AS marcados
+         FROM gc_cliente_jornada j
+         LEFT JOIN gc_checklist_itens i ON i.gc_cliente_jornada_id = j.id
+         WHERE j.gc_cliente_id = $1
+         GROUP BY j.id ORDER BY j.ordem, j.created_at`,
+        [req.params.id]
+      );
+      if (jornada.length === 0) return reply.status(404).send({ message: 'Cliente sem jornada' });
+
+      const alvo = etapa_modelo_id === 'fim' ? jornada.length : jornada.findIndex((j) => j.etapa_id === etapa_modelo_id);
+      if (alvo < 0) return reply.status(404).send({ message: 'Etapa de destino não encontrada' });
+      const atual = jornada.findIndex((j) => j.status !== 'concluida');
+      const atualIdx = atual < 0 ? jornada.length : atual;
+      const destinoNome = alvo >= jornada.length ? 'Jornada concluída' : jornada[alvo].nome;
+      const origemNome = atualIdx >= jornada.length ? 'Jornada concluída' : jornada[atualIdx].nome;
+
+      if (alvo === atualIdx) return { sem_mudanca: true, origem: origemNome, destino: destinoNome };
+
+      const fechar = jornada
+        .slice(0, alvo)
+        .filter((j) => j.status !== 'concluida' || Number(j.abertos) > 0)
+        .map((j) => ({ nome: j.nome, itens_abertos: Number(j.abertos) }));
+      const reabrir = jornada
+        .slice(alvo)
+        .filter((j) => j.status === 'concluida')
+        .map((j) => ({ nome: j.nome, itens_marcados: Number(j.marcados) }));
+
+      if (!confirmar) return { origem: origemNome, destino: destinoNome, fechar, reabrir };
+
+      await withTransaction(async (client) => {
+        for (const [i, j] of jornada.entries()) {
+          if (i < alvo) {
+            // Ficou pra trás: concluída, com os itens que faltavam.
+            await client.query(
+              `UPDATE gc_cliente_jornada SET status = 'concluida', concluida_em = COALESCE(concluida_em, NOW()),
+                 updated_at = NOW() WHERE id = $1`,
+              [j.id]
+            );
+            await client.query(
+              `UPDATE gc_checklist_itens
+               SET concluido = true, concluido_por = COALESCE(concluido_por, $2),
+                   concluido_em = COALESCE(concluido_em, NOW()), updated_at = NOW()
+               WHERE gc_cliente_jornada_id = $1 AND NOT concluido`,
+              [j.id, sub]
+            );
+            continue;
+          }
+          const reabre = j.status === 'concluida';
+          if (reabre) {
+            // Reaberta: sem desmarcar os itens ela ficaria "em andamento" com checklist 100%.
+            await client.query(
+              `UPDATE gc_checklist_itens
+               SET concluido = false, concluido_por = NULL, concluido_em = NULL, updated_at = NOW()
+               WHERE gc_cliente_jornada_id = $1`,
+              [j.id]
+            );
+          }
+          const novoStatus = i === alvo ? 'em_andamento' : reabre || j.status === 'em_andamento' ? 'pendente' : j.status;
+          await client.query(
+            `UPDATE gc_cliente_jornada SET status = $2,
+               concluida_em = CASE WHEN $2 = 'concluida' THEN concluida_em ELSE NULL END, updated_at = NOW()
+             WHERE id = $1`,
+            [j.id, novoStatus]
+          );
+        }
+      });
+
+      const efeitos = [
+        fechar.length ? `Concluídas: ${fechar.map((f) => f.nome).join(', ')}` : '',
+        reabrir.length ? `Reabertas: ${reabrir.map((r) => r.nome).join(', ')}` : '',
+      ].filter(Boolean).join(' · ');
+      await registrarEvento(req.params.id, `Etapa movida: ${origemNome} → ${destinoNome}`, efeitos, sub);
+      return { ok: true, origem: origemNome, destino: destinoNome };
+    }
+  );
 
   // ------------------------------------------------------------------ serviços
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>(

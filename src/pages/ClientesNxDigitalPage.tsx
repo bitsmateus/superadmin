@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowUpDown, Loader2, Plus, Search, ShieldAlert, Users } from 'lucide-react'
+import { ArrowUpDown, KanbanSquare, Loader2, Plus, Search, ShieldAlert, Table2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -10,9 +10,12 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Tabs } from '@/components/ui/Tabs'
 import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
+import { KanbanClientes, type ColunaKanban } from '@/components/gestaoClientes/KanbanClientes'
+import { ModalMoverEtapa } from '@/components/gestaoClientes/ModalMoverEtapa'
 import {
   NIVEIS_AVALIACAO, PRIORIDADES, TIPOS_SERVICO, gestaoClientes, progressoDoCliente,
-  type GcClienteLista, type GcNivelAvaliacao, type GcPrioridade, type GcStatusCliente,
+  type GcClienteLista, type GcNivelAvaliacao, type GcPreviaMover, type GcPrioridade,
+  type GcStatusCliente,
 } from '@/services/gestaoClientes'
 import {
   avaliarSaude, compararPorGravidade, compararPorPrioridade, contaNoTotal, type Saude,
@@ -54,6 +57,37 @@ const CORES_NOTA: Record<GcNivelAvaliacao, string> = {
   bom: 'text-accent',
   regular: 'text-warning',
   ruim: 'text-danger',
+}
+
+/** Dias daqui até uma data 'YYYY-MM-DD' (negativo = já passou). */
+function diasAteData(data: string | null): number | null {
+  if (!data) return null
+  const quando = new Date(`${String(data).slice(0, 10)}T12:00:00`).getTime()
+  return Number.isNaN(quando) ? null : Math.round((quando - Date.now()) / 86400000)
+}
+
+function dataBr(data: string | null): string {
+  return data ? String(data).slice(0, 10).split('-').reverse().join('/') : '—'
+}
+
+/** "hoje", "ontem", "há 5 dias" — pra data que importa pelo quão recente é. */
+function haQuantoTempo(iso: string | null): string {
+  if (!iso) return ''
+  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (dias <= 0) return 'hoje'
+  if (dias === 1) return 'ontem'
+  return `há ${dias} dias`
+}
+
+type Visao = 'tabela' | 'kanban'
+const CHAVE_VISAO = 'gc:clientes:visao'
+
+function lerVisao(): Visao {
+  try {
+    return window.localStorage.getItem(CHAVE_VISAO) === 'kanban' ? 'kanban' : 'tabela'
+  } catch {
+    return 'tabela'
+  }
 }
 
 function rotuloNota(nivel: GcNivelAvaliacao): string {
@@ -145,6 +179,14 @@ export function ClientesNxDigitalPage() {
   const [soProblemas, setSoProblemas] = React.useState(false)
   const [ordem, setOrdem] = React.useState<Ordem>('fila')
   const [modalAberto, setModalAberto] = React.useState(false)
+  const [visao, setVisao] = React.useState<Visao>(lerVisao)
+  const [colunas, setColunas] = React.useState<ColunaKanban[]>([])
+  const [mover, setMover] = React.useState<{
+    cliente: GcClienteLista
+    destinoId: string
+    previa: GcPreviaMover
+  } | null>(null)
+  const [movendo, setMovendo] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
     try {
@@ -171,6 +213,52 @@ export function ClientesNxDigitalPage() {
   React.useEffect(() => {
     void carregar()
   }, [carregar])
+
+  React.useEffect(() => {
+    gestaoClientes
+      .modelos()
+      .then((m) => setColunas(m.etapas.map((e) => ({ id: e.id, nome: e.nome }))))
+      .catch(() => {
+        // Sem as colunas o Kanban fica vazio, mas a tabela continua funcionando — não vale
+        // derrubar a tela por causa disso.
+      })
+  }, [])
+
+  const escolherVisao = (v: Visao) => {
+    setVisao(v)
+    try {
+      window.localStorage.setItem(CHAVE_VISAO, v)
+    } catch {
+      /* sem armazenamento: vale até recarregar */
+    }
+  }
+
+  // Arrastar (ou escolher no seletor) NÃO executa: pede ao servidor a prévia do que aconteceria e só
+  // move depois da confirmação, porque mexe no checklist do cliente.
+  const pedirMover = async (cliente: GcClienteLista, destinoId: string) => {
+    try {
+      const previa = await gestaoClientes.moverEtapa(cliente.id, destinoId)
+      if (previa.sem_mudanca) return
+      setMover({ cliente, destinoId, previa })
+    } catch (err) {
+      toast.error('Não foi possível mover: ' + (err as Error).message)
+    }
+  }
+
+  const confirmarMover = async () => {
+    if (!mover) return
+    setMovendo(true)
+    try {
+      await gestaoClientes.moverEtapa(mover.cliente.id, mover.destinoId, true)
+      toast.success(`${mover.cliente.nome_empresa} movido pra ${mover.previa.destino}`)
+      setMover(null)
+      await carregar()
+    } catch (err) {
+      toast.error('Falha ao mover: ' + (err as Error).message)
+    } finally {
+      setMovendo(false)
+    }
+  }
 
   // O semáforo é calculado uma vez por carga, não a cada render: são ~15 sinais por cliente.
   const comSaude = React.useMemo(
@@ -302,6 +390,31 @@ export function ClientesNxDigitalPage() {
                 só quem precisa de atenção
               </Button>
             )}
+            <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="Visão">
+              {(
+                [
+                  { valor: 'tabela', rotulo: 'Tabela', icone: Table2 },
+                  { valor: 'kanban', rotulo: 'Kanban por etapa', icone: KanbanSquare },
+                ] as const
+              ).map((v) => (
+                <button
+                  key={v.valor}
+                  type="button"
+                  onClick={() => escolherVisao(v.valor)}
+                  title={v.rotulo}
+                  aria-pressed={visao === v.valor}
+                  className={cn(
+                    'flex h-9 items-center gap-1.5 px-2.5 text-xs transition-colors',
+                    visao === v.valor
+                      ? 'bg-elevate/[0.08] text-foreground'
+                      : 'text-foreground/50 hover:text-foreground/80',
+                  )}
+                >
+                  <v.icone className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{v.rotulo}</span>
+                </button>
+              ))}
+            </div>
             <label className="flex items-center gap-1.5 text-xs text-foreground/50">
               <ArrowUpDown className="h-3.5 w-3.5" />
               <select
@@ -347,6 +460,13 @@ export function ClientesNxDigitalPage() {
               ) : undefined
             }
           />
+        ) : visao === 'kanban' ? (
+          <KanbanClientes
+            itens={ordenados}
+            colunas={colunas}
+            onAbrir={(id) => navegar(`/clientesnxdigital/clientes/${id}`)}
+            onMover={(c, destino) => void pedirMover(c, destino)}
+          />
         ) : (
           <div className="overflow-hidden rounded-xl border border-line">
             <div className="overflow-x-auto">
@@ -360,6 +480,9 @@ export function ClientesNxDigitalPage() {
                     <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Serviços</th>
                     <th className="px-4 py-2.5 font-medium">Etapa atual</th>
                     <th className="hidden px-4 py-2.5 font-medium sm:table-cell">Checklist</th>
+                    <th className="hidden px-4 py-2.5 font-medium xl:table-cell">Renovação</th>
+                    <th className="hidden px-4 py-2.5 font-medium xl:table-cell">Último relatório</th>
+                    <th className="hidden px-4 py-2.5 font-medium 2xl:table-cell">Portal</th>
                     <th className="px-4 py-2.5 font-medium">Status</th>
                   </tr>
                 </thead>
@@ -386,7 +509,31 @@ export function ClientesNxDigitalPage() {
         onFechar={() => setModalAberto(false)}
         onSalvo={(id) => navegar(`/clientesnxdigital/clientes/${id}`)}
       />
+
+      <ModalMoverEtapa
+        aberto={mover !== null}
+        cliente={mover?.cliente.nome_empresa ?? ''}
+        previa={mover?.previa ?? null}
+        confirmando={movendo}
+        onCancelar={() => setMover(null)}
+        onConfirmar={() => void confirmarMover()}
+      />
     </>
+  )
+}
+
+/** Próxima renovação: a data, e quanto falta — em vermelho se já venceu ou vence em até 30 dias. */
+function Renovacao({ data }: { data: string | null }) {
+  const dias = diasAteData(data)
+  if (dias === null) return <span className="text-xs text-foreground/35">sem data</span>
+  const urgente = dias <= 30
+  return (
+    <span className={urgente ? 'text-danger' : 'text-foreground/80'}>
+      {dataBr(data)}
+      <span className="block text-xs">
+        {dias < 0 ? `venceu há ${Math.abs(dias)} dia(s)` : dias === 0 ? 'vence hoje' : `em ${dias} dia(s)`}
+      </span>
+    </span>
   )
 }
 
@@ -514,6 +661,25 @@ function LinhaCliente({
       </td>
       <td className="hidden px-4 py-3 sm:table-cell">
         <BarraProgresso valor={progressoDoCliente(c)} />
+      </td>
+      <td className="hidden whitespace-nowrap px-4 py-3 xl:table-cell">
+        <Renovacao data={c.proxima_renovacao} />
+      </td>
+      <td className="hidden whitespace-nowrap px-4 py-3 xl:table-cell">
+        {c.ultimo_relatorio ? (
+          <span className="text-foreground/80">
+            {String(c.ultimo_relatorio).slice(0, 7).split('-').reverse().join('/')}
+          </span>
+        ) : (
+          <span className="text-xs text-foreground/35">nunca publicado</span>
+        )}
+      </td>
+      <td className="hidden whitespace-nowrap px-4 py-3 2xl:table-cell">
+        {c.ultimo_acesso_portal ? (
+          <span className="text-foreground/80">{haQuantoTempo(c.ultimo_acesso_portal)}</span>
+        ) : (
+          <span className="text-xs text-foreground/35">nunca abriu</span>
+        )}
       </td>
       <td className="px-4 py-3">
         <Badge tone={TOM_DO_STATUS[c.status]} dot>

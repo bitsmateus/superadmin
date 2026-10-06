@@ -329,7 +329,7 @@ async function podeUsarModulo(userId: string, role: string): Promise<boolean> {
   );
   if (!perfil?.restrict_access) return true;
   const chave = await queryOne(
-    `SELECT 1 FROM user_menu_access WHERE user_id = $1 AND menu_key = 'nxdigital'`,
+    `SELECT 1 FROM user_menu_access WHERE user_id = $1 AND menu_key LIKE 'nxdigital%'`,
     [userId]
   );
   return !!chave;

@@ -30,9 +30,11 @@ export interface TopBarProps {
   /** Sobrescreve o tamanho padrão (text-base) do <h1> — ex.: "text-[36px]". */
   titleClassName?: string
   breadcrumbs?: { label: string; to?: string }[]
+  /** No celular: sem migalhas e sem subtítulo, só o título e as ações numa linha. */
+  compacto?: boolean
 }
 
-export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs }: TopBarProps) {
+export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs, compacto }: TopBarProps) {
   const location = useLocation()
   const parts = location.pathname.split('/').filter(Boolean)
   // Numa cópia do menu Suporte a URL é /visao/<id>, que viraria um breadcrumb "visao / a1b2c3".
@@ -62,7 +64,7 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs
     <header className="sticky top-0 z-20 border-b border-line bg-bg/85 backdrop-blur-md">
       <div className="flex min-h-14 items-center justify-between gap-3 py-1.5 pl-16 pr-4 sm:gap-4 lg:px-8">
         <div className="min-w-0 flex-1">
-          <nav className="flex items-center gap-1 text-xs text-foreground/40">
+          <nav className={cn('items-center gap-1 text-xs text-foreground/40', compacto ? 'hidden sm:flex' : 'flex')}>
             {computedCrumbs.map((c, i) => (
               <span key={i} className="flex items-center gap-1">
                 {i > 0 && <ChevronRight className="h-3 w-3 text-foreground/25" />}
@@ -81,7 +83,7 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs
           </nav>
           <div className="mt-0.5 flex items-baseline gap-2">
             <h1 className={cn('text-foreground truncate', titleClassName ?? 'text-base font-semibold')}>{heading}</h1>
-            {subtitle && <span className="text-xs text-foreground/40">{subtitle}</span>}
+            {subtitle && <span className={cn('text-xs text-foreground/40', compacto && 'hidden sm:inline')}>{subtitle}</span>}
           </div>
         </div>
         {rightSlot && <div className="shrink-0">{rightSlot}</div>}

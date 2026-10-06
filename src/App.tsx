@@ -214,7 +214,8 @@ export default function App() {
           <Route path="/financeiro/contas-a-pagar" element={<FinanceiroContasPagarPage />} />
           <Route path="/financeiro/clientes-geral" element={<FinanceiroClientesGeralPage />} />
           {/* Clientes NX Digital — módulo de gestão dos clientes de tráfego (tabelas gc_*). */}
-          <Route path="/clientesnxdigital" element={<ClientesNxDigitalPage />} />
+          {/* A raiz só redireciona: assim a trava por aba (ProtectedRoute) vale pra ela também. */}
+          <Route path="/clientesnxdigital" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
           <Route path="/clientesnxdigital/clientes" element={<ClientesNxDigitalPage />} />
           <Route path="/clientesnxdigital/clientes/:id" element={<ClienteNxDetalhePage />} />
           <Route path="/clientesnxdigital/trafego" element={<TrafegoNxPage />} />

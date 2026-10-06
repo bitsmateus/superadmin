@@ -42,6 +42,7 @@ export function EstrategiasNxPage() {
   return (
     <>
       <TopBar
+        compacto
         title="Estratégias"
         subtitle="Clientes NX Digital"
         breadcrumbs={[

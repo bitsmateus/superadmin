@@ -32,7 +32,7 @@ export function Tabs({
         type="button"
         onClick={() => onChange(it.value)}
         className={cn(
-          'relative inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors',
+          'relative inline-flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors',
           active
             ? 'text-foreground'
             : finalized
@@ -62,7 +62,7 @@ export function Tabs({
       )}
       role="tablist"
     >
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {items.map((it) => renderTab(it, false))}
       </div>
       {rightItems && rightItems.length > 0 && (

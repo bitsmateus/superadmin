@@ -1,7 +1,7 @@
 ﻿import { Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { MENU_ACCESS_ITEMS } from '@/constants/menuAccess'
+import { MENU_ACCESS_ITEMS, acessoAAgenda } from '@/constants/menuAccess'
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { profile: session, loading } = useAuth()
@@ -35,7 +35,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const matched = MENU_ACCESS_ITEMS.find(
       (item) => location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path)),
     )
-    if (matched && !allowed.has(matched.key)) {
+    const liberado = matched?.key === 'agenda' ? acessoAAgenda(allowed) : matched ? allowed.has(matched.key) : true
+    if (matched && !liberado) {
       const fallback = MENU_ACCESS_ITEMS.find((item) => allowed.has(item.key))
       return <Navigate to={fallback?.path ?? '/'} replace />
     }

@@ -15,6 +15,11 @@ export interface MenuAccessItem {
   label: string
   path: string
   group: MenuAccessGroup
+  /**
+   * Item que se libera/restringe mas NÃO é uma página do Suporte arquivável: fica fora de
+   * MENU_KEY_BY_PATH (que o menu usa pra arquivar/duplicar itens do Suporte) e tem a checagem própria.
+   */
+  fixo?: boolean
 }
 
 export const MENU_ACCESS_GROUP_LABEL: Record<MenuAccessGroup, string> = {
@@ -41,16 +46,25 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   { key: 'arquivados', label: 'Clientes arquivados', path: '/arquivados', group: 'suporte' },
   { key: 'tickets', label: 'Tickets', path: '/tickets', group: 'suporte' },
   { key: 'templates', label: 'Templates', path: '/templates', group: 'suporte' },
-  // Grupo NX DIGITAL (gestão dos clientes de tráfego): uma chave só pras três telas — Clientes,
-  // Tráfego e Estratégias. É o que o gestor de tráfego precisa e nada além disso.
-  {
-    key: 'nxdigital',
-    label: 'NX DIGITAL — Clientes, Tráfego e Estratégias',
-    path: '/clientesnxdigital',
-    group: 'nxdigital',
-  },
+  // Agenda: a mesma tela é atalho do Suporte e do Comercial. Quem tem o Comercial liberado a enxerga por
+  // lá (ver `acessoAAgenda`); quem só tem NX DIGITAL não vê a agenda do suporte sem esta marca.
+  { key: 'agenda', label: 'Agenda', path: '/agenda', group: 'suporte', fixo: true },
+  // Grupo NX DIGITAL (gestão dos clientes de tráfego): uma chave POR aba, marcadas uma a uma como o
+  // resto do menu. As telas de detalhe do cliente (/clientesnxdigital/clientes/<id>) valem pela chave de
+  // Clientes.
+  { key: 'nxdigital_clientes', label: 'Clientes', path: '/clientesnxdigital/clientes', group: 'nxdigital' },
+  { key: 'nxdigital_trafego', label: 'Tráfego', path: '/clientesnxdigital/trafego', group: 'nxdigital' },
+  { key: 'nxdigital_estrategias', label: 'Estratégias', path: '/clientesnxdigital/estrategias', group: 'nxdigital' },
 ]
 
+/** As chaves das abas do NX DIGITAL. */
+export const CHAVES_NX_DIGITAL = ['nxdigital_clientes', 'nxdigital_trafego', 'nxdigital_estrategias'] as const
+
+/** A pessoa restrita pode abrir a Agenda? Com a marca "Agenda" ou com o Comercial liberado. */
+export function acessoAAgenda(allowed: Set<string>): boolean {
+  return allowed.has('agenda') || allowed.has('comercial')
+}
+
 export const MENU_KEY_BY_PATH: Record<string, string> = Object.fromEntries(
-  MENU_ACCESS_ITEMS.map((item) => [item.path, item.key]),
+  MENU_ACCESS_ITEMS.filter((item) => !item.fixo).map((item) => [item.path, item.key]),
 )

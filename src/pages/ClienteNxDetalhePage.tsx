@@ -149,6 +149,7 @@ export function ClienteNxDetalhePage() {
   return (
     <>
       <TopBar
+        compacto
         title={nome}
         subtitle="Clientes NX Digital"
         breadcrumbs={[
@@ -165,7 +166,7 @@ export function ClienteNxDetalhePage() {
                 leftIcon={<Trash2 className="h-4 w-4" />}
                 onClick={() => setConfirmandoExclusao(true)}
               >
-                Excluir
+                <span className="hidden sm:inline">Excluir</span>
               </Button>
               <Button
                 variant="ghost"
@@ -173,7 +174,7 @@ export function ClienteNxDetalhePage() {
                 leftIcon={<MessageSquare className="h-4 w-4" />}
                 onClick={() => setNotasAbertas(true)}
               >
-                Notas
+                <span className="hidden sm:inline">Notas</span>
               </Button>
               <Button
                 variant="secondary"
@@ -181,7 +182,7 @@ export function ClienteNxDetalhePage() {
                 leftIcon={<Pencil className="h-4 w-4" />}
                 onClick={() => setEditando(true)}
               >
-                Editar cliente
+                <span className="hidden sm:inline">Editar cliente</span>
               </Button>
             </div>
           ) : undefined

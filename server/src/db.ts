@@ -363,6 +363,26 @@ END $$`);
     SELECT DISTINCT user_id, 'comercial' FROM user_menu_access
     WHERE menu_key IN ('comercial_novos_leads', 'comercial_crm_luis', 'comercial_crm_arthur')
     ON CONFLICT (user_id, menu_key) DO NOTHING`);
+  // NX DIGITAL: a chave única 'nxdigital' virou uma chave POR aba (Clientes, Tráfego, Estratégias).
+  // Quem tinha a antiga ganha as três, pra não perder nada nem ganhar nada na troca. Idempotente.
+  await pool.query(`INSERT INTO user_menu_access (user_id, menu_key)
+    SELECT m.user_id, k FROM user_menu_access m,
+      unnest(ARRAY['nxdigital_clientes','nxdigital_trafego','nxdigital_estrategias']) AS k
+    WHERE m.menu_key = 'nxdigital'
+    ON CONFLICT (user_id, menu_key) DO NOTHING`);
+  await pool.query(`DELETE FROM user_menu_access WHERE menu_key = 'nxdigital'`);
+  // Agenda passou a ter marca própria. Uma vez só (marcador abaixo): quem já era restrito e NÃO é
+  // do NX DIGITAL mantém a agenda que já via; o time do NX DIGITAL não ganha a agenda do suporte.
+  await pool.query(`CREATE TABLE IF NOT EXISTS menu_access_migracoes (nome TEXT PRIMARY KEY, feita_em TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  const feita = await pool.query(`SELECT 1 FROM menu_access_migracoes WHERE nome = 'agenda_com_marca'`);
+  if (feita.rowCount === 0) {
+    await pool.query(`INSERT INTO user_menu_access (user_id, menu_key)
+      SELECT p.id, 'agenda' FROM profiles p
+      WHERE p.restrict_access = true
+        AND NOT EXISTS (SELECT 1 FROM user_menu_access m WHERE m.user_id = p.id AND m.menu_key LIKE 'nxdigital%')
+      ON CONFLICT (user_id, menu_key) DO NOTHING`);
+    await pool.query(`INSERT INTO menu_access_migracoes (nome) VALUES ('agenda_com_marca')`);
+  }
   await pool.query(`CREATE TABLE IF NOT EXISTS lead_rows (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     board_id UUID NOT NULL REFERENCES lead_boards(id) ON DELETE CASCADE,

@@ -56,7 +56,7 @@ import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadPages } from '@/hooks/useLeadPages'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 import { useSupportPages, useSupportPagesBooted } from '@/hooks/useSupportPages'
-import { MENU_KEY_BY_PATH, MENU_ACCESS_ITEMS } from '@/constants/menuAccess'
+import { MENU_KEY_BY_PATH, MENU_ACCESS_ITEMS, acessoAAgenda } from '@/constants/menuAccess'
 import { leadPagesService } from '@/services/leadPages'
 import { supportPagesService, isSupportCopy } from '@/services/supportPages'
 import type { SupportDuplicateMode } from '@/services/supportPages'
@@ -295,6 +295,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       // Comercial é tudo-ou-nada por uma chave só — as abas são dinâmicas, então o caminho
       // exato (/comercial/<id>) nunca bate igualzinho num dicionário fixo.
       if (to.startsWith('/comercial')) return menuAllowed.has('comercial')
+      if (to === '/agenda') return acessoAAgenda(menuAllowed)
+      // O grupo NX DIGITAL aparece se QUALQUER aba dele está liberada; cada aba, pela chave dela.
+      if (to === '/clientesnxdigital') return [...menuAllowed].some((k) => k.startsWith('nxdigital_'))
       const key = MENU_KEY_BY_PATH[to]
       return key ? menuAllowed.has(key) : true
     },
@@ -916,7 +919,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
           />
         </button>
         {clientesNxOpen &&
-          SUB_ABAS_CLIENTES_NX.map((sub) => (
+          SUB_ABAS_CLIENTES_NX.filter((sub) => canSee(sub.to)).map((sub) => (
             <NavLink
               key={sub.to}
               to={sub.to}

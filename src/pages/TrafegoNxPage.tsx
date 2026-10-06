@@ -300,6 +300,7 @@ export function TrafegoNxPage() {
   return (
     <>
       <TopBar
+        compacto
         title="Tráfego"
         subtitle="Clientes NX Digital"
         breadcrumbs={[

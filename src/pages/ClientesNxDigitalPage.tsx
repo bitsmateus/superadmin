@@ -405,6 +405,7 @@ export function ClientesNxDigitalPage() {
   return (
     <>
       <TopBar
+        compacto
         title="Clientes"
         subtitle="Clientes NX Digital"
         breadcrumbs={[
@@ -495,7 +496,7 @@ export function ClientesNxDigitalPage() {
               ),
             }))}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {soProblemas && (
               <Button
                 variant="ghost"
@@ -556,7 +557,7 @@ export function ClientesNxDigitalPage() {
                 ))}
               </div>
             )}
-            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/55">
+            <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-foreground/55">
               <input
                 type="checkbox"
                 checked={mostrarTeste}
@@ -566,7 +567,7 @@ export function ClientesNxDigitalPage() {
               Mostrar clientes de teste{foraDosTotais > 0 ? ` (${foraDosTotais})` : ''}
             </label>
             {visao === 'tabela' && (
-              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/55">
+              <label className="hidden cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-foreground/55 sm:flex">
                 <input
                   type="checkbox"
                   checked={mostrarPrioridade}
@@ -595,7 +596,7 @@ export function ClientesNxDigitalPage() {
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar por empresa, contato, cidade, CNPJ…"
               leftIcon={<Search className="h-4 w-4" />}
-              containerClassName="sm:w-64"
+              containerClassName="w-full sm:w-64"
             />
           </div>
         </div>
@@ -636,7 +637,19 @@ export function ClientesNxDigitalPage() {
             onMover={(c, destino) => void pedirMover(c, destino)}
           />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-line">
+          <>
+          {/* Celular: um cartão por cliente. A tabela de 11 colunas só cabe de tablet pra cima. */}
+          <div className="space-y-2 sm:hidden">
+            {ordenados.map(({ cliente: c, saude }) => (
+              <CartaoCliente
+                key={c.id}
+                cliente={c}
+                saude={saude}
+                onAbrir={() => navegar(`/clientesnxdigital/clientes/${c.id}`)}
+              />
+            ))}
+          </div>
+          <div className="hidden overflow-hidden rounded-xl border border-line sm:block">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-elevate/[0.02] text-left text-xs uppercase tracking-wide text-foreground/50">
@@ -670,6 +683,7 @@ export function ClientesNxDigitalPage() {
               </table>
             </div>
           </div>
+          </>
         )}
       </div>
 
@@ -703,6 +717,69 @@ function Renovacao({ data }: { data: string | null }) {
         {dias < 0 ? `venceu há ${Math.abs(dias)} dia(s)` : dias === 0 ? 'vence hoje' : `em ${dias} dia(s)`}
       </span>
     </span>
+  )
+}
+
+/**
+ * O cliente como CARTÃO, pro celular: quem é, como está (com o motivo), em que etapa, quando renova.
+ * É o que a tabela mostra em 11 colunas, na ordem em que se lê de cima pra baixo.
+ */
+function CartaoCliente({
+  cliente: c,
+  saude,
+  onAbrir,
+}: {
+  cliente: GcClienteLista
+  saude: Saude
+  onAbrir: () => void
+}) {
+  const ordem = ['risco', 'atencao', 'neutro', 'bom', 'otimo']
+  const porGravidade = [...saude.sinais].sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado))
+  const pior =
+    porGravidade.find((x) => x.chave !== 'renovacao_sem_data' && (x.estado === 'risco' || x.estado === 'atencao')) ??
+    porGravidade[0]
+  const dias = diasAteData(c.proxima_renovacao)
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="w-full rounded-xl border border-line p-3 text-left transition-colors active:bg-elevate/[0.04]"
+    >
+      <span className="flex items-center gap-2.5">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line bg-elevate/[0.04] text-xs font-semibold text-foreground/70">
+          {iniciais(c.nome_empresa) || '—'}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5 font-medium text-foreground">
+            <span className="truncate">{c.nome_empresa}</span>
+            {c.fora_dos_totais && (
+              <span className="shrink-0 rounded border border-line px-1 text-[10px] font-normal uppercase text-foreground/45">teste</span>
+            )}
+          </span>
+          <span className="block truncate text-xs text-foreground/50">
+            {[c.nome_contato, c.responsavel_nome].filter(Boolean).join(' · ') || '—'}
+          </span>
+        </span>
+        <PastilhaSaude estado={saude.nivel} />
+      </span>
+      {pior && (saude.nivel === 'risco' || saude.nivel === 'atencao') && (
+        <span className="mt-2 block text-xs text-foreground/60">
+          {pior.titulo}: {pior.detalhe}
+        </span>
+      )}
+      <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground/50">
+        <span>{c.etapa_atual ?? 'Jornada concluída'}</span>
+        {Number(c.itens_atrasados) > 0 && <span className="text-danger">{Number(c.itens_atrasados)} atrasado(s)</span>}
+        <span className={dias !== null && dias <= DIAS_AVISO_RENOVACAO ? 'text-danger' : undefined}>
+          {dias === null ? 'sem data de renovação' : dias < 0 ? `renovação venceu há ${Math.abs(dias)} dia(s)` : `renova em ${dias} dia(s)`}
+        </span>
+        {c.avaliacao ? (
+          <span className={CORES_NOTA[c.avaliacao.nivel]}>nota: {rotuloNota(c.avaliacao.nivel)}</span>
+        ) : (
+          <span className="text-foreground/35">sem nota</span>
+        )}
+      </span>
+    </button>
   )
 }
 

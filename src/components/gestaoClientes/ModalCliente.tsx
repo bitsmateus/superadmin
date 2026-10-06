@@ -59,6 +59,7 @@ export function ModalCliente({
       responsavel_id: cliente?.responsavel_id ?? '',
       status: cliente?.status ?? 'ativo',
       prioridade: cliente?.prioridade ?? 'media',
+      fora_dos_totais: cliente?.fora_dos_totais ?? false,
       data_inicio: soData(cliente?.data_inicio),
       observacoes_gerais: cliente?.observacoes_gerais ?? '',
     })
@@ -181,6 +182,23 @@ export function ModalCliente({
           value={form.data_inicio ?? null}
           onChange={(v) => setForm((f) => ({ ...f, data_inicio: v }))}
         />
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-line px-3 py-2.5 sm:col-span-2">
+          <input
+            type="checkbox"
+            checked={form.fora_dos_totais ?? false}
+            onChange={(e) => setForm((f) => ({ ...f, fora_dos_totais: e.target.checked }))}
+            className="mt-0.5 h-4 w-4 rounded border-line"
+          />
+          <span>
+            <span className="block text-sm font-medium text-foreground">
+              Cliente de teste ou arquivado
+            </span>
+            <span className="block text-xs text-foreground/55">
+              Continua na lista, mas não entra em nenhum total (investimento, leads, clientes em
+              risco). Use pra cadastros de teste e pra cliente que você quer guardar sem contar.
+            </span>
+          </span>
+        </label>
         <div className="sm:col-span-2">
           <Textarea
             label="Observações"

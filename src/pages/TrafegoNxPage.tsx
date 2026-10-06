@@ -11,7 +11,7 @@ import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
   mesAtual, mesPorExtenso, somarMeses, variacaoDaMetrica,
 } from '@/lib/gcMetricas'
-import { avaliarSaude, type Saude } from '@/lib/gcSaude'
+import { avaliarSaude, contaNoTotal, type Saude } from '@/lib/gcSaude'
 import { cn } from '@/lib/utils'
 
 /** As colunas da tabela: o que foi lançado e, depois, o que sai da conta. */
@@ -87,9 +87,15 @@ export function TrafegoNxPage() {
   const semNumeros = comSaude.filter(
     ({ cliente }) => Object.keys(cliente.metricas_mes ?? {}).length === 0,
   )
-  const total = totalDoMes(linhas, 'metricas_mes')
-  const totalAnterior = totalDoMes(linhas, 'metricas_mes_anterior')
-  const emRisco = comSaude.filter(({ saude }) => saude.nivel === 'risco').length
+  // Os cartões, o total e o "em risco" contam só quem entra nos totais (ativo, não-teste). As linhas
+  // dos de teste continuam na tabela, marcadas, mas não somam.
+  const contados = comSaude.filter(({ cliente }) => contaNoTotal(cliente))
+  const total = totalDoMes(contados.map((x) => x.cliente), 'metricas_mes')
+  const totalAnterior = totalDoMes(contados.map((x) => x.cliente), 'metricas_mes_anterior')
+  const emRisco = contados.filter(({ saude }) => saude.nivel === 'risco').length
+  const contadosComNumeros = contados.filter(
+    ({ cliente }) => Object.keys(cliente.metricas_mes ?? {}).length > 0,
+  ).length
 
   return (
     <>
@@ -156,7 +162,7 @@ export function TrafegoNxPage() {
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-foreground/60">
               <span>
-                <strong className="text-foreground">{comNumeros.length}</strong> de {linhas.length}{' '}
+                <strong className="text-foreground">{contadosComNumeros}</strong> de {contados.length}{' '}
                 clientes com lançamento
               </span>
               <span>
@@ -246,7 +252,14 @@ function Linha({
       className="cursor-pointer border-t border-line transition-colors hover:bg-elevate/[0.03]"
     >
       <td className="sticky left-0 whitespace-nowrap bg-surface px-4 py-2.5">
-        <span className="block font-medium text-foreground">{l.nome_empresa}</span>
+        <span className="block font-medium text-foreground">
+          {l.nome_empresa}
+          {l.fora_dos_totais && (
+            <span className="ml-1.5 rounded border border-line px-1 text-[10px] font-normal uppercase text-foreground/45">
+              teste
+            </span>
+          )}
+        </span>
         <span className="block text-xs text-foreground/45">
           {l.responsavel_nome ?? 'sem responsável'}
         </span>

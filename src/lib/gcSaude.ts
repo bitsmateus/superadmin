@@ -418,6 +418,17 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   return { nivel, rotulo: ROTULO_ESTADO[nivel], sinais, contagem, churn }
 }
 
+/**
+ * O cliente entra nos totais da carteira? Só se está ATIVO e não foi marcado como teste/arquivado.
+ *
+ * É a regra única: a lista de Clientes, a tela de Tráfego e o card "Em risco" usam esta função, e
+ * escrever "status === 'ativo'" em cada tela é como uma delas esquece de excluir os de teste.
+ * Pausado também fica de fora: não está sendo atendido, então não soma investimento nem leads.
+ */
+export function contaNoTotal(c: Pick<GcClienteLista, 'status' | 'fora_dos_totais'>): boolean {
+  return c.status === 'ativo' && !c.fora_dos_totais
+}
+
 /** Peso da prioridade definida à mão. Alta primeiro, baixa por último. */
 const PESO_PRIORIDADE: Record<string, number> = { alta: 0, media: 1, baixa: 2 }
 

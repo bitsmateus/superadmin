@@ -272,6 +272,11 @@ const TABELAS = [
      END IF;
    END $$`,
 
+  // Cliente de teste ou arquivado: continua existindo e aparecendo nas listas, mas fica FORA dos
+  // totais (investimento, leads, risco...). É diferente de "encerrado", que é um cliente que saiu —
+  // teste é cadastro que nunca foi cliente de verdade e não pode inflar a carteira.
+  `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS fora_dos_totais BOOLEAN NOT NULL DEFAULT false`,
+
   // Prints e arquivos colados no registro — mesmo formato dos anexos de lead_notes:
   // [{ id, name, type, size, dataUrl }]. Fica no banco (data URL) como o resto do projeto, em vez
   // de depender de um bucket que não existe aqui.

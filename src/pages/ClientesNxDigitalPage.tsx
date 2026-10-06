@@ -15,7 +15,7 @@ import {
   type GcClienteLista, type GcNivelAvaliacao, type GcPrioridade, type GcStatusCliente,
 } from '@/services/gestaoClientes'
 import {
-  avaliarSaude, compararPorGravidade, compararPorPrioridade, type Saude,
+  avaliarSaude, compararPorGravidade, compararPorPrioridade, contaNoTotal, type Saude,
 } from '@/lib/gcSaude'
 import { formatarMetrica, mesPorExtenso, mesAtual } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
@@ -202,8 +202,10 @@ export function ClientesNxDigitalPage() {
   const contagem = (status: GcStatusCliente | 'todos') =>
     status === 'todos' ? clientes.length : clientes.filter((c) => c.status === status).length
 
-  // Os indicadores do topo falam só dos clientes ATIVOS: cliente encerrado não tem o que cobrar.
-  const ativos = comSaude.filter(({ cliente }) => cliente.status === 'ativo')
+  // Os indicadores do topo falam só de quem CONTA nos totais: ativo e não marcado como teste. Cliente
+  // encerrado não tem o que cobrar, e cadastro de teste inflaria a carteira e o "em risco".
+  const ativos = comSaude.filter(({ cliente }) => contaNoTotal(cliente))
+  const foraDosTotais = comSaude.filter(({ cliente }) => cliente.fora_dos_totais).length
   const emRisco = ativos.filter(({ saude }) => saude.nivel === 'risco').length
   const precisamAtencao = ativos.filter(({ saude }) => saude.nivel === 'atencao').length
   const semLancamento = ativos.filter(
@@ -240,7 +242,11 @@ export function ClientesNxDigitalPage() {
               rotulo="Clientes ativos"
               valor={String(ativos.length)}
               ajuda={
-                altaPrioridade > 0 ? `${altaPrioridade} de prioridade alta` : `${clientes.length} no total`
+                altaPrioridade > 0
+                  ? `${altaPrioridade} de prioridade alta`
+                  : foraDosTotais > 0
+                    ? `${foraDosTotais} de teste fora da conta`
+                    : `${clientes.length} no total`
               }
             />
             <Indicador
@@ -430,7 +436,17 @@ function LinhaCliente({
             {iniciais(c.nome_empresa) || '—'}
           </span>
           <span className="min-w-0">
-            <span className="block truncate font-medium text-foreground">{c.nome_empresa}</span>
+            <span className="flex items-center gap-1.5 truncate font-medium text-foreground">
+              {c.nome_empresa}
+              {c.fora_dos_totais && (
+                <span
+                  className="shrink-0 rounded border border-line px-1 text-[10px] font-normal uppercase text-foreground/45"
+                  title="Fora dos totais"
+                >
+                  teste
+                </span>
+              )}
+            </span>
             <span className="block truncate text-xs text-foreground/50">
               {[c.nome_contato, c.responsavel_nome].filter(Boolean).join(' · ') || '—'}
             </span>

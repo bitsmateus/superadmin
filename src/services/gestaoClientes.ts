@@ -129,6 +129,8 @@ export interface GcClienteLista {
   responsavel_nome: string | null
   status: GcStatusCliente
   prioridade: GcPrioridade
+  /** Teste/arquivado: aparece nas listas, mas não entra em nenhum total. */
+  fora_dos_totais: boolean
   data_inicio: string | null
   observacoes_gerais: string
   created_at: string
@@ -185,6 +187,7 @@ export type GcClienteEntrada = Partial<{
   responsavel_id: string | null
   status: GcStatusCliente
   prioridade: GcPrioridade
+  fora_dos_totais: boolean
   data_inicio: string | null
   observacoes_gerais: string
 }>

@@ -18,8 +18,8 @@ import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js'
 /** Só deixa passar as colunas que a tela realmente edita — o resto do body é ignorado. */
 const CAMPOS_CLIENTE = [
   'nome_empresa', 'nome_contato', 'whatsapp_contato', 'email_contato', 'cnpj', 'cidade',
-  'segmento', 'logo_url', 'responsavel_id', 'status', 'prioridade', 'data_inicio',
-  'observacoes_gerais',
+  'segmento', 'logo_url', 'responsavel_id', 'status', 'prioridade', 'fora_dos_totais',
+  'data_inicio', 'observacoes_gerais',
 ] as const;
 
 const CAMPOS_SERVICO = [

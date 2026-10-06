@@ -1,37 +1,41 @@
-import { createSign } from 'crypto';
 import { randomUUID } from 'crypto';
 
 /**
- * Integração com a Agenda do Google via conta de serviço (Service Account) com
- * delegação de domínio (Google Workspace) — sem OAuth interativo: a conta de
- * serviço "se passa" por um e-mail do domínio (GOOGLE_CALENDAR_IMPERSONATE_EMAIL)
- * e lê/escreve na agenda dele (GOOGLE_CALENDAR_ID, default "primary" = a agenda
- * principal desse e-mail). Todo o time (Comercial e Suporte) usa essa MESMA
- * agenda — é o que fica por trás da tela /agenda do painel.
+ * Integração com a Agenda do Google via OAuth2 (refresh token) de UMA conta —
+ * a que for usada na autorização única (ver abaixo) vira "a agenda compartilhada"
+ * do time (Comercial e Suporte usam a mesma, GOOGLE_CALENDAR_ID, default
+ * "primary" = a agenda principal dessa conta).
  *
- * Sem SDK (googleapis): assina o JWT na mão com `crypto` (RS256) e troca por um
- * access_token OAuth2, igual ao resto do server (fetch cru, sem SDK pesado) —
- * ver officialApi.ts / channels.ts pro mesmo estilo.
+ * Por que OAuth e não Service Account: muitos projetos novos do Google Cloud
+ * vêm com a política `iam.managed.disableServiceAccountKeyCreation` ativada por
+ * padrão (bloqueia gerar chave JSON de conta de serviço) e nem sempre dá pra
+ * desativar. OAuth com refresh token não esbarra nisso — é só um "ID do cliente
+ * OAuth" comum + uma autorização manual, uma vez só.
  *
- * Setup necessário (uma vez, feito por quem tem acesso ao Google Workspace):
- *   1. Google Cloud Console: cria um projeto, ativa a "Google Calendar API".
- *   2. Cria uma Service Account nesse projeto, gera uma chave JSON.
- *   3. Google Admin Console (admin.google.com) → Segurança → Controles de API →
- *      Delegação em todo o domínio → adiciona o "Client ID" da service account
- *      com o escopo https://www.googleapis.com/auth/calendar
- *   4. Preenche no .env do servidor:
- *        GOOGLE_SERVICE_ACCOUNT_EMAIL = client_email da chave JSON
- *        GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY = private_key da chave JSON (com \n)
- *        GOOGLE_CALENDAR_IMPERSONATE_EMAIL = e-mail do Workspace cuja agenda
- *          vai ser usada como a agenda compartilhada (ex.: agenda@suaempresa.com.br)
+ * Sem SDK (googleapis): só fetch cru, igual ao resto do server.
+ *
+ * Setup necessário (uma vez):
+ *   1. Google Cloud Console → APIs e serviços → Credenciais → "ID do cliente
+ *      OAuth" do tipo "Aplicativo da Web" → em "URIs de redirecionamento
+ *      autorizados" adiciona: https://developers.google.com/oauthplayground
+ *   2. developers.google.com/oauthplayground → ícone de engrenagem → marca
+ *      "Use your own OAuth credentials" → cola o Client ID e o Client secret
+ *      desse cliente OAuth.
+ *   3. No campo de escopo (canto inferior esquerdo), cola
+ *      https://www.googleapis.com/auth/calendar → "Authorize APIs" → loga com
+ *      a conta Google que vai virar a agenda compartilhada → Allow.
+ *   4. "Exchange authorization code for tokens" → copia o "Refresh token".
+ *   5. Preenche no .env do servidor:
+ *        GOOGLE_OAUTH_CLIENT_ID = Client ID do passo 1
+ *        GOOGLE_OAUTH_CLIENT_SECRET = Client secret do passo 1
+ *        GOOGLE_OAUTH_REFRESH_TOKEN = Refresh token do passo 4
  *        GOOGLE_CALENDAR_ID (opcional, default "primary")
  */
 
-const SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? '';
-const PRIVATE_KEY = (process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY ?? '').replace(/\\n/g, '\n');
-const IMPERSONATE_EMAIL = process.env.GOOGLE_CALENDAR_IMPERSONATE_EMAIL ?? '';
+const CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID ?? '';
+const CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '';
+const REFRESH_TOKEN = process.env.GOOGLE_OAUTH_REFRESH_TOKEN ?? '';
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary';
-const SCOPE = 'https://www.googleapis.com/auth/calendar';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const API_BASE = 'https://www.googleapis.com/calendar/v3';
 
@@ -70,43 +74,21 @@ export interface CreateMeetingInput {
 }
 
 export function isGoogleCalendarConfigured(): boolean {
-  return Boolean(SERVICE_ACCOUNT_EMAIL && PRIVATE_KEY && IMPERSONATE_EMAIL);
-}
-
-function base64url(input: string): string {
-  return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function signAssertion(): string {
-  const now = Math.floor(Date.now() / 1000);
-  const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-  const payload = base64url(
-    JSON.stringify({
-      iss: SERVICE_ACCOUNT_EMAIL,
-      sub: IMPERSONATE_EMAIL,
-      scope: SCOPE,
-      aud: TOKEN_URL,
-      iat: now,
-      exp: now + 3600,
-    }),
-  );
-  const signingInput = `${header}.${payload}`;
-  const signature = createSign('RSA-SHA256').update(signingInput).sign(PRIVATE_KEY, 'base64');
-  const sig = signature.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  return `${signingInput}.${sig}`;
+  return Boolean(CLIENT_ID && CLIENT_SECRET && REFRESH_TOKEN);
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function getAccessToken(): Promise<string> {
   if (cachedToken && cachedToken.expiresAt - Date.now() > 60_000) return cachedToken.token;
-  const assertion = signAssertion();
   const resp = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion,
+      grant_type: 'refresh_token',
+      refresh_token: REFRESH_TOKEN,
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
     }),
   });
   const body = (await resp.json()) as { access_token?: string; expires_in?: number; error?: string; error_description?: string };

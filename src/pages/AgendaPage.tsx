@@ -252,11 +252,7 @@ export function AgendaPage() {
 }
 
 function SetupPendingPanel() {
-  const vars = [
-    'GOOGLE_SERVICE_ACCOUNT_EMAIL',
-    'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY',
-    'GOOGLE_CALENDAR_IMPERSONATE_EMAIL',
-  ]
+  const vars = ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_REFRESH_TOKEN']
   return (
     <div className="rounded-xl border border-dashed border-line px-6 py-10 text-center">
       <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl bg-elevate/[0.04] text-foreground/60">
@@ -264,7 +260,7 @@ function SetupPendingPanel() {
       </div>
       <h3 className="text-sm font-medium text-foreground">Agenda do Google ainda não configurada</h3>
       <p className="mx-auto mt-1.5 max-w-md text-xs text-foreground/50">
-        Falta configurar a Service Account do Google Workspace no servidor. Preencha no .env:
+        Falta autorizar o acesso à conta Google que vai virar a agenda compartilhada. Preencha no .env:
       </p>
       <ul className="mx-auto mt-3 inline-block space-y-1 text-left text-xs">
         {vars.map((v) => (
@@ -274,8 +270,8 @@ function SetupPendingPanel() {
         ))}
       </ul>
       <p className="mx-auto mt-3 max-w-md text-[11px] text-foreground/40">
-        Veja o passo a passo nos comentários de server/.env.example (criar a Service Account no Google
-        Cloud Console e liberar a delegação em todo o domínio no Admin Console do Workspace).
+        Veja o passo a passo nos comentários de server/.env.example (criar um "ID do cliente OAuth" no
+        Google Cloud Console e autorizar via developers.google.com/oauthplayground).
       </p>
     </div>
   )

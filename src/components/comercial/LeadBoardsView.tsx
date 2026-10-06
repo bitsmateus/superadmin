@@ -33,6 +33,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { PageActivityLogModal } from '@/components/comercial/PageActivityLogModal'
@@ -57,7 +58,7 @@ import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
 import { leadPagesService } from '@/services/leadPages'
 import { canManageUsers } from '@/services/supabase'
-import type { LeadBoard, LeadBoardPage, LeadLabelField, LeadPage, LeadRow, LeadRowField } from '@/types/leadBoard'
+import type { LeadBoard, LeadBoardPage, LeadLabelField, LeadPage, LeadPageSection, LeadRow, LeadRowField } from '@/types/leadBoard'
 
 // A lib de leitura de .xlsx é pesada (~400KB) — carrega só quando alguém abre o import,
 // não no bundle inicial da tela de Lista/Kanban/Dashboard.
@@ -249,18 +250,22 @@ function ToolbarButton({
 function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageName: string; boards: LeadBoard[] }) {
   const navigate = useNavigate()
   const pages = useLeadPages()
-  const isNotas = pages.find((p) => p.id === pageId)?.isNotas ?? false
+  const currentPage = pages.find((p) => p.id === pageId)
+  const isNotas = currentPage?.isNotas ?? false
+  const currentSection = currentPage?.section ?? 'comercial'
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [duplicateOpen, setDuplicateOpen] = React.useState(false)
   const [duplicateName, setDuplicateName] = React.useState('')
   const [duplicateBoardIds, setDuplicateBoardIds] = React.useState<Set<string>>(new Set())
+  const [duplicateSection, setDuplicateSection] = React.useState<LeadPageSection>('comercial')
   const ref = React.useRef<HTMLDivElement>(null)
   useOutsideClose(ref, open, () => setOpen(false))
 
   const openDuplicate = () => {
     setDuplicateName(`${pageName} (cópia)`)
     setDuplicateBoardIds(new Set(boards.map((b) => b.id)))
+    setDuplicateSection(currentSection)
     setDuplicateOpen(true)
     setOpen(false)
   }
@@ -279,13 +284,13 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
     if (!name) return
     setBusy(true)
     try {
-      const created = await leadPagesService.duplicate(pageId, name, Array.from(duplicateBoardIds))
+      const created = await leadPagesService.duplicate(pageId, name, Array.from(duplicateBoardIds), duplicateSection)
       // Os quadros novos entram por SSE, mas recarrega na hora pra não esperar — senão a aba
       // abre "vazia" por um instante até o realtime alcançar.
       await leadBoardsService.reloadBoards()
       toast.success(`"${created.name}" criada — mesma estrutura de quadros, sem os leads.`)
       setDuplicateOpen(false)
-      navigate(`/comercial/${created.id}`)
+      navigate(`/${duplicateSection}/${created.id}`)
     } catch (err) {
       toast.error('Falha ao duplicar: ' + (err as Error).message)
     } finally {
@@ -366,6 +371,17 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
           autoFocus
           onKeyDown={(e) => { if (e.key === 'Enter') void confirmDuplicate() }}
         />
+        <div className="mt-3">
+          <Select
+            label="Menu de destino"
+            value={duplicateSection}
+            onChange={(e) => setDuplicateSection(e.target.value as LeadPageSection)}
+            options={[
+              { value: 'comercial', label: 'Comercial' },
+              { value: 'demandas', label: 'Demandas' },
+            ]}
+          />
+        </div>
         {boards.length > 0 && (
           <div className="mt-3">
             <div className="mb-1.5 flex items-center justify-between">
@@ -396,7 +412,7 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
             </div>
           </div>
         )}
-        <p className="mt-2 text-xs text-foreground/45">Copia só a estrutura dos quadros marcados (nome/cor) — sem trazer os leads.</p>
+        <p className="mt-2 text-xs text-foreground/45">Copia a estrutura dos quadros marcados (nome/cor) e as etiquetas de Status/Tipo/Dia de contato/Ligação — sem trazer os leads.</p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setDuplicateOpen(false)} disabled={busy}>Cancelar</Button>
           <Button onClick={confirmDuplicate} disabled={!duplicateName.trim()} loading={busy}>Duplicar</Button>

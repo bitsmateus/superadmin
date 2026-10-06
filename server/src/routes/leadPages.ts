@@ -105,7 +105,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
   );
 
   // POST /api/lead-pages — admin only, cria uma aba nova (vazia, sem quadro nenhum)
-  app.post<{ Body: { name?: string } }>(
+  app.post<{ Body: { name?: string; section?: string } }>(
     '/api/lead-pages',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -113,12 +113,13 @@ export async function leadPageRoutes(app: FastifyInstance) {
       if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
       const name = (req.body.name ?? '').trim();
       if (!name) return reply.status(400).send({ message: 'Nome é obrigatório' });
+      const section = req.body.section === 'demandas' ? 'demandas' : 'comercial';
 
       const [row] = await query<{ max: number | null }>('SELECT MAX(position) as max FROM lead_pages');
       const position = (row?.max ?? -1) + 1;
       const [page] = await query(
-        'INSERT INTO lead_pages (id, name, position) VALUES ($1,$2,$3) RETURNING *',
-        [await uniquePageId(name), name, position]
+        'INSERT INTO lead_pages (id, name, position, section) VALUES ($1,$2,$3,$4) RETURNING *',
+        [await uniquePageId(name), name, position, section]
       );
       return reply.status(201).send(page);
     }
@@ -148,29 +149,34 @@ export async function leadPageRoutes(app: FastifyInstance) {
   );
 
   // POST /api/lead-pages/:id/duplicate — admin only. Cria uma aba nova "<nome> (cópia)" com a
-  // MESMA estrutura (nome/cor/posição) dos quadros da original — sem copiar nenhum lead.
-  // boardIds opcional: só duplica esses quadros específicos; sem informar (ou vazio), duplica
-  // todos os quadros da aba de origem.
-  app.post<{ Params: { id: string }; Body: { name?: string; boardIds?: string[] } }>(
+  // MESMA estrutura (nome/cor/posição dos quadros + etiquetas de Status/Tipo/Dia de contato/
+  // Ligação) da original — sem copiar nenhum lead. boardIds opcional: só duplica esses quadros
+  // específicos; sem informar (ou vazio), duplica todos os quadros da aba de origem. section
+  // opcional: manda a cópia pro menu "Demandas" em vez de ficar no mesmo menu da original (ver
+  // Sidebar.tsx) — sem informar, herda a section da aba de origem.
+  app.post<{ Params: { id: string }; Body: { name?: string; boardIds?: string[]; section?: string } }>(
     '/api/lead-pages/:id/duplicate',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { role } = req.user as { role: string };
       if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
 
-      const source = await queryOne<{ id: string; name: string }>(
-        'SELECT id, name FROM lead_pages WHERE id = $1',
+      const source = await queryOne<{ id: string; name: string; section: string }>(
+        'SELECT id, name, section FROM lead_pages WHERE id = $1',
         [req.params.id]
       );
       if (!source) return reply.status(404).send({ message: 'Aba não encontrada' });
 
       const name = req.body.name?.trim() || `${source.name} (cópia)`;
+      const section = req.body.section === 'demandas' || req.body.section === 'comercial'
+        ? req.body.section
+        : source.section;
       const [row] = await query<{ max: number | null }>('SELECT MAX(position) as max FROM lead_pages');
       const position = (row?.max ?? -1) + 1;
       const newId = await uniquePageId(name);
       const [newPage] = await query(
-        'INSERT INTO lead_pages (id, name, position) VALUES ($1,$2,$3) RETURNING *',
-        [newId, name, position]
+        'INSERT INTO lead_pages (id, name, position, section) VALUES ($1,$2,$3,$4) RETURNING *',
+        [newId, name, position, section]
       );
 
       const boardIds = req.body.boardIds;
@@ -187,6 +193,20 @@ export async function leadPageRoutes(app: FastifyInstance) {
         await query(
           'INSERT INTO lead_boards (name, color, page, position) VALUES ($1,$2,$3,$4)',
           [b.name, b.color, newId, b.position]
+        );
+      }
+
+      // Etiquetas (colunas do Kanban e dos seletores de Tipo/Dia de contato/Ligação) são por
+      // aba — sem copiar, a cópia nasceria sem nenhuma coluna de Status. "sdr" fica de fora: é
+      // global (page_id NULL), já compartilhado por todas as abas.
+      const sourceLabels = await query<{ field: string; name: string; color: string; position: number }>(
+        `SELECT field, name, color, position FROM lead_labels WHERE page_id = $1 AND field != 'sdr'`,
+        [source.id]
+      );
+      for (const l of sourceLabels) {
+        await query(
+          'INSERT INTO lead_labels (field, name, color, position, page_id) VALUES ($1,$2,$3,$4,$5)',
+          [l.field, l.name, l.color, l.position, newId]
         );
       }
 

@@ -8,6 +8,10 @@
 /** Aba do Comercial onde o quadro aparece — id de uma lead_page (gerenciável por admin). */
 export type LeadBoardPage = string
 
+/** Qual menu lateral mostra a aba — 'comercial' (padrão) ou 'demandas' (pipes por cliente, menu
+ * próprio). Mesma estrutura de quadros/kanban por trás dos dois, só o lugar no menu muda. */
+export type LeadPageSection = 'comercial' | 'demandas'
+
 /** Aba do Comercial (Novos Leads, CRM NX Luis, CRM NX Arthur, e as que um admin criar/duplicar
  * depois). Admin pode duplicar (só a estrutura de quadros, sem leads) e arquivar/restaurar. */
 export interface LeadPage {
@@ -18,6 +22,7 @@ export interface LeadPage {
   /** Aba marcada como bloco de notas — renderiza NotasView (uma nota por dia, com formatação
    * básica) em vez do quadro genérico de captação de leads. */
   isNotas: boolean
+  section: LeadPageSection
 }
 
 export interface LeadBoard {

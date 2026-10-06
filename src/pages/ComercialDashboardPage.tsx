@@ -55,7 +55,8 @@ export function ComercialDashboardPage() {
   const allRows = useAllLeadRows()
 
   const boards = React.useMemo(() => {
-    const activePageIds = new Set(activePages.map((p) => p.id))
+    // Demandas é outro menu (pipes por cliente, não funil de vendas) — fica fora desse dashboard.
+    const activePageIds = new Set(activePages.filter((p) => p.section === 'comercial').map((p) => p.id))
     return allBoards.filter((b) => activePageIds.has(b.page))
   }, [allBoards, activePages])
 

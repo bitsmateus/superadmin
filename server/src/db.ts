@@ -1509,6 +1509,10 @@ END $$`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS delivery_calendar_event_id TEXT`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS calendar_event_id TEXT`);
 
+  // Menu "Demandas": mesma estrutura de lead_pages/lead_boards do Comercial, só num menu lateral
+  // separado — section discrimina qual dos dois mostra a aba (ver leadPages.ts/Sidebar.tsx).
+  await pool.query(`ALTER TABLE lead_pages ADD COLUMN IF NOT EXISTS section TEXT NOT NULL DEFAULT 'comercial'`);
+
   console.log('[db] migrations applied');
 }
 

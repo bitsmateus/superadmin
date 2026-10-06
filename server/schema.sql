@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS profiles (
   -- NULL = nunca arrastou nada, vale a ordem padrão. É preferência pessoal: não muda o menu de
   -- ninguém mais, e item que não está na lista (aba nova, ou que a pessoa nem enxerga) fica no fim.
   sidebar_order JSONB,
+  -- Itens do menu que essa pessoa fixou (array de chaves) — aparecem num grupo "Fixados" no topo
+  -- do menu, com destaque. NULL/vazio = ninguém fixado ainda.
+  pinned_menu JSONB,
   password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -232,6 +235,7 @@ CREATE TABLE IF NOT EXISTS clients (
   delivery_date TEXT,
   delivery_notes TEXT,
   delivery_completed_at TIMESTAMPTZ,
+  delivery_calendar_event_id TEXT,
 
   followup_active BOOLEAN NOT NULL DEFAULT FALSE,
   followups JSONB NOT NULL DEFAULT '[]',
@@ -389,6 +393,7 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   dia_contato TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT '',
   agendamento TEXT NOT NULL DEFAULT '',
+  calendar_event_id TEXT,
   retornar TEXT NOT NULL DEFAULT '',
   retornado BOOLEAN NOT NULL DEFAULT false,
   responsavel TEXT NOT NULL DEFAULT '',
@@ -438,7 +443,11 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   -- Quem FECHOU a venda (só usado na aba Vendas). Diferente do SDR = a venda gera também a
   -- comissão de fechamento pra essa pessoa (ver sincronizarComissaoCloser). Igual ao SDR ou vazio
   -- = só a comissão de SDR, que é o caso de quem agenda e fecha a mesma venda.
-  closer TEXT NOT NULL DEFAULT ''
+  closer TEXT NOT NULL DEFAULT '',
+  -- Preview da última Atualização (lead_notes) desse lead, pro card do Kanban mostrar sem join —
+  -- ver sincronizarContagemNotas em leadBoards.ts. Vazio/NULL = nenhuma nota ainda.
+  last_note_preview TEXT NOT NULL DEFAULT '',
+  last_note_at TIMESTAMPTZ
 );
 -- Uma cópia por lead de origem — a trava que impede espelhar a mesma lead duas vezes.
 CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_espelho_origem_idx
@@ -667,7 +676,8 @@ CREATE TABLE IF NOT EXISTS reminders (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   kind TEXT,
   status TEXT,
-  priority TEXT
+  priority TEXT,
+  calendar_event_id TEXT
 );
 
 -- Atualizações/anexos e linha do tempo de uma tarefa (mesmo padrão de lead_notes/lead_events).

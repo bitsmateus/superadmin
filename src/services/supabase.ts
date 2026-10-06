@@ -26,6 +26,9 @@ export interface Profile {
   /** Ordem do menu lateral que a pessoa montou arrastando os itens: { grupo: [chave, ...] }.
    * Ausente = nunca mexeu, vale a ordem padrão. Item fora da lista (aba criada depois) vai pro fim. */
   sidebarOrder?: Record<string, string[]> | null
+  /** Itens do menu que essa pessoa fixou (chave do item — ver chaveDoItem em Sidebar.tsx).
+   * Ausente/vazio = nada fixado. Aparecem num grupo "Fixados" no topo do menu. */
+  pinnedMenu?: string[] | null
   created_at: string
 }
 

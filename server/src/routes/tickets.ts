@@ -1,5 +1,42 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
+import { syncScheduledMeeting } from '../lib/calendarSync.js';
+
+interface ReminderRow {
+  id: string;
+  user_id: string;
+  client_id: string | null;
+  due_at: string | null;
+  notes: string | null;
+  kind: string | null;
+  calendar_event_id: string | null;
+}
+
+/** Reunião de briefing (reminders.kind = 'meeting', ver BriefingMeeting.tsx) agendada/reagendada
+ * por aqui já cria/atualiza o evento na Agenda (Google Calendar) — ver lib/calendarSync.ts. */
+async function syncBriefingMeetingCalendar(rem: ReminderRow) {
+  if (!rem.client_id) return;
+  const client = await queryOne<{ name: string; company: string | null }>(
+    'SELECT name, company FROM clients WHERE id = $1',
+    [rem.client_id],
+  );
+  const actor = await queryOne<{ name: string | null; email: string }>(
+    'SELECT name, email FROM profiles WHERE id = $1',
+    [rem.user_id],
+  );
+  const eventId = await syncScheduledMeeting({
+    calendarEventId: rem.calendar_event_id,
+    scheduledAtISO: rem.due_at ? new Date(rem.due_at).toISOString() : null,
+    tipo: 'suporte',
+    clienteId: rem.client_id,
+    clienteNome: client?.company || client?.name || 'Cliente',
+    responsavel: actor?.name || actor?.email || 'Equipe',
+    obs: rem.notes ?? undefined,
+  });
+  if (eventId !== rem.calendar_event_id) {
+    await query('UPDATE reminders SET calendar_event_id = $1 WHERE id = $2', [eventId, rem.id]);
+  }
+}
 
 export async function ticketRoutes(app: FastifyInstance) {
   // GET /api/tickets
@@ -295,7 +332,7 @@ export async function ticketRoutes(app: FastifyInstance) {
       const b = req.body;
       // user_id = responsável pela tarefa (pode ser outra pessoa do time).
       const assignee = (b.user_id as string) || sub;
-      const [rem] = await query(
+      const [rem] = await query<ReminderRow>(
         `INSERT INTO reminders (user_id, client_id, title, notes, due_at, kind, status, priority)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
         [
@@ -309,6 +346,9 @@ export async function ticketRoutes(app: FastifyInstance) {
           b.priority ?? 'normal',
         ]
       );
+      if (rem.kind === 'meeting') {
+        await syncBriefingMeetingCalendar(rem).catch((err) => console.error('[calendarSync] reminders (criar):', err));
+      }
       return reply.status(201).send(rem);
     }
   );
@@ -337,11 +377,15 @@ export async function ticketRoutes(app: FastifyInstance) {
         params.push(val);
       }
       params.push(req.params.id);
-      const [rem] = await query(
+      const [rem] = await query<ReminderRow>(
         `UPDATE reminders SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
         params
       );
       if (!rem) return reply.status(404).send({ message: 'Lembrete não encontrado' });
+
+      if (rem.kind === 'meeting' && 'due_at' in patch) {
+        await syncBriefingMeetingCalendar(rem).catch((err) => console.error('[calendarSync] reminders (editar):', err));
+      }
 
       if (statusChange) {
         const actor = await queryOne<{ name: string | null; email: string }>('SELECT name, email FROM profiles WHERE id = $1', [sub]);
@@ -359,7 +403,20 @@ export async function ticketRoutes(app: FastifyInstance) {
     '/api/reminders/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const existing = await queryOne<{ calendar_event_id: string | null }>(
+        'SELECT calendar_event_id FROM reminders WHERE id = $1',
+        [req.params.id],
+      );
       await query('DELETE FROM reminders WHERE id = $1', [req.params.id]);
+      if (existing?.calendar_event_id) {
+        await syncScheduledMeeting({
+          calendarEventId: existing.calendar_event_id,
+          scheduledAtISO: null,
+          tipo: 'suporte',
+          clienteNome: '',
+          responsavel: '',
+        }).catch((err) => console.error('[calendarSync] reminders (excluir):', err));
+      }
       return reply.status(204).send();
     }
   );

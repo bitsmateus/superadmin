@@ -4,6 +4,37 @@ import { query, queryOne } from '../db.js';
 import { findMatchingLeadRowId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 import { sendMail } from '../lib/mailer.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
+import { syncScheduledMeeting, localDateTimeToISO } from '../lib/calendarSync.js';
+
+/** "Reunião de treinamento" (campo Entrega, DeliveryTab.tsx) agendada/reagendada por aqui já
+ * cria/atualiza o evento na Agenda (Google Calendar) — ver lib/calendarSync.ts. */
+interface ClientDeliveryRow {
+  id: string;
+  name: string;
+  company: string | null;
+  delivery_date: string | null;
+  delivery_notes: string | null;
+  delivery_calendar_event_id: string | null;
+}
+
+async function syncDeliveryMeetingCalendar(client: ClientDeliveryRow, actorId: string) {
+  const actor = await queryOne<{ name: string | null; email: string }>(
+    'SELECT name, email FROM profiles WHERE id = $1',
+    [actorId],
+  );
+  const eventId = await syncScheduledMeeting({
+    calendarEventId: client.delivery_calendar_event_id,
+    scheduledAtISO: localDateTimeToISO(client.delivery_date),
+    tipo: 'suporte',
+    clienteId: client.id,
+    clienteNome: client.company || client.name || 'Cliente',
+    responsavel: actor?.name || actor?.email || 'Equipe',
+    obs: client.delivery_notes ?? undefined,
+  });
+  if (eventId !== client.delivery_calendar_event_id) {
+    await query('UPDATE clients SET delivery_calendar_event_id = $1 WHERE id = $2', [eventId, client.id]);
+  }
+}
 
 const FINANCE_COLS = [
   'contract_url','contract_sent_at','contract_signed_at',
@@ -209,7 +240,7 @@ export async function clientRoutes(app: FastifyInstance) {
     '/api/clients/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const { role } = req.user as { role: string };
+      const { sub, role } = req.user as { sub: string; role: string };
       const patch = req.body;
 
       // Guard: suporte cannot touch finance/contract fields
@@ -239,11 +270,15 @@ export async function clientRoutes(app: FastifyInstance) {
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
 
       params.push(req.params.id);
-      const [updated] = await query(
+      const [updated] = await query<ClientDeliveryRow>(
         `UPDATE clients SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
         params
       );
       if (!updated) return reply.status(404).send({ message: 'Cliente não encontrado' });
+
+      if ('delivery_date' in patch) {
+        await syncDeliveryMeetingCalendar(updated, sub).catch((err) => console.error('[calendarSync] clients (entrega):', err));
+      }
 
       return updated;
     }

@@ -165,6 +165,9 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS theme TEXT`);
   // Ordem do menu lateral por pessoa (arrastando os itens) — ver profiles.sidebar_order no schema.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sidebar_order JSONB`);
+  // Itens do menu que essa pessoa fixou (aparecem num grupo "Fixados" no topo) — array de chaves
+  // (mesma chave usada em sidebar_order: pageId ou o "to" da rota).
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pinned_menu JSONB`);
   await pool.query(`ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_theme_check`);
   await pool.query(`ALTER TABLE profiles ADD CONSTRAINT profiles_theme_check CHECK (theme IS NULL OR theme IN ('light', 'dark'))`);
   // Roteiro da sessão de ativação (checklist do que é feito com o cliente).
@@ -1493,6 +1496,18 @@ END $$`);
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);
+
+  // Preview da última Atualização de cada lead, pra mostrar no card do Kanban sem precisar
+  // buscar lead_notes por linha ao montar o quadro — ver sincronizarContagemNotas em leadBoards.ts.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS last_note_preview TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS last_note_at TIMESTAMPTZ`);
+
+  // Agenda (Google Calendar): id do evento criado/atualizado automaticamente quando a reunião é
+  // agendada por aqui — guardado pra reagendar (PATCH) em vez de duplicar, e pra cancelar (DELETE)
+  // se a data for limpa. Ver server/src/lib/calendarSync.ts.
+  await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS calendar_event_id TEXT`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS delivery_calendar_event_id TEXT`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS calendar_event_id TEXT`);
 
   console.log('[db] migrations applied');
 }

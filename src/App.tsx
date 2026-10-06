@@ -98,6 +98,9 @@ const TeamPerformancePage = React.lazy(() =>
 const ChurnRiskPage = React.lazy(() =>
   import('./pages/ChurnRiskPage').then((m) => ({ default: m.ChurnRiskPage })),
 )
+const AgendaPage = React.lazy(() =>
+  import('./pages/AgendaPage').then((m) => ({ default: m.AgendaPage })),
+)
 const RelatoriosPage = React.lazy(() =>
   import('./pages/RelatoriosPage').then((m) => ({ default: m.RelatoriosPage })),
 )
@@ -229,6 +232,7 @@ export default function App() {
           <Route path="/comando" element={<CommandCenterPage />} />
           <Route path="/equipe" element={<TeamPerformancePage />} />
           <Route path="/risco-churn" element={<ChurnRiskPage />} />
+          <Route path="/agenda" element={<AgendaPage />} />
           <Route path="/relatorios" element={<RelatoriosPage />} />
           <Route path="/auditoria" element={<AuditLogPage />} />
           <Route path="/users" element={<UsersPage />} />

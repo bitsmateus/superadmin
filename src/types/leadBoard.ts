@@ -62,6 +62,10 @@ export interface LeadRow {
   /** Venda desfeita (o lead saiu de "Vendido"). Fica no quadro, mas fora dos totais. */
   vendaRevertida: boolean
   notesCount: number
+  /** Prévia (texto puro, sem HTML) da última Atualização desse lead — pro card do Kanban mostrar
+   * sem precisar abrir o histórico. Vazia = nenhuma nota ainda. */
+  lastNotePreview: string
+  lastNoteAt: string | null
   position: number
   createdAt: string
   updatedAt: string
@@ -103,6 +107,7 @@ export interface LeadRow {
 export type LeadRowField = Exclude<
   keyof LeadRow,
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
+  | 'lastNotePreview' | 'lastNoteAt'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
   | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId' | 'closer'
 >

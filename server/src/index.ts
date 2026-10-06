@@ -41,6 +41,7 @@ import { acougueRoutes } from './routes/acougue.js';
 import { mercadoNunesRoutes } from './routes/mercadoNunes.js';
 import { pulseRoutes } from './routes/pulses.js';
 import { churnRiskRoutes } from './routes/churnRisk.js';
+import { agendaRoutes } from './routes/agenda.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startFollowUpDigest } from './jobs/followUpDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
@@ -137,6 +138,7 @@ async function main() {
   await app.register(acougueRoutes);
   await app.register(pulseRoutes);
   await app.register(churnRiskRoutes);
+  await app.register(agendaRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

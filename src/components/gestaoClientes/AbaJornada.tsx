@@ -1,12 +1,12 @@
 import * as React from 'react'
-import { AlertTriangle, Check, ChevronDown, Circle, CircleDot, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, Circle, CircleDot, History, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Select } from '@/components/ui/Select'
+import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { DataMiuda } from '@/components/gestaoClientes/CampoData'
-import { useTeamProfiles } from '@/hooks/useTeamProfiles'
+import { RegistrarAlinhamento } from '@/components/gestaoClientes/RegistrarAlinhamento'
 import { gestaoClientes, type GcEtapaJornada } from '@/services/gestaoClientes'
 import { cn } from '@/lib/utils'
 
@@ -78,13 +78,15 @@ function IconeEtapa({ status, atrasada }: { status: GcEtapaJornada['status']; at
  * aparece em vermelho aqui e puxa o cliente pra baixo na lista.
  */
 export function AbaJornada({
+  clienteId,
   jornada,
   onMudou,
 }: {
+  clienteId: string
   jornada: GcEtapaJornada[]
   onMudou: () => Promise<void> | void
 }) {
-  const { data: perfis } = useTeamProfiles()
+  const [confirmandoAndamento, setConfirmandoAndamento] = React.useState(false)
   // A etapa em andamento nasce aberta; as outras, fechadas. Jornada de 9 etapas aberta inteira é
   // uma parede de texto, e o que interessa é onde o cliente está agora.
   const [abertas, setAbertas] = React.useState<Record<string, boolean>>({})
@@ -105,12 +107,10 @@ export function AbaJornada({
     }
   }
 
-  const opcoesResponsavel = [
-    { value: '', label: '— sem dono —' },
-    ...(perfis ?? [])
-      .map((p) => ({ value: p.id, label: (p.name && p.name.trim()) || p.email }))
-      .sort((a, b) => a.label.localeCompare(b.label)),
-  ]
+  // "Cliente já em andamento" só faz sentido enquanto sobra etapa pra fechar até o Go-live.
+  const indiceGoLive = jornada.findIndex((e) => /^go-live/i.test(e.nome))
+  const podeMarcarAndamento =
+    indiceGoLive >= 0 && jornada.slice(0, indiceGoLive + 1).some((e) => e.status !== 'concluida')
 
   const totalAtrasados = jornada.reduce(
     (soma, e) => soma + e.itens.filter((i) => estaAtrasado(i.prazo, i.concluido)).length,
@@ -119,6 +119,20 @@ export function AbaJornada({
 
   return (
     <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {podeMarcarAndamento && (
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<History className="h-3.5 w-3.5" />}
+            onClick={() => setConfirmandoAndamento(true)}
+          >
+            Cliente já em andamento
+          </Button>
+        )}
+        <RegistrarAlinhamento clienteId={clienteId} onRegistrado={onMudou} />
+      </div>
+
       {totalAtrasados > 0 && (
         <p className="flex items-center gap-2 rounded-lg border border-danger/25 bg-danger/[0.04] px-3 py-2 text-sm text-danger">
           <AlertTriangle className="h-4 w-4" />
@@ -156,13 +170,17 @@ export function AbaJornada({
                     : ''}
                   {etapa.concluida_em
                     ? ` · concluída em ${new Date(etapa.concluida_em).toLocaleDateString('pt-BR')}`
-                    : ''}
+                    : etapa.concluida_antes
+                      ? ' · já concluída antes do módulo'
+                      : ''}
                 </span>
               </span>
               {atrasadosNaEtapa > 0 && (
                 <Badge tone="danger">{atrasadosNaEtapa} atrasado(s)</Badge>
               )}
-              <Badge tone={TOM[etapa.status]}>{ROTULO[etapa.status]}</Badge>
+              <Badge tone={TOM[etapa.status]}>
+                {etapa.status === 'concluida' && etapa.concluida_antes ? 'Concluída antes do módulo' : ROTULO[etapa.status]}
+              </Badge>
               <ChevronDown
                 className={cn(
                   'h-4 w-4 shrink-0 text-foreground/40 transition-transform',
@@ -173,36 +191,38 @@ export function AbaJornada({
 
             {aberta && (
               <div className="border-t border-line bg-elevate/[0.015] px-4 py-3">
-                <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-line pb-3">
-                  <Select
-                    options={opcoesResponsavel}
-                    value={etapa.responsavel_id ?? ''}
-                    onChange={(e) =>
-                      void comErro(`dono-${etapa.id}`, () =>
-                        gestaoClientes.atualizarEtapa(etapa.id, {
-                          responsavel_id: e.target.value || null,
-                        }),
-                      )
-                    }
-                    className="w-48"
-                  />
-                  <span className="flex items-center gap-1.5 text-xs text-foreground/50">
-                    prazo da etapa
-                    <DataMiuda
-                      value={etapa.prazo ? String(etapa.prazo).slice(0, 10) : null}
-                      atrasado={estaAtrasado(etapa.prazo, etapa.status === 'concluida')}
-                      onChange={(v) =>
-                        void comErro(`prazo-${etapa.id}`, () =>
-                          gestaoClientes.atualizarEtapa(etapa.id, { prazo: v }),
-                        )
-                      }
-                    />
-                  </span>
-                </div>
-
                 <ul className="space-y-1.5">
                   {etapa.itens.map((item) => {
                     const atrasado = estaAtrasado(item.prazo, item.concluido)
+                    if (item.automatico) {
+                      // Marca sozinho: sem caixa clicável, sem prazo e sem lixeira — o estado vem dos fatos.
+                      return (
+                        <li key={item.id} className="flex items-start gap-2.5">
+                          <span
+                            className={cn(
+                              'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border',
+                              item.concluido ? 'border-success bg-success text-white' : 'border-line',
+                            )}
+                            aria-label={item.concluido ? 'Feito' : 'Pendente'}
+                          >
+                            {item.concluido && <Check className="h-3 w-3" />}
+                          </span>
+                          <span className={cn('min-w-0 flex-1 text-sm', item.concluido ? 'text-foreground/45' : 'text-foreground/85')}>
+                            {item.titulo}
+                          </span>
+                          <span
+                            className="shrink-0 text-xs text-foreground/40"
+                            title={
+                              item.automatico === 'relatorio'
+                                ? 'Marca sozinho quando o relatório do mês que fechou é publicado.'
+                                : 'Marca sozinho quando uma nota de "Reunião/alinhamento" é registrada.'
+                            }
+                          >
+                            marca sozinho
+                          </span>
+                        </li>
+                      )
+                    }
                     return (
                       <li key={item.id} className="group flex items-start gap-2.5">
                         <button
@@ -335,6 +355,38 @@ export function AbaJornada({
           </div>
         )
       })}
+
+      <Modal
+        open={confirmandoAndamento}
+        onClose={() => setConfirmandoAndamento(false)}
+        size="sm"
+        title="Marcar como cliente já em andamento?"
+        description="Todas as etapas até o Go-live vão ficar como “concluídas antes do módulo”, sem data de conclusão, e os itens delas também."
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setConfirmandoAndamento(false)}>
+              Cancelar
+            </Button>
+            <Button
+              loading={ocupado === 'andamento'}
+              onClick={() =>
+                void comErro('andamento', async () => {
+                  await gestaoClientes.jaEmAndamento(clienteId)
+                  setConfirmandoAndamento(false)
+                  toast.success('Etapas até o Go-live marcadas como concluídas antes do módulo')
+                })
+              }
+            >
+              Marcar etapas
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-foreground/75">
+          As etapas depois do Go-live continuam normais, e a seguinte abre. Isso registra no histórico do cliente e
+          não tem botão de desfazer — se for engano, reabra as etapas uma a uma.
+        </p>
+      </Modal>
     </div>
   )
 }

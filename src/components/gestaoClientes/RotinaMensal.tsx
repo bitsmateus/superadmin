@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { AlertTriangle, Check, RefreshCcw } from 'lucide-react'
-import { toast } from 'sonner'
-import { gestaoClientes, type GcItemRotina } from '@/services/gestaoClientes'
+import { RegistrarAlinhamento } from '@/components/gestaoClientes/RegistrarAlinhamento'
+import type { GcItemRotina } from '@/services/gestaoClientes'
 import { mesPorExtenso } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
 
@@ -13,42 +13,36 @@ function prazoBr(prazo: string | null): string {
  * Rotina mensal do cliente: o que nasce sozinho todo mês, com prazo (relatório até o dia 5,
  * alinhamento até o dia 10 do mês seguinte). Agrupada pelo mês que fechou.
  *
- * "Publicar o relatório" se conclui sozinho quando o relatório do mês é publicado — fazer a mesma
- * coisa duas vezes é como o item fica aberto e atrasado mesmo com o relatório já entregue.
+ * Os itens NÃO se marcam à mão: "Publicar o relatório" marca quando o relatório do mês é publicado e
+ * "Alinhamento" marca quando uma nota de Reunião/alinhamento é registrada. Por isso o botão "Registrar
+ * alinhamento" mora aqui.
  */
 export function RotinaMensal({
+  clienteId,
   itens,
   onMudou,
 }: {
+  clienteId: string
   itens: GcItemRotina[]
   onMudou: () => Promise<void> | void
 }) {
-  const [ocupado, setOcupado] = React.useState<string | null>(null)
-  if (itens.length === 0) return null
-
   const porMes = new Map<string, GcItemRotina[]>()
   for (const i of itens) {
     const chave = String(i.mes_referencia).slice(0, 7)
     porMes.set(chave, [...(porMes.get(chave) ?? []), i])
   }
 
-  const alternar = async (item: GcItemRotina) => {
-    setOcupado(item.id)
-    try {
-      await gestaoClientes.atualizarItem(item.id, { concluido: !item.concluido })
-      await onMudou()
-    } catch (err) {
-      toast.error('Falha ao salvar: ' + (err as Error).message)
-    } finally {
-      setOcupado(null)
-    }
-  }
-
   return (
     <section className="rounded-xl border border-line p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <RefreshCcw className="h-4 w-4 text-accent" /> Rotina mensal
-      </h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <RefreshCcw className="h-4 w-4 text-accent" /> Rotina mensal
+        </h2>
+        <RegistrarAlinhamento clienteId={clienteId} onRegistrado={onMudou} />
+      </div>
+      {itens.length === 0 && (
+        <p className="text-sm text-foreground/45">Os itens do mês aparecem aqui quando o mês fecha.</p>
+      )}
       <div className="space-y-3">
         {[...porMes.entries()].map(([mes, doMes]) => (
           <div key={mes}>
@@ -58,22 +52,16 @@ export function RotinaMensal({
             <ul className="space-y-1">
               {doMes.map((i) => (
                 <li key={i.id} className="flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    disabled={ocupado === i.id}
-                    onClick={() => void alternar(i)}
+                  <span
                     className={cn(
-                      'grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors',
-                      i.concluido
-                        ? 'border-success bg-success text-white'
-                        : i.atrasado
-                          ? 'border-danger hover:bg-danger/10'
-                          : 'border-line hover:border-accent',
+                      'grid h-4 w-4 shrink-0 place-items-center rounded border',
+                      i.concluido ? 'border-success bg-success text-white' : i.atrasado ? 'border-danger' : 'border-line',
                     )}
-                    aria-label={i.concluido ? 'Reabrir' : 'Concluir'}
+                    title="Marca sozinho"
+                    aria-label={i.concluido ? 'Feito' : 'Pendente'}
                   >
                     {i.concluido && <Check className="h-3 w-3" />}
-                  </button>
+                  </span>
                   <span
                     className={cn(
                       'min-w-0 flex-1 truncate text-sm',

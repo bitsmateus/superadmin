@@ -64,6 +64,43 @@ let ultimaGeracao: { mes: string; em: number } | null = null;
 const INTERVALO_MS = 30 * 60 * 1000;
 
 /**
+ * A rotina do relatório e do alinhamento NÃO se marca à mão: o estado vem dos fatos.
+ *  - relatório: o relatório daquele mês está PUBLICADO;
+ *  - alinhamento: existe uma nota do tipo "Reunião/alinhamento" entre o primeiro dia do mês de
+ *    referência e o fim do mês seguinte (a janela em que o alinhamento é feito, prazo dia 10).
+ * Sem o fato, o item fica (ou volta a ficar) pendente — apagar a nota ou despublicar reabre.
+ * Idempotente e barata: um UPDATE que só toca quem mudou. Sem `clienteId`, vale pra todos.
+ */
+export async function sincronizarRotinaAutomatica(clienteId?: string): Promise<void> {
+  await pool.query(
+    `UPDATE gc_checklist_itens i
+     SET concluido = f.ok,
+         concluido_em = CASE WHEN f.ok THEN COALESCE(i.concluido_em, NOW()) ELSE NULL END,
+         concluido_por = CASE WHEN f.ok THEN i.concluido_por ELSE NULL END,
+         updated_at = NOW()
+     FROM (
+       SELECT i2.id,
+         CASE i2.recorrente_chave
+           WHEN 'relatorio' THEN EXISTS (
+             SELECT 1 FROM gc_relatorios r
+             WHERE r.gc_cliente_id = i2.gc_cliente_id AND r.status = 'publicado'
+               AND r.periodo_inicio = i2.mes_referencia)
+           ELSE EXISTS (
+             SELECT 1 FROM gc_historico h
+             WHERE h.gc_cliente_id = i2.gc_cliente_id AND h.tipo = 'reuniao'
+               AND (h.created_at AT TIME ZONE 'America/Sao_Paulo')::date >= i2.mes_referencia
+               AND (h.created_at AT TIME ZONE 'America/Sao_Paulo')::date < (i2.mes_referencia + INTERVAL '2 months')::date)
+         END AS ok
+       FROM gc_checklist_itens i2
+       WHERE i2.recorrente_chave IN ('relatorio', 'alinhamento')
+         AND ($1::uuid IS NULL OR i2.gc_cliente_id = $1::uuid)
+     ) f
+     WHERE i.id = f.id AND i.concluido IS DISTINCT FROM f.ok`,
+    [clienteId ?? null]
+  );
+}
+
+/**
  * Garante que todo cliente que conta nos totais tenha os itens da rotina do mês que fechou.
  * Idempotente e barata de chamar: o registro em gc_recorrentes_gerados impede o duplicado, mesmo
  * com duas telas abrindo ao mesmo tempo, e quem apagou um item não o vê ressuscitar.
@@ -99,5 +136,6 @@ export async function garantirRecorrentes(agora: Date = new Date(), forcar = fal
     );
     criados += r.rowCount ?? 0;
   }
+  await sincronizarRotinaAutomatica();
   return criados;
 }

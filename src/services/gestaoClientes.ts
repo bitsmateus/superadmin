@@ -39,7 +39,8 @@ export const TIPOS_SERVICO: { valor: GcTipoServico; label: string }[] = [
 
 export const TIPOS_HISTORICO: { valor: GcTipoHistorico; label: string }[] = [
   { valor: 'nota', label: 'Nota' },
-  { valor: 'reuniao', label: 'Reunião' },
+  // É este tipo que marca sozinho o item "Alinhamento mensal" da jornada e da rotina.
+  { valor: 'reuniao', label: 'Reunião/alinhamento' },
   { valor: 'ligacao', label: 'Ligação' },
   { valor: 'reclamacao', label: 'Reclamação' },
   { valor: 'ajuste', label: 'Ajuste' },
@@ -64,6 +65,8 @@ export interface GcChecklistItem {
   concluido_em: string | null
   prazo: string | null
   responsavel_id?: string | null
+  /** Item que se marca sozinho (relatório publicado; nota de reunião/alinhamento) — não se marca à mão. */
+  automatico?: 'relatorio' | 'alinhamento' | null
 }
 
 export interface GcEtapaJornada {
@@ -76,6 +79,8 @@ export interface GcEtapaJornada {
   responsavel_nome: string | null
   prazo: string | null
   concluida_em: string | null
+  /** Concluída ANTES de o cliente entrar no módulo ("cliente já em andamento"): não tem data de conclusão. */
+  concluida_antes?: boolean
   itens: GcChecklistItem[]
 }
 
@@ -278,6 +283,8 @@ export type GcClienteEntrada = Partial<{
   fora_dos_totais: boolean
   data_inicio: string | null
   observacoes_gerais: string
+  /** Só no cadastro: as etapas até o Go-live nascem "concluídas antes do módulo". */
+  ja_em_andamento: boolean
 }>
 
 export type GcServicoEntrada = Partial<{
@@ -564,6 +571,9 @@ export const gestaoClientes = {
   atualizar: (id: string, dados: GcClienteEntrada) =>
     api.patch<GcClienteLista>(`/api/gc/clientes/${id}`, dados),
   excluir: (id: string) => api.delete(`/api/gc/clientes/${id}`),
+  /** Marca as etapas até o Go-live como concluídas antes do módulo (sem data) e abre a seguinte. */
+  jaEmAndamento: (clienteId: string) =>
+    api.post<{ etapas: number }>(`/api/gc/clientes/${clienteId}/jornada/ja-em-andamento`, {}),
 
   criarServico: (clienteId: string, dados: GcServicoEntrada) =>
     api.post<GcServico>(`/api/gc/clientes/${clienteId}/servicos`, dados),

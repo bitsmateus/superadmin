@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronLeft, ChevronRight, Loader2, Plus, Target, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Plus, Target, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -7,7 +7,6 @@ import { Select } from '@/components/ui/Select'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
-import { PlanejamentoCliente } from '@/components/gestaoClientes/PlanejamentoCliente'
 import {
   HORIZONTES, avisosDoErro, gestaoClientes,
   type GcHorizonte, type GcMeta, type GcMetrica,
@@ -174,17 +173,13 @@ function CartaoMeta({
  * meta. As de 6 e 12 meses nascem e se editam na grade do planejamento; o formulário daqui é só da
  * meta do mês.
  */
-export function AbaMetricas({
-  clienteId,
-  cliente,
-  abrirPlanejamento = 0,
-}: {
-  clienteId: string
-  /** Nome e segmento, pra os modelos de texto do planejamento trocarem {cliente} e {segmento}. */
-  cliente?: { nome_empresa?: string | null; segmento?: string | null }
-  /** Sobe quando algo de fora pede pra abrir o bloco de planejamento. */
-  abrirPlanejamento?: number
-}) {
+/** Os quatro números que todo mês tem: em destaque. O resto é opcional e fica recolhido. */
+const CHAVES_EM_DESTAQUE = ['investimento', 'leads', 'vendas', 'receita']
+const CHAVES_OPCIONAIS = ['impressoes', 'cliques', 'conversas', 'agendamentos']
+/** Calculadas que aparecem sempre; CTR e ticket só quando os números de que dependem existem. */
+const DERIVADAS_FIXAS = ['cpl', 'cac', 'roas', 'conversao']
+
+export function AbaMetricas({ clienteId }: { clienteId: string }) {
   const [metricas, setMetricas] = React.useState<GcMetrica[]>([])
   const [metas, setMetas] = React.useState<GcMeta[]>([])
   const [carregando, setCarregando] = React.useState(true)
@@ -195,6 +190,7 @@ export function AbaMetricas({
     chave: 'leads', alvo: '', prazo: null,
   })
   const [criandoMeta, setCriandoMeta] = React.useState(false)
+  const [maisAberto, setMaisAberto] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
     try {
@@ -321,6 +317,37 @@ export function AbaMetricas({
     new Set(metricas.map((m) => String(m.periodo_inicio).slice(0, 7))),
   ).sort((a, b) => b.localeCompare(a))
 
+  const algumOpcional = CHAVES_OPCIONAIS.some((c) => (rascunho[c] ?? '').trim() !== '')
+  const mostrarMais = maisAberto || algumOpcional
+  const tem = (c: string) => valoresDoMes[c] !== undefined
+  const derivadasVisiveis = METRICAS_DERIVADAS.filter(
+    (d) =>
+      DERIVADAS_FIXAS.includes(d.chave) ||
+      (d.chave === 'ctr' && tem('impressoes') && tem('cliques')) ||
+      (d.chave === 'ticket' && tem('vendas') && tem('receita')),
+  ).sort((a, b) => {
+    const ordem = ['cpl', 'cac', 'roas', 'conversao', 'ctr', 'ticket']
+    return ordem.indexOf(a.chave) - ordem.indexOf(b.chave)
+  })
+  /** Um campo de lançamento. O texto de ajuda mora no tooltip, não embaixo do campo. */
+  const campoDoMes = (chave: string) => {
+    const m = METRICAS_LANCADAS.find((x) => x.chave === chave)!
+    return (
+      <div key={m.chave} title={m.ajuda}>
+        <Input
+          label={m.label}
+          value={rascunho[m.chave] ?? ''}
+          onChange={(e) => setRascunho((r) => ({ ...r, [m.chave]: e.target.value }))}
+          placeholder={m.unidade === 'reais' ? '0,00' : '0'}
+          inputMode="decimal"
+        />
+        <div className="mt-1 h-4">
+          <Variacao chave={m.chave} atual={valoresDoMes[m.chave]} anterior={valoresAnteriores[m.chave]} />
+        </div>
+      </div>
+    )
+  }
+
   if (carregando) {
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-sm text-foreground/60">
@@ -331,16 +358,6 @@ export function AbaMetricas({
 
   return (
     <div className="space-y-4">
-      {/* No topo, acima das metas atuais e do lançamento do mês: o planejamento é o "pra onde vamos"
-          que dá sentido a tudo que vem abaixo, e as metas dele são as mesmas de "Metas combinadas". */}
-      <PlanejamentoCliente
-        clienteId={clienteId}
-        metricas={metricas}
-        cliente={cliente}
-        abrirQuando={abrirPlanejamento}
-        onMetasMudaram={carregar}
-      />
-
       <section className="rounded-xl border border-line p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1">
@@ -370,25 +387,25 @@ export function AbaMetricas({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {METRICAS_LANCADAS.map((m) => (
-            <div key={m.chave}>
-              <Input
-                label={m.label}
-                value={rascunho[m.chave] ?? ''}
-                onChange={(e) => setRascunho((r) => ({ ...r, [m.chave]: e.target.value }))}
-                placeholder={m.unidade === 'reais' ? '0,00' : '0'}
-                inputMode="decimal"
-              />
-              <div className="mt-1 flex items-center justify-between gap-2">
-                <span className="truncate text-[11px] text-foreground/40">{m.ajuda ?? ''}</span>
-                <Variacao
-                  chave={m.chave}
-                  atual={valoresDoMes[m.chave]}
-                  anterior={valoresAnteriores[m.chave]}
-                />
-              </div>
+          {CHAVES_EM_DESTAQUE.map((chave) => campoDoMes(chave))}
+        </div>
+
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setMaisAberto((a) => !a)}
+            aria-expanded={mostrarMais}
+            className="flex items-center gap-1.5 text-xs font-medium text-foreground/55 transition-colors hover:text-foreground"
+          >
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !mostrarMais && '-rotate-90')} />
+            Mais métricas (opcional)
+            {!mostrarMais && algumOpcional && <span className="text-accent">· preenchidas</span>}
+          </button>
+          {mostrarMais && (
+            <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {CHAVES_OPCIONAIS.map((chave) => campoDoMes(chave))}
             </div>
-          ))}
+          )}
         </div>
 
         <div className="mt-4 border-t border-line pt-3">
@@ -396,7 +413,7 @@ export function AbaMetricas({
             Calculado a partir do que foi lançado
           </p>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {METRICAS_DERIVADAS.map((d) => (
+            {derivadasVisiveis.map((d) => (
               <div key={d.chave} title={d.ajuda}>
                 <span className="text-xs text-foreground/50">{d.label}</span>
                 <span className="block text-base font-semibold tabular-nums text-foreground">
@@ -418,7 +435,7 @@ export function AbaMetricas({
           <Target className="h-4 w-4 text-accent" /> Metas combinadas
         </h2>
         <p className="mb-3 text-xs text-foreground/50">
-          As de 6 e 12 meses se definem na grade do planejamento, acima. Aqui, só a meta do mês.
+          As de 6 e 12 meses se definem na aba Planejamento. Aqui, só a meta do mês.
         </p>
 
         {metasVisiveis.length === 0 ? (

@@ -11,13 +11,14 @@ import { AbaVisaoGeral } from '@/components/gestaoClientes/AbaVisaoGeral'
 import { AbaJornada } from '@/components/gestaoClientes/AbaJornada'
 import { ModalNotas, PainelNotas } from '@/components/gestaoClientes/PainelNotas'
 import { AbaMetricas } from '@/components/gestaoClientes/AbaMetricas'
+import { AbaPlanejamento } from '@/components/gestaoClientes/AbaPlanejamento'
 import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 import type { Destino } from '@/lib/gcSaude'
 import { gravarVisitados, lerVisitados, proximoSemData, semDataDeRenovacao } from '@/lib/gcFilaRenovacao'
 
-type Aba = 'visao' | 'jornada' | 'metricas' | 'estrategias' | 'relatorios' | 'notas'
+type Aba = 'visao' | 'jornada' | 'metricas' | 'planejamento' | 'estrategias' | 'relatorios' | 'notas'
 
 /**
  * Detalhe do cliente de tráfego — Visão geral, Jornada e Histórico.
@@ -35,8 +36,6 @@ export function ClienteNxDetalhePage() {
   const [editando, setEditando] = React.useState(false)
   const [confirmandoExclusao, setConfirmandoExclusao] = React.useState(false)
   const [notasAbertas, setNotasAbertas] = React.useState(false)
-  // Sobe a cada pedido pra abrir o planejamento (vindo da Visão geral ou do semáforo).
-  const [pedidoPlanejamento, setPedidoPlanejamento] = React.useState(0)
   const [excluindo, setExcluindo] = React.useState(false)
   // Fila "Completar agora" das datas de renovação (vem da lista de clientes).
   const [params] = useSearchParams()
@@ -103,14 +102,9 @@ export function ClienteNxDetalhePage() {
    */
   const irPara = (destino: Destino) => {
     switch (destino) {
-      case 'planejamento':
-        // O planejamento mora na aba Métricas e metas. A aba carrega antes de o bloco existir, então
-        // o pedido vai por um contador que o bloco observa: ele abre e rola assim que montar.
-        setAba('metricas')
-        setPedidoPlanejamento((n) => n + 1)
-        return
       case 'jornada':
       case 'metricas':
+      case 'planejamento':
       case 'relatorios':
         setAba(destino)
         window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -241,15 +235,19 @@ export function ClienteNxDetalhePage() {
                     </span>
                   ),
                 },
-                { value: 'metricas', label: 'Métricas e metas' },
+                { value: 'metricas', label: 'Métricas' },
+                { value: 'planejamento', label: 'Planejamento' },
                 {
                   value: 'estrategias',
+                  // O contador some quando é zero: "Estratégias 0" só ocupa espaço.
                   label: (
                     <span className="flex items-center gap-1.5">
                       Estratégias
-                      <span className="text-xs tabular-nums text-foreground/45">
-                        {detalhe.estrategias.length}
-                      </span>
+                      {detalhe.estrategias.length > 0 && (
+                        <span className="text-xs tabular-nums text-foreground/45">
+                          {detalhe.estrategias.length}
+                        </span>
+                      )}
                     </span>
                   ),
                 },
@@ -274,11 +272,13 @@ export function ClienteNxDetalhePage() {
                 onMudou={carregar}
                 onVerNotas={() => setNotasAbertas(true)}
                 onIr={irPara}
+                onEditar={() => setEditando(true)}
               />
             )}
-            {aba === 'jornada' && <AbaJornada jornada={detalhe.jornada} onMudou={carregar} />}
-            {aba === 'metricas' && (
-              <AbaMetricas clienteId={id} cliente={detalhe.cliente} abrirPlanejamento={pedidoPlanejamento} />
+            {aba === 'jornada' && <AbaJornada clienteId={id} jornada={detalhe.jornada} onMudou={carregar} />}
+            {aba === 'metricas' && <AbaMetricas clienteId={id} />}
+            {aba === 'planejamento' && (
+              <AbaPlanejamento clienteId={id} cliente={detalhe.cliente} onMudou={carregar} />
             )}
             {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
             {aba === 'estrategias' && (

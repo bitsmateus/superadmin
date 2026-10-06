@@ -205,6 +205,23 @@ export function ModalCliente({
             </span>
           </span>
         </label>
+        {!cliente && (
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-line px-3 py-2.5 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={form.ja_em_andamento ?? false}
+              onChange={(e) => setForm((f) => ({ ...f, ja_em_andamento: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 rounded border-line"
+            />
+            <span>
+              <span className="block text-sm font-medium text-foreground">Cliente já em andamento</span>
+              <span className="block text-xs text-foreground/55">
+                Ele já passou pela implantação antes do módulo: as etapas até o Go-live ficam como "concluídas antes do
+                módulo", sem data. As etapas depois do Go-live seguem normais.
+              </span>
+            </span>
+          </label>
+        )}
         <div className="sm:col-span-2">
           <Textarea
             label="Observações"

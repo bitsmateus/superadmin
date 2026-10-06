@@ -280,8 +280,11 @@ function LinhaSinal({ sinal, onIr }: { sinal: Sinal; onIr?: (d: Destino) => void
 }
 
 /**
- * Painel com TODOS os passos — é o que a pessoa que cuida da conta abre pra saber o que fazer.
- * Os sinais ruins vêm primeiro: a tela é pra agir, não pra arquivar.
+ * Painel de saúde do cliente: o nível, o risco de churn em UMA frase e a lista "O que falta
+ * acompanhar" — só o que NÃO está bem, cada item com o link pra resolver.
+ *
+ * Sinal ótimo ou bom não entra na lista: "Situação: ótimo" e "Serviços: ótimo" só repetiam o que a
+ * pastilha do topo já diz e empurravam o que precisa de ação pra baixo.
  */
 export function PainelSaude({
   saude,
@@ -293,8 +296,10 @@ export function PainelSaude({
   /** Leva pra onde o sinal se resolve. Sem isso as linhas ficam só de leitura. */
   onIr?: (d: Destino) => void
 }) {
-  const ordem: Estado[] = ['risco', 'atencao', 'neutro', 'bom', 'otimo']
-  const sinais = [...saude.sinais].sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado))
+  const ordem: Estado[] = ['risco', 'atencao', 'neutro']
+  const faltam = saude.sinais
+    .filter((s) => ordem.includes(s.estado))
+    .sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado))
 
   const tomChurn: Estado =
     saude.churn.nivel === 'alto'
@@ -304,60 +309,43 @@ export function PainelSaude({
         : saude.churn.nivel === 'indefinido'
           ? 'neutro'
           : 'otimo'
+  const fraseDeChurn =
+    saude.churn.nivel === 'indefinido'
+      ? null
+      : saude.churn.nivel === 'baixo'
+        ? 'Risco de churn baixo.'
+        : saude.churn.explicacao
+          ? `Risco de churn ${saude.churn.nivel}: ${saude.churn.explicacao.replace(/\.$/, '')}.`
+          : `Risco de churn ${saude.churn.nivel}: ${saude.churn.motivos[0]?.replace(/\.$/, '') ?? 'veja a lista abaixo'}${
+              saude.churn.motivos.length > 1 ? ` (+${saude.churn.motivos.length - 1})` : ''
+            }.`
 
   return (
     <section className="rounded-xl border border-line p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          Como está esse cliente
-        </h2>
-        <div className="flex items-center gap-2">
-          <PastilhaSaude estado={saude.nivel} />
-          <PastilhaSaude
-            estado={tomChurn}
-            texto={
-              saude.churn.nivel === 'indefinido'
-                ? 'Churn: sem dados'
-                : `Risco de churn: ${saude.churn.nivel}${
-                    saude.churn.origem === 'acompanhamento' ? ' · falta de acompanhamento' : ''
-                  }`
-            }
-          />
-        </div>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">Como está esse cliente</h2>
+        <PastilhaSaude estado={saude.nivel} />
       </div>
+
+      {fraseDeChurn && (
+        <p className={cn('mt-1.5 flex items-start gap-1.5 text-xs', tomChurn === 'otimo' ? 'text-foreground/50' : 'text-danger/90')}>
+          {tomChurn !== 'otimo' && <TrendingDown className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+          {fraseDeChurn}
+        </p>
+      )}
 
       {children && <div className="mt-3">{children}</div>}
 
-      <div className="mt-3">
-        <FaixaDeSinais saude={saude} />
-        <p className="mt-1.5 text-xs text-foreground/45">
-          {saude.contagem.otimo} ótimo · {saude.contagem.bom} bom · {saude.contagem.atencao} atenção
-          · {saude.contagem.risco} risco
-          {saude.contagem.neutro > 0 ? ` · ${saude.contagem.neutro} sem dados` : ''}
-        </p>
-      </div>
-
-      {saude.churn.motivos.length > 0 && (
-        <div className="mt-3 rounded-lg border border-danger/20 bg-danger/[0.04] px-3 py-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium text-danger">
-            <TrendingDown className="h-3.5 w-3.5" /> O que puxa esse cliente pra saída
-          </p>
-          {saude.churn.explicacao && (
-            <p className="mt-1 text-xs text-foreground/80">{saude.churn.explicacao}</p>
-          )}
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-foreground/70">
-            {saude.churn.motivos.map((m, i) => (
-              <li key={i}>{m}</li>
-            ))}
-          </ul>
-        </div>
+      <h3 className="mb-1 mt-4 text-xs font-medium uppercase tracking-wide text-foreground/45">O que falta acompanhar</h3>
+      {faltam.length === 0 ? (
+        <p className="py-2 text-sm text-foreground/50">Tudo em dia.</p>
+      ) : (
+        <ul>
+          {faltam.map((s) => (
+            <LinhaSinal key={s.chave} sinal={s} onIr={onIr} />
+          ))}
+        </ul>
       )}
-
-      <ul className="mt-3">
-        {sinais.map((s) => (
-          <LinhaSinal key={s.chave} sinal={s} onIr={onIr} />
-        ))}
-      </ul>
     </section>
   )
 }

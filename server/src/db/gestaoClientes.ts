@@ -363,6 +363,11 @@ const TABELAS = [
        ordem = ordem + 100, updated_at = NOW()
      WHERE campo = 'premissas'`,
 
+  // "Cliente já em andamento": etapas que o cliente já tinha cumprido ANTES de entrar no módulo ficam
+  // concluídas SEM data (concluida_em nulo) e marcadas — inventar uma data seria registrar o que ninguém
+  // sabe.
+  `ALTER TABLE gc_cliente_jornada ADD COLUMN IF NOT EXISTS concluida_antes BOOLEAN NOT NULL DEFAULT false`,
+
   // Rotina mensal: itens que nascem sozinhos todo mês (publicar o relatório, alinhar com o cliente),
   // com prazo automático. Não pertencem a etapa nem a estratégia — são do CLIENTE, no mês de
   // referência —, então a regra de "dono" do item ganha uma terceira forma.

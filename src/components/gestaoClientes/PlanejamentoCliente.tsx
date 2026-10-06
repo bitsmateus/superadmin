@@ -11,7 +11,7 @@ import { MenuModelos, ModalModelosTexto, type AlvoDeModelo } from '@/components/
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import {
   gestaoClientes,
-  type GcCampoModelo, type GcHistoricoPlanejamento, type GcMetrica, type GcModeloTexto,
+  type GcCampoModelo, type GcMetrica, type GcModeloTexto,
   type GcOrigemCampo, type GcPlanejamentoApi, type GcPlanejamentoEntrada,
 } from '@/services/gestaoClientes'
 import {
@@ -139,13 +139,6 @@ function paraEntrada(r: Rascunho): GcPlanejamentoEntrada {
   }
 }
 
-function textoDoValor(v: string | number | boolean | null): string {
-  if (v === null || v === '') return '—'
-  if (typeof v === 'boolean') return v ? 'ligado' : 'desligado'
-  const s = String(v)
-  return s.length > 60 ? `${s.slice(0, 60)}…` : s
-}
-
 const NOMES_MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 /** ['2026-06','2026-07','2026-08'] → "jun, jul, ago/26". */
 function rotuloDosMeses(meses: string[] | undefined): string {
@@ -209,15 +202,15 @@ export function PlanejamentoCliente({
   clienteId,
   metricas,
   cliente,
-  abrirQuando = 0,
+  recolhivel = true,
   onMetasMudaram,
 }: {
   clienteId: string
   metricas: GcMetrica[]
   /** Pra trocar {cliente} e {segmento} nos modelos de texto. */
   cliente?: { nome_empresa?: string | null; segmento?: string | null }
-  /** Sobe quando algo de fora (a Visão geral) pede pra abrir o bloco. */
-  abrirQuando?: number
+  /** Falso na aba Planejamento: o bloco fica sempre aberto, sem o recolher. */
+  recolhivel?: boolean
   /** Chamado depois de salvar: as metas mudaram e a seção "Metas combinadas" precisa recarregar. */
   onMetasMudaram: () => Promise<void> | void
 }) {
@@ -226,16 +219,14 @@ export function PlanejamentoCliente({
   const [inicial, setInicial] = React.useState('')
   const [carregando, setCarregando] = React.useState(true)
   const [salvando, setSalvando] = React.useState(false)
-  const [aberto, setAberto] = React.useState<boolean | null>(null)
+  const [abertoEscolhido, setAberto] = React.useState<boolean | null>(null)
+  const aberto = recolhivel ? abertoEscolhido : true
   const [chaveGrafico, setChaveGrafico] = React.useState<ChavePlano>('leads')
-  const [historicoAberto, setHistoricoAberto] = React.useState(false)
-  const [historico, setHistorico] = React.useState<GcHistoricoPlanejamento[] | null>(null)
   const [modelos, setModelos] = React.useState<GcModeloTexto[]>([])
   const [gerenciando, setGerenciando] = React.useState<GcCampoModelo | null>(null)
   const [confirmandoMedia, setConfirmandoMedia] = React.useState(false)
   const [mediaAplicada, setMediaAplicada] = React.useState<string>('')
   const prefillFeito = React.useRef<GcPlanejamentoApi | null>(null)
-  const secaoRef = React.useRef<HTMLElement>(null)
 
   const sugestao = React.useMemo(() => sugerirPontoA(metricas, mesAtual()), [metricas])
 
@@ -273,17 +264,6 @@ export function PlanejamentoCliente({
   React.useEffect(() => {
     void carregarModelos()
   }, [carregarModelos])
-
-  const carregarHistorico = React.useCallback(async () => {
-    try {
-      setHistorico(await gestaoClientes.historicoPlanejamento(clienteId))
-    } catch (err) {
-      toast.error('Falha ao carregar o histórico: ' + (err as Error).message)
-    }
-  }, [clienteId])
-  React.useEffect(() => {
-    if (historicoAberto && historico === null) void carregarHistorico()
-  }, [historicoAberto, historico, carregarHistorico])
 
   // ---- ponto A: pré-preenchimento com a média dos últimos meses lançados
   /** Aplica a sugestão aos campos. `soVazios` = só onde ainda não há número (o pré-preenchimento). */
@@ -329,7 +309,7 @@ export function PlanejamentoCliente({
 
   React.useEffect(() => {
     // Só decide uma vez, quando o planejamento chega: recolhido, a menos que a pessoa tenha deixado aberto.
-    if (!api || aberto !== null) return
+    if (!recolhivel || !api || abertoEscolhido !== null) return
     let lembrado: string | null = null
     try {
       lembrado = window.localStorage.getItem(CHAVE_ABERTO(clienteId))
@@ -337,7 +317,7 @@ export function PlanejamentoCliente({
       /* sem armazenamento: vale a regra padrão */
     }
     setAberto(lembrado === '1')
-  }, [api, aberto, clienteId])
+  }, [api, recolhivel, abertoEscolhido, clienteId])
 
   const alternar = (valor: boolean) => {
     setAberto(valor)
@@ -347,16 +327,6 @@ export function PlanejamentoCliente({
       /* a escolha vale até recarregar */
     }
   }
-
-  // Um pedido de fora ("abrir planejamento", vindo da Visão geral ou do semáforo) abre e rola até aqui.
-  React.useEffect(() => {
-    if (abrirQuando <= 0) return
-    setAberto(true)
-    const t = window.setTimeout(() => {
-      secaoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 80)
-    return () => window.clearTimeout(t)
-  }, [abrirQuando])
 
   const plano = React.useMemo(() => (rascunho ? planoDoRascunho(rascunho) : null), [rascunho])
   const realizado = React.useMemo(() => realizadoPorMes(metricas), [metricas])
@@ -456,7 +426,6 @@ export function PlanejamentoCliente({
           ? `Planejamento salvo — lembrete em Estratégias > Pendências para ${dataBR(salvo.atual.lembrar_em!)}`
           : 'Planejamento salvo',
       )
-      setHistorico(null)
       await onMetasMudaram()
     } catch (err) {
       toast.error('Falha ao salvar o planejamento: ' + (err as Error).message)
@@ -509,18 +478,20 @@ export function PlanejamentoCliente({
   const semData = !planoDaRota.dataDiagnostico
 
   return (
-    <section ref={secaoRef} id="gc-planejamento" className="rounded-xl border border-accent/25 bg-accent/[0.015]">
+    <section id="gc-planejamento" className="rounded-xl border border-accent/25 bg-accent/[0.015]">
       {/* ------------------------------------------------------------ cabeçalho (sempre visível) */}
       <div className="flex flex-wrap items-center gap-3 p-4">
         <button
           type="button"
-          onClick={() => alternar(!aberto)}
-          className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+          onClick={() => recolhivel && alternar(!aberto)}
+          className={cn('flex min-w-0 flex-1 items-start gap-2.5 text-left', !recolhivel && 'cursor-default')}
           aria-expanded={!!aberto}
         >
-          <ChevronDown
-            className={cn('mt-1 h-4 w-4 shrink-0 text-foreground/40 transition-transform', !aberto && '-rotate-90')}
-          />
+          {recolhivel && (
+            <ChevronDown
+              className={cn('mt-1 h-4 w-4 shrink-0 text-foreground/40 transition-transform', !aberto && '-rotate-90')}
+            />
+          )}
           <span className="min-w-0">
             <span className="flex flex-wrap items-center gap-2">
               <Route className="h-4 w-4 text-accent" />
@@ -863,51 +834,6 @@ export function PlanejamentoCliente({
                 <TabelaProjecao linhas={linhasDaProjecao} chave={chaveEfetiva} />
               </div>
             </>
-          )}
-        </div>
-
-        {/* ---------------------------------------------------------------- histórico */}
-        <div className="mt-3 overflow-hidden rounded-xl border border-line bg-surface">
-          <button
-            type="button"
-            onClick={() => setHistoricoAberto((a) => !a)}
-            className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-elevate/[0.02]"
-          >
-            Histórico de alterações
-            <ChevronDown className={cn('h-4 w-4 text-foreground/40 transition-transform', !historicoAberto && '-rotate-90')} />
-          </button>
-          {historicoAberto && (
-            <div className="border-t border-line px-3 py-2">
-              {historico === null ? (
-                <p className="py-3 text-center text-sm text-foreground/45">Carregando…</p>
-              ) : historico.length === 0 ? (
-                <p className="py-3 text-center text-sm text-foreground/45">Nenhuma alteração registrada ainda.</p>
-              ) : (
-                <ol className="space-y-3">
-                  {historico.map((h) => (
-                    <li key={h.id}>
-                      <p className="text-xs text-foreground/50">
-                        {new Date(h.alterado_em).toLocaleString('pt-BR', {
-                          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-                        })}
-                        {h.autor_nome ? ` · ${h.autor_nome}` : ''} · {h.mudancas.length} alteração(ões)
-                      </p>
-                      <ul className="mt-1 space-y-0.5">
-                        {h.mudancas.map((m, i) => (
-                          <li key={i} className="text-xs text-foreground/75">
-                            <span className="text-foreground/45">
-                              {m.escopo === 'atual' ? '' : `${m.escopo === '6_meses' ? '6 meses' : '12 meses'} · `}
-                            </span>
-                            {m.rotulo}: <span className="text-foreground/50">{textoDoValor(m.antes)}</span> →{' '}
-                            <span className="font-medium text-foreground">{textoDoValor(m.depois)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
           )}
         </div>
       </div>

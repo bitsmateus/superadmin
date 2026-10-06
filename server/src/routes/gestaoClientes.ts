@@ -1,10 +1,10 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import crypto from 'node:crypto';
-import { query, queryOne, withTransaction } from '../db.js';
+import { pool, query, queryOne, withTransaction } from '../db.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
 import { validarMetricas } from '../lib/gcValidacao.js';
-import { garantirRecorrentes } from '../lib/gcRecorrentes.js';
+import { garantirRecorrentes, sincronizarRotinaAutomatica } from '../lib/gcRecorrentes.js';
 import { CHAVES_REALIZADO_PUBLICO, montarJornadaPublica } from '../lib/gcPortalJornada.js';
 import {
   CAMPOS_COM_ORIGEM, CHAVES_DIGITADAS, HORIZONTES_PLANEJAMENTO, baseDoPontoA, derivadosDoPontoA, diffDeCampos,
@@ -96,6 +96,46 @@ async function registrarEvento(clienteId: string, titulo: string, descricao = ''
   );
 }
 
+/**
+ * "Cliente já em andamento": fecha as etapas até o Go-live (inclusive) como concluídas ANTES DO MÓDULO,
+ * sem data de conclusão, com os itens delas concluídos também sem data nem autor, e abre a etapa
+ * seguinte. Aceita o cliente de uma transação (cadastro) ou usa o pool.
+ */
+async function aplicarJaEmAndamento(
+  clienteId: string,
+  conexao?: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }> }
+): Promise<{ etapas: number }> {
+  const exec = conexao ?? { query: (sql: string, params?: unknown[]) => pool.query(sql, params) };
+  const go = await exec.query(
+    `SELECT ordem FROM gc_cliente_jornada WHERE gc_cliente_id = $1 AND lower(nome) LIKE 'go-live%' ORDER BY ordem LIMIT 1`,
+    [clienteId]
+  );
+  if (!go.rows[0]) return { etapas: 0 };
+  const ordemGo = go.rows[0].ordem;
+  const etapas = await exec.query(
+    `UPDATE gc_cliente_jornada
+     SET status = 'concluida', concluida_em = NULL, concluida_antes = true, updated_at = NOW()
+     WHERE gc_cliente_id = $1 AND ordem <= $2 RETURNING id`,
+    [clienteId, ordemGo]
+  );
+  await exec.query(
+    `UPDATE gc_checklist_itens
+     SET concluido = true, concluido_em = NULL, concluido_por = NULL, updated_at = NOW()
+     WHERE gc_cliente_jornada_id = ANY($1::uuid[]) AND NOT concluido`,
+    [etapas.rows.map((e) => e.id)]
+  );
+  await exec.query(
+    `UPDATE gc_cliente_jornada SET status = 'em_andamento', updated_at = NOW()
+     WHERE id = (
+       SELECT id FROM gc_cliente_jornada
+       WHERE gc_cliente_id = $1 AND ordem > $2 AND status = 'pendente'
+       ORDER BY ordem, created_at LIMIT 1
+     ) AND NOT EXISTS (SELECT 1 FROM gc_cliente_jornada WHERE gc_cliente_id = $1 AND status = 'em_andamento')`,
+    [clienteId, ordemGo]
+  );
+  return { etapas: etapas.rows.length };
+}
+
 /** Põe a próxima etapa pendente do cliente em andamento — a jornada anda sozinha. */
 async function abrirProximaEtapa(clienteId: string) {
   await query(
@@ -122,7 +162,8 @@ async function recalcularEtapa(etapaId: string, autorId?: string) {
   if (!etapa) return;
   const contagem = await queryOne<{ total: string; feitos: string }>(
     `SELECT count(*) AS total, count(*) FILTER (WHERE concluido) AS feitos
-     FROM gc_checklist_itens WHERE gc_cliente_jornada_id = $1`,
+     FROM gc_checklist_itens WHERE gc_cliente_jornada_id = $1
+       AND titulo NOT IN ${TITULOS_AUTOMATICOS_SQL}`,
     [etapaId]
   );
   const total = Number(contagem?.total ?? 0);
@@ -153,6 +194,15 @@ async function recalcularEtapa(etapaId: string, autorId?: string) {
  * dado nas métricas do comercial.
  */
 const HOJE = `(NOW() AT TIME ZONE 'America/Sao_Paulo')::date`;
+
+/**
+ * Itens da etapa "Acompanhamento mensal" da jornada que NÃO se marcam à mão: o estado vem dos fatos do
+ * mês que fechou (relatório publicado; nota de reunião/alinhamento). São derivados na leitura, nunca
+ * gravados como concluídos — senão o do mês passado continuaria "feito" no mês seguinte.
+ */
+const TITULOS_AUTOMATICOS_SQL = `('Relatório do mês publicado', 'Alinhamento mensal com o cliente')`;
+/** O mês que fechou, como a data do primeiro dia. */
+const MES_QUE_FECHOU_SQL = `(date_trunc('month', ${HOJE}) - INTERVAL '1 month')::date`;
 
 /** Pacote de métricas de um mês, pivotado ({ leads: 42 }). `$n` é o primeiro dia do mês. */
 function pivotMetricas(parametro: string): string {
@@ -186,9 +236,11 @@ const SQL_CLIENTES = `
     -- Progresso da IMPLANTAÇÃO: os itens da rotina mensal ficam de fora, senão todo mês um item novo
     -- em aberto puxaria o percentual de um cliente já implantado pra baixo.
     (SELECT count(*) FROM gc_checklist_itens i
-      WHERE i.gc_cliente_id = c.id AND i.recorrente_chave IS NULL) AS itens_total,
+      WHERE i.gc_cliente_id = c.id AND i.recorrente_chave IS NULL
+        AND i.titulo NOT IN ${TITULOS_AUTOMATICOS_SQL}) AS itens_total,
     (SELECT count(*) FROM gc_checklist_itens i
-      WHERE i.gc_cliente_id = c.id AND i.concluido AND i.recorrente_chave IS NULL) AS itens_concluidos,
+      WHERE i.gc_cliente_id = c.id AND i.concluido AND i.recorrente_chave IS NULL
+        AND i.titulo NOT IN ${TITULOS_AUTOMATICOS_SQL}) AS itens_concluidos,
     (SELECT count(*) FROM gc_checklist_itens i
       WHERE i.gc_cliente_id = c.id AND NOT i.concluido
         AND i.prazo IS NOT NULL AND i.prazo < ${HOJE}) AS itens_atrasados,
@@ -358,6 +410,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     // A MESMA consulta da lista, filtrada num cliente: o detalhe mostra o semáforo, e ele tem que
     // sair igualzinho ao da lista — dois caminhos pro mesmo cálculo é como eles se separam.
     await garantirRecorrentes();
+    await sincronizarRotinaAutomatica(req.params.id);
     const [mes, anterior] = mesesDeReferencia();
     const cliente = await queryOne(`${SQL_CLIENTES} WHERE c.id = $3`, [mes, anterior, req.params.id]);
     if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
@@ -367,7 +420,19 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       query(
         `SELECT j.*, p.name AS responsavel_nome, COALESCE(
            (SELECT json_agg(json_build_object(
-               'id', i.id, 'titulo', i.titulo, 'ordem', i.ordem, 'concluido', i.concluido,
+               'id', i.id, 'titulo', i.titulo, 'ordem', i.ordem,
+               'automatico', CASE i.titulo
+                  WHEN 'Relatório do mês publicado' THEN 'relatorio'
+                  WHEN 'Alinhamento mensal com o cliente' THEN 'alinhamento' END,
+               'concluido', CASE i.titulo
+                  WHEN 'Relatório do mês publicado' THEN EXISTS (
+                    SELECT 1 FROM gc_relatorios r WHERE r.gc_cliente_id = j.gc_cliente_id
+                      AND r.status = 'publicado' AND r.periodo_inicio = ${MES_QUE_FECHOU_SQL})
+                  WHEN 'Alinhamento mensal com o cliente' THEN EXISTS (
+                    SELECT 1 FROM gc_historico h WHERE h.gc_cliente_id = j.gc_cliente_id AND h.tipo = 'reuniao'
+                      AND (h.created_at AT TIME ZONE 'America/Sao_Paulo')::date >= ${MES_QUE_FECHOU_SQL}
+                      AND (h.created_at AT TIME ZONE 'America/Sao_Paulo')::date < (${MES_QUE_FECHOU_SQL} + INTERVAL '2 months')::date)
+                  ELSE i.concluido END,
                'concluido_em', i.concluido_em, 'prazo', i.prazo, 'responsavel_id', i.responsavel_id
              ) ORDER BY i.ordem, i.created_at)
             FROM gc_checklist_itens i WHERE i.gc_cliente_jornada_id = j.id),
@@ -436,10 +501,14 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         valores
       );
       await criarJornadaDoCliente(client, rows[0].id);
+      if (body.ja_em_andamento === true) await aplicarJaEmAndamento(rows[0].id, client);
       return rows[0];
     });
 
     await registrarEvento(criado.id, 'Cliente cadastrado', '', sub);
+    if (body.ja_em_andamento === true) {
+      await registrarEvento(criado.id, 'Cliente já em andamento', 'Etapas até o Go-live: concluídas antes do módulo', sub);
+    }
     return reply.status(201).send(criado);
   });
 
@@ -680,6 +749,28 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return atualizada;
   });
 
+  // POST /api/gc/clientes/:id/jornada/ja-em-andamento — "este cliente já estava rodando antes do módulo":
+  // todas as etapas até o Go-live ficam "concluídas antes do módulo", SEM data (não há data verdadeira
+  // pra colocar) e a etapa seguinte abre. Etapas depois do Go-live seguem normais.
+  app.post<{ Params: { id: string } }>(
+    '/api/gc/clientes/:id/jornada/ja-em-andamento',
+    autenticado,
+    async (req, reply) => {
+      const { sub } = req.user as { sub: string };
+      const existe = await queryOne('SELECT 1 FROM gc_clientes WHERE id = $1', [req.params.id]);
+      if (!existe) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      const resultado = await aplicarJaEmAndamento(req.params.id);
+      if (resultado.etapas === 0) {
+        return reply.status(409).send({ message: 'Não achei a etapa "Go-live" na jornada deste cliente.' });
+      }
+      await registrarEvento(
+        req.params.id, 'Cliente já em andamento',
+        `${resultado.etapas} etapa(s) até o Go-live marcadas como concluídas antes do módulo`, sub
+      );
+      return resultado;
+    }
+  );
+
   // ------------------------------------------------------------------ checklist
   // POST /api/gc/checklist — item novo, numa etapa da jornada OU numa estratégia (nunca nos dois:
   // o banco tem CHECK pra isso).
@@ -727,13 +818,25 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     Body: { concluido?: boolean; titulo?: string; prazo?: string | null; responsavel_id?: string | null };
   }>('/api/gc/checklist/:id', autenticado, async (req, reply) => {
     const { sub } = req.user as { sub: string };
-    const item = await queryOne<{ gc_cliente_jornada_id: string | null }>(
-      'SELECT gc_cliente_jornada_id FROM gc_checklist_itens WHERE id = $1',
+    const item = await queryOne<{ gc_cliente_jornada_id: string | null; titulo: string; recorrente_chave: string | null }>(
+      'SELECT gc_cliente_jornada_id, titulo, recorrente_chave FROM gc_checklist_itens WHERE id = $1',
       [req.params.id]
     );
     if (!item) return reply.status(404).send({ message: 'Item não encontrado' });
 
     const { concluido, titulo, prazo, responsavel_id } = req.body ?? {};
+    // Relatório publicado e alinhamento do mês se marcam sozinhos, a partir dos fatos (o relatório
+    // publicado; a nota de reunião/alinhamento). Marcar à mão deixaria o item mentir.
+    const automatico =
+      (item.gc_cliente_jornada_id !== null &&
+        ['Relatório do mês publicado', 'Alinhamento mensal com o cliente'].includes(item.titulo)) ||
+      item.recorrente_chave === 'relatorio' ||
+      item.recorrente_chave === 'alinhamento';
+    if (automatico && concluido !== undefined) {
+      return reply.status(409).send({
+        message: 'Esse item se marca sozinho: o relatório precisa ser publicado, ou uma nota de "Reunião/alinhamento" registrada.',
+      });
+    }
     const sets: string[] = [];
     const params: unknown[] = [];
     let i = 1;
@@ -793,6 +896,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         JSON.stringify(anexos ?? []),
       ]
     );
+    await sincronizarRotinaAutomatica(req.params.id);
     return reply.status(201).send(criado);
   });
 
@@ -815,13 +919,18 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         params
       );
       if (!atualizado) return reply.status(404).send({ message: 'Registro não encontrado' });
+      await sincronizarRotinaAutomatica((atualizado as { gc_cliente_id: string }).gc_cliente_id);
       return atualizado;
     }
   );
 
   app.delete<{ Params: { id: string } }>('/api/gc/historico/:id', autenticado, async (req, reply) => {
-    const apagado = await queryOne('DELETE FROM gc_historico WHERE id = $1 RETURNING id', [req.params.id]);
+    const apagado = await queryOne<{ gc_cliente_id: string }>(
+      'DELETE FROM gc_historico WHERE id = $1 RETURNING gc_cliente_id',
+      [req.params.id]
+    );
     if (!apagado) return reply.status(404).send({ message: 'Registro não encontrado' });
+    await sincronizarRotinaAutomatica(apagado.gc_cliente_id);
     return reply.status(204).send();
   });
 
@@ -1251,6 +1360,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   // tudo "sem responsável". Atraso é comparado em horário de Brasília.
   app.get('/api/gc/pendencias', autenticado, async () => {
     await garantirRecorrentes();
+    await sincronizarRotinaAutomatica();
     const itens = await query<{ prazo: string | null; atrasado: boolean; cliente_nome: string }>(
       `SELECT i.id, i.titulo, i.prazo, i.ordem,
          c.id AS cliente_id, c.nome_empresa AS cliente_nome,
@@ -1272,6 +1382,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
          -- Etapa que ainda nem começou não é pendência de ninguém agora: o checklist dela só vira
          -- trabalho quando a etapa abre. Estratégia aplicada entra sempre.
          AND (j.id IS NULL OR j.status <> 'pendente')
+         -- Itens automáticos da jornada têm a rotina mensal como pendência de verdade.
+         AND NOT (i.gc_cliente_jornada_id IS NOT NULL AND i.titulo IN ${TITULOS_AUTOMATICOS_SQL})
        ORDER BY (i.prazo IS NOT NULL AND i.prazo < ${HOJE}) DESC, i.prazo ASC NULLS LAST,
                 c.nome_empresa, i.ordem
        LIMIT 1000`
@@ -1717,7 +1829,18 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
           'INSERT INTO gc_planejamento_historico (gc_cliente_id, alterado_por, mudancas) VALUES ($1,$2,$3)',
           [req.params.id, sub, JSON.stringify(mudancas)]
         );
-        await registrarEvento(req.params.id, 'Planejamento atualizado', `${mudancas.length} alteração(ões)`, sub);
+        const autor = await queryOne<{ name: string | null }>('SELECT name FROM profiles WHERE id = $1', [sub]);
+        const mostra = (v: unknown) => (v === null || v === '' || v === undefined ? '—' : String(v).length > 60 ? `${String(v).slice(0, 60)}…` : String(v));
+        const linhas = mudancas
+          .slice(0, 15)
+          .map((m) => `${m.escopo === 'atual' ? '' : `${m.escopo === '6_meses' ? '6 meses' : '12 meses'} · `}${m.rotulo}: ${mostra(m.antes)} → ${mostra(m.depois)}`);
+        if (mudancas.length > 15) linhas.push(`… e mais ${mudancas.length - 15} alteração(ões)`);
+        await registrarEvento(
+          req.params.id,
+          `Planejamento atualizado${autor?.name ? ` por ${autor.name}` : ''}`,
+          linhas.join('\n'),
+          sub
+        );
       }
       return depois;
     }
@@ -1918,6 +2041,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         [req.params.id]
       );
       if (!r) return reply.status(404).send({ message: 'Relatório não encontrado' });
+      await sincronizarRotinaAutomatica((r as { gc_cliente_id: string }).gc_cliente_id);
       return r;
     }
   );

@@ -8,9 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { CampoData, DataMiuda } from '@/components/gestaoClientes/CampoData'
 import { RotinaMensal } from '@/components/gestaoClientes/RotinaMensal'
 import { ResumoPlanejamento } from '@/components/gestaoClientes/ResumoPlanejamento'
-import {
-  comDerivadas, formatarMetrica, mesAtual, mesPorExtenso, numeroDigitado,
-} from '@/lib/gcMetricas'
+import { mesAtual, mesPorExtenso, numeroDigitado } from '@/lib/gcMetricas'
 import { DIAS_AVISO_RENOVACAO, avaliarSaude, type Destino } from '@/lib/gcSaude'
 import { AvaliacaoDoResultado, PainelSaude } from '@/components/gestaoClientes/Semaforo'
 import {
@@ -209,48 +207,6 @@ function QuadroDeAvisos({
 }
 
 /**
- * Investido × vendido × receita do mês corrente — as três perguntas que o cliente faz e que a
- * pessoa que cuida da conta precisa responder sem abrir outra aba.
- */
-function ResumoDoMes({ cliente }: { cliente: GcClienteDetalhe['cliente'] }) {
-  const v = comDerivadas(cliente.metricas_mes ?? {})
-  const vazio = Object.keys(cliente.metricas_mes ?? {}).length === 0
-  if (vazio) {
-    return (
-      <p className="text-sm text-foreground/50">
-        Nada lançado neste mês ainda. Sem isso não dá pra dizer se o mês foi bom — a aba "Métricas e
-        metas" é onde entra.
-      </p>
-    )
-  }
-  const linhas: { rotulo: string; valor: string; destaque?: boolean }[] = [
-    { rotulo: 'Investido', valor: formatarMetrica(v.investimento ?? null, 'reais'), destaque: true },
-    { rotulo: 'Leads', valor: formatarMetrica(v.leads ?? null, 'inteiro') },
-    { rotulo: 'Vendas', valor: formatarMetrica(v.vendas ?? null, 'inteiro'), destaque: true },
-    { rotulo: 'Receita', valor: formatarMetrica(v.receita ?? null, 'reais'), destaque: true },
-    { rotulo: 'Retorno', valor: v.roas === undefined ? '—' : `${v.roas.toFixed(2).replace('.', ',')}x` },
-  ]
-  return (
-    <div className="space-y-1.5 text-sm">
-      {linhas.map((l) => (
-        <div key={l.rotulo} className="flex items-center justify-between gap-3">
-          <span className="text-foreground/60">{l.rotulo}</span>
-          <span
-            className={
-              l.destaque
-                ? 'font-semibold tabular-nums text-foreground'
-                : 'tabular-nums text-foreground/85'
-            }
-          >
-            {l.valor}
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/**
  * Visão geral do cliente: o cadastro, os serviços contratados e as observações.
  *
  * O cadastro é só leitura aqui — editar abre o mesmo modal do "Novo cliente", pra não existirem
@@ -261,9 +217,12 @@ export function AbaVisaoGeral({
   onMudou,
   onVerNotas,
   onIr,
+  onEditar,
 }: {
   detalhe: GcClienteDetalhe
   onMudou: () => Promise<void> | void
+  /** Abre o cadastro do cliente (botão "Completar cadastro"). */
+  onEditar?: () => void
   /** Chamado ao clicar num sinal do semáforo — a página sabe trocar de aba e abrir janelas. */
   onIr?: (d: Destino) => void
   /** Leva pra aba de notas — o quadro de avisos daqui é só a prévia do que está fixado lá. */
@@ -271,6 +230,16 @@ export function AbaVisaoGeral({
 }) {
   const { cliente, servicos } = detalhe
   const [adicionando, setAdicionando] = React.useState(false)
+  const camposDoCadastro: { rotulo: string; valor: string | null | undefined }[] = [
+    { rotulo: 'Contato', valor: cliente.nome_contato },
+    { rotulo: 'WhatsApp', valor: cliente.whatsapp_contato },
+    { rotulo: 'E-mail', valor: cliente.email_contato },
+    { rotulo: 'CNPJ', valor: cliente.cnpj },
+    { rotulo: 'Cidade', valor: cliente.cidade },
+    { rotulo: 'Segmento', valor: cliente.segmento },
+    { rotulo: 'Responsável', valor: cliente.responsavel_nome },
+    { rotulo: 'Início', valor: cliente.data_inicio ? dataBr(cliente.data_inicio) : null },
+  ]
 
   const excluirServico = async (id: string) => {
     try {
@@ -317,17 +286,26 @@ export function AbaVisaoGeral({
         </PainelSaude>
 
         <section className="rounded-xl border border-line p-4">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">Cadastro</h2>
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Campo rotulo="Contato" valor={cliente.nome_contato} />
-            <Campo rotulo="WhatsApp" valor={cliente.whatsapp_contato} />
-            <Campo rotulo="E-mail" valor={cliente.email_contato} />
-            <Campo rotulo="CNPJ" valor={cliente.cnpj} />
-            <Campo rotulo="Cidade" valor={cliente.cidade} />
-            <Campo rotulo="Segmento" valor={cliente.segmento} />
-            <Campo rotulo="Responsável" valor={cliente.responsavel_nome} />
-            <Campo rotulo="Início" valor={dataBr(cliente.data_inicio)} />
-          </dl>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-foreground">Cadastro</h2>
+            {camposDoCadastro.some((c) => !c.valor) && onEditar && (
+              <Button variant="secondary" size="sm" onClick={onEditar}>
+                Completar cadastro
+              </Button>
+            )}
+          </div>
+          {/* Só o que está preenchido: um monte de "—" não informa nada, e o botão ao lado diz o que falta. */}
+          {camposDoCadastro.some((c) => c.valor) ? (
+            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {camposDoCadastro
+                .filter((c) => c.valor)
+                .map((c) => (
+                  <Campo key={c.rotulo} rotulo={c.rotulo} valor={c.valor} />
+                ))}
+            </dl>
+          ) : (
+            <p className="text-sm text-foreground/45">Nenhum dado de cadastro preenchido ainda.</p>
+          )}
         </section>
 
         <section id="gc-servicos" className="rounded-xl border border-line p-4 transition-shadow">
@@ -408,7 +386,7 @@ export function AbaVisaoGeral({
 
         <ResumoPlanejamento cliente={cliente} onAbrir={() => onIr?.('planejamento')} />
 
-        <RotinaMensal itens={detalhe.rotina ?? []} onMudou={onMudou} />
+        <RotinaMensal clienteId={cliente.id} itens={detalhe.rotina ?? []} onMudou={onMudou} />
 
         <section className="rounded-xl border border-line p-4">
           <h2 className="mb-2 text-sm font-semibold text-foreground">Observações</h2>
@@ -421,11 +399,6 @@ export function AbaVisaoGeral({
               Nada anotado. Use "Editar cliente" pra registrar combinados e particularidades.
             </p>
           )}
-        </section>
-
-        <section className="rounded-xl border border-line p-4">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">O mês até agora</h2>
-          <ResumoDoMes cliente={cliente} />
         </section>
 
         <section className="rounded-xl border border-line p-4">

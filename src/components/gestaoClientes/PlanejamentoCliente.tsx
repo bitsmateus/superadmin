@@ -697,7 +697,7 @@ export function PlanejamentoCliente({
           </h3>
           <p className="mb-2 text-xs text-foreground/50">Preencha o que souber. CPL e ROAS são calculados.</p>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full max-w-[760px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-foreground/45">
                 <tr>
                   <th className="py-1.5 pr-3 font-medium">Métrica</th>
@@ -734,7 +734,7 @@ export function PlanejamentoCliente({
                               inputMode="decimal"
                               placeholder={placeholder}
                               className={cn(
-                                'h-8 w-full rounded-md border border-line bg-surface pr-2 text-right text-sm tabular-nums text-foreground outline-none placeholder:text-foreground/25 focus:border-accent focus:ring-2 focus:ring-accent/15',
+                                'h-8 w-full rounded-md border border-line bg-surface pr-2 text-right text-sm tabular-nums text-foreground outline-none placeholder:text-foreground/10 focus:border-accent focus:ring-2 focus:ring-accent/15',
                                 prefixo ? 'pl-8' : 'pl-2',
                               )}
                             />

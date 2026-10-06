@@ -579,6 +579,14 @@ export function avaliarSaude(c: GcClienteLista): Saude {
 
   // A nota de quem acompanha o cliente TEM PRIORIDADE: é o julgamento de quem conhece o caso, e os
   // sinais abaixo dela continuam listados pra mostrar os fatos que ela está pesando.
+  // Renovação VENCIDA ou SEM DATA tem peso fixo: o cliente nunca fica acima de "Atenção" por causa dela,
+  // não importa quantos outros sinais estejam verdes (nem se há planejamento). Só o risco real e a nota
+  // do gestor passam por cima.
+  const renovacaoPendente = sinais.some(
+    (x) => (x.chave === 'renovacao_sem_data') || (x.chave === 'renovacao' && x.detalhe.startsWith('Venceu')),
+  )
+  if (renovacaoPendente && (nivel === 'otimo' || nivel === 'bom' || nivel === 'neutro')) nivel = 'atencao'
+
   if (avaliacao) nivel = ESTADO_DA_NOTA[avaliacao.nivel]
 
   const sinaisDeChurn = sinais.filter(
@@ -600,6 +608,15 @@ export function avaliarSaude(c: GcClienteLista): Saude {
           origem,
           explicacao,
         }
+
+  // Cliente de TESTE (fora dos totais) não é julgado: não há o que acompanhar de verdade, e um vermelho
+  // ali só atrapalharia a leitura da carteira. Os sinais continuam listados.
+  if (c.fora_dos_totais) {
+    return {
+      nivel: 'neutro', rotulo: ROTULO_ESTADO.neutro, sinais, contagem,
+      churn: { nivel: 'indefinido', motivos: [], origem: null, explicacao: null },
+    }
+  }
 
   return { nivel, rotulo: ROTULO_ESTADO[nivel], sinais, contagem, churn }
 }

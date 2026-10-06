@@ -85,6 +85,14 @@ function haQuantoTempo(iso: string | null): string {
 }
 
 type Visao = 'tabela' | 'kanban'
+function lerPreferencia(chave: string): boolean {
+  try {
+    return window.localStorage.getItem(chave) === '1'
+  } catch {
+    return false
+  }
+}
+
 const CHAVE_VISAO = 'gc:clientes:visao'
 
 /** O que o Kanban agrupa: as etapas da jornada ou a situação do mês (lançado, relatório...). */
@@ -194,6 +202,10 @@ export function ClientesNxDigitalPage() {
   const [busca, setBusca] = React.useState('')
   const [aba, setAba] = React.useState<GcStatusCliente | 'todos'>('ativo')
   const [soProblemas, setSoProblemas] = React.useState(false)
+  // Preferências de exibição, lembradas neste navegador: a lista padrão é a de trabalho — sem a coluna de
+  // prioridade e sem os clientes de teste.
+  const [mostrarTeste, setMostrarTeste] = React.useState(() => lerPreferencia('gc:lista:teste'))
+  const [mostrarPrioridade, setMostrarPrioridade] = React.useState(() => lerPreferencia('gc:lista:prioridade'))
   const [ordem, setOrdem] = React.useState<Ordem>('fila')
   const [modalAberto, setModalAberto] = React.useState(false)
   const pendencia = useLancamentoPendente()
@@ -275,6 +287,15 @@ export function ClientesNxDigitalPage() {
     }
   }
 
+  const escolherPreferencia = (chave: string, valor: boolean, aplicar: (v: boolean) => void) => {
+    aplicar(valor)
+    try {
+      window.localStorage.setItem(chave, valor ? '1' : '0')
+    } catch {
+      /* sem armazenamento: vale até recarregar */
+    }
+  }
+
   const escolherVisao = (v: Visao) => {
     setVisao(v)
     try {
@@ -321,6 +342,7 @@ export function ClientesNxDigitalPage() {
   // Mesmo filtro e mesma ordem pra tabela, pro Kanban por etapa e pro Kanban por situação: três
   // telas que filtram de um jeito cada uma é como a pessoa acha que um cliente "sumiu".
   const passaNoFiltro = ({ cliente: c, saude }: { cliente: GcClienteLista; saude: Saude }) => {
+    if (c.fora_dos_totais && !mostrarTeste) return false
     if (aba !== 'todos' && c.status !== aba) return false
     if (soProblemas && saude.nivel !== 'risco' && saude.nivel !== 'atencao') return false
     if (!termo) return true
@@ -349,11 +371,11 @@ export function ClientesNxDigitalPage() {
         .filter(passaNoFiltro)
         .sort(comparador),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clientesSituacao, aba, soProblemas, termo, ordem],
+    [clientesSituacao, aba, soProblemas, termo, ordem, mostrarTeste],
   )
 
   const contagem = (status: GcStatusCliente | 'todos') =>
-    status === 'todos' ? clientes.length : clientes.filter((c) => c.status === status).length
+    clientes.filter((c) => (mostrarTeste || !c.fora_dos_totais) && (status === 'todos' || c.status === status)).length
 
   // Os indicadores do topo falam só de quem CONTA nos totais: ativo e não marcado como teste. Cliente
   // encerrado não tem o que cobrar, e cadastro de teste inflaria a carteira e o "em risco".
@@ -510,6 +532,26 @@ export function ClientesNxDigitalPage() {
                 ))}
               </div>
             )}
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/55">
+              <input
+                type="checkbox"
+                checked={mostrarTeste}
+                onChange={(e) => escolherPreferencia('gc:lista:teste', e.target.checked, setMostrarTeste)}
+                className="h-3.5 w-3.5 rounded border-line"
+              />
+              Mostrar clientes de teste{foraDosTotais > 0 ? ` (${foraDosTotais})` : ''}
+            </label>
+            {visao === 'tabela' && (
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/55">
+                <input
+                  type="checkbox"
+                  checked={mostrarPrioridade}
+                  onChange={(e) => escolherPreferencia('gc:lista:prioridade', e.target.checked, setMostrarPrioridade)}
+                  className="h-3.5 w-3.5 rounded border-line"
+                />
+                Prioridade
+              </label>
+            )}
             <label className="flex items-center gap-1.5 text-xs text-foreground/50">
               <ArrowUpDown className="h-3.5 w-3.5" />
               <select
@@ -579,7 +621,7 @@ export function ClientesNxDigitalPage() {
                   <tr>
                     <th className="px-4 py-2.5 font-medium">#</th>
                     <th className="px-4 py-2.5 font-medium">Empresa</th>
-                    <th className="px-4 py-2.5 font-medium">Prioridade</th>
+                    {mostrarPrioridade && <th className="px-4 py-2.5 font-medium">Prioridade</th>}
                     <th className="px-4 py-2.5 font-medium">Como está</th>
                     <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Serviços</th>
                     <th className="px-4 py-2.5 font-medium">Etapa atual</th>
@@ -599,6 +641,7 @@ export function ClientesNxDigitalPage() {
                       saude={saude}
                       onAbrir={() => navegar(`/clientesnxdigital/clientes/${c.id}`)}
                       onPrioridade={(p) => void mudarPrioridade(c.id, p)}
+                      mostrarPrioridade={mostrarPrioridade}
                     />
                   ))}
                 </tbody>
@@ -647,9 +690,11 @@ function LinhaCliente({
   posicao,
   onAbrir,
   onPrioridade,
+  mostrarPrioridade,
 }: {
   cliente: GcClienteLista
   saude: Saude
+  mostrarPrioridade: boolean
   /** Lugar na fila. Null quando a lista está em ordem alfabética, onde o número não diria nada. */
   posicao: number | null
   onAbrir: () => void
@@ -704,7 +749,7 @@ function LinhaCliente({
           </span>
         </div>
       </td>
-      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+      {mostrarPrioridade && <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <select
           value={c.prioridade ?? 'media'}
           onChange={(e) => onPrioridade(e.target.value as GcPrioridade)}
@@ -720,7 +765,7 @@ function LinhaCliente({
             </option>
           ))}
         </select>
-      </td>
+      </td>}
       <td className="px-4 py-3">
         <PastilhaSaude estado={saude.nivel} />
         {pior && (saude.nivel === 'risco' || saude.nivel === 'atencao') && (

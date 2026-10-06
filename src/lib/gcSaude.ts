@@ -12,6 +12,12 @@ import { comDerivadas, formatarPorChave, metricaLabel, variacaoDaMetrica } from 
  * mesmo semáforo, e duas implementações do mesmo cálculo é como elas passam a discordar.
  *
  * Nada aqui vai pro portal do cliente: é leitura interna.
+ *
+ * REGRA DE RISCO. "Risco" é reservado pra sinal REAL de problema: retorno abaixo de 1, meta muito
+ * abaixo do ritmo, serviço cancelado, cliente encerrado ou a nota "ruim" do gestor. Falta de dado
+ * (nenhuma métrica, nenhum relatório, nenhum contato registrado) NÃO é risco — é "sem dados", e um
+ * cliente recém-trazido pra base não pode aparecer vermelho só porque ninguém lançou nada ainda.
+ * Esses casos aparecem como atenção na lista de sinais, pra continuar dizendo o que fazer.
  */
 
 export type Estado = 'otimo' | 'bom' | 'atencao' | 'risco' | 'neutro'
@@ -32,7 +38,7 @@ export interface Saude {
   sinais: Sinal[]
   /** Quantos sinais em cada estado — usado nos contadores das telas. */
   contagem: Record<Estado, number>
-  churn: { nivel: 'baixo' | 'medio' | 'alto'; motivos: string[] }
+  churn: { nivel: 'baixo' | 'medio' | 'alto' | 'indefinido'; motivos: string[] }
 }
 
 /** Lugar da tela onde o sinal se resolve. */
@@ -199,7 +205,7 @@ export function avaliarSaude(c: GcClienteLista): Saude {
     sinais.push({
       chave: 'renovacao',
       titulo: 'Renovação do contrato',
-      estado: proxima < 0 ? 'risco' : proxima <= 30 ? 'atencao' : 'otimo',
+      estado: proxima <= 30 ? 'atencao' : 'otimo',
       detalhe:
         proxima < 0
           ? `Venceu há ${Math.abs(proxima)} dia(s) e não foi renovado`
@@ -217,7 +223,7 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   sinais.push({
     chave: 'jornada',
     titulo: 'Implantação',
-    estado: etapasAtrasadas > 0 ? 'risco' : etapas > 0 && feitas === etapas ? 'otimo' : 'bom',
+    estado: etapasAtrasadas > 0 ? 'atencao' : etapas > 0 && feitas === etapas ? 'otimo' : 'bom',
     detalhe:
       etapasAtrasadas > 0
         ? `${etapasAtrasadas} etapa(s) com prazo vencido`
@@ -231,7 +237,7 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   sinais.push({
     chave: 'pendencias',
     titulo: 'Pendências',
-    estado: atrasados > 0 ? 'risco' : abertos > 0 ? 'bom' : 'otimo',
+    estado: atrasados > 0 ? 'atencao' : abertos > 0 ? 'bom' : 'otimo',
     detalhe:
       atrasados > 0
         ? `${atrasados} item(ns) atrasado(s)`
@@ -275,7 +281,7 @@ export function avaliarSaude(c: GcClienteLista): Saude {
       sinais.push({
         chave: 'vendas',
         titulo: 'Vendas',
-        estado: (vendas ?? 0) > 0 ? 'otimo' : leads > 0 ? 'risco' : 'atencao',
+        estado: (vendas ?? 0) > 0 ? 'otimo' : 'atencao',
         detalhe:
           (vendas ?? 0) > 0
             ? `${vendas} venda(s) no mês`
@@ -311,23 +317,25 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   // ---------------------------------------------------------------- metas
   const metasAtivas = (c.metas ?? []).filter((m) => m.status === 'ativa')
   if (metasAtivas.length > 0) {
-    const foraDoRitmo = metasAtivas.filter((m) => {
+    // Quantos pontos o progresso está atrás de onde deveria estar hoje pelo prazo. Meta não anda em
+    // linha reta, então 20 pontos de folga viram só atenção; 40 já é meta muito abaixo e vira risco.
+    const atrasoDaMeta = (m: GcMeta): number | null => {
       const progresso = progressoDaMeta(m, mes[m.chave_metrica])
       const decorrido = tempoDecorrido(m)
-      if (progresso === null || decorrido === null) return false
-      // 20 pontos de folga: meta não anda em linha reta, e cobrar ritmo exato viraria alarme falso
-      // todo mês.
-      return progresso < decorrido * 100 - 20
-    })
+      if (progresso === null || decorrido === null) return null
+      return decorrido * 100 - progresso
+    }
+    const foraDoRitmo = metasAtivas.filter((m) => (atrasoDaMeta(m) ?? 0) > 20)
+    const muitoAbaixo = metasAtivas.filter((m) => (atrasoDaMeta(m) ?? 0) > 40)
     sinais.push({
       chave: 'metas',
       titulo: 'Metas combinadas',
-      estado: foraDoRitmo.length > 0 ? 'atencao' : 'otimo',
+      estado: muitoAbaixo.length > 0 ? 'risco' : foraDoRitmo.length > 0 ? 'atencao' : 'otimo',
       detalhe:
         foraDoRitmo.length > 0
           ? `${foraDoRitmo.length} de ${metasAtivas.length} fora do ritmo (${foraDoRitmo
               .map((m) => metricaLabel(m.chave_metrica))
-              .join(', ')})`
+              .join(', ')})${muitoAbaixo.length > 0 ? ' — muito abaixo do esperado' : ''}`
           : `${metasAtivas.length} meta(s) no ritmo`,
     })
   } else {
@@ -346,7 +354,7 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   sinais.push({
     chave: 'relatorio',
     titulo: 'Relatório entregue',
-    estado: diasRelatorio === null ? 'risco' : diasRelatorio <= 45 ? 'otimo' : diasRelatorio <= 75 ? 'atencao' : 'risco',
+    estado: diasRelatorio !== null && diasRelatorio <= 45 ? 'otimo' : 'atencao',
     detalhe:
       diasRelatorio === null
         ? 'Nunca foi publicado um relatório pra esse cliente'
@@ -358,8 +366,7 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   sinais.push({
     chave: 'contato',
     titulo: 'Último contato',
-    estado:
-      diasContato === null ? 'risco' : diasContato <= 14 ? 'otimo' : diasContato <= 30 ? 'atencao' : 'risco',
+    estado: diasContato !== null && diasContato <= 14 ? 'otimo' : 'atencao',
     detalhe:
       diasContato === null
         ? 'Nenhum registro de conversa com esse cliente'
@@ -373,33 +380,40 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   const contagem: Record<Estado, number> = { otimo: 0, bom: 0, atencao: 0, risco: 0, neutro: 0 }
   for (const s of sinais) contagem[s.estado]++
 
+  // Sem dado nenhum pra julgar: nem métrica no mês, nem relatório publicado. É o caso do cliente
+  // que acabou de entrar na base — o semáforo diz "Sem dados" em vez de inventar um veredito.
+  const semDados = !temLancamento && !c.ultimo_relatorio
+
   // O nível é o pior quadro que os sinais desenham, não uma média: um cliente com tudo verde e
-  // ROAS abaixo de 1 não está "bom na média" — está com problema.
+  // ROAS abaixo de 1 não está "bom na média" — está com problema. Como "risco" só sai de sinal
+  // real (ver o cabeçalho), basta um deles pra o cliente aparecer em risco.
   let nivel: Estado
-  if (contagem.risco >= 2) nivel = 'risco'
-  else if (contagem.risco === 1) nivel = contagem.atencao >= 2 ? 'risco' : 'atencao'
+  if (contagem.risco >= 1) nivel = 'risco'
+  else if (semDados) nivel = 'neutro'
   else if (contagem.atencao >= 2) nivel = 'atencao'
   else if (contagem.atencao === 1) nivel = 'bom'
   else if (contagem.otimo >= 4) nivel = 'otimo'
   else nivel = 'bom'
 
-  // Quem acompanha o cliente manda. Marcou "ruim", o cliente aparece em risco por mais verde que
-  // esteja o resto — e marcar "ótimo" NÃO apaga um prazo vencido nem um mês sem contato, porque
-  // esses continuam sendo fatos. Só quando não há nada em atenção nem em risco a nota vale pros
-  // dois lados: aí o que resta é opinião, e a de quem conhece o cliente vale mais que a contagem.
-  if (avaliacao) {
-    const daNota = ESTADO_DA_NOTA[avaliacao.nivel]
-    nivel =
-      contagem.risco === 0 && contagem.atencao === 0 ? daNota : piorEstado([nivel, daNota])
-  }
+  // A nota de quem acompanha o cliente TEM PRIORIDADE: é o julgamento de quem conhece o caso, e os
+  // sinais abaixo dela continuam listados pra mostrar os fatos que ela está pesando.
+  if (avaliacao) nivel = ESTADO_DA_NOTA[avaliacao.nivel]
 
   const motivos = sinais
     .filter((s) => s.pesaNoChurn && (s.estado === 'risco' || s.estado === 'atencao'))
     .map((s) => s.detalhe)
-  const churn = {
-    nivel: motivos.length >= 3 ? ('alto' as const) : motivos.length >= 2 ? ('medio' as const) : ('baixo' as const),
-    motivos,
-  }
+  const churn =
+    semDados && !avaliacao && contagem.risco === 0
+      ? { nivel: 'indefinido' as const, motivos: [] as string[] }
+      : {
+          nivel:
+            motivos.length >= 3
+              ? ('alto' as const)
+              : motivos.length >= 2
+                ? ('medio' as const)
+                : ('baixo' as const),
+          motivos,
+        }
 
   return { nivel, rotulo: ROTULO_ESTADO[nivel], sinais, contagem, churn }
 }

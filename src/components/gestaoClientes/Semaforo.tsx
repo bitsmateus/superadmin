@@ -297,7 +297,13 @@ export function PainelSaude({
   const sinais = [...saude.sinais].sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado))
 
   const tomChurn: Estado =
-    saude.churn.nivel === 'alto' ? 'risco' : saude.churn.nivel === 'medio' ? 'atencao' : 'otimo'
+    saude.churn.nivel === 'alto'
+      ? 'risco'
+      : saude.churn.nivel === 'medio'
+        ? 'atencao'
+        : saude.churn.nivel === 'indefinido'
+          ? 'neutro'
+          : 'otimo'
 
   return (
     <section className="rounded-xl border border-line p-4">
@@ -307,7 +313,14 @@ export function PainelSaude({
         </h2>
         <div className="flex items-center gap-2">
           <PastilhaSaude estado={saude.nivel} />
-          <PastilhaSaude estado={tomChurn} texto={`Risco de churn: ${saude.churn.nivel}`} />
+          <PastilhaSaude
+            estado={tomChurn}
+            texto={
+              saude.churn.nivel === 'indefinido'
+                ? 'Churn: sem dados'
+                : `Risco de churn: ${saude.churn.nivel}`
+            }
+          />
         </div>
       </div>
 

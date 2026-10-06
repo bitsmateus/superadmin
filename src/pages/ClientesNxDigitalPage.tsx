@@ -468,7 +468,7 @@ function LinhaCliente({
         ) : (
           <span className="mt-1 block text-xs text-foreground/35">sem nota sua neste mês</span>
         )}
-        {saude.churn.nivel !== 'baixo' && (
+        {(saude.churn.nivel === 'medio' || saude.churn.nivel === 'alto') && (
           <span className="mt-0.5 block text-xs text-danger/80">churn {saude.churn.nivel}</span>
         )}
       </td>

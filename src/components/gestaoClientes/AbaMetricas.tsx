@@ -8,7 +8,7 @@ import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
 import {
-  HORIZONTES, gestaoClientes,
+  HORIZONTES, avisosDoErro, gestaoClientes,
   type GcHorizonte, type GcMeta, type GcMetrica,
 } from '@/services/gestaoClientes'
 import {
@@ -235,11 +235,16 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
         periodo_inicio: inicio,
         periodo_fim: fim,
         valores,
+        // Quem chegou aqui sem aviso, ou já confirmou na janela, segue — o servidor confere de novo.
+        confirmar_avisos: ignorarAvisos,
       })
       toast.success(`Métricas de ${mesPorExtenso(periodo)} salvas`)
       await carregar()
     } catch (err) {
-      toast.error('Falha ao salvar: ' + (err as Error).message)
+      // O servidor recusou por números incoerentes que a tela não pegou: mostra os mesmos avisos.
+      const doServidor = avisosDoErro(err)
+      if (doServidor) setAvisos(doServidor)
+      else toast.error('Falha ao salvar: ' + (err as Error).message)
     } finally {
       setSalvando(false)
     }

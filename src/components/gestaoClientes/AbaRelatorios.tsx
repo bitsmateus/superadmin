@@ -7,14 +7,15 @@ import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import {
-  gestaoClientes,
+  avisosDoErro, gestaoClientes,
   type GcClienteDetalhe, type GcLinkPublico, type GcMeta, type GcMetrica,
   type GcRelatorio, type GcSnapshot,
 } from '@/services/gestaoClientes'
+import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
 import { progressoDaMeta } from '@/lib/gcSaude'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
-  limitesDoMes, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade, somarMeses,
+  limitesDoMes, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade, somarMeses, validarMetricas,
 } from '@/lib/gcMetricas'
 
 /** Métricas de um período, em números, com as derivadas calculadas. */
@@ -157,8 +158,21 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
   if (Object.keys(numeros).length === 0) faltaParaPublicar.push('lançar as métricas do mês')
   if (!comentario.trim()) faltaParaPublicar.push('escrever o comentário do gestor')
 
-  const publicar = () =>
-    agir('publicar', async () => {
+  const [avisosPublicar, setAvisosPublicar] = React.useState<string[] | null>(null)
+
+  // Publicar é o ponto em que o número chega na frente do CLIENTE, então é onde a conferência é mais
+  // dura: se algo não bate (cliques acima de impressões...), só publica com confirmação explícita.
+  const publicar = async (confirmado = false) => {
+    if (!confirmado) {
+      const achados = validarMetricas(numeros)
+      if (achados.length > 0) {
+        setAvisosPublicar(achados)
+        return
+      }
+    }
+    setAvisosPublicar(null)
+    setOcupado('publicar')
+    try {
       // Publicar sem rascunho salvo é o caso comum (a pessoa escreve e publica de uma vez), então
       // o salvamento faz parte do publicar em vez de ser um passo obrigatório antes.
       const salvo = await gestaoClientes.salvarRelatorio(clienteId, {
@@ -167,9 +181,18 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
         comentario_gestor: comentario,
         proximos_passos: proximos,
       })
-      await gestaoClientes.publicarRelatorio(salvo.id, montarSnapshot())
+      await gestaoClientes.publicarRelatorio(salvo.id, montarSnapshot(), confirmado)
       toast.success(`Relatório de ${mesPorExtenso(periodo)} publicado`)
-    })
+      await carregar()
+    } catch (err) {
+      // O servidor recusou por números que a tela não pegou: mostra os mesmos avisos.
+      const doServidor = avisosDoErro(err)
+      if (doServidor) setAvisosPublicar(doServidor)
+      else toast.error((err as Error).message)
+    } finally {
+      setOcupado(null)
+    }
+  }
 
   const baixarPdf = async (relatorio: GcRelatorio | null) => {
     if (!relatorio) {
@@ -257,7 +280,7 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
                       : undefined
                   }
                   leftIcon={<Send className="h-4 w-4" />}
-                  onClick={publicar}
+                  onClick={() => void publicar()}
                 >
                   Publicar
                 </Button>
@@ -386,6 +409,16 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
           </div>
         )}
       </section>
+
+      <ModalAvisos
+        avisos={avisosPublicar}
+        salvando={ocupado === 'publicar'}
+        titulo="Os números deste relatório não batem"
+        rotuloConfirmar="Publicar mesmo assim"
+        exigirMarcar
+        onCorrigir={() => setAvisosPublicar(null)}
+        onSalvarMesmoAssim={() => void publicar(true)}
+      />
 
       {relatorios.length > 0 && (
         <section className="overflow-hidden rounded-xl border border-line">

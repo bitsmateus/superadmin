@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { query, queryOne, withTransaction } from '../db.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
+import { validarMetricas } from '../lib/gcValidacao.js';
 
 /**
  * Módulo "Clientes NX Digital" — gestão dos clientes de tráfego.
@@ -257,6 +258,31 @@ async function podeUsarModulo(userId: string, role: string): Promise<boolean> {
     [userId]
   );
   return !!chave;
+}
+
+/**
+ * Os números que o cliente teria no período DEPOIS de aplicar `alteracoes` (valor vazio apaga).
+ * A conferência de coerência olha o conjunto final, não só o que veio na chamada: "vendas > leads"
+ * só aparece vendo os dois lados, e um deles pode já estar gravado de antes.
+ */
+async function valoresFinais(
+  clienteId: string,
+  periodoInicio: string,
+  fonte: string,
+  alteracoes: Record<string, number | string | null | undefined>
+): Promise<Record<string, number>> {
+  const atuais = await query<{ chave: string; valor: string }>(
+    `SELECT chave, valor FROM gc_metricas
+     WHERE gc_cliente_id = $1 AND periodo_inicio = $2::date AND fonte = $3`,
+    [clienteId, periodoInicio, fonte]
+  );
+  const finais: Record<string, number> = {};
+  for (const r of atuais) finais[r.chave] = Number(r.valor);
+  for (const [chave, valor] of Object.entries(alteracoes)) {
+    if (valor === null || valor === undefined || valor === '') delete finais[chave];
+    else finais[chave] = Number(valor);
+  }
+  return finais;
 }
 
 export async function gestaoClientesRoutes(app: FastifyInstance) {
@@ -777,14 +803,31 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       gc_cliente_id?: string; gc_servico_id?: string | null;
       periodo_inicio?: string; periodo_fim?: string; fonte?: string;
       valores?: Record<string, number | string | null>;
+      /** A pessoa viu os avisos de números incoerentes e quer salvar mesmo assim. */
+      confirmar_avisos?: boolean;
     };
   }>('/api/gc/metricas', autenticado, async (req, reply) => {
     const { sub } = req.user as { sub: string };
-    const { gc_cliente_id, gc_servico_id, periodo_inicio, periodo_fim, fonte, valores } = req.body ?? {};
+    const {
+      gc_cliente_id, gc_servico_id, periodo_inicio, periodo_fim, fonte, valores, confirmar_avisos,
+    } = req.body ?? {};
     if (!gc_cliente_id || !periodo_inicio || !periodo_fim) {
       return reply.status(400).send({ message: 'Informe o cliente e o período' });
     }
     const origem = fonte ?? 'manual';
+
+    // Número impossível (cliques acima de impressões...) só entra com confirmação explícita. A tela
+    // já avisa, mas a regra vale AQUI: é o que impede a API direta de gravar sem ninguém ter visto.
+    if (!confirmar_avisos) {
+      const avisos = validarMetricas(await valoresFinais(gc_cliente_id, periodo_inicio, origem, valores ?? {}));
+      if (avisos.length > 0) {
+        return reply.status(409).send({
+          message: 'Esses números não batem: ' + avisos.join('; '),
+          avisos,
+          exige_confirmacao: true,
+        });
+      }
+    }
     for (const [chave, valor] of Object.entries(valores ?? {})) {
       if (valor === null || valor === undefined || valor === '') {
         await query(
@@ -820,10 +863,11 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     Body: {
       periodo?: string;
       linhas?: { gc_cliente_id: string; valores: Record<string, number | string | null> }[];
+      confirmar_avisos?: boolean;
     };
   }>('/api/gc/metricas/lote', autenticado, async (req, reply) => {
     const { sub } = req.user as { sub: string };
-    const { periodo, linhas } = req.body ?? {};
+    const { periodo, linhas, confirmar_avisos } = req.body ?? {};
     if (!periodo || !/^\d{4}-\d{2}$/.test(periodo)) {
       return reply.status(400).send({ message: 'periodo deve ser YYYY-MM' });
     }
@@ -831,6 +875,30 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ message: 'Nenhuma linha pra salvar' });
     }
     const [inicio] = mesesDeReferencia(periodo);
+
+    // Mesma regra do lançamento individual, por cliente, com o nome na frente de cada aviso.
+    if (!confirmar_avisos) {
+      const avisos: string[] = [];
+      for (const linha of linhas) {
+        const achados = validarMetricas(
+          await valoresFinais(linha.gc_cliente_id, inicio, 'manual', linha.valores ?? {})
+        );
+        if (achados.length === 0) continue;
+        const cli = await queryOne<{ nome_empresa: string }>(
+          'SELECT nome_empresa FROM gc_clientes WHERE id = $1',
+          [linha.gc_cliente_id]
+        );
+        for (const a of achados) avisos.push(`${cli?.nome_empresa ?? 'Cliente'}: ${a}`);
+      }
+      if (avisos.length > 0) {
+        return reply.status(409).send({
+          message: 'Esses números não batem: ' + avisos.join('; '),
+          avisos,
+          exige_confirmacao: true,
+        });
+      }
+    }
+
     let gravados = 0;
     let apagados = 0;
     await withTransaction(async (client) => {
@@ -1289,7 +1357,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   // portal. O snapshot vem montado da tela: ele é a foto do que o gestor viu e aprovou, e é
   // auto-descritivo (cada número traz label e unidade) pra o portal e o PDF não precisarem
   // recalcular nada depois.
-  app.post<{ Params: { id: string }; Body: { snapshot?: GcSnapshot } }>(
+  app.post<{ Params: { id: string }; Body: { snapshot?: GcSnapshot; confirmar_avisos?: boolean } }>(
     '/api/gc/relatorios/:id/publicar',
     autenticado,
     async (req, reply) => {
@@ -1321,6 +1389,26 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
           message: `Pra publicar falta: ${faltando.join(' e ')}.`,
           faltando,
         });
+      }
+
+      // O relatório é o que o CLIENTE lê: número impossível aqui (cliques acima de impressões) é o
+      // pior lugar pra ele aparecer. Só publica com confirmação explícita de quem viu os avisos.
+      if (!req.body?.confirmar_avisos) {
+        const doPeriodo = await query<{ chave: string; valor: string }>(
+          `SELECT chave, valor FROM gc_metricas
+           WHERE gc_cliente_id = $1 AND periodo_inicio >= $2 AND periodo_fim <= $3`,
+          [alvo.gc_cliente_id, alvo.periodo_inicio, alvo.periodo_fim]
+        );
+        const numeros: Record<string, number> = {};
+        for (const r of doPeriodo) numeros[r.chave] = Number(r.valor);
+        const avisos = validarMetricas(numeros);
+        if (avisos.length > 0) {
+          return reply.status(409).send({
+            message: 'Os números deste relatório não batem: ' + avisos.join('; '),
+            avisos,
+            exige_confirmacao: true,
+          });
+        }
       }
 
       const publicado = await queryOne<{ gc_cliente_id: string; periodo_inicio: string }>(

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
-import { gestaoClientes, type GcClienteLista } from '@/services/gestaoClientes'
+import { avisosDoErro, gestaoClientes, type GcClienteLista } from '@/services/gestaoClientes'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
   mesAtual, mesPorExtenso, numeroDigitado, somarMeses, validarMetricas, variacaoDaMetrica,
@@ -233,12 +233,15 @@ export function TrafegoNxPage() {
       const r = await gestaoClientes.salvarMetricasEmLote({
         periodo,
         linhas: alteracoes.porCliente.map((x) => ({ gc_cliente_id: x.id, valores: x.valores })),
+        confirmar_avisos: ignorarAvisos,
       })
       toast.success(`${mesPorExtenso(periodo)} salvo — ${r.clientes} cliente(s) atualizado(s)`)
       setEditando(false)
       await carregar()
     } catch (err) {
-      toast.error('Falha ao salvar o mês: ' + (err as Error).message)
+      const doServidor = avisosDoErro(err)
+      if (doServidor) setAvisos(doServidor)
+      else toast.error('Falha ao salvar o mês: ' + (err as Error).message)
     } finally {
       setSalvando(false)
     }

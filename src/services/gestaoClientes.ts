@@ -189,6 +189,16 @@ export interface GcModelos {
   estrategias: GcModeloEstrategia[]
 }
 
+/**
+ * Os avisos de "números não batem" que o servidor devolve (409) quando a tela deixou passar algo —
+ * ou null se o erro é outro. É a rede de proteção: a tela confere antes, mas a regra vale no
+ * servidor, e quando ele recusa a gente mostra os mesmos avisos em vez de um erro seco.
+ */
+export function avisosDoErro(err: unknown): string[] | null {
+  const e = err as { status?: number; body?: { avisos?: string[] } }
+  return e?.status === 409 && Array.isArray(e.body?.avisos) ? e.body!.avisos! : null
+}
+
 /** O que mover um cliente de etapa faria — a base da janela de confirmação. */
 export interface GcPreviaMover {
   origem?: string
@@ -468,6 +478,8 @@ export const gestaoClientes = {
     periodo_inicio: string
     periodo_fim: string
     valores: Record<string, number | string | null>
+    /** A pessoa viu os avisos de números incoerentes e quer salvar mesmo assim. */
+    confirmar_avisos?: boolean
   }) => api.put<GcMetrica[]>('/api/gc/metricas', dados),
 
   /** Mesma forma da lista: a tela de Tráfego mostra o semáforo do mesmo jeito. */
@@ -475,6 +487,7 @@ export const gestaoClientes = {
   salvarMetricasEmLote: (dados: {
     periodo: string
     linhas: { gc_cliente_id: string; valores: Record<string, number | null> }[]
+    confirmar_avisos?: boolean
   }) =>
     api.put<{ clientes: number; gravados: number; apagados: number }>('/api/gc/metricas/lote', dados),
 
@@ -500,8 +513,11 @@ export const gestaoClientes = {
     clienteId: string,
     dados: { periodo_inicio: string; periodo_fim: string; comentario_gestor: string; proximos_passos: string },
   ) => api.post<GcRelatorio>(`/api/gc/clientes/${clienteId}/relatorios`, dados),
-  publicarRelatorio: (id: string, snapshot: GcSnapshot) =>
-    api.post<GcRelatorio>(`/api/gc/relatorios/${id}/publicar`, { snapshot }),
+  publicarRelatorio: (id: string, snapshot: GcSnapshot, confirmarAvisos = false) =>
+    api.post<GcRelatorio>(`/api/gc/relatorios/${id}/publicar`, {
+      snapshot,
+      confirmar_avisos: confirmarAvisos,
+    }),
   despublicarRelatorio: (id: string) => api.post<GcRelatorio>(`/api/gc/relatorios/${id}/despublicar`),
   excluirRelatorio: (id: string) => api.delete(`/api/gc/relatorios/${id}`),
   /** PDF do relatório. Rascunho ainda não tem snapshot gravado, então manda o da tela. */

@@ -1502,6 +1502,13 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS last_note_preview TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS last_note_at TIMESTAMPTZ`);
 
+  // Agenda (Google Calendar): id do evento criado/atualizado automaticamente quando a reunião é
+  // agendada por aqui — guardado pra reagendar (PATCH) em vez de duplicar, e pra cancelar (DELETE)
+  // se a data for limpa. Ver server/src/lib/calendarSync.ts.
+  await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS calendar_event_id TEXT`);
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS delivery_calendar_event_id TEXT`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS calendar_event_id TEXT`);
+
   console.log('[db] migrations applied');
 }
 

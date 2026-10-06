@@ -3,6 +3,32 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { findMatchingClientId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
+import { syncScheduledMeeting, localDateTimeToISO } from '../lib/calendarSync.js';
+
+/** Preencher o Agendamento de um lead (Comercial) agendado/reagendado por aqui já cria/atualiza o
+ * evento na Agenda (Google Calendar) — ver lib/calendarSync.ts. */
+interface LeadAgendamentoRow {
+  id: string;
+  nome: string;
+  empresa: string;
+  sdr: string;
+  responsavel: string;
+  agendamento: string;
+  calendar_event_id: string | null;
+}
+
+async function syncLeadAgendamentoCalendar(lead: LeadAgendamentoRow) {
+  const eventId = await syncScheduledMeeting({
+    calendarEventId: lead.calendar_event_id,
+    scheduledAtISO: localDateTimeToISO(lead.agendamento),
+    tipo: 'comercial',
+    clienteNome: lead.empresa || lead.nome || 'Lead',
+    responsavel: lead.sdr || lead.responsavel || 'Equipe',
+  });
+  if (eventId !== lead.calendar_event_id) {
+    await query('UPDATE lead_rows SET calendar_event_id = $1 WHERE id = $2', [eventId, lead.id]);
+  }
+}
 
 /**
  * Toda venda nova (funil ou avulsa) já cria sozinha a linha correspondente em Gestão Interna >
@@ -1177,6 +1203,12 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         params
       );
       if (!leadRow) return reply.status(404).send({ message: 'Linha não encontrada' });
+
+      if ('agendamento' in patch) {
+        void syncLeadAgendamentoCalendar(leadRow as unknown as LeadAgendamentoRow).catch((err) =>
+          console.error('[calendarSync] lead-rows (agendamento):', err),
+        );
+      }
 
       // Corrigir o MRR/Implementação numa venda sincronizada (ex.: desconto fechado depois)
       // atualiza o valor "oficial" no lead de origem também — só nesse sentido (Vendas -> CRM),

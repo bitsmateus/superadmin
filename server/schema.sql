@@ -235,6 +235,7 @@ CREATE TABLE IF NOT EXISTS clients (
   delivery_date TEXT,
   delivery_notes TEXT,
   delivery_completed_at TIMESTAMPTZ,
+  delivery_calendar_event_id TEXT,
 
   followup_active BOOLEAN NOT NULL DEFAULT FALSE,
   followups JSONB NOT NULL DEFAULT '[]',
@@ -392,6 +393,7 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   dia_contato TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT '',
   agendamento TEXT NOT NULL DEFAULT '',
+  calendar_event_id TEXT,
   retornar TEXT NOT NULL DEFAULT '',
   retornado BOOLEAN NOT NULL DEFAULT false,
   responsavel TEXT NOT NULL DEFAULT '',
@@ -674,7 +676,8 @@ CREATE TABLE IF NOT EXISTS reminders (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   kind TEXT,
   status TEXT,
-  priority TEXT
+  priority TEXT,
+  calendar_event_id TEXT
 );
 
 -- Atualizações/anexos e linha do tempo de uma tarefa (mesmo padrão de lead_notes/lead_events).

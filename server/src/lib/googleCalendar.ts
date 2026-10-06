@@ -165,7 +165,7 @@ export async function listCalendarEvents(timeMinISO: string, timeMaxISO: string)
   return (body.items ?? []).map(normalizeEvent).filter((e): e is CalendarEvent => e !== null);
 }
 
-export async function createCalendarEvent(input: CreateMeetingInput): Promise<CalendarEvent> {
+function buildEventBody(input: CreateMeetingInput, withConferenceRequest: boolean) {
   const tipoLabel = input.tipo === 'comercial' ? 'Comercial' : 'Suporte';
   const descricaoLinhas = [
     `Tipo: ${tipoLabel}`,
@@ -174,14 +174,14 @@ export async function createCalendarEvent(input: CreateMeetingInput): Promise<Ca
   ];
   if (input.obs?.trim()) descricaoLinhas.push('', input.obs.trim());
 
-  const requestBody = {
+  return {
     summary: `[${tipoLabel}] ${input.clienteNome}`,
     description: descricaoLinhas.join('\n'),
     start: { dateTime: input.start, timeZone: 'America/Sao_Paulo' },
     end: { dateTime: input.end, timeZone: 'America/Sao_Paulo' },
-    conferenceData: {
-      createRequest: { requestId: randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } },
-    },
+    ...(withConferenceRequest
+      ? { conferenceData: { createRequest: { requestId: randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } } }
+      : {}),
     extendedProperties: {
       private: {
         origem: 'superadmin',
@@ -192,10 +192,23 @@ export async function createCalendarEvent(input: CreateMeetingInput): Promise<Ca
       },
     },
   };
+}
 
+export async function createCalendarEvent(input: CreateMeetingInput): Promise<CalendarEvent> {
   const body = (await calendarFetch(
     `/calendars/${encodeURIComponent(CALENDAR_ID)}/events?conferenceDataVersion=1`,
-    { method: 'POST', body: JSON.stringify(requestBody) },
+    { method: 'POST', body: JSON.stringify(buildEventBody(input, true)) },
+  )) as Record<string, unknown>;
+  const event = normalizeEvent(body);
+  if (!event) throw new Error('Google Calendar retornou um evento inesperado');
+  return event;
+}
+
+/** Atualiza um evento já existente (reagendar) — não mexe no link do Meet já criado. */
+export async function updateCalendarEvent(eventId: string, input: CreateMeetingInput): Promise<CalendarEvent> {
+  const body = (await calendarFetch(
+    `/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`,
+    { method: 'PATCH', body: JSON.stringify(buildEventBody(input, false)) },
   )) as Record<string, unknown>;
   const event = normalizeEvent(body);
   if (!event) throw new Error('Google Calendar retornou um evento inesperado');

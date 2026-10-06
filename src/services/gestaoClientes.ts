@@ -156,6 +156,8 @@ export interface GcClienteLista {
   metricas_mes_anterior: Record<string, string>
   /** Como o gestor avaliou o resultado DESTE mês. Null = ninguém deu nota ainda. */
   avaliacao: GcAvaliacao | null
+  /** Situação do relatório do mês de referência. Null = nem rascunho existe. */
+  relatorio_mes: 'rascunho' | 'publicado' | null
 }
 
 export interface GcClienteDetalhe {
@@ -400,6 +402,13 @@ export const gestaoClientes = {
   }) => api.put<GcMetrica[]>('/api/gc/metricas', dados),
 
   /** Mesma forma da lista: a tela de Tráfego mostra o semáforo do mesmo jeito. */
+  /** Grava o mês de vários clientes numa transação só (a grade "Lançar mês"). */
+  salvarMetricasEmLote: (dados: {
+    periodo: string
+    linhas: { gc_cliente_id: string; valores: Record<string, number | null> }[]
+  }) =>
+    api.put<{ clientes: number; gravados: number; apagados: number }>('/api/gc/metricas/lote', dados),
+
   trafego: (periodo: string) =>
     api.get<GcClienteLista[]>(`/api/gc/trafego?periodo=${encodeURIComponent(periodo)}`),
 

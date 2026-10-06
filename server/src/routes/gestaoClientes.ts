@@ -199,6 +199,8 @@ const SQL_CLIENTES = `
         'data_base', g.data_base, 'status', g.status
       ) ORDER BY g.created_at)
       FROM gc_metas g WHERE g.gc_cliente_id = c.id), '[]'::json) AS metas,
+    (SELECT r.status FROM gc_relatorios r
+      WHERE r.gc_cliente_id = c.id AND r.periodo_inicio = $1::date LIMIT 1) AS relatorio_mes,
     ${pivotMetricas('$1')} AS metricas_mes,
     ${pivotMetricas('$2')} AS metricas_mes_anterior,
     (SELECT json_build_object(
@@ -686,6 +688,55 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
        ORDER BY chave`,
       [gc_cliente_id, periodo_inicio, periodo_fim]
     );
+  });
+
+  // PUT /api/gc/metricas/lote — grava o mês de VÁRIOS clientes de uma vez (a grade "Lançar mês" da
+  // tela de Tráfego). Tudo numa transação: ou entra o mês inteiro, ou nada — meio mês gravado
+  // deixaria a carteira com uns clientes atualizados e outros não, sem ninguém saber quais.
+  // Mesma regra do lançamento individual: valor vazio APAGA o lançamento, zero é um número.
+  app.put<{
+    Body: {
+      periodo?: string;
+      linhas?: { gc_cliente_id: string; valores: Record<string, number | string | null> }[];
+    };
+  }>('/api/gc/metricas/lote', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const { periodo, linhas } = req.body ?? {};
+    if (!periodo || !/^\d{4}-\d{2}$/.test(periodo)) {
+      return reply.status(400).send({ message: 'periodo deve ser YYYY-MM' });
+    }
+    if (!Array.isArray(linhas) || linhas.length === 0) {
+      return reply.status(400).send({ message: 'Nenhuma linha pra salvar' });
+    }
+    const [inicio] = mesesDeReferencia(periodo);
+    let gravados = 0;
+    let apagados = 0;
+    await withTransaction(async (client) => {
+      for (const linha of linhas) {
+        for (const [chave, valor] of Object.entries(linha.valores ?? {})) {
+          if (valor === null || valor === undefined || valor === '') {
+            const r = await client.query(
+              `DELETE FROM gc_metricas
+               WHERE gc_cliente_id = $1 AND periodo_inicio = $2::date AND fonte = 'manual' AND chave = $3`,
+              [linha.gc_cliente_id, inicio, chave]
+            );
+            apagados += r.rowCount ?? 0;
+            continue;
+          }
+          await client.query(
+            `INSERT INTO gc_metricas
+               (gc_cliente_id, periodo_inicio, periodo_fim, fonte, chave, valor, criado_por)
+             VALUES ($1, $2::date, (date_trunc('month', $2::date) + INTERVAL '1 month - 1 day')::date,
+                     'manual', $3, $4, $5)
+             ON CONFLICT (gc_cliente_id, periodo_inicio, periodo_fim, fonte, chave)
+             DO UPDATE SET valor = EXCLUDED.valor, criado_por = EXCLUDED.criado_por, updated_at = NOW()`,
+            [linha.gc_cliente_id, inicio, chave, Number(valor), sub]
+          );
+          gravados++;
+        }
+      }
+    });
+    return { clientes: linhas.length, gravados, apagados };
   });
 
   // GET /api/gc/trafego?periodo=YYYY-MM — a visão de todos os clientes num mês, uma linha por

@@ -166,7 +166,17 @@ function CartaoMeta({
  * PARTIDA, e o progresso conta de lá, não do zero: quem começou em 40 e foi a 60 andou 40% do
  * caminho até 90, não 66% da meta.
  */
-export function AbaMetricas({ clienteId }: { clienteId: string }) {
+export function AbaMetricas({
+  clienteId,
+  cliente,
+  abrirPlanejamento = 0,
+}: {
+  clienteId: string
+  /** Nome e segmento, pra os modelos de texto do planejamento trocarem {cliente} e {segmento}. */
+  cliente?: { nome_empresa?: string | null; segmento?: string | null }
+  /** Sobe quando algo de fora pede pra abrir o bloco de planejamento. */
+  abrirPlanejamento?: number
+}) {
   const [metricas, setMetricas] = React.useState<GcMetrica[]>([])
   const [metas, setMetas] = React.useState<GcMeta[]>([])
   const [carregando, setCarregando] = React.useState(true)
@@ -305,7 +315,13 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
     <div className="space-y-4">
       {/* No topo, acima das metas atuais e do lançamento do mês: o planejamento é o "pra onde vamos"
           que dá sentido a tudo que vem abaixo, e as metas dele são as mesmas de "Metas combinadas". */}
-      <PlanejamentoCliente clienteId={clienteId} metricas={metricas} onMetasMudaram={carregar} />
+      <PlanejamentoCliente
+        clienteId={clienteId}
+        metricas={metricas}
+        cliente={cliente}
+        abrirQuando={abrirPlanejamento}
+        onMetasMudaram={carregar}
+      />
 
       <section className="rounded-xl border border-line p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">

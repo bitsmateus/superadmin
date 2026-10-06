@@ -61,7 +61,7 @@ export const DIAS_AVISO_RENOVACAO = 45
 
 /** Lugar da tela onde o sinal se resolve. */
 export type Destino =
-  | 'avaliacao' | 'servicos' | 'editar' | 'jornada' | 'metricas' | 'relatorios' | 'notas'
+  | 'avaliacao' | 'servicos' | 'editar' | 'jornada' | 'metricas' | 'relatorios' | 'notas' | 'planejamento'
 
 /**
  * Pra onde cada sinal leva ao ser clicado. Fica aqui, junto das regras, e não espalhado pela tela:
@@ -80,7 +80,7 @@ const DESTINO_DO_SINAL: Record<string, { destino: Destino; rotulo: string }> = {
   cpl: { destino: 'metricas', rotulo: 'ver as métricas' },
   vendas: { destino: 'metricas', rotulo: 'lançar as vendas' },
   retorno: { destino: 'metricas', rotulo: 'lançar a receita' },
-  metas: { destino: 'metricas', rotulo: 'definir as metas' },
+  metas: { destino: 'planejamento', rotulo: 'abrir o planejamento' },
   relatorio: { destino: 'relatorios', rotulo: 'publicar o relatório' },
   contato: { destino: 'notas', rotulo: 'registrar o contato' },
 }
@@ -496,7 +496,11 @@ export function avaliarSaude(c: GcClienteLista): Saude {
       chave: 'metas',
       titulo: 'Metas combinadas',
       estado: 'atencao',
-      detalhe: 'Nenhuma meta definida — sem meta não há como dizer se o mês foi bom',
+      // Sem planejamento NEM metas: o caminho é montar o planejamento (ponto A + metas), que é onde as
+      // metas de 6 e 12 meses nascem. Com planejamento mas sem metas, falta dizer aonde se quer chegar.
+      detalhe: c.planejamento
+        ? 'Planejamento sem metas de 6 ou 12 meses — defina onde o cliente quer chegar'
+        : 'Sem planejamento nem metas — defina o ponto A e as metas pra poder dizer se o mês foi bom',
     })
   }
 

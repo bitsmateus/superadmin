@@ -34,6 +34,8 @@ export function ClienteNxDetalhePage() {
   const [editando, setEditando] = React.useState(false)
   const [confirmandoExclusao, setConfirmandoExclusao] = React.useState(false)
   const [notasAbertas, setNotasAbertas] = React.useState(false)
+  // Sobe a cada pedido pra abrir o planejamento (vindo da Visão geral ou do semáforo).
+  const [pedidoPlanejamento, setPedidoPlanejamento] = React.useState(0)
   const [excluindo, setExcluindo] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
@@ -57,6 +59,12 @@ export function ClienteNxDetalhePage() {
    */
   const irPara = (destino: Destino) => {
     switch (destino) {
+      case 'planejamento':
+        // O planejamento mora na aba Métricas e metas. A aba carrega antes de o bloco existir, então
+        // o pedido vai por um contador que o bloco observa: ele abre e rola assim que montar.
+        setAba('metricas')
+        setPedidoPlanejamento((n) => n + 1)
+        return
       case 'jornada':
       case 'metricas':
       case 'relatorios':
@@ -211,7 +219,9 @@ export function ClienteNxDetalhePage() {
               />
             )}
             {aba === 'jornada' && <AbaJornada jornada={detalhe.jornada} onMudou={carregar} />}
-            {aba === 'metricas' && <AbaMetricas clienteId={id} />}
+            {aba === 'metricas' && (
+              <AbaMetricas clienteId={id} cliente={detalhe.cliente} abrirPlanejamento={pedidoPlanejamento} />
+            )}
             {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
             {aba === 'estrategias' && (
               <AbaEstrategias estrategias={detalhe.estrategias} clienteId={id} onMudou={carregar} />

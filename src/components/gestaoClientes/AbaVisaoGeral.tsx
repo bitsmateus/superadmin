@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { CampoData, DataMiuda } from '@/components/gestaoClientes/CampoData'
 import { RotinaMensal } from '@/components/gestaoClientes/RotinaMensal'
+import { ResumoPlanejamento } from '@/components/gestaoClientes/ResumoPlanejamento'
 import {
   comDerivadas, formatarMetrica, mesAtual, mesPorExtenso, numeroDigitado,
 } from '@/lib/gcMetricas'
@@ -404,6 +405,8 @@ export function AbaVisaoGeral({
 
       <div className="space-y-4">
         <QuadroDeAvisos detalhe={detalhe} onVerNotas={onVerNotas} />
+
+        <ResumoPlanejamento cliente={cliente} onAbrir={() => onIr?.('planejamento')} />
 
         <RotinaMensal itens={detalhe.rotina ?? []} onMudou={onMudou} />
 

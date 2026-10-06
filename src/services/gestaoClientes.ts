@@ -398,6 +398,28 @@ export interface GcLinkPublico {
   ultimo_acesso: string | null
 }
 
+/**
+ * De onde veio um número do ponto A: calculado da média dos meses lançados (com os meses usados) ou
+ * informado por alguém. O ponto A é uma foto do diagnóstico, e saber a origem muda o quanto se
+ * confia nele.
+ */
+export interface GcOrigemCampo {
+  origem: 'calculado' | 'informado'
+  meses?: string[]
+}
+
+/** Os quatro textos do planejamento que têm modelo. */
+export type GcCampoModelo = 'situacao' | 'objetivo' | 'estrategia' | 'premissas'
+
+export interface GcModeloTexto {
+  id: string
+  campo: GcCampoModelo
+  nome: string
+  texto: string
+  ordem: number
+  ativo: boolean
+}
+
 /** O planejamento do cliente como a API entrega e recebe. */
 export interface GcPlanejamentoApi {
   /** False = ninguém salvou o planejamento ainda (o resto vem vazio, exceto metas já existentes). */
@@ -412,6 +434,8 @@ export interface GcPlanejamentoApi {
     data_diagnostico: string | null
   }
   curva: 'linear' | 'composta'
+  /** De onde veio cada número do ponto A, por campo. Campo ausente = sem origem registrada. */
+  origens: Record<string, GcOrigemCampo>
   portal: { ativo: boolean; mostrar_situacao: boolean; mostrar_objetivo: boolean }
   cenarios: Record<
     '6_meses' | '12_meses',
@@ -430,6 +454,7 @@ export interface GcPlanejamentoApi {
 export interface GcPlanejamentoEntrada {
   atual: GcPlanejamentoApi['atual']
   curva: 'linear' | 'composta'
+  origens: Record<string, GcOrigemCampo>
   portal: GcPlanejamentoApi['portal']
   cenarios: Record<
     '6_meses' | '12_meses',
@@ -574,6 +599,23 @@ export const gestaoClientes = {
     api.put<GcPlanejamentoApi>(`/api/gc/clientes/${clienteId}/planejamento`, dados),
   historicoPlanejamento: (clienteId: string) =>
     api.get<GcHistoricoPlanejamento[]>(`/api/gc/clientes/${clienteId}/planejamento/historico`),
+
+  /** O bloco "Nossa jornada" como o portal o entregaria — mesmo com o toggle desligado. */
+  previaPortal: (clienteId: string) =>
+    api.get<{ ligado: boolean; jornada: GcJornadaPortal | null }>(
+      `/api/gc/clientes/${clienteId}/planejamento/previa-portal`,
+    ),
+
+  /** `todos` traz também os desativados — a janela de gestão precisa vê-los pra reativar. */
+  modelosTexto: (todos = false) =>
+    api.get<GcModeloTexto[]>(`/api/gc/planejamento/modelos${todos ? '?todos=1' : ''}`),
+  criarModeloTexto: (dados: { campo: GcCampoModelo; nome: string; texto: string }) =>
+    api.post<GcModeloTexto>('/api/gc/planejamento/modelos', dados),
+  atualizarModeloTexto: (id: string, dados: Partial<Pick<GcModeloTexto, 'nome' | 'texto' | 'ativo' | 'ordem'>>) =>
+    api.patch<GcModeloTexto>(`/api/gc/planejamento/modelos/${id}`, dados),
+  excluirModeloTexto: (id: string) => api.delete(`/api/gc/planejamento/modelos/${id}`),
+  ordenarModelosTexto: (campo: GcCampoModelo, ids: string[]) =>
+    api.put('/api/gc/planejamento/modelos/ordem', { campo, ids }),
 
   /** A nota do mês. Sem período, o servidor usa o mês de hoje em Brasília. */
   avaliar: (

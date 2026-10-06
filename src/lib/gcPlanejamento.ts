@@ -418,3 +418,185 @@ export function avaliarMesContraRota(
   }
   return saida
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Ponto A a partir das métricas lançadas
+// ---------------------------------------------------------------------------------------------------
+
+export type CampoDoPontoA = 'leads' | 'investimento' | 'receita' | 'conversao' | 'ticket'
+
+export interface SugestaoDoPontoA {
+  /** O valor sugerido e os meses cuja média o gerou. Ausente = não há dado pra calcular. */
+  campos: Partial<Record<CampoDoPontoA, { valor: number; meses: string[] }>>
+  /** Os meses considerados (os últimos lançados), do mais antigo ao mais recente. */
+  meses: string[]
+}
+
+const arredonda = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Sugere o ponto A pela média dos últimos meses lançados (até 3).
+ *
+ *  - Só entram meses ANTERIORES ao corrente: o mês em andamento é parcial, e uma média com um mês
+ *    pela metade subestimaria tudo.
+ *  - "Últimos lançados" são os 3 meses mais recentes COM número, mesmo que não sejam seguidos: um
+ *    mês sem lançamento no meio não pode fazer a média cair pra zero.
+ *  - Conversão e ticket são razões de SOMAS (vendas ÷ leads, receita ÷ vendas), não média de
+ *    percentuais: um mês de 10 leads e outro de 1.000 não pesam igual.
+ *  - Cada campo usa só os meses em que ele existe; com 1 ou 2 meses usa o que houver.
+ */
+export function sugerirPontoA(
+  linhas: { periodo_inicio: string; chave: string; valor: string | number }[],
+  mesCorrente: string,
+  quantos = 3,
+): SugestaoDoPontoA {
+  const porMes: Record<string, Record<string, number>> = {}
+  for (const l of linhas) {
+    const mes = String(l.periodo_inicio).slice(0, 7)
+    const v = Number(l.valor)
+    if (!Number.isFinite(v)) continue
+    porMes[mes] = { ...(porMes[mes] ?? {}), [l.chave]: v }
+  }
+  const meses = Object.keys(porMes)
+    .filter((m) => m < mesCorrente && ['leads', 'investimento', 'vendas', 'receita'].some((k) => porMes[m][k] !== undefined))
+    .sort()
+    .slice(-quantos)
+
+  const campos: SugestaoDoPontoA['campos'] = {}
+  const media = (chave: string) => {
+    const usados = meses.filter((m) => porMes[m][chave] !== undefined)
+    if (usados.length === 0) return null
+    return { valor: arredonda(usados.reduce((s, m) => s + porMes[m][chave], 0) / usados.length), meses: usados }
+  }
+  const mLeads = media('leads')
+  const mInv = media('investimento')
+  const mReceita = media('receita')
+  if (mLeads) campos.leads = mLeads
+  if (mInv) campos.investimento = mInv
+  if (mReceita) campos.receita = mReceita
+
+  const razao = (num: string, den: string, fator: number) => {
+    const usados = meses.filter((m) => porMes[m][num] !== undefined && porMes[m][den] !== undefined)
+    const soma = usados.reduce((s, m) => s + porMes[m][den], 0)
+    if (usados.length === 0 || soma <= 0) return null
+    return { valor: arredonda((usados.reduce((s, m) => s + porMes[m][num], 0) / soma) * fator), meses: usados }
+  }
+  const conv = razao('vendas', 'leads', 100)
+  const ticket = razao('receita', 'vendas', 1)
+  if (conv) campos.conversao = conv
+  if (ticket) campos.ticket = ticket
+  return { campos, meses }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Resumo de uma linha
+// ---------------------------------------------------------------------------------------------------
+
+// O Intl separa "R$" do número com espaço NÃO separável; num resumo que a pessoa copia e cola, espaço comum.
+const brl0 = (v: number) =>
+  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).replace(/ /g, ' ')
+
+/** "100 leads · R$ 6.400" — as duas métricas que contam a história: volume e faturamento. */
+function trecho(m: MetasPlano): string | null {
+  const partes: string[] = []
+  if (m.leads !== undefined) partes.push(`${Math.round(m.leads).toLocaleString('pt-BR')} leads`)
+  if (m.receita !== undefined) partes.push(brl0(m.receita))
+  // Sem nenhuma das duas, o investimento é o que sobra pra dizer alguma coisa.
+  if (partes.length === 0 && m.investimento !== undefined) partes.push(`${brl0(m.investimento)} de investimento`)
+  return partes.length ? partes.join(' · ') : null
+}
+
+/** "Ponto A: 100 leads · R$ 6.400 → Meta 6m: 300 leads · … → Meta 12m: …". Null se não há nada. */
+export function resumoLinha(plano: Planejamento): string | null {
+  const partes: string[] = []
+  const a = trecho(baseDoPontoA(plano.atual))
+  if (a) partes.push(`Ponto A: ${a}`)
+  const m6 = trecho(plano.metas['6_meses'] ?? {})
+  if (m6) partes.push(`Meta 6m: ${m6}`)
+  const m12 = trecho(plano.metas['12_meses'] ?? {})
+  if (m12) partes.push(`Meta 12m: ${m12}`)
+  return partes.length ? partes.join(' → ') : null
+}
+
+/**
+ * O planejamento está COMPLETO? Data do diagnóstico, leads, investimento e conversão do ponto A e
+ * pelo menos uma meta em cada horizonte. É o que decide se o bloco abre sozinho: planejamento
+ * completo fica recolhido, incompleto convida a terminar.
+ */
+export function planejamentoCompleto(plano: Planejamento): boolean {
+  const a = plano.atual
+  return (
+    !!plano.dataDiagnostico &&
+    a.leads !== null && a.investimento !== null && a.conversao !== null &&
+    HORIZONTES_PLANO.every((h) => Object.keys(plano.metas[h.valor] ?? {}).length > 0)
+  )
+}
+
+/** O que ainda falta pra o planejamento ficar completo, em palavras — pro cabeçalho do bloco. */
+export function faltaNoPlanejamento(plano: Planejamento): string[] {
+  const falta: string[] = []
+  const a = plano.atual
+  if (!plano.dataDiagnostico) falta.push('data do diagnóstico')
+  if (a.leads === null) falta.push('leads do ponto A')
+  if (a.investimento === null) falta.push('investimento do ponto A')
+  if (a.conversao === null) falta.push('taxa de conversão do ponto A')
+  for (const h of HORIZONTES_PLANO) {
+    if (Object.keys(plano.metas[h.valor] ?? {}).length === 0) falta.push(`metas de ${h.label}`)
+  }
+  return falta
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Variáveis dos modelos de texto
+// ---------------------------------------------------------------------------------------------------
+
+/** As variáveis que um modelo pode usar, com o que cada uma é — pra mostrar na tela de gestão. */
+export const VARIAVEIS_DE_MODELO: { nome: string; ajuda: string }[] = [
+  { nome: 'cliente', ajuda: 'nome da empresa' },
+  { nome: 'segmento', ajuda: 'segmento do cliente' },
+  { nome: 'leads_hoje', ajuda: 'leads/mês do ponto A' },
+  { nome: 'investimento_hoje', ajuda: 'investimento/mês do ponto A' },
+  { nome: 'ticket_hoje', ajuda: 'ticket médio do ponto A' },
+  { nome: 'conversao_hoje', ajuda: 'taxa de conversão do ponto A (%)' },
+  { nome: 'faturamento_hoje', ajuda: 'faturamento mensal do ponto A' },
+  { nome: 'cpl_hoje', ajuda: 'CPL do ponto A (investimento ÷ leads)' },
+  { nome: 'meta_leads_6m', ajuda: 'meta de leads em 6 meses (idem _12m)' },
+  { nome: 'meta_faturamento_6m', ajuda: 'meta de faturamento em 6 meses (idem _12m)' },
+  { nome: 'meta_investimento_6m', ajuda: 'meta de investimento em 6 meses (idem _12m)' },
+]
+
+const formatoNum = (v: number, casas = 0) =>
+  v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas })
+
+/** Os valores das variáveis, a partir do cliente e do planejamento. Só entra o que existe. */
+export function contextoDeVariaveis(
+  plano: Planejamento,
+  cliente: { nome_empresa?: string | null; segmento?: string | null },
+): Record<string, string> {
+  const ctx: Record<string, string> = {}
+  const base = baseDoPontoA(plano.atual)
+  if (cliente.nome_empresa) ctx.cliente = cliente.nome_empresa
+  if (cliente.segmento) ctx.segmento = cliente.segmento
+  if (base.leads !== undefined) ctx.leads_hoje = formatoNum(base.leads)
+  if (base.investimento !== undefined) ctx.investimento_hoje = formatoNum(base.investimento, 2)
+  if (plano.atual.ticket !== null) ctx.ticket_hoje = formatoNum(plano.atual.ticket, 2)
+  if (plano.atual.conversao !== null) ctx.conversao_hoje = formatoNum(plano.atual.conversao, 1)
+  if (base.receita !== undefined) ctx.faturamento_hoje = formatoNum(base.receita, 2)
+  if (base.cpl !== undefined) ctx.cpl_hoje = formatoNum(base.cpl, 2)
+  for (const h of HORIZONTES_PLANO) {
+    const sufixo = `${h.meses}m`
+    const m = plano.metas[h.valor] ?? {}
+    if (m.leads !== undefined) ctx[`meta_leads_${sufixo}`] = formatoNum(m.leads)
+    if (m.receita !== undefined) ctx[`meta_faturamento_${sufixo}`] = formatoNum(m.receita, 2)
+    if (m.investimento !== undefined) ctx[`meta_investimento_${sufixo}`] = formatoNum(m.investimento, 2)
+  }
+  return ctx
+}
+
+/**
+ * Troca {variavel} pelo valor, quando existe. Variável sem valor FICA no texto, visível: apagar
+ * em silêncio deixaria "investe R$ /mês" e a pessoa nem notaria que faltou preencher o ponto A.
+ */
+export function aplicarVariaveis(texto: string, ctx: Record<string, string>): string {
+  return texto.replace(/\{([a-z0-9_]+)\}/gi, (inteiro, nome: string) => (ctx[nome] !== undefined ? ctx[nome] : inteiro))
+}

@@ -168,12 +168,34 @@ export interface GcClienteDetalhe {
   historico: GcRegistroHistorico[]
 }
 
+export interface GcModeloEstrategia {
+  id: string
+  nome: string
+  descricao: string
+  servico_tipo: string | null
+  /** Desativado some dos seletores, mas continua existindo pra quem já recebeu a estratégia. */
+  ativo: boolean
+  passos: { id: string; titulo: string; ordem: number }[]
+}
+
 export interface GcModelos {
   etapas: { id: string; nome: string; ordem: number; itens: { id: string; titulo: string }[] }[]
-  estrategias: {
-    id: string; nome: string; descricao: string; servico_tipo: string | null
-    passos: { id: string; titulo: string }[]
-  }[]
+  estrategias: GcModeloEstrategia[]
+}
+
+/** Um item de checklist ABERTO, de qualquer cliente que conta nos totais. */
+export interface GcPendencia {
+  id: string
+  titulo: string
+  prazo: string | null
+  cliente_id: string
+  cliente_nome: string
+  origem: 'jornada' | 'estrategia'
+  origem_nome: string
+  /** Em cascata: item, depois etapa/estratégia, depois o cliente. */
+  responsavel_id: string | null
+  responsavel_nome: string | null
+  atrasado: boolean
 }
 
 /** Campos que a tela de cadastro envia — o servidor ignora qualquer outra chave. */
@@ -322,7 +344,25 @@ export interface GcLinkPublico {
 }
 
 export const gestaoClientes = {
-  modelos: () => api.get<GcModelos>('/api/gc/modelos'),
+  /** `todos` traz também os modelos desativados — a tela de gestão precisa vê-los pra reativar. */
+  modelos: (todos = false) => api.get<GcModelos>(`/api/gc/modelos${todos ? '?todos=1' : ''}`),
+
+  criarModeloEstrategia: (dados: {
+    nome: string; descricao?: string; servico_tipo?: string | null; passos?: string[]
+  }) => api.post<GcModeloEstrategia>('/api/gc/modelos/estrategias', dados),
+  atualizarModeloEstrategia: (
+    id: string,
+    dados: Partial<{ nome: string; descricao: string; servico_tipo: string | null; ativo: boolean }>,
+  ) => api.patch<GcModeloEstrategia>(`/api/gc/modelos/estrategias/${id}`, dados),
+  criarPassoDeModelo: (id: string, titulo: string) =>
+    api.post<{ id: string; titulo: string }>(`/api/gc/modelos/estrategias/${id}/passos`, { titulo }),
+  ordenarPassosDeModelo: (id: string, ids: string[]) =>
+    api.put(`/api/gc/modelos/estrategias/${id}/passos/ordem`, { ids }),
+  renomearPassoDeModelo: (id: string, titulo: string) =>
+    api.patch(`/api/gc/modelos/passos/${id}`, { titulo }),
+  excluirPassoDeModelo: (id: string) => api.delete(`/api/gc/modelos/passos/${id}`),
+
+  pendencias: () => api.get<GcPendencia[]>('/api/gc/pendencias'),
 
   /** Sem período, o servidor usa o mês de hoje em Brasília. */
   listar: (periodo?: string) =>

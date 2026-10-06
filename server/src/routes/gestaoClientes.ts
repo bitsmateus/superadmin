@@ -263,7 +263,9 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
 
   // ------------------------------------------------------------------ modelos
   // GET /api/gc/modelos — jornada padrão e estratégias prontas, pra montar os seletores da tela.
-  app.get('/api/gc/modelos', autenticado, async () => {
+  app.get<{ Querystring: { todos?: string } }>('/api/gc/modelos', autenticado, async (req) => {
+    // Os seletores só oferecem modelo ATIVO; a tela de gestão pede "todos" pra poder reativar.
+    const filtroEstrategia = req.query.todos === '1' ? '' : 'WHERE e.ativo';
     const etapas = await query(
       `SELECT e.*, COALESCE(
          (SELECT json_agg(json_build_object('id', i.id, 'titulo', i.titulo, 'ordem', i.ordem) ORDER BY i.ordem)
@@ -276,7 +278,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
          (SELECT json_agg(json_build_object('id', i.id, 'titulo', i.titulo, 'ordem', i.ordem) ORDER BY i.ordem)
           FROM gc_estrategias_modelo_itens i WHERE i.estrategia_modelo_id = e.id),
          '[]'::json) AS passos
-       FROM gc_estrategias_modelo e WHERE e.ativo ORDER BY e.nome`
+       FROM gc_estrategias_modelo e ${filtroEstrategia} ORDER BY e.ativo DESC, e.nome`
     );
     return { etapas, estrategias };
   });
@@ -889,6 +891,155 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     ]);
     if (!apagada) return reply.status(404).send({ message: 'Estratégia não encontrada' });
     return reply.status(204).send();
+  });
+
+  // ------------------------------------------------------------------ gestão dos modelos de estratégia
+  // Criar, editar e desativar os MODELOS. Aplicar um modelo num cliente COPIA nome e passos, então
+  // mexer aqui não reescreve o que já está rodando em ninguém — por isso editar é seguro e não
+  // existe "excluir": o que não serve mais é desativado e some dos seletores, sem apagar a origem
+  // das estratégias que já foram aplicadas.
+  const TIPOS_SERVICO_VALIDOS = ['trafego_meta', 'trafego_google', 'central_ia', 'site', 'automacao', 'outro'];
+
+  app.post<{
+    Body: { nome?: string; descricao?: string; servico_tipo?: string | null; passos?: string[] };
+  }>('/api/gc/modelos/estrategias', autenticado, async (req, reply) => {
+    const { nome, descricao, servico_tipo, passos } = req.body ?? {};
+    if (!nome?.trim()) return reply.status(400).send({ message: 'Dê um nome pra estratégia' });
+    if (servico_tipo && !TIPOS_SERVICO_VALIDOS.includes(servico_tipo)) {
+      return reply.status(400).send({ message: 'Tipo de serviço inválido' });
+    }
+    const criado = await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `INSERT INTO gc_estrategias_modelo (nome, descricao, servico_tipo)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [nome.trim(), descricao ?? '', servico_tipo || null]
+      );
+      for (const [i, titulo] of (passos ?? []).filter((t) => t?.trim()).entries()) {
+        await client.query(
+          'INSERT INTO gc_estrategias_modelo_itens (estrategia_modelo_id, titulo, ordem) VALUES ($1, $2, $3)',
+          [rows[0].id, titulo.trim(), i]
+        );
+      }
+      return rows[0];
+    });
+    return reply.status(201).send(criado);
+  });
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/api/gc/modelos/estrategias/:id',
+    autenticado,
+    async (req, reply) => {
+      const corpo = { ...(req.body ?? {}) };
+      if (corpo.servico_tipo && !TIPOS_SERVICO_VALIDOS.includes(String(corpo.servico_tipo))) {
+        return reply.status(400).send({ message: 'Tipo de serviço inválido' });
+      }
+      if (typeof corpo.nome === 'string' && !corpo.nome.trim()) {
+        return reply.status(400).send({ message: 'O nome não pode ficar vazio' });
+      }
+      const { sets, params } = montarUpdate(['nome', 'descricao', 'servico_tipo', 'ativo'], corpo);
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+      params.push(req.params.id);
+      const atualizado = await queryOne(
+        `UPDATE gc_estrategias_modelo SET ${sets.join(', ')}, updated_at = NOW()
+         WHERE id = $${params.length} RETURNING *`,
+        params
+      );
+      if (!atualizado) return reply.status(404).send({ message: 'Modelo não encontrado' });
+      return atualizado;
+    }
+  );
+
+  app.post<{ Params: { id: string }; Body: { titulo?: string } }>(
+    '/api/gc/modelos/estrategias/:id/passos',
+    autenticado,
+    async (req, reply) => {
+      const titulo = req.body?.titulo?.trim();
+      if (!titulo) return reply.status(400).send({ message: 'Escreva o passo' });
+      const criado = await queryOne(
+        `INSERT INTO gc_estrategias_modelo_itens (estrategia_modelo_id, titulo, ordem)
+         VALUES ($1, $2, (SELECT COALESCE(MAX(ordem), -1) + 1 FROM gc_estrategias_modelo_itens
+                          WHERE estrategia_modelo_id = $1))
+         RETURNING *`,
+        [req.params.id, titulo]
+      );
+      return reply.status(201).send(criado);
+    }
+  );
+
+  // PUT .../passos/ordem — define a ordem dos passos de uma vez, pela lista de ids na ordem nova.
+  app.put<{ Params: { id: string }; Body: { ids?: string[] } }>(
+    '/api/gc/modelos/estrategias/:id/passos/ordem',
+    autenticado,
+    async (req, reply) => {
+      const ids = req.body?.ids;
+      if (!Array.isArray(ids)) return reply.status(400).send({ message: 'ids é obrigatório' });
+      await withTransaction(async (client) => {
+        for (const [i, id] of ids.entries()) {
+          await client.query(
+            `UPDATE gc_estrategias_modelo_itens SET ordem = $1, updated_at = NOW()
+             WHERE id = $2 AND estrategia_modelo_id = $3`,
+            [i, id, req.params.id]
+          );
+        }
+      });
+      return { ok: true };
+    }
+  );
+
+  app.patch<{ Params: { id: string }; Body: { titulo?: string } }>(
+    '/api/gc/modelos/passos/:id',
+    autenticado,
+    async (req, reply) => {
+      const titulo = req.body?.titulo?.trim();
+      if (!titulo) return reply.status(400).send({ message: 'O passo não pode ficar vazio' });
+      const atualizado = await queryOne(
+        'UPDATE gc_estrategias_modelo_itens SET titulo = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+        [titulo, req.params.id]
+      );
+      if (!atualizado) return reply.status(404).send({ message: 'Passo não encontrado' });
+      return atualizado;
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/gc/modelos/passos/:id', autenticado, async (req, reply) => {
+    const apagado = await queryOne('DELETE FROM gc_estrategias_modelo_itens WHERE id = $1 RETURNING id', [
+      req.params.id,
+    ]);
+    if (!apagado) return reply.status(404).send({ message: 'Passo não encontrado' });
+    return reply.status(204).send();
+  });
+
+  // ------------------------------------------------------------------ pendências (todos os clientes)
+  // GET /api/gc/pendencias — os itens de checklist ABERTOS de todos os clientes que contam (ativos e
+  // não-teste), numa lista só: é o "o que está pendente na carteira?" sem abrir cliente por cliente.
+  //
+  // O responsável efetivo cai em cascata — item, depois etapa/estratégia, depois o cliente —,
+  // porque quase ninguém atribui item por item, e filtrar só pelo campo do item deixaria quase
+  // tudo "sem responsável". Atraso é comparado em horário de Brasília.
+  app.get('/api/gc/pendencias', autenticado, async () => {
+    return query(
+      `SELECT i.id, i.titulo, i.prazo, i.ordem,
+         c.id AS cliente_id, c.nome_empresa AS cliente_nome,
+         CASE WHEN i.gc_cliente_jornada_id IS NOT NULL THEN 'jornada' ELSE 'estrategia' END AS origem,
+         COALESCE(j.nome, e.nome) AS origem_nome,
+         COALESCE(i.responsavel_id, j.responsavel_id, e.responsavel_id, c.responsavel_id) AS responsavel_id,
+         pr.name AS responsavel_nome,
+         (i.prazo IS NOT NULL AND i.prazo < ${HOJE}) AS atrasado
+       FROM gc_checklist_itens i
+       JOIN gc_clientes c ON c.id = i.gc_cliente_id
+       LEFT JOIN gc_cliente_jornada j ON j.id = i.gc_cliente_jornada_id
+       LEFT JOIN gc_cliente_estrategias e ON e.id = i.gc_cliente_estrategia_id
+       LEFT JOIN profiles pr
+         ON pr.id = COALESCE(i.responsavel_id, j.responsavel_id, e.responsavel_id, c.responsavel_id)
+       WHERE NOT i.concluido
+         AND c.status = 'ativo' AND NOT c.fora_dos_totais
+         -- Etapa que ainda nem começou não é pendência de ninguém agora: o checklist dela só vira
+         -- trabalho quando a etapa abre. Estratégia aplicada entra sempre.
+         AND (j.id IS NULL OR j.status <> 'pendente')
+       ORDER BY (i.prazo IS NOT NULL AND i.prazo < ${HOJE}) DESC, i.prazo ASC NULLS LAST,
+                c.nome_empresa, i.ordem
+       LIMIT 1000`
+    );
   });
 
   // ------------------------------------------------------------------ avaliação do gestor

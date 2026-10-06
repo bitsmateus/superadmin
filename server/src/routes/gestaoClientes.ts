@@ -5,6 +5,7 @@ import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
 import { validarMetricas } from '../lib/gcValidacao.js';
 import { garantirRecorrentes } from '../lib/gcRecorrentes.js';
+import { CHAVES_REALIZADO_PUBLICO, montarJornadaPublica } from '../lib/gcPortalJornada.js';
 import {
   CHAVES_PLANEJAMENTO, HORIZONTES_PLANEJAMENTO, baseDoPontoA, diffDeCampos, somarMesesNaData,
   type Mudanca, type PontoA,
@@ -1421,6 +1422,23 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     }
   );
 
+  // GET /api/gc/clientes/:id/planejamento/previa-portal — "ver como o cliente vê". Devolve o bloco
+  // "Nossa jornada" EXATAMENTE como o portal entregaria, montado pelo mesmo caminho, só que mesmo
+  // com o toggle desligado — é pra conferir antes de ligar. Reflete o que está SALVO.
+  app.get<{ Params: { id: string } }>(
+    '/api/gc/clientes/:id/planejamento/previa-portal',
+    autenticado,
+    async (req) => {
+      const ligado = Boolean(
+        (await queryOne<{ portal_ativo: boolean }>(
+          'SELECT portal_ativo FROM gc_planejamento WHERE gc_cliente_id = $1',
+          [req.params.id]
+        ))?.portal_ativo
+      );
+      return { ligado, jornada: await jornadaDoPortal(req.params.id, { ignorarToggle: true }) };
+    }
+  );
+
   // PUT /api/gc/clientes/:id/planejamento — grava o planejamento INTEIRO de uma vez: ponto A, curva,
   // opções do portal e, por horizonte, os três textos e os seis números. Tudo numa transação, com o
   // diff contra o que estava gravado indo pro histórico.
@@ -1811,33 +1829,28 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
  * interna, custo, margem ou histórico do time passa por aqui.
  */
 /**
- * O bloco "Nossa jornada" do portal: ponto de partida, metas de 6 e 12 meses e o realizado, pro
- * gráfico de realizado × projeção. Só existe se alguém LIGOU, cliente a cliente.
+ * Carrega o que o bloco "Nossa jornada" precisa e entrega à montagem pura (lib/gcPortalJornada.ts),
+ * que decide campo por campo o que o cliente pode ler.
  *
- * O que NUNCA sai daqui: a estratégia e as premissas (nem são lidas do banco). A situação de hoje e
- * o "onde quer chegar" só saem se a pessoa marcou cada um — e o texto que sai é o escrito, sem
- * resumo nem edição.
- *
- * O realizado vem só dos meses com relatório PUBLICADO: o portal inteiro mostra só o que a equipe
- * revisou e liberou, e número lançado mas ainda não revisado (ou incoerente) não pode vazar por
+ * Aqui só se BUSCA, e só o necessário: a estratégia e as premissas nem entram nestas consultas, e
+ * quem decide o que sai é a lista permitida da montagem — não um espalhamento de colunas. O realizado
+ * vem só dos meses com relatório PUBLICADO: número lançado e ainda não revisado não pode vazar por
  * aqui antes do relatório.
+ *
+ * `ignorarToggle` é da prévia "ver como o cliente vê": monta o bloco mesmo com o portal desligado,
+ * pelo MESMO caminho — é o que garante que a prévia nunca mostre mais (nem menos) que o portal.
  */
-async function jornadaDoPortal(clienteId: string) {
-  const p = await queryOne<{
-    situacao_atual: string; leads_mes: string | null; investimento_mes: string | null;
-    ticket_medio: string | null; taxa_conversao: string | null; faturamento_mensal: string | null;
-    data_diagnostico: string | null; curva: string; portal_ativo: boolean;
-    portal_mostrar_situacao: boolean; portal_mostrar_objetivo: boolean;
-  }>(
+async function jornadaDoPortal(clienteId: string, opcoes: { ignorarToggle?: boolean } = {}) {
+  const planejamento = await queryOne<Record<string, unknown>>(
     `SELECT situacao_atual, leads_mes, investimento_mes, ticket_medio, taxa_conversao, faturamento_mensal,
             to_char(data_diagnostico, 'YYYY-MM-DD') AS data_diagnostico, curva,
             portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo
      FROM gc_planejamento WHERE gc_cliente_id = $1`,
     [clienteId]
   );
-  if (!p?.portal_ativo) return null;
+  if (!planejamento) return null;
+  if (!planejamento.portal_ativo && !opcoes.ignorarToggle) return null;
 
-  const n = (v: string | null) => (v === null ? null : Number(v));
   const metas = await query<{ horizonte: string; chave_metrica: string; valor_meta: string }>(
     `SELECT DISTINCT ON (horizonte, chave_metrica) horizonte, chave_metrica, valor_meta
      FROM gc_metas
@@ -1845,22 +1858,13 @@ async function jornadaDoPortal(clienteId: string) {
      ORDER BY horizonte, chave_metrica, created_at DESC`,
     [clienteId, [...HORIZONTES_PLANEJAMENTO], [...CHAVES_PLANEJAMENTO]]
   );
-  const objetivos = p.portal_mostrar_objetivo
-    ? await query<{ horizonte: string; onde_quer_chegar: string }>(
+  const cenarios = planejamento.portal_mostrar_objetivo
+    ? await query<Record<string, unknown>>(
         'SELECT horizonte, onde_quer_chegar FROM gc_planejamento_cenarios WHERE gc_cliente_id = $1',
         [clienteId]
       )
     : [];
 
-  const cenarios: Record<string, { metas: Record<string, number>; objetivo: string | null }> = {};
-  for (const h of HORIZONTES_PLANEJAMENTO) {
-    cenarios[h] = {
-      metas: Object.fromEntries(metas.filter((m) => m.horizonte === h).map((m) => [m.chave_metrica, Number(m.valor_meta)])),
-      objetivo: objetivos.find((o) => o.horizonte === h)?.onde_quer_chegar?.trim() || null,
-    };
-  }
-
-  const realizado: Record<string, Record<string, number>> = { leads: {}, vendas: {}, receita: {}, investimento: {} };
   const publicados = (
     await query<{ dia: string }>(
       `SELECT to_char(periodo_inicio, 'YYYY-MM-DD') AS dia FROM gc_relatorios
@@ -1868,27 +1872,16 @@ async function jornadaDoPortal(clienteId: string) {
       [clienteId]
     )
   ).map((r) => r.dia);
-  if (publicados.length > 0) {
-    const linhas = await query<{ chave: string; mes: string; valor: string }>(
-      `SELECT chave, to_char(periodo_inicio, 'YYYY-MM') AS mes, valor
-       FROM gc_metricas
-       WHERE gc_cliente_id = $1 AND periodo_inicio = ANY($2::date[]) AND chave = ANY($3)`,
-      [clienteId, publicados, Object.keys(realizado)]
-    );
-    for (const l of linhas) realizado[l.chave][l.mes] = Number(l.valor);
-  }
+  const realizado = publicados.length
+    ? await query<{ chave: string; mes: string; valor: string }>(
+        `SELECT chave, to_char(periodo_inicio, 'YYYY-MM') AS mes, valor
+         FROM gc_metricas
+         WHERE gc_cliente_id = $1 AND periodo_inicio = ANY($2::date[]) AND chave = ANY($3)`,
+        [clienteId, publicados, [...CHAVES_REALIZADO_PUBLICO]]
+      )
+    : [];
 
-  return {
-    data_diagnostico: p.data_diagnostico,
-    curva: p.curva,
-    situacao: p.portal_mostrar_situacao ? p.situacao_atual.trim() || null : null,
-    atual: {
-      leads: n(p.leads_mes), investimento: n(p.investimento_mes), ticket: n(p.ticket_medio),
-      conversao: n(p.taxa_conversao), receita: n(p.faturamento_mensal),
-    },
-    cenarios,
-    realizado,
-  };
+  return montarJornadaPublica({ planejamento, metas, cenarios, realizado }, opcoes);
 }
 
 export async function gestaoClientesPublicRoutes(app: FastifyInstance) {

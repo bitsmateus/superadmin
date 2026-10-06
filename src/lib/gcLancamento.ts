@@ -24,3 +24,19 @@ export function pendentesDoMes(
     .map((c) => ({ id: c.id, nome: c.nome_empresa }))
     .sort((a, b) => a.nome.localeCompare(b.nome))
 }
+
+export type SituacaoDoMes = 'sem_lancamento' | 'lancado' | 'rascunho' | 'publicado'
+
+/**
+ * Em que pé está o mês do cliente. Vale o estágio MAIS AVANÇADO: relatório publicado manda sobre
+ * rascunho, que manda sobre "só lançou números", que manda sobre nada.
+ *
+ * Rascunho sem métrica nenhuma ainda é "rascunho": alguém começou a escrever, e esconder isso
+ * atrás de "sem lançamento" mentiria sobre o andamento.
+ */
+export function situacaoDoMes(c: Pick<GcClienteLista, 'metricas_mes' | 'relatorio_mes'>): SituacaoDoMes {
+  if (c.relatorio_mes === 'publicado') return 'publicado'
+  if (c.relatorio_mes === 'rascunho') return 'rascunho'
+  return Object.keys(c.metricas_mes ?? {}).length > 0 ? 'lancado' : 'sem_lancamento'
+}
+

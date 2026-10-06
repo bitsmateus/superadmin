@@ -1,8 +1,11 @@
 import * as React from 'react'
-import { GripVertical } from 'lucide-react'
+import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { PRIORIDADES, progressoDoCliente, type GcClienteLista, type GcPrioridade } from '@/services/gestaoClientes'
 import { DIAS_AVISO_RENOVACAO, type Saude } from '@/lib/gcSaude'
+import { mesPorExtenso, somarMeses } from '@/lib/gcMetricas'
+import { situacaoDoMes, type SituacaoDoMes } from '@/lib/gcLancamento'
 import { cn } from '@/lib/utils'
 
 export interface ColunaKanban {
@@ -10,6 +13,8 @@ export interface ColunaKanban {
   id: string
   nome: string
 }
+
+type Item = { cliente: GcClienteLista; saude: Saude }
 
 const ESTILO_PRIORIDADE: Record<GcPrioridade, string> = {
   alta: 'border-danger/30 bg-danger/10 text-danger',
@@ -33,6 +38,87 @@ function diasAteData(data: string | null): number | null {
   return Number.isNaN(quando) ? null : Math.round((quando - Date.now()) / 86400000)
 }
 
+/** O card de um cliente — o mesmo nas duas visões do Kanban. */
+function CartaoCliente({
+  item,
+  esmaecido,
+  onAbrir,
+  arrastavel,
+  onDragStart,
+  onDragEnd,
+  rodape,
+}: {
+  item: Item
+  esmaecido?: boolean
+  onAbrir: (id: string) => void
+  arrastavel?: boolean
+  onDragStart?: (e: React.DragEvent) => void
+  onDragEnd?: () => void
+  /** Conteúdo extra no pé do card (o seletor "mover pra…" da visão por etapa). */
+  rodape?: React.ReactNode
+}) {
+  const { cliente: c, saude } = item
+  const renov = diasAteData(c.proxima_renovacao)
+  const alertaRenov = renov !== null && renov <= DIAS_AVISO_RENOVACAO
+
+  return (
+    <article
+      draggable={arrastavel}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onClick={() => onAbrir(c.id)}
+      className={cn(
+        'group cursor-pointer rounded-lg border border-line bg-surface p-2.5 transition-shadow hover:shadow-md',
+        esmaecido && 'opacity-40',
+      )}
+    >
+      <div className="flex items-start gap-1.5">
+        {arrastavel && <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-grab text-foreground/25" />}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">
+            {c.nome_empresa}
+            {c.fora_dos_totais && (
+              <span className="ml-1.5 rounded border border-line px-1 text-[10px] font-normal uppercase text-foreground/45">
+                teste
+              </span>
+            )}
+          </p>
+          <p className="truncate text-xs text-foreground/45">{c.responsavel_nome ?? 'sem responsável'}</p>
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <PastilhaSaude estado={saude.nivel} />
+        <span
+          className={cn(
+            'rounded-full border px-1.5 py-0.5 text-[10px] font-medium',
+            ESTILO_PRIORIDADE[c.prioridade ?? 'media'],
+          )}
+        >
+          {PRIORIDADES.find((p) => p.valor === (c.prioridade ?? 'media'))?.label}
+        </span>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <span className="h-1 flex-1 overflow-hidden rounded-full bg-elevate/[0.08]">
+          <span className="block h-full rounded-full bg-accent" style={{ width: `${progressoDoCliente(c)}%` }} />
+        </span>
+        <span className="text-[10px] tabular-nums text-foreground/45">{progressoDoCliente(c)}%</span>
+      </div>
+
+      {(Number(c.itens_atrasados) > 0 || alertaRenov) && (
+        <p className="mt-1.5 text-[11px] text-danger">
+          {Number(c.itens_atrasados) > 0 && `${Number(c.itens_atrasados)} atrasado(s)`}
+          {Number(c.itens_atrasados) > 0 && alertaRenov && ' · '}
+          {alertaRenov && (renov! < 0 ? `renovação venceu há ${Math.abs(renov!)}d` : `renova em ${renov}d`)}
+        </p>
+      )}
+
+      {rodape}
+    </article>
+  )
+}
+
 /**
  * Kanban por etapa da jornada: uma coluna por etapa, o cliente no card da etapa em que está.
  *
@@ -50,7 +136,7 @@ export function KanbanClientes({
   onAbrir,
   onMover,
 }: {
-  itens: { cliente: GcClienteLista; saude: Saude }[]
+  itens: Item[]
   colunas: ColunaKanban[]
   onAbrir: (id: string) => void
   onMover: (cliente: GcClienteLista, destinoId: string) => void
@@ -59,9 +145,9 @@ export function KanbanClientes({
   const [sobre, setSobre] = React.useState<string | null>(null)
 
   const todas: ColunaKanban[] = [...colunas, { id: 'fim', nome: 'Jornada concluída' }]
-  const porColuna = new Map<string, { cliente: GcClienteLista; saude: Saude }[]>()
+  const porColuna = new Map<string, Item[]>()
   for (const col of todas) porColuna.set(col.id, [])
-  const sem: { cliente: GcClienteLista; saude: Saude }[] = []
+  const sem: Item[] = []
   for (const item of itens) {
     const alvo = colunaDo(item.cliente, colunas)
     if (alvo && porColuna.has(alvo)) porColuna.get(alvo)!.push(item)
@@ -110,83 +196,29 @@ export function KanbanClientes({
                     {arrastando ? 'solte aqui' : 'nenhum cliente'}
                   </p>
                 )}
-                {doGrupo.map(({ cliente: c, saude }) => {
-                  const renov = diasAteData(c.proxima_renovacao)
-                  return (
-                    <article
-                      key={c.id}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/plain', c.id)
-                        e.dataTransfer.effectAllowed = 'move'
-                        setArrastando(c.id)
-                      }}
-                      onDragEnd={() => {
-                        setArrastando(null)
-                        setSobre(null)
-                      }}
-                      onClick={() => onAbrir(c.id)}
-                      className={cn(
-                        'group cursor-pointer rounded-lg border border-line bg-surface p-2.5 transition-shadow hover:shadow-md',
-                        arrastando === c.id && 'opacity-40',
-                      )}
-                    >
-                      <div className="flex items-start gap-1.5">
-                        <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-grab text-foreground/25" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {c.nome_empresa}
-                            {c.fora_dos_totais && (
-                              <span className="ml-1.5 rounded border border-line px-1 text-[10px] font-normal uppercase text-foreground/45">
-                                teste
-                              </span>
-                            )}
-                          </p>
-                          <p className="truncate text-xs text-foreground/45">
-                            {c.responsavel_nome ?? 'sem responsável'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <PastilhaSaude estado={saude.nivel} />
-                        <span
-                          className={cn(
-                            'rounded-full border px-1.5 py-0.5 text-[10px] font-medium',
-                            ESTILO_PRIORIDADE[c.prioridade ?? 'media'],
-                          )}
-                        >
-                          {PRIORIDADES.find((p) => p.valor === (c.prioridade ?? 'media'))?.label}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className="h-1 flex-1 overflow-hidden rounded-full bg-elevate/[0.08]">
-                          <span
-                            className="block h-full rounded-full bg-accent"
-                            style={{ width: `${progressoDoCliente(c)}%` }}
-                          />
-                        </span>
-                        <span className="text-[10px] tabular-nums text-foreground/45">
-                          {progressoDoCliente(c)}%
-                        </span>
-                      </div>
-
-                      {(Number(c.itens_atrasados) > 0 || (renov !== null && renov <= DIAS_AVISO_RENOVACAO)) && (
-                        <p className="mt-1.5 text-[11px] text-danger">
-                          {Number(c.itens_atrasados) > 0 && `${Number(c.itens_atrasados)} atrasado(s)`}
-                          {Number(c.itens_atrasados) > 0 && renov !== null && renov <= DIAS_AVISO_RENOVACAO && ' · '}
-                          {renov !== null && renov <= DIAS_AVISO_RENOVACAO &&
-                            (renov < 0 ? `renovação venceu há ${Math.abs(renov)}d` : `renova em ${renov}d`)}
-                        </p>
-                      )}
-
-                      {/* Alternativa ao arrastar, pra tela de toque. Mesma confirmação. */}
+                {doGrupo.map((item) => (
+                  <CartaoCliente
+                    key={item.cliente.id}
+                    item={item}
+                    esmaecido={arrastando === item.cliente.id}
+                    onAbrir={onAbrir}
+                    arrastavel
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', item.cliente.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                      setArrastando(item.cliente.id)
+                    }}
+                    onDragEnd={() => {
+                      setArrastando(null)
+                      setSobre(null)
+                    }}
+                    rodape={
+                      // Alternativa ao arrastar, pra tela de toque. Mesma confirmação.
                       <select
                         value=""
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => {
-                          if (e.target.value) onMover(c, e.target.value)
+                          if (e.target.value) onMover(item.cliente, e.target.value)
                         }}
                         className="mt-2 h-6 w-full rounded border border-line bg-transparent px-1 text-[11px] text-foreground/45 outline-none focus:border-accent/60"
                         aria-label="Mover pra outra etapa"
@@ -200,9 +232,9 @@ export function KanbanClientes({
                             </option>
                           ))}
                       </select>
-                    </article>
-                  )
-                })}
+                    }
+                  />
+                ))}
               </div>
             </section>
           )
@@ -215,6 +247,108 @@ export function KanbanClientes({
           {sem.map((x) => x.cliente.nome_empresa).join(', ')} — aparecem na tabela.
         </p>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Visão por situação do mês
+// ---------------------------------------------------------------------------------------------------
+
+const COLUNAS_SITUACAO: { id: SituacaoDoMes; nome: string; ajuda: string; tom: string }[] = [
+  { id: 'sem_lancamento', nome: 'Sem lançamento', ajuda: 'nenhuma métrica lançada', tom: 'border-t-danger/60' },
+  { id: 'lancado', nome: 'Lançado', ajuda: 'números no lugar, falta o relatório', tom: 'border-t-warning/60' },
+  { id: 'rascunho', nome: 'Relatório em rascunho', ajuda: 'escrito, ainda não publicado', tom: 'border-t-accent/60' },
+  { id: 'publicado', nome: 'Publicado', ajuda: 'o cliente já pode ler', tom: 'border-t-success/60' },
+]
+
+/**
+ * Kanban por situação do mês: sem lançamento → lançado → relatório em rascunho → publicado.
+ *
+ * É SÓ LEITURA, de propósito: a situação é calculada (do que está lançado e publicado), não
+ * escolhida. Arrastar um card pra "Publicado" não publicaria nada, só mentiria. Pra avançar, o card
+ * abre o cliente, e a coluna "Sem lançamento" tem o atalho pra grade de lançamento.
+ */
+export function KanbanSituacao({
+  itens,
+  periodo,
+  carregando,
+  onPeriodo,
+  onAbrir,
+  onLancar,
+}: {
+  itens: Item[]
+  periodo: string
+  carregando: boolean
+  onPeriodo: (p: string) => void
+  onAbrir: (id: string) => void
+  onLancar: (periodo: string) => void
+}) {
+  const porColuna = new Map<SituacaoDoMes, Item[]>()
+  for (const col of COLUNAS_SITUACAO) porColuna.set(col.id, [])
+  for (const item of itens) porColuna.get(situacaoDoMes(item.cliente))!.push(item)
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" size="sm" onClick={() => onPeriodo(somarMeses(periodo, -1))} aria-label="Mês anterior">
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="min-w-[160px] text-center text-sm font-semibold text-foreground">
+          {mesPorExtenso(periodo)}
+        </span>
+        <Button variant="ghost" size="sm" onClick={() => onPeriodo(somarMeses(periodo, 1))} aria-label="Próximo mês">
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+        <span className="ml-2 text-xs text-foreground/45">
+          {carregando ? 'carregando…' : 'situação calculada do que está lançado e publicado'}
+        </span>
+      </div>
+
+      <div className="-mx-4 overflow-x-auto px-4 pb-2 lg:-mx-6 lg:px-6">
+        <div className="flex gap-3">
+          {COLUNAS_SITUACAO.map((col) => {
+            const doGrupo = porColuna.get(col.id) ?? []
+            return (
+              <section
+                key={col.id}
+                className={cn(
+                  'flex w-[270px] shrink-0 flex-col rounded-xl border border-t-2 border-line bg-elevate/[0.02]',
+                  col.tom,
+                  carregando && 'opacity-60',
+                )}
+              >
+                <header className="border-b border-line px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="truncate text-sm font-semibold text-foreground">{col.nome}</h3>
+                    <span className="rounded-full bg-elevate/[0.06] px-2 text-xs tabular-nums text-foreground/55">
+                      {doGrupo.length}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-foreground/40">{col.ajuda}</p>
+                  {col.id === 'sem_lancamento' && doGrupo.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onLancar(periodo)}
+                      className="mt-1 text-xs font-medium text-accent hover:underline"
+                    >
+                      lançar o mês →
+                    </button>
+                  )}
+                </header>
+                <div className="flex min-h-[120px] flex-col gap-2 p-2">
+                  {doGrupo.length === 0 && (
+                    <p className="px-1 py-4 text-center text-xs text-foreground/30">nenhum cliente</p>
+                  )}
+                  {doGrupo.map((item) => (
+                    <CartaoCliente key={item.cliente.id} item={item} onAbrir={onAbrir} />
+                  ))}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }

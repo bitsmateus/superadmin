@@ -10,7 +10,9 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Tabs } from '@/components/ui/Tabs'
 import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
-import { KanbanClientes, type ColunaKanban } from '@/components/gestaoClientes/KanbanClientes'
+import {
+  KanbanClientes, KanbanSituacao, type ColunaKanban,
+} from '@/components/gestaoClientes/KanbanClientes'
 import { ModalMoverEtapa } from '@/components/gestaoClientes/ModalMoverEtapa'
 import { FaixaLancamento } from '@/components/gestaoClientes/FaixaLancamento'
 import { useLancamentoPendente } from '@/hooks/useLancamentoPendente'
@@ -84,6 +86,18 @@ function haQuantoTempo(iso: string | null): string {
 
 type Visao = 'tabela' | 'kanban'
 const CHAVE_VISAO = 'gc:clientes:visao'
+
+/** O que o Kanban agrupa: as etapas da jornada ou a situação do mês (lançado, relatório...). */
+type Agrupamento = 'etapa' | 'situacao'
+const CHAVE_AGRUPAMENTO = 'gc:clientes:kanban-agrupamento'
+
+function lerAgrupamento(): Agrupamento {
+  try {
+    return window.localStorage.getItem(CHAVE_AGRUPAMENTO) === 'situacao' ? 'situacao' : 'etapa'
+  } catch {
+    return 'etapa'
+  }
+}
 
 function lerVisao(): Visao {
   try {
@@ -184,6 +198,12 @@ export function ClientesNxDigitalPage() {
   const [modalAberto, setModalAberto] = React.useState(false)
   const pendencia = useLancamentoPendente()
   const [visao, setVisao] = React.useState<Visao>(lerVisao)
+  const [agrupamento, setAgrupamento] = React.useState<Agrupamento>(lerAgrupamento)
+  // A visão por situação tem o próprio mês e a própria carga: a lista principal é do mês corrente, e
+  // navegar pra setembro aqui não pode bagunçar os indicadores e o semáforo da tela inteira.
+  const [periodoSituacao, setPeriodoSituacao] = React.useState(mesAtual())
+  const [clientesSituacao, setClientesSituacao] = React.useState<GcClienteLista[]>([])
+  const [carregandoSituacao, setCarregandoSituacao] = React.useState(false)
   const [colunas, setColunas] = React.useState<ColunaKanban[]>([])
   const [mover, setMover] = React.useState<{
     cliente: GcClienteLista
@@ -228,6 +248,33 @@ export function ClientesNxDigitalPage() {
       })
   }, [])
 
+  React.useEffect(() => {
+    if (visao !== 'kanban' || agrupamento !== 'situacao') return
+    let cancelado = false
+    setCarregandoSituacao(true)
+    gestaoClientes
+      .listar(periodoSituacao)
+      .then((lista) => {
+        if (!cancelado) setClientesSituacao(lista)
+      })
+      .catch((err: Error) => toast.error('Falha ao carregar a situação do mês: ' + err.message))
+      .finally(() => {
+        if (!cancelado) setCarregandoSituacao(false)
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [visao, agrupamento, periodoSituacao])
+
+  const escolherAgrupamento = (a: Agrupamento) => {
+    setAgrupamento(a)
+    try {
+      window.localStorage.setItem(CHAVE_AGRUPAMENTO, a)
+    } catch {
+      /* sem armazenamento: vale até recarregar */
+    }
+  }
+
   const escolherVisao = (v: Visao) => {
     setVisao(v)
     try {
@@ -271,7 +318,9 @@ export function ClientesNxDigitalPage() {
   )
 
   const termo = busca.trim().toLowerCase()
-  const visiveis = comSaude.filter(({ cliente: c, saude }) => {
+  // Mesmo filtro e mesma ordem pra tabela, pro Kanban por etapa e pro Kanban por situação: três
+  // telas que filtram de um jeito cada uma é como a pessoa acha que um cliente "sumiu".
+  const passaNoFiltro = ({ cliente: c, saude }: { cliente: GcClienteLista; saude: Saude }) => {
     if (aba !== 'todos' && c.status !== aba) return false
     if (soProblemas && saude.nivel !== 'risco' && saude.nivel !== 'atencao') return false
     if (!termo) return true
@@ -281,14 +330,26 @@ export function ClientesNxDigitalPage() {
         (v ?? '').toLowerCase().includes(termo),
       ) || (digitos.length >= 3 && (c.cnpj ?? '').replace(/\D/g, '').includes(digitos))
     )
-  })
-
-  const ordenados = [...visiveis].sort(
+  }
+  const comparador =
     ordem === 'fila'
       ? compararPorPrioridade
       : ordem === 'gravidade'
         ? compararPorGravidade
-        : (a, b) => a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa),
+        : (a: { cliente: GcClienteLista }, b: { cliente: GcClienteLista }) =>
+            a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa)
+
+  const visiveis = comSaude.filter(passaNoFiltro)
+  const ordenados = [...visiveis].sort(comparador)
+
+  const ordenadosSituacao = React.useMemo(
+    () =>
+      clientesSituacao
+        .map((c) => ({ cliente: c, saude: avaliarSaude(c) }))
+        .filter(passaNoFiltro)
+        .sort(comparador),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [clientesSituacao, aba, soProblemas, termo, ordem],
   )
 
   const contagem = (status: GcStatusCliente | 'todos') =>
@@ -424,6 +485,31 @@ export function ClientesNxDigitalPage() {
                 </button>
               ))}
             </div>
+            {visao === 'kanban' && (
+              <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="Agrupar por">
+                {(
+                  [
+                    { valor: 'etapa', rotulo: 'Por etapa' },
+                    { valor: 'situacao', rotulo: 'Situação do mês' },
+                  ] as const
+                ).map((a) => (
+                  <button
+                    key={a.valor}
+                    type="button"
+                    onClick={() => escolherAgrupamento(a.valor)}
+                    aria-pressed={agrupamento === a.valor}
+                    className={cn(
+                      'h-9 px-2.5 text-xs transition-colors',
+                      agrupamento === a.valor
+                        ? 'bg-elevate/[0.08] text-foreground'
+                        : 'text-foreground/50 hover:text-foreground/80',
+                    )}
+                  >
+                    {a.rotulo}
+                  </button>
+                ))}
+              </div>
+            )}
             <label className="flex items-center gap-1.5 text-xs text-foreground/50">
               <ArrowUpDown className="h-3.5 w-3.5" />
               <select
@@ -468,6 +554,15 @@ export function ClientesNxDigitalPage() {
                 </Button>
               ) : undefined
             }
+          />
+        ) : visao === 'kanban' && agrupamento === 'situacao' ? (
+          <KanbanSituacao
+            itens={ordenadosSituacao}
+            periodo={periodoSituacao}
+            carregando={carregandoSituacao}
+            onPeriodo={setPeriodoSituacao}
+            onAbrir={(id) => navegar(`/clientesnxdigital/clientes/${id}`)}
+            onLancar={(p) => navegar(`/clientesnxdigital/trafego?lancar=${p}`)}
           />
         ) : visao === 'kanban' ? (
           <KanbanClientes

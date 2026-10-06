@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import crypto from 'node:crypto';
 import { query, queryOne, withTransaction } from '../db.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
@@ -227,8 +227,37 @@ function mesesDeReferencia(periodo?: string): [string, string] {
   return [`${mes}-01`, `${anterior}-01`];
 }
 
+/**
+ * Usuário com acesso restrito só entra no módulo se a chave "nxdigital" estiver liberada pra ele
+ * (Equipe → Permissões). Esconder o menu não basta: sem esta checagem, quem conhece a URL da API
+ * leria os clientes de tráfego mesmo sem ver o item no menu.
+ */
+async function podeUsarModulo(userId: string, role: string): Promise<boolean> {
+  if (role === 'admin') return true;
+  const perfil = await queryOne<{ restrict_access: boolean }>(
+    'SELECT restrict_access FROM profiles WHERE id = $1',
+    [userId]
+  );
+  if (!perfil?.restrict_access) return true;
+  const chave = await queryOne(
+    `SELECT 1 FROM user_menu_access WHERE user_id = $1 AND menu_key = 'nxdigital'`,
+    [userId]
+  );
+  return !!chave;
+}
+
 export async function gestaoClientesRoutes(app: FastifyInstance) {
-  const autenticado = { onRequest: [app.authenticate] };
+  const autenticado = {
+    onRequest: [
+      app.authenticate,
+      async (req: FastifyRequest, reply: FastifyReply) => {
+        const { sub, role } = req.user as { sub: string; role: string };
+        if (!(await podeUsarModulo(sub, role))) {
+          return reply.status(403).send({ message: 'Sem acesso ao módulo NX DIGITAL' });
+        }
+      },
+    ],
+  };
 
   // ------------------------------------------------------------------ modelos
   // GET /api/gc/modelos — jornada padrão e estratégias prontas, pra montar os seletores da tela.

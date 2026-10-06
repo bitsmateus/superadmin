@@ -664,8 +664,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         </>
         )}
 
-        {/* Clientes NX Digital — grupo próprio, com a sub-aba Clientes */}
-        {canSee('/comercial') && (
+        {/* NX DIGITAL — grupo próprio (Clientes, Tráfego, Estratégias), com chave de acesso própria */}
+        {canSee('/clientesnxdigital') && (
         <>
         <button
           type="button"

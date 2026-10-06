@@ -5,7 +5,7 @@
  * Itens admin-only (Equipe, Auditoria, Conhecimento) ou de financeiro (Comando, Financeiro,
  * Performance) ficam de fora — esses já têm gate próprio por papel, não precisam entrar aqui.
  */
-export type MenuAccessGroup = 'comercial' | 'suporte'
+export type MenuAccessGroup = 'comercial' | 'suporte' | 'nxdigital'
 
 export interface MenuAccessItem {
   key: string
@@ -17,6 +17,7 @@ export interface MenuAccessItem {
 export const MENU_ACCESS_GROUP_LABEL: Record<MenuAccessGroup, string> = {
   comercial: 'Comercial',
   suporte: 'Suporte',
+  nxdigital: 'NX DIGITAL',
 }
 
 // O Comercial NÃO tem um item aqui — cada aba (Novos Leads, CRM NX Luis, CRM NX Arthur, Vendas,
@@ -37,6 +38,14 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   { key: 'arquivados', label: 'Clientes arquivados', path: '/arquivados', group: 'suporte' },
   { key: 'tickets', label: 'Tickets', path: '/tickets', group: 'suporte' },
   { key: 'templates', label: 'Templates', path: '/templates', group: 'suporte' },
+  // Grupo NX DIGITAL (gestão dos clientes de tráfego): uma chave só pras três telas — Clientes,
+  // Tráfego e Estratégias. É o que o gestor de tráfego precisa e nada além disso.
+  {
+    key: 'nxdigital',
+    label: 'NX DIGITAL — Clientes, Tráfego e Estratégias',
+    path: '/clientesnxdigital',
+    group: 'nxdigital',
+  },
 ]
 
 export const MENU_KEY_BY_PATH: Record<string, string> = Object.fromEntries(

@@ -695,8 +695,8 @@ function EditUserModal({
                   togglePageId={togglePageId}
                 />
 
-                {(() => {
-                  const groupItems = MENU_ACCESS_ITEMS.filter((item) => item.group === 'suporte')
+                {(['suporte', 'nxdigital'] as const).map((grupo) => {
+                  const groupItems = MENU_ACCESS_ITEMS.filter((item) => item.group === grupo)
                   const allChecked = groupItems.every((item) => menuKeys.has(item.key))
                   const toggleGroup = () => {
                     setMenuKeys((prev) => {
@@ -709,7 +709,7 @@ function EditUserModal({
                     })
                   }
                   return (
-                    <div>
+                    <div key={grupo}>
                       <label className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-foreground/40">
                         <input
                           type="checkbox"
@@ -717,7 +717,7 @@ function EditUserModal({
                           onChange={toggleGroup}
                           className="h-3 w-3 rounded border-line"
                         />
-                        {MENU_ACCESS_GROUP_LABEL.suporte}
+                        {MENU_ACCESS_GROUP_LABEL[grupo]}
                         <span className="font-normal normal-case text-foreground/30">— marcar todos</span>
                       </label>
                       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
@@ -737,7 +737,7 @@ function EditUserModal({
                       </div>
                     </div>
                   )
-                })()}
+                })}
               </div>
             )}
             <p className="mt-2 text-[10.5px] leading-relaxed text-foreground/45">

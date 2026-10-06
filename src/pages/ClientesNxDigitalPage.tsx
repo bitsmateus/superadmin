@@ -26,6 +26,7 @@ import {
   type Saude,
 } from '@/lib/gcSaude'
 import { formatarMetrica, mesPorExtenso, mesAtual } from '@/lib/gcMetricas'
+import { gravarVisitados, proximoSemData, semDataDeRenovacao } from '@/lib/gcFilaRenovacao'
 import { cn } from '@/lib/utils'
 
 const ABAS: { value: GcStatusCliente | 'todos'; label: string }[] = [
@@ -387,6 +388,13 @@ export function ClientesNxDigitalPage() {
     ({ cliente }) => Object.keys(cliente.metricas_mes ?? {}).length === 0,
   ).length
   const semNota = ativos.filter(({ cliente }) => !cliente.avaliacao).length
+  const clientesSemData = ativos.map(({ cliente }) => cliente).filter(semDataDeRenovacao)
+  const completarRenovacoes = () => {
+    // Começa uma rodada nova: a fila abre o primeiro e o detalhe vai passando pro próximo.
+    gravarVisitados([])
+    const primeiro = proximoSemData(clientesSemData, [])
+    if (primeiro) navegar(`/clientesnxdigital/clientes/${primeiro.id}?completar=renovacao`)
+  }
   const altaPrioridade = ativos.filter(({ cliente }) => cliente.prioridade === 'alta').length
   const investimentoDoMes = ativos.reduce(
     (soma, { cliente }) => soma + Number(cliente.metricas_mes?.investimento ?? 0),
@@ -415,6 +423,21 @@ export function ClientesNxDigitalPage() {
           pendencia={pendencia}
           onLancar={(p) => navegar(`/clientesnxdigital/trafego?lancar=${p}`)}
         />
+
+        {/* Um aviso só, em vez de repetir "sem data de renovação" em cada linha. */}
+        {!carregando && clientesSemData.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning/[0.06] px-4 py-3">
+            <p className="text-sm text-foreground/85">
+              <strong>
+                {clientesSemData.length} {clientesSemData.length === 1 ? 'cliente' : 'clientes'} sem data de renovação
+              </strong>
+              <span className="text-foreground/55"> — sem ela ninguém é avisado do fim do contrato.</span>
+            </p>
+            <Button size="sm" onClick={completarRenovacoes}>
+              Completar agora
+            </Button>
+          </div>
+        )}
 
         {!carregando && clientes.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -703,9 +726,12 @@ function LinhaCliente({
   // O pior sinal explica a pastilha: "Risco" sozinho não diz o que foi, e é isso que faz a pessoa
   // abrir o cliente certo em vez de abrir todos.
   const ordem = ['risco', 'atencao', 'neutro', 'bom', 'otimo']
-  const pior = [...saude.sinais].sort(
-    (a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado),
-  )[0]
+  // "Sem data de renovação" tem aviso próprio acima da tabela: na linha só aparece quando é o ÚNICO
+  // motivo, senão o motivo de cada cliente fica escondido atrás de um texto igual em todos.
+  const porGravidade = [...saude.sinais].sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado))
+  const pior =
+    porGravidade.find((x) => x.chave !== 'renovacao_sem_data' && (x.estado === 'risco' || x.estado === 'atencao')) ??
+    porGravidade[0]
 
   return (
     <tr

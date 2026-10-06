@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Loader2, MessageSquare, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
@@ -15,6 +15,7 @@ import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 import type { Destino } from '@/lib/gcSaude'
+import { gravarVisitados, lerVisitados, proximoSemData, semDataDeRenovacao } from '@/lib/gcFilaRenovacao'
 
 type Aba = 'visao' | 'jornada' | 'metricas' | 'estrategias' | 'relatorios' | 'notas'
 
@@ -37,6 +38,11 @@ export function ClienteNxDetalhePage() {
   // Sobe a cada pedido pra abrir o planejamento (vindo da Visão geral ou do semáforo).
   const [pedidoPlanejamento, setPedidoPlanejamento] = React.useState(0)
   const [excluindo, setExcluindo] = React.useState(false)
+  // Fila "Completar agora" das datas de renovação (vem da lista de clientes).
+  const [params] = useSearchParams()
+  const naFila = params.get('completar') === 'renovacao'
+  const [restantes, setRestantes] = React.useState<number | null>(null)
+  const [indoProximo, setIndoProximo] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
     try {
@@ -51,6 +57,44 @@ export function ClienteNxDetalhePage() {
   React.useEffect(() => {
     void carregar()
   }, [carregar])
+
+  // Na fila: marca este cliente como visto, conta quantos faltam e leva pro bloco de serviços.
+  React.useEffect(() => {
+    if (!naFila || !detalhe) return
+    const visitados = Array.from(new Set([...lerVisitados(), id]))
+    gravarVisitados(visitados)
+    let cancelado = false
+    gestaoClientes
+      .listar()
+      .then((lista) => {
+        if (!cancelado) setRestantes(lista.filter((c) => semDataDeRenovacao(c) && c.id !== id && !visitados.includes(c.id)).length)
+      })
+      .catch(() => undefined)
+    setAba('visao')
+    const t = window.setTimeout(() => irPara('servicos'), 250)
+    return () => {
+      cancelado = true
+      window.clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [naFila, id, detalhe?.cliente.id])
+
+  const irParaProximo = async () => {
+    setIndoProximo(true)
+    try {
+      const proximo = proximoSemData(await gestaoClientes.listar(), lerVisitados(), id)
+      if (!proximo) {
+        toast.success('Todos os clientes já têm data de renovação (ou foram vistos)')
+        navegar('/clientesnxdigital/clientes')
+        return
+      }
+      navegar(`/clientesnxdigital/clientes/${proximo.id}?completar=renovacao`)
+    } catch (err) {
+      toast.error('Falha ao buscar o próximo: ' + (err as Error).message)
+    } finally {
+      setIndoProximo(false)
+    }
+  }
 
   /**
    * Leva pro lugar onde o sinal do semáforo se resolve. Os que moram na própria Visão geral
@@ -157,6 +201,20 @@ export function ClienteNxDetalhePage() {
         >
           <ArrowLeft className="h-4 w-4" /> Voltar para a lista
         </button>
+
+        {naFila && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/[0.05] px-4 py-3">
+            <p className="text-sm text-foreground/85">
+              <strong>Completando datas de renovação.</strong>{' '}
+              <span className="text-foreground/60">
+                Informe a data no bloco de serviços{restantes !== null ? ` · faltam ${restantes} cliente(s) depois deste` : ''}.
+              </span>
+            </p>
+            <Button size="sm" loading={indoProximo} onClick={() => void irParaProximo()}>
+              Próximo cliente sem data
+            </Button>
+          </div>
+        )}
 
         {carregando ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-foreground/60">

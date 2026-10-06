@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useModuloNxNoCelular } from '@/hooks/useModuloNxNoCelular'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Loader2, MessageSquare, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -29,6 +30,7 @@ type Aba = 'visao' | 'jornada' | 'metricas' | 'planejamento' | 'estrategias' | '
  * servidor, então o estado que vale é sempre o que ele devolveu — não o que a tela adivinhou.
  */
 export function ClienteNxDetalhePage() {
+  useModuloNxNoCelular()
   const { id = '' } = useParams<{ id: string }>()
   const navegar = useNavigate()
   const [detalhe, setDetalhe] = React.useState<GcClienteDetalhe | null>(null)

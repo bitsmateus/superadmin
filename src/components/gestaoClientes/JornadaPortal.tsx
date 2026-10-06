@@ -77,7 +77,7 @@ export function JornadaPortal({ jornada }: { jornada: GcJornadaPortal }) {
             </p>
           )}
           {pontoA.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5">
               {pontoA.map((p) => (
                 <div key={p.rotulo} className="rounded-xl border border-line px-3 py-2.5">
                   <p className="text-[11px] uppercase tracking-wide text-foreground/45">{p.rotulo}</p>
@@ -105,7 +105,7 @@ export function JornadaPortal({ jornada }: { jornada: GcJornadaPortal }) {
                 <div key={h.valor} className="rounded-xl border border-line p-3">
                   <p className="mb-1.5 text-sm font-semibold text-foreground">Em {h.label}</p>
                   {c.objetivo && <p className="mb-2 whitespace-pre-wrap text-sm text-foreground/80">{c.objetivo}</p>}
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  <dl className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
                     {metas.map((k) => (
                       <div key={k.chave} className="flex items-baseline justify-between gap-2 border-b border-line/60 py-1">
                         <dt className="text-xs text-foreground/55">{k.chave === 'receita' ? 'Faturamento' : k.label}</dt>

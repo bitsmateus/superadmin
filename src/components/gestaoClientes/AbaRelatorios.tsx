@@ -297,7 +297,7 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
           </p>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           {[...METRICAS_LANCADAS, ...METRICAS_DERIVADAS].map((m) => (
             <div key={m.chave} className="rounded-lg border border-line px-3 py-2">
               <p className="text-xs uppercase tracking-wide text-foreground/45">{m.label}</p>

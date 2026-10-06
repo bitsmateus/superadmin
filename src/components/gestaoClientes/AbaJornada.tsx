@@ -157,10 +157,10 @@ export function AbaJornada({
             <button
               type="button"
               onClick={() => setAbertas((a) => ({ ...a, [etapa.id]: !aberta }))}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elevate/[0.02]"
+              className="flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 text-left transition-colors hover:bg-elevate/[0.02] sm:flex-nowrap"
             >
               <IconeEtapa status={etapa.status} atrasada={etapaAtrasada} />
-              <span className="min-w-0 flex-1">
+              <span className="min-w-0 flex-1 basis-0">
                 <span className="block truncate font-medium text-foreground">{etapa.nome}</span>
                 <span className="block text-xs text-foreground/50">
                   {etapa.itens.length > 0 ? `${feitos} de ${etapa.itens.length} itens` : 'sem checklist'}
@@ -175,18 +175,19 @@ export function AbaJornada({
                       : ''}
                 </span>
               </span>
-              {atrasadosNaEtapa > 0 && (
-                <Badge tone="danger">{atrasadosNaEtapa} atrasado(s)</Badge>
-              )}
-              <Badge tone={TOM[etapa.status]}>
-                {etapa.status === 'concluida' && etapa.concluida_antes ? 'Concluída antes do módulo' : ROTULO[etapa.status]}
-              </Badge>
+              {/* Celular: a seta fica ao lado do nome e as pastilhas descem pra uma linha própria. */}
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 shrink-0 text-foreground/40 transition-transform',
+                  'order-2 h-4 w-4 shrink-0 text-foreground/40 transition-transform sm:order-4',
                   aberta ? '' : '-rotate-90',
                 )}
               />
+              <span className="order-3 flex w-full flex-wrap items-center gap-1.5 pl-10 sm:w-auto sm:flex-nowrap sm:pl-0">
+                {atrasadosNaEtapa > 0 && <Badge tone="danger">{atrasadosNaEtapa} atrasado(s)</Badge>}
+                <Badge tone={TOM[etapa.status]}>
+                  {etapa.status === 'concluida' && etapa.concluida_antes ? 'Concluída antes do módulo' : ROTULO[etapa.status]}
+                </Badge>
+              </span>
             </button>
 
             {aberta && (

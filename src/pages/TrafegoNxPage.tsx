@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useModuloNxNoCelular } from '@/hooks/useModuloNxNoCelular'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BarChart3, ChevronLeft, ChevronRight, Columns3, Loader2, Pencil, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -102,6 +103,7 @@ function rascunhoInicial(linhas: GcClienteLista[]): Rascunho {
  * vez, numa transação: é o jeito de fechar o mês de 11 clientes sem abrir 11 telas.
  */
 export function TrafegoNxPage() {
+  useModuloNxNoCelular()
   const navegar = useNavigate()
   const [periodo, setPeriodo] = React.useState(mesAtual())
   const [linhas, setLinhas] = React.useState<GcClienteLista[]>([])
@@ -356,11 +358,11 @@ export function TrafegoNxPage() {
           />
         ) : (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
               {(['investimento', 'leads', 'vendas', 'receita'] as const).map((chave) => {
                 const def = TODAS_COLUNAS.find((c) => c.chave === chave)!
                 return (
-                  <div key={chave} className="rounded-xl border border-line p-4">
+                  <div key={chave} className="rounded-xl border border-line p-3 sm:p-4">
                     <p className="text-xs uppercase tracking-wide text-foreground/45">{def.label}</p>
                     <p className="mt-0.5 text-2xl font-semibold tabular-nums text-foreground">
                       {formatarMetrica(total[chave] ?? null, def.unidade)}
@@ -604,7 +606,7 @@ function Linha({
       onClick={onAbrir}
       className="cursor-pointer border-t border-line transition-colors hover:bg-elevate/[0.03]"
     >
-      <td className="sticky left-0 whitespace-nowrap bg-surface px-4 py-2.5">
+      <td className="sticky left-0 max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap bg-surface px-3 py-2.5 sm:max-w-none sm:px-4">
         <NomeDoCliente cliente={l} />
       </td>
       <td className="whitespace-nowrap px-3 py-2.5">
@@ -658,7 +660,7 @@ function LinhaEditavel({
 
   return (
     <tr className="border-t border-line">
-      <td className="sticky left-0 whitespace-nowrap bg-surface px-4 py-2">
+      <td className="sticky left-0 max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap bg-surface px-3 py-2 sm:max-w-none sm:px-4">
         <NomeDoCliente cliente={l} />
       </td>
       {colunas.map((chave) => {

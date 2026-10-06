@@ -210,7 +210,7 @@ function Relatorio({ snapshot, baixar }: { snapshot: GcSnapshot; baixar: () => P
           <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">
             Detalhamento do período
           </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
             {detalhados.map((n) => (
               <div key={n.chave} className="rounded-xl border border-line px-3 py-2.5">
                 <p className="text-[11px] uppercase tracking-wide text-foreground/45">{n.label}</p>

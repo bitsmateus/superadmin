@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useModuloNxNoCelular } from '@/hooks/useModuloNxNoCelular'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
@@ -20,6 +21,7 @@ type Aba = 'catalogo' | 'pendencias'
  * prazo e checklist; aqui fica a referência e a visão da carteira.
  */
 export function EstrategiasNxPage() {
+  useModuloNxNoCelular()
   const navegar = useNavigate()
   const [aba, setAba] = React.useState<Aba>('pendencias')
   const [clientes, setClientes] = React.useState<{ id: string; nome_empresa: string }[]>([])

@@ -274,7 +274,7 @@ export function AbaVisaoGeral({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-4">
         <PainelSaude saude={avaliarSaude(cliente)} onIr={onIr}>
           <AvaliacaoDoResultado

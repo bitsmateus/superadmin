@@ -231,17 +231,17 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-line px-4 py-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-xl border border-line px-3 py-2.5 sm:px-4 sm:py-3">
           <p className="text-xs uppercase tracking-wide text-foreground/45">Em aberto</p>
           <p className="text-2xl font-semibold tabular-nums text-foreground">{itens.length}</p>
-          <p className="text-xs text-foreground/45">em {clientes.length} cliente(s)</p>
+          <p className="hidden text-xs text-foreground/45 sm:block">em {clientes.length} cliente(s)</p>
         </div>
         <button
           type="button"
           onClick={() => setSoAtrasados((v) => !v)}
           className={cn(
-            'rounded-xl border px-4 py-3 text-left transition-colors',
+            'rounded-xl border px-3 py-2.5 text-left transition-colors sm:px-4 sm:py-3',
             soAtrasados ? 'border-danger/50 bg-danger/[0.05]' : 'border-line hover:border-foreground/20',
           )}
         >
@@ -249,14 +249,14 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
           <p className={cn('text-2xl font-semibold tabular-nums', atrasados > 0 ? 'text-danger' : 'text-foreground')}>
             {atrasados}
           </p>
-          <p className="text-xs text-foreground/45">{soAtrasados ? 'mostrando só elas' : 'clique pra filtrar'}</p>
+          <p className="hidden text-xs text-foreground/45 sm:block">{soAtrasados ? 'mostrando só elas' : 'clique pra filtrar'}</p>
         </button>
-        <div className="rounded-xl border border-line px-4 py-3">
+        <div className="rounded-xl border border-line px-3 py-2.5 sm:px-4 sm:py-3">
           <p className="text-xs uppercase tracking-wide text-foreground/45">Sem prazo</p>
           <p className="text-2xl font-semibold tabular-nums text-foreground">
             {itens.filter((i) => !i.prazo).length}
           </p>
-          <p className="text-xs text-foreground/45">defina um prazo pra elas poderem atrasar</p>
+          <p className="hidden text-xs text-foreground/45 sm:block">defina um prazo pra elas poderem atrasar</p>
         </div>
       </div>
 
@@ -327,7 +327,7 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
             const fechado = fechados.has(g.id)
             return (
               <section key={g.id} className="overflow-hidden rounded-xl border border-line">
-                <header className="flex items-center gap-3 bg-elevate/[0.02] px-4 py-2.5">
+                <header className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-elevate/[0.02] px-4 py-2.5">
                   <button
                     type="button"
                     onClick={() =>
@@ -338,12 +338,12 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
                         return novo
                       })
                     }
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    className="flex min-w-0 flex-1 basis-[60%] flex-wrap items-center gap-x-2 gap-y-0.5 text-left"
                   >
                     <ChevronDown
                       className={cn('h-4 w-4 shrink-0 text-foreground/40 transition-transform', fechado && '-rotate-90')}
                     />
-                    <span className="truncate text-sm font-semibold text-foreground">{g.nome}</span>
+                    <span className="max-w-full truncate text-sm font-semibold text-foreground">{g.nome}</span>
                     <span className="text-xs text-foreground/45">{g.itens.length} em aberto</span>
                     {atrasoDoGrupo > 0 && <Badge tone="danger">{atrasoDoGrupo} atrasada(s)</Badge>}
                   </button>

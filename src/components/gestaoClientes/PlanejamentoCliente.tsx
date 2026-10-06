@@ -529,7 +529,9 @@ export function PlanejamentoCliente({
       else if (h === '12_meses') alvo = `6_meses-${total - 1}`
     }
     if (!alvo) return
-    const proximo = document.querySelector<HTMLInputElement>(`[data-plano="${alvo}"]`)
+    // No celular a grade vira cartões (outros campos, mesmos dados): procura entre os que estão à vista.
+    const prefixo = window.matchMedia('(min-width: 640px)').matches ? '' : 'm-'
+    const proximo = document.querySelector<HTMLInputElement>(`[data-plano="${prefixo}${alvo}"]`)
     if (!proximo) return
     e.preventDefault()
     proximo.focus()
@@ -585,11 +587,11 @@ export function PlanejamentoCliente({
         <div className="flex items-center gap-2">
           {sujo && <span className="text-xs text-warning">alterações não salvas</span>}
           {sujo && (
-            <Button variant="ghost" size="sm" onClick={() => api && aplicar(api)}>
+            <Button className="hidden sm:inline-flex" variant="ghost" size="sm" onClick={() => api && aplicar(api)}>
               Descartar
             </Button>
           )}
-          <Button onClick={() => void salvar()} loading={salvando} disabled={!sujo}>
+          <Button className="hidden sm:inline-flex" onClick={() => void salvar()} loading={salvando} disabled={!sujo}>
             Salvar planejamento
           </Button>
         </div>
@@ -770,7 +772,63 @@ export function PlanejamentoCliente({
             <Target className="h-4 w-4 text-accent" /> 2 · Metas de 6 e 12 meses
           </h3>
           <p className="mb-2 text-xs text-foreground/50">Preencha o que souber. CPL e ROAS são calculados.</p>
-          <div className="overflow-x-auto">
+          {/* Celular: um cartão por métrica, com as duas metas lado a lado. A tabela fica de tablet pra cima. */}
+          <div className="space-y-2 sm:hidden">
+            {[...CHAVES_DIGITADAS, ...CHAVES_CALCULADAS].map(({ chave, label }) => {
+              const indice = CHAVES_DIGITADAS.findIndex((c) => c.chave === chave)
+              const digitada = indice >= 0
+              const prefixo = PREFIXO[chave]
+              return (
+                <div key={chave} className="rounded-lg border border-line p-2.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className={cn('text-sm font-medium', digitada ? 'text-foreground/85' : 'text-foreground/45')}>{label}</span>
+                    <span className="text-xs tabular-nums text-foreground/50">Ponto A: {textoDaBase(chave, base[chave])}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {HORIZONTES_PLANO.map((h) => (
+                      <div key={h.valor} className="min-w-0">
+                        <span className="mb-1 block text-[11px] text-foreground/45">Meta {h.label}</span>
+                        <div className={cn('relative', !digitada && 'h-10 rounded-md bg-elevate/[0.04] text-foreground/45')}>
+                          {prefixo && (
+                            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-foreground/40">{prefixo}</span>
+                          )}
+                          {digitada ? (
+                            <input
+                              data-plano={`m-${h.valor}-${indice}`}
+                              aria-label={`${label}, meta de ${h.label}`}
+                              value={rascunho.cenarios[h.valor].metas[chave as ChaveDigitada]}
+                              onChange={(e) => mudarMeta(h.valor, chave as ChaveDigitada, e.target.value)}
+                              onKeyDown={(e) => aoTeclar(e, h.valor, indice)}
+                              onBlur={(e) =>
+                                mudarMeta(h.valor, chave as ChaveDigitada, mascararCampo(e.target.value, prefixo === 'R$' ? 'reais' : 'inteiro'))
+                              }
+                              onFocus={(e) => e.target.select()}
+                              inputMode="decimal"
+                              enterKeyHint="next"
+                              placeholder={prefixo === 'R$' ? '0,00' : '0'}
+                              className={cn(
+                                'h-10 w-full rounded-md border border-line bg-surface pr-2.5 text-right text-base tabular-nums text-foreground outline-none placeholder:text-foreground/10 focus:border-accent focus:ring-2 focus:ring-accent/15',
+                                prefixo ? 'pl-8' : 'pl-2.5',
+                              )}
+                            />
+                          ) : (
+                            <span className="absolute inset-y-0 right-2.5 flex items-center text-base tabular-nums">
+                              {textoCalculado(chave, plano.metas[h.valor][chave])}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 h-4">
+                          <CelulaVariacao chave={chave} valor={plano.metas[h.valor][chave]} pontoA={base[chave]} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full max-w-[760px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-foreground/45">
                 <tr>

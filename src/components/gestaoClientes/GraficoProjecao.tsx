@@ -51,10 +51,23 @@ export function GraficoProjecao({
   mostrarDesvio?: boolean
 }) {
   const unidade: GcUnidade = metricaUnidade(chave)
-  const largura = 720
-  const margemE = 62
+  // A largura do desenho acompanha a da tela: encolher um desenho de 720px pra caber no celular reduziria
+  // os rótulos a ~5px. Medido o espaço real, o texto mantém o tamanho e as margens se apertam.
+  const caixa = React.useRef<HTMLDivElement>(null)
+  const [medida, setMedida] = React.useState(720)
+  React.useEffect(() => {
+    const el = caixa.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const obs = new ResizeObserver(() => setMedida(Math.round(el.getBoundingClientRect().width) || 720))
+    obs.observe(el)
+    setMedida(Math.round(el.getBoundingClientRect().width) || 720)
+    return () => obs.disconnect()
+  }, [])
+  const largura = Math.max(280, Math.min(720, medida))
+  const estreito = largura < 520
+  const margemE = estreito ? 44 : 62
   // Folga à direita pro último rótulo de mês (centralizado no ponto) não ser cortado.
-  const margemD = 28
+  const margemD = estreito ? 20 : 28
   const alturaValor = 190
   const alturaDesvio = mostrarDesvio ? 88 : 0
   const espaco = mostrarDesvio ? 26 : 0
@@ -95,11 +108,12 @@ export function GraficoProjecao({
   })
   if (atual.length) trechosRealizado.push(atual)
 
-  const passoRotulo = n > 9 ? 2 : 1
+  // Um rótulo de mês ocupa ~46px: pula os que não cabem em vez de empilhar texto em cima de texto.
+  const passoRotulo = Math.max(1, Math.ceil(46 / ((largura - margemE - margemD) / Math.max(1, n - 1))))
   const barra = Math.max(6, Math.min(22, ((largura - margemE - margemD) / n) * 0.5))
 
   return (
-    <figure className="w-full">
+    <figure className="w-full" ref={caixa as React.Ref<HTMLElement>}>
       <div className="mb-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-foreground/65">
         <span className="flex items-center gap-1.5">
           <svg width="26" height="8" aria-hidden><line x1="1" y1="4" x2="25" y2="4" stroke="var(--viz-1)" strokeWidth="2" strokeDasharray="5 3" /></svg>

@@ -48,7 +48,7 @@ export function Modal({
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 animate-fade-in sm:p-4">
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={() => closeOnBackdrop && onClose()}
@@ -63,7 +63,7 @@ export function Modal({
         )}
       >
         {(title || description) && (
-          <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
+          <div className="flex items-start justify-between gap-4 border-b border-line px-4 py-3 sm:px-6 sm:py-4">
             <div>
               {title && (
                 <h2 className="text-base font-semibold text-foreground">{title}</h2>
@@ -82,9 +82,9 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="px-6 py-5 max-h-[70vh] overflow-y-auto">{children}</div>
+        <div className="max-h-[calc(100dvh-11rem)] overflow-y-auto px-4 py-4 sm:max-h-[70vh] sm:px-6 sm:py-5">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-line bg-elevate/[0.02] px-6 py-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-elevate/[0.02] px-4 py-3 sm:px-6">
             {footer}
           </div>
         )}

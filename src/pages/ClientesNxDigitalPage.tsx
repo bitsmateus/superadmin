@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useModuloNxNoCelular } from '@/hooks/useModuloNxNoCelular'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUpDown, KanbanSquare, Loader2, Plus, Search, ShieldAlert, Table2, Users } from 'lucide-react'
 import { toast } from 'sonner'
@@ -168,7 +169,7 @@ function Indicador({
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'rounded-xl border px-4 py-3 text-left transition-colors',
+        'rounded-xl border px-3 py-2.5 text-left transition-colors sm:px-4 sm:py-3',
         ativo ? 'border-accent/50 bg-accent/[0.05]' : 'border-line',
         onClick && !ativo && 'hover:border-foreground/20',
       )}
@@ -198,6 +199,7 @@ function Indicador({
  * do Financeiro, de propósito: aqui o que importa é a entrega, não a cobrança.
  */
 export function ClientesNxDigitalPage() {
+  useModuloNxNoCelular()
   const navegar = useNavigate()
   const [clientes, setClientes] = React.useState<GcClienteLista[]>([])
   const [carregando, setCarregando] = React.useState(true)
@@ -442,7 +444,7 @@ export function ClientesNxDigitalPage() {
         )}
 
         {!carregando && clientes.length > 0 && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
             <Indicador
               rotulo="Clientes ativos"
               valor={String(ativos.length)}

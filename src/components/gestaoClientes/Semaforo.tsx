@@ -318,7 +318,9 @@ export function PainelSaude({
             texto={
               saude.churn.nivel === 'indefinido'
                 ? 'Churn: sem dados'
-                : `Risco de churn: ${saude.churn.nivel}`
+                : `Risco de churn: ${saude.churn.nivel}${
+                    saude.churn.origem === 'acompanhamento' ? ' · falta de acompanhamento' : ''
+                  }`
             }
           />
         </div>
@@ -340,6 +342,9 @@ export function PainelSaude({
           <p className="flex items-center gap-1.5 text-xs font-medium text-danger">
             <TrendingDown className="h-3.5 w-3.5" /> O que puxa esse cliente pra saída
           </p>
+          {saude.churn.explicacao && (
+            <p className="mt-1 text-xs text-foreground/80">{saude.churn.explicacao}</p>
+          )}
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-foreground/70">
             {saude.churn.motivos.map((m, i) => (
               <li key={i}>{m}</li>

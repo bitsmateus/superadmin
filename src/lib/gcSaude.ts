@@ -38,7 +38,17 @@ export interface Saude {
   sinais: Sinal[]
   /** Quantos sinais em cada estado — usado nos contadores das telas. */
   contagem: Record<Estado, number>
-  churn: { nivel: 'baixo' | 'medio' | 'alto' | 'indefinido'; motivos: string[] }
+  churn: {
+    nivel: 'baixo' | 'medio' | 'alto' | 'indefinido'
+    motivos: string[]
+    /**
+     * De onde vem o risco, quando a nota do gestor é "Ótimo" ou "Bom": falta de ACOMPANHAMENTO
+     * (renovação, relatório, contato) ou números que destoam da nota. Null sem nota boa.
+     */
+    origem: 'acompanhamento' | 'resultado' | 'misto' | null
+    /** O texto que explica a origem, pra o selo de churn não parecer contradizer a nota. */
+    explicacao: string | null
+  }
 }
 
 /**
@@ -129,6 +139,70 @@ const ESTADO_DA_NOTA: Record<NonNullable<GcClienteLista['avaliacao']>['nivel'], 
   ruim: 'risco',
 }
 
+
+/** Sinais que dizem "ninguém está acompanhando": o risco nasce de falta de rotina, não de resultado. */
+const SINAIS_DE_ACOMPANHAMENTO: Record<string, string> = {
+  renovacao: 'renovação do contrato',
+  renovacao_sem_data: 'data de renovação não informada',
+  relatorio: 'relatório',
+  contato: 'contato com o cliente',
+}
+/** Sinais que dizem "o resultado não veio": vendas e retorno dos números lançados. */
+const SINAIS_DE_RESULTADO: Record<string, string> = { vendas: 'vendas', retorno: 'retorno (ROAS)' }
+
+/**
+ * Explica de onde vem o risco de churn quando o gestor marcou o resultado do mês como "Ótimo" ou
+ * "Bom".
+ *
+ * Sem isto o painel mostra "Risco de churn: médio" ao lado de "Resultado: Ótimo" e parece que um
+ * contradiz o outro. Não contradiz: o cliente pode estar entregando resultado e, ainda assim,
+ * estar a ponto de sair porque ninguém renovou, ninguém mandou o relatório, ninguém falou com ele.
+ * O texto separa as duas coisas. Se os NÚMEROS é que destoam da nota, ele diz isso também — aí a
+ * contradição é real e vale conferir qual dos dois está desatualizado.
+ */
+function explicarChurn(
+  sinaisDeChurn: Sinal[],
+  nota: 'otimo' | 'bom' | 'regular' | 'ruim' | null,
+): { origem: 'acompanhamento' | 'resultado' | 'misto' | null; explicacao: string | null } {
+  if ((nota !== 'otimo' && nota !== 'bom') || sinaisDeChurn.length === 0) {
+    return { origem: null, explicacao: null }
+  }
+  const acompanhamento = [
+    ...new Set(sinaisDeChurn.filter((s) => s.chave in SINAIS_DE_ACOMPANHAMENTO).map((s) => SINAIS_DE_ACOMPANHAMENTO[s.chave])),
+  ]
+  const resultado = [
+    ...new Set(sinaisDeChurn.filter((s) => s.chave in SINAIS_DE_RESULTADO).map((s) => SINAIS_DE_RESULTADO[s.chave])),
+  ]
+  const outros = sinaisDeChurn.filter(
+    (s) => !(s.chave in SINAIS_DE_ACOMPANHAMENTO) && !(s.chave in SINAIS_DE_RESULTADO),
+  )
+  const rotuloNota = nota === 'otimo' ? 'Ótimo' : 'Bom'
+  const partes: string[] = []
+
+  if (acompanhamento.length > 0) {
+    partes.push(
+      `Você avaliou o resultado do mês como "${rotuloNota}", então esse risco não vem de mau resultado: ` +
+        `vem de falta de acompanhamento (${acompanhamento.join(', ')}).`,
+    )
+  }
+  if (resultado.length > 0) {
+    partes.push(
+      `Os números do mês (${resultado.join(', ')}) estão piores do que a sua nota "${rotuloNota}" — ` +
+        `vale conferir se a nota ou os números estão desatualizados.`,
+    )
+  }
+  if (outros.length > 0) {
+    partes.push(`Também pesam: ${outros.map((s) => s.titulo.toLowerCase()).join(', ')}.`)
+  }
+
+  const origem =
+    acompanhamento.length > 0 && resultado.length > 0
+      ? ('misto' as const)
+      : resultado.length > 0
+        ? ('resultado' as const)
+        : ('acompanhamento' as const)
+  return { origem, explicacao: partes.join(' ') }
+}
 
 /**
  * Monta o semáforo de um cliente a partir da linha da lista (que já traz atrasos, último contato,
@@ -419,12 +493,14 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   // sinais abaixo dela continuam listados pra mostrar os fatos que ela está pesando.
   if (avaliacao) nivel = ESTADO_DA_NOTA[avaliacao.nivel]
 
-  const motivos = sinais
-    .filter((s) => s.pesaNoChurn && (s.estado === 'risco' || s.estado === 'atencao'))
-    .map((s) => s.detalhe)
+  const sinaisDeChurn = sinais.filter(
+    (s) => s.pesaNoChurn && (s.estado === 'risco' || s.estado === 'atencao'),
+  )
+  const motivos = sinaisDeChurn.map((s) => s.detalhe)
+  const { origem, explicacao } = explicarChurn(sinaisDeChurn, avaliacao?.nivel ?? null)
   const churn =
     semDados && !avaliacao && contagem.risco === 0
-      ? { nivel: 'indefinido' as const, motivos: [] as string[] }
+      ? { nivel: 'indefinido' as const, motivos: [] as string[], origem: null, explicacao: null }
       : {
           nivel:
             motivos.length >= 3
@@ -433,6 +509,8 @@ export function avaliarSaude(c: GcClienteLista): Saude {
                 ? ('medio' as const)
                 : ('baixo' as const),
           motivos,
+          origem,
+          explicacao,
         }
 
   return { nivel, rotulo: ROTULO_ESTADO[nivel], sinais, contagem, churn }

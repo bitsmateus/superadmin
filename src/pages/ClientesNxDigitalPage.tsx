@@ -736,7 +736,13 @@ function LinhaCliente({
           <span className="mt-1 block text-xs text-foreground/35">sem nota sua neste mês</span>
         )}
         {(saude.churn.nivel === 'medio' || saude.churn.nivel === 'alto') && (
-          <span className="mt-0.5 block text-xs text-danger/80">churn {saude.churn.nivel}</span>
+          <span
+            className="mt-0.5 block text-xs text-danger/80"
+            title={saude.churn.explicacao ?? undefined}
+          >
+            churn {saude.churn.nivel}
+            {saude.churn.origem === 'acompanhamento' ? ' · falta de acompanhamento' : ''}
+          </span>
         )}
       </td>
       <td className="hidden px-4 py-3 lg:table-cell">

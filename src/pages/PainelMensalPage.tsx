@@ -7,6 +7,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { MILESTONE_NO_SHOW, MILESTONE_VENDIDO } from '@/components/comercial/LeadDashboardView'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted } from '@/hooks/useLeadBoards'
+import { useLeadPages } from '@/hooks/useLeadPages'
 import { useLeadMilestones } from '@/hooks/useLeadMilestones'
 import { useCommercialMonths, useCommercialMonthsLoaded } from '@/hooks/useCommercialMonths'
 import { commercialMonthsService } from '@/services/commercialMonths'
@@ -151,6 +152,18 @@ export function PainelMensalPage() {
   const allRows = useAllLeadRows()
   const milestones = useLeadMilestones()
   const months = useCommercialMonths()
+  const leadPages = useLeadPages()
+
+  // "Demandas" é outro menu (pipes por cliente, não funil de vendas) — as linhas de lá não podem
+  // entrar nessa conta, senão o painel mensal do Comercial fica contaminado com entregas.
+  const comercialBoardIds = React.useMemo(() => {
+    const comercialPageIds = new Set(leadPages.filter((p) => p.section === 'comercial').map((p) => p.id))
+    return new Set(boards.filter((b) => comercialPageIds.has(b.page)).map((b) => b.id))
+  }, [leadPages, boards])
+  const comercialRows = React.useMemo(
+    () => allRows.filter((r) => comercialBoardIds.has(r.boardId)),
+    [allRows, comercialBoardIds],
+  )
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [showFunilDetalhe, setShowFunilDetalhe] = React.useState(false)
@@ -185,7 +198,7 @@ export function PainelMensalPage() {
     // o campo Agendamento está vazio (SDR não preencheu a data), cai no critério antigo (data em
     // que o status virou "Reunião agendada") — sem isso, todo lead sem essa data marcada sumia de
     // "até hoje" mesmo já tendo tido a reunião de verdade, o que fica pior do que o bug original.
-    const monthCohort = allRows.filter((r) => {
+    const monthCohort = comercialRows.filter((r) => {
       const d = diaLocal(r.createdAt)
       return d >= from && d <= to
     })

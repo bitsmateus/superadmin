@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Navigate, useLocation, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { LeadBoardsView } from '@/components/comercial/LeadBoardsView'
 import { VendasView } from '@/components/comercial/VendasView'
@@ -8,11 +8,14 @@ import { NotasView } from '@/components/comercial/NotasView'
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 
-/** Tela do Comercial pra uma aba dinâmica (Novos Leads, CRM NX Luis, CRM NX Arthur, ou qualquer
- * outra que um admin tenha criado/duplicado). Uma rota só (/comercial/:pageId) pras 3 de sempre
- * e pras novas — não são mais páginas fixas no código. */
+/** Tela do Comercial E de Demandas pra uma aba dinâmica (Novos Leads, CRM NX Luis, CRM NX
+ * Arthur, ou qualquer outra que um admin tenha criado/duplicado — ver lead_pages.section). Uma
+ * rota só por menu (/comercial/:pageId e /demandas/:pageId) — não são páginas fixas no código. */
 export function ComercialPage() {
   const { pageId } = useParams<{ pageId: string }>()
+  const location = useLocation()
+  const basePath = location.pathname.startsWith('/demandas') ? '/demandas' : '/comercial'
+  const section = basePath === '/demandas' ? 'demandas' : 'comercial'
   const booted = useLeadPagesBooted()
   const pages = useLeadPages()
   const boards = useLeadBoards()
@@ -40,9 +43,10 @@ export function ComercialPage() {
 
   const exists = pages.some((p) => p.id === pageId)
   if (!exists) {
-    // Aba não existe (ou foi arquivada) — manda pra primeira disponível.
-    const fallback = pages[0]
-    return <Navigate to={fallback ? `/comercial/${fallback.id}` : '/'} replace />
+    // Aba não existe (ou foi arquivada) — manda pra primeira disponível do MESMO menu (Comercial
+    // e Demandas compartilham essa tela, mas não as abas uma da outra).
+    const fallback = pages.find((p) => p.section === section)
+    return <Navigate to={fallback ? `${basePath}/${fallback.id}` : '/'} replace />
   }
 
   if (isVendasPage) return <VendasView pageId={pageId as string} />

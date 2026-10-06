@@ -203,6 +203,10 @@ export default function App() {
           <Route path="/comercial/vendas" element={<Navigate to="/financeiro/vendas" replace />} />
           <Route path="/comercial/contrato" element={<Navigate to="/financeiro/contrato" replace />} />
           <Route path="/comercial/:pageId" element={<ComercialPage />} />
+          {/* Demandas: mesma tela/estrutura do Comercial (lead_pages/lead_boards), outro menu —
+              cada aba é um "pipe" por cliente (ver lead_pages.section em ComercialPage.tsx). */}
+          <Route path="/demandas" element={<ComercialPage />} />
+          <Route path="/demandas/:pageId" element={<ComercialPage />} />
           <Route path="/financeiro/vendas" element={<FinanceiroVendasPage />} />
           <Route path="/financeiro/contrato" element={<FinanceiroContratoPage />} />
           {/* Gestão Interna virou parte de Vendas — mesma tela, mesmo período, só num lugar. */}

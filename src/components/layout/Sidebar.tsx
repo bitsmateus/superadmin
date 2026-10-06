@@ -21,6 +21,7 @@ import {
   LayoutDashboard,
   Lightbulb,
   LifeBuoy,
+  ListTodo,
   LogOut,
   MessageCircle,
   MessageSquare,
@@ -65,7 +66,7 @@ import type { SupportPage } from '@/services/supportPages'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import type { LeadPage } from '@/types/leadBoard'
+import type { LeadPage, LeadPageSection } from '@/types/leadBoard'
 import { ServerSwitcher } from './ServerSwitcher'
 
 // "Tarefas" (/tarefas) saiu daqui de propósito — agora só se chega lá pela aba dentro de
@@ -333,11 +334,14 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   // Suporte na frente, e era preciso fechar toda vez. Quem quiser ver o grupo clica nele, e ele
   // fica assim até mandar o contrário.
   const [comercialOpen, setComercialOpen] = useGrupoAberto('comercial')
+  const [demandasOpen, setDemandasOpen] = useGrupoAberto('demandas')
   const [financeiroOpen, setFinanceiroOpen] = useGrupoAberto('financeiro')
   const [suporteOpen, setSuporteOpen] = useGrupoAberto('suporte')
   const [clientesNxOpen, setClientesNxOpen] = useGrupoAberto('clientes-nx')
   const [newPageOpen, setNewPageOpen] = React.useState(false)
   const [pagesArchiveOpen, setPagesArchiveOpen] = React.useState(false)
+  const [newDemandaPageOpen, setNewDemandaPageOpen] = React.useState(false)
+  const [demandasArchiveOpen, setDemandasArchiveOpen] = React.useState(false)
 
   const suporte = withDuplicates(
     [
@@ -358,7 +362,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   )
   const visibleComercialItems = canSee('/comercial')
     ? leadPages
-        .filter((p) => !financeiroPageIds.has(p.id))
+        .filter((p) => p.section === 'comercial' && !financeiroPageIds.has(p.id))
         .map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact }))
     : []
   // O Dashboard Comercial entra na mesma lista dos demais — assim ele também pode ser arrastado
@@ -371,6 +375,15 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         { to: '/agenda', label: 'Agenda', icon: CalendarDays },
         ...visibleComercialItems,
       ]
+    : []
+  // Demandas: mesma infra de lead_pages/lead_boards do Comercial (ver lead_pages.section), só num
+  // menu lateral separado — cada aba é um "pipe" de entregas por cliente, não um funil de vendas.
+  // Reaproveita a mesma trava de acesso do Comercial (canSee('/comercial')) de propósito: ainda
+  // não existe uma chave de permissão própria pra Demandas.
+  const demandasItems = canSee('/comercial')
+    ? leadPages
+        .filter((p) => p.section === 'demandas')
+        .map((p) => ({ to: `/demandas/${p.id}`, label: p.name, icon: ListTodo }))
     : []
   const hasVendasBoard = leadBoards.some((b) => b.isVendas)
   const hasContratoBoard = leadBoards.some((b) => b.isContrato)
@@ -385,6 +398,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   // Cada grupo já sai na ordem que ESSA pessoa montou arrastando (ver useMenuArrastavel).
   const suporteOrdenado = ordenar('suporte', suporte)
   const comercialOrdenado = ordenar('comercial', comercialItems)
+  const demandasOrdenado = ordenar('demandas', demandasItems)
   const financeiroOrdenado = ordenar('financeiro', visibleFinanceiroItems)
 
   // Numa cópia a URL é /visao/<id>, que não diz nada sobre qual grupo do menu destacar/abrir —
@@ -444,11 +458,12 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     () => [
       ...suporteOrdenado,
       ...comercialOrdenado,
+      ...demandasOrdenado,
       ...financeiroOrdenado,
       ...secundariosOrdenados,
       ...arquivadosOrdenados,
     ],
-    [suporteOrdenado, comercialOrdenado, financeiroOrdenado, secundariosOrdenados, arquivadosOrdenados],
+    [suporteOrdenado, comercialOrdenado, demandasOrdenado, financeiroOrdenado, secundariosOrdenados, arquivadosOrdenados],
   )
   const pinnedKeys = profile?.pinnedMenu ?? []
   const pinnedItems = React.useMemo(
@@ -696,6 +711,106 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                 </NavLink>
               )
             })}
+          </>
+        )}
+        </>
+        )}
+
+        {/* Demandas — pipes/quadros por cliente, mesma infra do Comercial (lead_pages.section) */}
+        {(demandasItems.length > 0 || isAdmin) && canSee('/comercial') && (
+        <>
+        <button
+          type="button"
+          onClick={() => setDemandasOpen((o) => !o)}
+          className={cn(
+            'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+            location.pathname.startsWith('/demandas')
+              ? 'text-foreground'
+              : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
+          )}
+        >
+          <ListTodo
+            className={cn(
+              'h-4 w-4 shrink-0',
+              location.pathname.startsWith('/demandas')
+                ? 'text-accent'
+                : 'text-foreground/50 group-hover:text-foreground/75',
+            )}
+          />
+          <span>Demandas</span>
+          {isAdmin && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setNewDemandaPageOpen(true) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setNewDemandaPageOpen(true) } }}
+              title="Nova aba"
+              className="ml-auto grid h-5 w-5 shrink-0 place-items-center rounded text-foreground/35 hover:bg-elevate/[0.06] hover:text-foreground/70"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </span>
+          )}
+          <ChevronDown
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 transition-transform',
+              demandasOpen ? '' : '-rotate-90',
+              isAdmin ? '' : 'ml-auto',
+            )}
+          />
+        </button>
+        {demandasOpen && (
+          <>
+            {demandasOrdenado.map((item) => {
+              const { to, label, icon: Icon } = item
+              const drag = arrastar('demandas', demandasOrdenado, item)
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={closeOnMobile}
+                  {...drag.handlers}
+                  className={({ isActive }) =>
+                    cn(
+                      'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                      isActive
+                        ? 'bg-elevate/[0.05] text-foreground'
+                        : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                      drag.classe,
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon
+                        className={cn(
+                          'h-4 w-4 shrink-0',
+                          isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                        )}
+                      />
+                      <span className="truncate">{label}</span>
+                      <PinToggle
+                        pinned={isPinned(chaveDoItem(item))}
+                        onToggle={() => togglePin(chaveDoItem(item))}
+                        className="ml-auto"
+                      />
+                    </>
+                  )}
+                </NavLink>
+              )
+            })}
+            {demandasItems.length === 0 && (
+              <p className="px-3 py-2 pl-5 text-xs text-foreground/35">Nenhuma aba ainda — use o + pra criar.</p>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setDemandasArchiveOpen(true)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm text-foreground/45 transition-colors hover:bg-elevate/[0.03] hover:text-foreground/80"
+              >
+                <Archive className="h-4 w-4 shrink-0 text-foreground/40" />
+                <span>Abas arquivadas</span>
+              </button>
+            )}
           </>
         )}
         </>
@@ -1020,7 +1135,14 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         onClose={() => setNewPageOpen(false)}
         onCreated={(id) => { navigate(`/comercial/${id}`); closeOnMobile() }}
       />
-      <ArchivedComercialPagesModal open={pagesArchiveOpen} onClose={() => setPagesArchiveOpen(false)} />
+      <ArchivedComercialPagesModal open={pagesArchiveOpen} onClose={() => setPagesArchiveOpen(false)} section="comercial" />
+      <NewComercialPageModal
+        open={newDemandaPageOpen}
+        onClose={() => setNewDemandaPageOpen(false)}
+        onCreated={(id) => { navigate(`/demandas/${id}`); closeOnMobile() }}
+        section="demandas"
+      />
+      <ArchivedComercialPagesModal open={demandasArchiveOpen} onClose={() => setDemandasArchiveOpen(false)} section="demandas" />
       <ArchivedSupportPagesModal open={supportArchiveOpen} onClose={() => setSupportArchiveOpen(false)} />
     </aside>
   )
@@ -1602,15 +1724,18 @@ function ArchivedSupportPagesModal({ open, onClose }: { open: boolean; onClose: 
   )
 }
 
-/** Nova aba do Comercial — admin only, cria vazia (sem quadro nenhum, dá pra montar depois). */
+/** Nova aba do Comercial OU de Demandas (section) — admin only, cria vazia (sem quadro nenhum,
+ * dá pra montar/duplicar pra dentro dela depois). */
 function NewComercialPageModal({
   open,
   onClose,
   onCreated,
+  section = 'comercial',
 }: {
   open: boolean
   onClose: () => void
   onCreated: (id: string) => void
+  section?: LeadPageSection
 }) {
   const [name, setName] = React.useState('')
   const [saving, setSaving] = React.useState(false)
@@ -1622,7 +1747,7 @@ function NewComercialPageModal({
     if (!trimmed) return
     setSaving(true)
     try {
-      const page = await leadPagesService.create(trimmed)
+      const page = await leadPagesService.create(trimmed, section)
       toast.success(`Aba "${page.name}" criada.`)
       onClose()
       onCreated(page.id)
@@ -1634,12 +1759,12 @@ function NewComercialPageModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Nova aba do Comercial" size="sm">
+    <Modal open={open} onClose={onClose} title={section === 'demandas' ? 'Nova aba de Demandas' : 'Nova aba do Comercial'} size="sm">
       <Input
         label="Nome da aba"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Ex.: CRM NX Time 2"
+        placeholder={section === 'demandas' ? 'Ex.: Nome do cliente' : 'Ex.: CRM NX Time 2'}
         autoFocus
         onKeyDown={(e) => { if (e.key === 'Enter') void submit() }}
       />
@@ -1651,9 +1776,17 @@ function NewComercialPageModal({
   )
 }
 
-/** Abas arquivadas do Comercial — admin only. Restaurar devolve pro menu na hora; quadros e
- * leads da aba nunca foram apagados, só ficaram escondidos. */
-function ArchivedComercialPagesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Abas arquivadas do Comercial OU de Demandas (section) — admin only. Restaurar devolve pro
+ * menu na hora; quadros e leads da aba nunca foram apagados, só ficaram escondidos. */
+function ArchivedComercialPagesModal({
+  open,
+  onClose,
+  section = 'comercial',
+}: {
+  open: boolean
+  onClose: () => void
+  section?: LeadPageSection
+}) {
   const [loading, setLoading] = React.useState(false)
   const [pages, setPages] = React.useState<LeadPage[]>([])
   const [restoringId, setRestoringId] = React.useState<string | null>(null)
@@ -1662,10 +1795,10 @@ function ArchivedComercialPagesModal({ open, onClose }: { open: boolean; onClose
     if (!open) return
     setLoading(true)
     leadPagesService.getArchived()
-      .then(setPages)
+      .then((all) => setPages(all.filter((p) => p.section === section)))
       .catch((err) => toast.error('Falha ao carregar abas arquivadas: ' + (err as Error).message))
       .finally(() => setLoading(false))
-  }, [open])
+  }, [open, section])
 
   const restore = async (page: LeadPage) => {
     setRestoringId(page.id)

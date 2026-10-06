@@ -330,7 +330,11 @@ CREATE TABLE IF NOT EXISTS lead_pages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   -- Aba marcada is_notas vira um bloco de notas simples (sem quadros/kanban/métricas/SDR/filtro),
   -- uma nota por dia (ver page_notes) — em vez do quadro genérico de captação de leads.
-  is_notas BOOLEAN NOT NULL DEFAULT false
+  is_notas BOOLEAN NOT NULL DEFAULT false,
+  -- Qual menu lateral mostra essa aba — 'comercial' (padrão, todas as abas de sempre) ou
+  -- 'demandas' (pipes por cliente, menu próprio — ver Sidebar.tsx/ComercialPage.tsx). Mesma
+  -- estrutura de quadros/kanban/etiquetas por trás dos dois, só o lugar no menu muda.
+  section TEXT NOT NULL DEFAULT 'comercial'
 );
 
 INSERT INTO lead_pages (id, name, position) VALUES

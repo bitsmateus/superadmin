@@ -1,10 +1,16 @@
 import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
-import type { LeadPage } from '@/types/leadBoard'
+import type { LeadPage, LeadPageSection } from '@/types/leadBoard'
 
-type PageRow = { id: string; name: string; position: number; archived_at: string | null; created_at: string; is_notas: boolean }
+type PageRow = {
+  id: string; name: string; position: number; archived_at: string | null; created_at: string
+  is_notas: boolean; section?: LeadPageSection
+}
 function rowToPage(r: PageRow): LeadPage {
-  return { id: r.id, name: r.name, position: r.position, archivedAt: r.archived_at, isNotas: r.is_notas }
+  return {
+    id: r.id, name: r.name, position: r.position, archivedAt: r.archived_at, isNotas: r.is_notas,
+    section: r.section ?? 'comercial',
+  }
 }
 
 // ---------- Cache das abas ativas (mesmo padrão reativo de leadBoardsService) ----------
@@ -65,8 +71,8 @@ export const leadPagesService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
   getAll(): LeadPage[] { return pages },
 
-  async create(name: string): Promise<LeadPage> {
-    const row = await api.post<PageRow>('/api/lead-pages', { name })
+  async create(name: string, section?: LeadPageSection): Promise<LeadPage> {
+    const row = await api.post<PageRow>('/api/lead-pages', { name, section })
     await reloadPages()
     return rowToPage(row)
   },
@@ -89,9 +95,10 @@ export const leadPagesService = {
     }
   },
 
-  /** boardIds vazio/omitido = duplica todos os quadros da aba de origem. */
-  async duplicate(id: string, name?: string, boardIds?: string[]): Promise<LeadPage> {
-    const row = await api.post<PageRow>(`/api/lead-pages/${id}/duplicate`, { name, boardIds })
+  /** boardIds vazio/omitido = duplica todos os quadros da aba de origem. section omitida =
+   * herda a da aba de origem; informada = manda a cópia pro outro menu (Comercial/Demandas). */
+  async duplicate(id: string, name?: string, boardIds?: string[], section?: LeadPageSection): Promise<LeadPage> {
+    const row = await api.post<PageRow>(`/api/lead-pages/${id}/duplicate`, { name, boardIds, section })
     await reloadPages()
     return rowToPage(row)
   },

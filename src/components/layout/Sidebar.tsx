@@ -362,10 +362,13 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         .map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact }))
     : []
   // O Dashboard Comercial entra na mesma lista dos demais — assim ele também pode ser arrastado
-  // pra onde a pessoa quiser dentro do grupo, em vez de ficar preso no topo.
+  // pra onde a pessoa quiser dentro do grupo, em vez de ficar preso no topo. A Agenda é a MESMA
+  // agenda que aparece em Suporte (mesma rota /agenda) — só um segundo atalho até ela; quem abre
+  // por aqui enxerga só as reuniões "comercial" (ver separação por área dentro de AgendaPage).
   const comercialItems = visibleComercialItems.length
     ? [
         { to: '/comercial-dashboard', label: 'Dashboard Comercial', icon: LayoutDashboard },
+        { to: '/agenda', label: 'Agenda', icon: CalendarDays },
         ...visibleComercialItems,
       ]
     : []

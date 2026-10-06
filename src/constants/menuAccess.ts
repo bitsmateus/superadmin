@@ -4,8 +4,9 @@
  * de Permissões em Equipe quanto pra filtrar o próprio Sidebar/rotas de quem está restrito.
  * Itens admin-only (Equipe, Auditoria, Conhecimento) ou de financeiro (Comando, Financeiro,
  * Performance) ficam de fora — esses já têm gate próprio por papel, não precisam entrar aqui.
- * Agenda também fica de fora de propósito: é uma agenda ÚNICA e compartilhada entre Comercial
- * e Suporte, então não faz sentido restringir por área — todo mundo logado enxerga.
+ * Agenda também fica de fora de propósito: é a MESMA agenda, só com um atalho dentro de Suporte e
+ * outro dentro de Comercial — a separação entre o que cada área vê não é por essa allowlist, é
+ * automática por profile.area dentro da própria AgendaPage (ver resolveArea/useAgenda*).
  */
 export type MenuAccessGroup = 'comercial' | 'suporte' | 'nxdigital'
 

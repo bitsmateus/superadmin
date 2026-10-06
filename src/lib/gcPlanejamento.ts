@@ -336,7 +336,7 @@ export function validarRealismo(plano: Planejamento): AvisoDeRealismo[] {
   for (const h of HORIZONTES_PLANO) {
     const m = plano.metas[h.valor] ?? {}
     if (Object.keys(m).length === 0) continue
-    const rotulo = `Meta de ${h.label}`
+    const rotulo = `Meta ${h.label}`
 
     const leadsParaVendas = m.vendas && conv ? m.vendas / conv : null
     if (leadsParaVendas !== null && m.leads !== undefined && m.leads < leadsParaVendas * (1 - MARGEM)) {
@@ -397,13 +397,13 @@ export function avisosDeCplImplicito(
     if (variacao < -LIMITE_QUEDA_CPL) {
       saida.push({
         horizonte: h.valor, cplHoje, cplMeta, variacaoPct: variacao * 100,
-        texto: `Meta de ${h.label}: o CPL implícito é ${reais(cplMeta)}, ${Math.abs(Math.round(variacao * 100))}% abaixo ` +
+        texto: `Meta ${h.label}: o CPL implícito é ${reais(cplMeta)}, ${Math.abs(Math.round(variacao * 100))}% abaixo ` +
           `dos ${reais(cplHoje)} de hoje. Vale escrever em "Estratégia e premissas" o que vai derrubar o CPL.`,
       })
     } else if (variacao > LIMITE_ALTA_CPL) {
       saida.push({
         horizonte: h.valor, cplHoje, cplMeta, variacaoPct: variacao * 100,
-        texto: `Meta de ${h.label}: o CPL implícito é ${reais(cplMeta)}, ${Math.round(variacao * 100)}% acima ` +
+        texto: `Meta ${h.label}: o CPL implícito é ${reais(cplMeta)}, ${Math.round(variacao * 100)}% acima ` +
           `dos ${reais(cplHoje)} de hoje. Confira se o investimento ou os leads estão certos.`,
       })
     }
@@ -592,9 +592,9 @@ export function resumoLinha(plano: Planejamento): string | null {
   const a = trecho(baseDoPontoA(plano.atual))
   if (a) partes.push(`Ponto A: ${a}`)
   const m6 = trecho(plano.metas['6_meses'] ?? {})
-  if (m6) partes.push(`Meta 6m: ${m6}`)
+  if (m6) partes.push(`Meta 6 meses: ${m6}`)
   const m12 = trecho(plano.metas['12_meses'] ?? {})
-  if (m12) partes.push(`Meta 12m: ${m12}`)
+  if (m12) partes.push(`Meta 12 meses: ${m12}`)
   return partes.length ? partes.join(' → ') : null
 }
 

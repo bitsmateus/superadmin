@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import {
   TIPOS_SERVICO, gestaoClientes, type GcModeloEstrategia,
 } from '@/services/gestaoClientes'
@@ -348,7 +349,9 @@ export function GestaoModelos({
         </Button>
       </div>
 
-      {modelos.length === 0 ? (
+      {carregando ? (
+        <EsqueletoDeCarga tipo="lista" linhas={4} />
+      ) : modelos.length === 0 ? (
         <EmptyState
           icon={<Lightbulb className="h-6 w-6" />}
           title="Nenhum modelo de estratégia"

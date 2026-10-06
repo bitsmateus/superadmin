@@ -165,6 +165,23 @@ export function numeroDigitado(texto: string | null | undefined): number | null 
 }
 
 /**
+ * Máscara de CAMPO: ao sair do campo, "2000" vira "2.000,00" (moeda), "1500" vira "1.500" (inteiro) e
+ * "8,5" continua "8,5" (percentual). Texto que não é número fica como está — a máscara não apaga o que
+ * a pessoa digitou. O que volta é lido por `numeroDigitado` sem perda (ele trata o ponto como milhar).
+ */
+export function mascararCampo(texto: string, tipo: 'reais' | 'inteiro' | 'percentual'): string {
+  const n = numeroDigitado(texto)
+  if (n === null) return texto
+  const casas = tipo === 'reais' ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : { maximumFractionDigits: 2 }
+  return n.toLocaleString('pt-BR', casas)
+}
+
+/** A máscara de uma métrica, pela unidade dela. */
+export function mascaraDaUnidade(unidade: GcUnidade): 'reais' | 'inteiro' | 'percentual' {
+  return unidade === 'reais' ? 'reais' : unidade === 'percentual' ? 'percentual' : 'inteiro'
+}
+
+/**
  * Variação percentual entre dois períodos e se ela é boa ou ruim PRA AQUELA métrica.
  * Sem base de comparação (ou base zero), devolve null — não inventa "+100%".
  */

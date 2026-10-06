@@ -3,6 +3,7 @@ import { AlertTriangle, Check, CheckCircle2, ChevronDown, ExternalLink, Loader2,
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import { gestaoClientes, type GcPendencia } from '@/services/gestaoClientes'
 import { cn } from '@/lib/utils'
 
@@ -224,9 +225,7 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
 
   if (carregando) {
     return (
-      <div className="flex items-center justify-center gap-2 py-16 text-sm text-foreground/60">
-        <Loader2 className="h-4 w-4 animate-spin" /> Carregando pendências…
-      </div>
+      <EsqueletoDeCarga tipo="lista" linhas={6} />
     )
   }
 

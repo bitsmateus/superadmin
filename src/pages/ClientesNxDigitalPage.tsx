@@ -26,6 +26,7 @@ import {
   type Saude,
 } from '@/lib/gcSaude'
 import { formatarMetrica, mesPorExtenso, mesAtual } from '@/lib/gcMetricas'
+import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import { gravarVisitados, proximoSemData, semDataDeRenovacao } from '@/lib/gcFilaRenovacao'
 import { cn } from '@/lib/utils'
 
@@ -600,9 +601,7 @@ export function ClientesNxDigitalPage() {
         </div>
 
         {carregando ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-foreground/60">
-            <Loader2 className="h-4 w-4 animate-spin" /> Carregando clientes…
-          </div>
+          <EsqueletoDeCarga tipo="lista" linhas={8} />
         ) : ordenados.length === 0 ? (
           <EmptyState
             icon={<Users className="h-6 w-6" />}

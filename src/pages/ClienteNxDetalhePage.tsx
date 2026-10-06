@@ -11,6 +11,7 @@ import { AbaVisaoGeral } from '@/components/gestaoClientes/AbaVisaoGeral'
 import { AbaJornada } from '@/components/gestaoClientes/AbaJornada'
 import { ModalNotas, PainelNotas } from '@/components/gestaoClientes/PainelNotas'
 import { AbaMetricas } from '@/components/gestaoClientes/AbaMetricas'
+import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import { AbaPlanejamento } from '@/components/gestaoClientes/AbaPlanejamento'
 import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
@@ -211,13 +212,13 @@ export function ClienteNxDetalhePage() {
         )}
 
         {carregando ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-foreground/60">
-            <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
-          </div>
+          <EsqueletoDeCarga tipo="ficha" />
         ) : !detalhe ? (
           <p className="py-16 text-center text-sm text-foreground/60">Cliente não encontrado.</p>
         ) : (
           <>
+            {/* Abas fixas logo abaixo da barra do topo: trocar de aba não exige voltar ao início da página. */}
+            <div className="sticky top-[57px] z-10 -mx-4 bg-bg/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
             <Tabs
               value={aba}
               onChange={(v) => setAba(v as Aba)}
@@ -265,6 +266,7 @@ export function ClienteNxDetalhePage() {
                 },
               ]}
             />
+            </div>
 
             {aba === 'visao' && (
               <AbaVisaoGeral

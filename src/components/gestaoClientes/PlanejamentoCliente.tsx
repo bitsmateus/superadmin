@@ -8,7 +8,9 @@ import { Modal } from '@/components/ui/Modal'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { GraficoProjecao, TabelaProjecao } from '@/components/gestaoClientes/GraficoProjecao'
 import { MenuModelos, ModalModelosTexto, type AlvoDeModelo } from '@/components/gestaoClientes/ModelosDeTexto'
+import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
+import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import {
   gestaoClientes,
   type GcCampoModelo, type GcMetrica, type GcModeloTexto,
@@ -22,7 +24,7 @@ import {
   type HorizontePlano, type Planejamento,
 } from '@/lib/gcPlanejamento'
 import { planoDaApi } from '@/lib/gcPlanoAdaptadores'
-import { formatarMetrica, mesAtual, numeroDigitado, numeroParaCampo } from '@/lib/gcMetricas'
+import { formatarMetrica, mascararCampo, mesAtual, numeroDigitado, numeroParaCampo } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------------------------------
@@ -106,6 +108,26 @@ function planoDoRascunho(r: Rascunho): Planejamento {
     metas: { '6_meses': metas('6_meses'), '12_meses': metas('12_meses') },
   }
 }
+
+/**
+ * O rascunho com os números como NÚMEROS, pra comparar "o que está na tela" com "o que está salvo" sem
+ * que a máscara ("2000" → "2.000,00") conte como alteração.
+ */
+function normalizado(r: Rascunho) {
+  const n = (t: string) => numeroDigitado(t)
+  return {
+    ...r,
+    leads: n(r.leads), investimento: n(r.investimento), vendas: n(r.vendas), receita: n(r.receita),
+    cenarios: Object.fromEntries(
+      (Object.keys(r.cenarios) as HorizontePlano[]).map((h) => [
+        h,
+        { ...r.cenarios[h], metas: Object.fromEntries(Object.entries(r.cenarios[h].metas).map(([k, v]) => [k, n(v)])) },
+      ]),
+    ),
+  }
+}
+
+const CHAVE_RASCUNHO = (id: string) => `gc:planejamento:rascunho:${id}`
 
 function paraEntrada(r: Rascunho): GcPlanejamentoEntrada {
   const plano = planoDoRascunho(r)
@@ -227,6 +249,9 @@ export function PlanejamentoCliente({
   const [confirmandoMedia, setConfirmandoMedia] = React.useState(false)
   const [mediaAplicada, setMediaAplicada] = React.useState<string>('')
   const prefillFeito = React.useRef<GcPlanejamentoApi | null>(null)
+  /** Rascunho de uma sessão anterior (guardado no navegador) à espera de o usuário decidir. */
+  const [guardado, setGuardado] = React.useState<{ rascunho: Rascunho; em: string } | null>(null)
+  const rascunhoVerificado = React.useRef(false)
 
   const sugestao = React.useMemo(() => sugerirPontoA(metricas, mesAtual()), [metricas])
 
@@ -234,7 +259,7 @@ export function PlanejamentoCliente({
     const r = doApi(a)
     setApi(a)
     setRascunho(r)
-    setInicial(JSON.stringify(r))
+    setInicial(JSON.stringify(normalizado(r)))
   }, [])
 
   React.useEffect(() => {
@@ -342,7 +367,47 @@ export function PlanejamentoCliente({
   }, [plano, rascunho])
   // O botão de salvar fica ativo sempre que o rascunho difere do que está gravado — inclusive ao LIMPAR
   // um campo, que é só uma diferença como outra qualquer.
-  const sujo = rascunho !== null && JSON.stringify(rascunho) !== inicial
+  const sujo = rascunho !== null && JSON.stringify(normalizado(rascunho)) !== inicial
+  useAvisoAoSair(sujo)
+
+  // ---- rascunho automático: o que foi digitado e não salvo fica guardado neste navegador (trocar de
+  // aba ou fechar sem querer não joga o trabalho fora) e é oferecido de volta na próxima abertura.
+  React.useEffect(() => {
+    if (!api || !rascunho || rascunhoVerificado.current) return
+    rascunhoVerificado.current = true
+    try {
+      const bruto = window.localStorage.getItem(CHAVE_RASCUNHO(clienteId))
+      if (!bruto) return
+      const lido = JSON.parse(bruto) as { rascunho: Rascunho; em: string }
+      // Rascunho igual ao que já está salvo não tem o que oferecer.
+      if (JSON.stringify(normalizado(lido.rascunho)) === inicial) {
+        window.localStorage.removeItem(CHAVE_RASCUNHO(clienteId))
+        return
+      }
+      setGuardado(lido)
+    } catch {
+      /* sem armazenamento ou rascunho ilegível: segue sem ele */
+    }
+  }, [api, rascunho, inicial, clienteId])
+
+  React.useEffect(() => {
+    if (!rascunho || !rascunhoVerificado.current || guardado) return
+    const t = window.setTimeout(() => {
+      try {
+        if (sujo) {
+          window.localStorage.setItem(
+            CHAVE_RASCUNHO(clienteId),
+            JSON.stringify({ rascunho, em: new Date().toISOString() }),
+          )
+        } else {
+          window.localStorage.removeItem(CHAVE_RASCUNHO(clienteId))
+        }
+      } catch {
+        /* sem armazenamento: o aviso ao sair continua valendo */
+      }
+    }, 600)
+    return () => window.clearTimeout(t)
+  }, [rascunho, sujo, guardado, clienteId])
 
   const chavesComRota = React.useMemo(
     () => (planoDaRota ? CHAVES_PLANO.filter(({ chave }) => rotaProjetada(planoDaRota, chave).length > 0) : []),
@@ -532,6 +597,39 @@ export function PlanejamentoCliente({
 
       {/* O conteúdo fica MONTADO mesmo recolhido: desmontar jogaria fora o que está sendo digitado. */}
       <div className={cn('border-t border-accent/15 p-4', !aberto && 'hidden')}>
+        {guardado && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/[0.05] px-3 py-2 text-sm">
+            <span className="text-foreground/85">
+              Há um rascunho não salvo de{' '}
+              {new Date(guardado.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}.
+            </span>
+            <span className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setRascunho(guardado.rascunho)
+                  setGuardado(null)
+                }}
+              >
+                Restaurar
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  try {
+                    window.localStorage.removeItem(CHAVE_RASCUNHO(clienteId))
+                  } catch {
+                    /* nada a limpar */
+                  }
+                  setGuardado(null)
+                }}
+              >
+                Descartar rascunho
+              </Button>
+            </span>
+          </div>
+        )}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="max-w-2xl text-xs text-foreground/55">
             Tudo é opcional: preencha o que souber. As metas numéricas são as mesmas de "Metas combinadas".
@@ -546,7 +644,7 @@ export function PlanejamentoCliente({
 
         {/* ---------------------------------------------------------------- 1. ponto A */}
         <div className="rounded-xl border border-line bg-surface p-3">
-          <h3 className="mb-2 text-sm font-semibold text-foreground">1 · Onde o cliente está hoje — ponto A</h3>
+          <h3 className="mb-2 text-sm font-semibold text-foreground">1 · Ponto A — onde o cliente está hoje</h3>
           <div>
             <span className="mb-1.5 block text-xs font-medium text-foreground/70">Situação de hoje</span>
             <Textarea
@@ -575,6 +673,11 @@ export function PlanejamentoCliente({
                     label={c.label}
                     value={rascunho[c.campo]}
                     onChange={(e) => mudarPontoA(c.campo, c.api, e.target.value)}
+                    onBlur={() =>
+                      setRascunho((r) =>
+                        r ? { ...r, [c.campo]: mascararCampo(r[c.campo], c.label.includes('(R$)') ? 'reais' : 'inteiro') } : r,
+                      )
+                    }
                     placeholder={c.ph}
                     inputMode="decimal"
                   />
@@ -634,7 +737,7 @@ export function PlanejamentoCliente({
                   label="Lembrar de completar em"
                   value={rascunho.lembrarEm}
                   onChange={(v) => mudar('lembrarEm', v)}
-                  hint="Opcional. Com data, vira pendência em Estratégias > Pendências."
+                  hint="Opcional · vira pendência em Estratégias"
                 />
               </div>
             )}
@@ -701,6 +804,9 @@ export function PlanejamentoCliente({
                               value={rascunho.cenarios[h.valor].metas[chave as ChaveDigitada]}
                               onChange={(e) => mudarMeta(h.valor, chave as ChaveDigitada, e.target.value)}
                               onKeyDown={(e) => aoTeclar(e, h.valor, indice)}
+                              onBlur={(e) =>
+                                mudarMeta(h.valor, chave as ChaveDigitada, mascararCampo(e.target.value, prefixo === 'R$' ? 'reais' : 'inteiro'))
+                              }
                               onFocus={(e) => e.target.select()}
                               inputMode="decimal"
                               placeholder={placeholder}
@@ -769,7 +875,7 @@ export function PlanejamentoCliente({
             const c = rascunho.cenarios[h.valor]
             return (
               <div key={h.valor} className="rounded-xl border border-line bg-surface p-3">
-                <h3 className="mb-2 text-sm font-semibold text-foreground">Em {h.label}</h3>
+                <h3 className="mb-2 text-sm font-semibold text-foreground">Meta {h.label}</h3>
                 <div className="space-y-3">
                   <div>
                     <span className="mb-1.5 block text-xs font-medium text-foreground/70">Onde quer chegar</span>
@@ -836,6 +942,16 @@ export function PlanejamentoCliente({
             </>
           )}
         </div>
+      </div>
+
+      <div className={cn('px-4 pb-4', !aberto && 'hidden')}>
+        <BarraSalvar
+          visivel={sujo}
+          salvando={salvando}
+          rotulo="Salvar planejamento"
+          onSalvar={() => void salvar()}
+          onDescartar={() => api && aplicar(api)}
+        />
       </div>
 
       {/* ------------------------------------------------------------------ janelas */}

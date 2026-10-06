@@ -1,10 +1,11 @@
 import * as React from 'react'
-import { Check, Plus, Trash2 } from 'lucide-react'
+import { Check, Lightbulb, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
+import { EmptyState } from '@/components/ui/EmptyState'
 import {
   gestaoClientes, type GcEstrategia, type GcModelos,
 } from '@/services/gestaoClientes'
@@ -90,6 +91,7 @@ export function AbaEstrategias({
     <div className="space-y-4">
       <form onSubmit={aplicar} className="grid items-end gap-3 rounded-xl border border-line p-3 sm:grid-cols-[1fr_1fr_auto]">
         <Select
+          id="gc-aplicar-estrategia"
           label="Estratégia pronta"
           options={[
             { value: '', label: '— Nenhuma (criar em branco) —' },
@@ -110,9 +112,20 @@ export function AbaEstrategias({
       </form>
 
       {estrategias.length === 0 ? (
-        <p className="py-8 text-center text-sm text-foreground/50">
-          Nenhuma estratégia aplicada. Escolha uma pronta acima — os passos dela já viram checklist.
-        </p>
+        <EmptyState
+          icon={<Lightbulb className="h-6 w-6" />}
+          title="Nenhuma estratégia aplicada"
+          description="Escolha uma pronta acima — os passos dela já viram checklist."
+          action={
+            <Button
+              size="sm"
+              leftIcon={<Plus className="h-4 w-4" />}
+              onClick={() => document.getElementById('gc-aplicar-estrategia')?.focus()}
+            >
+              Aplicar estratégia
+            </Button>
+          }
+        />
       ) : (
         estrategias.map((e) => {
           const feitos = e.itens.filter((i) => i.concluido).length

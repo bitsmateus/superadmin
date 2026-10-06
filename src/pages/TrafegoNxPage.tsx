@@ -14,6 +14,7 @@ import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
   mesAtual, mesPorExtenso, numeroDigitado, numeroParaCampo, somarMeses, validarMetricas, variacaoDaMetrica,
 } from '@/lib/gcMetricas'
+import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import { avaliarSaude, contaNoTotal, type Saude } from '@/lib/gcSaude'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { cn } from '@/lib/utils'
@@ -345,9 +346,7 @@ export function TrafegoNxPage() {
         )}
 
         {carregando ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-foreground/60">
-            <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
-          </div>
+          <EsqueletoDeCarga tipo="lista" linhas={8} />
         ) : linhas.length === 0 ? (
           <EmptyState
             icon={<BarChart3 className="h-6 w-6" />}

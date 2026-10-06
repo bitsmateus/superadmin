@@ -6,14 +6,16 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
+import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
+import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import {
   HORIZONTES, avisosDoErro, gestaoClientes,
   type GcHorizonte, type GcMeta, type GcMetrica,
 } from '@/services/gestaoClientes'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, TODAS_METRICAS, comDerivadas, formatarMetrica,
-  formatarPorChave, limitesDoMes, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade,
+  formatarPorChave, limitesDoMes, mascaraDaUnidade, mascararCampo, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade,
   numeroDigitado, numeroParaCampo, somarMeses, validarMetricas, variacaoDaMetrica,
 } from '@/lib/gcMetricas'
 import { progressoDaMeta } from '@/lib/gcSaude'
@@ -317,6 +319,20 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
     new Set(metricas.map((m) => String(m.periodo_inicio).slice(0, 7))),
   ).sort((a, b) => b.localeCompare(a))
 
+  // Alteração pendente = o rascunho difere do que está gravado no mês (comparando NÚMEROS, pra a máscara
+  // "2000" → "2.000,00" não contar como mudança).
+  const gravadoDoMes: Record<string, number> = {}
+  for (const m of metricas) {
+    if (String(m.periodo_inicio).slice(0, 10) === inicio) gravadoDoMes[m.chave] = Number(m.valor)
+  }
+  const digitado: Record<string, number> = {}
+  for (const [k, v] of Object.entries(rascunho)) {
+    const n = numeroDigitado(v)
+    if (n !== null) digitado[k] = n
+  }
+  const sujoDoMes = JSON.stringify(Object.entries(digitado).sort()) !== JSON.stringify(Object.entries(gravadoDoMes).sort())
+  useAvisoAoSair(sujoDoMes)
+
   const algumOpcional = CHAVES_OPCIONAIS.some((c) => (rascunho[c] ?? '').trim() !== '')
   const mostrarMais = maisAberto || algumOpcional
   const tem = (c: string) => valoresDoMes[c] !== undefined
@@ -340,6 +356,7 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
           onChange={(e) => setRascunho((r) => ({ ...r, [m.chave]: e.target.value }))}
           placeholder={m.unidade === 'reais' ? '0,00' : '0'}
           inputMode="decimal"
+          onBlur={() => setRascunho((r) => ({ ...r, [m.chave]: mascararCampo(r[m.chave] ?? '', mascaraDaUnidade(m.unidade)) }))}
         />
         <div className="mt-1 h-4">
           <Variacao chave={m.chave} atual={valoresDoMes[m.chave]} anterior={valoresAnteriores[m.chave]} />
@@ -429,6 +446,20 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
           </div>
         </div>
       </section>
+
+      <BarraSalvar
+        visivel={sujoDoMes}
+        salvando={salvando}
+        rotulo="Salvar o mês"
+        onSalvar={() => void salvar()}
+        onDescartar={() => {
+          const atual: Record<string, string> = {}
+          for (const m of metricas) {
+            if (String(m.periodo_inicio).slice(0, 10) === inicio) atual[m.chave] = numeroParaCampo(m.valor)
+          }
+          setRascunho(atual)
+        }}
+      />
 
       <section className="rounded-xl border border-line p-4">
         <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">

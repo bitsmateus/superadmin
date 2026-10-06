@@ -8,15 +8,32 @@
 
 export const CHAVES_PLANEJAMENTO = ['leads', 'cpl', 'vendas', 'roas', 'receita', 'investimento'] as const;
 export type ChavePlanejamento = (typeof CHAVES_PLANEJAMENTO)[number];
+/**
+ * As quatro metas que se DIGITAM na grade de 6 e 12 meses. CPL e ROAS são calculados (investimento ÷
+ * leads, faturamento ÷ investimento) e não se guardam: guardar duplicaria o número e abriria a porta
+ * pra os três divergirem.
+ */
+export const CHAVES_DIGITADAS = ['leads', 'vendas', 'investimento', 'receita'] as const;
 export const HORIZONTES_PLANEJAMENTO = ['6_meses', '12_meses'] as const;
 export type HorizontePlanejamento = (typeof HORIZONTES_PLANEJAMENTO)[number];
 
+/** Os 4 números do ponto A. Ticket médio e conversão saem daqui (ver `derivadosDoPontoA`). */
 export interface PontoA {
   leads_mes: number | null;
   investimento_mes: number | null;
-  ticket_medio: number | null;
-  taxa_conversao: number | null;
+  vendas_mes: number | null;
   faturamento_mensal: number | null;
+}
+
+/** Ticket médio (faturamento ÷ vendas) e conversão em % (vendas ÷ leads); null sem os dois números. */
+export function derivadosDoPontoA(a: PontoA): { ticket_medio: number | null; taxa_conversao: number | null } {
+  const arredonda = (n: number) => Math.round(n * 100) / 100;
+  return {
+    ticket_medio:
+      a.faturamento_mensal !== null && a.vendas_mes ? arredonda(a.faturamento_mensal / a.vendas_mes) : null,
+    taxa_conversao:
+      a.vendas_mes !== null && a.leads_mes ? arredonda((a.vendas_mes / a.leads_mes) * 100) : null,
+  };
 }
 
 /**
@@ -30,9 +47,7 @@ export function baseDoPontoA(a: PontoA): Partial<Record<ChavePlanejamento, numbe
   if (a.investimento_mes !== null) base.investimento = a.investimento_mes;
   if (a.faturamento_mensal !== null) base.receita = a.faturamento_mensal;
   if (a.leads_mes && a.investimento_mes !== null) base.cpl = a.investimento_mes / a.leads_mes;
-  if (a.leads_mes !== null && a.taxa_conversao !== null) {
-    base.vendas = (a.leads_mes * a.taxa_conversao) / 100;
-  }
+  if (a.vendas_mes !== null) base.vendas = a.vendas_mes;
   if (a.investimento_mes && a.faturamento_mensal !== null) {
     base.roas = a.faturamento_mensal / a.investimento_mes;
   }
@@ -50,6 +65,9 @@ export function somarMesesNaData(data: string, meses: number): string {
 
 export const ROTULOS_PLANEJAMENTO: Record<string, string> = {
   situacao_atual: 'Situação de hoje',
+  vendas_mes: 'Vendas/mês (ponto A)',
+  aguardando_cliente: 'Aguardando o cliente',
+  lembrar_em: 'Lembrar de completar em',
   leads_mes: 'Leads/mês (ponto A)',
   investimento_mes: 'Investimento/mês (ponto A)',
   ticket_medio: 'Ticket médio (ponto A)',
@@ -58,16 +76,14 @@ export const ROTULOS_PLANEJAMENTO: Record<string, string> = {
   data_diagnostico: 'Data do diagnóstico',
   origem_leads_mes: 'Origem de leads/mês',
   origem_investimento_mes: 'Origem de investimento/mês',
-  origem_ticket_medio: 'Origem de ticket médio',
-  origem_taxa_conversao: 'Origem de taxa de conversão',
+  origem_vendas_mes: 'Origem de vendas/mês',
   origem_faturamento_mensal: 'Origem de faturamento mensal',
   curva: 'Curva de crescimento',
   portal_ativo: 'Mostrar "Nossa jornada" no portal',
   portal_mostrar_situacao: 'Portal: mostrar a situação de hoje',
   portal_mostrar_objetivo: 'Portal: mostrar "onde quer chegar"',
   onde_quer_chegar: 'Onde quer chegar',
-  estrategia: 'Estratégia',
-  premissas: 'Premissas',
+  estrategia: 'Estratégia e premissas',
   leads: 'Meta de leads',
   cpl: 'Meta de CPL',
   vendas: 'Meta de vendas',
@@ -111,9 +127,7 @@ export function diffDeCampos(
   return mudancas;
 }
 
-export const CAMPOS_COM_ORIGEM = [
-  'leads_mes', 'investimento_mes', 'ticket_medio', 'taxa_conversao', 'faturamento_mensal',
-] as const;
+export const CAMPOS_COM_ORIGEM = ['leads_mes', 'investimento_mes', 'vendas_mes', 'faturamento_mensal'] as const;
 
 export interface OrigemDoCampo {
   origem: 'calculado' | 'informado';

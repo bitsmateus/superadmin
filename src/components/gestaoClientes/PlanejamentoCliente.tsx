@@ -1,7 +1,5 @@
 import * as React from 'react'
-import {
-  AlertTriangle, Calculator, ChevronDown, Eye, Info, Loader2, Lock, Route, ShieldAlert, Target, Wand2,
-} from 'lucide-react'
+import { AlertTriangle, Calculator, ChevronDown, Loader2, Lock, Route, Target } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
@@ -9,8 +7,7 @@ import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { GraficoProjecao, TabelaProjecao } from '@/components/gestaoClientes/GraficoProjecao'
-import { ModalModelosTexto, SeletorDeModelo } from '@/components/gestaoClientes/ModelosDeTexto'
-import { PreviaPortal } from '@/components/gestaoClientes/PreviaPortal'
+import { MenuModelos, ModalModelosTexto, type AlvoDeModelo } from '@/components/gestaoClientes/ModelosDeTexto'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import {
   gestaoClientes,
@@ -18,105 +15,94 @@ import {
   type GcOrigemCampo, type GcPlanejamentoApi, type GcPlanejamentoEntrada,
 } from '@/services/gestaoClientes'
 import {
-  CHAVES_PLANO, HORIZONTES_PLANO, aplicarVariaveis, avaliarMesContraRota, baseDoPontoA, contextoDeVariaveis,
-  faltaNoPlanejamento, planejamentoCompleto, projecaoMensal, realizadoPorMes, resumoLinha, rotaProjetada,
-  sugerirPontoA, validarRealismo, type CampoDoPontoA, type ChavePlano, type Curva, type HorizontePlano,
-  type Planejamento,
+  CHAVES_CALCULADAS, CHAVES_DIGITADAS, CHAVES_PLANO, HORIZONTES_PLANO, aplicarVariaveis, avaliarMesContraRota,
+  avisosDeCplImplicito, baseDoPontoA, comMetasCalculadas, comPartidaDasMetricas, contextoDeVariaveis,
+  estadoDoPlanejamento, hojeISO, montarPontoA, projecaoMensal, realizadoPorMes, resumoLinha, rotaProjetada,
+  sugerirPontoA, validarRealismo, variacaoContraPontoA, type CampoDoPontoA, type ChavePlano,
+  type HorizontePlano, type Planejamento,
 } from '@/lib/gcPlanejamento'
 import { planoDaApi } from '@/lib/gcPlanoAdaptadores'
-import {
-  formatarMetrica, mesAtual, metricaUnidade, numeroDigitado, numeroParaCampo,
-} from '@/lib/gcMetricas'
+import { formatarMetrica, mesAtual, numeroDigitado, numeroParaCampo } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------------------------------
 // O rascunho do editor: tudo em TEXTO, como a pessoa digita
 // ---------------------------------------------------------------------------------------------------
 
-/** Os cinco números do ponto A: nome no rascunho, nome na API e como aparece na tela. */
-const CAMPOS_DO_A: { campo: CampoDoPontoA; api: string; label: string; ph: string; ajuda?: string }[] = [
+/** Os quatro números do ponto A: nome no rascunho, nome na API e como aparece na tela. */
+const CAMPOS_DO_A: { campo: CampoDoPontoA; api: string; label: string; ph: string }[] = [
   { campo: 'leads', api: 'leads_mes', label: 'Leads / mês', ph: '0' },
   { campo: 'investimento', api: 'investimento_mes', label: 'Investimento / mês (R$)', ph: '0,00' },
-  { campo: 'ticket', api: 'ticket_medio', label: 'Ticket médio (R$)', ph: '0,00' },
-  { campo: 'conversao', api: 'taxa_conversao', label: 'Taxa de conversão (%)', ph: '0', ajuda: 'leads que viram venda' },
-  { campo: 'receita', api: 'faturamento_mensal', label: 'Faturamento mensal (R$)', ph: '0,00' },
+  { campo: 'vendas', api: 'vendas_mes', label: 'Vendas / mês', ph: '0' },
+  { campo: 'receita', api: 'faturamento_mensal', label: 'Faturamento / mês (R$)', ph: '0,00' },
 ]
+
+type ChaveDigitada = 'leads' | 'vendas' | 'investimento' | 'receita'
 
 interface Rascunho {
   situacao: string
   leads: string
   investimento: string
-  ticket: string
-  conversao: string
+  vendas: string
   receita: string
   /** Origem por campo da API (leads_mes...). Campo com número e sem entrada aqui conta como "informado". */
   origens: Record<string, GcOrigemCampo>
   data: string | null
-  curva: Curva
-  portalAtivo: boolean
-  portalSituacao: boolean
-  portalObjetivo: boolean
+  /** O ponto A está em branco de propósito: o cliente ainda vai trazer os números. */
+  aguardando: boolean
+  lembrarEm: string | null
   cenarios: Record<HorizontePlano, {
     objetivo: string
+    /** "Estratégia e premissas": interna, nunca vai pro portal. */
     estrategia: string
-    premissas: string
-    metas: Record<ChavePlano, string>
+    metas: Record<ChaveDigitada, string>
   }>
 }
 
-function vazioDeMetas(): Record<ChavePlano, string> {
-  return { leads: '', cpl: '', vendas: '', roas: '', receita: '', investimento: '' }
+function vazioDeMetas(): Record<ChaveDigitada, string> {
+  return { leads: '', vendas: '', investimento: '', receita: '' }
 }
 
 function doApi(a: GcPlanejamentoApi): Rascunho {
   const cen = (h: HorizontePlano) => {
     const c = a.cenarios[h]
     const metas = vazioDeMetas()
-    for (const { chave } of CHAVES_PLANO) metas[chave] = numeroParaCampo(c?.metas?.[chave])
-    return {
-      objetivo: c?.onde_quer_chegar ?? '',
-      estrategia: c?.estrategia ?? '',
-      premissas: c?.premissas ?? '',
-      metas,
-    }
+    for (const { chave } of CHAVES_DIGITADAS) metas[chave as ChaveDigitada] = numeroParaCampo(c?.metas?.[chave as ChaveDigitada])
+    return { objetivo: c?.onde_quer_chegar ?? '', estrategia: c?.estrategia ?? '', metas }
   }
   return {
     situacao: a.atual.situacao_atual,
     leads: numeroParaCampo(a.atual.leads_mes),
     investimento: numeroParaCampo(a.atual.investimento_mes),
-    ticket: numeroParaCampo(a.atual.ticket_medio),
-    conversao: numeroParaCampo(a.atual.taxa_conversao),
+    vendas: numeroParaCampo(a.atual.vendas_mes),
     receita: numeroParaCampo(a.atual.faturamento_mensal),
     origens: a.origens ?? {},
     data: a.atual.data_diagnostico,
-    curva: a.curva,
-    portalAtivo: a.portal.ativo,
-    portalSituacao: a.portal.mostrar_situacao,
-    portalObjetivo: a.portal.mostrar_objetivo,
+    aguardando: a.atual.aguardando_cliente,
+    lembrarEm: a.atual.lembrar_em,
     cenarios: { '6_meses': cen('6_meses'), '12_meses': cen('12_meses') },
   }
 }
 
-/** O rascunho no formato do cálculo — é com ele que o realismo e a projeção reagem ao digitar. */
+/** O rascunho no formato do cálculo — é com ele que os avisos e a projeção reagem ao digitar. */
 function planoDoRascunho(r: Rascunho): Planejamento {
   const metas = (h: HorizontePlano) => {
     const m: Partial<Record<ChavePlano, number>> = {}
-    for (const { chave } of CHAVES_PLANO) {
-      const n = numeroDigitado(r.cenarios[h].metas[chave])
+    for (const { chave } of CHAVES_DIGITADAS) {
+      const n = numeroDigitado(r.cenarios[h].metas[chave as ChaveDigitada])
       if (n !== null) m[chave] = n
     }
-    return m
+    return comMetasCalculadas(m)
   }
   return {
-    curva: r.curva,
+    curva: 'linear',
     dataDiagnostico: r.data,
-    atual: {
+    atual: montarPontoA({
       leads: numeroDigitado(r.leads),
       investimento: numeroDigitado(r.investimento),
-      ticket: numeroDigitado(r.ticket),
-      conversao: numeroDigitado(r.conversao),
+      vendas: numeroDigitado(r.vendas),
       receita: numeroDigitado(r.receita),
-    },
+    }),
     metas: { '6_meses': metas('6_meses'), '12_meses': metas('12_meses') },
   }
 }
@@ -126,14 +112,15 @@ function paraEntrada(r: Rascunho): GcPlanejamentoEntrada {
   const cen = (h: HorizontePlano) => ({
     onde_quer_chegar: r.cenarios[h].objetivo,
     estrategia: r.cenarios[h].estrategia,
-    premissas: r.cenarios[h].premissas,
     // Campo em branco vai como null: é o sinal de "apague essa meta".
-    metas: Object.fromEntries(CHAVES_PLANO.map(({ chave }) => [chave, plano.metas[h][chave] ?? null])),
+    metas: Object.fromEntries(
+      CHAVES_DIGITADAS.map(({ chave }) => [chave, numeroDigitado(r.cenarios[h].metas[chave as ChaveDigitada])]),
+    ),
   })
   // Todo número do ponto A sai com origem: o que ninguém marcou como calculado é "informado".
   const origens: Record<string, GcOrigemCampo> = {}
   for (const c of CAMPOS_DO_A) {
-    if (plano.atual[c.campo] === null) continue
+    if (numeroDigitado(r[c.campo]) === null) continue
     origens[c.api] = r.origens[c.api] ?? { origem: 'informado' }
   }
   return {
@@ -141,23 +128,16 @@ function paraEntrada(r: Rascunho): GcPlanejamentoEntrada {
       situacao_atual: r.situacao,
       leads_mes: plano.atual.leads,
       investimento_mes: plano.atual.investimento,
-      ticket_medio: plano.atual.ticket,
-      taxa_conversao: plano.atual.conversao,
+      vendas_mes: plano.atual.vendas,
       faturamento_mensal: plano.atual.receita,
       data_diagnostico: r.data,
+      aguardando_cliente: r.aguardando,
+      lembrar_em: r.aguardando ? r.lembrarEm : null,
     },
-    curva: r.curva,
     origens,
-    portal: { ativo: r.portalAtivo, mostrar_situacao: r.portalSituacao, mostrar_objetivo: r.portalObjetivo },
     cenarios: { '6_meses': cen('6_meses'), '12_meses': cen('12_meses') },
   }
 }
-
-const NIVEL_AVISO = {
-  alerta: { classe: 'border-danger/30 bg-danger/[0.05]', icone: ShieldAlert, cor: 'text-danger', rotulo: 'não fecha' },
-  atencao: { classe: 'border-warning/30 bg-warning/[0.06]', icone: AlertTriangle, cor: 'text-warning', rotulo: 'atenção' },
-  info: { classe: 'border-line bg-elevate/[0.02]', icone: Info, cor: 'text-accent', rotulo: 'pra saber' },
-} as const
 
 function textoDoValor(v: string | number | boolean | null): string {
   if (v === null || v === '') return '—'
@@ -174,23 +154,56 @@ function rotuloDosMeses(meses: string[] | undefined): string {
   return `${nomes.join(', ')}/${meses[meses.length - 1].slice(2, 4)}`
 }
 
+const dataBR = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
+
 const CHAVE_ABERTO = (id: string) => `gc:planejamento:aberto:${id}`
+
+/** O prefixo de unidade que vai DENTRO do campo da grade. Leads e vendas não têm. */
+const PREFIXO: Partial<Record<ChavePlano, string>> = { investimento: 'R$', receita: 'R$', cpl: 'R$', roas: 'x' }
+
+/** O valor de uma linha calculada (CPL, ROAS) no formato da grade: sem o "R$" — ele já é o prefixo. */
+function textoCalculado(chave: ChavePlano, v: number | undefined): string {
+  if (v === undefined) return '—'
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+function textoDaBase(chave: ChavePlano, v: number | undefined): string {
+  if (v === undefined) return '—'
+  if (chave === 'leads' || chave === 'vendas') return formatarMetrica(v, 'inteiro')
+  return `${PREFIXO[chave] ?? ''} ${textoCalculado(chave, v)}`.trim()
+}
+
+/** Variação contra o ponto A em texto pequeno: "+120%", ou "—" quando não há como comparar. */
+function CelulaVariacao({ chave, valor, pontoA }: { chave: ChavePlano; valor: number | undefined; pontoA: number | undefined }) {
+  const v = variacaoContraPontoA(chave, valor, pontoA)
+  if (!v) return <span className="text-[11px] text-foreground/30">—</span>
+  const pct = Math.round(v.pct)
+  return (
+    <span className={cn('text-[11px] tabular-nums', v.boa === true ? 'text-success' : 'text-foreground/50')}>
+      {pct > 0 ? '+' : ''}
+      {pct.toLocaleString('pt-BR')}%
+    </span>
+  )
+}
 
 /**
  * PLANEJAMENTO DO CLIENTE — o ponto A (onde o cliente está hoje), onde se quer chegar em 6 e 12
- * meses, a rota entre as duas pontas e a conferência de realismo.
+ * meses, a rota entre as duas pontas e a conferência das metas.
  *
- * O bloco abre sozinho só quando está INCOMPLETO: planejamento pronto fica recolhido, com um resumo
- * de uma linha no cabeçalho, pra não empurrar o resto da aba pra baixo toda vez. Quem abre ou fecha
- * à mão tem a escolha lembrada neste navegador.
+ * TUDO é opcional. Salvar vazio, só com texto ou com parte dos números sempre funciona; sem número o
+ * planejamento aparece como "A definir" (cinza, neutro), nunca como pendência ou erro. O bloco vem
+ * recolhido: abre quando a pessoa pede (ou quando a Visão geral manda abrir) e a escolha fica lembrada.
  *
- * O ponto A pode ser PRÉ-PREENCHIDO com a média dos últimos meses lançados, com a origem de cada
- * número marcada ("calculado das métricas" × "informado"). É uma FOTO do diagnóstico, não um número
- * que se atualiza: se andasse todo mês, a régua das metas se moveria junto.
+ * O ponto A tem quatro números digitados (leads, investimento, vendas e faturamento); ticket médio e
+ * conversão saem deles. Na grade, só leads, vendas, investimento e faturamento são digitados: CPL e
+ * ROAS são contas, mostradas em cinza.
+ *
+ * O ponto A pode ser PRÉ-PREENCHIDO com a média dos últimos meses lançados — só na primeira vez, num
+ * planejamento que nunca foi salvo —, com a origem de cada número marcada ("calculado das métricas" ×
+ * "informado"). É uma FOTO do diagnóstico, não um número que se atualiza.
  *
  * Os NÚMEROS das metas de 6 e 12 meses moram na mesma tabela de metas de sempre: o que se preenche
- * aqui aparece também em "Metas combinadas". O que a tabela de metas não guarda — o diagnóstico e os
- * textos — tem tabela própria.
+ * aqui aparece também em "Metas combinadas". As opções do portal ("Nossa jornada") ficam na aba
+ * Relatórios, junto do link do portal.
  */
 export function PlanejamentoCliente({
   clienteId,
@@ -219,7 +232,6 @@ export function PlanejamentoCliente({
   const [historico, setHistorico] = React.useState<GcHistoricoPlanejamento[] | null>(null)
   const [modelos, setModelos] = React.useState<GcModeloTexto[]>([])
   const [gerenciando, setGerenciando] = React.useState<GcCampoModelo | null>(null)
-  const [previaAberta, setPreviaAberta] = React.useState(false)
   const [confirmandoMedia, setConfirmandoMedia] = React.useState(false)
   const [mediaAplicada, setMediaAplicada] = React.useState<string>('')
   const prefillFeito = React.useRef<GcPlanejamentoApi | null>(null)
@@ -255,7 +267,7 @@ export function PlanejamentoCliente({
     try {
       setModelos(await gestaoClientes.modelosTexto(false))
     } catch {
-      // Sem os modelos o seletor fica vazio, mas dá pra escrever à mão — não vale um aviso a mais.
+      // Sem os modelos o menu fica vazio, mas dá pra escrever à mão — não vale um aviso a mais.
     }
   }, [])
   React.useEffect(() => {
@@ -276,41 +288,47 @@ export function PlanejamentoCliente({
   // ---- ponto A: pré-preenchimento com a média dos últimos meses lançados
   /** Aplica a sugestão aos campos. `soVazios` = só onde ainda não há número (o pré-preenchimento). */
   const aplicarMedia = React.useCallback((soVazios: boolean) => {
-    let usadas: string[] = []
     setRascunho((r) => {
       if (!r) return r
       const proximo = { ...r, origens: { ...r.origens } }
+      let preencheu = false
       for (const c of CAMPOS_DO_A) {
         const s = sugestao.campos[c.campo]
         if (!s) continue
         if (soVazios && proximo[c.campo].trim() !== '') continue
         proximo[c.campo] = numeroParaCampo(s.valor)
         proximo.origens[c.api] = { origem: 'calculado', meses: s.meses }
-        usadas = s.meses.length > usadas.length ? s.meses : usadas
+        preencheu = true
+      }
+      // Entrou número no ponto A: a data do diagnóstico vem com hoje, e o "aguardando" acaba.
+      if (preencheu) {
+        proximo.data = proximo.data ?? hojeISO()
+        proximo.aguardando = false
+        proximo.lembrarEm = null
       }
       return proximo
     })
-    return usadas
   }, [sugestao])
 
   React.useEffect(() => {
-    // Uma vez por planejamento carregado, e só em campo vazio: nunca sobrescreve número já salvo.
+    // Só na PRIMEIRA vez (planejamento nunca salvo) e em campo vazio: quem já salvou — inclusive em
+    // branco, de propósito — não vê os números voltarem sozinhos.
     if (!api || prefillFeito.current === api) return
     prefillFeito.current = api
-    if (sugestao.meses.length === 0) return
-    const preenchidos = CAMPOS_DO_A.filter((c) => (doApi(api) as unknown as Record<string, string>)[c.campo].trim() === '' && sugestao.campos[c.campo])
-    if (preenchidos.length === 0) return
+    if (api.existe || api.atual.aguardando_cliente || sugestao.meses.length === 0) return
+    if (!CAMPOS_DO_A.some((c) => sugestao.campos[c.campo])) return
     aplicarMedia(true)
     setMediaAplicada(rotuloDosMeses(sugestao.meses))
   }, [api, sugestao, aplicarMedia])
 
   // ---- recolher / abrir
-  const plano = React.useMemo(() => (rascunho ? planoDoRascunho(rascunho) : null), [rascunho])
   const planoSalvo = React.useMemo(() => (api ? planoDaApi(api) : null), [api])
-  const completo = planoSalvo ? planejamentoCompleto(planoSalvo) : false
+  const estado = planoSalvo
+    ? estadoDoPlanejamento(planoSalvo, { aguardando: api?.atual.aguardando_cliente, lembrarEm: api?.atual.lembrar_em })
+    : 'a_definir'
 
   React.useEffect(() => {
-    // Só decide uma vez, quando o planejamento chega: a escolha lembrada vale; sem ela, abre se incompleto.
+    // Só decide uma vez, quando o planejamento chega: recolhido, a menos que a pessoa tenha deixado aberto.
     if (!api || aberto !== null) return
     let lembrado: string | null = null
     try {
@@ -318,7 +336,7 @@ export function PlanejamentoCliente({
     } catch {
       /* sem armazenamento: vale a regra padrão */
     }
-    setAberto(lembrado === '1' ? true : lembrado === '0' ? false : !planejamentoCompleto(planoDaApi(api)))
+    setAberto(lembrado === '1')
   }, [api, aberto, clienteId])
 
   const alternar = (valor: boolean) => {
@@ -340,23 +358,35 @@ export function PlanejamentoCliente({
     return () => window.clearTimeout(t)
   }, [abrirQuando])
 
-  const avisos = React.useMemo(() => (plano ? validarRealismo(plano) : []), [plano])
+  const plano = React.useMemo(() => (rascunho ? planoDoRascunho(rascunho) : null), [rascunho])
   const realizado = React.useMemo(() => realizadoPorMes(metricas), [metricas])
+  /** Pra projetar: sem ponto A, a rota parte do primeiro mês lançado em Métricas. */
+  const planoDaRota = React.useMemo(() => (plano ? comPartidaDasMetricas(plano, realizado) : null), [plano, realizado])
+  const avisos = React.useMemo(() => {
+    if (!plano || !rascunho) return []
+    const cpl = avisosDeCplImplicito(plano, {
+      '6_meses': rascunho.cenarios['6_meses'].estrategia,
+      '12_meses': rascunho.cenarios['12_meses'].estrategia,
+    })
+    return [...cpl.map((a) => a.texto), ...validarRealismo(plano).map((a) => `${a.titulo}. ${a.texto}`)]
+  }, [plano, rascunho])
+  // O botão de salvar fica ativo sempre que o rascunho difere do que está gravado — inclusive ao LIMPAR
+  // um campo, que é só uma diferença como outra qualquer.
   const sujo = rascunho !== null && JSON.stringify(rascunho) !== inicial
 
   const chavesComRota = React.useMemo(
-    () => (plano ? CHAVES_PLANO.filter(({ chave }) => rotaProjetada(plano, chave).length > 0) : []),
-    [plano],
+    () => (planoDaRota ? CHAVES_PLANO.filter(({ chave }) => rotaProjetada(planoDaRota, chave).length > 0) : []),
+    [planoDaRota],
   )
   const chaveEfetiva = chavesComRota.some((c) => c.chave === chaveGrafico)
     ? chaveGrafico
     : (chavesComRota[0]?.chave ?? chaveGrafico)
   const linhasDaProjecao = React.useMemo(
-    () => (plano ? projecaoMensal(plano, chaveEfetiva, realizado, mesAtual()) : []),
-    [plano, chaveEfetiva, realizado],
+    () => (planoDaRota ? projecaoMensal(planoDaRota, chaveEfetiva, realizado, mesAtual()) : []),
+    [planoDaRota, chaveEfetiva, realizado],
   )
 
-  if (carregando || !rascunho || !plano) {
+  if (carregando || !rascunho || !plano || !planoDaRota) {
     return (
       <section className="flex items-center justify-center gap-2 rounded-xl border border-line p-8 text-sm text-foreground/60">
         <Loader2 className="h-4 w-4 animate-spin" /> Carregando planejamento…
@@ -366,14 +396,28 @@ export function PlanejamentoCliente({
 
   const mudar = <K extends keyof Rascunho>(campo: K, valor: Rascunho[K]) =>
     setRascunho((r) => (r ? { ...r, [campo]: valor } : r))
-  /** Digitar num número do ponto A o torna "informado": deixou de ser a média calculada. */
-  const mudarPontoA = (campo: CampoDoPontoA, api: string, valor: string) =>
-    setRascunho((r) =>
-      r ? { ...r, [campo]: valor, origens: { ...r.origens, [api]: { origem: 'informado' as const } } } : r,
-    )
-  const mudarCenario = (h: HorizontePlano, campo: 'objetivo' | 'estrategia' | 'premissas', valor: string) =>
+  /**
+   * Digitar num número do ponto A o torna "informado" (deixou de ser a média). Quando é o PRIMEIRO
+   * número do ponto A, a data do diagnóstico vem preenchida com hoje (continua editável e opcional) e o
+   * "aguardando o cliente" acaba: os números chegaram.
+   */
+  const mudarPontoA = (campo: CampoDoPontoA, apiCampo: string, valor: string) =>
+    setRascunho((r) => {
+      if (!r) return r
+      const jaTinhaNumero = CAMPOS_DO_A.some((c) => r[c.campo].trim() !== '')
+      const proximo: Rascunho = {
+        ...r, [campo]: valor, origens: { ...r.origens, [apiCampo]: { origem: 'informado' as const } },
+      }
+      if (valor.trim() !== '') {
+        if (!jaTinhaNumero && !r.data) proximo.data = hojeISO()
+        proximo.aguardando = false
+        proximo.lembrarEm = null
+      }
+      return proximo
+    })
+  const mudarCenario = (h: HorizontePlano, campo: 'objetivo' | 'estrategia', valor: string) =>
     setRascunho((r) => (r ? { ...r, cenarios: { ...r.cenarios, [h]: { ...r.cenarios[h], [campo]: valor } } } : r))
-  const mudarMeta = (h: HorizontePlano, chave: ChavePlano, valor: string) =>
+  const mudarMeta = (h: HorizontePlano, chave: ChaveDigitada, valor: string) =>
     setRascunho((r) =>
       r
         ? { ...r, cenarios: { ...r.cenarios, [h]: { ...r.cenarios[h], metas: { ...r.cenarios[h].metas, [chave]: valor } } } }
@@ -382,39 +426,36 @@ export function PlanejamentoCliente({
 
   const ctxDeVariaveis = contextoDeVariaveis(plano, cliente ?? {})
   /** Aplica um modelo a um texto: troca as variáveis, e substitui ou acrescenta conforme a escolha. */
-  const aplicarModelo = (atual: string, modelo: string, modo: 'substituir' | 'acrescentar') => {
+  const textoComModelo = (atual: string, modelo: string, modo: 'substituir' | 'acrescentar') => {
     const texto = aplicarVariaveis(modelo, ctxDeVariaveis)
     return modo === 'acrescentar' && atual.trim() ? `${atual.replace(/\s+$/, '')}\n\n${texto}` : texto
   }
+  const textosDoPlano: Record<AlvoDeModelo, string> = {
+    situacao: rascunho.situacao,
+    'objetivo:6_meses': rascunho.cenarios['6_meses'].objetivo,
+    'objetivo:12_meses': rascunho.cenarios['12_meses'].objetivo,
+    'estrategia:6_meses': rascunho.cenarios['6_meses'].estrategia,
+    'estrategia:12_meses': rascunho.cenarios['12_meses'].estrategia,
+  }
+  const aplicarModeloEm = (alvo: AlvoDeModelo, modelo: string, modo: 'substituir' | 'acrescentar') => {
+    const novo = textoComModelo(textosDoPlano[alvo], modelo, modo)
+    if (alvo === 'situacao') return mudar('situacao', novo)
+    const [campo, horizonte] = alvo.split(':') as ['objetivo' | 'estrategia', HorizontePlano]
+    mudarCenario(horizonte, campo, novo)
+  }
 
   const salvar = async () => {
-    const conv = numeroDigitado(rascunho.conversao)
-    if (conv !== null && (conv < 0 || conv > 100)) {
-      toast.error('A taxa de conversão fica entre 0 e 100%')
-      return
-    }
     setSalvando(true)
     try {
       const salvo = await gestaoClientes.salvarPlanejamento(clienteId, paraEntrada(rascunho))
       aplicar(salvo)
       setMediaAplicada('')
-      // A conferência roda sobre o que FOI gravado — é o que o time vai ver depois.
-      const conferencia = validarRealismo(planoDaApi(salvo))
-      const graves = conferencia.filter((a) => a.nivel === 'alerta')
-      if (graves.length > 0) {
-        const g = graves[0]
-        toast.warning(
-          `Planejamento salvo, mas ${graves.length} ponto(s) não fecham a conta` +
-            (g.investimentoNecessario ? ` — ${g.titulo.split(':')[0].toLowerCase()} pede cerca de ${formatarMetrica(g.investimentoNecessario, 'reais')}/mês` : ''),
-        )
-      } else if (conferencia.some((a) => a.nivel === 'atencao')) {
-        toast.success('Planejamento salvo — há pontos de atenção nos avisos de realismo')
-      } else {
-        toast.success('Planejamento salvo')
-      }
-      if (!salvo.atual.data_diagnostico) {
-        toast.info('Sem a data do diagnóstico não dá pra traçar a rota mês a mês.')
-      }
+      const lembrete = salvo.atual.aguardando_cliente && salvo.atual.lembrar_em
+      toast.success(
+        lembrete
+          ? `Planejamento salvo — lembrete em Estratégias > Pendências para ${dataBR(salvo.atual.lembrar_em!)}`
+          : 'Planejamento salvo',
+      )
       setHistorico(null)
       await onMetasMudaram()
     } catch (err) {
@@ -424,11 +465,11 @@ export function PlanejamentoCliente({
     }
   }
 
+  // O que a grade mostra na coluna "Ponto A": só o ponto A de verdade, sem o ponto de partida emprestado.
   const base = baseDoPontoA(plano.atual)
-  const falta = faltaNoPlanejamento(plano)
-  const resumo = resumoLinha(plano)
+  const resumo = planoSalvo ? resumoLinha(planoSalvo) : null
   const mesAgora = mesAtual()
-  const naRota = avaliarMesContraRota(plano, realizado[mesAgora] ?? {}, mesAgora)
+  const naRota = avaliarMesContraRota(planoDaRota, realizado[mesAgora] ?? {}, mesAgora)
   const ruins = naRota.filter((r) => r.boa === false)
   const estadoDoMes = ruins.some((r) => Math.abs(r.desvioPct) > 40)
     ? { estado: 'risco' as const, texto: 'Muito abaixo da rota' }
@@ -438,31 +479,34 @@ export function PlanejamentoCliente({
         ? { estado: 'otimo' as const, texto: 'No caminho' }
         : null
 
-  /** Enter desce pra mesma coluna da linha de baixo, como em planilha. */
+  /**
+   * Enter e Tab descem pra mesma coluna da linha de baixo, como em planilha; no fim da coluna de 6
+   * meses, seguem pro topo da de 12. Shift+Tab sobe. Fora da grade, o Tab é o de sempre.
+   */
   const aoTeclar = (e: React.KeyboardEvent<HTMLInputElement>, h: HorizontePlano, indice: number) => {
-    if (e.key !== 'Enter') return
+    const total = CHAVES_DIGITADAS.length
+    let alvo: string | null = null
+    if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+      if (indice + 1 < total) alvo = `${h}-${indice + 1}`
+      else if (h === '6_meses') alvo = `12_meses-0`
+      else if (e.key === 'Enter') return e.preventDefault()
+    } else if (e.key === 'Tab' && e.shiftKey) {
+      if (indice > 0) alvo = `${h}-${indice - 1}`
+      else if (h === '12_meses') alvo = `6_meses-${total - 1}`
+    }
+    if (!alvo) return
+    const proximo = document.querySelector<HTMLInputElement>(`[data-plano="${alvo}"]`)
+    if (!proximo) return
     e.preventDefault()
-    const proximo = document.querySelector<HTMLInputElement>(`[data-plano="${h}-${indice + 1}"]`)
-    proximo?.focus()
-    proximo?.select()
+    proximo.focus()
+    proximo.select()
   }
 
   const temSugestao = Object.keys(sugestao.campos).length > 0
   const algumNumero = CAMPOS_DO_A.some((c) => rascunho[c.campo].trim() !== '')
-
-  /** O rótulo de um texto, com o seletor de modelo ao lado. */
-  const rotuloComModelo = (rotulo: string, campo: GcCampoModelo, texto: string, aoAplicar: (t: string) => void) => (
-    <div className="mb-1.5 flex items-center justify-between gap-2">
-      <span className="text-xs font-medium text-foreground/70">{rotulo}</span>
-      <SeletorDeModelo
-        campo={campo}
-        modelos={modelos}
-        textoAtual={texto}
-        onAplicar={(m, modo) => aoAplicar(aplicarModelo(texto, m, modo))}
-        onGerenciar={() => setGerenciando(campo)}
-      />
-    </div>
-  )
+  const ticketCalculado = plano.atual.ticket
+  const conversaoCalculada = plano.atual.conversao
+  const semData = !planoDaRota.dataDiagnostico
 
   return (
     <section ref={secaoRef} id="gc-planejamento" className="rounded-xl border border-accent/25 bg-accent/[0.015]">
@@ -481,24 +525,24 @@ export function PlanejamentoCliente({
             <span className="flex flex-wrap items-center gap-2">
               <Route className="h-4 w-4 text-accent" />
               <span className="text-base font-semibold text-foreground">Planejamento do cliente</span>
-              {estadoDoMes && <PastilhaSaude estado={estadoDoMes.estado} texto={estadoDoMes.texto} />}
-              {completo ? null : (
-                <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] text-warning">
-                  incompleto
-                </span>
+              {estado === 'a_definir' && <PastilhaSaude estado="neutro" texto="A definir" />}
+              {estado === 'atencao' && <PastilhaSaude estado="atencao" texto="Atenção" />}
+              {estado === 'definido' && estadoDoMes && (
+                <PastilhaSaude estado={estadoDoMes.estado} texto={estadoDoMes.texto} />
               )}
             </span>
-            {resumo ? (
+            {estado === 'definido' && resumo ? (
               <span className="mt-0.5 block truncate text-xs text-foreground/60" title={resumo}>
                 {resumo}
               </span>
             ) : (
               <span className="mt-0.5 block text-xs text-foreground/50">
-                Ainda não há ponto de partida nem metas. Abra pra montar.
+                {estado === 'atencao' && api?.atual.lembrar_em
+                  ? `O lembrete de ${dataBR(api.atual.lembrar_em)} venceu: veja se o cliente já trouxe os números.`
+                  : api?.atual.aguardando_cliente
+                    ? `Aguardando o cliente${api.atual.lembrar_em ? ` — lembrar em ${dataBR(api.atual.lembrar_em)}` : ''}.`
+                    : 'Preencha quando o cliente tiver esses números.'}
               </span>
-            )}
-            {!completo && falta.length > 0 && (
-              <span className="mt-0.5 block text-[11px] text-warning/90">Falta: {falta.join(', ')}</span>
             )}
           </span>
         </button>
@@ -517,16 +561,23 @@ export function PlanejamentoCliente({
 
       {/* O conteúdo fica MONTADO mesmo recolhido: desmontar jogaria fora o que está sendo digitado. */}
       <div className={cn('border-t border-accent/15 p-4', !aberto && 'hidden')}>
-        <p className="mb-3 max-w-2xl text-xs text-foreground/55">
-          De onde o cliente parte, onde a gente quer chegar em 6 e 12 meses e o caminho entre os dois. As metas
-          numéricas dos cenários são as mesmas de "Metas combinadas" mais abaixo.
-        </p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="max-w-2xl text-xs text-foreground/55">
+            Tudo é opcional: preencha o que souber. As metas numéricas são as mesmas de "Metas combinadas".
+          </p>
+          <MenuModelos
+            modelos={modelos}
+            textos={textosDoPlano}
+            onAplicar={aplicarModeloEm}
+            onGerenciar={() => setGerenciando('situacao')}
+          />
+        </div>
 
-        {/* ---------------------------------------------------------------- 1. cenário atual */}
+        {/* ---------------------------------------------------------------- 1. ponto A */}
         <div className="rounded-xl border border-line bg-surface p-3">
-          <h3 className="mb-2 text-sm font-semibold text-foreground">1 · Cenário atual — o ponto A</h3>
+          <h3 className="mb-2 text-sm font-semibold text-foreground">1 · Onde o cliente está hoje — ponto A</h3>
           <div>
-            {rotuloComModelo('Situação de hoje', 'situacao', rascunho.situacao, (t) => mudar('situacao', t))}
+            <span className="mb-1.5 block text-xs font-medium text-foreground/70">Situação de hoje</span>
             <Textarea
               rows={3}
               value={rascunho.situacao}
@@ -543,7 +594,7 @@ export function PlanejamentoCliente({
             </p>
           )}
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {CAMPOS_DO_A.map((c) => {
               const origem = rascunho.origens[c.api]
               const temValor = rascunho[c.campo].trim() !== ''
@@ -573,11 +624,49 @@ export function PlanejamentoCliente({
                         : 'informado'}
                     </p>
                   )}
-                  {!temValor && c.ajuda && <p className="mt-1 text-[11px] text-foreground/40">{c.ajuda}</p>}
                 </div>
               )
             })}
             <CampoData label="Data do diagnóstico" value={rascunho.data} onChange={(v) => mudar('data', v)} />
+          </div>
+
+          {/* Ticket e conversão são contas: aparecem só quando existem, em texto pequeno. */}
+          {(ticketCalculado !== null || conversaoCalculada !== null) && (
+            <p className="mt-2 text-[11px] text-foreground/45">
+              {[
+                ticketCalculado !== null ? `Ticket médio ${formatarMetrica(ticketCalculado, 'reais')}` : null,
+                conversaoCalculada !== null ? `Conversão ${formatarMetrica(conversaoCalculada, 'percentual')}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}{' '}
+              <span className="text-foreground/30">(calculados)</span>
+            </p>
+          )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground/80">
+              <input
+                type="checkbox"
+                checked={rascunho.aguardando}
+                onChange={(e) =>
+                  setRascunho((r) =>
+                    r ? { ...r, aguardando: e.target.checked, lembrarEm: e.target.checked ? r.lembrarEm : null } : r,
+                  )
+                }
+                className="h-4 w-4 rounded border-line"
+              />
+              Aguardando o cliente trazer os números
+            </label>
+            {rascunho.aguardando && (
+              <div className="flex items-center gap-2">
+                <CampoData
+                  label="Lembrar de completar em"
+                  value={rascunho.lembrarEm}
+                  onChange={(v) => mudar('lembrarEm', v)}
+                  hint="Opcional. Com data, vira pendência em Estratégias > Pendências."
+                />
+              </div>
+            )}
           </div>
 
           {temSugestao && (
@@ -586,7 +675,11 @@ export function PlanejamentoCliente({
                 variant="ghost"
                 size="sm"
                 leftIcon={<Calculator className="h-3.5 w-3.5" />}
-                onClick={() => (algumNumero ? setConfirmandoMedia(true) : (aplicarMedia(false), setMediaAplicada(rotuloDosMeses(sugestao.meses))))}
+                onClick={() =>
+                  algumNumero
+                    ? setConfirmandoMedia(true)
+                    : (aplicarMedia(false), setMediaAplicada(rotuloDosMeses(sugestao.meses)))
+                }
               >
                 {algumNumero ? 'Recalcular da média dos últimos meses' : 'Preencher com a média dos últimos meses'}
               </Button>
@@ -597,91 +690,105 @@ export function PlanejamentoCliente({
           )}
         </div>
 
-        {/* ---------------------------------------------------------------- 2. grade dos cenários */}
+        {/* ---------------------------------------------------------------- 2. grade das metas */}
         <div className="mt-3 rounded-xl border border-line bg-surface p-3">
           <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Target className="h-4 w-4 text-accent" /> 2 · Metas dos cenários de 6 e 12 meses
+            <Target className="h-4 w-4 text-accent" /> 2 · Metas de 6 e 12 meses
           </h3>
-          <p className="mb-2 text-xs text-foreground/50">
-            Preencha tudo de uma vez — <strong>Enter</strong> desce pra linha de baixo. O ponto A é calculado do
-            cenário atual. Campo vazio apaga aquela meta.
-          </p>
+          <p className="mb-2 text-xs text-foreground/50">Preencha o que souber. CPL e ROAS são calculados.</p>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-foreground/45">
                 <tr>
                   <th className="py-1.5 pr-3 font-medium">Métrica</th>
                   <th className="px-2 py-1.5 text-right font-medium">Ponto A</th>
-                  {HORIZONTES_PLANO.map((h) => (
-                    <th key={h.valor} className="px-2 py-1.5 text-right font-medium">
-                      Meta em {h.label}
-                    </th>
-                  ))}
+                  <th className="px-2 py-1.5 text-right font-medium">Meta 6 meses</th>
+                  <th className="px-2 py-1.5 font-medium">Variação</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Meta 12 meses</th>
+                  <th className="px-2 py-1.5 font-medium">Variação</th>
                 </tr>
               </thead>
               <tbody>
-                {CHAVES_PLANO.map(({ chave, label }, indice) => {
-                  const unidade = metricaUnidade(chave)
+                {CHAVES_DIGITADAS.map(({ chave, label }, indice) => {
+                  const prefixo = PREFIXO[chave]
+                  const placeholder = prefixo === 'R$' ? '0,00' : '0'
                   return (
                     <tr key={chave} className="border-t border-line">
                       <td className="py-1.5 pr-3 font-medium text-foreground/85">{label}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-foreground/55">
-                        {base[chave] === undefined ? '—' : formatarMetrica(base[chave]!, unidade)}
-                      </td>
-                      {HORIZONTES_PLANO.map((h) => (
-                        <td key={h.valor} className="px-1.5 py-1">
-                          <input
-                            data-plano={`${h.valor}-${indice}`}
-                            value={rascunho.cenarios[h.valor].metas[chave]}
-                            onChange={(e) => mudarMeta(h.valor, chave, e.target.value)}
-                            onKeyDown={(e) => aoTeclar(e, h.valor, indice)}
-                            onFocus={(e) => e.target.select()}
-                            inputMode="decimal"
-                            placeholder={unidade === 'reais' || unidade === 'decimal' ? '0,00' : '0'}
-                            className="h-8 w-full min-w-[96px] rounded-md border border-line bg-surface px-2 text-right text-sm tabular-nums text-foreground outline-none placeholder:text-foreground/25 focus:border-accent focus:ring-2 focus:ring-accent/15"
-                          />
-                        </td>
-                      ))}
+                      <td className="px-2 py-1.5 text-right tabular-nums text-foreground/55">{textoDaBase(chave, base[chave])}</td>
+                      {HORIZONTES_PLANO.flatMap((h) => [
+                        <td key={`${h.valor}-campo`} className="px-1.5 py-1">
+                          <div className="relative ml-auto w-[160px]">
+                            {prefixo && (
+                              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground/40">
+                                {prefixo}
+                              </span>
+                            )}
+                            <input
+                              data-plano={`${h.valor}-${indice}`}
+                              aria-label={`${label}, meta de ${h.label}`}
+                              value={rascunho.cenarios[h.valor].metas[chave as ChaveDigitada]}
+                              onChange={(e) => mudarMeta(h.valor, chave as ChaveDigitada, e.target.value)}
+                              onKeyDown={(e) => aoTeclar(e, h.valor, indice)}
+                              onFocus={(e) => e.target.select()}
+                              inputMode="decimal"
+                              placeholder={placeholder}
+                              className={cn(
+                                'h-8 w-full rounded-md border border-line bg-surface pr-2 text-right text-sm tabular-nums text-foreground outline-none placeholder:text-foreground/25 focus:border-accent focus:ring-2 focus:ring-accent/15',
+                                prefixo ? 'pl-8' : 'pl-2',
+                              )}
+                            />
+                          </div>
+                        </td>,
+                        <td key={`${h.valor}-var`} className="px-2 py-1">
+                          <CelulaVariacao chave={chave} valor={plano.metas[h.valor][chave]} pontoA={base[chave]} />
+                        </td>,
+                      ])}
                     </tr>
                   )
                 })}
+                {/* Linhas CALCULADAS: cinza, somente leitura. */}
+                {CHAVES_CALCULADAS.map(({ chave, label }) => (
+                  <tr key={chave} className="border-t border-line">
+                    <td className="py-1.5 pr-3 font-medium text-foreground/45">{label}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-foreground/40">{textoDaBase(chave, base[chave])}</td>
+                    {HORIZONTES_PLANO.flatMap((h) => [
+                      <td key={`${h.valor}-campo`} className="px-1.5 py-1">
+                        <div
+                          className="relative ml-auto h-8 w-[160px] rounded-md bg-elevate/[0.04] text-foreground/45"
+                          title="Calculado — não se digita"
+                        >
+                          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground/30">
+                            {PREFIXO[chave]}
+                          </span>
+                          <span className="absolute inset-y-0 right-2 flex items-center text-sm tabular-nums">
+                            {textoCalculado(chave, plano.metas[h.valor][chave])}
+                          </span>
+                        </div>
+                      </td>,
+                      <td key={`${h.valor}-var`} className="px-2 py-1">
+                        <CelulaVariacao chave={chave} valor={plano.metas[h.valor][chave]} pontoA={base[chave]} />
+                      </td>,
+                    ])}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
-          {/* ------------------------------------------------------------ realismo */}
+          {/* ------------------------------------------------------------ avisos (discretos, não bloqueiam) */}
           {avisos.length > 0 && (
-            <div className="mt-3 space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-foreground/45">Conferência de realismo</p>
-              {avisos.map((a, i) => {
-                const n = NIVEL_AVISO[a.nivel]
-                const Icone = n.icone
-                const sugerido = a.investimentoNecessario ? Math.ceil(a.investimentoNecessario / 10) * 10 : null
-                const atualInv = numeroDigitado(rascunho.cenarios[a.horizonte].metas.investimento)
-                return (
-                  <div key={i} className={cn('flex items-start gap-2.5 rounded-lg border px-3 py-2', n.classe)}>
-                    <Icone className={cn('mt-0.5 h-4 w-4 shrink-0', n.cor)} />
-                    <div className="min-w-0 flex-1 text-sm">
-                      <p className="font-medium text-foreground">
-                        {a.titulo} <span className={cn('text-[11px] font-normal', n.cor)}>· {n.rotulo}</span>
-                      </p>
-                      <p className="text-xs text-foreground/70">{a.texto}</p>
-                    </div>
-                    {sugerido !== null && atualInv !== sugerido && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="shrink-0"
-                        leftIcon={<Wand2 className="h-3.5 w-3.5" />}
-                        onClick={() => mudarMeta(a.horizonte, 'investimento', numeroParaCampo(sugerido))}
-                      >
-                        Usar {formatarMetrica(sugerido, 'reais')}
-                      </Button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <ul className="mt-3 space-y-1.5">
+              {avisos.map((texto, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 rounded-md border border-warning/25 bg-warning/[0.05] px-2.5 py-1.5 text-xs text-foreground/75"
+                >
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                  <span>{texto}</span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
@@ -691,10 +798,10 @@ export function PlanejamentoCliente({
             const c = rascunho.cenarios[h.valor]
             return (
               <div key={h.valor} className="rounded-xl border border-line bg-surface p-3">
-                <h3 className="mb-2 text-sm font-semibold text-foreground">Cenário de {h.label}</h3>
+                <h3 className="mb-2 text-sm font-semibold text-foreground">Em {h.label}</h3>
                 <div className="space-y-3">
                   <div>
-                    {rotuloComModelo('Onde quer chegar', 'objetivo', c.objetivo, (t) => mudarCenario(h.valor, 'objetivo', t))}
+                    <span className="mb-1.5 block text-xs font-medium text-foreground/70">Onde quer chegar</span>
                     <Textarea
                       rows={2}
                       value={c.objetivo}
@@ -703,24 +810,12 @@ export function PlanejamentoCliente({
                     />
                   </div>
                   <div>
-                    {rotuloComModelo('Estratégia', 'estrategia', c.estrategia, (t) => mudarCenario(h.valor, 'estrategia', t))}
+                    <span className="mb-1.5 block text-xs font-medium text-foreground/70">Estratégia e premissas</span>
                     <Textarea
-                      rows={3}
+                      rows={4}
                       value={c.estrategia}
                       onChange={(e) => mudarCenario(h.valor, 'estrategia', e.target.value)}
-                      placeholder="O que vamos fazer pra chegar lá."
-                    />
-                    <p className="mt-1 flex items-center gap-1 text-[11px] text-foreground/40">
-                      <Lock className="h-3 w-3" /> interna — nunca vai pro portal
-                    </p>
-                  </div>
-                  <div>
-                    {rotuloComModelo('Premissas', 'premissas', c.premissas, (t) => mudarCenario(h.valor, 'premissas', t))}
-                    <Textarea
-                      rows={3}
-                      value={c.premissas}
-                      onChange={(e) => mudarCenario(h.valor, 'premissas', e.target.value)}
-                      placeholder="O que precisa ser verdade: CPL cair com criativo novo, cliente atender em 5 min…"
+                      placeholder="O que vamos fazer e o que precisa ser verdade: CPL cair com criativo novo, cliente atender em 5 min…"
                     />
                     <p className="mt-1 flex items-center gap-1 text-[11px] text-foreground/40">
                       <Lock className="h-3 w-3" /> interna — nunca vai pro portal
@@ -736,55 +831,31 @@ export function PlanejamentoCliente({
         <div className="mt-3 rounded-xl border border-line bg-surface p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-foreground">3 · Projeção mês a mês</h3>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="Curva de crescimento">
-                {(
-                  [
-                    { valor: 'linear', rotulo: 'Linear', ajuda: 'o mesmo tanto a cada mês' },
-                    { valor: 'composta', rotulo: 'Composta', ajuda: 'a mesma % a cada mês, em cima do mês anterior' },
-                  ] as const
-                ).map((c) => (
-                  <button
-                    key={c.valor}
-                    type="button"
-                    title={c.ajuda}
-                    onClick={() => mudar('curva', c.valor)}
-                    aria-pressed={rascunho.curva === c.valor}
-                    className={cn(
-                      'h-8 px-3 text-xs transition-colors',
-                      rascunho.curva === c.valor
-                        ? 'bg-elevate/[0.08] text-foreground'
-                        : 'text-foreground/50 hover:text-foreground/80',
-                    )}
-                  >
-                    {c.rotulo}
-                  </button>
-                ))}
-              </div>
-              {chavesComRota.length > 0 && (
-                <Select
-                  options={chavesComRota.map((c) => ({ value: c.chave, label: c.label }))}
-                  value={chaveEfetiva}
-                  onChange={(e) => setChaveGrafico(e.target.value as ChavePlano)}
-                  className="w-40"
-                />
-              )}
-            </div>
+            {chavesComRota.length > 0 && (
+              <Select
+                options={chavesComRota.map((c) => ({ value: c.chave, label: c.label }))}
+                value={chaveEfetiva}
+                onChange={(e) => setChaveGrafico(e.target.value as ChavePlano)}
+                className="w-40"
+              />
+            )}
           </div>
 
           {chavesComRota.length === 0 ? (
             <p className="py-6 text-center text-sm text-foreground/45">
-              Pra traçar a rota, preencha a <strong>data do diagnóstico</strong>, o ponto A e pelo menos uma meta.
+              {semData
+                ? 'Lance o primeiro mês para ver a rota.'
+                : 'Defina uma meta de 6 ou 12 meses para ver a rota.'}
             </p>
           ) : (
             <>
               <p className="mb-3 text-xs text-foreground/50">
-                {HORIZONTES_PLANO.every((h) => plano.metas[h.valor][chaveEfetiva] !== undefined)
-                  ? 'A rota passa pela meta de 6 meses antes de seguir pra de 12 — a de 6 é um ponto de passagem, não uma linha à parte. '
-                  : 'Rota do ponto A até a meta. '}
-                {rascunho.curva === 'linear'
-                  ? 'Linear: o mesmo tanto a cada mês.'
-                  : 'Composta: a mesma percentagem a cada mês, em cima do mês anterior.'}{' '}
+                {HORIZONTES_PLANO.every((h) => planoDaRota.metas[h.valor][chaveEfetiva] !== undefined)
+                  ? 'A rota passa pela meta de 6 meses antes de seguir pra de 12. '
+                  : 'Rota até a meta. '}
+                {temPontoDeA(base, chaveEfetiva)
+                  ? 'Parte do ponto A, o mesmo tanto a cada mês. '
+                  : 'Sem o número no ponto A, parte do primeiro mês lançado em Métricas. '}
                 "No caminho" é estar a menos de 10% do projetado.
               </p>
               <GraficoProjecao linhas={linhasDaProjecao} chave={chaveEfetiva} />
@@ -793,62 +864,6 @@ export function PlanejamentoCliente({
               </div>
             </>
           )}
-        </div>
-
-        {/* ---------------------------------------------------------------- portal */}
-        <div className="mt-3 rounded-xl border border-line bg-surface p-3">
-          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-foreground">Portal do cliente — "Nossa jornada"</h3>
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<Eye className="h-3.5 w-3.5" />}
-              disabled={sujo}
-              title={sujo ? 'Salve o planejamento primeiro — a prévia mostra o que está salvo' : undefined}
-              onClick={() => setPreviaAberta(true)}
-            >
-              Ver como o cliente vê
-            </Button>
-          </div>
-          <p className="mb-2 text-xs text-foreground/50">
-            Desligado por padrão. Ligado, o cliente vê o cenário atual (só os números), as metas de 6 e 12 meses e o
-            gráfico de realizado × projeção — com o realizado dos meses de relatório já publicado. Use a prévia
-            antes de ligar.{sujo && ' (Salve as alterações pra a prévia refletir.)'}
-          </p>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground/85">
-            <input
-              type="checkbox"
-              checked={rascunho.portalAtivo}
-              onChange={(e) => mudar('portalAtivo', e.target.checked)}
-              className="h-4 w-4 rounded border-line"
-            />
-            Mostrar "Nossa jornada" no portal deste cliente
-          </label>
-          <div className={cn('ml-6 mt-2 space-y-1.5', !rascunho.portalAtivo && 'opacity-45')}>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground/75">
-              <input
-                type="checkbox"
-                disabled={!rascunho.portalAtivo}
-                checked={rascunho.portalSituacao}
-                onChange={(e) => mudar('portalSituacao', e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-line"
-              />
-              Mostrar o texto "situação de hoje"
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground/75">
-              <input
-                type="checkbox"
-                disabled={!rascunho.portalAtivo}
-                checked={rascunho.portalObjetivo}
-                onChange={(e) => mudar('portalObjetivo', e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-line"
-              />
-              Mostrar o texto "onde quer chegar" de cada cenário
-            </label>
-            <p className="flex items-center gap-1 text-xs text-foreground/45">
-              <Lock className="h-3 w-3" /> Estratégia e premissas nunca vão pro portal.
-            </p>
-          </div>
         </div>
 
         {/* ---------------------------------------------------------------- histórico */}
@@ -904,7 +919,6 @@ export function PlanejamentoCliente({
         onFechar={() => setGerenciando(null)}
         onMudou={carregarModelos}
       />
-      <PreviaPortal aberto={previaAberta} clienteId={clienteId} onFechar={() => setPreviaAberta(false)} />
       <Modal
         open={confirmandoMedia}
         onClose={() => setConfirmandoMedia(false)}
@@ -935,4 +949,9 @@ export function PlanejamentoCliente({
       </Modal>
     </section>
   )
+}
+
+/** A métrica tem número no ponto A (e não só o ponto de partida emprestado do primeiro mês)? */
+function temPontoDeA(base: Partial<Record<ChavePlano, number>>, chave: ChavePlano): boolean {
+  return base[chave] !== undefined
 }

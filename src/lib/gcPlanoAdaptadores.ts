@@ -1,23 +1,27 @@
 import type {
   GcClienteLista, GcJornadaPortal, GcPlanejamentoApi,
 } from '@/services/gestaoClientes'
-import { HORIZONTES_PLANO, type MetasPlano, type Planejamento } from '@/lib/gcPlanejamento'
+import {
+  HORIZONTES_PLANO, comMetasCalculadas, montarPontoA, type MetasPlano, type Planejamento,
+} from '@/lib/gcPlanejamento'
+
+// A curva é sempre linear (o seletor saiu da tela) e CPL/ROAS são sempre calculados das metas digitadas:
+// o que vier gravado pra essas duas chaves, de planejamentos antigos, é ignorado em todos os adaptadores.
 
 /** O planejamento como a API de edição entrega → o formato do cálculo. */
 export function planoDaApi(a: GcPlanejamentoApi): Planejamento {
   return {
-    curva: a.curva,
+    curva: 'linear',
     dataDiagnostico: a.atual.data_diagnostico,
-    atual: {
+    atual: montarPontoA({
       leads: a.atual.leads_mes,
       investimento: a.atual.investimento_mes,
-      ticket: a.atual.ticket_medio,
-      conversao: a.atual.taxa_conversao,
+      vendas: a.atual.vendas_mes,
       receita: a.atual.faturamento_mensal,
-    },
+    }),
     metas: {
-      '6_meses': a.cenarios['6_meses']?.metas ?? {},
-      '12_meses': a.cenarios['12_meses']?.metas ?? {},
+      '6_meses': comMetasCalculadas(a.cenarios['6_meses']?.metas ?? {}),
+      '12_meses': comMetasCalculadas(a.cenarios['12_meses']?.metas ?? {}),
     },
   }
 }
@@ -25,36 +29,48 @@ export function planoDaApi(a: GcPlanejamentoApi): Planejamento {
 /** O bloco do portal → o formato do cálculo (a mesma rota projetada do painel). */
 export function planoDaJornada(j: GcJornadaPortal): Planejamento {
   return {
-    curva: j.curva,
+    curva: 'linear',
     dataDiagnostico: j.data_diagnostico,
-    atual: j.atual,
-    metas: { '6_meses': j.cenarios['6_meses'].metas, '12_meses': j.cenarios['12_meses'].metas },
+    atual: montarPontoA({
+      leads: j.atual.leads, investimento: j.atual.investimento, vendas: j.atual.vendas, receita: j.atual.receita,
+    }),
+    metas: {
+      '6_meses': comMetasCalculadas(j.cenarios['6_meses'].metas),
+      '12_meses': comMetasCalculadas(j.cenarios['12_meses'].metas),
+    },
   }
 }
 
+const CHAVES_GRAVADAS = ['leads', 'vendas', 'investimento', 'receita']
+
 /**
  * O planejamento de uma linha da LISTA de clientes (que traz o ponto A e as metas, mas não os
- * textos) → o formato do cálculo. Null se o cliente não tem planejamento ou nenhuma meta de 6/12
+ * textos) → o formato do cálculo. Null se o cliente não tem linha de planejamento nem meta de 6/12
  * meses. As metas vêm em ordem de criação, então a mais recente de cada métrica prevalece — a mesma
  * regra do editor.
+ *
+ * Sem data do diagnóstico, a rota começa no primeiro mês lançado em Métricas.
  */
-export function planoDaLista(c: Pick<GcClienteLista, 'planejamento' | 'metas'>): Planejamento | null {
-  if (!c.planejamento) return null
+export function planoDaLista(
+  c: Pick<GcClienteLista, 'planejamento' | 'metas'> & { primeiro_mes_metricas?: string | null },
+): Planejamento | null {
   const metas: Record<'6_meses' | '12_meses', MetasPlano> = { '6_meses': {}, '12_meses': {} }
   for (const m of c.metas ?? []) {
     if (m.status !== 'ativa') continue
     if (!HORIZONTES_PLANO.some((h) => h.valor === m.horizonte)) continue
-    const chave = m.chave_metrica as keyof MetasPlano
-    if (!['leads', 'cpl', 'vendas', 'roas', 'receita', 'investimento'].includes(chave)) continue
-    metas[m.horizonte as '6_meses' | '12_meses'][chave] = Number(m.valor_meta)
+    if (!CHAVES_GRAVADAS.includes(m.chave_metrica)) continue
+    metas[m.horizonte as '6_meses' | '12_meses'][m.chave_metrica as keyof MetasPlano] = Number(m.valor_meta)
   }
   const p = c.planejamento
+  const temMeta = HORIZONTES_PLANO.some((h) => Object.keys(metas[h.valor]).length > 0)
+  if (!p && !temMeta) return null
   return {
-    curva: p.curva,
-    dataDiagnostico: p.data_diagnostico,
-    atual: {
-      leads: p.leads, investimento: p.investimento, ticket: p.ticket, conversao: p.conversao, receita: p.receita,
-    },
-    metas,
+    curva: 'linear',
+    dataDiagnostico:
+      p?.data_diagnostico ?? (c.primeiro_mes_metricas ? `${c.primeiro_mes_metricas}-01` : null),
+    atual: montarPontoA({
+      leads: p?.leads ?? null, investimento: p?.investimento ?? null, vendas: p?.vendas ?? null, receita: p?.receita ?? null,
+    }),
+    metas: { '6_meses': comMetasCalculadas(metas['6_meses']), '12_meses': comMetasCalculadas(metas['12_meses']) },
   }
 }

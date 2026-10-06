@@ -166,15 +166,24 @@ export interface GcClienteLista {
   relatorio_mes: 'rascunho' | 'publicado' | null
   /** O mês ('YYYY-MM') a que `metricas_mes` se refere. */
   periodo_referencia: string
-  /** Ponto A e curva do planejamento. Null = o cliente não tem planejamento. */
+  /** O primeiro mês ('YYYY-MM') com métrica lançada. Sem ponto A, é de onde a rota projetada parte. */
+  primeiro_mes_metricas: string | null
+  /** Ponto A do planejamento. Null = o cliente não tem linha de planejamento. */
   planejamento: {
     curva: 'linear' | 'composta'
     data_diagnostico: string | null
     leads: number | null
     investimento: number | null
+    vendas: number | null
+    /** Calculado no servidor (faturamento ÷ vendas). */
     ticket: number | null
+    /** Calculada no servidor (vendas ÷ leads, em %). */
     conversao: number | null
     receita: number | null
+    /** O ponto A está em branco de propósito, esperando o cliente trazer os números. */
+    aguardando_cliente: boolean
+    /** 'YYYY-MM-DD': quando lembrar de completar. Vencido, o planejamento passa a pedir atenção. */
+    lembrar_em: string | null
   } | null
 }
 
@@ -245,7 +254,7 @@ export interface GcPendencia {
   cliente_id: string
   cliente_nome: string
   /** 'rotina' = item da rotina mensal (relatório, alinhamento), que nasce sozinho todo mês. */
-  origem: 'jornada' | 'estrategia' | 'rotina'
+  origem: 'jornada' | 'estrategia' | 'rotina' | 'planejamento'
   origem_nome: string
   /** Em cascata: item, depois etapa/estratégia, depois o cliente. */
   responsavel_id: string | null
@@ -408,8 +417,8 @@ export interface GcOrigemCampo {
   meses?: string[]
 }
 
-/** Os quatro textos do planejamento que têm modelo. */
-export type GcCampoModelo = 'situacao' | 'objetivo' | 'estrategia' | 'premissas'
+/** Os três textos do planejamento que têm modelo (estratégia e premissas são um campo só). */
+export type GcCampoModelo = 'situacao' | 'objetivo' | 'estrategia'
 
 export interface GcModeloTexto {
   id: string
@@ -428,40 +437,47 @@ export interface GcPlanejamentoApi {
     situacao_atual: string
     leads_mes: number | null
     investimento_mes: number | null
+    vendas_mes: number | null
+    faturamento_mensal: number | null
+    /** Calculados no servidor; só leitura. */
     ticket_medio: number | null
     taxa_conversao: number | null
-    faturamento_mensal: number | null
     data_diagnostico: string | null
+    aguardando_cliente: boolean
+    lembrar_em: string | null
   }
   curva: 'linear' | 'composta'
   /** De onde veio cada número do ponto A, por campo. Campo ausente = sem origem registrada. */
   origens: Record<string, GcOrigemCampo>
-  portal: { ativo: boolean; mostrar_situacao: boolean; mostrar_objetivo: boolean }
+  portal: GcPortalJornadaOpcoes
   cenarios: Record<
     '6_meses' | '12_meses',
     {
       onde_quer_chegar: string
-      /** Interna: nunca vai pro portal. */
+      /** "Estratégia e premissas". Interna: nunca vai pro portal. */
       estrategia: string
-      /** Interna: nunca vai pro portal. */
-      premissas: string
-      metas: Partial<Record<'leads' | 'cpl' | 'vendas' | 'roas' | 'receita' | 'investimento', number>>
+      /** Só as quatro metas digitadas; CPL e ROAS são calculados na tela. */
+      metas: Partial<Record<'leads' | 'vendas' | 'receita' | 'investimento', number>>
     }
   >
 }
 
+/** As opções do bloco "Nossa jornada" do portal. */
+export interface GcPortalJornadaOpcoes {
+  ativo: boolean
+  mostrar_situacao: boolean
+  mostrar_objetivo: boolean
+}
+
 /** O que se envia ao salvar: o mesmo formato, com `null` nas metas que a pessoa limpou. */
 export interface GcPlanejamentoEntrada {
-  atual: GcPlanejamentoApi['atual']
-  curva: 'linear' | 'composta'
+  atual: Omit<GcPlanejamentoApi['atual'], 'ticket_medio' | 'taxa_conversao'>
   origens: Record<string, GcOrigemCampo>
-  portal: GcPlanejamentoApi['portal']
   cenarios: Record<
     '6_meses' | '12_meses',
     {
       onde_quer_chegar: string
       estrategia: string
-      premissas: string
       metas: Record<string, number | null>
     }
   >
@@ -491,6 +507,7 @@ export interface GcJornadaPortal {
   atual: {
     leads: number | null
     investimento: number | null
+    vendas: number | null
     ticket: number | null
     conversao: number | null
     receita: number | null
@@ -597,6 +614,9 @@ export const gestaoClientes = {
     api.get<GcPlanejamentoApi>(`/api/gc/clientes/${clienteId}/planejamento`),
   salvarPlanejamento: (clienteId: string, dados: GcPlanejamentoEntrada) =>
     api.put<GcPlanejamentoApi>(`/api/gc/clientes/${clienteId}/planejamento`, dados),
+  /** As opções do bloco "Nossa jornada" do portal (aba Relatórios). Não mexe no planejamento. */
+  salvarPortalJornada: (clienteId: string, dados: GcPortalJornadaOpcoes) =>
+    api.put<GcPortalJornadaOpcoes>(`/api/gc/clientes/${clienteId}/portal-jornada`, dados),
   historicoPlanejamento: (clienteId: string) =>
     api.get<GcHistoricoPlanejamento[]>(`/api/gc/clientes/${clienteId}/planejamento/historico`),
 

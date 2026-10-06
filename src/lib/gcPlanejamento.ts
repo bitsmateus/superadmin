@@ -15,29 +15,69 @@ export const HORIZONTES_PLANO: { valor: HorizontePlano; meses: number; label: st
   { valor: '12_meses', meses: 12, label: '12 meses' },
 ]
 
-/** As métricas do planejamento, na ordem em que aparecem no editor. */
-export type ChavePlano = 'leads' | 'cpl' | 'vendas' | 'roas' | 'receita' | 'investimento'
-export const CHAVES_PLANO: { chave: ChavePlano; label: string }[] = [
+/**
+ * As métricas do planejamento, na ordem em que aparecem na grade: as quatro DIGITADAS primeiro, depois
+ * as duas CALCULADAS (CPL = investimento ÷ leads; ROAS = faturamento ÷ investimento).
+ */
+export type ChavePlano = 'leads' | 'vendas' | 'investimento' | 'receita' | 'cpl' | 'roas'
+export const CHAVES_DIGITADAS: { chave: ChavePlano; label: string }[] = [
   { chave: 'leads', label: 'Leads' },
-  { chave: 'cpl', label: 'CPL' },
   { chave: 'vendas', label: 'Vendas' },
-  { chave: 'roas', label: 'ROAS' },
+  { chave: 'investimento', label: 'Investimento' },
   // O catálogo de métricas chama de "receita" o que aqui o time chama de faturamento.
   { chave: 'receita', label: 'Faturamento' },
-  { chave: 'investimento', label: 'Investimento' },
 ]
+export const CHAVES_CALCULADAS: { chave: ChavePlano; label: string }[] = [
+  { chave: 'cpl', label: 'CPL' },
+  { chave: 'roas', label: 'ROAS' },
+]
+export const CHAVES_PLANO: { chave: ChavePlano; label: string }[] = [...CHAVES_DIGITADAS, ...CHAVES_CALCULADAS]
 
+/** A curva é sempre linear: o seletor linear/composta saiu da tela (o cálculo composto segue disponível). */
 export type Curva = 'linear' | 'composta'
 export type MetasPlano = Partial<Record<ChavePlano, number>>
 
-/** Os números fixos do diagnóstico. Null = não informado, que é diferente de zero. */
+/**
+ * Os números do diagnóstico. Null = não informado, que é diferente de zero. Quatro são DIGITADOS
+ * (leads, investimento, vendas, faturamento); ticket e conversão saem deles em `montarPontoA`.
+ */
 export interface PontoA {
   leads: number | null
   investimento: number | null
-  ticket: number | null
-  /** Em percentual: 8 = 8% dos leads viram venda. */
-  conversao: number | null
+  vendas: number | null
   receita: number | null
+  /** Calculado: faturamento ÷ vendas. */
+  ticket: number | null
+  /** Calculada, em percentual: vendas ÷ leads × 100 (8 = 8% dos leads viram venda). */
+  conversao: number | null
+}
+
+const arredonda2 = (n: number) => Math.round(n * 100) / 100
+
+/** Monta o ponto A a partir dos 4 números digitados, calculando ticket e conversão quando dá. */
+export function montarPontoA(d: {
+  leads: number | null
+  investimento: number | null
+  vendas: number | null
+  receita: number | null
+}): PontoA {
+  return {
+    ...d,
+    ticket: d.receita !== null && d.vendas ? arredonda2(d.receita / d.vendas) : null,
+    conversao: d.vendas !== null && d.leads ? arredonda2((d.vendas / d.leads) * 100) : null,
+  }
+}
+
+/**
+ * CPL e ROAS de um conjunto de números: são CONTAS, não metas digitadas. O que veio gravado pra essas
+ * duas chaves é descartado — guardar o número duplicaria a conta e deixaria os três divergirem.
+ */
+export function comMetasCalculadas(m: MetasPlano): MetasPlano {
+  const { cpl: _cpl, roas: _roas, ...digitadas } = m
+  const saida: MetasPlano = { ...digitadas }
+  if (m.investimento !== undefined && m.leads) saida.cpl = m.investimento / m.leads
+  if (m.receita !== undefined && m.investimento) saida.roas = m.receita / m.investimento
+  return saida
 }
 
 export interface Planejamento {
@@ -46,6 +86,11 @@ export interface Planejamento {
   dataDiagnostico: string | null
   atual: PontoA
   metas: Record<HorizontePlano, MetasPlano>
+  /**
+   * Ponto de partida de uma métrica QUANDO O PONTO A NÃO TEM o número: o valor do primeiro mês lançado
+   * em Métricas. Só serve pra traçar a rota; não é ponto A e não aparece como tal.
+   */
+  partida?: MetasPlano
 }
 
 /** Quanto o realizado pode se afastar do projetado e ainda contar como "no caminho". */
@@ -56,11 +101,39 @@ export function baseDoPontoA(a: PontoA): MetasPlano {
   const base: MetasPlano = {}
   if (a.leads !== null) base.leads = a.leads
   if (a.investimento !== null) base.investimento = a.investimento
+  if (a.vendas !== null) base.vendas = a.vendas
   if (a.receita !== null) base.receita = a.receita
-  if (a.leads && a.investimento !== null) base.cpl = a.investimento / a.leads
-  if (a.leads !== null && a.conversao !== null) base.vendas = (a.leads * a.conversao) / 100
-  if (a.investimento && a.receita !== null) base.roas = a.receita / a.investimento
-  return base
+  return comMetasCalculadas(base)
+}
+
+/** Tem algum número do ponto A preenchido? */
+export function temPontoA(a: PontoA): boolean {
+  return a.leads !== null || a.investimento !== null || a.vendas !== null || a.receita !== null
+}
+
+/** Hoje, 'YYYY-MM-DD', no relógio da pessoa. */
+export function hojeISO(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Sem Ponto A, a projeção parte do PRIMEIRO MÊS LANÇADO em Métricas: ele dá a data de início da rota
+ * (quando não há data do diagnóstico) e o valor de partida das métricas que o ponto A não tem. Sem
+ * nenhum mês lançado, a rota não existe — e a tela só diz pra lançar o primeiro mês.
+ */
+export function comPartidaDasMetricas(
+  plano: Planejamento,
+  realizado: Record<string, Record<string, number>>,
+): Planejamento {
+  const meses = Object.keys(realizado).sort()
+  const primeiro = meses[0]
+  if (!primeiro) return plano
+  return {
+    ...plano,
+    dataDiagnostico: plano.dataDiagnostico ?? `${primeiro}-01`,
+    partida: realizado[primeiro],
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -116,7 +189,7 @@ export interface PontoDaRota {
  */
 export function rotaProjetada(plano: Planejamento, chave: ChavePlano): PontoDaRota[] {
   if (!plano.dataDiagnostico) return []
-  const a = baseDoPontoA(plano.atual)[chave]
+  const a = baseDoPontoA(plano.atual)[chave] ?? plano.partida?.[chave]
 
   const pontos: { k: number; valor: number }[] = []
   if (a !== undefined) pontos.push({ k: 0, valor: a })
@@ -237,12 +310,10 @@ export function projecaoMensal(
 
 export interface AvisoDeRealismo {
   horizonte: HorizontePlano
-  /** 'alerta' = a conta não fecha; 'atencao' = só fecha com uma condição; 'info' = pra saber. */
-  nivel: 'alerta' | 'atencao' | 'info'
+  /** 'atencao' = a conta pede uma explicação; 'info' = pra saber. */
+  nivel: 'atencao' | 'info'
   titulo: string
   texto: string
-  /** Quanto de investimento mensal a meta pede, quando o aviso é sobre isso. */
-  investimentoNecessario?: number
 }
 
 const reais = (v: number) => formatarMetrica(v, 'reais')
@@ -250,97 +321,34 @@ const inteiro = (v: number) => formatarMetrica(v, 'inteiro')
 const MARGEM = 0.1
 
 /**
- * Confere se o cenário é realista a partir do que o próprio cliente faz HOJE.
+ * Confere se as metas fecham ENTRE SI, a partir do que o cliente faz hoje. É AVISO, nunca bloqueio:
+ * quem planejou sabe coisas que a conta não sabe.
  *
- * A pergunta central: pra chegar na meta de leads/vendas com o CPL e a conversão de partida, quanto
- * precisa investir? Se a premissa de investimento do cenário é menor que isso, a meta não fecha — e
- * isso é melhor descobrir ao desenhar o plano do que no terceiro mês, quando o realizado já estiver
- * "abaixo". Vira AVISO, não bloqueio: a premissa pode ser "o CPL vai cair com criativo novo", e quem
- * planejou sabe disso melhor que a conta.
- *
- * A conta usa o CPL de partida (conservador) e, se o cenário prevê um CPL melhor, também esse (o
- * otimista): fechar só com o CPL melhorando é um aviso de atenção, não de alerta.
+ * O que se confere aqui: leads que não sustentam as vendas (na conversão de hoje) e vendas × ticket que
+ * não bate com o faturamento. O custo por lead que a meta implica NÃO entra aqui — tem aviso próprio,
+ * `avisosDeCplImplicito`, pra a mesma conta não aparecer duas vezes.
  */
 export function validarRealismo(plano: Planejamento): AvisoDeRealismo[] {
   const avisos: AvisoDeRealismo[] = []
   const a = plano.atual
-  const cplA = a.leads && a.investimento !== null ? a.investimento / a.leads : null
   const conv = a.conversao && a.conversao > 0 ? a.conversao / 100 : null
 
   for (const h of HORIZONTES_PLANO) {
     const m = plano.metas[h.valor] ?? {}
     if (Object.keys(m).length === 0) continue
-    const rotulo = `Cenário de ${h.label}`
+    const rotulo = `Meta de ${h.label}`
 
-    // Quantos leads a meta realmente exige: a de leads, ou os que as vendas pedem na conversão de hoje.
     const leadsParaVendas = m.vendas && conv ? m.vendas / conv : null
     if (leadsParaVendas !== null && m.leads !== undefined && m.leads < leadsParaVendas * (1 - MARGEM)) {
       avisos.push({
         horizonte: h.valor, nivel: 'atencao', titulo: `${rotulo}: leads não sustentam as vendas`,
         texto: `Com a conversão de hoje (${(a.conversao ?? 0).toLocaleString('pt-BR')}%), ${inteiro(m.vendas!)} vendas ` +
           `pedem cerca de ${inteiro(leadsParaVendas)} leads, e a meta de leads é ${inteiro(m.leads)}. ` +
-          `Ou a meta de leads sobe, ou o cenário supõe uma conversão melhor que a atual.`,
+          `Ou a meta de leads sobe, ou a meta supõe uma conversão melhor que a atual.`,
       })
     }
-    const leadsNecessarios = Math.max(m.leads ?? 0, leadsParaVendas ?? 0)
 
-    if (leadsNecessarios > 0 && cplA !== null) {
-      const comCplDeHoje = leadsNecessarios * cplA
-      const comCplDaMeta = m.cpl !== undefined ? leadsNecessarios * m.cpl : null
-      const referencia = comCplDaMeta ?? comCplDeHoje
-      const alvoDe = m.leads !== undefined && m.leads >= (leadsParaVendas ?? 0) ? `${inteiro(m.leads)} leads` : `${inteiro(m.vendas ?? 0)} vendas`
-
-      if (m.investimento !== undefined) {
-        if (m.investimento < referencia * (1 - MARGEM)) {
-          avisos.push({
-            horizonte: h.valor, nivel: 'alerta', investimentoNecessario: referencia,
-            titulo: `${rotulo}: o investimento previsto não fecha a conta`,
-            texto: `Pra chegar em ${alvoDe} com CPL de ${reais(comCplDaMeta !== null ? m.cpl! : cplA)}` +
-              `${comCplDaMeta !== null ? ' (o da meta)' : ' (o de hoje)'}, o investimento teria de ser ` +
-              `de cerca de ${reais(referencia)}/mês — o cenário prevê ${reais(m.investimento)}.`,
-          })
-        } else if (comCplDaMeta !== null && m.investimento < comCplDeHoje * (1 - MARGEM)) {
-          avisos.push({
-            horizonte: h.valor, nivel: 'atencao', investimentoNecessario: comCplDeHoje,
-            titulo: `${rotulo}: só fecha se o CPL cair`,
-            texto: `Com o CPL de hoje (${reais(cplA)}), ${alvoDe} custariam cerca de ${reais(comCplDeHoje)}/mês. ` +
-              `O investimento previsto (${reais(m.investimento)}) só basta se o CPL cair pra ${reais(m.cpl!)}. ` +
-              `Vale registrar nas premissas o que vai derrubar o CPL.`,
-          })
-        } else if (m.investimento > referencia * 1.5) {
-          avisos.push({
-            horizonte: h.valor, nivel: 'info', investimentoNecessario: referencia,
-            titulo: `${rotulo}: investimento acima do necessário`,
-            texto: `O investimento previsto (${reais(m.investimento)}) é ` +
-              `${Math.round((m.investimento / referencia - 1) * 100)}% maior que o necessário pra ${alvoDe} ` +
-              `(cerca de ${reais(referencia)}/mês). Ou a meta está baixa pro orçamento, ou sobra verba.`,
-          })
-        }
-      } else {
-        avisos.push({
-          horizonte: h.valor, nivel: 'info', investimentoNecessario: referencia,
-          titulo: `${rotulo}: falta a premissa de investimento`,
-          texto: `Pra chegar em ${alvoDe} com o CPL ${comCplDaMeta !== null ? 'da meta' : 'de hoje'}, são cerca de ` +
-            `${reais(referencia)}/mês. Preencha o investimento do cenário pra conferir se o orçamento comporta.`,
-        })
-      }
-    }
-
-    // Coerência entre as próprias metas do cenário.
-    const longe = (calculado: number, declarado: number) => Math.abs(calculado - declarado) / declarado > 0.15
-    if (m.cpl !== undefined && m.leads !== undefined && m.investimento !== undefined && longe(m.cpl * m.leads, m.investimento)) {
-      avisos.push({
-        horizonte: h.valor, nivel: 'atencao', titulo: `${rotulo}: CPL × leads não bate com o investimento`,
-        texto: `${reais(m.cpl)} × ${inteiro(m.leads)} leads dá ${reais(m.cpl * m.leads)}, e o investimento previsto é ${reais(m.investimento)}.`,
-      })
-    }
-    if (m.roas !== undefined && m.investimento !== undefined && m.receita !== undefined && longe(m.roas * m.investimento, m.receita)) {
-      avisos.push({
-        horizonte: h.valor, nivel: 'atencao', titulo: `${rotulo}: ROAS × investimento não bate com o faturamento`,
-        texto: `ROAS ${m.roas.toLocaleString('pt-BR')}x sobre ${reais(m.investimento)} dá ${reais(m.roas * m.investimento)}, ` +
-          `e o faturamento previsto é ${reais(m.receita)}.`,
-      })
-    }
+    const longe = (calculado: number, declarado: number) => declarado !== 0 && Math.abs(calculado - declarado) / declarado > 0.15
     if (m.vendas !== undefined && a.ticket && m.receita !== undefined && longe(m.vendas * a.ticket, m.receita)) {
       avisos.push({
         horizonte: h.valor, nivel: 'atencao', titulo: `${rotulo}: vendas × ticket não bate com o faturamento`,
@@ -349,22 +357,108 @@ export function validarRealismo(plano: Planejamento): AvisoDeRealismo[] {
       })
     }
   }
-
-  if (cplA === null && HORIZONTES_PLANO.some((h) => Object.keys(plano.metas[h.valor] ?? {}).length > 0)) {
-    avisos.unshift({
-      horizonte: '6_meses', nivel: 'info', titulo: 'Sem leads e investimento de partida',
-      texto: 'Preencha leads e investimento do ponto A pra o painel conferir se o orçamento dos cenários comporta as metas.',
-    })
-  }
-
-  const ordem = { alerta: 0, atencao: 1, info: 2 }
-  return avisos.sort((x, y) => ordem[x.nivel] - ordem[y.nivel])
+  return avisos
 }
 
-/** Tem algum número de planejamento a considerar (metas de 6/12 meses ou ponto A)? */
+export interface AvisoDeCpl {
+  horizonte: HorizontePlano
+  cplHoje: number
+  cplMeta: number
+  /** Variação do CPL da meta contra o de hoje, em %. Negativa = o CPL cai. */
+  variacaoPct: number
+  texto: string
+}
+
+/** O CPL da meta pode cair até 50% (ou subir até 100%) sem pedir explicação. */
+export const LIMITE_QUEDA_CPL = 0.5
+export const LIMITE_ALTA_CPL = 1
+
+/**
+ * O CPL IMPLÍCITO da meta (investimento ÷ leads) está muito fora do CPL do ponto A? Queda maior que
+ * 50% (ou alta maior que 100%) pede uma explicação — e a explicação é o texto de "Estratégia e
+ * premissas" do horizonte. Com ele escrito, o aviso some: a premissa existe, não cabe cobrar de novo.
+ * Aviso discreto, não bloqueia nada.
+ */
+export function avisosDeCplImplicito(
+  plano: Planejamento,
+  estrategiaEscrita: Record<HorizontePlano, string>,
+): AvisoDeCpl[] {
+  const a = plano.atual
+  if (!a.leads || a.investimento === null) return []
+  const cplHoje = a.investimento / a.leads
+  if (!(cplHoje > 0)) return []
+  const saida: AvisoDeCpl[] = []
+  for (const h of HORIZONTES_PLANO) {
+    const m = plano.metas[h.valor] ?? {}
+    if (!m.leads || m.investimento === undefined) continue
+    if (estrategiaEscrita[h.valor].trim() !== '') continue
+    const cplMeta = m.investimento / m.leads
+    const variacao = (cplMeta - cplHoje) / cplHoje
+    if (variacao < -LIMITE_QUEDA_CPL) {
+      saida.push({
+        horizonte: h.valor, cplHoje, cplMeta, variacaoPct: variacao * 100,
+        texto: `Meta de ${h.label}: o CPL implícito é ${reais(cplMeta)}, ${Math.abs(Math.round(variacao * 100))}% abaixo ` +
+          `dos ${reais(cplHoje)} de hoje. Vale escrever em "Estratégia e premissas" o que vai derrubar o CPL.`,
+      })
+    } else if (variacao > LIMITE_ALTA_CPL) {
+      saida.push({
+        horizonte: h.valor, cplHoje, cplMeta, variacaoPct: variacao * 100,
+        texto: `Meta de ${h.label}: o CPL implícito é ${reais(cplMeta)}, ${Math.round(variacao * 100)}% acima ` +
+          `dos ${reais(cplHoje)} de hoje. Confira se o investimento ou os leads estão certos.`,
+      })
+    }
+  }
+  return saida
+}
+
+/** Variação de um valor contra o ponto A, em %. Null sem ponto A (ou com ponto A zero). */
+export function variacaoContraPontoA(
+  chave: ChavePlano,
+  valor: number | undefined,
+  pontoA: number | undefined,
+): { pct: number; boa: boolean | null } | null {
+  if (valor === undefined) return null
+  const v = variacaoDaMetrica(chave, valor, pontoA)
+  if (!v) return null
+  // Investimento maior ou menor não é "bom" nem "ruim" por si: fica sem cor.
+  return { pct: v.pct, boa: chave === 'investimento' ? null : v.boa }
+}
+
+/** Tem alguma META de 6 ou 12 meses? É o que o semáforo compara com o realizado. */
 export function temPlanejamento(plano: Planejamento | null | undefined): plano is Planejamento {
   if (!plano) return false
   return HORIZONTES_PLANO.some((h) => Object.keys(plano.metas[h.valor] ?? {}).length > 0)
+}
+
+/** Tem QUALQUER número de planejamento: ponto A ou meta? Textos sozinhos não contam. */
+export function temNumerosDePlanejamento(plano: Planejamento | null | undefined): boolean {
+  if (!plano) return false
+  return temPontoA(plano.atual) || temPlanejamento(plano)
+}
+
+/**
+ * O estado do planejamento, em uma palavra:
+ *  - 'definido'  : há número de planejamento;
+ *  - 'a_definir' : nada preenchido ainda — estado NEUTRO, não é pendência nem risco;
+ *  - 'atencao'   : nada preenchido E o lembrete de "completar em" já venceu. É o único caso em que
+ *                  a falta de planejamento pede atenção.
+ */
+export type EstadoDoPlanejamento = 'definido' | 'a_definir' | 'atencao'
+export function estadoDoPlanejamento(
+  plano: Planejamento | null | undefined,
+  lembrete: { aguardando?: boolean; lembrarEm?: string | null },
+  hoje: string = hojeISO(),
+): EstadoDoPlanejamento {
+  if (temNumerosDePlanejamento(plano)) return 'definido'
+  return lembreteVencido(lembrete, hoje) ? 'atencao' : 'a_definir'
+}
+
+/** O lembrete de completar o planejamento já venceu (a data é anterior a hoje)? */
+export function lembreteVencido(
+  lembrete: { aguardando?: boolean; lembrarEm?: string | null },
+  hoje: string = hojeISO(),
+): boolean {
+  return !!lembrete.aguardando && !!lembrete.lembrarEm && lembrete.lembrarEm < hoje
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -423,7 +517,7 @@ export function avaliarMesContraRota(
 // Ponto A a partir das métricas lançadas
 // ---------------------------------------------------------------------------------------------------
 
-export type CampoDoPontoA = 'leads' | 'investimento' | 'receita' | 'conversao' | 'ticket'
+export type CampoDoPontoA = 'leads' | 'investimento' | 'vendas' | 'receita'
 
 export interface SugestaoDoPontoA {
   /** O valor sugerido e os meses cuja média o gerou. Ausente = não há dado pra calcular. */
@@ -441,9 +535,8 @@ const arredonda = (n: number) => Math.round(n * 100) / 100
  *    pela metade subestimaria tudo.
  *  - "Últimos lançados" são os 3 meses mais recentes COM número, mesmo que não sejam seguidos: um
  *    mês sem lançamento no meio não pode fazer a média cair pra zero.
- *  - Conversão e ticket são razões de SOMAS (vendas ÷ leads, receita ÷ vendas), não média de
- *    percentuais: um mês de 10 leads e outro de 1.000 não pesam igual.
  *  - Cada campo usa só os meses em que ele existe; com 1 ou 2 meses usa o que houver.
+ *  - Ticket e conversão não são sugeridos: saem de faturamento, vendas e leads depois de preenchidos.
  */
 export function sugerirPontoA(
   linhas: { periodo_inicio: string; chave: string; valor: string | number }[],
@@ -468,23 +561,10 @@ export function sugerirPontoA(
     if (usados.length === 0) return null
     return { valor: arredonda(usados.reduce((s, m) => s + porMes[m][chave], 0) / usados.length), meses: usados }
   }
-  const mLeads = media('leads')
-  const mInv = media('investimento')
-  const mReceita = media('receita')
-  if (mLeads) campos.leads = mLeads
-  if (mInv) campos.investimento = mInv
-  if (mReceita) campos.receita = mReceita
-
-  const razao = (num: string, den: string, fator: number) => {
-    const usados = meses.filter((m) => porMes[m][num] !== undefined && porMes[m][den] !== undefined)
-    const soma = usados.reduce((s, m) => s + porMes[m][den], 0)
-    if (usados.length === 0 || soma <= 0) return null
-    return { valor: arredonda((usados.reduce((s, m) => s + porMes[m][num], 0) / soma) * fator), meses: usados }
+  for (const chave of ['leads', 'investimento', 'vendas', 'receita'] as const) {
+    const m = media(chave)
+    if (m) campos[chave] = m
   }
-  const conv = razao('vendas', 'leads', 100)
-  const ticket = razao('receita', 'vendas', 1)
-  if (conv) campos.conversao = conv
-  if (ticket) campos.ticket = ticket
   return { campos, meses }
 }
 
@@ -518,34 +598,6 @@ export function resumoLinha(plano: Planejamento): string | null {
   return partes.length ? partes.join(' → ') : null
 }
 
-/**
- * O planejamento está COMPLETO? Data do diagnóstico, leads, investimento e conversão do ponto A e
- * pelo menos uma meta em cada horizonte. É o que decide se o bloco abre sozinho: planejamento
- * completo fica recolhido, incompleto convida a terminar.
- */
-export function planejamentoCompleto(plano: Planejamento): boolean {
-  const a = plano.atual
-  return (
-    !!plano.dataDiagnostico &&
-    a.leads !== null && a.investimento !== null && a.conversao !== null &&
-    HORIZONTES_PLANO.every((h) => Object.keys(plano.metas[h.valor] ?? {}).length > 0)
-  )
-}
-
-/** O que ainda falta pra o planejamento ficar completo, em palavras — pro cabeçalho do bloco. */
-export function faltaNoPlanejamento(plano: Planejamento): string[] {
-  const falta: string[] = []
-  const a = plano.atual
-  if (!plano.dataDiagnostico) falta.push('data do diagnóstico')
-  if (a.leads === null) falta.push('leads do ponto A')
-  if (a.investimento === null) falta.push('investimento do ponto A')
-  if (a.conversao === null) falta.push('taxa de conversão do ponto A')
-  for (const h of HORIZONTES_PLANO) {
-    if (Object.keys(plano.metas[h.valor] ?? {}).length === 0) falta.push(`metas de ${h.label}`)
-  }
-  return falta
-}
-
 // ---------------------------------------------------------------------------------------------------
 // Variáveis dos modelos de texto
 // ---------------------------------------------------------------------------------------------------
@@ -556,8 +608,9 @@ export const VARIAVEIS_DE_MODELO: { nome: string; ajuda: string }[] = [
   { nome: 'segmento', ajuda: 'segmento do cliente' },
   { nome: 'leads_hoje', ajuda: 'leads/mês do ponto A' },
   { nome: 'investimento_hoje', ajuda: 'investimento/mês do ponto A' },
-  { nome: 'ticket_hoje', ajuda: 'ticket médio do ponto A' },
-  { nome: 'conversao_hoje', ajuda: 'taxa de conversão do ponto A (%)' },
+  { nome: 'vendas_hoje', ajuda: 'vendas/mês do ponto A' },
+  { nome: 'ticket_hoje', ajuda: 'ticket médio do ponto A (faturamento ÷ vendas)' },
+  { nome: 'conversao_hoje', ajuda: 'conversão do ponto A em % (vendas ÷ leads)' },
   { nome: 'faturamento_hoje', ajuda: 'faturamento mensal do ponto A' },
   { nome: 'cpl_hoje', ajuda: 'CPL do ponto A (investimento ÷ leads)' },
   { nome: 'meta_leads_6m', ajuda: 'meta de leads em 6 meses (idem _12m)' },
@@ -579,6 +632,7 @@ export function contextoDeVariaveis(
   if (cliente.segmento) ctx.segmento = cliente.segmento
   if (base.leads !== undefined) ctx.leads_hoje = formatoNum(base.leads)
   if (base.investimento !== undefined) ctx.investimento_hoje = formatoNum(base.investimento, 2)
+  if (plano.atual.vendas !== null) ctx.vendas_hoje = formatoNum(plano.atual.vendas)
   if (plano.atual.ticket !== null) ctx.ticket_hoje = formatoNum(plano.atual.ticket, 2)
   if (plano.atual.conversao !== null) ctx.conversao_hoje = formatoNum(plano.atual.conversao, 1)
   if (base.receita !== undefined) ctx.faturamento_hoje = formatoNum(base.receita, 2)

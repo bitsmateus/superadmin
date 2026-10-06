@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, ExternalLink, Loader2 } from 'lucide-react'
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ExternalLink, Loader2, Route } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -25,6 +25,7 @@ const ROTULO_ORIGEM: Record<GcPendencia['origem'], string> = {
   jornada: 'etapa',
   estrategia: 'estratégia',
   rotina: 'rotina',
+  planejamento: 'planejamento',
 }
 
 /** Um seletor simples — o <Select> do projeto traz rótulo e margem demais pra uma barra de filtros. */
@@ -158,26 +159,40 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
 
   const linha = (i: GcPendencia, mostrarCliente: boolean) => (
     <li key={i.id} className="group flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
-      <button
-        type="button"
-        disabled={concluindo.has(i.id)}
-        onClick={() => void concluir(i)}
-        className={cn(
-          'grid h-5 w-5 shrink-0 place-items-center rounded border transition-colors',
-          i.atrasado ? 'border-danger hover:bg-danger/10' : 'border-line hover:border-success hover:bg-success/10',
-        )}
-        aria-label="Concluir"
-        title="Marcar como concluído"
-      >
-        <Check className="h-3 w-3 text-transparent group-hover:text-success" />
-      </button>
+      {i.origem === 'planejamento' ? (
+        // O lembrete do planejamento não é um item que se conclui no clique: some quando o ponto A é
+        // preenchido (ou o "aguardando o cliente" é desmarcado). O botão leva pro cliente.
+        <button
+          type="button"
+          onClick={() => onAbrirCliente(i.cliente_id)}
+          className="grid h-5 w-5 shrink-0 place-items-center rounded border border-line text-foreground/45 transition-colors hover:border-accent hover:text-accent"
+          aria-label="Abrir o cliente pra completar o planejamento"
+          title="Abrir o cliente pra completar o planejamento"
+        >
+          <Route className="h-3 w-3" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={concluindo.has(i.id)}
+          onClick={() => void concluir(i)}
+          className={cn(
+            'grid h-5 w-5 shrink-0 place-items-center rounded border transition-colors',
+            i.atrasado ? 'border-danger hover:bg-danger/10' : 'border-line hover:border-success hover:bg-success/10',
+          )}
+          aria-label="Concluir"
+          title="Marcar como concluído"
+        >
+          <Check className="h-3 w-3 text-transparent group-hover:text-success" />
+        </button>
+      )}
       <span className="min-w-0 flex-1">
         <span className={cn('block truncate text-sm', i.atrasado ? 'text-danger' : 'text-foreground/90')}>
           {i.titulo}
         </span>
         <span className="block truncate text-xs text-foreground/50">
           {mostrarCliente ? `${i.cliente_nome} · ` : ''}
-          {ROTULO_ORIGEM[i.origem]}: {i.origem_nome}
+          {i.origem === 'planejamento' ? 'aguardando o cliente' : `${ROTULO_ORIGEM[i.origem]}: ${i.origem_nome}`}
         </span>
       </span>
       <span className="hidden shrink-0 text-xs text-foreground/55 sm:block">

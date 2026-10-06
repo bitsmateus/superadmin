@@ -12,69 +12,104 @@ import { cn } from '@/lib/utils'
 export const ROTULO_DO_CAMPO: Record<GcCampoModelo, string> = {
   situacao: 'Situação de hoje',
   objetivo: 'Onde quer chegar',
-  estrategia: 'Estratégia',
-  premissas: 'Premissas',
+  estrategia: 'Estratégia e premissas',
+}
+
+/** Um dos cinco textos do planejamento onde um modelo pode ser aplicado. */
+export type AlvoDeModelo =
+  | 'situacao'
+  | 'objetivo:6_meses' | 'objetivo:12_meses'
+  | 'estrategia:6_meses' | 'estrategia:12_meses'
+
+const ALVOS_DO_CAMPO: Record<GcCampoModelo, { id: AlvoDeModelo; rotulo: string }[]> = {
+  situacao: [{ id: 'situacao', rotulo: 'Situação de hoje' }],
+  objetivo: [
+    { id: 'objetivo:6_meses', rotulo: 'em 6 meses' },
+    { id: 'objetivo:12_meses', rotulo: 'em 12 meses' },
+  ],
+  estrategia: [
+    { id: 'estrategia:6_meses', rotulo: 'em 6 meses' },
+    { id: 'estrategia:12_meses', rotulo: 'em 12 meses' },
+  ],
 }
 
 /**
- * "Preencher com modelo ▾" — fica ao lado do rótulo de um texto do planejamento.
+ * O menu ÚNICO "Modelos ▾" do planejamento — no lugar de um "preencher com modelo" por campo.
  *
- * Se o campo JÁ TEM texto, aplicar um modelo pergunta antes: substituir ou acrescentar. Sobrescrever
- * em silêncio é como se perde um texto escrito com cuidado por um clique no lugar errado.
+ * Lista os modelos por tipo de texto. Escolhido um, a pessoa diz ONDE aplicar (o texto de hoje, ou o
+ * cenário de 6 ou 12 meses) e, se esse campo JÁ TEM texto, se acrescenta ou substitui: sobrescrever em
+ * silêncio é como se perde um texto escrito com cuidado por um clique no lugar errado.
  */
-export function SeletorDeModelo({
-  campo,
+export function MenuModelos({
   modelos,
-  textoAtual,
+  textos,
   onAplicar,
   onGerenciar,
 }: {
-  campo: GcCampoModelo
   modelos: GcModeloTexto[]
-  textoAtual: string
-  /** `modo` só importa quando o campo já tinha texto. */
-  onAplicar: (texto: string, modo: 'substituir' | 'acrescentar') => void
+  /** O que está escrito agora em cada alvo, pra saber se vale perguntar antes de aplicar. */
+  textos: Record<AlvoDeModelo, string>
+  onAplicar: (alvo: AlvoDeModelo, texto: string, modo: 'substituir' | 'acrescentar') => void
   onGerenciar: () => void
 }) {
   const [aberto, setAberto] = React.useState(false)
   const [escolhido, setEscolhido] = React.useState<GcModeloTexto | null>(null)
   const ref = React.useRef<HTMLDivElement>(null)
-  useOutsideClose(ref, aberto, () => {
+  const fechar = () => {
     setAberto(false)
     setEscolhido(null)
-  })
-  const doCampo = modelos.filter((m) => m.campo === campo)
-  const temTexto = textoAtual.trim().length > 0
+  }
+  useOutsideClose(ref, aberto, fechar)
 
-  const aplicar = (m: GcModeloTexto, modo: 'substituir' | 'acrescentar') => {
-    onAplicar(m.texto, modo)
-    setAberto(false)
-    setEscolhido(null)
+  const aplicar = (alvo: AlvoDeModelo, modo: 'substituir' | 'acrescentar') => {
+    if (!escolhido) return
+    onAplicar(alvo, escolhido.texto, modo)
+    fechar()
   }
 
   return (
     <div ref={ref} className="relative">
-      <button
+      <Button
         type="button"
-        onClick={() => setAberto((a) => !a)}
-        className="flex items-center gap-1 text-[11px] text-foreground/50 transition-colors hover:text-accent"
+        variant="secondary"
+        size="sm"
+        leftIcon={<FileText className="h-3.5 w-3.5" />}
+        onClick={() => (aberto ? fechar() : setAberto(true))}
+        aria-expanded={aberto}
       >
-        <FileText className="h-3 w-3" /> preencher com modelo
-      </button>
+        Modelos
+      </Button>
       {aberto && (
-        <div className="absolute right-0 z-30 mt-1 w-72 rounded-xl border border-line bg-surface p-1.5 shadow-lg">
+        <div className="absolute right-0 z-30 mt-1 max-h-[60vh] w-80 overflow-y-auto rounded-xl border border-line bg-surface p-1.5 shadow-lg">
           {escolhido ? (
             <div className="p-2">
               <p className="text-xs text-foreground/70">
-                O campo já tem texto. Com o modelo <strong className="text-foreground">{escolhido.nome}</strong>:
+                Aplicar o modelo <strong className="text-foreground">{escolhido.nome}</strong> em:
               </p>
-              <div className="mt-2 flex flex-col gap-1.5">
-                <Button size="sm" variant="secondary" onClick={() => aplicar(escolhido, 'acrescentar')}>
-                  Acrescentar no final
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => aplicar(escolhido, 'substituir')}>
-                  Substituir o que está escrito
-                </Button>
+              <div className="mt-2 space-y-2">
+                {ALVOS_DO_CAMPO[escolhido.campo].map((alvo) => {
+                  const temTexto = textos[alvo.id].trim().length > 0
+                  const nome = escolhido.campo === 'situacao' ? alvo.rotulo : `${ROTULO_DO_CAMPO[escolhido.campo]} ${alvo.rotulo}`
+                  return (
+                    <div key={alvo.id} className="rounded-lg border border-line p-2">
+                      <p className="mb-1.5 text-xs font-medium text-foreground/80">{nome}</p>
+                      {temTexto ? (
+                        <div className="flex gap-1.5">
+                          <Button size="sm" variant="secondary" onClick={() => aplicar(alvo.id, 'acrescentar')}>
+                            Acrescentar
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => aplicar(alvo.id, 'substituir')}>
+                            Substituir
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="secondary" onClick={() => aplicar(alvo.id, 'substituir')}>
+                          Aplicar
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
                 <Button size="sm" variant="ghost" onClick={() => setEscolhido(null)}>
                   Voltar
                 </Button>
@@ -82,27 +117,33 @@ export function SeletorDeModelo({
             </div>
           ) : (
             <>
-              {doCampo.length === 0 && (
-                <p className="px-2 py-3 text-center text-xs text-foreground/45">
-                  Nenhum modelo de "{ROTULO_DO_CAMPO[campo].toLowerCase()}" ainda.
-                </p>
-              )}
-              {doCampo.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => (temTexto ? setEscolhido(m) : aplicar(m, 'substituir'))}
-                  className="block w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-elevate/[0.05]"
-                >
-                  <span className="block text-sm font-medium text-foreground">{m.nome}</span>
-                  <span className="block truncate text-[11px] text-foreground/45">{m.texto.split('\n')[0]}</span>
-                </button>
-              ))}
+              {(Object.keys(ROTULO_DO_CAMPO) as GcCampoModelo[]).map((campo) => {
+                const doCampo = modelos.filter((m) => m.campo === campo)
+                return (
+                  <div key={campo} className="mb-1">
+                    <p className="px-2.5 pb-0.5 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-foreground/40">
+                      {ROTULO_DO_CAMPO[campo]}
+                    </p>
+                    {doCampo.length === 0 && <p className="px-2.5 pb-1 text-xs text-foreground/40">Nenhum modelo.</p>}
+                    {doCampo.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setEscolhido(m)}
+                        className="block w-full rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-elevate/[0.05]"
+                      >
+                        <span className="block text-sm font-medium text-foreground">{m.nome}</span>
+                        <span className="block truncate text-[11px] text-foreground/45">{m.texto.split('\n')[0]}</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
               <div className="mt-1 border-t border-line pt-1">
                 <button
                   type="button"
                   onClick={() => {
-                    setAberto(false)
+                    fechar()
                     onGerenciar()
                   }}
                   className="w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-foreground/55 hover:bg-elevate/[0.05] hover:text-foreground"

@@ -2,10 +2,12 @@ import { ArrowRight, Route } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import type { GcClienteLista } from '@/services/gestaoClientes'
-import { avaliarMesContraRota, faltaNoPlanejamento, resumoLinha, temPlanejamento } from '@/lib/gcPlanejamento'
+import { avaliarMesContraRota, estadoDoPlanejamento, resumoLinha, temPlanejamento } from '@/lib/gcPlanejamento'
 import { planoDaLista } from '@/lib/gcPlanoAdaptadores'
 import { comDerivadas, formatarMetrica, metricaUnidade } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
+
+const dataBR = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
 
 /**
  * Resumo do planejamento na Visão geral do cliente: de onde parte, aonde quer chegar e como o mês
@@ -13,6 +15,9 @@ import { cn } from '@/lib/utils'
  *
  * Lê só a linha do cliente que a Visão geral já tem (ponto A, metas e números do mês), sem pedido
  * extra. É a mesma comparação que o semáforo faz em "Metas combinadas", então os dois não divergem.
+ *
+ * Sem número nenhum o planejamento está "A definir": cinza, neutro. Só vira "Atenção" se o lembrete de
+ * completar que a própria equipe marcou já venceu.
  */
 export function ResumoPlanejamento({
   cliente,
@@ -22,22 +27,33 @@ export function ResumoPlanejamento({
   onAbrir: () => void
 }) {
   const plano = planoDaLista(cliente)
-  const temMetas = temPlanejamento(plano)
+  const estado = estadoDoPlanejamento(plano, {
+    aguardando: cliente.planejamento?.aguardando_cliente,
+    lembrarEm: cliente.planejamento?.lembrar_em,
+  })
 
-  if (!plano || !temMetas) {
+  if (!plano || estado !== 'definido') {
+    const vencido = estado === 'atencao'
     return (
-      <section className="rounded-xl border border-dashed border-line p-4">
-        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Route className="h-4 w-4 text-accent" /> Planejamento
-        </h2>
+      <section className="rounded-xl border border-line p-4">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Route className="h-4 w-4 text-accent" /> Planejamento
+          </h2>
+          <PastilhaSaude
+            estado={vencido ? 'atencao' : 'neutro'}
+            texto={vencido ? 'Atenção' : 'A definir'}
+          />
+        </div>
         <p className="text-sm text-foreground/55">
-          {plano
-            ? 'O ponto A está registrado, mas ainda não há metas de 6 e 12 meses.'
-            : 'Ainda não há planejamento: ponto de partida e metas de 6 e 12 meses.'}{' '}
-          Sem ele, "Metas combinadas" não tem como dizer se o mês foi bom.
+          {vencido
+            ? `O lembrete de ${dataBR(cliente.planejamento?.lembrar_em ?? '')} venceu: veja se o cliente já trouxe os números.`
+            : cliente.planejamento?.aguardando_cliente
+              ? `Aguardando o cliente${cliente.planejamento.lembrar_em ? ` — lembrar em ${dataBR(cliente.planejamento.lembrar_em)}` : ''}.`
+              : 'Preencha quando o cliente tiver esses números.'}
         </p>
         <Button className="mt-2" size="sm" variant="secondary" rightIcon={<ArrowRight className="h-3.5 w-3.5" />} onClick={onAbrir}>
-          {plano ? 'Completar o planejamento' : 'Montar o planejamento'}
+          Abrir o planejamento
         </Button>
       </section>
     )
@@ -45,8 +61,7 @@ export function ResumoPlanejamento({
 
   const periodo = cliente.periodo_referencia ?? ''
   const mes = comDerivadas(cliente.metricas_mes ?? {})
-  const avaliacoes = avaliarMesContraRota(plano, mes, periodo)
-  const falta = faltaNoPlanejamento(plano)
+  const avaliacoes = temPlanejamento(plano) ? avaliarMesContraRota(plano, mes, periodo) : []
   const resumo = resumoLinha(plano)
 
   return (
@@ -65,13 +80,14 @@ export function ResumoPlanejamento({
       </div>
 
       {resumo && <p className="text-xs leading-relaxed text-foreground/70">{resumo}</p>}
-      {falta.length > 0 && <p className="mt-1 text-[11px] text-warning">Falta: {falta.join(', ')}</p>}
 
       <div className="mt-3 border-t border-line pt-3">
         <p className="mb-1.5 text-[11px] uppercase tracking-wide text-foreground/40">Este mês contra a rota</p>
         {avaliacoes.length === 0 ? (
           <p className="text-xs text-foreground/50">
-            Nada pra comparar ainda: sem número lançado neste mês, ou o mês está fora da rota.
+            {temPlanejamento(plano)
+              ? 'Nada pra comparar ainda: sem número lançado neste mês, ou o mês está fora da rota.'
+              : 'Metas de 6 e 12 meses a definir — sem elas não há rota pra comparar.'}
           </p>
         ) : (
           <ul className="space-y-1.5">

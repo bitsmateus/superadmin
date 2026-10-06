@@ -340,6 +340,29 @@ const TABELAS = [
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
 
+  // ---- "o básico bem feito": ponto A com 4 números, todos opcionais.
+  // Vendas/mês entra como número digitado; ticket médio (faturamento ÷ vendas) e conversão (vendas ÷
+  // leads) passam a ser CALCULADOS — as colunas antigas continuam existindo e guardam o valor derivado,
+  // pra lista de clientes e o portal seguirem lendo o mesmo lugar.
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS vendas_mes NUMERIC(14,2)`,
+  `UPDATE gc_planejamento SET vendas_mes = ROUND(leads_mes * taxa_conversao / 100, 2)
+     WHERE vendas_mes IS NULL AND leads_mes IS NOT NULL AND taxa_conversao IS NOT NULL`,
+  // "Aguardando o cliente": o ponto A fica em branco de propósito, com um lembrete opcional que vira
+  // pendência em Estratégias > Pendências enquanto o planejamento estiver nesse estado.
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS aguardando_cliente BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS lembrar_em DATE`,
+  // Estratégia e premissas viram UM campo ("Estratégia e premissas", interno). O que já estava escrito
+  // nas premissas é acrescentado ao fim da estratégia, sem perder nada; depois a coluna fica vazia.
+  `UPDATE gc_planejamento_cenarios SET
+       estrategia = CASE WHEN btrim(estrategia) = '' THEN premissas
+                         ELSE rtrim(estrategia) || E'\\n\\nPremissas:\\n' || premissas END,
+       premissas = ''
+     WHERE btrim(premissas) <> ''`,
+  // Modelos de "premissas" passam pra "estratégia e premissas", com o nome deixando claro de onde vêm.
+  `UPDATE gc_planejamento_modelos SET campo = 'estrategia', nome = 'Premissas — ' || nome,
+       ordem = ordem + 100, updated_at = NOW()
+     WHERE campo = 'premissas'`,
+
   // Rotina mensal: itens que nascem sozinhos todo mês (publicar o relatório, alinhar com o cliente),
   // com prazo automático. Não pertencem a etapa nem a estratégia — são do CLIENTE, no mês de
   // referência —, então a regra de "dono" do item ganha uma terceira forma.
@@ -472,15 +495,15 @@ const MODELOS_PLANEJAMENTO_PADRAO: { campo: string; nome: string; texto: string 
     texto: '1. Pesquisa no Google pra quem já procura o serviço.\n2. Meta pra gerar demanda e remarketing.\n3. Orçamento dividido pelo custo por venda de cada canal, revisado todo mês.',
   },
   {
-    campo: 'premissas', nome: 'CPL e conversão',
+    campo: 'estrategia', nome: 'Premissas — CPL e conversão',
     texto: '- O CPL cai de R$ {cpl_hoje} pra [alvo] com criativo novo e público refinado.\n- A taxa de conversão sobe de {conversao_hoje}% pra [alvo]% com atendimento mais rápido.',
   },
   {
-    campo: 'premissas', nome: 'Operação do cliente',
+    campo: 'estrategia', nome: 'Premissas — Operação do cliente',
     texto: '- O cliente responde os leads em até 5 minutos no horário comercial.\n- Há equipe suficiente pra atender {meta_leads_6m} leads/mês.\n- O cliente aprova os criativos em até 48h.',
   },
   {
-    campo: 'premissas', nome: 'Orçamento',
+    campo: 'estrategia', nome: 'Premissas — Orçamento',
     texto: '- O investimento sobe de R$ {investimento_hoje} pra R$ {meta_investimento_6m}/mês no período.\n- Não há sazonalidade forte nos meses do plano (ou está descontada: [explicar]).',
   },
 ];

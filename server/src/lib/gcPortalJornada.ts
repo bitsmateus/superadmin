@@ -1,4 +1,4 @@
-import { CHAVES_PLANEJAMENTO, HORIZONTES_PLANEJAMENTO } from './gcPlanejamento.js';
+import { CHAVES_PLANEJAMENTO, HORIZONTES_PLANEJAMENTO, derivadosDoPontoA } from './gcPlanejamento.js';
 
 /**
  * O bloco "Nossa jornada" do portal do cliente — montagem PURA, sem banco.
@@ -33,6 +33,7 @@ export interface JornadaPublica {
   atual: {
     leads: number | null;
     investimento: number | null;
+    vendas: number | null;
     ticket: number | null;
     conversao: number | null;
     receita: number | null;
@@ -93,8 +94,14 @@ export function montarJornadaPublica(
     atual: {
       leads: numero(p.leads_mes),
       investimento: numero(p.investimento_mes),
-      ticket: numero(p.ticket_medio),
-      conversao: numero(p.taxa_conversao),
+      vendas: numero(p.vendas_mes),
+      // Ticket e conversão saem das contas (faturamento ÷ vendas, vendas ÷ leads), não de colunas.
+      ...(({ ticket_medio, taxa_conversao }) => ({ ticket: ticket_medio, conversao: taxa_conversao }))(
+        derivadosDoPontoA({
+          leads_mes: numero(p.leads_mes), investimento_mes: numero(p.investimento_mes),
+          vendas_mes: numero(p.vendas_mes), faturamento_mensal: numero(p.faturamento_mensal),
+        })
+      ),
       receita: numero(p.faturamento_mensal),
     },
     cenarios,

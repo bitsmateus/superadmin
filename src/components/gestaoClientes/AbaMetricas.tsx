@@ -81,6 +81,9 @@ function CartaoMeta({
   onExcluir: () => void
   onConcluir: () => void
 }) {
+  // Meta de 6 e 12 meses nasce e se edita na grade do planejamento; aqui ela só é acompanhada.
+  const doPlanejamento = meta.horizonte === '6_meses' || meta.horizonte === '12_meses'
+  const rotuloDoHorizonte = HORIZONTES.find((h) => h.valor === (meta.horizonte ?? 'mes'))?.curto
   const progresso = progressoDaMeta(meta, atual)
   const esperado = ritmoEsperado(meta)
   const atingida = progresso !== null && progresso >= 100
@@ -90,7 +93,10 @@ function CartaoMeta({
   return (
     <div className="group rounded-xl border border-line px-3 py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium text-foreground">{metricaLabel(meta.chave_metrica)}</span>
+        <span className="font-medium text-foreground">
+          {metricaLabel(meta.chave_metrica)}
+          {rotuloDoHorizonte && <span className="ml-2 text-xs font-normal text-foreground/40">{rotuloDoHorizonte}</span>}
+        </span>
         <span className="text-base font-semibold tabular-nums text-foreground">
           {formatarPorChave(meta.chave_metrica, atual)}
           <span className="ml-1 text-xs font-medium text-foreground/50">
@@ -132,19 +138,21 @@ function CartaoMeta({
             estado={atingida ? 'otimo' : atrasada ? 'risco' : progresso === null ? 'neutro' : 'bom'}
             texto={atingida ? 'atingida' : atrasada ? 'atrasada' : progresso === null ? 'sem dado' : 'no ritmo'}
           />
-          {meta.status === 'ativa' && atingida && (
+          {!doPlanejamento && meta.status === 'ativa' && atingida && (
             <button type="button" onClick={onConcluir} className="text-success hover:underline">
               marcar como atingida
             </button>
           )}
-          <button
-            type="button"
-            onClick={onExcluir}
-            className="text-foreground/25 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
-            aria-label="Excluir meta"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {!doPlanejamento && (
+            <button
+              type="button"
+              onClick={onExcluir}
+              className="text-foreground/25 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+              aria-label="Excluir meta"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </span>
       </div>
     </div>
@@ -161,10 +169,10 @@ function CartaoMeta({
  * As métricas derivadas (CPL, CTR, ROAS…) não são digitadas nem gravadas: aparecem calculadas do
  * lado. Guardar o CPL junto criaria dois números que podem discordar da própria divisão.
  *
- * As metas são separadas por horizonte (mês, 6 meses, 12 meses) porque é assim que se combina com
- * o cliente — "100 leads" sem dizer até quando não é meta, é desejo. Cada uma guarda o PONTO DE
- * PARTIDA, e o progresso conta de lá, não do zero: quem começou em 40 e foi a 60 andou 40% do
- * caminho até 90, não 66% da meta.
+ * "Metas combinadas" lista só as metas que EXISTEM, cada uma com o PONTO DE PARTIDA, e o progresso
+ * conta de lá, não do zero: quem começou em 40 e foi a 60 andou 40% do caminho até 90, não 66% da
+ * meta. As de 6 e 12 meses nascem e se editam na grade do planejamento; o formulário daqui é só da
+ * meta do mês.
  */
 export function AbaMetricas({
   clienteId,
@@ -183,9 +191,9 @@ export function AbaMetricas({
   const [periodo, setPeriodo] = React.useState(mesAtual())
   const [rascunho, setRascunho] = React.useState<Record<string, string>>({})
   const [salvando, setSalvando] = React.useState(false)
-  const [novaMeta, setNovaMeta] = React.useState<{
-    chave: string; horizonte: GcHorizonte; base: string; alvo: string; prazo: string | null
-  }>({ chave: 'leads', horizonte: 'mes', base: '', alvo: '', prazo: null })
+  const [novaMeta, setNovaMeta] = React.useState<{ chave: string; alvo: string; prazo: string | null }>({
+    chave: 'leads', alvo: '', prazo: null,
+  })
   const [criandoMeta, setCriandoMeta] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
@@ -272,15 +280,15 @@ export function AbaMetricas({
     try {
       await gestaoClientes.criarMeta(clienteId, {
         chave_metrica: novaMeta.chave,
-        horizonte: novaMeta.horizonte,
-        // Sem ponto de partida informado, o de hoje é o que está lançado no mês — é o que faz o
-        // progresso significar "andou", e não "já nasceu em 40%".
-        valor_base: numeroDigitado(novaMeta.base) ?? valoresDoMes[novaMeta.chave] ?? 0,
+        horizonte: 'mes',
+        // O ponto de partida é o que está lançado hoje no mês — é o que faz o progresso significar
+        // "andou", e não "já nasceu em 40%".
+        valor_base: valoresDoMes[novaMeta.chave] ?? 0,
         data_base: new Date().toISOString().slice(0, 10),
         valor_meta: alvo,
-        prazo: novaMeta.prazo ?? prazoSugerido(novaMeta.horizonte),
+        prazo: novaMeta.prazo ?? prazoSugerido('mes'),
       })
-      setNovaMeta({ chave: 'leads', horizonte: novaMeta.horizonte, base: '', alvo: '', prazo: null })
+      setNovaMeta({ chave: 'leads', alvo: '', prazo: null })
       await carregar()
     } catch (err) {
       toast.error('Falha ao criar a meta: ' + (err as Error).message)
@@ -297,6 +305,16 @@ export function AbaMetricas({
       toast.error('Falha ao salvar: ' + (err as Error).message)
     }
   }
+
+  // CPL e ROAS de 6 e 12 meses são CALCULADOS no planejamento; uma meta gravada com essas chaves é
+  // resto de versão antiga e não vale em lugar nenhum — então não aparece como se valesse.
+  const ORDEM_HORIZONTE: Record<string, number> = { mes: 0, '6_meses': 1, '12_meses': 2 }
+  const metasVisiveis = metas
+    .filter(
+      (m) =>
+        !((m.horizonte === '6_meses' || m.horizonte === '12_meses') && (m.chave_metrica === 'cpl' || m.chave_metrica === 'roas')),
+    )
+    .sort((a, b) => (ORDEM_HORIZONTE[a.horizonte ?? 'mes'] ?? 0) - (ORDEM_HORIZONTE[b.horizonte ?? 'mes'] ?? 0))
 
   // Os meses que já têm lançamento, do mais novo pro mais velho — é a tabela de histórico.
   const mesesLancados = Array.from(
@@ -400,70 +418,39 @@ export function AbaMetricas({
           <Target className="h-4 w-4 text-accent" /> Metas combinadas
         </h2>
         <p className="mb-3 text-xs text-foreground/50">
-          O risco vertical em cada barra é onde a meta deveria estar hoje, pelo prazo. O progresso
-          conta do ponto de partida.
+          As de 6 e 12 meses se definem na grade do planejamento, acima. Aqui, só a meta do mês.
         </p>
 
-        <div className="space-y-4">
-          {HORIZONTES.map((h) => {
-            const doHorizonte = metas.filter((m) => (m.horizonte ?? 'mes') === h.valor)
-            return (
-              <div key={h.valor}>
-                <h3 className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-foreground/55">
-                  {h.label}
-                  <span className="text-foreground/35">{doHorizonte.length}</span>
-                </h3>
-                {doHorizonte.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-line px-3 py-2 text-xs text-foreground/40">
-                    Nenhuma meta de {h.curto} combinada.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {doHorizonte.map((meta) => (
-                      <CartaoMeta
-                        key={meta.id}
-                        meta={meta}
-                        atual={valoresDoMes[meta.chave_metrica]}
-                        onExcluir={() => void agir(() => gestaoClientes.excluirMeta(meta.id))}
-                        onConcluir={() =>
-                          void agir(() => gestaoClientes.atualizarMeta(meta.id, { status: 'atingida' }))
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        {metasVisiveis.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-line px-3 py-3 text-center text-sm text-foreground/45">
+            Sem metas definidas.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {metasVisiveis.map((meta) => (
+              <CartaoMeta
+                key={meta.id}
+                meta={meta}
+                atual={valoresDoMes[meta.chave_metrica]}
+                onExcluir={() => void agir(() => gestaoClientes.excluirMeta(meta.id))}
+                onConcluir={() => void agir(() => gestaoClientes.atualizarMeta(meta.id, { status: 'atingida' }))}
+              />
+            ))}
+          </div>
+        )}
 
         <form
           onSubmit={criarMeta}
-          className="mt-4 grid items-start gap-3 border-t border-line pt-4 sm:grid-cols-6"
+          className="mt-4 grid items-start gap-3 border-t border-line pt-4 sm:grid-cols-4"
         >
           <Select
-            label="Métrica"
+            label="Meta do mês"
             options={TODAS_METRICAS.map((m) => ({ value: m.chave, label: m.label }))}
             value={novaMeta.chave}
             onChange={(e) => setNovaMeta((n) => ({ ...n, chave: e.target.value }))}
           />
-          <Select
-            label="Horizonte"
-            options={HORIZONTES.map((h) => ({ value: h.valor, label: h.label }))}
-            value={novaMeta.horizonte}
-            onChange={(e) =>
-              setNovaMeta((n) => ({ ...n, horizonte: e.target.value as GcHorizonte, prazo: null }))
-            }
-          />
           <Input
-            label="Ponto de partida"
-            value={novaMeta.base}
-            onChange={(e) => setNovaMeta((n) => ({ ...n, base: e.target.value }))}
-            placeholder={formatarPorChave(novaMeta.chave, valoresDoMes[novaMeta.chave] ?? 0)}
-            inputMode="decimal"
-          />
-          <Input
-            label="Meta"
+            label="Valor"
             value={novaMeta.alvo}
             onChange={(e) => setNovaMeta((n) => ({ ...n, alvo: e.target.value }))}
             placeholder={metricaUnidade(novaMeta.chave) === 'reais' ? '0,00' : '0'}
@@ -471,7 +458,7 @@ export function AbaMetricas({
           />
           <CampoData
             label="Prazo"
-            value={novaMeta.prazo ?? prazoSugerido(novaMeta.horizonte)}
+            value={novaMeta.prazo ?? prazoSugerido('mes')}
             onChange={(v) => setNovaMeta((n) => ({ ...n, prazo: v }))}
           />
           <div>
@@ -488,9 +475,6 @@ export function AbaMetricas({
             </Button>
           </div>
         </form>
-        <p className="mt-2 text-xs text-foreground/45">
-          Ponto de partida vazio usa o valor lançado hoje no mês — é de lá que o progresso conta.
-        </p>
       </section>
 
       <ModalAvisos

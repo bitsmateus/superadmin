@@ -258,7 +258,7 @@ function LinhaSinal({ sinal, onIr }: { sinal: Sinal; onIr?: (d: Destino) => void
             {alvo.rotulo} <ChevronRight className="h-3 w-3" />
           </span>
         )}
-        <PastilhaSaude estado={sinal.estado} />
+        <PastilhaSaude estado={sinal.estado} texto={sinal.rotulo} />
       </span>
     </>
   )

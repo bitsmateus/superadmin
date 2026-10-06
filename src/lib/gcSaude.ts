@@ -1,6 +1,9 @@
 import type { GcClienteLista, GcMeta } from '@/services/gestaoClientes'
 import { comDerivadas, formatarPorChave, metricaLabel, variacaoDaMetrica } from '@/lib/gcMetricas'
-import { CHAVES_PLANO, HORIZONTES_PLANO, avaliarMesContraRota, temPlanejamento } from '@/lib/gcPlanejamento'
+import {
+  CHAVES_PLANO, HORIZONTES_PLANO, avaliarMesContraRota, lembreteVencido, rotaProjetada, temPlanejamento,
+  type ChavePlano,
+} from '@/lib/gcPlanejamento'
 import { planoDaLista } from '@/lib/gcPlanoAdaptadores'
 
 /**
@@ -28,6 +31,8 @@ export interface Sinal {
   chave: string
   titulo: string
   estado: Estado
+  /** Troca o texto da pastilha (que, sem isto, é o do estado). Ex.: o planejamento sem número é "A definir". */
+  rotulo?: string
   /** A frase que explica o estado — curta, com o número que motivou. */
   detalhe: string
   /** Conta pro risco de churn? (contato, retorno, relatório, serviço, status) */
@@ -417,13 +422,27 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   // As metas de 6 e 12 meses das métricas do planejamento moram na MESMA tabela de metas, então
   // quando há planejamento elas são avaliadas pela rota e saem da avaliação por prazo — senão a
   // mesma meta seria cobrada duas vezes, por duas réguas diferentes.
-  const metasAtivas = (c.metas ?? []).filter((m) => m.status === 'ativa')
+  // CPL e ROAS de 6 e 12 meses são CALCULADOS no planejamento: uma meta gravada com essas chaves é resto
+  // de versão antiga e não vale — como no resto da tela, deixa de existir.
+  const eCalculada = (m: GcMeta) =>
+    (m.horizonte === '6_meses' || m.horizonte === '12_meses') && (m.chave_metrica === 'cpl' || m.chave_metrica === 'roas')
+  const metasAtivas = (c.metas ?? []).filter((m) => m.status === 'ativa' && !eCalculada(m))
   const planoDoCliente = planoDaLista(c)
-  const comPlano = temPlanejamento(planoDoCliente) ? planoDoCliente : null
+  // O plano só entra se a rota consegue ser traçada pra alguma métrica (há ponto de partida e data).
+  // Um plano sem rota — metas soltas, sem ponto A — não tem o que comparar, e fingir que tem calaria
+  // a avaliação por prazo das mesmas metas.
+  const comPlano =
+    temPlanejamento(planoDoCliente) && CHAVES_PLANO.some((k) => rotaProjetada(planoDoCliente, k.chave).length > 0)
+      ? planoDoCliente
+      : null
+  // Só sai da avaliação por prazo a meta que a rota CONSEGUE avaliar (há ponto de partida e data pra
+  // traçá-la). Sem isso, uma meta de 6 meses sem ponto A ficaria sem avaliação nenhuma: nem pela rota,
+  // que não existe, nem pelo prazo, de onde a tiramos.
   const coberta = (m: GcMeta) =>
     comPlano !== null &&
     HORIZONTES_PLANO.some((h) => h.valor === m.horizonte) &&
-    CHAVES_PLANO.some((k) => k.chave === m.chave_metrica)
+    CHAVES_PLANO.some((k) => k.chave === m.chave_metrica) &&
+    rotaProjetada(comPlano, m.chave_metrica as ChavePlano).length > 0
   const metasPorPrazo = metasAtivas.filter((m) => !coberta(m))
 
   if (metasAtivas.length > 0) {
@@ -448,7 +467,7 @@ export function avaliarSaude(c: GcClienteLista): Saude {
     const partes: string[] = []
     if (comPlano) {
       if (!comPlano.dataDiagnostico) {
-        partes.push('Planejamento sem data do diagnóstico — sem a rota mês a mês não dá pra comparar')
+        partes.push('Planejamento: lance o primeiro mês em Métricas pra ver a rota')
       } else if (rota.length === 0) {
         partes.push('Planejamento: nada do mês pra comparar com a rota (sem lançamento, ou mês fora da rota)')
       } else if (ruins.length === 0) {
@@ -492,15 +511,21 @@ export function avaliarSaude(c: GcClienteLista): Saude {
       detalhe: partes.join(' · '),
     })
   } else {
+    // Sem metas, o planejamento está "A definir": estado NEUTRO, que não pesa no semáforo nem no risco de
+    // churn — o cliente pode simplesmente ainda não ter trazido os números. Só vira atenção quando o
+    // lembrete de "completar em" que a própria equipe marcou já venceu.
+    const vencido = lembreteVencido({
+      aguardando: c.planejamento?.aguardando_cliente,
+      lembrarEm: c.planejamento?.lembrar_em,
+    })
     sinais.push({
       chave: 'metas',
       titulo: 'Metas combinadas',
-      estado: 'atencao',
-      // Sem planejamento NEM metas: o caminho é montar o planejamento (ponto A + metas), que é onde as
-      // metas de 6 e 12 meses nascem. Com planejamento mas sem metas, falta dizer aonde se quer chegar.
-      detalhe: c.planejamento
-        ? 'Planejamento sem metas de 6 ou 12 meses — defina onde o cliente quer chegar'
-        : 'Sem planejamento nem metas — defina o ponto A e as metas pra poder dizer se o mês foi bom',
+      estado: vencido ? 'atencao' : 'neutro',
+      rotulo: vencido ? undefined : 'A definir',
+      detalhe: vencido
+        ? `Planejamento aguardando o cliente: o lembrete de ${String(c.planejamento?.lembrar_em).slice(0, 10).split('-').reverse().join('/')} venceu`
+        : 'Preencha quando o cliente tiver esses números.',
     })
   }
 

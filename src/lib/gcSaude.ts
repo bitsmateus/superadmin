@@ -1,5 +1,7 @@
 import type { GcClienteLista, GcMeta } from '@/services/gestaoClientes'
 import { comDerivadas, formatarPorChave, metricaLabel, variacaoDaMetrica } from '@/lib/gcMetricas'
+import { CHAVES_PLANO, HORIZONTES_PLANO, avaliarMesContraRota, temPlanejamento } from '@/lib/gcPlanejamento'
+import { planoDaLista } from '@/lib/gcPlanoAdaptadores'
 
 /**
  * Semáforo de saúde do cliente (módulo "Clientes NX Digital").
@@ -409,7 +411,21 @@ export function avaliarSaude(c: GcClienteLista): Saude {
   }
 
   // ---------------------------------------------------------------- metas
+  // "Metas combinadas" considera DUAS fontes: as metas de sempre (por prazo) e o planejamento do
+  // cliente (a rota mês a mês do ponto A até as metas de 6 e 12 meses).
+  //
+  // As metas de 6 e 12 meses das métricas do planejamento moram na MESMA tabela de metas, então
+  // quando há planejamento elas são avaliadas pela rota e saem da avaliação por prazo — senão a
+  // mesma meta seria cobrada duas vezes, por duas réguas diferentes.
   const metasAtivas = (c.metas ?? []).filter((m) => m.status === 'ativa')
+  const planoDoCliente = planoDaLista(c)
+  const comPlano = temPlanejamento(planoDoCliente) ? planoDoCliente : null
+  const coberta = (m: GcMeta) =>
+    comPlano !== null &&
+    HORIZONTES_PLANO.some((h) => h.valor === m.horizonte) &&
+    CHAVES_PLANO.some((k) => k.chave === m.chave_metrica)
+  const metasPorPrazo = metasAtivas.filter((m) => !coberta(m))
+
   if (metasAtivas.length > 0) {
     // Quantos pontos o progresso está atrás de onde deveria estar hoje pelo prazo. Meta não anda em
     // linha reta, então 20 pontos de folga viram só atenção; 40 já é meta muito abaixo e vira risco.
@@ -419,18 +435,61 @@ export function avaliarSaude(c: GcClienteLista): Saude {
       if (progresso === null || decorrido === null) return null
       return decorrido * 100 - progresso
     }
-    const foraDoRitmo = metasAtivas.filter((m) => (atrasoDaMeta(m) ?? 0) > 20)
-    const muitoAbaixo = metasAtivas.filter((m) => (atrasoDaMeta(m) ?? 0) > 40)
+    const foraDoRitmo = metasPorPrazo.filter((m) => (atrasoDaMeta(m) ?? 0) > 20)
+    const muitoAbaixo = metasPorPrazo.filter((m) => (atrasoDaMeta(m) ?? 0) > 40)
+
+    // O planejamento: realizado do mês contra o projetado da rota. Mesmas réguas das metas por prazo
+    // (20% pra atenção, 40% pra risco), só que olhando só o desvio RUIM pra métrica.
+    const rota = comPlano ? avaliarMesContraRota(comPlano, mes, c.periodo_referencia ?? '') : []
+    const ruins = rota.filter((r) => r.boa === false)
+    const rotaRisco = ruins.filter((r) => Math.abs(r.desvioPct) > 40)
+    const rotaAtencao = ruins.filter((r) => Math.abs(r.desvioPct) > 20)
+
+    const partes: string[] = []
+    if (comPlano) {
+      if (!comPlano.dataDiagnostico) {
+        partes.push('Planejamento sem data do diagnóstico — sem a rota mês a mês não dá pra comparar')
+      } else if (rota.length === 0) {
+        partes.push('Planejamento: nada do mês pra comparar com a rota (sem lançamento, ou mês fora da rota)')
+      } else if (ruins.length === 0) {
+        partes.push(
+          'Planejamento: no caminho (' +
+            rota.map((r) => `${r.label.toLowerCase()} ${r.desvioPct > 0 ? '+' : ''}${r.desvioPct.toFixed(0)}%`).join(', ') + ')',
+        )
+      } else {
+        partes.push(
+          'Planejamento: ' +
+            ruins
+              .sort((a, b) => Math.abs(b.desvioPct) - Math.abs(a.desvioPct))
+              .slice(0, 3)
+              .map((r) => `${r.label.toLowerCase()} ${Math.abs(r.desvioPct).toFixed(0)}% ${r.desvioPct > 0 ? 'acima' : 'abaixo'} do projetado`)
+              .join(', '),
+        )
+      }
+    }
+    if (metasPorPrazo.length > 0) {
+      partes.push(
+        foraDoRitmo.length > 0
+          ? `${foraDoRitmo.length} de ${metasPorPrazo.length} meta(s) fora do ritmo (${foraDoRitmo
+              .map((m) => metricaLabel(m.chave_metrica))
+              .join(', ')})${muitoAbaixo.length > 0 ? ' — muito abaixo do esperado' : ''}`
+          : `${metasPorPrazo.length} meta(s) no ritmo`,
+      )
+    }
+
+    const algumaAvaliada = rota.length > 0 || metasPorPrazo.length > 0
     sinais.push({
       chave: 'metas',
       titulo: 'Metas combinadas',
-      estado: muitoAbaixo.length > 0 ? 'risco' : foraDoRitmo.length > 0 ? 'atencao' : 'otimo',
-      detalhe:
-        foraDoRitmo.length > 0
-          ? `${foraDoRitmo.length} de ${metasAtivas.length} fora do ritmo (${foraDoRitmo
-              .map((m) => metricaLabel(m.chave_metrica))
-              .join(', ')})${muitoAbaixo.length > 0 ? ' — muito abaixo do esperado' : ''}`
-          : `${metasAtivas.length} meta(s) no ritmo`,
+      estado:
+        muitoAbaixo.length > 0 || rotaRisco.length > 0
+          ? 'risco'
+          : foraDoRitmo.length > 0 || rotaAtencao.length > 0
+            ? 'atencao'
+            : algumaAvaliada
+              ? 'otimo'
+              : 'neutro',
+      detalhe: partes.join(' · '),
     })
   } else {
     sinais.push({

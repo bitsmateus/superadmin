@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { FileDown, Loader2, TrendingUp } from 'lucide-react'
 import { gestaoClientes, HORIZONTES, type GcSnapshot } from '@/services/gestaoClientes'
 import { formatarMetrica } from '@/lib/gcMetricas'
+import { JornadaPortal } from '@/components/gestaoClientes/JornadaPortal'
 import { cn } from '@/lib/utils'
 
 type Portal = Awaited<ReturnType<typeof gestaoClientes.portal>>
@@ -352,6 +353,10 @@ export function PortalClientePage() {
             <p className="text-xs text-foreground/50">Relatórios de performance · Grupo NX Digital</p>
           </div>
         </header>
+
+        {/* "Nossa jornada": só existe se a equipe ligou pra esse cliente. O servidor já tirou
+            estratégia e premissas — o que chega aqui é o que pode ser mostrado. */}
+        {dados.jornada && <JornadaPortal jornada={dados.jornada} />}
 
         {dados.relatorios.length === 0 ? (
           <div className="rounded-2xl border border-line bg-surface p-8 text-center">

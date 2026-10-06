@@ -164,6 +164,18 @@ export interface GcClienteLista {
   avaliacao: GcAvaliacao | null
   /** Situação do relatório do mês de referência. Null = nem rascunho existe. */
   relatorio_mes: 'rascunho' | 'publicado' | null
+  /** O mês ('YYYY-MM') a que `metricas_mes` se refere. */
+  periodo_referencia: string
+  /** Ponto A e curva do planejamento. Null = o cliente não tem planejamento. */
+  planejamento: {
+    curva: 'linear' | 'composta'
+    data_diagnostico: string | null
+    leads: number | null
+    investimento: number | null
+    ticket: number | null
+    conversao: number | null
+    receita: number | null
+  } | null
 }
 
 /** Um item da rotina mensal do cliente — nasce sozinho, com prazo, pro mês que fechou. */
@@ -386,6 +398,90 @@ export interface GcLinkPublico {
   ultimo_acesso: string | null
 }
 
+/** O planejamento do cliente como a API entrega e recebe. */
+export interface GcPlanejamentoApi {
+  /** False = ninguém salvou o planejamento ainda (o resto vem vazio, exceto metas já existentes). */
+  existe: boolean
+  atual: {
+    situacao_atual: string
+    leads_mes: number | null
+    investimento_mes: number | null
+    ticket_medio: number | null
+    taxa_conversao: number | null
+    faturamento_mensal: number | null
+    data_diagnostico: string | null
+  }
+  curva: 'linear' | 'composta'
+  portal: { ativo: boolean; mostrar_situacao: boolean; mostrar_objetivo: boolean }
+  cenarios: Record<
+    '6_meses' | '12_meses',
+    {
+      onde_quer_chegar: string
+      /** Interna: nunca vai pro portal. */
+      estrategia: string
+      /** Interna: nunca vai pro portal. */
+      premissas: string
+      metas: Partial<Record<'leads' | 'cpl' | 'vendas' | 'roas' | 'receita' | 'investimento', number>>
+    }
+  >
+}
+
+/** O que se envia ao salvar: o mesmo formato, com `null` nas metas que a pessoa limpou. */
+export interface GcPlanejamentoEntrada {
+  atual: GcPlanejamentoApi['atual']
+  curva: 'linear' | 'composta'
+  portal: GcPlanejamentoApi['portal']
+  cenarios: Record<
+    '6_meses' | '12_meses',
+    {
+      onde_quer_chegar: string
+      estrategia: string
+      premissas: string
+      metas: Record<string, number | null>
+    }
+  >
+}
+
+export interface GcMudancaPlanejamento {
+  escopo: string
+  campo: string
+  rotulo: string
+  antes: string | number | boolean | null
+  depois: string | number | boolean | null
+}
+
+export interface GcHistoricoPlanejamento {
+  id: string
+  alterado_em: string
+  autor_nome: string | null
+  mudancas: GcMudancaPlanejamento[]
+}
+
+/** O bloco "Nossa jornada" do portal. Nunca traz estratégia nem premissas. */
+export interface GcJornadaPortal {
+  data_diagnostico: string | null
+  curva: 'linear' | 'composta'
+  /** A situação de hoje, só se a equipe marcou pra mostrar. */
+  situacao: string | null
+  atual: {
+    leads: number | null
+    investimento: number | null
+    ticket: number | null
+    conversao: number | null
+    receita: number | null
+  }
+  cenarios: Record<
+    '6_meses' | '12_meses',
+    {
+      metas: Partial<Record<'leads' | 'cpl' | 'vendas' | 'roas' | 'receita' | 'investimento', number>>
+      /** "Onde quer chegar", só se a equipe marcou pra mostrar. */
+      objetivo: string | null
+    }
+  >
+  /** Realizado por métrica e mês — só de meses com relatório PUBLICADO. */
+  realizado: Record<string, Record<string, number>>
+}
+
 export const gestaoClientes = {
   /** `todos` traz também os modelos desativados — a tela de gestão precisa vê-los pra reativar. */
   modelos: (todos = false) => api.get<GcModelos>(`/api/gc/modelos${todos ? '?todos=1' : ''}`),
@@ -472,6 +568,13 @@ export const gestaoClientes = {
   ) => api.patch<GcEstrategia>(`/api/gc/estrategias/${id}`, dados),
   excluirEstrategia: (id: string) => api.delete(`/api/gc/estrategias/${id}`),
 
+  planejamento: (clienteId: string) =>
+    api.get<GcPlanejamentoApi>(`/api/gc/clientes/${clienteId}/planejamento`),
+  salvarPlanejamento: (clienteId: string, dados: GcPlanejamentoEntrada) =>
+    api.put<GcPlanejamentoApi>(`/api/gc/clientes/${clienteId}/planejamento`, dados),
+  historicoPlanejamento: (clienteId: string) =>
+    api.get<GcHistoricoPlanejamento[]>(`/api/gc/clientes/${clienteId}/planejamento/historico`),
+
   /** A nota do mês. Sem período, o servidor usa o mês de hoje em Brasília. */
   avaliar: (
     clienteId: string,
@@ -550,6 +653,8 @@ export const gestaoClientes = {
       relatorios: (Pick<GcRelatorio, 'id' | 'periodo_inicio' | 'periodo_fim' | 'publicado_em'> & {
         snapshot: GcSnapshot
       })[]
+      /** Null = a equipe não ligou o bloco "Nossa jornada" pra esse cliente. */
+      jornada: GcJornadaPortal | null
     }>(`/api/public/cliente/${encodeURIComponent(token)}`),
 
   registrar: (

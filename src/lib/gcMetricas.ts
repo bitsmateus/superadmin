@@ -143,6 +143,17 @@ export function comDerivadas(brutas: Record<string, number | string | null>): Re
 }
 
 /**
+ * O inverso de numeroDigitado: um número do banco no formato do CAMPO ("1500,5"). Sem ponto de
+ * milhar, de propósito: o campo é lido de volta por numeroDigitado, que trata ponto como milhar —
+ * "1500.5" voltaria como 15005, e abrir uma tela e salvar sem mexer em nada corromperia o valor.
+ */
+export function numeroParaCampo(valor: number | string | null | undefined): string {
+  if (valor === null || valor === undefined || valor === '') return ''
+  const n = Number(valor)
+  return Number.isFinite(n) ? String(n).replace('.', ',') : ''
+}
+
+/**
  * Número do jeito que a pessoa digita no Brasil: "1.500,50" → 1500.5. Campo vazio devolve null,
  * que é diferente de zero — zero é um valor lançado, vazio é "não sei".
  */

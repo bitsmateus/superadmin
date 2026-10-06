@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/Select'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
+import { PlanejamentoCliente } from '@/components/gestaoClientes/PlanejamentoCliente'
 import {
   HORIZONTES, avisosDoErro, gestaoClientes,
   type GcHorizonte, type GcMeta, type GcMetrica,
@@ -14,7 +15,7 @@ import {
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, TODAS_METRICAS, comDerivadas, formatarMetrica,
   formatarPorChave, limitesDoMes, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade,
-  numeroDigitado, somarMeses, validarMetricas, variacaoDaMetrica,
+  numeroDigitado, numeroParaCampo, somarMeses, validarMetricas, variacaoDaMetrica,
 } from '@/lib/gcMetricas'
 import { progressoDaMeta } from '@/lib/gcSaude'
 import { cn } from '@/lib/utils'
@@ -202,7 +203,7 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
   React.useEffect(() => {
     const atual: Record<string, string> = {}
     for (const m of metricas) {
-      if (String(m.periodo_inicio).slice(0, 10) === inicio) atual[m.chave] = String(Number(m.valor))
+      if (String(m.periodo_inicio).slice(0, 10) === inicio) atual[m.chave] = numeroParaCampo(m.valor)
     }
     setRascunho(atual)
   }, [metricas, inicio])
@@ -302,6 +303,10 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* No topo, acima das metas atuais e do lançamento do mês: o planejamento é o "pra onde vamos"
+          que dá sentido a tudo que vem abaixo, e as metas dele são as mesmas de "Metas combinadas". */}
+      <PlanejamentoCliente clienteId={clienteId} metricas={metricas} onMetasMudaram={carregar} />
+
       <section className="rounded-xl border border-line p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1">

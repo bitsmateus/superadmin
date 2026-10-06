@@ -12,7 +12,7 @@ import { useLancamentoPendente } from '@/hooks/useLancamentoPendente'
 import { avisosDoErro, gestaoClientes, type GcClienteLista } from '@/services/gestaoClientes'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
-  mesAtual, mesPorExtenso, numeroDigitado, somarMeses, validarMetricas, variacaoDaMetrica,
+  mesAtual, mesPorExtenso, numeroDigitado, numeroParaCampo, somarMeses, validarMetricas, variacaoDaMetrica,
 } from '@/lib/gcMetricas'
 import { avaliarSaude, contaNoTotal, type Saude } from '@/lib/gcSaude'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
@@ -84,7 +84,7 @@ function rascunhoInicial(linhas: GcClienteLista[]): Rascunho {
     r[l.id] = {}
     for (const m of METRICAS_LANCADAS) {
       const v = l.metricas_mes?.[m.chave]
-      if (v !== undefined && v !== null && v !== '') r[l.id][m.chave] = String(Number(v))
+      if (v !== undefined && v !== null && v !== '') r[l.id][m.chave] = numeroParaCampo(v)
     }
   }
   return r

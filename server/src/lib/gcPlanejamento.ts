@@ -56,6 +56,11 @@ export const ROTULOS_PLANEJAMENTO: Record<string, string> = {
   taxa_conversao: 'Taxa de conversão (ponto A)',
   faturamento_mensal: 'Faturamento mensal (ponto A)',
   data_diagnostico: 'Data do diagnóstico',
+  origem_leads_mes: 'Origem de leads/mês',
+  origem_investimento_mes: 'Origem de investimento/mês',
+  origem_ticket_medio: 'Origem de ticket médio',
+  origem_taxa_conversao: 'Origem de taxa de conversão',
+  origem_faturamento_mensal: 'Origem de faturamento mensal',
   curva: 'Curva de crescimento',
   portal_ativo: 'Mostrar "Nossa jornada" no portal',
   portal_mostrar_situacao: 'Portal: mostrar a situação de hoje',
@@ -104,4 +109,34 @@ export function diffDeCampos(
     mudancas.push({ escopo, campo, rotulo: ROTULOS_PLANEJAMENTO[campo] ?? campo, antes: a, depois: d });
   }
   return mudancas;
+}
+
+export const CAMPOS_COM_ORIGEM = [
+  'leads_mes', 'investimento_mes', 'ticket_medio', 'taxa_conversao', 'faturamento_mensal',
+] as const;
+
+export interface OrigemDoCampo {
+  origem: 'calculado' | 'informado';
+  /** Meses ('YYYY-MM') cuja média gerou o número, quando calculado. */
+  meses?: string[];
+}
+
+/** Aceita só o formato conhecido: o que vem da tela não pode gravar lixo arbitrário no JSON. */
+export function sanearOrigens(bruto: unknown): Record<string, OrigemDoCampo> {
+  const saida: Record<string, OrigemDoCampo> = {};
+  if (!bruto || typeof bruto !== 'object') return saida;
+  for (const campo of CAMPOS_COM_ORIGEM) {
+    const o = (bruto as Record<string, unknown>)[campo];
+    if (!o || typeof o !== 'object') continue;
+    const origem = (o as { origem?: unknown }).origem;
+    if (origem !== 'calculado' && origem !== 'informado') continue;
+    const meses = (o as { meses?: unknown }).meses;
+    saida[campo] = {
+      origem,
+      ...(origem === 'calculado' && Array.isArray(meses)
+        ? { meses: meses.filter((m): m is string => typeof m === 'string' && /^\d{4}-\d{2}$/.test(m)).slice(0, 12) }
+        : {}),
+    };
+  }
+  return saida;
 }

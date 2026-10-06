@@ -7,7 +7,8 @@ import { validarMetricas } from '../lib/gcValidacao.js';
 import { garantirRecorrentes } from '../lib/gcRecorrentes.js';
 import { CHAVES_REALIZADO_PUBLICO, montarJornadaPublica } from '../lib/gcPortalJornada.js';
 import {
-  CHAVES_PLANEJAMENTO, HORIZONTES_PLANEJAMENTO, baseDoPontoA, diffDeCampos, somarMesesNaData,
+  CAMPOS_COM_ORIGEM, CHAVES_PLANEJAMENTO, HORIZONTES_PLANEJAMENTO, baseDoPontoA, diffDeCampos,
+  sanearOrigens, somarMesesNaData,
   type Mudanca, type PontoA,
 } from '../lib/gcPlanejamento.js';
 
@@ -1353,7 +1354,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     const p = await queryOne<Record<string, unknown>>(
       `SELECT situacao_atual, leads_mes, investimento_mes, ticket_medio, taxa_conversao, faturamento_mensal,
               to_char(data_diagnostico, 'YYYY-MM-DD') AS data_diagnostico, curva,
-              portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo
+              portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo, origens
        FROM gc_planejamento WHERE gc_cliente_id = $1`,
       [clienteId]
     );
@@ -1396,6 +1397,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         data_diagnostico: (p?.data_diagnostico as string | null) ?? null,
       },
       curva: ((p?.curva as string) ?? 'linear') as 'linear' | 'composta',
+      origens: sanearOrigens(p?.origens),
       portal: {
         ativo: Boolean(p?.portal_ativo),
         mostrar_situacao: Boolean(p?.portal_mostrar_situacao),
@@ -1419,6 +1421,83 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
          WHERE h.gc_cliente_id = $1 ORDER BY h.alterado_em DESC LIMIT 100`,
         [req.params.id]
       );
+    }
+  );
+
+  // ---- modelos de texto do planejamento (situação de hoje, onde quer chegar, estratégia, premissas)
+  const CAMPOS_DE_MODELO = ['situacao', 'objetivo', 'estrategia', 'premissas'];
+
+  app.get<{ Querystring: { todos?: string } }>('/api/gc/planejamento/modelos', autenticado, async (req) => {
+    // O seletor só oferece modelo ATIVO; a janela de gestão pede "todos" pra poder reativar.
+    return query(
+      `SELECT id, campo, nome, texto, ordem, ativo FROM gc_planejamento_modelos
+       ${req.query.todos === '1' ? '' : 'WHERE ativo'} ORDER BY campo, ordem, created_at`
+    );
+  });
+
+  app.post<{ Body: { campo?: string; nome?: string; texto?: string } }>(
+    '/api/gc/planejamento/modelos',
+    autenticado,
+    async (req, reply) => {
+      const { campo, nome, texto: conteudo } = req.body ?? {};
+      if (!campo || !CAMPOS_DE_MODELO.includes(campo)) return reply.status(400).send({ message: 'campo inválido' });
+      if (!nome?.trim()) return reply.status(400).send({ message: 'Dê um nome ao modelo' });
+      const criado = await queryOne(
+        `INSERT INTO gc_planejamento_modelos (campo, nome, texto, ordem)
+         VALUES ($1, $2, $3, (SELECT COALESCE(MAX(ordem), -1) + 1 FROM gc_planejamento_modelos WHERE campo = $1))
+         RETURNING id, campo, nome, texto, ordem, ativo`,
+        [campo, nome.trim(), conteudo ?? '']
+      );
+      return reply.status(201).send(criado);
+    }
+  );
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/api/gc/planejamento/modelos/:id',
+    autenticado,
+    async (req, reply) => {
+      const corpo = { ...(req.body ?? {}) };
+      if (typeof corpo.nome === 'string' && !corpo.nome.trim()) {
+        return reply.status(400).send({ message: 'O nome não pode ficar vazio' });
+      }
+      const { sets, params } = montarUpdate(['nome', 'texto', 'ordem', 'ativo'], corpo);
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+      params.push(req.params.id);
+      const atualizado = await queryOne(
+        `UPDATE gc_planejamento_modelos SET ${sets.join(', ')}, updated_at = NOW()
+         WHERE id = $${params.length} RETURNING id, campo, nome, texto, ordem, ativo`,
+        params
+      );
+      if (!atualizado) return reply.status(404).send({ message: 'Modelo não encontrado' });
+      return atualizado;
+    }
+  );
+
+  // Modelo é só texto de apoio, sem referência de ninguém: pode apagar de verdade (o texto que já foi
+  // aplicado num planejamento é cópia e continua lá).
+  app.delete<{ Params: { id: string } }>('/api/gc/planejamento/modelos/:id', autenticado, async (req, reply) => {
+    const apagado = await queryOne('DELETE FROM gc_planejamento_modelos WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!apagado) return reply.status(404).send({ message: 'Modelo não encontrado' });
+    return reply.status(204).send();
+  });
+
+  app.put<{ Body: { campo?: string; ids?: string[] } }>(
+    '/api/gc/planejamento/modelos/ordem',
+    autenticado,
+    async (req, reply) => {
+      const { campo, ids } = req.body ?? {};
+      if (!campo || !CAMPOS_DE_MODELO.includes(campo) || !Array.isArray(ids)) {
+        return reply.status(400).send({ message: 'campo e ids são obrigatórios' });
+      }
+      await withTransaction(async (client) => {
+        for (const [i, id] of ids.entries()) {
+          await client.query(
+            'UPDATE gc_planejamento_modelos SET ordem = $1, updated_at = NOW() WHERE id = $2 AND campo = $3',
+            [i, id, campo]
+          );
+        }
+      });
+      return { ok: true };
     }
   );
 
@@ -1452,6 +1531,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     atual?: Record<string, unknown>;
     curva?: string;
     portal?: { ativo?: boolean; mostrar_situacao?: boolean; mostrar_objetivo?: boolean };
+    origens?: unknown;
     cenarios?: Record<string, { onde_quer_chegar?: string; estrategia?: string; premissas?: string; metas?: Record<string, unknown> }>;
   };
   app.put<{ Params: { id: string }; Body: CorpoPlanejamento }>(
@@ -1484,8 +1564,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
           `INSERT INTO gc_planejamento
              (gc_cliente_id, situacao_atual, leads_mes, investimento_mes, ticket_medio, taxa_conversao,
               faturamento_mensal, data_diagnostico, curva, portal_ativo, portal_mostrar_situacao,
-              portal_mostrar_objetivo, atualizado_por)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+              portal_mostrar_objetivo, atualizado_por, origens)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
            ON CONFLICT (gc_cliente_id) DO UPDATE SET
              situacao_atual = EXCLUDED.situacao_atual, leads_mes = EXCLUDED.leads_mes,
              investimento_mes = EXCLUDED.investimento_mes, ticket_medio = EXCLUDED.ticket_medio,
@@ -1494,12 +1574,20 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
              portal_ativo = EXCLUDED.portal_ativo,
              portal_mostrar_situacao = EXCLUDED.portal_mostrar_situacao,
              portal_mostrar_objetivo = EXCLUDED.portal_mostrar_objetivo,
-             atualizado_por = EXCLUDED.atualizado_por, updated_at = NOW()`,
+             atualizado_por = EXCLUDED.atualizado_por, origens = EXCLUDED.origens, updated_at = NOW()`,
           [
             req.params.id, texto(a.situacao_atual), pontoA.leads_mes, pontoA.investimento_mes,
             pontoA.ticket_medio, pontoA.taxa_conversao, pontoA.faturamento_mensal, dataDiag, curva,
             Boolean(corpo.portal?.ativo), Boolean(corpo.portal?.mostrar_situacao),
             Boolean(corpo.portal?.mostrar_objetivo), sub,
+            // Campo sem número não tem origem: sobraria um "calculado" apontando pra nada.
+            JSON.stringify(
+              Object.fromEntries(
+                Object.entries(sanearOrigens(corpo.origens)).filter(
+                  ([campo]) => (pontoA as unknown as Record<string, unknown>)[campo] !== null
+                )
+              )
+            ),
           ]
         );
 
@@ -1551,11 +1639,15 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       const depois = await lerPlanejamento(req.params.id);
 
       // O que mudou, por escopo — vira UMA linha de histórico.
+      const origensComoCampos = (o: Record<string, { origem: string }>) =>
+        Object.fromEntries(CAMPOS_COM_ORIGEM.map((c) => [`origem_${c}`, o[c]?.origem ?? null]));
       const mudancas: Mudanca[] = [
         ...diffDeCampos('atual', { ...antes.atual, curva: antes.curva, portal_ativo: antes.portal.ativo,
-            portal_mostrar_situacao: antes.portal.mostrar_situacao, portal_mostrar_objetivo: antes.portal.mostrar_objetivo },
+            portal_mostrar_situacao: antes.portal.mostrar_situacao, portal_mostrar_objetivo: antes.portal.mostrar_objetivo,
+            ...origensComoCampos(antes.origens) },
           { ...depois.atual, curva: depois.curva, portal_ativo: depois.portal.ativo,
-            portal_mostrar_situacao: depois.portal.mostrar_situacao, portal_mostrar_objetivo: depois.portal.mostrar_objetivo }),
+            portal_mostrar_situacao: depois.portal.mostrar_situacao, portal_mostrar_objetivo: depois.portal.mostrar_objetivo,
+            ...origensComoCampos(depois.origens) }),
       ];
       for (const h of HORIZONTES_PLANEJAMENTO) {
         const a0 = antes.cenarios[h];

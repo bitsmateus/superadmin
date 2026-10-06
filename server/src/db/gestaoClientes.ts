@@ -322,6 +322,24 @@ const TABELAS = [
   `CREATE INDEX IF NOT EXISTS gc_planejamento_historico_idx
      ON gc_planejamento_historico (gc_cliente_id, alterado_em DESC)`,
 
+  // De onde veio cada número do ponto A: { leads_mes: { origem: 'calculado', meses: ['2026-07', ...] } }
+  // ou { origem: 'informado' }. O ponto A é uma FOTO do diagnóstico, e saber se um número foi digitado
+  // por alguém ou calculado da média dos meses lançados muda o quanto se confia nele.
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS origens JSONB NOT NULL DEFAULT '{}'`,
+
+  // Modelos de texto pros campos do planejamento (situação de hoje, onde quer chegar, estratégia,
+  // premissas). Editáveis pela equipe: são ponto de partida, não verdade.
+  `CREATE TABLE IF NOT EXISTS gc_planejamento_modelos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    campo TEXT NOT NULL CHECK (campo IN ('situacao','objetivo','estrategia','premissas')),
+    nome TEXT NOT NULL,
+    texto TEXT NOT NULL DEFAULT '',
+    ordem INT NOT NULL DEFAULT 0,
+    ativo BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
   // Rotina mensal: itens que nascem sozinhos todo mês (publicar o relatório, alinhar com o cliente),
   // com prazo automático. Não pertencem a etapa nem a estratégia — são do CLIENTE, no mês de
   // referência —, então a regra de "dono" do item ganha uma terceira forma.
@@ -411,6 +429,63 @@ const ESTRATEGIAS_PADRAO: { nome: string; descricao: string; servicoTipo: string
 ];
 
 /**
+ * Modelos de texto iniciais do planejamento. São ponto de partida pra a equipe ajustar — escritos
+ * genéricos de propósito. As chaves entre chaves ({cliente}, {segmento}, {leads_hoje}...) são
+ * trocadas pelos dados do cliente ao aplicar; o que não souber trocar fica visível pra ser
+ * preenchido à mão.
+ */
+const MODELOS_PLANEJAMENTO_PADRAO: { campo: string; nome: string; texto: string }[] = [
+  {
+    campo: 'situacao', nome: 'Primeiro diagnóstico',
+    texto: '{cliente} ({segmento}) hoje investe R$ {investimento_hoje}/mês em anúncios e recebe cerca de {leads_hoje} leads/mês.\n\nO que já faz:\n- \n\nO que não funciona:\n- \n\nO que o cliente espera de nós:\n- ',
+  },
+  {
+    campo: 'situacao', nome: 'Já anunciava antes',
+    texto: '{cliente} já anunciava antes de chegar até nós, [por conta própria / com outra agência].\n\nResultado até aqui: \nPrincipal dor: \nO que não quer repetir: ',
+  },
+  {
+    campo: 'situacao', nome: 'Começando do zero',
+    texto: '{cliente} ({segmento}) ainda não tem anúncios estruturados. Parte de uma base de [seguidores / contatos / clientes] e quer [objetivo inicial].\n\nCanais que já usa: \nTime comercial: ',
+  },
+  {
+    campo: 'objetivo', nome: 'Crescer o volume de leads',
+    texto: 'Chegar a {meta_leads_6m} leads por mês em 6 meses, sem perder a qualidade do atendimento, e sustentar esse volume até o fim do primeiro ano.',
+  },
+  {
+    campo: 'objetivo', nome: 'Mais faturamento com o mesmo investimento',
+    texto: 'Aumentar o faturamento vindo dos anúncios para R$ {meta_faturamento_6m}/mês mantendo o investimento perto do atual, melhorando a eficiência (CPL e conversão).',
+  },
+  {
+    campo: 'objetivo', nome: 'Abrir uma nova frente',
+    texto: 'Validar [Google / remarketing / nova unidade] como segunda fonte de leads e chegar, em 12 meses, com ela respondendo por [x]% do total.',
+  },
+  {
+    campo: 'estrategia', nome: 'Captação via Meta Ads (WhatsApp)',
+    texto: '1. Campanhas de captação levando direto pro WhatsApp.\n2. Três criativos novos por mês, com teste de público.\n3. Acompanhar CPL semanalmente e pausar o que passar do teto.\n4. Relatório mensal com leads, vendas e custo por venda.',
+  },
+  {
+    campo: 'estrategia', nome: 'Remarketing e prova social',
+    texto: '1. Público de quem interagiu e não comprou.\n2. Criativos de depoimento e resultado.\n3. Frequência controlada pra não saturar.\n4. Medir quantas vendas vêm desse público.',
+  },
+  {
+    campo: 'estrategia', nome: 'Google + Meta',
+    texto: '1. Pesquisa no Google pra quem já procura o serviço.\n2. Meta pra gerar demanda e remarketing.\n3. Orçamento dividido pelo custo por venda de cada canal, revisado todo mês.',
+  },
+  {
+    campo: 'premissas', nome: 'CPL e conversão',
+    texto: '- O CPL cai de R$ {cpl_hoje} pra [alvo] com criativo novo e público refinado.\n- A taxa de conversão sobe de {conversao_hoje}% pra [alvo]% com atendimento mais rápido.',
+  },
+  {
+    campo: 'premissas', nome: 'Operação do cliente',
+    texto: '- O cliente responde os leads em até 5 minutos no horário comercial.\n- Há equipe suficiente pra atender {meta_leads_6m} leads/mês.\n- O cliente aprova os criativos em até 48h.',
+  },
+  {
+    campo: 'premissas', nome: 'Orçamento',
+    texto: '- O investimento sobe de R$ {investimento_hoje} pra R$ {meta_investimento_6m}/mês no período.\n- Não há sazonalidade forte nos meses do plano (ou está descontada: [explicar]).',
+  },
+];
+
+/**
  * Cria as tabelas e, só na primeira vez, as etapas/estratégias padrão. O seed checa se já existe
  * alguma linha antes de inserir — mexer nos modelos pela tela não é desfeito no próximo boot.
  */
@@ -432,6 +507,21 @@ export async function criarEstruturaGestaoClientes(pool: Pool): Promise<void> {
       }
     }
     console.log('[gestao-clientes] jornada padrão criada (9 etapas)');
+  }
+
+  // Modelos de texto do planejamento: só se a tabela está vazia, pra o que a equipe editou ou apagou
+  // não voltar no próximo boot.
+  const { rows: modelosTexto } = await pool.query<{ total: string }>('SELECT count(*) AS total FROM gc_planejamento_modelos');
+  if (Number(modelosTexto[0]?.total ?? 0) === 0) {
+    const ordemPorCampo: Record<string, number> = {};
+    for (const m of MODELOS_PLANEJAMENTO_PADRAO) {
+      const ordem = (ordemPorCampo[m.campo] = (ordemPorCampo[m.campo] ?? -1) + 1);
+      await pool.query(
+        'INSERT INTO gc_planejamento_modelos (campo, nome, texto, ordem) VALUES ($1, $2, $3, $4)',
+        [m.campo, m.nome, m.texto, ordem]
+      );
+    }
+    console.log('[gestao-clientes] modelos de texto do planejamento criados');
   }
 
   const { rows: estrategias } = await pool.query<{ total: string }>('SELECT count(*) AS total FROM gc_estrategias_modelo');

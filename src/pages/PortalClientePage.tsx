@@ -313,7 +313,7 @@ function Relatorio({
  */
 function AvisoDeAtualizacao({ quando }: { quando: string | null }) {
   return (
-    <aside className="flex items-start gap-3 rounded-2xl border border-accent/25 bg-gradient-to-r from-accent/[0.08] to-transparent px-4 py-3.5 text-sm text-foreground/80">
+    <aside className="flex items-start gap-3 rounded-2xl border border-line bg-surface shadow-sm px-4 py-3.5 text-sm text-foreground/80">
       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent">
         <Info className="h-4 w-4" />
       </span>
@@ -387,7 +387,7 @@ function TelaInicial({
   const rotulo = (r: RelPortal) => r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7)
   return (
     <div className="space-y-3">
-      <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/55">O que você quer ver?</h2>
+      <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70">O que você quer ver?</h2>
       <CartaoDeAcesso
         titulo="Relatório do mês atual"
         subtitulo={atual ? rotulo(atual) : 'Ainda não publicado — sai assim que o mês fechar.'}
@@ -507,7 +507,7 @@ export function PortalClientePage() {
   return (
     <div
       className="min-h-screen px-4 py-6 sm:px-6 sm:py-10"
-      style={{ background: 'linear-gradient(160deg, #fdf2f8 0%, #fce7f3 45%, #fbcfe8 100%)' }}
+      style={{ background: 'linear-gradient(135deg, #1E1B6B 0%, #2B2FB5 55%, #2F5BFF 100%)' }}
     >
       <div className="mx-auto max-w-4xl space-y-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
@@ -520,11 +520,11 @@ export function PortalClientePage() {
               </span>
             )}
             <div>
-              <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-accent">
+              <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/80">
                 <img src={logoNx} alt="" className="h-4 w-4 rounded" /> Grupo NX Digital
               </p>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">{dados.cliente.nome_empresa}</h1>
-              <p className="text-xs text-foreground/50">
+              <h1 className="text-2xl font-bold tracking-tight text-white">{dados.cliente.nome_empresa}</h1>
+              <p className="text-xs text-white/60">
                 {[dados.cliente.segmento, infoDoCliente?.cidade].filter(Boolean).join(' · ') || 'Relatórios de performance'}
               </p>
             </div>
@@ -575,7 +575,7 @@ export function PortalClientePage() {
           </>
         )}
 
-        <footer className="space-y-1 pb-6 pt-2 text-center text-xs text-foreground/40">
+        <footer className="space-y-1 pb-6 pt-2 text-center text-xs text-white/60">
           <p>Grupo NX Digital · este link é pessoal, não compartilhe.</p>
           {ultimaTexto && <p>Última atualização: {ultimaTexto}</p>}
         </footer>

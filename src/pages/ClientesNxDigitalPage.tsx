@@ -30,7 +30,6 @@ import { formatarMetrica, mesPorExtenso, mesAtual } from '@/lib/gcMetricas'
 import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import { FAIXA_DA_SAUDE, estiloDoAvatar } from '@/lib/gcVisual'
 import { iniciaisDe } from '@/lib/gcIniciais'
-import { gravarVisitados, proximoSemData, semDataDeRenovacao } from '@/lib/gcFilaRenovacao'
 import { cn } from '@/lib/utils'
 
 const ABAS: { value: GcStatusCliente | 'todos'; label: string }[] = [
@@ -455,13 +454,6 @@ export function ClientesNxDigitalPage() {
     ({ cliente }) => Object.keys(cliente.metricas_mes ?? {}).length === 0,
   ).length
   const semNota = ativos.filter(({ cliente }) => !cliente.avaliacao).length
-  const clientesSemData = ativos.map(({ cliente }) => cliente).filter(semDataDeRenovacao)
-  const completarRenovacoes = () => {
-    // Começa uma rodada nova: a fila abre o primeiro e o detalhe vai passando pro próximo.
-    gravarVisitados([])
-    const primeiro = proximoSemData(clientesSemData, [])
-    if (primeiro) navegar(`/clientesnxdigital/clientes/${primeiro.id}?completar=renovacao`)
-  }
   const altaPrioridade = ativos.filter(({ cliente }) => cliente.prioridade === 'alta').length
   const investimentoDoMes = ativos.reduce(
     (soma, { cliente }) => soma + Number(cliente.metricas_mes?.investimento ?? 0),
@@ -491,24 +483,6 @@ export function ClientesNxDigitalPage() {
           pendencia={pendencia}
           onLancar={(p) => navegar(`/clientesnxdigital/trafego?lancar=${p}`)}
         />
-
-        {/* Um aviso só, em vez de repetir "sem data de renovação" em cada linha. */}
-        {!carregando && clientesSemData.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/25 bg-gradient-to-r from-warning/[0.09] to-transparent px-4 py-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning/15 text-warning">
-              <CalendarClock className="h-[18px] w-[18px]" />
-            </span>
-            <p className="min-w-0 flex-1 text-sm text-foreground/85">
-              <strong>
-                {clientesSemData.length} {clientesSemData.length === 1 ? 'cliente' : 'clientes'} sem data de renovação
-              </strong>
-              <span className="text-foreground/55"> — sem ela ninguém é avisado do fim do contrato.</span>
-            </p>
-            <Button size="sm" onClick={completarRenovacoes}>
-              Completar agora
-            </Button>
-          </div>
-        )}
 
         {!carregando && clientes.length > 0 && (
           <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">

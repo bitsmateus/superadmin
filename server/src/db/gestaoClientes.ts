@@ -265,6 +265,8 @@ const TABELAS = [
   // não dá pra todos. É diferente do semáforo — um cliente pode estar verde e ainda assim ser o
   // mais importante da carteira (ou estar vermelho e ser pequeno).
   `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS prioridade TEXT NOT NULL DEFAULT 'media'`,
+  // O que falta acompanhar neste cliente, escrito à mão pelo gestor.
+  `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS falta_acompanhar TEXT NOT NULL DEFAULT ''`,
   `DO $$ BEGIN
      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gc_clientes_prioridade') THEN
        ALTER TABLE gc_clientes ADD CONSTRAINT gc_clientes_prioridade

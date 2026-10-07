@@ -27,7 +27,7 @@ import {
 const CAMPOS_CLIENTE = [
   'nome_empresa', 'nome_contato', 'whatsapp_contato', 'email_contato', 'cnpj', 'cidade',
   'segmento', 'logo_url', 'responsavel_id', 'status', 'prioridade', 'fora_dos_totais',
-  'data_inicio', 'observacoes_gerais', 'estrategia_usada',
+  'data_inicio', 'observacoes_gerais', 'estrategia_usada', 'falta_acompanhar',
 ] as const;
 
 const CAMPOS_SERVICO = [

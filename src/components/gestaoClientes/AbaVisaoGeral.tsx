@@ -158,6 +158,47 @@ function LinhaDeServico({
   )
 }
 
+/** "O que falta acompanhar", escrito à mão: o gestor anota o que está pendente (ex.: "falta o cliente colocar saldo"). */
+function FaltaAcompanhar({ clienteId, texto, onMudou }: { clienteId: string; texto: string; onMudou: () => Promise<void> | void }) {
+  const [valor, setValor] = React.useState(texto)
+  const [salvando, setSalvando] = React.useState(false)
+  React.useEffect(() => setValor(texto), [texto, clienteId])
+  const sujo = valor !== texto
+  useAvisoAoSair(sujo)
+  const salvar = async () => {
+    setSalvando(true)
+    try {
+      await gestaoClientes.atualizar(clienteId, { falta_acompanhar: valor })
+      await onMudou()
+      toast.success('Anotação salva')
+    } catch (err) {
+      toast.error('Falha ao salvar: ' + (err as Error).message)
+    } finally {
+      setSalvando(false)
+    }
+  }
+  return (
+    <div>
+      <Textarea
+        rows={3}
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        placeholder="Escreva o que falta: ex. falta o cliente colocar saldo, falta enviar os criativos…"
+      />
+      {sujo && (
+        <div className="mt-2 flex items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setValor(texto)}>
+            Descartar
+          </Button>
+          <Button size="sm" loading={salvando} onClick={() => void salvar()}>
+            Salvar
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * As notas FIXADAS do cliente, repetidas aqui de propósito: são os combinados que a pessoa precisa
  * ver antes de falar com o cliente, e ninguém abre a aba de notas antes de uma ligação.
@@ -266,7 +307,11 @@ export function AbaVisaoGeral({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-4">
-        <PainelSaude saude={avaliarSaude(cliente)} onIr={onIr}>
+        <PainelSaude
+          saude={avaliarSaude(cliente)}
+          onIr={onIr}
+          faltaEscrita={<FaltaAcompanhar clienteId={cliente.id} texto={cliente.falta_acompanhar ?? ''} onMudou={onMudou} />}
+        >
           <AvaliacaoDoResultado
             clienteId={cliente.id}
             avaliacao={cliente.avaliacao}

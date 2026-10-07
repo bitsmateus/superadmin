@@ -290,9 +290,12 @@ export function PainelSaude({
   saude,
   children,
   onIr,
+  faltaEscrita,
 }: {
   saude: Saude
   children?: React.ReactNode
+  /** Se vier, "O que falta acompanhar" é este bloco (texto do gestor) em vez da lista automática de sinais. */
+  faltaEscrita?: React.ReactNode
   /** Leva pra onde o sinal se resolve. Sem isso as linhas ficam só de leitura. */
   onIr?: (d: Destino) => void
 }) {
@@ -337,7 +340,7 @@ export function PainelSaude({
       {children && <div className="mt-3">{children}</div>}
 
       <h3 className="mb-1 mt-4 text-xs font-medium uppercase tracking-wide text-foreground/45">O que falta acompanhar</h3>
-      {faltam.length === 0 ? (
+      {faltaEscrita ?? (faltam.length === 0 ? (
         <p className="py-2 text-sm text-foreground/50">Tudo em dia.</p>
       ) : (
         <ul>
@@ -345,7 +348,7 @@ export function PainelSaude({
             <LinhaSinal key={s.chave} sinal={s} onIr={onIr} />
           ))}
         </ul>
-      )}
+      ))}
     </section>
   )
 }

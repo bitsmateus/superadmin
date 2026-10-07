@@ -138,6 +138,8 @@ export interface GcClienteLista {
   fora_dos_totais: boolean
   data_inicio: string | null
   observacoes_gerais: string
+  /** O que falta acompanhar, escrito pelo gestor (ex.: "falta o cliente colocar saldo"). */
+  falta_acompanhar?: string
   /** A estratégia que está sendo usada neste cliente, em texto livre. */
   estrategia_usada?: string
   created_at: string
@@ -290,6 +292,7 @@ export type GcClienteEntrada = Partial<{
   fora_dos_totais: boolean
   data_inicio: string | null
   observacoes_gerais: string
+  falta_acompanhar: string
   estrategia_usada: string
   /** Só no cadastro: as etapas até o Go-live nascem "concluídas antes do módulo". */
   ja_em_andamento: boolean

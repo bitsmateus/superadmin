@@ -2245,7 +2245,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
  * `ignorarToggle` é da prévia "ver como o cliente vê": monta o bloco mesmo com o portal desligado,
  * pelo MESMO caminho — é o que garante que a prévia nunca mostre mais (nem menos) que o portal.
  */
-async function jornadaDoPortal(clienteId: string, opcoes: { ignorarToggle?: boolean } = {}) {
+async function jornadaDoPortal(clienteId: string, opcoes: { ignorarToggle?: boolean; mostrarTudo?: boolean } = {}) {
   const planejamento = await queryOne<Record<string, unknown>>(
     `SELECT situacao_atual, leads_mes, investimento_mes, vendas_mes, faturamento_mensal,
             to_char(data_diagnostico, 'YYYY-MM-DD') AS data_diagnostico, curva,
@@ -2256,6 +2256,11 @@ async function jornadaDoPortal(clienteId: string, opcoes: { ignorarToggle?: bool
   );
   if (!planejamento) return null;
   if (!planejamento.portal_ativo && !opcoes.ignorarToggle) return null;
+  // O portal mostra o planejamento direto: situação de hoje e onde queremos chegar.
+  if (opcoes.mostrarTudo) {
+    planejamento.portal_mostrar_situacao = true;
+    planejamento.portal_mostrar_objetivo = true;
+  }
 
   const metas = await query<{ horizonte: string; chave_metrica: string; valor_meta: string }>(
     `SELECT DISTINCT ON (horizonte, chave_metrica) horizonte, chave_metrica, valor_meta
@@ -2326,7 +2331,7 @@ export async function gestaoClientesPublicRoutes(app: FastifyInstance) {
       [link.gc_cliente_id]
     );
 
-    return { cliente, relatorios, jornada: await jornadaDoPortal(link.gc_cliente_id) };
+    return { cliente, relatorios, jornada: await jornadaDoPortal(link.gc_cliente_id, { ignorarToggle: true, mostrarTudo: true }) };
   });
 
   // GET /api/public/cliente/:token/relatorio/:id/pdf — o mesmo PDF do painel, pro cliente baixar.

@@ -1,10 +1,11 @@
 import * as React from 'react'
 import { useParams } from 'react-router-dom'
 import {
-  CircleDollarSign, Clock, FileDown, Info, Loader2, ShoppingBag, TrendingUp, Wallet,
+  ArrowLeft, ChevronRight, CircleDollarSign, Clock, FileDown, FileText, Flag, History, Info, Loader2,
+  ShoppingBag, TrendingUp, Wallet,
 } from 'lucide-react'
 import { gestaoClientes, HORIZONTES, type GcSnapshot } from '@/services/gestaoClientes'
-import { formatarMetrica } from '@/lib/gcMetricas'
+import { formatarMetrica, mesAtual } from '@/lib/gcMetricas'
 import { JornadaPortal } from '@/components/gestaoClientes/JornadaPortal'
 import logoNx from '@/assets/logo-nx.jpg'
 import { cn } from '@/lib/utils'
@@ -336,11 +337,112 @@ function AvisoDeAtualizacao({ quando }: { quando: string | null }) {
  * aqui é o que a NX escolheu publicar. Em todo o painel fica claro QUANDO foi a última atualização e
  * que a equipe pode estar fazendo coisas que ainda não entraram aqui.
  */
+type Vista = { tipo: 'inicio' } | { tipo: 'plano' } | { tipo: 'mes'; id: string }
+type RelPortal = Portal['relatorios'][number]
+
+function mesAnterior(mes: string): string {
+  const [a, m] = mes.split('-').map(Number)
+  const d = new Date(a, m - 2, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function CartaoDeAcesso({
+  titulo, subtitulo, icone: Icone, onClick, desabilitado,
+}: {
+  titulo: string
+  subtitulo: string
+  icone: React.ComponentType<{ className?: string }>
+  onClick?: () => void
+  desabilitado?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      disabled={desabilitado}
+      onClick={onClick}
+      className="flex w-full items-center gap-4 rounded-3xl border border-line bg-surface p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0"
+    >
+      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-accent/12 text-accent">
+        <Icone className="h-6 w-6" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-base font-semibold text-foreground">{titulo}</span>
+        <span className="block text-sm text-foreground/55">{subtitulo}</span>
+      </span>
+      {!desabilitado && <ChevronRight className="h-5 w-5 shrink-0 text-foreground/35" />}
+    </button>
+  )
+}
+
+/** A primeira tela do portal: mês atual, mês anterior (se houver) e o planejamento. */
+function TelaInicial({
+  atual, anterior, outros, temPlano, onAbrir,
+}: {
+  atual: RelPortal | null
+  anterior: RelPortal | null
+  outros: RelPortal[]
+  temPlano: boolean
+  onAbrir: (v: Vista) => void
+}) {
+  const rotulo = (r: RelPortal) => r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7)
+  return (
+    <div className="space-y-3">
+      <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/55">O que você quer ver?</h2>
+      <CartaoDeAcesso
+        titulo="Relatório do mês atual"
+        subtitulo={atual ? rotulo(atual) : 'Ainda não publicado — sai assim que o mês fechar.'}
+        icone={FileText}
+        desabilitado={!atual}
+        onClick={atual ? () => onAbrir({ tipo: 'mes', id: atual.id }) : undefined}
+      />
+      {anterior && (
+        <CartaoDeAcesso
+          titulo="Relatório do mês anterior"
+          subtitulo={rotulo(anterior)}
+          icone={History}
+          onClick={() => onAbrir({ tipo: 'mes', id: anterior.id })}
+        />
+      )}
+      {temPlano && (
+        <CartaoDeAcesso
+          titulo="Planejamento"
+          subtitulo="De onde partimos, onde queremos chegar e como estamos indo."
+          icone={Flag}
+          onClick={() => onAbrir({ tipo: 'plano' })}
+        />
+      )}
+      {outros.length > 0 && (
+        <details className="group rounded-3xl border border-line bg-surface shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-sm font-semibold text-foreground">
+            Outros meses
+            <span className="text-xs font-normal text-foreground/45">{outros.length}</span>
+          </summary>
+          <ul className="border-t border-line">
+            {outros.map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => onAbrir({ tipo: 'mes', id: r.id })}
+                  className="flex w-full items-center justify-between px-5 py-3 text-left text-sm text-foreground/80 hover:text-accent"
+                >
+                  {rotulo(r)} <ChevronRight className="h-4 w-4 text-foreground/35" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  )
+}
+
 export function PortalClientePage() {
   const { token = '' } = useParams<{ token: string }>()
   const [dados, setDados] = React.useState<Portal | null>(null)
   const [erro, setErro] = React.useState('')
   const [carregando, setCarregando] = React.useState(true)
+  // Tela inicial: o cliente escolhe o que quer ver. 'mes' = id do relatório aberto.
+  const [vista, setVista] = React.useState<{ tipo: 'inicio' } | { tipo: 'plano' } | { tipo: 'mes'; id: string }>({ tipo: 'inicio' })
 
   React.useEffect(() => {
     gestaoClientes
@@ -395,11 +497,18 @@ export function PortalClientePage() {
   const ultimaTexto = ultima ? dataEHora(ultima) : null
   // Do mais novo pro mais velho: o último é o que abre inteiro, os outros ficam recolhidos.
   const ordenados = [...dados.relatorios].sort((a, b) => String(b.periodo_inicio).localeCompare(String(a.periodo_inicio)))
-  const [recente, ...anteriores] = ordenados
+  const mesDe = (r: { periodo_inicio: string }) => String(r.periodo_inicio).slice(0, 7)
+  const mesCorrente = mesAtual()
+  const atual = ordenados.find((r) => mesDe(r) === mesCorrente) ?? null
+  const anterior = ordenados.find((r) => mesDe(r) === mesAnterior(mesCorrente)) ?? null
+  const outros = ordenados.filter((r) => r !== atual && r !== anterior)
   const infoDoCliente = dados.relatorios[0]?.snapshot?.cliente
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-accent/[0.05] via-elevate/[0.02] to-transparent px-4 py-6 sm:px-6 sm:py-10">
+    <div
+      className="min-h-screen px-4 py-6 sm:px-6 sm:py-10"
+      style={{ background: 'linear-gradient(160deg, #fdf2f8 0%, #fce7f3 45%, #fbcfe8 100%)' }}
+    >
       <div className="mx-auto max-w-4xl space-y-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
@@ -432,49 +541,37 @@ export function PortalClientePage() {
 
         <AvisoDeAtualizacao quando={ultimaTexto} />
 
-        {/* "Nossa jornada": só existe se a equipe ligou pra esse cliente. O servidor já tirou
-            estratégia e premissas — o que chega aqui é o que pode ser mostrado. */}
-        {dados.jornada && <JornadaPortal jornada={dados.jornada} />}
-
-        {!recente ? (
-          <div className="rounded-3xl border border-line bg-surface p-8 text-center shadow-sm">
-            <p className="text-sm text-foreground/60">
-              Nenhum relatório publicado ainda. Assim que o primeiro mês fechar, ele aparece aqui.
-            </p>
-          </div>
+        {vista.tipo === 'inicio' ? (
+          <TelaInicial
+            atual={atual}
+            anterior={anterior}
+            outros={outros}
+            temPlano={!!dados.jornada}
+            onAbrir={setVista}
+          />
         ) : (
           <>
-            <Relatorio
-              snapshot={recente.snapshot}
-              publicadoEm={recente.publicado_em ?? recente.snapshot?.publicado_em ?? null}
-              baixar={() =>
-                baixarPdf(recente.id, recente.snapshot?.periodo?.rotulo ?? String(recente.periodo_inicio).slice(0, 7))
-              }
-            />
-            {anteriores.length > 0 && (
-              <div className="space-y-3">
-                <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/50">
-                  Relatórios anteriores
-                </h2>
-                {anteriores.map((r) => (
-                  <details key={r.id} className="group rounded-3xl border border-line bg-surface shadow-sm [&[open]>summary]:border-b">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-line px-5 py-4 text-sm font-semibold text-foreground">
-                      {r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7)}
-                      <span className="text-xs font-normal text-foreground/45 group-open:hidden">ver relatório</span>
-                    </summary>
-                    <div className="p-1 sm:p-2">
-                      <Relatorio
-                        snapshot={r.snapshot}
-                        publicadoEm={r.publicado_em ?? r.snapshot?.publicado_em ?? null}
-                        baixar={() =>
-                          baixarPdf(r.id, r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7))
-                        }
-                      />
-                    </div>
-                  </details>
-                ))}
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => setVista({ tipo: 'inicio' })}
+              className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3.5 py-2 text-sm font-medium text-foreground/80 shadow-sm transition-colors hover:border-accent/40"
+            >
+              <ArrowLeft className="h-4 w-4" /> Voltar ao início
+            </button>
+
+            {vista.tipo === 'plano' && dados.jornada && <JornadaPortal jornada={dados.jornada} />}
+
+            {vista.tipo === 'mes' && (() => {
+              const r = dados.relatorios.find((x) => x.id === vista.id)
+              if (!r) return null
+              return (
+                <Relatorio
+                  snapshot={r.snapshot}
+                  publicadoEm={r.publicado_em ?? r.snapshot?.publicado_em ?? null}
+                  baixar={() => baixarPdf(r.id, r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7))}
+                />
+              )
+            })()}
           </>
         )}
 

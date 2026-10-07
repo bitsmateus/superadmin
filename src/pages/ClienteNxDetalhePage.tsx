@@ -287,7 +287,12 @@ export function ClienteNxDetalhePage() {
             )}
             {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
             {aba === 'estrategias' && (
-              <AbaEstrategias estrategias={detalhe.estrategias} clienteId={id} onMudou={carregar} />
+              <AbaEstrategias
+                estrategias={detalhe.estrategias}
+                estrategiaUsada={detalhe.cliente.estrategia_usada ?? ''}
+                clienteId={id}
+                onMudou={carregar}
+              />
             )}
             {aba === 'notas' && (
               <PainelNotas historico={detalhe.historico} clienteId={id} onMudou={carregar} />

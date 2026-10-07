@@ -363,6 +363,10 @@ const TABELAS = [
        ordem = ordem + 100, updated_at = NOW()
      WHERE campo = 'premissas'`,
 
+  // "Estratégia usada": texto livre por cliente. A estratégia quase sempre é personalizada, então em vez de
+  // escolher um modelo pronto a equipe escreve o que está sendo feito.
+  `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS estrategia_usada TEXT NOT NULL DEFAULT ''`,
+
   // "Cliente já em andamento": etapas que o cliente já tinha cumprido ANTES de entrar no módulo ficam
   // concluídas SEM data (concluida_em nulo) e marcadas — inventar uma data seria registrar o que ninguém
   // sabe.

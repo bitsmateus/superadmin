@@ -138,6 +138,8 @@ export interface GcClienteLista {
   fora_dos_totais: boolean
   data_inicio: string | null
   observacoes_gerais: string
+  /** A estratégia que está sendo usada neste cliente, em texto livre. */
+  estrategia_usada?: string
   created_at: string
   /** Primeira etapa que ainda não foi concluída — null quando a jornada toda acabou. */
   etapa_atual: string | null
@@ -283,6 +285,7 @@ export type GcClienteEntrada = Partial<{
   fora_dos_totais: boolean
   data_inicio: string | null
   observacoes_gerais: string
+  estrategia_usada: string
   /** Só no cadastro: as etapas até o Go-live nascem "concluídas antes do módulo". */
   ja_em_andamento: boolean
 }>

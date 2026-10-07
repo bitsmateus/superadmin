@@ -1,14 +1,12 @@
 import * as React from 'react'
-import { Check, Lightbulb, Plus, Trash2 } from 'lucide-react'
+import { Check, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
+import { Input, Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
-import { EmptyState } from '@/components/ui/EmptyState'
-import {
-  gestaoClientes, type GcEstrategia, type GcModelos,
-} from '@/services/gestaoClientes'
+import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
+import { gestaoClientes, type GcEstrategia } from '@/services/gestaoClientes'
 import { cn } from '@/lib/utils'
 
 const STATUS: { valor: GcEstrategia['status']; label: string }[] = [
@@ -26,35 +24,33 @@ const TOM: Record<GcEstrategia['status'], 'info' | 'success' | 'warning' | 'neut
 }
 
 /**
- * Estratégias do cliente: o que está sendo feito pra entregar resultado, cada uma com seus passos.
+ * Estratégia do cliente: um campo de TEXTO LIVRE com a estratégia que está sendo usada.
  *
- * Aplicar uma estratégia pronta copia o nome e os passos dela (os passos viram checklist). É cópia,
- * não referência — ajustar o modelo depois não reescreve o que já está rodando num cliente.
+ * A estratégia costuma ser personalizada, então não há mais "estratégia pronta" pra escolher — escreve-se
+ * o que está sendo feito. As estratégias com passos (checklist) que já tinham sido aplicadas continuam
+ * listadas abaixo, e seus passos seguem aparecendo nas Pendências.
  */
 export function AbaEstrategias({
   estrategias,
+  estrategiaUsada,
   clienteId,
   onMudou,
 }: {
   estrategias: GcEstrategia[]
+  estrategiaUsada: string
   clienteId: string
   onMudou: () => Promise<void> | void
 }) {
-  const [modelos, setModelos] = React.useState<GcModelos['estrategias']>([])
-  const [modeloEscolhido, setModeloEscolhido] = React.useState('')
-  const [nomeLivre, setNomeLivre] = React.useState('')
-  const [aplicando, setAplicando] = React.useState(false)
+  const [texto, setTexto] = React.useState(estrategiaUsada)
+  const [salvando, setSalvando] = React.useState(false)
   const [novoPasso, setNovoPasso] = React.useState<Record<string, string>>({})
+  const sujo = texto !== estrategiaUsada
+  useAvisoAoSair(sujo)
 
+  // Recarregar o cliente (ou trocar de cliente) traz o texto salvo de volta.
   React.useEffect(() => {
-    gestaoClientes
-      .modelos()
-      .then((m) => setModelos(m.estrategias))
-      .catch(() => {
-        // O seletor de prontas fica vazio, mas dá pra criar estratégia em branco — não vale travar
-        // a aba por causa disso.
-      })
-  }, [])
+    setTexto(estrategiaUsada)
+  }, [estrategiaUsada, clienteId])
 
   const agir = async (fn: () => Promise<unknown>) => {
     try {
@@ -65,68 +61,43 @@ export function AbaEstrategias({
     }
   }
 
-  const aplicar = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!modeloEscolhido && !nomeLivre.trim()) {
-      toast.error('Escolha uma estratégia pronta ou dê um nome pra nova')
-      return
-    }
-    setAplicando(true)
+  const salvar = async () => {
+    setSalvando(true)
     try {
-      await gestaoClientes.criarEstrategia(clienteId, {
-        estrategia_modelo_id: modeloEscolhido || undefined,
-        nome: nomeLivre.trim() || undefined,
-      })
-      setModeloEscolhido('')
-      setNomeLivre('')
+      await gestaoClientes.atualizar(clienteId, { estrategia_usada: texto })
+      toast.success('Estratégia salva')
       await onMudou()
     } catch (err) {
-      toast.error('Falha ao aplicar: ' + (err as Error).message)
+      toast.error('Falha ao salvar: ' + (err as Error).message)
     } finally {
-      setAplicando(false)
+      setSalvando(false)
     }
   }
 
   return (
     <div className="space-y-4">
-      <form onSubmit={aplicar} className="grid items-end gap-3 rounded-xl border border-line p-3 sm:grid-cols-[1fr_1fr_auto]">
-        <Select
-          id="gc-aplicar-estrategia"
-          label="Estratégia pronta"
-          options={[
-            { value: '', label: '— Nenhuma (criar em branco) —' },
-            ...modelos.map((m) => ({ value: m.id, label: m.nome })),
-          ]}
-          value={modeloEscolhido}
-          onChange={(e) => setModeloEscolhido(e.target.value)}
+      <section className="rounded-2xl border border-line p-4">
+        <Textarea
+          label="Estratégia usada"
+          rows={8}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder="Escreva a estratégia que está sendo usada neste cliente: público, canais, criativos, orçamento, o que está testando…"
         />
-        <Input
-          label="Ou nome da estratégia nova"
-          value={nomeLivre}
-          onChange={(e) => setNomeLivre(e.target.value)}
-          placeholder="Ex.: Campanha de inverno"
-        />
-        <Button type="submit" loading={aplicando} leftIcon={<Plus className="h-4 w-4" />}>
-          Aplicar
-        </Button>
-      </form>
-
-      {estrategias.length === 0 ? (
-        <EmptyState
-          icon={<Lightbulb className="h-6 w-6" />}
-          title="Nenhuma estratégia aplicada"
-          description="Escolha uma pronta acima — os passos dela já viram checklist."
-          action={
-            <Button
-              size="sm"
-              leftIcon={<Plus className="h-4 w-4" />}
-              onClick={() => document.getElementById('gc-aplicar-estrategia')?.focus()}
-            >
-              Aplicar estratégia
+        <div className="mt-3 flex items-center justify-end gap-2">
+          {sujo && <span className="text-xs text-warning">alterações não salvas</span>}
+          {sujo && (
+            <Button variant="ghost" size="sm" onClick={() => setTexto(estrategiaUsada)}>
+              Descartar
             </Button>
-          }
-        />
-      ) : (
+          )}
+          <Button size="sm" loading={salvando} disabled={!sujo} onClick={() => void salvar()}>
+            Salvar
+          </Button>
+        </div>
+      </section>
+
+      {estrategias.length === 0 ? null : (
         estrategias.map((e) => {
           const feitos = e.itens.filter((i) => i.concluido).length
           return (

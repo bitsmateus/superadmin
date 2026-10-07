@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
-import { MenuModelos, ModalModelosTexto, type AlvoDeModelo } from '@/components/gestaoClientes/ModelosDeTexto'
+import { type AlvoDeModelo } from '@/components/gestaoClientes/ModelosDeTexto'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { RoteiroDoPlano } from '@/components/gestaoClientes/RoteiroDoPlano'
@@ -773,12 +773,6 @@ export function PlanejamentoCliente({
           <p className="max-w-2xl text-xs text-foreground/55">
             Tudo é opcional: preencha o que souber, na ordem dos 4 passos. O resumo acima se monta sozinho.
           </p>
-          <MenuModelos
-            modelos={modelos}
-            textos={textosDoPlano}
-            onAplicar={aplicarModeloEm}
-            onGerenciar={() => setGerenciando('situacao')}
-          />
         </div>
 
         {/* ---------------------------------------------------------------- 1. ponto A */}
@@ -1071,12 +1065,6 @@ export function PlanejamentoCliente({
       </div>
 
       {/* ------------------------------------------------------------------ janelas */}
-      <ModalModelosTexto
-        aberto={gerenciando !== null}
-        campoInicial={gerenciando ?? 'situacao'}
-        onFechar={() => setGerenciando(null)}
-        onMudou={carregarModelos}
-      />
       <Modal
         open={confirmandoMedia}
         onClose={() => setConfirmandoMedia(false)}

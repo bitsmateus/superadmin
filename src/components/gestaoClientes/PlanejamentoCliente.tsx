@@ -759,11 +759,7 @@ export function PlanejamentoCliente({
                 <PastilhaSaude estado={estadoDoMes.estado} texto={estadoDoMes.texto} />
               )}
             </span>
-            {estado === 'definido' && resumo ? (
-              <span className="mt-0.5 block truncate text-xs text-foreground/60" title={resumo}>
-                {resumo}
-              </span>
-            ) : (
+            {estado === 'definido' ? null : (
               <span className="mt-0.5 block text-xs text-foreground/50">
                 {estado === 'atencao' && api?.atual.lembrar_em
                   ? `O lembrete de ${dataBR(api.atual.lembrar_em)} venceu: veja se o cliente já trouxe os números.`

@@ -531,6 +531,9 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       if ('responsavel_id' in corpo && !corpo.responsavel_id) {
         return reply.status(400).send({ message: 'O responsável é obrigatório — escolha outra pessoa em vez de remover' });
       }
+      if (corpo.logo_url && !/^(data:image\/(png|jpeg|webp|gif);base64,|https?:\/\/)/.test(String(corpo.logo_url))) {
+        return reply.status(400).send({ message: 'A logo precisa ser uma imagem' });
+      }
       const { sets, params } = montarUpdate(CAMPOS_CLIENTE, corpo);
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       params.push(req.params.id);

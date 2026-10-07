@@ -376,7 +376,7 @@ export interface GcInfoMes {
 
 export interface GcSnapshot {
   versao: number
-  cliente: { nome_empresa: string; segmento?: string; cidade?: string; responsavel_nome?: string | null }
+  cliente: { nome_empresa: string; logo_url?: string | null; segmento?: string; cidade?: string; responsavel_nome?: string | null }
   periodo: { inicio: string; fim: string; rotulo: string }
   numeros: {
     chave: string

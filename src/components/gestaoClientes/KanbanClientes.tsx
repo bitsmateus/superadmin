@@ -7,7 +7,7 @@ import type { Saude } from '@/lib/gcSaude'
 import { mesPorExtenso, somarMeses } from '@/lib/gcMetricas'
 import { situacaoDoMes, type SituacaoDoMes } from '@/lib/gcLancamento'
 import { FAIXA_DA_SAUDE, estiloDoAvatar } from '@/lib/gcVisual'
-import { iniciaisDe } from '@/lib/gcIniciais'
+import { AvatarCliente } from '@/components/gestaoClientes/AvatarCliente'
 import { cn } from '@/lib/utils'
 
 /**
@@ -101,12 +101,7 @@ function CartaoCliente({
       )}
     >
       <div className="flex items-start gap-2">
-        <span
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-[11px] font-semibold"
-          style={estiloDoAvatar(c.nome_empresa)}
-        >
-          {iniciaisDe(c.nome_empresa) || '—'}
-        </span>
+        <AvatarCliente nome={c.nome_empresa} logoUrl={c.logo_url} className="h-8 w-8 rounded-lg text-[11px]" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-foreground">
             {c.nome_empresa}

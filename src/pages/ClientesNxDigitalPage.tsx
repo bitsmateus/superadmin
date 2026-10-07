@@ -29,7 +29,7 @@ import {
 import { formatarMetrica, mesPorExtenso, mesAtual } from '@/lib/gcMetricas'
 import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import { FAIXA_DA_SAUDE, estiloDoAvatar } from '@/lib/gcVisual'
-import { iniciaisDe } from '@/lib/gcIniciais'
+import { AvatarCliente } from '@/components/gestaoClientes/AvatarCliente'
 import { cn } from '@/lib/utils'
 
 const ABAS: { value: GcStatusCliente | 'todos'; label: string }[] = [
@@ -762,12 +762,7 @@ function CartaoCliente({
       )}
     >
       <span className="flex items-center gap-2.5">
-        <span
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border text-xs font-semibold"
-          style={estiloDoAvatar(c.nome_empresa)}
-        >
-          {iniciaisDe(c.nome_empresa) || '—'}
-        </span>
+        <AvatarCliente nome={c.nome_empresa} logoUrl={c.logo_url} className="h-9 w-9 rounded-xl text-xs" />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 font-medium text-foreground">
             <span className="truncate">{c.nome_empresa}</span>
@@ -846,12 +841,7 @@ function LinhaCliente({
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <span
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border text-xs font-semibold"
-            style={estiloDoAvatar(c.nome_empresa)}
-          >
-            {iniciaisDe(c.nome_empresa) || '—'}
-          </span>
+          <AvatarCliente nome={c.nome_empresa} logoUrl={c.logo_url} className="h-9 w-9 rounded-xl text-xs" />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 truncate font-medium text-foreground">
               {c.nome_empresa}

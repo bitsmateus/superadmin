@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { RotinaMensal } from '@/components/gestaoClientes/RotinaMensal'
 import { ResumoPlanejamento } from '@/components/gestaoClientes/ResumoPlanejamento'
 import { mesAtual, mesPorExtenso } from '@/lib/gcMetricas'
+import { LogoDoCliente } from '@/components/gestaoClientes/LogoDoCliente'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import { avaliarSaude, type Destino } from '@/lib/gcSaude'
 import { AvaliacaoDoResultado, PainelSaude } from '@/components/gestaoClientes/Semaforo'
@@ -298,7 +299,8 @@ export function AbaVisaoGeral({
         </section>
 
         <section id="gc-informacoes" className="rounded-xl border border-line p-4">
-          <h2 className="mb-1 text-sm font-semibold text-foreground">Informações do cliente</h2>
+          <LogoDoCliente clienteId={cliente.id} nome={cliente.nome_empresa} logoUrl={cliente.logo_url} onMudou={onMudou} />
+          <h2 className="mb-1 mt-4 text-sm font-semibold text-foreground">Informações do cliente</h2>
           <p className="mb-2 text-xs text-foreground/50">Registre aqui o que foi combinado ao fechar, valores, particularidades — o que o time precisa saber.</p>
           <Textarea
             rows={5}

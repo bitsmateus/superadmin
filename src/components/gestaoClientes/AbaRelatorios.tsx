@@ -94,6 +94,7 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
     versao: 1,
     cliente: {
       nome_empresa: detalhe.cliente.nome_empresa,
+      logo_url: detalhe.cliente.logo_url,
       segmento: detalhe.cliente.segmento,
       cidade: detalhe.cliente.cidade,
       responsavel_nome: detalhe.cliente.responsavel_nome,

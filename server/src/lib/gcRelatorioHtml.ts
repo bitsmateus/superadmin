@@ -40,7 +40,7 @@ export interface GcMetaSnapshot {
 
 export interface GcSnapshot {
   versao: number;
-  cliente: { nome_empresa: string; segmento?: string; cidade?: string; responsavel_nome?: string | null };
+  cliente: { nome_empresa: string; logo_url?: string | null; segmento?: string; cidade?: string; responsavel_nome?: string | null };
   periodo: { inicio: string; fim: string; rotulo: string };
   numeros: GcNumeroSnapshot[];
   /** O essencial, já escolhido pela tela — evita este arquivo ter que saber quais chaves importam. */
@@ -215,6 +215,11 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
     .join('');
 
   const atualizadoEm = dataEHora(snapshot.publicado_em);
+  // Só imagem embutida ou http(s): o valor vai pra dentro de um atributo HTML.
+  const logo = snapshot.cliente?.logo_url ?? '';
+  const logoDoCliente = /^(data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+|https?:\/\/[^\s"'<>]+)$/.test(logo)
+    ? `<img class="logo-cliente" src="${logo}" alt="">`
+    : '';
   const secao = (titulo: string, conteudo: string, classe = '') =>
     conteudo.trim() ? `<section class="${classe}"><h2>${titulo}</h2>${conteudo}</section>` : '';
 
@@ -236,6 +241,7 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
   header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
   .marca { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .14em;
     text-transform: uppercase; color: ${COR.azul}; font-weight: 700; }
+  .logo-cliente { height: 40px; max-width: 120px; object-fit: contain; vertical-align: middle; margin-right: 10px; }
   .logo { height: 24px; width: 24px; border-radius: 6px; object-fit: cover; }
   h1 { margin: 4px 0 0; font-size: 25px; letter-spacing: -.01em; }
   .sub { color: ${COR.tintaFraca}; font-size: 12px; margin-top: 3px; }
@@ -304,7 +310,7 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
   <header>
     <div>
       <div class="marca"><img class="logo" src="${LOGO_NX_DATA_URL}" alt="">Grupo NX Digital</div>
-      <h1>${escapar(snapshot.cliente?.nome_empresa)}</h1>
+      <h1>${logoDoCliente}${escapar(snapshot.cliente?.nome_empresa)}</h1>
       <div class="sub">
         ${[snapshot.cliente?.segmento, snapshot.cliente?.cidade].filter(Boolean).map(escapar).join(' · ')}
         ${snapshot.cliente?.responsavel_nome ? ` · responsável: ${escapar(snapshot.cliente.responsavel_nome)}` : ''}

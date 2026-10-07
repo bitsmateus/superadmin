@@ -320,27 +320,6 @@ export function AbaVisaoGeral({
             </Button>
           </div>
         </section>
-
-        <section id="gc-servicos" className="rounded-xl border border-line p-4 transition-shadow">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">Serviços contratados</h2>
-            {!adicionando && (
-              <Button variant="secondary" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={() => setAdicionando(true)}>
-                Adicionar serviço
-              </Button>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            {servicos.length === 0 && !adicionando && (
-              <p className="py-4 text-center text-sm text-foreground/50">Nenhum serviço registrado.</p>
-            )}
-            {servicos.map((s) => (
-              <LinhaDeServico key={s.id} servico={s} onMudou={onMudou} />
-            ))}
-            {adicionando && <FormServico clienteId={cliente.id} onPronto={onMudou} onCancelar={() => setAdicionando(false)} />}
-          </div>
-        </section>
       </div>
 
       <div className="space-y-4">

@@ -55,7 +55,23 @@ interface Passo {
   rotulo: string
   titulo: string
   itens: { rotulo: string; valor: string }[]
+  /** O que sai das contas (CPL, conversão, ticket, ROAS…) — é o que diz se o número faz sentido. */
+  indicadores?: { rotulo: string; valor: string }[]
   nota?: string
+}
+
+type Numeros = Partial<Record<Metrica, number>>
+
+/** CPL, taxa de conversão, ticket médio, custo por venda e retorno: só os que as contas permitem. */
+function indicadoresDe(v: Numeros): Passo['indicadores'] {
+  const out: NonNullable<Passo['indicadores']> = []
+  const { investimento: inv, leads, vendas, receita: rec } = v
+  if (inv && leads) out.push({ rotulo: 'CPL', valor: formatarMetrica(inv / leads, 'reais') })
+  if (leads && vendas !== undefined) out.push({ rotulo: 'Conversão', valor: `${((vendas / leads) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` })
+  if (rec && vendas) out.push({ rotulo: 'Ticket médio', valor: formatarMetrica(rec / vendas, 'reais') })
+  if (inv && vendas) out.push({ rotulo: 'Custo por venda', valor: formatarMetrica(inv / vendas, 'reais') })
+  if (inv && rec) out.push({ rotulo: 'Retorno (ROAS)', valor: `${(rec / inv).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}x` })
+  return out
 }
 
 function passosDoCenario(plano: Planejamento): Passo[] {
@@ -86,26 +102,47 @@ function passosDoCenario(plano: Planejamento): Passo[] {
       rotulo: 'Hoje',
       titulo: zerado ? 'Não investe ainda' : 'Ponto A',
       itens: zerado ? [] : hoje,
+      indicadores: zerado ? [] : indicadoresDe(base),
       nota: zerado ? 'Tudo zerado: o plano parte do zero.' : hoje.length === 0 ? 'a definir' : undefined,
     },
     {
       rotulo: 'Mês 1',
-      titulo: 'Começar a investir',
+      titulo: zerado ? 'Começar a investir' : 'Primeiro mês do plano',
       itens: itensMes1,
+      indicadores: indicadoresDe(mes1),
       nota:
         plano.cplMedio !== undefined && mes1.leads !== undefined
           ? `Leads = investimento ÷ CPL médio de ${formatarMetrica(plano.cplMedio, 'reais')}`
           : itensMes1.length === 0 ? 'a definir' : undefined,
     },
-    { rotulo: 'Em 6 meses', titulo: 'Meta 6 meses', itens: pegar(m6), nota: pegar(m6).length ? undefined : 'a definir' },
-    { rotulo: 'Em 12 meses', titulo: 'Meta 12 meses', itens: pegar(m12), nota: pegar(m12).length ? undefined : 'a definir' },
+    { rotulo: 'Em 6 meses', titulo: 'Meta 6 meses', itens: pegar(m6), indicadores: indicadoresDe(m6), nota: pegar(m6).length ? undefined : 'a definir' },
+    { rotulo: 'Em 12 meses', titulo: 'Meta 12 meses', itens: pegar(m12), indicadores: indicadoresDe(m12), nota: pegar(m12).length ? undefined : 'a definir' },
   ]
 }
 
 /** O cenário em quatro passos (hoje, mês 1, 6 e 12 meses): é o coração do resumo do plano. */
 export function CenarioEmPassos({ plano }: { plano: Planejamento }) {
   const passos = passosDoCenario(plano)
+  // A leitura em uma frase: o salto do investimento e do faturamento até o fim do plano.
+  const m6 = plano.metas['6_meses']
+  const m12 = plano.metas['12_meses']
+  const fim = m12.receita !== undefined ? m12 : m6
+  const rotuloFim = m12.receita !== undefined ? '12 meses' : '6 meses'
+  const mes1Inv = doPrimeiroMes(plano, 'investimento')
+  const leitura: string[] = []
+  if (fim.receita !== undefined && fim.investimento) {
+    leitura.push(`Em ${rotuloFim}: ${formatarMetrica(fim.receita, 'reais')} de faturamento com ${formatarMetrica(fim.investimento, 'reais')} investidos por mês (${(fim.receita / fim.investimento).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}x de retorno).`)
+  }
+  if (mes1Inv !== undefined && fim.investimento && mes1Inv > 0 && fim.investimento !== mes1Inv) {
+    leitura.push(`O investimento vai de ${formatarMetrica(mes1Inv, 'reais')} no mês 1 para ${formatarMetrica(fim.investimento, 'reais')} (${(fim.investimento / mes1Inv).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}x).`)
+  }
   return (
+    <>
+    {leitura.length > 0 && (
+      <ul className="mb-2 space-y-0.5 text-xs text-foreground/70">
+        {leitura.map((l) => <li key={l}>• {l}</li>)}
+      </ul>
+    )}
     <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
       {passos.map((p, i) => (
         <li key={p.rotulo} className="rounded-xl border border-line bg-gradient-to-br from-elevate/[0.04] to-transparent p-3">
@@ -124,10 +161,21 @@ export function CenarioEmPassos({ plano }: { plano: Planejamento }) {
               ))}
             </dl>
           )}
+          {p.indicadores && p.indicadores.length > 0 && (
+            <dl className="mt-2 space-y-0.5 border-t border-line/70 pt-1.5">
+              {p.indicadores.map((it) => (
+                <div key={it.rotulo} className="flex items-baseline justify-between gap-2">
+                  <dt className="text-[11px] text-foreground/45">{it.rotulo}</dt>
+                  <dd className="text-[11px] font-medium tabular-nums text-foreground/70">{it.valor}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
           {p.nota && <p className="mt-1.5 text-[11px] leading-snug text-foreground/45">{p.nota}</p>}
         </li>
       ))}
     </ol>
+    </>
   )
 }
 

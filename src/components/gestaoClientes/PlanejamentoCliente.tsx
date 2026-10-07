@@ -59,6 +59,8 @@ interface Rascunho {
   estrategiaUsada: string
   /** CPL médio estimado: transforma o investimento do mês 1 (e dos meses sem meta de leads) em leads. */
   cplMedio: string
+  /** O funil por coluna: CPL (só 6/12), taxa de agendamento e de conversão em %, ticket médio. */
+  funil: Record<ColunaDaGrade, FunilDaColuna>
   cenarios: Record<HorizontePlano, {
     objetivo: string
     /** "Estratégia e premissas": interna, nunca vai pro portal. */
@@ -66,6 +68,8 @@ interface Rascunho {
     metas: Record<ChaveDigitada, string>
   }>
 }
+
+interface FunilDaColuna { cpl: string; agendamento: string; conversao: string; ticket: string }
 
 function vazioDeMetas(): Record<ChaveDigitada, string> {
   return { leads: '', vendas: '', investimento: '', receita: '' }
@@ -94,6 +98,17 @@ function doApi(a: GcPlanejamentoApi): Rascunho {
       receita: numeroParaCampo(a.primeiro_mes?.faturamento),
     },
     cplMedio: numeroParaCampo(a.primeiro_mes?.cpl_medio),
+    funil: Object.fromEntries(
+      (['mes1', '6_meses', '12_meses'] as ColunaDaGrade[]).map((c) => [
+        c,
+        {
+          cpl: numeroParaCampo(a.funil?.[c]?.cpl),
+          agendamento: numeroParaCampo(a.funil?.[c]?.agendamento),
+          conversao: numeroParaCampo(a.funil?.[c]?.conversao),
+          ticket: numeroParaCampo(a.funil?.[c]?.ticket),
+        },
+      ]),
+    ) as Record<ColunaDaGrade, FunilDaColuna>,
     estrategiaUsada: a.estrategia_usada ?? '',
     cenarios: { '6_meses': cen('6_meses'), '12_meses': cen('12_meses') },
   }
@@ -143,6 +158,9 @@ function normalizado(r: Rascunho) {
     leads: n(r.leads), investimento: n(r.investimento), vendas: n(r.vendas), receita: n(r.receita),
     mes1: { investimento: n(r.mes1.investimento), vendas: n(r.mes1.vendas), receita: n(r.mes1.receita) },
     cplMedio: n(r.cplMedio),
+    funil: Object.fromEntries(
+      Object.entries(r.funil).map(([c, f]) => [c, { cpl: n(f.cpl), agendamento: n(f.agendamento), conversao: n(f.conversao), ticket: n(f.ticket) }]),
+    ),
     cenarios: Object.fromEntries(
       (Object.keys(r.cenarios) as HorizontePlano[]).map((h) => [
         h,
@@ -150,6 +168,40 @@ function normalizado(r: Rascunho) {
       ]),
     ),
   }
+}
+
+/**
+ * O FUNIL: investimento ÷ CPL = leads; leads × taxa de agendamento = agendamentos; × taxa de conversão = vendas;
+ * vendas × ticket = faturamento. Preenche leads, vendas e faturamento da coluna quando há dados pra conta;
+ * os campos seguem editáveis (digitar por cima vale até mexer de novo no funil).
+ */
+function aplicarFunil(r: Rascunho, coluna: ColunaDaGrade): Rascunho {
+  const f = r.funil[coluna]
+  const mes1 = coluna === 'mes1'
+  const inv = numeroDigitado(mes1 ? r.mes1.investimento : r.cenarios[coluna].metas.investimento)
+  const cpl = numeroDigitado(mes1 ? r.cplMedio : f.cpl)
+  const ag = numeroDigitado(f.agendamento)
+  const conv = numeroDigitado(f.conversao)
+  const ticket = numeroDigitado(f.ticket)
+  if (inv === null || !cpl || cpl <= 0) return r
+  const leads = inv / cpl
+  const agendamentos = ag !== null ? leads * (ag / 100) : leads
+  const vendas = conv !== null ? Math.round(agendamentos * (conv / 100)) : null
+  const receita = vendas !== null && ticket !== null ? vendas * ticket : null
+  const texto = (n: number) => numeroParaCampo(n)
+  if (mes1) {
+    return {
+      ...r,
+      mes1: { ...r.mes1, ...(vendas !== null ? { vendas: texto(vendas) } : {}), ...(receita !== null ? { receita: texto(receita) } : {}) },
+    }
+  }
+  const metas = {
+    ...r.cenarios[coluna].metas,
+    leads: texto(Math.round(leads)),
+    ...(vendas !== null ? { vendas: texto(vendas) } : {}),
+    ...(receita !== null ? { receita: texto(receita) } : {}),
+  }
+  return { ...r, cenarios: { ...r.cenarios, [coluna]: { ...r.cenarios[coluna], metas } } }
 }
 
 const CHAVE_RASCUNHO = (id: string) => `gc:planejamento:rascunho:${id}`
@@ -190,6 +242,12 @@ function paraEntrada(r: Rascunho): GcPlanejamentoEntrada {
     primeiro_mes: {
       investimento: inv1, vendas: ven1, faturamento: rec1, cpl_medio: cpl,
     },
+    funil: Object.fromEntries(
+      Object.entries(r.funil).map(([c, f]) => [
+        c,
+        { cpl: numeroDigitado(f.cpl), agendamento: numeroDigitado(f.agendamento), conversao: numeroDigitado(f.conversao), ticket: numeroDigitado(f.ticket) },
+      ]),
+    ),
     cenarios: { '6_meses': cen('6_meses'), '12_meses': cen('12_meses') },
   }
 }
@@ -495,6 +553,8 @@ export function PlanejamentoCliente({
     })
   const mudarCenario = (h: HorizontePlano, campo: 'objetivo' | 'estrategia', valor: string) =>
     setRascunho((r) => (r ? { ...r, cenarios: { ...r.cenarios, [h]: { ...r.cenarios[h], [campo]: valor } } } : r))
+  const mudarFunil = (coluna: ColunaDaGrade, campo: keyof FunilDaColuna, valor: string) =>
+    setRascunho((r) => (r ? aplicarFunil({ ...r, funil: { ...r.funil, [coluna]: { ...r.funil[coluna], [campo]: valor } } }, coluna) : r))
   const mudarMeta = (h: HorizontePlano, chave: ChaveDigitada, valor: string) =>
     setRascunho((r) =>
       r
@@ -604,10 +664,18 @@ export function PlanejamentoCliente({
     return rascunho.cenarios[coluna].metas[chave as ChaveDigitada]
   }
   const mudarCampo = (coluna: ColunaDaGrade, chave: ChavePlano, valor: string) => {
+    // Mexeu no investimento (ou no CPL do mês 1), o funil da coluna refaz leads, vendas e faturamento.
+    const refaz = chave === 'investimento' || chave === 'cpl'
     if (coluna === 'mes1') {
-      if (chave === 'cpl') setRascunho((r) => (r ? { ...r, cplMedio: valor } : r))
-      else setRascunho((r) => (r ? { ...r, mes1: { ...r.mes1, [chave]: valor } } : r))
-    } else mudarMeta(coluna, chave as ChaveDigitada, valor)
+      setRascunho((r) => {
+        if (!r) return r
+        const novo = chave === 'cpl' ? { ...r, cplMedio: valor } : { ...r, mes1: { ...r.mes1, [chave]: valor } }
+        return refaz ? aplicarFunil(novo, 'mes1') : novo
+      })
+    } else {
+      mudarMeta(coluna, chave as ChaveDigitada, valor)
+      if (refaz) setRascunho((r) => (r ? aplicarFunil(r, coluna) : r))
+    }
   }
   /**
    * Uma célula da grade. Digitável (campo com prefixo de unidade) ou CALCULADA (cinza, só leitura):
@@ -746,7 +814,10 @@ export function PlanejamentoCliente({
               <Button
                 size="sm"
                 onClick={() => {
-                  setRascunho(guardado.rascunho)
+                  setRascunho({
+                    ...guardado.rascunho,
+                    funil: guardado.rascunho.funil ?? doApi({ ...(api as GcPlanejamentoApi), funil: undefined }).funil,
+                  })
                   setGuardado(null)
                 }}
               >
@@ -978,6 +1049,65 @@ export function PlanejamentoCliente({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* ------------------------------------------------------------ o funil: do investimento até a venda */}
+          <div className="mt-4 rounded-xl border border-line bg-elevate/[0.02] p-3">
+            <p className="text-sm font-semibold text-foreground">Funil: do investimento até a venda</p>
+            <p className="mb-3 text-xs text-foreground/50">
+              Preencha o CPL, a taxa de agendamento e a de conversão: o plano calcula leads, agendamentos, vendas e (com o ticket médio) o faturamento.
+              Investimento ÷ CPL = leads → × taxa de agendamento = agendamentos → × taxa de conversão = vendas → × ticket = faturamento.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-3">
+              {COLUNAS_DA_GRADE.map((coluna) => {
+                const f = rascunho.funil[coluna]
+                const mes1 = coluna === 'mes1'
+                const inv = numeroDigitado(mes1 ? rascunho.mes1.investimento : rascunho.cenarios[coluna].metas.investimento)
+                const cpl = numeroDigitado(mes1 ? rascunho.cplMedio : f.cpl)
+                const ag = numeroDigitado(f.agendamento)
+                const conv = numeroDigitado(f.conversao)
+                const leads = inv !== null && cpl ? inv / cpl : null
+                const agendados = leads !== null && ag !== null ? leads * (ag / 100) : null
+                const vendas = leads !== null && conv !== null ? Math.round((agendados ?? leads) * (conv / 100)) : null
+                const campo = (rotulo: string, valor: string, onChange: (v: string) => void, sufixo: string, prefixo?: string) => (
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] text-foreground/55">{rotulo}</span>
+                    <span className="relative block">
+                      {prefixo && <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground/40">{prefixo}</span>}
+                      <input
+                        value={valor}
+                        onChange={(e) => onChange(e.target.value)}
+                        onBlur={(e) => onChange(mascararCampo(e.target.value, 'reais'))}
+                        onFocus={(e) => e.target.select()}
+                        inputMode="decimal"
+                        placeholder="0"
+                        className={cn(
+                          'h-9 w-full rounded-md border border-line bg-surface pr-7 text-right text-sm tabular-nums text-foreground outline-none focus:border-accent focus:ring-2 focus:ring-accent/15',
+                          prefixo ? 'pl-8' : 'pl-2',
+                        )}
+                      />
+                      {sufixo && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-foreground/40">{sufixo}</span>}
+                    </span>
+                  </label>
+                )
+                return (
+                  <div key={coluna} className="rounded-lg border border-line bg-surface p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-accent">{ROTULO_DA_COLUNA[coluna]}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {!mes1 && campo('CPL médio', f.cpl, (v) => mudarFunil(coluna, 'cpl', v), '', 'R$')}
+                      {campo('Taxa de agendamento', f.agendamento, (v) => mudarFunil(coluna, 'agendamento', v), '%')}
+                      {campo('Taxa de conversão', f.conversao, (v) => mudarFunil(coluna, 'conversao', v), '%')}
+                      {campo('Ticket médio', f.ticket, (v) => mudarFunil(coluna, 'ticket', v), '', 'R$')}
+                    </div>
+                    <p className="mt-2 text-[11px] leading-snug text-foreground/55">
+                      {leads === null
+                        ? 'Preencha o investimento e o CPL médio pra calcular.'
+                        : `${Math.round(leads).toLocaleString('pt-BR')} leads${agendados !== null ? ` → ${Math.round(agendados).toLocaleString('pt-BR')} agendamentos` : ''}${vendas !== null ? ` → ${vendas.toLocaleString('pt-BR')} vendas` : ''}`}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
           {/* ------------------------------------------------------------ avisos (discretos, não bloqueiam) */}

@@ -35,6 +35,23 @@ const CAMPOS_SERVICO = [
 ] as const;
 
 /** Monta `SET a = $1, b = $2` só com os campos presentes no body. */
+const COLUNAS_FUNIL = ['mes1', '6_meses', '12_meses'] as const;
+const CAMPOS_FUNIL = ['cpl', 'agendamento', 'conversao', 'ticket'] as const;
+/** O funil como { coluna: { cpl, agendamento, conversao, ticket } } com números ou null; qualquer outra coisa some. */
+function limparFunil(bruto: unknown): Record<string, Record<string, number | null>> {
+  const saida: Record<string, Record<string, number | null>> = {};
+  const origem = (bruto && typeof bruto === 'object' ? bruto : {}) as Record<string, Record<string, unknown>>;
+  for (const col of COLUNAS_FUNIL) {
+    saida[col] = {};
+    for (const campo of CAMPOS_FUNIL) {
+      const v = origem[col]?.[campo];
+      const n = v === null || v === undefined || v === '' ? null : Number(v);
+      saida[col][campo] = n !== null && Number.isFinite(n) && n >= 0 ? n : null;
+    }
+  }
+  return saida;
+}
+
 function montarUpdate(
   permitidos: readonly string[],
   body: Record<string, unknown>,
@@ -1553,7 +1570,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       `SELECT situacao_atual, leads_mes, investimento_mes, vendas_mes, faturamento_mensal,
               to_char(data_diagnostico, 'YYYY-MM-DD') AS data_diagnostico,
               aguardando_cliente, to_char(lembrar_em, 'YYYY-MM-DD') AS lembrar_em,
-              mes1_investimento, mes1_vendas, mes1_faturamento, cpl_medio,
+              mes1_investimento, mes1_vendas, mes1_faturamento, cpl_medio, funil,
               portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo, origens
        FROM gc_planejamento WHERE gc_cliente_id = $1`,
       [clienteId]
@@ -1615,6 +1632,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       },
       // A curva é sempre linear: o seletor linear/composta saiu da tela.
       curva: 'linear' as const,
+      funil: limparFunil(p?.funil),
       origens: sanearOrigens(p?.origens),
       portal: {
         ativo: Boolean(p?.portal_ativo),
@@ -1759,6 +1777,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     /** Opcional: só muda se vier. */
     estrategia_usada?: string;
     primeiro_mes?: Record<string, unknown>;
+    funil?: unknown;
     cenarios?: Record<string, { onde_quer_chegar?: string; estrategia?: string; metas?: Record<string, unknown> }>;
   };
   const dataValida = (v: unknown): string | null =>
@@ -1843,6 +1862,11 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
           ]
         );
 
+        if (corpo.funil && typeof corpo.funil === 'object') {
+          await client.query('UPDATE gc_planejamento SET funil = $2::jsonb WHERE gc_cliente_id = $1', [
+            req.params.id, JSON.stringify(limparFunil(corpo.funil)),
+          ]);
+        }
         if (typeof corpo.estrategia_usada === 'string') {
           await client.query('UPDATE gc_clientes SET estrategia_usada = $2, updated_at = NOW() WHERE id = $1', [
             req.params.id, corpo.estrategia_usada,

@@ -484,6 +484,8 @@ export interface GcPlanejamentoApi {
    * faturamento". Os leads do mês 1 saem de investimento ÷ cpl_medio (a premissa).
    */
   primeiro_mes: { investimento: number | null; vendas: number | null; faturamento: number | null; cpl_medio: number | null }
+  /** O funil de cada coluna do plano: CPL (só 6 e 12 meses), taxa de agendamento e de conversão (em %) e ticket médio. */
+  funil?: Record<string, { cpl?: number | null; agendamento?: number | null; conversao?: number | null; ticket?: number | null }>
   /** De onde veio cada número do ponto A, por campo. Campo ausente = sem origem registrada. */
   origens: Record<string, GcOrigemCampo>
   portal: GcPortalJornadaOpcoes
@@ -511,6 +513,7 @@ export interface GcPlanejamentoEntrada {
   estrategia_usada?: string
   atual: Omit<GcPlanejamentoApi['atual'], 'ticket_medio' | 'taxa_conversao'>
   primeiro_mes: GcPlanejamentoApi['primeiro_mes']
+  funil?: GcPlanejamentoApi['funil']
   origens: Record<string, GcOrigemCampo>
   cenarios: Record<
     '6_meses' | '12_meses',

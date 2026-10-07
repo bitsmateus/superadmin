@@ -372,6 +372,8 @@ const TABELAS = [
   `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS cpl_medio NUMERIC(14,2)`,
   // O roteiro mês a mês (o que se trabalha em cada mês) — o cliente vê no portal.
   `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS roteiro JSONB NOT NULL DEFAULT '[]'`,
+  // O funil de cada coluna do plano (mês 1, 6 e 12 meses): CPL, taxa de agendamento, taxa de conversão e ticket.
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS funil JSONB NOT NULL DEFAULT '{}'`,
 
   // "Adicionar info": informações livres do mês de um cliente — um número relevante do tráfego, uma
   // observação —, que não cabem nas métricas fixas. Opcionalmente entram no relatório do cliente.

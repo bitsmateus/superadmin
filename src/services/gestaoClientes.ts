@@ -117,6 +117,7 @@ export interface GcRegistroHistorico {
   fixado: boolean
   anexos: GcAnexo[]
   created_at: string
+  updated_at?: string
 }
 
 /** Linha da lista: o cadastro mais o resumo da jornada, pra tela não precisar abrir cada cliente. */
@@ -789,7 +790,7 @@ export const gestaoClientes = {
       tipo?: GcTipoHistorico; titulo?: string; descricao: string; fixado?: boolean; anexos?: GcAnexo[]
     },
   ) => api.post<GcRegistroHistorico>(`/api/gc/clientes/${clienteId}/historico`, dados),
-  atualizarRegistro: (id: string, dados: Partial<{ titulo: string; descricao: string; fixado: boolean }>) =>
+  atualizarRegistro: (id: string, dados: Partial<{ tipo: GcTipoHistorico; titulo: string; descricao: string; fixado: boolean; anexos: GcAnexo[] }>) =>
     api.patch<GcRegistroHistorico>(`/api/gc/historico/${id}`, dados),
   excluirRegistro: (id: string) => api.delete(`/api/gc/historico/${id}`),
 }

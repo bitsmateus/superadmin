@@ -59,6 +59,9 @@ const FinanceiroContratoPage = React.lazy(() =>
 const ClientesNxDigitalPage = React.lazy(() =>
   import('./pages/ClientesNxDigitalPage').then((m) => ({ default: m.ClientesNxDigitalPage })),
 )
+const DemandasNxPage = React.lazy(() =>
+  import('./pages/DemandasNxPage').then((m) => ({ default: m.DemandasNxPage })),
+)
 const ClienteNxDetalhePage = React.lazy(() =>
   import('./pages/ClienteNxDetalhePage').then((m) => ({ default: m.ClienteNxDetalhePage })),
 )
@@ -212,6 +215,7 @@ export default function App() {
           <Route path="/clientesnxdigital" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
           <Route path="/clientesnxdigital/clientes" element={<ClientesNxDigitalPage />} />
           <Route path="/clientesnxdigital/clientes/:id" element={<ClienteNxDetalhePage />} />
+          <Route path="/clientesnxdigital/demandas" element={<DemandasNxPage />} />
           {/* As telas Tráfego e Estratégias saíram: quem tem o link antigo volta pra lista. */}
           <Route path="/clientesnxdigital/trafego" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
           <Route path="/clientesnxdigital/estrategias" element={<Navigate to="/clientesnxdigital/clientes" replace />} />

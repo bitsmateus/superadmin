@@ -444,6 +444,31 @@ const TABELAS = [
   `CREATE INDEX IF NOT EXISTS gc_checklist_cliente_idx ON gc_checklist_itens (gc_cliente_id, concluido)`,
   `CREATE INDEX IF NOT EXISTS gc_metricas_cliente_idx ON gc_metricas (gc_cliente_id, periodo_inicio)`,
   `CREATE INDEX IF NOT EXISTS gc_historico_cliente_idx ON gc_historico (gc_cliente_id, created_at DESC)`,
+  // ---------------------------------------------------------------- kanban de demandas
+  `CREATE TABLE IF NOT EXISTS gc_demandas_colunas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    ordem INTEGER NOT NULL DEFAULT 0,
+    concluida BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS gc_demandas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    coluna_id UUID NOT NULL REFERENCES gc_demandas_colunas(id),
+    ordem INTEGER NOT NULL DEFAULT 0,
+    titulo TEXT NOT NULL,
+    descricao TEXT NOT NULL DEFAULT '',
+    prioridade TEXT NOT NULL DEFAULT 'media' CHECK (prioridade IN ('baixa','media','alta')),
+    prazo DATE,
+    responsavel_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    criado_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    concluida_em TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_demandas_cliente_idx ON gc_demandas (gc_cliente_id)`,
+  `CREATE INDEX IF NOT EXISTS gc_demandas_coluna_idx ON gc_demandas (coluna_id, ordem)`,
 ];
 
 /** As 9 etapas padrão da jornada, com o checklist inicial de cada uma. */

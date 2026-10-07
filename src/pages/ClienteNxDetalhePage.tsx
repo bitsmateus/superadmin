@@ -13,11 +13,12 @@ import { ModalNotas, PainelNotas } from '@/components/gestaoClientes/PainelNotas
 import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import { AbaPlanejamento } from '@/components/gestaoClientes/AbaPlanejamento'
 import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
+import { KanbanDemandas } from '@/components/gestaoClientes/KanbanDemandas'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 import type { Destino } from '@/lib/gcSaude'
 
-type Aba = 'visao' | 'planejamento' | 'estrategias' | 'relatorios' | 'notas'
+type Aba = 'visao' | 'demandas' | 'planejamento' | 'estrategias' | 'relatorios' | 'notas'
 
 /**
  * Detalhe do cliente de tráfego — Visão geral, Jornada e Histórico.
@@ -170,6 +171,7 @@ export function ClienteNxDetalhePage() {
               onChange={(v) => setAba(v as Aba)}
               items={[
                 { value: 'visao', label: 'Visão geral' },
+                { value: 'demandas', label: 'Demandas' },
                 { value: 'planejamento', label: 'Planejamento' },
                 // Só existe pra quem ainda tem estratégia com passos (a de hoje agora mora no Planejamento).
                 ...(detalhe.estrategias.length > 0
@@ -219,6 +221,7 @@ export function ClienteNxDetalhePage() {
               <AbaPlanejamento clienteId={id} cliente={detalhe.cliente} onMudou={carregar} />
             )}
             {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
+            {aba === 'demandas' && <KanbanDemandas clienteId={id} />}
             {aba === 'estrategias' && (
               <AbaEstrategias estrategias={detalhe.estrategias} onMudou={carregar} />
             )}

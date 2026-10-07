@@ -411,14 +411,14 @@ export function PainelNotas({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 border-b border-line">
+      <div className="-mx-1 flex items-center gap-1 overflow-x-auto border-b border-line px-1">
         {abas.map((a) => (
           <button
             key={a.valor}
             type="button"
             onClick={() => setAba(a.valor)}
             className={cn(
-              'relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors',
+              'relative flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors',
               aba === a.valor ? 'text-foreground' : 'text-foreground/50 hover:text-foreground/80',
             )}
           >

@@ -823,7 +823,7 @@ export function PlanejamentoCliente({
         )}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="max-w-2xl text-xs text-foreground/55">
-            Tudo é opcional: preencha o que souber, na ordem dos 4 passos. O resumo acima se monta sozinho.
+            Tudo é opcional: preencha o que souber, na ordem dos 4 passos.
           </p>
         </div>
 

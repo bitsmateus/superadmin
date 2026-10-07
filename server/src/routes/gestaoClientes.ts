@@ -2030,6 +2030,204 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     }
   );
 
+  // ------------------------------------------------------------------ kanban de demandas
+  // Um quadro só, com as mesmas colunas pra todos os clientes. Dentro do cliente aparecem as demandas dele;
+  // no quadro geral (menu NX DIGITAL) aparecem as de todos.
+  const COLUNAS_PADRAO = [
+    { nome: 'A fazer', concluida: false },
+    { nome: 'Em andamento', concluida: false },
+    { nome: 'Aguardando cliente', concluida: false },
+    { nome: 'Em revisão', concluida: false },
+    { nome: 'Concluído', concluida: true },
+  ];
+
+  async function colunasDeDemanda() {
+    const existentes = await query<{ n: string }>('SELECT count(*)::text AS n FROM gc_demandas_colunas');
+    if (Number(existentes[0]?.n ?? 0) === 0) {
+      for (let i = 0; i < COLUNAS_PADRAO.length; i++) {
+        await query('INSERT INTO gc_demandas_colunas (nome, ordem, concluida) VALUES ($1,$2,$3)', [
+          COLUNAS_PADRAO[i].nome, i, COLUNAS_PADRAO[i].concluida,
+        ]);
+      }
+    }
+    return query('SELECT id, nome, ordem, concluida FROM gc_demandas_colunas ORDER BY ordem, created_at');
+  }
+
+  app.get('/api/gc/demandas/colunas', autenticado, async () => colunasDeDemanda());
+
+  app.post<{ Body: { nome?: string; concluida?: boolean } }>('/api/gc/demandas/colunas', autenticado, async (req, reply) => {
+    const nome = String(req.body?.nome ?? '').trim().slice(0, 60);
+    if (!nome) return reply.status(400).send({ message: 'Dê um nome à coluna' });
+    await colunasDeDemanda();
+    const criada = await queryOne(
+      `INSERT INTO gc_demandas_colunas (nome, ordem, concluida)
+       VALUES ($1, COALESCE((SELECT max(ordem) + 1 FROM gc_demandas_colunas), 0), $2) RETURNING id, nome, ordem, concluida`,
+      [nome, Boolean(req.body?.concluida)]
+    );
+    return reply.status(201).send(criada);
+  });
+
+  // A ordem das colunas: { ids: [...] } na ordem desejada. Declarada ANTES de /:id pra não ser tomada como id.
+  app.put<{ Body: { ids?: string[] } }>('/api/gc/demandas/colunas/ordem', autenticado, async (req) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    for (let i = 0; i < ids.length; i++) {
+      await query('UPDATE gc_demandas_colunas SET ordem = $2 WHERE id = $1', [ids[i], i]);
+    }
+    return colunasDeDemanda();
+  });
+
+  app.patch<{ Params: { id: string }; Body: { nome?: string; concluida?: boolean } }>(
+    '/api/gc/demandas/colunas/:id',
+    autenticado,
+    async (req, reply) => {
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      if (req.body?.nome !== undefined) {
+        const nome = String(req.body.nome).trim().slice(0, 60);
+        if (!nome) return reply.status(400).send({ message: 'Dê um nome à coluna' });
+        params.push(nome);
+        sets.push(`nome = $${params.length}`);
+      }
+      if (req.body?.concluida !== undefined) {
+        params.push(Boolean(req.body.concluida));
+        sets.push(`concluida = $${params.length}`);
+      }
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+      params.push(req.params.id);
+      const r = await queryOne(
+        `UPDATE gc_demandas_colunas SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id, nome, ordem, concluida`,
+        params
+      );
+      if (!r) return reply.status(404).send({ message: 'Coluna não encontrada' });
+      return r;
+    }
+  );
+
+  // Apagar coluna com cartões exige dizer pra onde eles vão (?mover_para=<id>).
+  app.delete<{ Params: { id: string }; Querystring: { mover_para?: string } }>(
+    '/api/gc/demandas/colunas/:id',
+    autenticado,
+    async (req, reply) => {
+      const total = await queryOne<{ n: string }>('SELECT count(*)::text AS n FROM gc_demandas WHERE coluna_id = $1', [req.params.id]);
+      if (Number(total?.n ?? 0) > 0) {
+        const destino = req.query.mover_para;
+        if (!destino || destino === req.params.id) {
+          return reply.status(409).send({ message: 'Essa coluna tem demandas: escolha pra qual coluna elas vão.' });
+        }
+        await query(
+          `UPDATE gc_demandas SET coluna_id = $2,
+             ordem = ordem + COALESCE((SELECT max(ordem) + 1 FROM gc_demandas WHERE coluna_id = $2), 0)
+           WHERE coluna_id = $1`,
+          [req.params.id, destino]
+        );
+      }
+      await query('DELETE FROM gc_demandas_colunas WHERE id = $1', [req.params.id]);
+      return reply.status(204).send();
+    }
+  );
+
+  const SELECT_DEMANDA = `
+    SELECT d.id, d.gc_cliente_id, c.nome_empresa AS cliente_nome, c.logo_url AS cliente_logo, d.coluna_id, d.ordem,
+           d.titulo, d.descricao, d.prioridade, to_char(d.prazo, 'YYYY-MM-DD') AS prazo,
+           d.responsavel_id, p.name AS responsavel_nome, d.concluida_em, d.created_at, d.updated_at
+    FROM gc_demandas d
+    JOIN gc_clientes c ON c.id = d.gc_cliente_id
+    LEFT JOIN profiles p ON p.id = d.responsavel_id`;
+
+  app.get<{ Querystring: { cliente_id?: string } }>('/api/gc/demandas', autenticado, async (req) => {
+    const filtro = req.query.cliente_id;
+    return query(
+      `${SELECT_DEMANDA} ${filtro ? 'WHERE d.gc_cliente_id = $1' : ''} ORDER BY d.coluna_id, d.ordem, d.created_at`,
+      filtro ? [filtro] : []
+    );
+  });
+
+  const PRIORIDADES_DEMANDA = ['baixa', 'media', 'alta'];
+
+  app.post<{
+    Body: {
+      gc_cliente_id?: string; titulo?: string; descricao?: string; coluna_id?: string
+      prioridade?: string; prazo?: string | null; responsavel_id?: string | null
+    };
+  }>('/api/gc/demandas', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const b = req.body ?? {};
+    const titulo = String(b.titulo ?? '').trim().slice(0, 200);
+    if (!titulo) return reply.status(400).send({ message: 'Dê um título à demanda' });
+    if (!b.gc_cliente_id) return reply.status(400).send({ message: 'Escolha o cliente' });
+    const colunas = await colunasDeDemanda();
+    const coluna = (colunas as { id: string }[]).find((c) => c.id === b.coluna_id) ?? (colunas as { id: string }[])[0];
+    const prioridade = PRIORIDADES_DEMANDA.includes(String(b.prioridade)) ? String(b.prioridade) : 'media';
+    const criada = await queryOne<{ id: string }>(
+      `INSERT INTO gc_demandas (gc_cliente_id, coluna_id, ordem, titulo, descricao, prioridade, prazo, responsavel_id, criado_por)
+       VALUES ($1, $2, COALESCE((SELECT max(ordem) + 1 FROM gc_demandas WHERE coluna_id = $2), 0), $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [b.gc_cliente_id, coluna.id, titulo, String(b.descricao ?? ''), prioridade, b.prazo || null, b.responsavel_id || null, sub]
+    );
+    await registrarEvento(b.gc_cliente_id, `Demanda criada: ${titulo}`, '', sub);
+    return reply.status(201).send(await queryOne(`${SELECT_DEMANDA} WHERE d.id = $1`, [criada!.id]));
+  });
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>('/api/gc/demandas/:id', autenticado, async (req, reply) => {
+    const corpo = { ...(req.body ?? {}) };
+    if (corpo.titulo !== undefined && !String(corpo.titulo).trim()) {
+      return reply.status(400).send({ message: 'Dê um título à demanda' });
+    }
+    if (corpo.prioridade !== undefined && !PRIORIDADES_DEMANDA.includes(String(corpo.prioridade))) delete corpo.prioridade;
+    const { sets, params } = montarUpdate(['titulo', 'descricao', 'prioridade', 'prazo', 'responsavel_id'], corpo);
+    if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+    params.push(req.params.id);
+    const r = await queryOne(`UPDATE gc_demandas SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${params.length} RETURNING id`, params);
+    if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
+    return queryOne(`${SELECT_DEMANDA} WHERE d.id = $1`, [req.params.id]);
+  });
+
+  // Mover (entre colunas ou dentro da coluna): { coluna_id, posicao } — posição 0 = topo.
+  app.post<{ Params: { id: string }; Body: { coluna_id?: string; posicao?: number } }>(
+    '/api/gc/demandas/:id/mover',
+    autenticado,
+    async (req, reply) => {
+      const { sub } = req.user as { sub: string };
+      const atual = await queryOne<{ gc_cliente_id: string; titulo: string; coluna_id: string }>(
+        'SELECT gc_cliente_id, titulo, coluna_id FROM gc_demandas WHERE id = $1', [req.params.id]
+      );
+      if (!atual) return reply.status(404).send({ message: 'Demanda não encontrada' });
+      const destino = await queryOne<{ id: string; nome: string; concluida: boolean }>(
+        'SELECT id, nome, concluida FROM gc_demandas_colunas WHERE id = $1', [req.body?.coluna_id ?? '']
+      );
+      if (!destino) return reply.status(400).send({ message: 'Coluna inválida' });
+      await withTransaction(async (client) => {
+        const outras = await client.query(
+          'SELECT id FROM gc_demandas WHERE coluna_id = $1 AND id <> $2 ORDER BY ordem, created_at', [destino.id, req.params.id]
+        );
+        const ids: string[] = outras.rows.map((r: { id: string }) => r.id);
+        const pos = Math.max(0, Math.min(ids.length, Number(req.body?.posicao ?? ids.length)));
+        ids.splice(pos, 0, req.params.id);
+        for (let i = 0; i < ids.length; i++) {
+          if (ids[i] === req.params.id) {
+            await client.query(
+              `UPDATE gc_demandas SET coluna_id = $2, ordem = $3, updated_at = NOW(),
+                 concluida_em = CASE WHEN $4::boolean THEN COALESCE(concluida_em, NOW()) ELSE NULL END WHERE id = $1`,
+              [ids[i], destino.id, i, destino.concluida]
+            );
+          } else {
+            await client.query('UPDATE gc_demandas SET ordem = $2 WHERE id = $1', [ids[i], i]);
+          }
+        }
+      });
+      if (atual.coluna_id !== destino.id) {
+        await registrarEvento(atual.gc_cliente_id, `Demanda "${atual.titulo}" movida para ${destino.nome}`, '', sub);
+      }
+      return queryOne(`${SELECT_DEMANDA} WHERE d.id = $1`, [req.params.id]);
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/gc/demandas/:id', autenticado, async (req, reply) => {
+    const r = await queryOne('DELETE FROM gc_demandas WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
+    return reply.status(204).send();
+  });
+
   // ------------------------------------------------------------------ relatórios
   // GET /api/gc/clientes/:id/relatorios — lista sem o snapshot (que é grande e só interessa quando
   // o relatório é aberto).

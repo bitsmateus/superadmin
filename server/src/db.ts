@@ -371,6 +371,15 @@ END $$`);
     WHERE m.menu_key = 'nxdigital'
     ON CONFLICT (user_id, menu_key) DO NOTHING`);
   await pool.query(`DELETE FROM user_menu_access WHERE menu_key = 'nxdigital'`);
+  // Demandas (kanban) é uma aba nova do NX DIGITAL: quem já tem Clientes ganha ela. Uma vez só.
+  await pool.query(`CREATE TABLE IF NOT EXISTS menu_access_migracoes (nome TEXT PRIMARY KEY, feita_em TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  const demandasFeita = await pool.query(`SELECT 1 FROM menu_access_migracoes WHERE nome = 'nxdigital_demandas'`);
+  if (demandasFeita.rowCount === 0) {
+    await pool.query(`INSERT INTO user_menu_access (user_id, menu_key)
+      SELECT user_id, 'nxdigital_demandas' FROM user_menu_access WHERE menu_key = 'nxdigital_clientes'
+      ON CONFLICT (user_id, menu_key) DO NOTHING`);
+    await pool.query(`INSERT INTO menu_access_migracoes (nome) VALUES ('nxdigital_demandas')`);
+  }
   // Agenda passou a ter marca própria. Uma vez só (marcador abaixo): quem já era restrito e NÃO é
   // do NX DIGITAL mantém a agenda que já via; o time do NX DIGITAL não ganha a agenda do suporte.
   await pool.query(`CREATE TABLE IF NOT EXISTS menu_access_migracoes (nome TEXT PRIMARY KEY, feita_em TIMESTAMPTZ NOT NULL DEFAULT NOW())`);

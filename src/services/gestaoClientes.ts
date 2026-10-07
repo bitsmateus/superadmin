@@ -106,6 +106,30 @@ export interface GcAnexo {
   dataUrl: string
 }
 
+export interface GcDemandaColuna {
+  id: string
+  nome: string
+  ordem: number
+  concluida: boolean
+}
+
+export interface GcDemanda {
+  id: string
+  gc_cliente_id: string
+  cliente_nome: string
+  cliente_logo: string | null
+  coluna_id: string
+  ordem: number
+  titulo: string
+  descricao: string
+  prioridade: 'baixa' | 'media' | 'alta'
+  prazo: string | null
+  responsavel_id: string | null
+  responsavel_nome: string | null
+  concluida_em: string | null
+  created_at: string
+}
+
 export interface GcRegistroHistorico {
   id: string
   gc_cliente_id: string
@@ -793,6 +817,27 @@ export const gestaoClientes = {
   atualizarRegistro: (id: string, dados: Partial<{ tipo: GcTipoHistorico; titulo: string; descricao: string; fixado: boolean; anexos: GcAnexo[] }>) =>
     api.patch<GcRegistroHistorico>(`/api/gc/historico/${id}`, dados),
   excluirRegistro: (id: string) => api.delete(`/api/gc/historico/${id}`),
+
+  // Kanban de demandas
+  demandasColunas: () => api.get<GcDemandaColuna[]>('/api/gc/demandas/colunas'),
+  criarDemandaColuna: (nome: string) => api.post<GcDemandaColuna>('/api/gc/demandas/colunas', { nome }),
+  atualizarDemandaColuna: (id: string, dados: Partial<{ nome: string; concluida: boolean }>) =>
+    api.patch<GcDemandaColuna>(`/api/gc/demandas/colunas/${id}`, dados),
+  ordenarDemandasColunas: (ids: string[]) => api.put<GcDemandaColuna[]>('/api/gc/demandas/colunas/ordem', { ids }),
+  excluirDemandaColuna: (id: string, moverPara?: string) =>
+    api.delete(`/api/gc/demandas/colunas/${id}${moverPara ? `?mover_para=${moverPara}` : ''}`),
+  demandas: (clienteId?: string) =>
+    api.get<GcDemanda[]>(`/api/gc/demandas${clienteId ? `?cliente_id=${clienteId}` : ''}`),
+  criarDemanda: (dados: {
+    gc_cliente_id: string; titulo: string; descricao?: string; coluna_id?: string
+    prioridade?: string; prazo?: string | null; responsavel_id?: string | null
+  }) => api.post<GcDemanda>('/api/gc/demandas', dados),
+  atualizarDemanda: (id: string, dados: Partial<{
+    titulo: string; descricao: string; prioridade: string; prazo: string | null; responsavel_id: string | null
+  }>) => api.patch<GcDemanda>(`/api/gc/demandas/${id}`, dados),
+  moverDemanda: (id: string, colunaId: string, posicao?: number) =>
+    api.post<GcDemanda>(`/api/gc/demandas/${id}/mover`, { coluna_id: colunaId, posicao }),
+  excluirDemanda: (id: string) => api.delete(`/api/gc/demandas/${id}`),
 }
 
 /** Quanto do checklist do cliente está feito, de 0 a 100. Cliente sem item nenhum dá 0. */

@@ -10,7 +10,6 @@ import { Modal } from '@/components/ui/Modal'
 import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
 import { AbaVisaoGeral } from '@/components/gestaoClientes/AbaVisaoGeral'
 import { ModalNotas, PainelNotas } from '@/components/gestaoClientes/PainelNotas'
-import { AbaMetricas } from '@/components/gestaoClientes/AbaMetricas'
 import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import { AbaPlanejamento } from '@/components/gestaoClientes/AbaPlanejamento'
 import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
@@ -18,7 +17,7 @@ import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 import type { Destino } from '@/lib/gcSaude'
 
-type Aba = 'visao' | 'metricas' | 'planejamento' | 'estrategias' | 'relatorios' | 'notas'
+type Aba = 'visao' | 'planejamento' | 'estrategias' | 'relatorios' | 'notas'
 
 /**
  * Detalhe do cliente de tráfego — Visão geral, Jornada e Histórico.
@@ -59,10 +58,14 @@ export function ClienteNxDetalhePage() {
    */
   const irPara = (destino: Destino) => {
     switch (destino) {
-      case 'metricas':
       case 'planejamento':
-      case 'relatorios':
         setAba(destino)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      case 'metricas':
+      case 'relatorios':
+        // Métricas e relatórios são uma aba só.
+        setAba('relatorios')
         window.scrollTo({ top: 0, behavior: 'smooth' })
         return
       case 'notas':
@@ -167,7 +170,6 @@ export function ClienteNxDetalhePage() {
               items={[
                 { value: 'visao', label: 'Visão geral' },
                 { value: 'planejamento', label: 'Planejamento' },
-                { value: 'metricas', label: 'Métricas' },
                 // Só existe pra quem ainda tem estratégia com passos (a de hoje agora mora no Planejamento).
                 ...(detalhe.estrategias.length > 0
                   ? [
@@ -187,7 +189,7 @@ export function ClienteNxDetalhePage() {
                     },
                     ]
                   : []),
-                { value: 'relatorios', label: 'Relatórios' },
+                { value: 'relatorios', label: 'Métricas e relatórios' },
                 {
                   value: 'notas',
                   label: (
@@ -212,7 +214,6 @@ export function ClienteNxDetalhePage() {
                 onEditar={() => setEditando(true)}
               />
             )}
-            {aba === 'metricas' && <AbaMetricas clienteId={id} />}
             {aba === 'planejamento' && (
               <AbaPlanejamento clienteId={id} cliente={detalhe.cliente} onMudou={carregar} />
             )}

@@ -13,6 +13,7 @@ import {
 } from '@/services/gestaoClientes'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
 import { LancamentoDoMes } from '@/components/gestaoClientes/LancamentoDoMes'
+import { cn } from '@/lib/utils'
 import { progressoDaMeta } from '@/lib/gcSaude'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
@@ -86,6 +87,9 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
     setComentario(doMes?.comentario_gestor ?? '')
     setProximos(doMes?.proximos_passos ?? '')
   }, [inicio, doMes?.id, doMes?.comentario_gestor, doMes?.proximos_passos])
+
+  // Os meses que já têm lançamento, do mais novo pro mais velho — a tabela de histórico.
+  const mesesLancados = Array.from(new Set(metricas.map((m) => String(m.periodo_inicio).slice(0, 7)))).sort((a, b) => b.localeCompare(a))
 
   const numeros = doPeriodo(metricas, inicio)
   const anteriores = doPeriodo(metricas, limitesDoMes(somarMeses(periodo, -1)).inicio)
@@ -426,6 +430,54 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
         onCorrigir={() => setAvisosPublicar(null)}
         onSalvarMesmoAssim={() => void publicar(true)}
       />
+
+      {mesesLancados.length > 0 && (
+        <section className="overflow-hidden rounded-xl border border-line">
+          <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-foreground">
+            Histórico mês a mês
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-elevate/[0.02] text-left text-xs uppercase tracking-wide text-foreground/50">
+                <tr>
+                  <th className="px-4 py-2.5 font-medium">Mês</th>
+                  {[...METRICAS_LANCADAS, ...METRICAS_DERIVADAS].map((m) => (
+                    <th key={m.chave} className="px-3 py-2.5 text-right font-medium">
+                      {m.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {mesesLancados.map((mes) => {
+                  const v = doPeriodo(metricas, limitesDoMes(mes).inicio)
+                  return (
+                    <tr key={mes} className={cn('border-t border-line', mes === periodo && 'bg-accent/[0.04]')}>
+                      <td className="whitespace-nowrap px-4 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setPeriodo(mes)}
+                          className="text-foreground/85 hover:text-accent"
+                        >
+                          {mesPorExtenso(mes)}
+                        </button>
+                      </td>
+                      {[...METRICAS_LANCADAS, ...METRICAS_DERIVADAS].map((m) => (
+                        <td
+                          key={m.chave}
+                          className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-foreground/75"
+                        >
+                          {formatarMetrica(v[m.chave] ?? null, m.unidade)}
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {relatorios.length > 0 && (
         <section className="overflow-hidden rounded-xl border border-line">

@@ -8,7 +8,7 @@ import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { MenuModelos, ModalModelosTexto, type AlvoDeModelo } from '@/components/gestaoClientes/ModelosDeTexto'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
-import { ProjecaoXReal } from '@/components/gestaoClientes/ProjecaoXReal'
+import { CenarioEmPassos, ProjecaoXReal } from '@/components/gestaoClientes/ProjecaoXReal'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import {
   gestaoClientes,
@@ -54,6 +54,8 @@ interface Rascunho {
   lembrarEm: string | null
   /** O primeiro mês do plano (pra quem começa a investir): investimento, vendas e faturamento esperados. */
   mes1: { investimento: string; vendas: string; receita: string }
+  /** A estratégia que está sendo usada hoje (texto livre, interno). */
+  estrategiaUsada: string
   /** CPL médio estimado: transforma o investimento do mês 1 (e dos meses sem meta de leads) em leads. */
   cplMedio: string
   cenarios: Record<HorizontePlano, {
@@ -91,6 +93,7 @@ function doApi(a: GcPlanejamentoApi): Rascunho {
       receita: numeroParaCampo(a.primeiro_mes?.faturamento),
     },
     cplMedio: numeroParaCampo(a.primeiro_mes?.cpl_medio),
+    estrategiaUsada: a.estrategia_usada ?? '',
     cenarios: { '6_meses': cen('6_meses'), '12_meses': cen('12_meses') },
   }
 }
@@ -171,6 +174,7 @@ function paraEntrada(r: Rascunho): GcPlanejamentoEntrada {
     origens[c.api] = r.origens[c.api] ?? { origem: 'informado' }
   }
   return {
+    estrategia_usada: r.estrategiaUsada,
     atual: {
       situacao_atual: r.situacao,
       leads_mes: plano.atual.leads,
@@ -198,6 +202,19 @@ function rotuloDosMeses(meses: string[] | undefined): string {
 }
 
 const dataBR = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
+
+/** O cabeçalho de cada passo do plano: um número, a PERGUNTA que ele responde e uma linha de apoio. */
+function Passo({ numero, pergunta, apoio }: { numero: number; pergunta: string; apoio: string }) {
+  return (
+    <div className="mb-3 flex items-start gap-2.5">
+      <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/15 text-xs font-bold text-accent">{numero}</span>
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">{pergunta}</h3>
+        <p className="text-xs text-foreground/50">{apoio}</p>
+      </div>
+    </div>
+  )
+}
 
 const CHAVE_ABERTO = (id: string) => `gc:planejamento:aberto:${id}`
 
@@ -703,6 +720,21 @@ export function PlanejamentoCliente({
 
       {/* O conteúdo fica MONTADO mesmo recolhido: desmontar jogaria fora o que está sendo digitado. */}
       <div className={cn('border-t border-accent/15 p-4', !aberto && 'hidden')}>
+        {/* O RESUMO DO PLANO: a leitura de uma tela só — de onde parte, aonde vai e como. É o que se mostra ao cliente. */}
+        <div className="mb-3 rounded-xl border border-accent/20 bg-gradient-to-br from-accent/[0.06] to-transparent p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">Resumo do plano</h3>
+            {estadoDoMes && <PastilhaSaude estado={estadoDoMes.estado} texto={`Este mês: ${estadoDoMes.texto.toLowerCase()}`} />}
+          </div>
+          <CenarioEmPassos plano={planoDaRota} />
+          <p className="mt-2 text-xs text-foreground/55">
+            <span className="font-medium text-foreground/70">Como: </span>
+            {rascunho.estrategiaUsada.trim()
+              ? rascunho.estrategiaUsada.trim().split('\n')[0].slice(0, 160)
+              : 'estratégia ainda não escrita (passo 3).'}
+          </p>
+        </div>
+
         {guardado && (
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/[0.05] px-3 py-2 text-sm">
             <span className="text-foreground/85">
@@ -738,7 +770,7 @@ export function PlanejamentoCliente({
         )}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="max-w-2xl text-xs text-foreground/55">
-            Tudo é opcional: preencha o que souber. As metas numéricas são as mesmas de "Metas combinadas".
+            Tudo é opcional: preencha o que souber, na ordem dos 4 passos. O resumo acima se monta sozinho.
           </p>
           <MenuModelos
             modelos={modelos}
@@ -750,7 +782,7 @@ export function PlanejamentoCliente({
 
         {/* ---------------------------------------------------------------- 1. ponto A */}
         <div className="rounded-xl border border-line bg-surface p-3">
-          <h3 className="mb-2 text-sm font-semibold text-foreground">1 · Ponto A — o cenário do cliente hoje</h3>
+          <Passo numero={1} pergunta="Onde o cliente está hoje?" apoio="O ponto de partida (Ponto A): o briefing e os números de hoje." />
           <div>
             <span className="mb-1.5 block text-xs font-medium text-foreground/70">Situação de hoje (o briefing)</span>
             <Textarea
@@ -890,13 +922,11 @@ export function PlanejamentoCliente({
 
         {/* ---------------------------------------------------------------- 2. o plano: mês 1 e metas */}
         <div className="mt-3 rounded-xl border border-line bg-surface p-3">
-          <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Target className="h-4 w-4 text-accent" /> 2 · O plano: primeiro mês e metas de 6 e 12 meses
-          </h3>
-          <p className="mb-3 text-xs text-foreground/50">
-            No <strong>mês 1</strong>: quanto investir e o que se espera (vendas e faturamento). Os <strong>leads</strong> saem do investimento ÷ CPL
-            médio, que você estima. Depois, as metas de 6 e 12 meses. Preencha o que souber.
-          </p>
+          <Passo
+            numero={2}
+            pergunta="Onde queremos chegar?"
+            apoio="As metas. No Mês 1: quanto investir e o que se espera. Depois, 6 e 12 meses. Os leads saem do investimento ÷ CPL médio que você estima."
+          />
 
           {/* Celular: um cartão por métrica, com as três colunas lado a lado. A tabela fica de tablet pra cima. */}
           <div className="space-y-2 sm:hidden">
@@ -971,47 +1001,58 @@ export function PlanejamentoCliente({
           )}
         </div>
 
-        {/* ---------------------------------------------------------------- textos dos cenários */}
+        {/* ---------------------------------------------------------------- o que se quer em palavras (passo 2) */}
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          {HORIZONTES_PLANO.map((h) => {
-            const c = rascunho.cenarios[h.valor]
-            return (
-              <div key={h.valor} className="rounded-xl border border-line bg-surface p-3">
-                <h3 className="mb-2 text-sm font-semibold text-foreground">Meta {h.label}</h3>
-                <div className="space-y-3">
-                  <div>
-                    <span className="mb-1.5 block text-xs font-medium text-foreground/70">Onde quer chegar</span>
-                    <Textarea
-                      rows={2}
-                      value={c.objetivo}
-                      onChange={(e) => mudarCenario(h.valor, 'objetivo', e.target.value)}
-                      placeholder="O objetivo, na linguagem do negócio do cliente."
-                    />
-                  </div>
-                  <div>
-                    <span className="mb-1.5 block text-xs font-medium text-foreground/70">Estratégia e premissas</span>
-                    <Textarea
-                      rows={4}
-                      value={c.estrategia}
-                      onChange={(e) => mudarCenario(h.valor, 'estrategia', e.target.value)}
-                      placeholder="O que vamos fazer e o que precisa ser verdade: CPL cair com criativo novo, cliente atender em 5 min…"
-                    />
-                    <p className="mt-1 flex items-center gap-1 text-[11px] text-foreground/40">
-                      <Lock className="h-3 w-3" /> interna — nunca vai pro portal
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+          {HORIZONTES_PLANO.map((h) => (
+            <div key={h.valor} className="rounded-xl border border-line bg-surface p-3">
+              <span className="mb-1.5 block text-xs font-medium text-foreground/70">Onde quer chegar em {h.label}</span>
+              <Textarea
+                rows={2}
+                value={rascunho.cenarios[h.valor].objetivo}
+                onChange={(e) => mudarCenario(h.valor, 'objetivo', e.target.value)}
+                placeholder="O objetivo, na linguagem do negócio do cliente."
+              />
+            </div>
+          ))}
         </div>
 
-        {/* ---------------------------------------------------------------- 3. projeção × real */}
+        {/* ---------------------------------------------------------------- 3. como vamos chegar lá */}
         <div className="mt-3 rounded-xl border border-line bg-surface p-3">
-          <h3 className="mb-0.5 text-sm font-semibold text-foreground">3 · Projeção × Real</h3>
-          <p className="mb-3 text-xs text-foreground/50">
-            O cenário do cliente passo a passo e, mês a mês, o que se projeta ao lado do que já foi lançado em Métricas.
+          <Passo
+            numero={3}
+            pergunta="Como vamos chegar lá?"
+            apoio="A estratégia que está sendo usada e o que precisa ser verdade pra meta se cumprir. Interno: nunca vai pro portal."
+          />
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-foreground/70">Estratégia usada hoje</span>
+            <Textarea
+              rows={4}
+              value={rascunho.estrategiaUsada}
+              onChange={(e) => mudar('estrategiaUsada', e.target.value)}
+              placeholder="O que está sendo feito neste cliente: público, canais, criativos, orçamento… (pode ser personalizada)"
+            />
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            {HORIZONTES_PLANO.map((h) => (
+              <div key={h.valor}>
+                <span className="mb-1.5 block text-xs font-medium text-foreground/70">Estratégia e premissas — {h.label}</span>
+                <Textarea
+                  rows={4}
+                  value={rascunho.cenarios[h.valor].estrategia}
+                  onChange={(e) => mudarCenario(h.valor, 'estrategia', e.target.value)}
+                  placeholder="O que vamos fazer e o que precisa ser verdade: CPL cair com criativo novo, cliente atender em 5 min…"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 flex items-center gap-1 text-[11px] text-foreground/40">
+            <Lock className="h-3 w-3" /> interna — nunca vai pro portal
           </p>
+        </div>
+
+        {/* ---------------------------------------------------------------- 4. projeção × real */}
+        <div className="mt-3 rounded-xl border border-line bg-surface p-3">
+          <Passo numero={4} pergunta="Está dando certo?" apoio="Mês a mês, o que o plano projeta ao lado do que já foi lançado em Métricas." />
           <ProjecaoXReal plano={planoDaRota} realizado={realizado} />
         </div>
       </div>

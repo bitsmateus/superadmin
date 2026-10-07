@@ -463,6 +463,8 @@ export interface GcModeloTexto {
 export interface GcPlanejamentoApi {
   /** False = ninguém salvou o planejamento ainda (o resto vem vazio, exceto metas já existentes). */
   existe: boolean
+  /** A estratégia que está sendo usada neste cliente hoje (texto livre, interno). */
+  estrategia_usada: string
   atual: {
     situacao_atual: string
     leads_mes: number | null
@@ -506,6 +508,7 @@ export interface GcPortalJornadaOpcoes {
 
 /** O que se envia ao salvar: o mesmo formato, com `null` nas metas que a pessoa limpou. */
 export interface GcPlanejamentoEntrada {
+  estrategia_usada?: string
   atual: Omit<GcPlanejamentoApi['atual'], 'ticket_medio' | 'taxa_conversao'>
   primeiro_mes: GcPlanejamentoApi['primeiro_mes']
   origens: Record<string, GcOrigemCampo>

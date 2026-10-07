@@ -53,7 +53,18 @@ export function JornadaPortal({ jornada }: { jornada: GcJornadaPortal }) {
     { rotulo: 'Faturamento mensal', valor: jornada.atual.receita, unidade: 'reais' as const },
   ].filter((p) => p.valor !== null)
 
-  const temMetas = HORIZONTES_PLANO.some((h) => Object.keys(jornada.cenarios[h.valor].metas).length > 0)
+  // O primeiro mês: pra quem começa a investir, "no mês 1 investir X, com a meta de X vendas e X de faturamento".
+  // Os leads dele são ESTIMADOS (investimento ÷ CPL médio); o CPL médio não é exibido.
+  const pm = jornada.primeiro_mes
+  const leadsMes1 = pm?.investimento !== null && pm?.cpl_medio ? pm.investimento / pm.cpl_medio : null
+  const itensMes1 = [
+    { rotulo: 'Investimento', valor: pm?.investimento ?? null, unidade: 'reais' as const },
+    { rotulo: 'Leads (estimativa)', valor: leadsMes1, unidade: 'inteiro' as const },
+    { rotulo: 'Vendas', valor: pm?.vendas ?? null, unidade: 'inteiro' as const },
+    { rotulo: 'Faturamento', valor: pm?.faturamento ?? null, unidade: 'reais' as const },
+  ].filter((i) => i.valor !== null)
+  const temMetas =
+    itensMes1.length > 0 || HORIZONTES_PLANO.some((h) => Object.keys(jornada.cenarios[h.valor].metas).length > 0)
   if (pontoA.length === 0 && !jornada.situacao && !temMetas) return null
 
   return (
@@ -97,6 +108,19 @@ export function JornadaPortal({ jornada }: { jornada: GcJornadaPortal }) {
             <Flag className="h-3.5 w-3.5" /> Aonde queremos chegar
           </h3>
           <div className="grid gap-3 lg:grid-cols-2">
+            {itensMes1.length > 0 && (
+              <div className="rounded-xl border border-accent/25 bg-accent/[0.04] p-3 lg:col-span-2">
+                <p className="mb-1.5 text-sm font-semibold text-foreground">No primeiro mês</p>
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 lg:grid-cols-4">
+                  {itensMes1.map((i) => (
+                    <div key={i.rotulo} className="flex items-baseline justify-between gap-2 border-b border-line/60 py-1">
+                      <dt className="text-xs text-foreground/55">{i.rotulo}</dt>
+                      <dd className="text-sm font-semibold tabular-nums text-foreground">{formatarMetrica(i.valor, i.unidade)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
             {HORIZONTES_PLANO.map((h) => {
               const c = jornada.cenarios[h.valor]
               const metas = CHAVES_PLANO.filter((k) => c.metas[k.chave] !== undefined)

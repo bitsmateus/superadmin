@@ -102,7 +102,8 @@ function passosDoCenario(plano: Planejamento): Passo[] {
   ]
 }
 
-function CenarioEmPassos({ plano }: { plano: Planejamento }) {
+/** O cenário em quatro passos (hoje, mês 1, 6 e 12 meses): é o coração do resumo do plano. */
+export function CenarioEmPassos({ plano }: { plano: Planejamento }) {
   const passos = passosDoCenario(plano)
   return (
     <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -186,7 +187,6 @@ export function ProjecaoXReal({
   if (!temAlgo) {
     return (
       <div>
-        <CenarioEmPassos plano={plano} />
         <p className="py-6 text-center text-sm text-foreground/45">
           Defina o primeiro mês e as metas de 6 e 12 meses (investimento, vendas e faturamento) para ver a projeção.
         </p>
@@ -231,9 +231,7 @@ export function ProjecaoXReal({
 
   return (
     <div>
-      <CenarioEmPassos plano={plano} />
-
-      <div className="mb-3 mt-5 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="inline-flex items-center gap-0.5 rounded-full bg-elevate/[0.06] p-1" role="group" aria-label="Período da projeção">
           {([6, 12] as const).map((n) => (
             <button

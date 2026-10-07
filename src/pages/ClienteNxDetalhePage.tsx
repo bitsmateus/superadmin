@@ -241,7 +241,10 @@ export function ClienteNxDetalhePage() {
                 },
                 { value: 'metricas', label: 'Métricas' },
                 { value: 'planejamento', label: 'Planejamento' },
-                {
+                // Só existe pra quem ainda tem estratégia com passos (a de hoje agora mora no Planejamento).
+                ...(detalhe.estrategias.length > 0
+                  ? [
+                    {
                   value: 'estrategias',
                   // O contador some quando é zero: "Estratégias 0" só ocupa espaço.
                   label: (
@@ -254,7 +257,9 @@ export function ClienteNxDetalhePage() {
                       )}
                     </span>
                   ),
-                },
+                    },
+                    ]
+                  : []),
                 { value: 'relatorios', label: 'Relatórios' },
                 {
                   value: 'notas',
@@ -287,12 +292,7 @@ export function ClienteNxDetalhePage() {
             )}
             {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
             {aba === 'estrategias' && (
-              <AbaEstrategias
-                estrategias={detalhe.estrategias}
-                estrategiaUsada={detalhe.cliente.estrategia_usada ?? ''}
-                clienteId={id}
-                onMudou={carregar}
-              />
+              <AbaEstrategias estrategias={detalhe.estrategias} onMudou={carregar} />
             )}
             {aba === 'notas' && (
               <PainelNotas historico={detalhe.historico} clienteId={id} onMudou={carregar} />

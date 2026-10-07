@@ -1595,8 +1595,14 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       leads_mes: numero(p?.leads_mes), investimento_mes: numero(p?.investimento_mes),
       vendas_mes: numero(p?.vendas_mes), faturamento_mensal: numero(p?.faturamento_mensal),
     };
+    // A estratégia que está sendo usada hoje mora no cliente (gc_clientes), mas se edita junto do plano.
+    const estrategiaUsada = await queryOne<{ estrategia_usada: string }>(
+      'SELECT estrategia_usada FROM gc_clientes WHERE id = $1',
+      [clienteId]
+    );
     return {
       existe: !!p,
+      estrategia_usada: estrategiaUsada?.estrategia_usada ?? '',
       atual: {
         situacao_atual: texto(p?.situacao_atual),
         ...pontoA,
@@ -1756,6 +1762,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     atual?: Record<string, unknown>;
     portal?: { ativo?: boolean; mostrar_situacao?: boolean; mostrar_objetivo?: boolean };
     origens?: unknown;
+    /** Opcional: só muda se vier. */
+    estrategia_usada?: string;
     primeiro_mes?: Record<string, unknown>;
     cenarios?: Record<string, { onde_quer_chegar?: string; estrategia?: string; metas?: Record<string, unknown> }>;
   };
@@ -1841,6 +1849,11 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
           ]
         );
 
+        if (typeof corpo.estrategia_usada === 'string') {
+          await client.query('UPDATE gc_clientes SET estrategia_usada = $2, updated_at = NOW() WHERE id = $1', [
+            req.params.id, corpo.estrategia_usada,
+          ]);
+        }
         const base = baseDoPontoA(pontoA);
         // Sem data do diagnóstico, o prazo conta a partir de hoje (Brasília).
         const dataRef = dataDiag ?? `${mesDeHoje()}-01`;
@@ -1901,6 +1914,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         lembrar_em: x.atual.lembrar_em, portal_ativo: x.portal.ativo,
         mes1_investimento: x.primeiro_mes.investimento, mes1_vendas: x.primeiro_mes.vendas,
         mes1_faturamento: x.primeiro_mes.faturamento, cpl_medio: x.primeiro_mes.cpl_medio,
+        estrategia_usada: x.estrategia_usada,
         portal_mostrar_situacao: x.portal.mostrar_situacao, portal_mostrar_objetivo: x.portal.mostrar_objetivo,
         ...origensComoCampos(x.origens),
       });

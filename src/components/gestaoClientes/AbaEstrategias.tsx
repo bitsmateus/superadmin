@@ -2,10 +2,9 @@ import * as React from 'react'
 import { Check, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
-import { Input, Textarea } from '@/components/ui/Input'
+import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
-import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import { gestaoClientes, type GcEstrategia } from '@/services/gestaoClientes'
 import { cn } from '@/lib/utils'
 
@@ -24,33 +23,22 @@ const TOM: Record<GcEstrategia['status'], 'info' | 'success' | 'warning' | 'neut
 }
 
 /**
- * Estratégia do cliente: um campo de TEXTO LIVRE com a estratégia que está sendo usada.
+ * Estratégias com PASSOS (checklist) que já tinham sido aplicadas neste cliente.
  *
- * A estratégia costuma ser personalizada, então não há mais "estratégia pronta" pra escolher — escreve-se
- * o que está sendo feito. As estratégias com passos (checklist) que já tinham sido aplicadas continuam
- * listadas abaixo, e seus passos seguem aparecendo nas Pendências.
+ * A estratégia de hoje agora se escreve no Planejamento (passo 3, "Como vamos chegar lá?"), então esta aba
+ * só aparece se o cliente ainda tem estratégias antigas com passos — pra não perder o checklist, que segue
+ * alimentando as Pendências.
  */
 export function AbaEstrategias({
   estrategias,
-  estrategiaUsada,
-  clienteId,
   onMudou,
 }: {
   estrategias: GcEstrategia[]
-  estrategiaUsada: string
-  clienteId: string
+  clienteId?: string
+  estrategiaUsada?: string
   onMudou: () => Promise<void> | void
 }) {
-  const [texto, setTexto] = React.useState(estrategiaUsada)
-  const [salvando, setSalvando] = React.useState(false)
   const [novoPasso, setNovoPasso] = React.useState<Record<string, string>>({})
-  const sujo = texto !== estrategiaUsada
-  useAvisoAoSair(sujo)
-
-  // Recarregar o cliente (ou trocar de cliente) traz o texto salvo de volta.
-  React.useEffect(() => {
-    setTexto(estrategiaUsada)
-  }, [estrategiaUsada, clienteId])
 
   const agir = async (fn: () => Promise<unknown>) => {
     try {
@@ -61,41 +49,11 @@ export function AbaEstrategias({
     }
   }
 
-  const salvar = async () => {
-    setSalvando(true)
-    try {
-      await gestaoClientes.atualizar(clienteId, { estrategia_usada: texto })
-      toast.success('Estratégia salva')
-      await onMudou()
-    } catch (err) {
-      toast.error('Falha ao salvar: ' + (err as Error).message)
-    } finally {
-      setSalvando(false)
-    }
-  }
-
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl border border-line p-4">
-        <Textarea
-          label="Estratégia usada"
-          rows={8}
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder="Escreva a estratégia que está sendo usada neste cliente: público, canais, criativos, orçamento, o que está testando…"
-        />
-        <div className="mt-3 flex items-center justify-end gap-2">
-          {sujo && <span className="text-xs text-warning">alterações não salvas</span>}
-          {sujo && (
-            <Button variant="ghost" size="sm" onClick={() => setTexto(estrategiaUsada)}>
-              Descartar
-            </Button>
-          )}
-          <Button size="sm" loading={salvando} disabled={!sujo} onClick={() => void salvar()}>
-            Salvar
-          </Button>
-        </div>
-      </section>
+      <p className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-xs text-foreground/55">
+        A estratégia de hoje fica no <strong>Planejamento</strong> (passo 3). Aqui ficam só as estratégias com passos que já estavam aplicadas.
+      </p>
 
       {estrategias.length === 0 ? null : (
         estrategias.map((e) => {

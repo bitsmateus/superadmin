@@ -1,25 +1,20 @@
 import * as React from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Plus, Target, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Select } from '@/components/ui/Select'
-import { CampoData } from '@/components/gestaoClientes/CampoData'
-import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { InfosDoMes } from '@/components/gestaoClientes/InfosDoMes'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
-import {
-  HORIZONTES, avisosDoErro, gestaoClientes,
-  type GcHorizonte, type GcMeta, type GcMetrica,
-} from '@/services/gestaoClientes'
+import { avisosDoErro, gestaoClientes, type GcMetrica, type GcPlanejamentoApi } from '@/services/gestaoClientes'
+import { planoDaApi } from '@/lib/gcPlanoAdaptadores'
+import { projecaoTemporal, realizadoPorMes, temPlanejamento } from '@/lib/gcPlanejamento'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, TODAS_METRICAS, comDerivadas, formatarMetrica,
   formatarPorChave, limitesDoMes, mascaraDaUnidade, mascararCampo, mesAtual, mesPorExtenso, metricaLabel, metricaUnidade,
   numeroDigitado, numeroParaCampo, somarMeses, validarMetricas, variacaoDaMetrica,
 } from '@/lib/gcMetricas'
-import { progressoDaMeta } from '@/lib/gcSaude'
 import { cn } from '@/lib/utils'
 
 /** Métricas de um mês viradas em mapa chave → número, com as derivadas calculadas. */
@@ -37,25 +32,34 @@ function dataBr(valor: string | null | undefined): string {
   return String(valor).slice(0, 10).split('-').reverse().join('/')
 }
 
-/** Prazo padrão de cada horizonte, pra não obrigar ninguém a abrir o calendário. */
-function prazoSugerido(horizonte: GcHorizonte): string {
-  const hoje = new Date()
-  if (horizonte === 'mes') {
-    const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
-    return fim.toISOString().slice(0, 10)
-  }
-  const meses = horizonte === '6_meses' ? 6 : 12
-  const fim = new Date(hoje.getFullYear(), hoje.getMonth() + meses, hoje.getDate())
-  return fim.toISOString().slice(0, 10)
-}
-
-/** Quanto do prazo já passou, de 0 a 100 — é o que diz se a meta está no ritmo. */
-function ritmoEsperado(meta: GcMeta): number | null {
-  if (!meta.prazo || !meta.data_base) return null
-  const inicio = new Date(String(meta.data_base).slice(0, 10)).getTime()
-  const fim = new Date(String(meta.prazo).slice(0, 10)).getTime()
-  if (!(fim > inicio)) return null
-  return Math.max(0, Math.min(100, Math.round(((Date.now() - inicio) / (fim - inicio)) * 100)))
+/**
+ * O PLANO de um campo no mês: o que se esperava ("plano R$ 5.000") e, com o que está digitado, a diferença.
+ * Verde dentro de 10% do plano; âmbar fora disso. Leads "~" são estimados (investimento ÷ CPL médio).
+ */
+function PlanoDoCampo({
+  plano, digitado, unidade, estimado,
+}: {
+  plano: number | null
+  digitado: number | undefined
+  unidade: 'reais' | 'inteiro' | 'percentual' | 'decimal'
+  estimado?: boolean
+}) {
+  if (plano === null) return null
+  const desvio = digitado !== undefined && plano !== 0 ? ((digitado - plano) / Math.abs(plano)) * 100 : null
+  return (
+    <p className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-foreground/50" title="O que o plano esperava pra este mês">
+      <span>
+        plano {estimado ? '~' : ''}
+        {formatarMetrica(plano, unidade)}
+      </span>
+      {desvio !== null && (
+        <span className={cn('rounded-full px-1.5 py-px font-semibold', Math.abs(desvio) <= 10 ? 'bg-success/12 text-success' : 'bg-warning/15 text-warning')}>
+          {desvio > 0 ? '+' : ''}
+          {desvio.toFixed(0)}% do plano
+        </span>
+      )}
+    </p>
+  )
 }
 
 /** Variação contra o mês anterior, com a cor certa pra métrica (CPL caindo é bom). */
@@ -72,95 +76,6 @@ function Variacao({ chave, atual, anterior }: { chave: string; atual?: number; a
   )
 }
 
-function CartaoMeta({
-  meta,
-  atual,
-  onExcluir,
-  onConcluir,
-}: {
-  meta: GcMeta
-  atual: number | undefined
-  onExcluir: () => void
-  onConcluir: () => void
-}) {
-  // Meta de 6 e 12 meses nasce e se edita na grade do planejamento; aqui ela só é acompanhada.
-  const doPlanejamento = meta.horizonte === '6_meses' || meta.horizonte === '12_meses'
-  const rotuloDoHorizonte = HORIZONTES.find((h) => h.valor === (meta.horizonte ?? 'mes'))?.curto
-  const progresso = progressoDaMeta(meta, atual)
-  const esperado = ritmoEsperado(meta)
-  const atingida = progresso !== null && progresso >= 100
-  // Fora do ritmo com a mesma folga de 20 pontos que o semáforo usa — os dois têm que concordar.
-  const atrasada = progresso !== null && esperado !== null && progresso < esperado - 20
-
-  return (
-    <div className="group rounded-xl border border-line px-3 py-2.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium text-foreground">
-          {metricaLabel(meta.chave_metrica)}
-          {rotuloDoHorizonte && <span className="ml-2 text-xs font-normal text-foreground/40">{rotuloDoHorizonte}</span>}
-        </span>
-        <span className="text-base font-semibold tabular-nums text-foreground">
-          {formatarPorChave(meta.chave_metrica, atual)}
-          <span className="ml-1 text-xs font-medium text-foreground/50">
-            de {formatarPorChave(meta.chave_metrica, Number(meta.valor_meta))}
-          </span>
-        </span>
-      </div>
-
-      <div className="relative mt-2 h-2 overflow-hidden rounded-full bg-elevate/[0.08]">
-        <div
-          className={cn(
-            'h-full rounded-full transition-[width]',
-            atingida ? 'bg-success' : atrasada ? 'bg-danger' : 'bg-accent',
-          )}
-          style={{ width: `${Math.max(0, Math.min(100, progresso ?? 0))}%` }}
-        />
-        {/* Onde a meta DEVERIA estar hoje, pelo prazo. É o que transforma "42 de 100" em "atrasado". */}
-        {esperado !== null && (
-          <span
-            className="absolute top-0 h-full w-0.5 bg-foreground/35"
-            style={{ left: `${esperado}%` }}
-            title={`Ritmo esperado hoje: ${esperado}%`}
-          />
-        )}
-      </div>
-
-      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-foreground/50">
-        <span>
-          partida {formatarPorChave(meta.chave_metrica, Number(meta.valor_base))}
-          {meta.data_base ? ` em ${dataBr(meta.data_base)}` : ''}
-          {meta.prazo ? ` · prazo ${dataBr(meta.prazo)}` : ' · sem prazo'}
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="tabular-nums">
-            {progresso === null ? '—' : `${progresso}% do caminho`}
-            {esperado !== null && ` (esperado ${esperado}%)`}
-          </span>
-          <PastilhaSaude
-            estado={atingida ? 'otimo' : atrasada ? 'risco' : progresso === null ? 'neutro' : 'bom'}
-            texto={atingida ? 'atingida' : atrasada ? 'atrasada' : progresso === null ? 'sem dado' : 'no ritmo'}
-          />
-          {!doPlanejamento && meta.status === 'ativa' && atingida && (
-            <button type="button" onClick={onConcluir} className="text-success hover:underline">
-              marcar como atingida
-            </button>
-          )}
-          {!doPlanejamento && (
-            <button
-              type="button"
-              onClick={onExcluir}
-              className="text-foreground/25 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
-              aria-label="Excluir meta"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </span>
-      </div>
-    </div>
-  )
-}
-
 /**
  * Métricas e metas do cliente.
  *
@@ -171,10 +86,8 @@ function CartaoMeta({
  * As métricas derivadas (CPL, CTR, ROAS…) não são digitadas nem gravadas: aparecem calculadas do
  * lado. Guardar o CPL junto criaria dois números que podem discordar da própria divisão.
  *
- * "Metas combinadas" lista só as metas que EXISTEM, cada uma com o PONTO DE PARTIDA, e o progresso
- * conta de lá, não do zero: quem começou em 40 e foi a 60 andou 40% do caminho até 90, não 66% da
- * meta. As de 6 e 12 meses nascem e se editam na grade do planejamento; o formulário daqui é só da
- * meta do mês.
+ * A META é o PLANO (aba Planejamento): cada campo mostra o que o plano esperava pra aquele mês, ao lado do
+ * que está sendo lançado, com a diferença. Não há mais formulário de meta avulsa por aqui.
  */
 /** Os quatro números que todo mês tem: em destaque. O resto é opcional e fica recolhido. */
 const CHAVES_EM_DESTAQUE = ['investimento', 'leads', 'vendas', 'receita']
@@ -184,25 +97,22 @@ const DERIVADAS_FIXAS = ['cpl', 'cac', 'roas', 'conversao']
 
 export function AbaMetricas({ clienteId }: { clienteId: string }) {
   const [metricas, setMetricas] = React.useState<GcMetrica[]>([])
-  const [metas, setMetas] = React.useState<GcMeta[]>([])
+  const [planoApi, setPlanoApi] = React.useState<GcPlanejamentoApi | null>(null)
   const [carregando, setCarregando] = React.useState(true)
   const [periodo, setPeriodo] = React.useState(mesAtual())
   const [rascunho, setRascunho] = React.useState<Record<string, string>>({})
   const [salvando, setSalvando] = React.useState(false)
-  const [novaMeta, setNovaMeta] = React.useState<{ chave: string; alvo: string; prazo: string | null }>({
-    chave: 'leads', alvo: '', prazo: null,
-  })
-  const [criandoMeta, setCriandoMeta] = React.useState(false)
   const [maisAberto, setMaisAberto] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
     try {
-      const [m, g] = await Promise.all([
+      const [m, plano] = await Promise.all([
         gestaoClientes.metricas(clienteId),
-        gestaoClientes.metas(clienteId),
+        // Sem o plano a tela segue funcionando, só sem a comparação.
+        gestaoClientes.planejamento(clienteId).catch(() => null),
       ])
       setMetricas(m)
-      setMetas(g)
+      setPlanoApi(plano)
     } catch (err) {
       toast.error('Falha ao carregar as métricas: ' + (err as Error).message)
     } finally {
@@ -268,53 +178,6 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
     }
   }
 
-  const criarMeta = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const alvo = numeroDigitado(novaMeta.alvo)
-    if (!alvo) {
-      toast.error('Informe o valor da meta')
-      return
-    }
-    setCriandoMeta(true)
-    try {
-      await gestaoClientes.criarMeta(clienteId, {
-        chave_metrica: novaMeta.chave,
-        horizonte: 'mes',
-        // O ponto de partida é o que está lançado hoje no mês — é o que faz o progresso significar
-        // "andou", e não "já nasceu em 40%".
-        valor_base: valoresDoMes[novaMeta.chave] ?? 0,
-        data_base: new Date().toISOString().slice(0, 10),
-        valor_meta: alvo,
-        prazo: novaMeta.prazo ?? prazoSugerido('mes'),
-      })
-      setNovaMeta({ chave: 'leads', alvo: '', prazo: null })
-      await carregar()
-    } catch (err) {
-      toast.error('Falha ao criar a meta: ' + (err as Error).message)
-    } finally {
-      setCriandoMeta(false)
-    }
-  }
-
-  const agir = async (fn: () => Promise<unknown>) => {
-    try {
-      await fn()
-      await carregar()
-    } catch (err) {
-      toast.error('Falha ao salvar: ' + (err as Error).message)
-    }
-  }
-
-  // CPL e ROAS de 6 e 12 meses são CALCULADOS no planejamento; uma meta gravada com essas chaves é
-  // resto de versão antiga e não vale em lugar nenhum — então não aparece como se valesse.
-  const ORDEM_HORIZONTE: Record<string, number> = { mes: 0, '6_meses': 1, '12_meses': 2 }
-  const metasVisiveis = metas
-    .filter(
-      (m) =>
-        !((m.horizonte === '6_meses' || m.horizonte === '12_meses') && (m.chave_metrica === 'cpl' || m.chave_metrica === 'roas')),
-    )
-    .sort((a, b) => (ORDEM_HORIZONTE[a.horizonte ?? 'mes'] ?? 0) - (ORDEM_HORIZONTE[b.horizonte ?? 'mes'] ?? 0))
-
   // Os meses que já têm lançamento, do mais novo pro mais velho — é a tabela de histórico.
   const mesesLancados = Array.from(
     new Set(metricas.map((m) => String(m.periodo_inicio).slice(0, 7))),
@@ -334,6 +197,15 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
   const sujoDoMes = JSON.stringify(Object.entries(digitado).sort()) !== JSON.stringify(Object.entries(gravadoDoMes).sort())
   useAvisoAoSair(sujoDoMes)
 
+  // O que o PLANO esperava pra este mês: a linha do mês na projeção (mês 1 em diante).
+  const realizadoPorMesDoPlano = React.useMemo(() => realizadoPorMes(metricas), [metricas])
+  const linhaDoPlano = React.useMemo(() => {
+    if (!planoApi) return null
+    const plano = planoDaApi(planoApi)
+    if (!temPlanejamento(plano)) return null
+    const proj = projecaoTemporal(plano, 12, { realizado: realizadoPorMesDoPlano, mesCorrente: mesAtual() })
+    return proj.linhas.find((l) => l.mes === periodo) ?? null
+  }, [planoApi, realizadoPorMesDoPlano, periodo])
   const algumOpcional = CHAVES_OPCIONAIS.some((c) => (rascunho[c] ?? '').trim() !== '')
   const mostrarMais = maisAberto || algumOpcional
   const tem = (c: string) => valoresDoMes[c] !== undefined
@@ -359,7 +231,15 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
           inputMode="decimal"
           onBlur={() => setRascunho((r) => ({ ...r, [m.chave]: mascararCampo(r[m.chave] ?? '', mascaraDaUnidade(m.unidade)) }))}
         />
-        <div className="mt-1 h-4">
+        <div className="mt-1 min-h-4">
+          {linhaDoPlano && (m.chave === 'investimento' || m.chave === 'leads' || m.chave === 'vendas' || m.chave === 'receita') && (
+            <PlanoDoCampo
+              plano={linhaDoPlano.projetado[m.chave as 'investimento' | 'leads' | 'vendas' | 'receita']}
+              digitado={valoresDoMes[m.chave]}
+              unidade={m.unidade}
+              estimado={m.chave === 'leads' && linhaDoPlano.leadsEstimados}
+            />
+          )}
           <Variacao chave={m.chave} atual={valoresDoMes[m.chave]} anterior={valoresAnteriores[m.chave]} />
         </div>
       </div>
@@ -391,6 +271,27 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
             Salvar o mês
           </Button>
         </div>
+
+        {planoApi && (
+          <p
+            className={cn(
+              'mb-3 rounded-lg px-3 py-2 text-xs',
+              linhaDoPlano ? 'border border-accent/20 bg-accent/[0.05] text-foreground/75' : 'border border-line bg-elevate/[0.02] text-foreground/50',
+            )}
+          >
+            {linhaDoPlano ? (
+              <>
+                <strong className="text-foreground">Plano para {mesPorExtenso(periodo).toLowerCase()}: mês {linhaDoPlano.k}.</strong> Em cada campo você vê
+                o que o plano esperava ("plano") ao lado do que está lançando.
+              </>
+            ) : (
+              <>
+                Este mês não está no plano (o plano começa no mês seguinte ao diagnóstico). Defina o <strong>Mês 1</strong> e as metas na aba <strong>Planejamento</strong> para
+                comparar aqui.
+              </>
+            )}
+          </p>
+        )}
 
         {/* Os campos e o que eles geram ficam LADO A LADO e juntos: preencher à esquerda, ver o resultado
             (CPL, ROAS…) na hora à direita, sem esticar os campos pela largura toda da tela. */}
@@ -444,70 +345,6 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
           setRascunho(atual)
         }}
       />
-
-      <section className="rounded-xl border border-line p-4">
-        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Target className="h-4 w-4 text-accent" /> Metas combinadas
-        </h2>
-        <p className="mb-3 text-xs text-foreground/50">
-          As de 6 e 12 meses se definem na aba Planejamento. Aqui, só a meta do mês.
-        </p>
-
-        {metasVisiveis.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-line px-3 py-3 text-center text-sm text-foreground/45">
-            Sem metas definidas.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {metasVisiveis.map((meta) => (
-              <CartaoMeta
-                key={meta.id}
-                meta={meta}
-                atual={valoresDoMes[meta.chave_metrica]}
-                onExcluir={() => void agir(() => gestaoClientes.excluirMeta(meta.id))}
-                onConcluir={() => void agir(() => gestaoClientes.atualizarMeta(meta.id, { status: 'atingida' }))}
-              />
-            ))}
-          </div>
-        )}
-
-        <form
-          onSubmit={criarMeta}
-          className="mt-4 grid items-start gap-3 border-t border-line pt-4 sm:grid-cols-4"
-        >
-          <Select
-            label="Meta do mês"
-            options={TODAS_METRICAS.map((m) => ({ value: m.chave, label: m.label }))}
-            value={novaMeta.chave}
-            onChange={(e) => setNovaMeta((n) => ({ ...n, chave: e.target.value }))}
-          />
-          <Input
-            label="Valor"
-            value={novaMeta.alvo}
-            onChange={(e) => setNovaMeta((n) => ({ ...n, alvo: e.target.value }))}
-            placeholder={metricaUnidade(novaMeta.chave) === 'reais' ? '0,00' : '0'}
-            inputMode="decimal"
-          />
-          <CampoData
-            label="Prazo"
-            value={novaMeta.prazo ?? prazoSugerido('mes')}
-            onChange={(v) => setNovaMeta((n) => ({ ...n, prazo: v }))}
-          />
-          <div>
-            <span className="mb-1.5 block text-xs font-medium text-transparent" aria-hidden>
-              .
-            </span>
-            <Button
-              type="submit"
-              loading={criandoMeta}
-              leftIcon={<Plus className="h-4 w-4" />}
-              className="h-10 w-full"
-            >
-              Criar meta
-            </Button>
-          </div>
-        </form>
-      </section>
 
       <ModalAvisos
         avisos={avisos}

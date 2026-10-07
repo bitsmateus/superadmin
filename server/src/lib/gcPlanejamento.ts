@@ -70,6 +70,7 @@ export const ROTULOS_PLANEJAMENTO: Record<string, string> = {
   mes1_vendas: 'Mês 1: meta de vendas',
   mes1_faturamento: 'Mês 1: meta de faturamento',
   cpl_medio: 'CPL médio (premissa do plano)',
+  estrategia_usada: 'Estratégia usada hoje',
   aguardando_cliente: 'Aguardando o cliente',
   lembrar_em: 'Lembrar de completar em',
   leads_mes: 'Leads/mês (ponto A)',

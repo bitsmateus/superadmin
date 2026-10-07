@@ -1,12 +1,24 @@
 import * as React from 'react'
 import { useParams } from 'react-router-dom'
-import { FileDown, Loader2, TrendingUp } from 'lucide-react'
+import {
+  CircleDollarSign, Clock, FileDown, Info, Loader2, ShoppingBag, TrendingUp, Wallet,
+} from 'lucide-react'
 import { gestaoClientes, HORIZONTES, type GcSnapshot } from '@/services/gestaoClientes'
 import { formatarMetrica } from '@/lib/gcMetricas'
 import { JornadaPortal } from '@/components/gestaoClientes/JornadaPortal'
+import logoNx from '@/assets/logo-nx.jpg'
 import { cn } from '@/lib/utils'
 
 type Portal = Awaited<ReturnType<typeof gestaoClientes.portal>>
+
+/** Data e hora em Brasília: "07/10/2026 às 14:30". */
+function dataEHora(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const data = d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+  const hora = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })
+  return `${data} às ${hora}`
+}
 
 /** Pega do resumo ou cai pra procurar entre os números (relatório publicado antes do resumo existir). */
 function doResumo(s: GcSnapshot, campo: 'investimento' | 'vendas' | 'receita' | 'retorno'): number | null {
@@ -31,17 +43,36 @@ function Variacao({
 }) {
   if (atual === null || anterior === null || anterior === undefined || anterior === 0) return null
   const pct = ((atual - anterior) / Math.abs(anterior)) * 100
-  if (Math.abs(pct) < 0.5) return <span className="text-[11px] text-foreground/40">estável</span>
+  if (Math.abs(pct) < 0.5) {
+    return <span className="mt-1.5 inline-block rounded-full bg-elevate/[0.06] px-2 py-0.5 text-[11px] text-foreground/50">estável</span>
+  }
   const bom = pct > 0 === subirEhBom
   return (
-    <span className={cn('text-[11px] font-medium', bom ? 'text-success' : 'text-danger')}>
-      {pct > 0 ? '▲' : '▼'} {Math.abs(pct).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% vs.
-      mês anterior
+    <span
+      className={cn(
+        'mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+        bom ? 'bg-success/12 text-success' : 'bg-warning/15 text-warning',
+      )}
+    >
+      {pct > 0 ? '▲' : '▼'} {Math.abs(pct).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%
+      <span className="font-normal opacity-70">vs. mês anterior</span>
     </span>
   )
 }
 
-/** Os três números grandes: o que entrou de verba, o que saiu de venda. */
+/** Título de seção, no mesmo estilo do PDF: caixa-alta pequena com uma linha por baixo. */
+function Secao({ titulo, children, className }: { titulo: string; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={cn('mt-7', className)}>
+      <h3 className="mb-3 border-b border-line pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/50">
+        {titulo}
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+/** Os três números grandes: o que entrou de verba, o que saiu de venda e a receita. */
 function Destaques({ snapshot }: { snapshot: GcSnapshot }) {
   const investimento = doResumo(snapshot, 'investimento')
   const vendas = doResumo(snapshot, 'vendas')
@@ -51,28 +82,19 @@ function Destaques({ snapshot }: { snapshot: GcSnapshot }) {
 
   const blocos = [
     {
-      rotulo: 'Investimento',
-      valor: formatarMetrica(investimento, 'reais'),
-      ajuda: 'verba aplicada em anúncios',
-      anterior: achar('investimento')?.anterior,
-      atual: investimento,
-      subirEhBom: true,
+      rotulo: 'Investimento', icone: Wallet, chip: 'bg-accent/12 text-accent',
+      valor: formatarMetrica(investimento, 'reais'), ajuda: 'verba aplicada em anúncios',
+      anterior: achar('investimento')?.anterior, atual: investimento,
     },
     {
-      rotulo: 'Vendas',
-      valor: formatarMetrica(vendas, 'inteiro'),
-      ajuda: 'negócios fechados no período',
-      anterior: achar('vendas')?.anterior,
-      atual: vendas,
-      subirEhBom: true,
+      rotulo: 'Vendas', icone: ShoppingBag, chip: 'bg-success/12 text-success',
+      valor: formatarMetrica(vendas, 'inteiro'), ajuda: 'negócios fechados no período',
+      anterior: achar('vendas')?.anterior, atual: vendas,
     },
     {
-      rotulo: 'Receita',
-      valor: formatarMetrica(receita, 'reais'),
-      ajuda: 'faturamento vindo das campanhas',
-      anterior: achar('receita')?.anterior,
-      atual: receita,
-      subirEhBom: true,
+      rotulo: 'Receita', icone: CircleDollarSign, chip: 'bg-warning/15 text-warning',
+      valor: formatarMetrica(receita, 'reais'), ajuda: 'faturamento vindo das campanhas',
+      anterior: achar('receita')?.anterior, atual: receita,
     },
   ]
 
@@ -80,26 +102,36 @@ function Destaques({ snapshot }: { snapshot: GcSnapshot }) {
     <>
       <div className="grid gap-3 sm:grid-cols-3">
         {blocos.map((b) => (
-          <div key={b.rotulo} className="rounded-xl border border-line bg-elevate/[0.02] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-foreground/45">{b.rotulo}</p>
-            <p className="mt-0.5 text-[26px] font-semibold leading-tight tabular-nums text-foreground">
-              {b.valor}
-            </p>
-            <p className="text-[11px] text-foreground/45">{b.ajuda}</p>
-            <Variacao atual={b.atual} anterior={b.anterior} subirEhBom={b.subirEhBom} />
+          <div
+            key={b.rotulo}
+            className="rounded-2xl border border-line bg-gradient-to-br from-elevate/[0.04] to-transparent p-4 shadow-sm"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-foreground/50">{b.rotulo}</p>
+              <span className={cn('grid h-8 w-8 place-items-center rounded-xl', b.chip)}>
+                <b.icone className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-2 text-[28px] font-bold leading-tight tracking-tight tabular-nums text-foreground">{b.valor}</p>
+            <p className="text-xs text-foreground/50">{b.ajuda}</p>
+            <Variacao atual={b.atual} anterior={b.anterior} />
           </div>
         ))}
       </div>
 
       {retorno !== null && retorno > 0 && (
-        <p className="mt-3 flex items-center gap-2 rounded-xl border-l-2 border-success bg-success/[0.05] px-4 py-3 text-sm text-foreground/85">
-          <TrendingUp className="h-4 w-4 shrink-0 text-success" />
-          Cada R$ 1,00 investido voltou como{' '}
-          <strong className="text-foreground">{formatarMetrica(retorno, 'reais')}</strong> de receita.
+        <p className="mt-3 flex items-center gap-3 rounded-2xl border border-success/25 bg-gradient-to-r from-success/[0.10] to-transparent px-4 py-3 text-sm text-foreground/85">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-success/15 text-success">
+            <TrendingUp className="h-4 w-4" />
+          </span>
+          <span>
+            Cada R$ 1,00 investido voltou como{' '}
+            <strong className="text-foreground">{formatarMetrica(retorno, 'reais')}</strong> de receita.
+          </span>
         </p>
       )}
       {retorno === null && investimento !== null && investimento > 0 && (
-        <p className="mt-3 rounded-xl border-l-2 border-line bg-elevate/[0.02] px-4 py-3 text-sm text-foreground/60">
+        <p className="mt-3 rounded-2xl border border-line bg-elevate/[0.02] px-4 py-3 text-sm text-foreground/60">
           A receita deste período ainda não foi informada — com ela, este relatório mostra o retorno
           por real investido.
         </p>
@@ -112,59 +144,62 @@ function BlocoMetas({ snapshot }: { snapshot: GcSnapshot }) {
   const metas = snapshot.metas ?? []
   if (metas.length === 0) return null
   return (
-    <section className="mt-5">
-      <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">Metas combinadas</h3>
-      <div className="space-y-3">
+    <Secao titulo="Metas combinadas">
+      <div className="space-y-4">
         {HORIZONTES.map((h) => {
           const doGrupo = metas.filter((m) => (m.horizonte ?? 'mes') === h.valor)
           if (doGrupo.length === 0) return null
           return (
             <div key={h.valor}>
-              <p className="mb-1 text-xs font-medium text-foreground/60">{h.label}</p>
+              <p className="mb-1.5 text-xs font-semibold text-foreground/70">{h.label}</p>
               <ul className="space-y-2">
-                {doGrupo.map((m, i) => (
-                  <li
-                    key={i}
-                    className="flex flex-wrap items-center gap-3 rounded-xl border border-line px-3 py-2.5"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-foreground">{m.label}</span>
-                      <span className="block text-xs text-foreground/50">
-                        de {formatarMetrica(m.base, m.unidade)} para{' '}
-                        {formatarMetrica(m.meta, m.unidade)}
-                      </span>
-                    </span>
-                    <span className="text-sm font-semibold tabular-nums text-foreground">
-                      {formatarMetrica(m.atual, m.unidade)}
-                    </span>
-                    {m.progresso !== null && m.progresso !== undefined && (
-                      <span className="flex items-center gap-2">
-                        <span className="h-1.5 w-24 overflow-hidden rounded-full bg-elevate/[0.08]">
-                          <span
-                            className={cn(
-                              'block h-full rounded-full',
-                              m.progresso >= 100 ? 'bg-success' : 'bg-accent',
-                            )}
-                            style={{ width: `${Math.max(0, Math.min(100, m.progresso))}%` }}
-                          />
+                {doGrupo.map((m, i) => {
+                  const pct = m.progresso ?? 0
+                  const cor = pct >= 100 ? 'bg-success' : pct >= 50 ? 'bg-accent' : 'bg-warning'
+                  return (
+                    <li key={i} className="rounded-2xl border border-line p-3.5">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold text-foreground">{m.label}</span>
+                        <span className="text-base font-bold tabular-nums text-foreground">
+                          {formatarMetrica(m.atual, m.unidade)}
+                          <span className="ml-1 text-xs font-medium text-foreground/50">
+                            de {formatarMetrica(m.meta, m.unidade)}
+                          </span>
                         </span>
-                        <span className="w-10 text-right text-xs tabular-nums text-foreground/60">
-                          {m.progresso}%
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-elevate/[0.08]">
+                        <div className={cn('h-full rounded-full transition-[width]', cor)} style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap justify-between gap-2 text-[11px] text-foreground/50">
+                        <span>
+                          partida {formatarMetrica(m.base, m.unidade)}
+                          {m.prazo ? ` · prazo ${String(m.prazo).slice(0, 10).split('-').reverse().join('/')}` : ''}
                         </span>
-                      </span>
-                    )}
-                  </li>
-                ))}
+                        <span className="font-semibold text-foreground/70">
+                          {m.progresso === null || m.progresso === undefined ? '—' : `${m.progresso}% do caminho`}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           )
         })}
       </div>
-    </section>
+    </Secao>
   )
 }
 
-function Relatorio({ snapshot, baixar }: { snapshot: GcSnapshot; baixar: () => Promise<void> }) {
+function Relatorio({
+  snapshot,
+  baixar,
+  publicadoEm,
+}: {
+  snapshot: GcSnapshot
+  baixar: () => Promise<void>
+  publicadoEm: string | null
+}) {
   const [baixando, setBaixando] = React.useState(false)
   // Os três do destaque não repetem na grade de baixo — lá fica o detalhamento.
   const detalhados = (snapshot.numeros ?? []).filter(
@@ -172,15 +207,12 @@ function Relatorio({ snapshot, baixar }: { snapshot: GcSnapshot; baixar: () => P
   )
 
   return (
-    <article className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <article className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-7">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">{snapshot.periodo?.rotulo}</h2>
-          {snapshot.publicado_em && (
-            <p className="text-xs text-foreground/45">
-              publicado em {new Date(snapshot.publicado_em).toLocaleDateString('pt-BR')}
-            </p>
-          )}
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent">Relatório de</p>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">{snapshot.periodo?.rotulo}</h2>
+          {publicadoEm && <p className="mt-0.5 text-xs text-foreground/45">publicado em {dataEHora(publicadoEm)}</p>}
         </div>
         <button
           type="button"
@@ -192,66 +224,51 @@ function Relatorio({ snapshot, baixar }: { snapshot: GcSnapshot; baixar: () => P
               setBaixando(false)
             }
           }}
-          className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm text-foreground/75 transition-colors hover:border-accent/40 hover:text-foreground"
+          className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3.5 py-2 text-sm font-medium text-foreground/80 shadow-sm transition-colors hover:border-accent/40 hover:text-foreground"
         >
-          {baixando ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <FileDown className="h-3.5 w-3.5" />
-          )}
+          {baixando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
           Baixar PDF
         </button>
       </header>
+      <div className="mb-5 mt-4 h-[3px] rounded-full bg-gradient-to-r from-accent via-success to-warning" />
 
       <Destaques snapshot={snapshot} />
 
       {detalhados.length > 0 && (
-        <section className="mt-5">
-          <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">
-            Detalhamento do período
-          </h3>
+        <Secao titulo="Detalhamento do período">
           <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
             {detalhados.map((n) => (
-              <div key={n.chave} className="rounded-xl border border-line px-3 py-2.5">
-                <p className="text-[11px] uppercase tracking-wide text-foreground/45">{n.label}</p>
-                <p className="text-lg font-semibold tabular-nums text-foreground">
-                  {formatarMetrica(n.valor, n.unidade)}
-                </p>
+              <div key={n.chave} className="rounded-2xl border border-line px-3.5 py-3">
+                <p className="text-[10.5px] font-medium uppercase tracking-[0.08em] text-foreground/50">{n.label}</p>
+                <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">{formatarMetrica(n.valor, n.unidade)}</p>
                 <Variacao atual={n.valor} anterior={n.anterior} subirEhBom={n.subirEhBom} />
               </div>
             ))}
           </div>
-        </section>
+        </Secao>
       )}
 
       <BlocoMetas snapshot={snapshot} />
 
       {snapshot.comentario_gestor && (
-        <section className="mt-5">
-          <h3 className="mb-1.5 text-xs uppercase tracking-wide text-foreground/45">
-            Leitura do gestor
-          </h3>
-          <p className="whitespace-pre-wrap rounded-xl border-l-2 border-accent bg-accent/[0.03] px-4 py-3 text-sm text-foreground/85">
+        <Secao titulo="Leitura do gestor">
+          <p className="whitespace-pre-wrap rounded-2xl border border-line border-l-[3px] border-l-accent bg-accent/[0.03] px-4 py-3.5 text-sm leading-relaxed text-foreground/85">
             {snapshot.comentario_gestor}
           </p>
-        </section>
+        </Secao>
       )}
 
       {snapshot.proximos_passos && (
-        <section className="mt-4">
-          <h3 className="mb-1.5 text-xs uppercase tracking-wide text-foreground/45">Próximos passos</h3>
-          <p className="whitespace-pre-wrap rounded-xl border-l-2 border-line bg-elevate/[0.02] px-4 py-3 text-sm text-foreground/85">
+        <Secao titulo="Próximos passos">
+          <p className="whitespace-pre-wrap rounded-2xl border border-line border-l-[3px] border-l-foreground/20 bg-elevate/[0.02] px-4 py-3.5 text-sm leading-relaxed text-foreground/85">
             {snapshot.proximos_passos}
           </p>
-        </section>
+        </Secao>
       )}
 
       {(snapshot.estrategias ?? []).length > 0 && (
-        <section className="mt-5">
-          <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">
-            O que está rodando
-          </h3>
-          <ul className="space-y-1.5">
+        <Secao titulo="O que está rodando">
+          <ul className="space-y-2">
             {snapshot.estrategias!.map((e, i) => {
               const pct = e.total ? Math.round((e.feitos / e.total) * 100) : 0
               return (
@@ -267,9 +284,28 @@ function Relatorio({ snapshot, baixar }: { snapshot: GcSnapshot; baixar: () => P
               )
             })}
           </ul>
-        </section>
+        </Secao>
       )}
     </article>
+  )
+}
+
+/**
+ * A observação que acompanha o painel (e o PDF): o que está aqui é o que a equipe da NX atualizou por
+ * último — a execução do dia a dia pode estar à frente disso.
+ */
+function AvisoDeAtualizacao({ quando }: { quando: string | null }) {
+  return (
+    <aside className="flex items-start gap-3 rounded-2xl border border-accent/25 bg-gradient-to-r from-accent/[0.08] to-transparent px-4 py-3.5 text-sm text-foreground/80">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent">
+        <Info className="h-4 w-4" />
+      </span>
+      <p className="leading-relaxed">
+        <strong className="text-foreground">Sobre as informações deste painel.</strong> Elas refletem a última
+        atualização feita pela equipe da NX{quando ? ` (${quando})` : ''}. A NX pode estar executando ações que
+        ainda não foram registradas aqui — em caso de dúvida, confirme com os seus gestores.
+      </p>
+    </aside>
   )
 }
 
@@ -278,10 +314,11 @@ function Relatorio({ snapshot, baixar }: { snapshot: GcSnapshot; baixar: () => P
  *
  * Mostra só os relatórios PUBLICADOS, lidos da foto que foi congelada na publicação. A primeira
  * coisa que aparece é o que o cliente quer saber: quanto investiu, quantas vendas saíram e quanto
- * voltou de receita.
+ * voltou de receita. O desenho segue o do PDF do relatório (mesma ordem, mesmas seções).
  *
  * O cliente não vê jornada interna, custo, margem, semáforo nem o histórico do time: o que chega
- * aqui é o que a NX escolheu publicar.
+ * aqui é o que a NX escolheu publicar. Em todo o painel fica claro QUANDO foi a última atualização e
+ * que a equipe pode estar fazendo coisas que ainda não entraram aqui.
  */
 export function PortalClientePage() {
   const { token = '' } = useParams<{ token: string }>()
@@ -333,51 +370,101 @@ export function PortalClientePage() {
     )
   }
 
+  // A última atualização é a publicação mais recente: é o que a equipe fechou e liberou pra cá.
+  const publicacoes = dados.relatorios
+    .map((r) => r.publicado_em ?? r.snapshot?.publicado_em ?? null)
+    .filter((x): x is string => !!x)
+    .sort()
+  const ultima = publicacoes.length ? publicacoes[publicacoes.length - 1] : null
+  const ultimaTexto = ultima ? dataEHora(ultima) : null
+  // Do mais novo pro mais velho: o último é o que abre inteiro, os outros ficam recolhidos.
+  const ordenados = [...dados.relatorios].sort((a, b) => String(b.periodo_inicio).localeCompare(String(a.periodo_inicio)))
+  const [recente, ...anteriores] = ordenados
+  const infoDoCliente = dados.relatorios[0]?.snapshot?.cliente
+
   return (
-    <div className="min-h-screen bg-elevate/[0.02] px-4 py-8 sm:px-6">
+    <div className="min-h-screen bg-gradient-to-b from-accent/[0.05] via-elevate/[0.02] to-transparent px-4 py-6 sm:px-6 sm:py-10">
       <div className="mx-auto max-w-4xl space-y-5">
-        <header className="flex items-center gap-3">
-          {dados.cliente.logo_url ? (
-            <img
-              src={dados.cliente.logo_url}
-              alt=""
-              className="h-11 w-11 rounded-xl border border-line object-cover"
-            />
-          ) : (
-            <span className="grid h-11 w-11 place-items-center rounded-xl border border-line bg-surface text-sm font-semibold text-foreground/70">
-              {dados.cliente.nome_empresa.slice(0, 2).toUpperCase()}
-            </span>
-          )}
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">{dados.cliente.nome_empresa}</h1>
-            <p className="text-xs text-foreground/50">Relatórios de performance · Grupo NX Digital</p>
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            {dados.cliente.logo_url ? (
+              <img src={dados.cliente.logo_url} alt="" className="h-14 w-14 rounded-2xl border border-line object-cover shadow-sm" />
+            ) : (
+              <span className="grid h-14 w-14 place-items-center rounded-2xl border border-line bg-surface text-base font-bold text-foreground/70 shadow-sm">
+                {dados.cliente.nome_empresa.slice(0, 2).toUpperCase()}
+              </span>
+            )}
+            <div>
+              <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-accent">
+                <img src={logoNx} alt="" className="h-4 w-4 rounded" /> Grupo NX Digital
+              </p>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">{dados.cliente.nome_empresa}</h1>
+              <p className="text-xs text-foreground/50">
+                {[dados.cliente.segmento, infoDoCliente?.cidade].filter(Boolean).join(' · ') || 'Relatórios de performance'}
+              </p>
+            </div>
           </div>
+          {ultimaTexto && (
+            <div className="rounded-2xl border border-line bg-surface px-4 py-2.5 text-right shadow-sm">
+              <p className="flex items-center justify-end gap-1.5 text-[11px] uppercase tracking-[0.1em] text-foreground/50">
+                <Clock className="h-3 w-3" /> Última atualização
+              </p>
+              <p className="text-sm font-semibold text-foreground">{ultimaTexto}</p>
+            </div>
+          )}
         </header>
+
+        <AvisoDeAtualizacao quando={ultimaTexto} />
 
         {/* "Nossa jornada": só existe se a equipe ligou pra esse cliente. O servidor já tirou
             estratégia e premissas — o que chega aqui é o que pode ser mostrado. */}
         {dados.jornada && <JornadaPortal jornada={dados.jornada} />}
 
-        {dados.relatorios.length === 0 ? (
-          <div className="rounded-2xl border border-line bg-surface p-8 text-center">
+        {!recente ? (
+          <div className="rounded-3xl border border-line bg-surface p-8 text-center shadow-sm">
             <p className="text-sm text-foreground/60">
               Nenhum relatório publicado ainda. Assim que o primeiro mês fechar, ele aparece aqui.
             </p>
           </div>
         ) : (
-          dados.relatorios.map((r) => (
+          <>
             <Relatorio
-              key={r.id}
-              snapshot={r.snapshot}
+              snapshot={recente.snapshot}
+              publicadoEm={recente.publicado_em ?? recente.snapshot?.publicado_em ?? null}
               baixar={() =>
-                baixarPdf(r.id, r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7))
+                baixarPdf(recente.id, recente.snapshot?.periodo?.rotulo ?? String(recente.periodo_inicio).slice(0, 7))
               }
             />
-          ))
+            {anteriores.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/50">
+                  Relatórios anteriores
+                </h2>
+                {anteriores.map((r) => (
+                  <details key={r.id} className="group rounded-3xl border border-line bg-surface shadow-sm [&[open]>summary]:border-b">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-line px-5 py-4 text-sm font-semibold text-foreground">
+                      {r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7)}
+                      <span className="text-xs font-normal text-foreground/45 group-open:hidden">ver relatório</span>
+                    </summary>
+                    <div className="p-1 sm:p-2">
+                      <Relatorio
+                        snapshot={r.snapshot}
+                        publicadoEm={r.publicado_em ?? r.snapshot?.publicado_em ?? null}
+                        baixar={() =>
+                          baixarPdf(r.id, r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7))
+                        }
+                      />
+                    </div>
+                  </details>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
-        <footer className="pb-6 text-center text-xs text-foreground/40">
-          Grupo NX Digital · este link é pessoal, não compartilhe.
+        <footer className="space-y-1 pb-6 pt-2 text-center text-xs text-foreground/40">
+          <p>Grupo NX Digital · este link é pessoal, não compartilhe.</p>
+          {ultimaTexto && <p>Última atualização: {ultimaTexto}</p>}
         </footer>
       </div>
     </div>

@@ -57,7 +57,7 @@ export function JornadaPortal({ jornada }: { jornada: GcJornadaPortal }) {
   if (pontoA.length === 0 && !jornada.situacao && !temMetas) return null
 
   return (
-    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+    <section className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-7">
       <header className="mb-4">
         <h2 className="text-lg font-semibold text-foreground">Nossa jornada</h2>
         <p className="text-xs text-foreground/50">De onde partimos, aonde estamos indo e como o caminho está sendo cumprido.</p>

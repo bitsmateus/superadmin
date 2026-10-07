@@ -160,6 +160,16 @@ function blocoMetas(metas: GcMetaSnapshot[]): string {
     .join('');
 }
 
+/** "07/10/2026 às 14:30", em Brasília. Vazio se não houver data válida. */
+function dataEHora(iso: string | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const data = d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const hora = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  return `${data} às ${hora}`;
+}
+
 /** Documento completo (com <html> e <style>), do jeito que renderFullHtmlToPdf espera. */
 export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
   const investimento = doResumo(snapshot, 'investimento');
@@ -202,6 +212,7 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
     })
     .join('');
 
+  const atualizadoEm = dataEHora(snapshot.publicado_em);
   const secao = (titulo: string, conteudo: string, classe = '') =>
     conteudo.trim() ? `<section class="${classe}"><h2>${titulo}</h2>${conteudo}</section>` : '';
 
@@ -276,6 +287,12 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
   .linha-estrategia .passos { font-size: 11px; color: ${COR.tintaFraca}; width: 44px; text-align: right; }
 
 
+  .observacao {
+    margin-top: 22px; border: 1px solid ${COR.linha}; border-left: 3px solid ${COR.azul}; border-radius: 0 11px 11px 0;
+    background: ${COR.fundo}; padding: 11px 14px; font-size: 11.5px; color: ${COR.tintaFraca}; page-break-inside: avoid;
+  }
+  .observacao strong { color: ${COR.tinta}; }
+
   footer { margin-top: 26px; border-top: 1px solid ${COR.linha}; padding-top: 9px;
     color: ${COR.tintaMaisFraca}; font-size: 9.5px; display: flex; justify-content: space-between; }
 </style>
@@ -294,6 +311,7 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
     <div class="periodo">
       relatório de
       <strong>${escapar(snapshot.periodo?.rotulo)}</strong>
+      ${atualizadoEm ? `<span style="display:block;margin-top:4px;font-size:10px">última atualização<br><b style="color:${COR.tinta}">${escapar(atualizadoEm)}</b></span>` : ''}
     </div>
   </header>
   <div class="regua"></div>
@@ -329,11 +347,17 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
   )}
   ${secao('Estratégias em curso', estrategias)}
 
+  <div class="observacao">
+    <strong>Sobre as informações deste relatório.</strong> Elas refletem a última atualização feita pela equipe da NX${
+      atualizadoEm ? ` (${escapar(atualizadoEm)})` : ''
+    }. A NX pode estar executando ações que ainda não foram registradas aqui — em caso de dúvida, confirme com os seus gestores.
+  </div>
+
   <footer>
     <span style="display:flex;align-items:center;gap:6px"><img class="logo" style="height:14px;width:14px;border-radius:4px" src="${LOGO_NX_DATA_URL}" alt="">Grupo NX Digital · relatório de performance</span>
     <span>${
       snapshot.publicado_em
-        ? `publicado em ${new Date(snapshot.publicado_em).toLocaleDateString('pt-BR')}`
+        ? `publicado em ${atualizadoEm}`
         : 'rascunho — não publicado'
     }</span>
   </footer>

@@ -10,6 +10,7 @@ import { GraficoProjecao, TabelaProjecao } from '@/components/gestaoClientes/Gra
 import { MenuModelos, ModalModelosTexto, type AlvoDeModelo } from '@/components/gestaoClientes/ModelosDeTexto'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
+import { ProjecaoTemporalTabela } from '@/components/gestaoClientes/ProjecaoTemporalTabela'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import {
   gestaoClientes,
@@ -646,14 +647,14 @@ export function PlanejamentoCliente({
 
         {/* ---------------------------------------------------------------- 1. ponto A */}
         <div className="rounded-xl border border-line bg-surface p-3">
-          <h3 className="mb-2 text-sm font-semibold text-foreground">1 · Ponto A — onde o cliente está hoje</h3>
+          <h3 className="mb-2 text-sm font-semibold text-foreground">1 · Ponto A — o cenário do cliente hoje</h3>
           <div>
-            <span className="mb-1.5 block text-xs font-medium text-foreground/70">Situação de hoje</span>
+            <span className="mb-1.5 block text-xs font-medium text-foreground/70">Situação de hoje (o briefing)</span>
             <Textarea
               rows={3}
               value={rascunho.situacao}
               onChange={(e) => mudar('situacao', e.target.value)}
-              placeholder="Como o cliente chegou até a gente: o que já faz, o que não funciona, o que ele espera. Leitura interna."
+              placeholder="Conte o cenário do cliente conforme o briefing: o que já faz, o que não funciona, o que ele espera. Se ele ainda não faz tráfego, diga aqui. Leitura interna."
             />
           </div>
 
@@ -720,6 +721,24 @@ export function PlanejamentoCliente({
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              title="Preenche leads, investimento, vendas e faturamento com zero: o cliente parte do zero"
+              onClick={() =>
+                setRascunho((r) =>
+                  r
+                    ? {
+                        ...r, leads: '0', investimento: '0', vendas: '0', receita: '0',
+                        data: r.data ?? hojeISO(), aguardando: false, lembrarEm: null,
+                        origens: { ...r.origens, leads_mes: { origem: 'informado' }, investimento_mes: { origem: 'informado' }, vendas_mes: { origem: 'informado' }, faturamento_mensal: { origem: 'informado' } },
+                      }
+                    : r,
+                )
+              }
+            >
+              Cliente ainda não faz tráfego (partir do zero)
+            </Button>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground/80">
               <input
                 type="checkbox"
@@ -962,10 +981,19 @@ export function PlanejamentoCliente({
           })}
         </div>
 
-        {/* ---------------------------------------------------------------- 3. projeção */}
+        {/* ---------------------------------------------------------------- 3. projeção temporal */}
+        <div className="mt-3 rounded-xl border border-line bg-surface p-3">
+          <h3 className="mb-0.5 text-sm font-semibold text-foreground">3 · Projeção temporal</h3>
+          <p className="mb-3 text-xs text-foreground/50">
+            O que as metas significam mês a mês — investimento, leads, vendas, faturamento e ROAS, em 6 ou 12 meses.
+          </p>
+          <ProjecaoTemporalTabela plano={planoDaRota} />
+        </div>
+
+        {/* ---------------------------------------------------------------- 4. realizado × projetado */}
         <div className="mt-3 rounded-xl border border-line bg-surface p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-foreground">3 · Projeção mês a mês</h3>
+            <h3 className="text-sm font-semibold text-foreground">4 · Realizado × projetado</h3>
             {chavesComRota.length > 0 && (
               <Select
                 options={chavesComRota.map((c) => ({ value: c.chave, label: c.label }))}

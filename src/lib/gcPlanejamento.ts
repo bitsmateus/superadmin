@@ -223,6 +223,102 @@ export function projetadoDoMes(plano: Planejamento, chave: ChavePlano, periodo: 
 }
 
 // ---------------------------------------------------------------------------------------------------
+// Projeção temporal (a tabela "mês 1, mês 2…" com totais)
+// ---------------------------------------------------------------------------------------------------
+
+export interface LinhaTemporal {
+  /** 1 = o primeiro mês depois do ponto A. */
+  k: number
+  /** 'YYYY-MM' do mês, quando há como saber (data do diagnóstico ou, na falta, o mês de hoje). */
+  mes: string
+  investimento: number | null
+  leads: number | null
+  vendas: number | null
+  receita: number | null
+  /** Faturamento ÷ investimento. */
+  roas: number | null
+  /** Leads que não vieram de uma meta de leads, e sim das vendas ÷ conversão do ponto A. */
+  leadsEstimados: boolean
+}
+
+export interface ProjecaoTemporal {
+  meses: number
+  linhas: LinhaTemporal[]
+  total: Omit<LinhaTemporal, 'k' | 'mes' | 'leadsEstimados'>
+  /** Algum número parte de zero porque o ponto A não tinha aquela métrica (cliente que ainda não faz tráfego). */
+  partiuDeZero: boolean
+}
+
+/**
+ * A PROJEÇÃO TEMPORAL: o que se espera em cada mês dos próximos 6 ou 12, a partir das metas.
+ *
+ * Não é um cálculo exato — meta de faturamento e de vendas não se metrifica com precisão —, é uma
+ * ESTIMATIVA ordenada: cresce em linha reta do ponto A até a meta de 6 meses e dela até a de 12.
+ * Depois da última meta definida, o valor se MANTÉM (a meta de 6 meses sozinha vira um patamar nos
+ * meses 7 a 12). Sem número no ponto A a conta parte de ZERO — é o cliente que ainda não faz tráfego,
+ * e "tudo zerado" é um começo legítimo.
+ *
+ * Metas de uma métrica que ninguém definiu ficam em branco (null), não em zero. Leads sem meta própria
+ * saem das vendas ÷ conversão do ponto A (marcados como estimados), quando a conversão existe.
+ */
+export function projecaoTemporal(plano: Planejamento, meses: 6 | 12, hoje: string = hojeISO()): ProjecaoTemporal {
+  const base = baseDoPontoA(plano.atual)
+  let partiuDeZero = false
+
+  const valorEm = (chave: 'investimento' | 'leads' | 'vendas' | 'receita', k: number): number | null => {
+    const m6 = plano.metas['6_meses']?.[chave]
+    const m12 = plano.metas['12_meses']?.[chave]
+    if (m6 === undefined && m12 === undefined) return null
+    const pontos: { k: number; v: number }[] = []
+    const inicio = base[chave] ?? plano.partida?.[chave] ?? 0
+    if (base[chave] === undefined && plano.partida?.[chave] === undefined) partiuDeZero = true
+    pontos.push({ k: 0, v: inicio })
+    if (m6 !== undefined) pontos.push({ k: 6, v: m6 })
+    if (m12 !== undefined) pontos.push({ k: 12, v: m12 })
+    for (let i = 0; i < pontos.length - 1; i++) {
+      const a = pontos[i]
+      const b = pontos[i + 1]
+      if (k >= a.k && k <= b.k) return interpolar(a.v, b.v, k - a.k, b.k - a.k, 'linear')
+    }
+    return pontos[pontos.length - 1].v
+  }
+
+  const conv = plano.atual.conversao && plano.atual.conversao > 0 ? plano.atual.conversao / 100 : null
+  const referencia = plano.dataDiagnostico ?? `${hoje.slice(0, 7)}-01`
+  const linhas: LinhaTemporal[] = []
+  for (let k = 1; k <= meses; k++) {
+    const investimento = valorEm('investimento', k)
+    const vendas = valorEm('vendas', k)
+    const receita = valorEm('receita', k)
+    let leads = valorEm('leads', k)
+    let leadsEstimados = false
+    if (leads === null && vendas !== null && conv !== null) {
+      leads = vendas / conv
+      leadsEstimados = true
+    }
+    linhas.push({
+      k, mes: mesDoIndice(referencia, k), investimento, leads, vendas, receita,
+      roas: receita !== null && investimento ? receita / investimento : null, leadsEstimados,
+    })
+  }
+  const soma = (f: (l: LinhaTemporal) => number | null): number | null => {
+    const vs = linhas.map(f).filter((v): v is number => v !== null)
+    return vs.length ? vs.reduce((s, v) => s + v, 0) : null
+  }
+  const investimento = soma((l) => l.investimento)
+  const receita = soma((l) => l.receita)
+  return {
+    meses,
+    linhas,
+    total: {
+      investimento, leads: soma((l) => l.leads), vendas: soma((l) => l.vendas), receita,
+      roas: receita !== null && investimento ? receita / investimento : null,
+    },
+    partiuDeZero,
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------
 // Realizado × projetado
 // ---------------------------------------------------------------------------------------------------
 

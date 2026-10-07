@@ -298,68 +298,6 @@ export function ProjecaoXReal({
         </table>
       </div>
 
-      {/* Gráfico: a mesma métrica, projetado (barra clara) e real (barra cheia), mês a mês. */}
-      <figure className="mt-4 rounded-xl border border-line p-3" aria-label={`Projetado e real de ${def.rotulo.toLowerCase()} mês a mês`}>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-4 text-xs text-foreground/60">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border border-accent/60 bg-accent/25" /> Projetado</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-success" /> Real</span>
-          </div>
-          <label className="flex items-center gap-2 text-xs text-foreground/55">
-            Gráfico de
-            <select
-              value={metrica}
-              onChange={(e) => setMetrica(e.target.value as Metrica)}
-              className="h-8 rounded-lg border border-line bg-transparent px-2 text-sm text-foreground outline-none focus:border-accent/60"
-            >
-              {COLUNAS.filter((c) => c.chave !== 'roas').map((c) => (
-                <option key={c.chave} value={c.chave} className="bg-surface">{c.rotulo}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="flex">
-          <div className="flex h-44 w-12 shrink-0 flex-col-reverse justify-between pr-2 text-right text-[10.5px] tabular-nums text-foreground/45">
-            {marcas.map((m) => (
-              <span key={m} className="leading-none">{compacto(m)}</span>
-            ))}
-          </div>
-          <div className="relative flex h-44 min-w-0 flex-1 items-end gap-1 border-b border-l border-line pl-1 sm:gap-2">
-            {marcas.slice(1).map((m) => (
-              <span key={m} className="pointer-events-none absolute inset-x-0 border-t border-foreground/[0.07]" style={{ bottom: `${(m / teto) * 100}%` }} />
-            ))}
-            {p.linhas.map((l, i) => (
-              <div
-                key={l.k}
-                className="flex h-full min-w-0 flex-1 items-end justify-center gap-0.5"
-                title={`Mês ${l.k} (${rotuloDoMes(l.mes)}) — projetado ${formatar(l.projetado[metrica], def.unidade)}${
-                  l.real[metrica] !== null ? ` · real ${formatar(l.real[metrica], def.unidade)}` : ' · sem lançamento'
-                }`}
-              >
-                <div
-                  className="w-1/2 max-w-[22px] rounded-t border border-b-0 border-accent/60 bg-accent/25"
-                  style={{ height: `${Math.max(1, (projetados[i] / teto) * 100)}%` }}
-                />
-                <div
-                  className={cn('w-1/2 max-w-[22px] rounded-t', reais[i] === null ? 'bg-transparent' : 'bg-success')}
-                  style={{ height: `${reais[i] === null ? 0 : Math.max(1, ((reais[i] ?? 0) / teto) * 100)}%` }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="ml-12 flex gap-1 pl-1 pt-1 text-[10.5px] text-foreground/45 sm:gap-2">
-          {p.linhas.map((l) => (
-            <span key={l.k} className="min-w-0 flex-1 truncate text-center">{l.k}</span>
-          ))}
-        </div>
-        {!algumReal && (
-          <p className="mt-2 text-center text-xs text-foreground/40">
-            Sem lançamento nesses meses ainda — as barras de real aparecem conforme você lança em Métricas.
-          </p>
-        )}
-      </figure>
-
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-foreground/50">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>

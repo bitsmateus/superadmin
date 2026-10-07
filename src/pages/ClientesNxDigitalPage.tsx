@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useModuloNxNoCelular } from '@/hooks/useModuloNxNoCelular'
 import { useNavigate } from 'react-router-dom'
-import { ArrowUpDown, KanbanSquare, Loader2, Plus, Search, ShieldAlert, Table2, Users } from 'lucide-react'
+import { ArrowUpDown, CalendarClock, KanbanSquare, Plus, Search, ShieldAlert, Star, Table2, Users, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -28,6 +28,8 @@ import {
 } from '@/lib/gcSaude'
 import { formatarMetrica, mesPorExtenso, mesAtual } from '@/lib/gcMetricas'
 import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
+import { FAIXA_DA_SAUDE, estiloDoAvatar } from '@/lib/gcVisual'
+import { iniciaisDe } from '@/lib/gcIniciais'
 import { gravarVisitados, proximoSemData, semDataDeRenovacao } from '@/lib/gcFilaRenovacao'
 import { cn } from '@/lib/utils'
 
@@ -155,6 +157,7 @@ function Indicador({
   tom,
   ativo,
   onClick,
+  icone: Icone,
 }: {
   rotulo: string
   valor: string
@@ -162,31 +165,92 @@ function Indicador({
   tom?: 'danger' | 'warning' | 'accent'
   ativo?: boolean
   onClick?: () => void
+  icone?: React.ElementType
 }) {
   const Elemento = onClick ? 'button' : 'div'
+  const cor = tom === 'danger' ? 'text-danger' : tom === 'warning' ? 'text-warning' : 'text-foreground'
+  const chip =
+    tom === 'danger'
+      ? 'bg-danger/12 text-danger'
+      : tom === 'warning'
+        ? 'bg-warning/12 text-warning'
+        : 'bg-accent/12 text-accent'
   return (
     <Elemento
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'rounded-xl border px-3 py-2.5 text-left transition-colors sm:px-4 sm:py-3',
-        ativo ? 'border-accent/50 bg-accent/[0.05]' : 'border-line',
-        onClick && !ativo && 'hover:border-foreground/20',
+        'group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-elevate/[0.05] to-transparent p-3.5 text-left shadow-sm transition-all sm:p-4',
+        ativo ? 'border-accent/50 ring-1 ring-accent/30' : 'border-line',
+        onClick && 'hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-md',
       )}
     >
-      <p className="text-xs uppercase tracking-wide text-foreground/45">{rotulo}</p>
-      <p
-        className={cn(
-          'mt-0.5 text-2xl font-semibold tabular-nums',
-          tom === 'danger' ? 'text-danger' : tom === 'warning' ? 'text-warning' : 'text-foreground',
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-foreground/50">{rotulo}</p>
+        {Icone && (
+          <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-lg', chip)}>
+            <Icone className="h-3.5 w-3.5" />
+          </span>
         )}
-      >
-        {valor}
-      </p>
-      {ajuda && <p className="text-xs text-foreground/45">{ajuda}</p>}
+      </div>
+      <p className={cn('mt-1.5 text-2xl font-semibold tracking-tight tabular-nums sm:text-[28px] sm:leading-8', cor)}>{valor}</p>
+      {ajuda && <p className="mt-0.5 text-xs text-foreground/45">{ajuda}</p>}
     </Elemento>
   )
 }
+
+/** Abas em pílula, com o número de cada uma: mais leve que o sublinhado, e rola no celular. */
+function AbasPilula({
+  valor,
+  onChange,
+  itens,
+}: {
+  valor: string
+  onChange: (v: string) => void
+  itens: { value: string; label: string; contagem: number }[]
+}) {
+  return (
+    <div
+      role="tablist"
+      className="inline-flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-elevate/[0.06] p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {itens.map((i) => {
+        const ativa = i.value === valor
+        return (
+          <button
+            key={i.value}
+            type="button"
+            role="tab"
+            aria-selected={ativa}
+            onClick={() => onChange(i.value)}
+            className={cn(
+              'flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all',
+              ativa ? 'bg-surface text-foreground shadow-sm' : 'text-foreground/55 hover:text-foreground/85',
+            )}
+          >
+            {i.label}
+            <span
+              className={cn(
+                'rounded-full px-1.5 text-[11px] tabular-nums',
+                ativa ? 'bg-accent/15 text-accent' : 'bg-elevate/[0.08] text-foreground/45',
+              )}
+            >
+              {i.contagem}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Alternância segmentada (Tabela | Kanban…): mesma pílula das abas. */
+const SEGMENTADO = 'flex items-center gap-0.5 rounded-full bg-elevate/[0.06] p-1'
+const segmento = (ativo: boolean) =>
+  cn(
+    'flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-all',
+    ativo ? 'bg-surface text-foreground shadow-sm' : 'text-foreground/55 hover:text-foreground/85',
+  )
 
 /**
  * CLIENTES NX DIGITAL → Clientes.
@@ -430,8 +494,11 @@ export function ClientesNxDigitalPage() {
 
         {/* Um aviso só, em vez de repetir "sem data de renovação" em cada linha. */}
         {!carregando && clientesSemData.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning/[0.06] px-4 py-3">
-            <p className="text-sm text-foreground/85">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/25 bg-gradient-to-r from-warning/[0.09] to-transparent px-4 py-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning/15 text-warning">
+              <CalendarClock className="h-[18px] w-[18px]" />
+            </span>
+            <p className="min-w-0 flex-1 text-sm text-foreground/85">
               <strong>
                 {clientesSemData.length} {clientesSemData.length === 1 ? 'cliente' : 'clientes'} sem data de renovação
               </strong>
@@ -446,6 +513,7 @@ export function ClientesNxDigitalPage() {
         {!carregando && clientes.length > 0 && (
           <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
             <Indicador
+              icone={Users}
               rotulo="Clientes ativos"
               valor={String(ativos.length)}
               ajuda={
@@ -457,6 +525,7 @@ export function ClientesNxDigitalPage() {
               }
             />
             <Indicador
+              icone={ShieldAlert}
               rotulo="Em risco"
               valor={String(emRisco)}
               ajuda={precisamAtencao > 0 ? `+ ${precisamAtencao} pedindo atenção` : 'nenhum alerta grave'}
@@ -465,18 +534,21 @@ export function ClientesNxDigitalPage() {
               onClick={() => setSoProblemas((v) => !v)}
             />
             <Indicador
+              icone={CalendarClock}
               rotulo="Sem lançamento"
               valor={String(semLancamento)}
               ajuda={`métricas de ${mesPorExtenso(mesAtual()).toLowerCase()}`}
               tom={semLancamento > 0 ? 'warning' : undefined}
             />
             <Indicador
+              icone={Star}
               rotulo="Sem a sua nota"
               valor={String(semNota)}
               ajuda="você ainda não disse se o mês foi bom"
               tom={semNota > 0 ? 'warning' : undefined}
             />
             <Indicador
+              icone={Wallet}
               rotulo="Investimento do mês"
               valor={formatarMetrica(investimentoDoMes, 'reais')}
               ajuda="soma dos clientes ativos"
@@ -484,19 +556,11 @@ export function ClientesNxDigitalPage() {
           </div>
         )}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Tabs
-            value={aba}
+        <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
+          <AbasPilula
+            valor={aba}
             onChange={(v) => setAba(v as GcStatusCliente | 'todos')}
-            items={ABAS.map((a) => ({
-              value: a.value,
-              label: (
-                <span className="flex items-center gap-1.5">
-                  {a.label}
-                  <span className="text-xs tabular-nums text-foreground/45">{contagem(a.value)}</span>
-                </span>
-              ),
-            }))}
+            itens={ABAS.map((a) => ({ value: a.value, label: a.label, contagem: contagem(a.value) }))}
           />
           <div className="flex flex-wrap items-center gap-2">
             {soProblemas && (
@@ -509,7 +573,7 @@ export function ClientesNxDigitalPage() {
                 só quem precisa de atenção
               </Button>
             )}
-            <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="Visão">
+            <div className={SEGMENTADO} role="group" aria-label="Visão">
               {(
                 [
                   { valor: 'tabela', rotulo: 'Tabela', icone: Table2 },
@@ -522,12 +586,7 @@ export function ClientesNxDigitalPage() {
                   onClick={() => escolherVisao(v.valor)}
                   title={v.rotulo}
                   aria-pressed={visao === v.valor}
-                  className={cn(
-                    'flex h-9 items-center gap-1.5 px-2.5 text-xs transition-colors',
-                    visao === v.valor
-                      ? 'bg-elevate/[0.08] text-foreground'
-                      : 'text-foreground/50 hover:text-foreground/80',
-                  )}
+                  className={segmento(visao === v.valor)}
                 >
                   <v.icone className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">{v.rotulo}</span>
@@ -535,7 +594,7 @@ export function ClientesNxDigitalPage() {
               ))}
             </div>
             {visao === 'kanban' && (
-              <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="Agrupar por">
+              <div className={SEGMENTADO} role="group" aria-label="Agrupar por">
                 {(
                   [
                     { valor: 'etapa', rotulo: 'Por etapa' },
@@ -547,12 +606,7 @@ export function ClientesNxDigitalPage() {
                     type="button"
                     onClick={() => escolherAgrupamento(a.valor)}
                     aria-pressed={agrupamento === a.valor}
-                    className={cn(
-                      'h-9 px-2.5 text-xs transition-colors',
-                      agrupamento === a.valor
-                        ? 'bg-elevate/[0.08] text-foreground'
-                        : 'text-foreground/50 hover:text-foreground/80',
-                    )}
+                    className={segmento(agrupamento === a.valor)}
                   >
                     {a.rotulo}
                   </button>
@@ -651,10 +705,10 @@ export function ClientesNxDigitalPage() {
               />
             ))}
           </div>
-          <div className="hidden overflow-hidden rounded-xl border border-line sm:block">
+          <div className="hidden overflow-hidden rounded-2xl border border-line bg-surface shadow-sm sm:block">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-elevate/[0.02] text-left text-xs uppercase tracking-wide text-foreground/50">
+                <thead className="border-b border-line bg-elevate/[0.03] text-left text-[11px] font-medium uppercase tracking-wider text-foreground/45">
                   <tr>
                     <th className="px-4 py-2.5 font-medium">#</th>
                     <th className="px-4 py-2.5 font-medium">Empresa</th>
@@ -745,11 +799,17 @@ function CartaoCliente({
     <button
       type="button"
       onClick={onAbrir}
-      className="w-full rounded-xl border border-line p-3 text-left transition-colors active:bg-elevate/[0.04]"
+      className={cn(
+        'w-full rounded-2xl border border-l-[3px] border-line bg-surface p-3 text-left shadow-sm transition-colors active:bg-elevate/[0.04]',
+        FAIXA_DA_SAUDE[saude.nivel],
+      )}
     >
       <span className="flex items-center gap-2.5">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line bg-elevate/[0.04] text-xs font-semibold text-foreground/70">
-          {iniciais(c.nome_empresa) || '—'}
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border text-xs font-semibold"
+          style={estiloDoAvatar(c.nome_empresa)}
+        >
+          {iniciaisDe(c.nome_empresa) || '—'}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 font-medium text-foreground">
@@ -814,7 +874,9 @@ function LinhaCliente({
   return (
     <tr
       onClick={onAbrir}
-      className="cursor-pointer border-t border-line transition-colors hover:bg-elevate/[0.03]"
+      className={cn(
+        'group/linha cursor-pointer border-t border-line transition-colors first:border-t-0 hover:bg-accent/[0.04]',
+      )}
     >
       <td className="w-10 px-4 py-3 text-center">
         {posicao === null ? (
@@ -832,8 +894,11 @@ function LinhaCliente({
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line bg-elevate/[0.04] text-xs font-semibold text-foreground/70">
-            {iniciais(c.nome_empresa) || '—'}
+          <span
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border text-xs font-semibold"
+            style={estiloDoAvatar(c.nome_empresa)}
+          >
+            {iniciaisDe(c.nome_empresa) || '—'}
           </span>
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 truncate font-medium text-foreground">

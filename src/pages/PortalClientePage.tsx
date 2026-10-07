@@ -89,6 +89,7 @@ function Destaques({ snapshot }: { snapshot: GcSnapshot }) {
     {
       rotulo: 'Vendas', icone: ShoppingBag, chip: 'bg-success/12 text-success',
       valor: formatarMetrica(vendas, 'inteiro'), ajuda: 'negócios fechados no período',
+      obs: 'Conforme informações recebidas e analisadas pela NX.',
       anterior: achar('vendas')?.anterior, atual: vendas,
     },
     {
@@ -114,6 +115,7 @@ function Destaques({ snapshot }: { snapshot: GcSnapshot }) {
             </div>
             <p className="mt-2 text-[28px] font-bold leading-tight tracking-tight tabular-nums text-foreground">{b.valor}</p>
             <p className="text-xs text-foreground/50">{b.ajuda}</p>
+            {'obs' in b && b.obs && <p className="mt-1 text-[11px] italic leading-snug text-foreground/45">{b.obs}</p>}
             <Variacao atual={b.atual} anterior={b.anterior} />
           </div>
         ))}

@@ -326,6 +326,7 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
       <span class="rotulo">Vendas</span>
       <span class="valor">${formatarValor(vendas, 'inteiro')}</span>
       <span class="ajuda">negócios fechados no período</span>
+      <span class="ajuda" style="font-style:italic;margin-top:3px">Conforme informações recebidas e analisadas pela NX.</span>
     </div>
     <div>
       <span class="rotulo">Receita</span>

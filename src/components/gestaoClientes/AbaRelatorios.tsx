@@ -12,6 +12,7 @@ import {
   type GcRelatorio, type GcSnapshot,
 } from '@/services/gestaoClientes'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
+import { LancamentoDoMes } from '@/components/gestaoClientes/LancamentoDoMes'
 import { progressoDaMeta } from '@/lib/gcSaude'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
@@ -84,7 +85,7 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
   React.useEffect(() => {
     setComentario(doMes?.comentario_gestor ?? '')
     setProximos(doMes?.proximos_passos ?? '')
-  }, [doMes])
+  }, [inicio, doMes?.id, doMes?.comentario_gestor, doMes?.proximos_passos])
 
   const numeros = doPeriodo(metricas, inicio)
   const anteriores = doPeriodo(metricas, limitesDoMes(somarMeses(periodo, -1)).inicio)
@@ -303,16 +304,14 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-          {[...METRICAS_LANCADAS, ...METRICAS_DERIVADAS].map((m) => (
-            <div key={m.chave} className="rounded-lg border border-line px-3 py-2">
-              <p className="text-xs uppercase tracking-wide text-foreground/45">{m.label}</p>
-              <p className="text-lg font-semibold tabular-nums text-foreground">
-                {formatarMetrica(numeros[m.chave] ?? null, m.unidade)}
-              </p>
-            </div>
-          ))}
-        </div>
+        {doMes?.status === 'publicado' && (
+          <p className="mb-3 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-xs text-foreground/60">
+            Este mês já está publicado. Dá pra corrigir os valores abaixo, mas o que o cliente vê só muda se você
+            despublicar e publicar de novo.
+          </p>
+        )}
+        {/* Os valores e as informações do mês se preenchem AQUI, no mesmo formulário da aba Métricas. */}
+        <LancamentoDoMes clienteId={clienteId} periodo={periodo} onSalvo={() => void carregar()} />
 
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           <Textarea
@@ -444,6 +443,11 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
                   className="min-w-0 flex-1 text-left text-sm text-foreground/85 hover:text-accent"
                 >
                   {mesPorExtenso(String(r.periodo_inicio).slice(0, 7))}
+                  {r.comentario_gestor?.trim() && (
+                    <span className="mt-0.5 line-clamp-2 block whitespace-pre-wrap text-xs font-normal text-foreground/50">
+                      {r.comentario_gestor}
+                    </span>
+                  )}
                 </button>
                 <Badge tone={r.status === 'publicado' ? 'success' : 'neutral'}>{r.status}</Badge>
                 <span className="text-xs text-foreground/45">

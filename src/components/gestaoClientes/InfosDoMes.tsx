@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
  *
  * Salva na hora, uma por uma: é anotação, não parte da grade do mês, então não depende do "Salvar o mês".
  */
-export function InfosDoMes({ clienteId, inicio }: { clienteId: string; inicio: string }) {
+export function InfosDoMes({ clienteId, inicio, onMudou }: { clienteId: string; inicio: string; onMudou?: () => void }) {
   const [infos, setInfos] = React.useState<GcInfoMes[] | null>(null)
   const [adicionando, setAdicionando] = React.useState(false)
   const [titulo, setTitulo] = React.useState('')
@@ -58,6 +58,7 @@ export function InfosDoMes({ clienteId, inicio }: { clienteId: string; inicio: s
       limpar()
       setAdicionando(false)
       await carregar()
+      onMudou?.()
     } catch (err) {
       toast.error('Falha ao salvar: ' + (err as Error).message)
     } finally {
@@ -69,6 +70,7 @@ export function InfosDoMes({ clienteId, inicio }: { clienteId: string; inicio: s
     try {
       await fn()
       await carregar()
+      onMudou?.()
     } catch (err) {
       toast.error('Falha: ' + (err as Error).message)
     }

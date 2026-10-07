@@ -187,6 +187,11 @@ export interface GcClienteLista {
     /** Calculada no servidor (vendas ÷ leads, em %). */
     conversao: number | null
     receita: number | null
+    /** O primeiro mês do plano (números) e a premissa de CPL. */
+    mes1_investimento: number | null
+    mes1_vendas: number | null
+    mes1_faturamento: number | null
+    cpl_medio: number | null
     /** O ponto A está em branco de propósito, esperando o cliente trazer os números. */
     aguardando_cliente: boolean
     /** 'YYYY-MM-DD': quando lembrar de completar. Vencido, o planejamento passa a pedir atenção. */
@@ -472,6 +477,11 @@ export interface GcPlanejamentoApi {
     lembrar_em: string | null
   }
   curva: 'linear' | 'composta'
+  /**
+   * O primeiro mês do plano: pra quem não investe hoje, "no mês 1 investir X, com meta de X vendas e X de
+   * faturamento". Os leads do mês 1 saem de investimento ÷ cpl_medio (a premissa).
+   */
+  primeiro_mes: { investimento: number | null; vendas: number | null; faturamento: number | null; cpl_medio: number | null }
   /** De onde veio cada número do ponto A, por campo. Campo ausente = sem origem registrada. */
   origens: Record<string, GcOrigemCampo>
   portal: GcPortalJornadaOpcoes
@@ -497,6 +507,7 @@ export interface GcPortalJornadaOpcoes {
 /** O que se envia ao salvar: o mesmo formato, com `null` nas metas que a pessoa limpou. */
 export interface GcPlanejamentoEntrada {
   atual: Omit<GcPlanejamentoApi['atual'], 'ticket_medio' | 'taxa_conversao'>
+  primeiro_mes: GcPlanejamentoApi['primeiro_mes']
   origens: Record<string, GcOrigemCampo>
   cenarios: Record<
     '6_meses' | '12_meses',
@@ -529,6 +540,7 @@ export interface GcJornadaPortal {
   curva: 'linear' | 'composta'
   /** A situação de hoje, só se a equipe marcou pra mostrar. */
   situacao: string | null
+  primeiro_mes: { investimento: number | null; vendas: number | null; faturamento: number | null; cpl_medio: number | null }
   atual: {
     leads: number | null
     investimento: number | null

@@ -363,6 +363,14 @@ const TABELAS = [
        ordem = ordem + 100, updated_at = NOW()
      WHERE campo = 'premissas'`,
 
+  // PRIMEIRO MÊS do plano: pra quem não investe hoje (ponto A zerado), o plano começa com "no mês 1 investir
+  // X, com a meta de X vendas e X de faturamento". Os leads do mês 1 saem do investimento ÷ CPL médio, que é
+  // uma PREMISSA (cpl_medio) — por isso os leads não são digitados.
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS mes1_investimento NUMERIC(14,2)`,
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS mes1_vendas NUMERIC(14,2)`,
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS mes1_faturamento NUMERIC(14,2)`,
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS cpl_medio NUMERIC(14,2)`,
+
   // "Adicionar info": informações livres do mês de um cliente — um número relevante do tráfego, uma
   // observação —, que não cabem nas métricas fixas. Opcionalmente entram no relatório do cliente.
   `CREATE TABLE IF NOT EXISTS gc_infos_mes (

@@ -3,14 +3,12 @@ import { AlertTriangle, Calculator, ChevronDown, Loader2, Lock, Route, Target } 
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
-import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
-import { GraficoProjecao, TabelaProjecao } from '@/components/gestaoClientes/GraficoProjecao'
 import { MenuModelos, ModalModelosTexto, type AlvoDeModelo } from '@/components/gestaoClientes/ModelosDeTexto'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
-import { ProjecaoTemporalTabela } from '@/components/gestaoClientes/ProjecaoTemporalTabela'
+import { ProjecaoXReal } from '@/components/gestaoClientes/ProjecaoXReal'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import {
   gestaoClientes,
@@ -18,7 +16,7 @@ import {
   type GcOrigemCampo, type GcPlanejamentoApi, type GcPlanejamentoEntrada,
 } from '@/services/gestaoClientes'
 import {
-  CHAVES_CALCULADAS, CHAVES_DIGITADAS, CHAVES_PLANO, HORIZONTES_PLANO, aplicarVariaveis, avaliarMesContraRota,
+  CHAVES_CALCULADAS, CHAVES_DIGITADAS, CHAVES_PLANO, HORIZONTES_PLANO, doPrimeiroMes, aplicarVariaveis, avaliarMesContraRota,
   avisosDeCplImplicito, baseDoPontoA, comMetasCalculadas, comPartidaDasMetricas, contextoDeVariaveis,
   estadoDoPlanejamento, hojeISO, montarPontoA, projecaoMensal, realizadoPorMes, resumoLinha, rotaProjetada,
   sugerirPontoA, validarRealismo, variacaoContraPontoA, type CampoDoPontoA, type ChavePlano,
@@ -54,6 +52,10 @@ interface Rascunho {
   /** O ponto A está em branco de propósito: o cliente ainda vai trazer os números. */
   aguardando: boolean
   lembrarEm: string | null
+  /** O primeiro mês do plano (pra quem começa a investir): investimento, vendas e faturamento esperados. */
+  mes1: { investimento: string; vendas: string; receita: string }
+  /** CPL médio estimado: transforma o investimento do mês 1 (e dos meses sem meta de leads) em leads. */
+  cplMedio: string
   cenarios: Record<HorizontePlano, {
     objetivo: string
     /** "Estratégia e premissas": interna, nunca vai pro portal. */
@@ -83,6 +85,12 @@ function doApi(a: GcPlanejamentoApi): Rascunho {
     data: a.atual.data_diagnostico,
     aguardando: a.atual.aguardando_cliente,
     lembrarEm: a.atual.lembrar_em,
+    mes1: {
+      investimento: numeroParaCampo(a.primeiro_mes?.investimento),
+      vendas: numeroParaCampo(a.primeiro_mes?.vendas),
+      receita: numeroParaCampo(a.primeiro_mes?.faturamento),
+    },
+    cplMedio: numeroParaCampo(a.primeiro_mes?.cpl_medio),
     cenarios: { '6_meses': cen('6_meses'), '12_meses': cen('12_meses') },
   }
 }
@@ -97,7 +105,17 @@ function planoDoRascunho(r: Rascunho): Planejamento {
     }
     return comMetasCalculadas(m)
   }
+  const pm: NonNullable<Planejamento['primeiroMes']> = {}
+  const inv1 = numeroDigitado(r.mes1.investimento)
+  const ven1 = numeroDigitado(r.mes1.vendas)
+  const rec1 = numeroDigitado(r.mes1.receita)
+  if (inv1 !== null) pm.investimento = inv1
+  if (ven1 !== null) pm.vendas = ven1
+  if (rec1 !== null) pm.receita = rec1
+  const cpl = numeroDigitado(r.cplMedio)
   return {
+    ...(Object.keys(pm).length ? { primeiroMes: pm } : {}),
+    ...(cpl !== null ? { cplMedio: cpl } : {}),
     curva: 'linear',
     dataDiagnostico: r.data,
     atual: montarPontoA({
@@ -119,6 +137,8 @@ function normalizado(r: Rascunho) {
   return {
     ...r,
     leads: n(r.leads), investimento: n(r.investimento), vendas: n(r.vendas), receita: n(r.receita),
+    mes1: { investimento: n(r.mes1.investimento), vendas: n(r.mes1.vendas), receita: n(r.mes1.receita) },
+    cplMedio: n(r.cplMedio),
     cenarios: Object.fromEntries(
       (Object.keys(r.cenarios) as HorizontePlano[]).map((h) => [
         h,
@@ -132,6 +152,10 @@ const CHAVE_RASCUNHO = (id: string) => `gc:planejamento:rascunho:${id}`
 
 function paraEntrada(r: Rascunho): GcPlanejamentoEntrada {
   const plano = planoDoRascunho(r)
+  const inv1 = numeroDigitado(r.mes1.investimento)
+  const ven1 = numeroDigitado(r.mes1.vendas)
+  const rec1 = numeroDigitado(r.mes1.receita)
+  const cpl = numeroDigitado(r.cplMedio)
   const cen = (h: HorizontePlano) => ({
     onde_quer_chegar: r.cenarios[h].objetivo,
     estrategia: r.cenarios[h].estrategia,
@@ -158,6 +182,9 @@ function paraEntrada(r: Rascunho): GcPlanejamentoEntrada {
       lembrar_em: r.aguardando ? r.lembrarEm : null,
     },
     origens,
+    primeiro_mes: {
+      investimento: inv1, vendas: ven1, faturamento: rec1, cpl_medio: cpl,
+    },
     cenarios: { '6_meses': cen('6_meses'), '12_meses': cen('12_meses') },
   }
 }
@@ -173,6 +200,16 @@ function rotuloDosMeses(meses: string[] | undefined): string {
 const dataBR = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
 
 const CHAVE_ABERTO = (id: string) => `gc:planejamento:aberto:${id}`
+
+/** As colunas da grade do plano, na ordem em que aparecem: o primeiro mês e as duas metas. */
+type ColunaDaGrade = 'mes1' | HorizontePlano
+const COLUNAS_DA_GRADE: ColunaDaGrade[] = ['mes1', '6_meses', '12_meses']
+const ROTULO_DA_COLUNA: Record<ColunaDaGrade, string> = { mes1: 'Mês 1', '6_meses': 'Meta 6 meses', '12_meses': 'Meta 12 meses' }
+/** As linhas, na ordem de leitura: o que investir, o CPL que se espera, os leads que isso dá, vendas e faturamento. */
+const LINHAS_DA_GRADE: ChavePlano[] = ['investimento', 'leads', 'vendas', 'receita', 'cpl', 'roas']
+const ROTULO_DA_LINHA: Record<ChavePlano, string> = {
+  investimento: 'Investimento', leads: 'Leads', vendas: 'Vendas', receita: 'Faturamento', cpl: 'CPL', roas: 'ROAS',
+}
 
 /** O prefixo de unidade que vai DENTRO do campo da grade. Leads e vendas não têm. */
 const PREFIXO: Partial<Record<ChavePlano, string>> = { investimento: 'R$', receita: 'R$', cpl: 'R$', roas: 'x' }
@@ -244,7 +281,6 @@ export function PlanejamentoCliente({
   const [salvando, setSalvando] = React.useState(false)
   const [abertoEscolhido, setAberto] = React.useState<boolean | null>(null)
   const aberto = recolhivel ? abertoEscolhido : true
-  const [chaveGrafico, setChaveGrafico] = React.useState<ChavePlano>('leads')
   const [modelos, setModelos] = React.useState<GcModeloTexto[]>([])
   const [gerenciando, setGerenciando] = React.useState<GcCampoModelo | null>(null)
   const [confirmandoMedia, setConfirmandoMedia] = React.useState(false)
@@ -410,18 +446,6 @@ export function PlanejamentoCliente({
     return () => window.clearTimeout(t)
   }, [rascunho, sujo, guardado, clienteId])
 
-  const chavesComRota = React.useMemo(
-    () => (planoDaRota ? CHAVES_PLANO.filter(({ chave }) => rotaProjetada(planoDaRota, chave).length > 0) : []),
-    [planoDaRota],
-  )
-  const chaveEfetiva = chavesComRota.some((c) => c.chave === chaveGrafico)
-    ? chaveGrafico
-    : (chavesComRota[0]?.chave ?? chaveGrafico)
-  const linhasDaProjecao = React.useMemo(
-    () => (planoDaRota ? projecaoMensal(planoDaRota, chaveEfetiva, realizado, mesAtual()) : []),
-    [planoDaRota, chaveEfetiva, realizado],
-  )
-
   if (carregando || !rascunho || !plano || !planoDaRota) {
     return (
       <section className="flex items-center justify-center gap-2 rounded-xl border border-line p-8 text-sm text-foreground/60">
@@ -515,28 +539,107 @@ export function PlanejamentoCliente({
         : null
 
   /**
-   * Enter e Tab descem pra mesma coluna da linha de baixo, como em planilha; no fim da coluna de 6
-   * meses, seguem pro topo da de 12. Shift+Tab sobe. Fora da grade, o Tab é o de sempre.
+   * Enter e Tab descem pra mesma coluna da linha de baixo (pulando as células calculadas, que não têm
+   * campo), como em planilha; no fim de uma coluna, seguem pro topo da próxima. Shift+Tab sobe.
    */
-  const aoTeclar = (e: React.KeyboardEvent<HTMLInputElement>, h: HorizontePlano, indice: number) => {
-    const total = CHAVES_DIGITADAS.length
-    let alvo: string | null = null
-    if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
-      if (indice + 1 < total) alvo = `${h}-${indice + 1}`
-      else if (h === '6_meses') alvo = `12_meses-0`
-      else if (e.key === 'Enter') return e.preventDefault()
-    } else if (e.key === 'Tab' && e.shiftKey) {
-      if (indice > 0) alvo = `${h}-${indice - 1}`
-      else if (h === '12_meses') alvo = `6_meses-${total - 1}`
-    }
-    if (!alvo) return
+  const aoTeclar = (e: React.KeyboardEvent<HTMLInputElement>, coluna: ColunaDaGrade, chave: ChavePlano) => {
+    const descer = e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)
+    const subir = e.key === 'Tab' && e.shiftKey
+    if (!descer && !subir) return
     // No celular a grade vira cartões (outros campos, mesmos dados): procura entre os que estão à vista.
     const prefixo = window.matchMedia('(min-width: 640px)').matches ? '' : 'm-'
-    const proximo = document.querySelector<HTMLInputElement>(`[data-plano="${prefixo}${alvo}"]`)
-    if (!proximo) return
+    const achar = (c: number, r: number) =>
+      document.querySelector<HTMLInputElement>(`[data-plano="${prefixo}${COLUNAS_DA_GRADE[c]}-${LINHAS_DA_GRADE[r]}"]`)
+    const ci = COLUNAS_DA_GRADE.indexOf(coluna)
+    const ri = LINHAS_DA_GRADE.indexOf(chave)
+    let alvo: HTMLInputElement | null = null
+    if (descer) {
+      for (let r = ri + 1; r < LINHAS_DA_GRADE.length && !alvo; r++) alvo = achar(ci, r)
+      for (let c = ci + 1; c < COLUNAS_DA_GRADE.length && !alvo; c++) {
+        for (let r = 0; r < LINHAS_DA_GRADE.length && !alvo; r++) alvo = achar(c, r)
+      }
+      if (!alvo && e.key === 'Enter') return e.preventDefault()
+    } else {
+      for (let r = ri - 1; r >= 0 && !alvo; r--) alvo = achar(ci, r)
+      for (let c = ci - 1; c >= 0 && !alvo; c--) {
+        for (let r = LINHAS_DA_GRADE.length - 1; r >= 0 && !alvo; r--) alvo = achar(c, r)
+      }
+    }
+    if (!alvo) return
     e.preventDefault()
-    proximo.focus()
-    proximo.select()
+    alvo.focus()
+    alvo.select()
+  }
+
+  /** O valor PLANEJADO numa célula (pro cálculo da variação e pro que aparece nas células calculadas). */
+  const valorPlanejado = (coluna: ColunaDaGrade, chave: ChavePlano): number | undefined => {
+    if (coluna === 'mes1') return doPrimeiroMes(plano, chave)
+    const v = plano.metas[coluna][chave]
+    // Sem meta de leads, o CPL das metas é o médio (a premissa) — é com ele que os leads são estimados.
+    if (chave === 'cpl' && v === undefined && plano.metas[coluna].investimento !== undefined) return plano.cplMedio
+    return v
+  }
+  const ehDigitada = (chave: ChavePlano) => chave !== 'roas' && (chave !== 'cpl')
+  /** O texto do campo de uma célula DIGITÁVEL. */
+  const textoDoCampo = (coluna: ColunaDaGrade, chave: ChavePlano): string => {
+    if (coluna === 'mes1') return chave === 'cpl' ? rascunho.cplMedio : rascunho.mes1[chave as 'investimento' | 'vendas' | 'receita']
+    return rascunho.cenarios[coluna].metas[chave as ChaveDigitada]
+  }
+  const mudarCampo = (coluna: ColunaDaGrade, chave: ChavePlano, valor: string) => {
+    if (coluna === 'mes1') {
+      if (chave === 'cpl') setRascunho((r) => (r ? { ...r, cplMedio: valor } : r))
+      else setRascunho((r) => (r ? { ...r, mes1: { ...r.mes1, [chave]: valor } } : r))
+    } else mudarMeta(coluna, chave as ChaveDigitada, valor)
+  }
+  /**
+   * Uma célula da grade. Digitável (campo com prefixo de unidade) ou CALCULADA (cinza, só leitura):
+   *  - mês 1: investimento, vendas, faturamento e o CPL médio se digitam; leads e ROAS são calculados;
+   *  - 6 e 12 meses: investimento, leads, vendas e faturamento se digitam; CPL e ROAS são calculados.
+   */
+  const celulaDaGrade = (coluna: ColunaDaGrade, chave: ChavePlano, mobile: boolean) => {
+    const digitavel =
+      coluna === 'mes1' ? ['investimento', 'vendas', 'receita', 'cpl'].includes(chave) : ['investimento', 'leads', 'vendas', 'receita'].includes(chave)
+    const prefixo = PREFIXO[chave]
+    const largura = mobile ? 'w-full' : 'ml-auto w-[150px]'
+    if (!digitavel) {
+      const v = valorPlanejado(coluna, chave)
+      return (
+        <div
+          className={cn('relative rounded-md bg-elevate/[0.04] text-foreground/45', mobile ? 'h-10' : 'h-8', largura)}
+          title="Calculado — não se digita"
+        >
+          {prefixo && <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground/30">{prefixo}</span>}
+          <span className={cn('absolute inset-y-0 right-2 flex items-center tabular-nums', mobile ? 'text-base' : 'text-sm')}>
+            {chave === 'leads' ? (v === undefined ? '—' : Math.round(v).toLocaleString('pt-BR')) : textoCalculado(chave, v)}
+          </span>
+        </div>
+      )
+    }
+    const placeholder =
+      chave === 'cpl' && base.cpl !== undefined ? textoCalculado('cpl', base.cpl) : prefixo === 'R$' ? '0,00' : '0'
+    return (
+      <div className={cn('relative', largura)}>
+        {prefixo && <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground/40">{prefixo}</span>}
+        <input
+          data-plano={`${mobile ? 'm-' : ''}${coluna}-${chave}`}
+          aria-label={`${ROTULO_DA_LINHA[chave]}, ${ROTULO_DA_COLUNA[coluna].toLowerCase()}`}
+          value={textoDoCampo(coluna, chave)}
+          onChange={(e) => mudarCampo(coluna, chave, e.target.value)}
+          onKeyDown={(e) => aoTeclar(e, coluna, chave)}
+          onBlur={(e) => mudarCampo(coluna, chave, mascararCampo(e.target.value, prefixo === 'R$' ? 'reais' : 'inteiro'))}
+          onFocus={(e) => e.target.select()}
+          inputMode="decimal"
+          enterKeyHint="next"
+          placeholder={placeholder}
+          title={chave === 'cpl' ? 'CPL médio estimado — com ele, o investimento vira leads' : undefined}
+          className={cn(
+            'w-full rounded-md border border-line bg-surface pr-2 text-right tabular-nums text-foreground outline-none placeholder:text-foreground/10 focus:border-accent focus:ring-2 focus:ring-accent/15',
+            mobile ? 'h-10 text-base' : 'h-8 text-sm',
+            prefixo ? (mobile ? 'pl-7' : 'pl-8') : 'pl-2',
+          )}
+        />
+      </div>
+    )
   }
 
   const temSugestao = Object.keys(sugestao.campos).length > 0
@@ -785,145 +888,67 @@ export function PlanejamentoCliente({
           )}
         </div>
 
-        {/* ---------------------------------------------------------------- 2. grade das metas */}
+        {/* ---------------------------------------------------------------- 2. o plano: mês 1 e metas */}
         <div className="mt-3 rounded-xl border border-line bg-surface p-3">
           <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Target className="h-4 w-4 text-accent" /> 2 · Metas de 6 e 12 meses
+            <Target className="h-4 w-4 text-accent" /> 2 · O plano: primeiro mês e metas de 6 e 12 meses
           </h3>
-          <p className="mb-2 text-xs text-foreground/50">Preencha o que souber. CPL e ROAS são calculados.</p>
-          {/* Celular: um cartão por métrica, com as duas metas lado a lado. A tabela fica de tablet pra cima. */}
+          <p className="mb-3 text-xs text-foreground/50">
+            No <strong>mês 1</strong>: quanto investir e o que se espera (vendas e faturamento). Os <strong>leads</strong> saem do investimento ÷ CPL
+            médio, que você estima. Depois, as metas de 6 e 12 meses. Preencha o que souber.
+          </p>
+
+          {/* Celular: um cartão por métrica, com as três colunas lado a lado. A tabela fica de tablet pra cima. */}
           <div className="space-y-2 sm:hidden">
-            {[...CHAVES_DIGITADAS, ...CHAVES_CALCULADAS].map(({ chave, label }) => {
-              const indice = CHAVES_DIGITADAS.findIndex((c) => c.chave === chave)
-              const digitada = indice >= 0
-              const prefixo = PREFIXO[chave]
-              return (
-                <div key={chave} className="rounded-lg border border-line p-2.5">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className={cn('text-sm font-medium', digitada ? 'text-foreground/85' : 'text-foreground/45')}>{label}</span>
-                    <span className="text-xs tabular-nums text-foreground/50">Ponto A: {textoDaBase(chave, base[chave])}</span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {HORIZONTES_PLANO.map((h) => (
-                      <div key={h.valor} className="min-w-0">
-                        <span className="mb-1 block text-[11px] text-foreground/45">Meta {h.label}</span>
-                        <div className={cn('relative', !digitada && 'h-10 rounded-md bg-elevate/[0.04] text-foreground/45')}>
-                          {prefixo && (
-                            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-foreground/40">{prefixo}</span>
-                          )}
-                          {digitada ? (
-                            <input
-                              data-plano={`m-${h.valor}-${indice}`}
-                              aria-label={`${label}, meta de ${h.label}`}
-                              value={rascunho.cenarios[h.valor].metas[chave as ChaveDigitada]}
-                              onChange={(e) => mudarMeta(h.valor, chave as ChaveDigitada, e.target.value)}
-                              onKeyDown={(e) => aoTeclar(e, h.valor, indice)}
-                              onBlur={(e) =>
-                                mudarMeta(h.valor, chave as ChaveDigitada, mascararCampo(e.target.value, prefixo === 'R$' ? 'reais' : 'inteiro'))
-                              }
-                              onFocus={(e) => e.target.select()}
-                              inputMode="decimal"
-                              enterKeyHint="next"
-                              placeholder={prefixo === 'R$' ? '0,00' : '0'}
-                              className={cn(
-                                'h-10 w-full rounded-md border border-line bg-surface pr-2.5 text-right text-base tabular-nums text-foreground outline-none placeholder:text-foreground/10 focus:border-accent focus:ring-2 focus:ring-accent/15',
-                                prefixo ? 'pl-8' : 'pl-2.5',
-                              )}
-                            />
-                          ) : (
-                            <span className="absolute inset-y-0 right-2.5 flex items-center text-base tabular-nums">
-                              {textoCalculado(chave, plano.metas[h.valor][chave])}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-0.5 h-4">
-                          <CelulaVariacao chave={chave} valor={plano.metas[h.valor][chave]} pontoA={base[chave]} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+            {LINHAS_DA_GRADE.map((chave) => (
+              <div key={chave} className="rounded-lg border border-line p-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className={cn('text-sm font-medium', ehDigitada(chave) ? 'text-foreground/85' : 'text-foreground/45')}>
+                    {chave === 'cpl' ? 'CPL (médio no mês 1)' : ROTULO_DA_LINHA[chave]}
+                  </span>
+                  <span className="text-xs tabular-nums text-foreground/50">Ponto A: {textoDaBase(chave, base[chave])}</span>
                 </div>
-              )
-            })}
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  {COLUNAS_DA_GRADE.map((coluna) => (
+                    <div key={coluna} className="min-w-0">
+                      <span className="mb-1 block truncate text-[10.5px] text-foreground/45">{ROTULO_DA_COLUNA[coluna].replace('Meta ', '')}</span>
+                      {celulaDaGrade(coluna, chave, true)}
+                      <div className="mt-0.5 h-4">
+                        <CelulaVariacao chave={chave} valor={valorPlanejado(coluna, chave)} pontoA={base[chave]} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="hidden overflow-x-auto sm:block">
-            <table className="w-full max-w-[760px] text-sm">
+            <table className="w-full max-w-[820px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-foreground/45">
                 <tr>
                   <th className="py-1.5 pr-3 font-medium">Métrica</th>
                   <th className="px-2 py-1.5 text-right font-medium">Ponto A</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Meta 6 meses</th>
-                  <th className="px-2 py-1.5 font-medium">Variação</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Meta 12 meses</th>
-                  <th className="px-2 py-1.5 font-medium">Variação</th>
+                  {COLUNAS_DA_GRADE.map((c) => (
+                    <th key={c} className="px-2 py-1.5 text-right font-medium">{ROTULO_DA_COLUNA[c]}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {CHAVES_DIGITADAS.map(({ chave, label }, indice) => {
-                  const prefixo = PREFIXO[chave]
-                  const placeholder = prefixo === 'R$' ? '0,00' : '0'
-                  return (
-                    <tr key={chave} className="border-t border-line">
-                      <td className="py-1.5 pr-3 font-medium text-foreground/85">{label}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-foreground/55">{textoDaBase(chave, base[chave])}</td>
-                      {HORIZONTES_PLANO.flatMap((h) => [
-                        <td key={`${h.valor}-campo`} className="px-1.5 py-1">
-                          <div className="relative ml-auto w-[160px]">
-                            {prefixo && (
-                              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground/40">
-                                {prefixo}
-                              </span>
-                            )}
-                            <input
-                              data-plano={`${h.valor}-${indice}`}
-                              aria-label={`${label}, meta de ${h.label}`}
-                              value={rascunho.cenarios[h.valor].metas[chave as ChaveDigitada]}
-                              onChange={(e) => mudarMeta(h.valor, chave as ChaveDigitada, e.target.value)}
-                              onKeyDown={(e) => aoTeclar(e, h.valor, indice)}
-                              onBlur={(e) =>
-                                mudarMeta(h.valor, chave as ChaveDigitada, mascararCampo(e.target.value, prefixo === 'R$' ? 'reais' : 'inteiro'))
-                              }
-                              onFocus={(e) => e.target.select()}
-                              inputMode="decimal"
-                              placeholder={placeholder}
-                              className={cn(
-                                'h-8 w-full rounded-md border border-line bg-surface pr-2 text-right text-sm tabular-nums text-foreground outline-none placeholder:text-foreground/10 focus:border-accent focus:ring-2 focus:ring-accent/15',
-                                prefixo ? 'pl-8' : 'pl-2',
-                              )}
-                            />
-                          </div>
-                        </td>,
-                        <td key={`${h.valor}-var`} className="px-2 py-1">
-                          <CelulaVariacao chave={chave} valor={plano.metas[h.valor][chave]} pontoA={base[chave]} />
-                        </td>,
-                      ])}
-                    </tr>
-                  )
-                })}
-                {/* Linhas CALCULADAS: cinza, somente leitura. */}
-                {CHAVES_CALCULADAS.map(({ chave, label }) => (
-                  <tr key={chave} className="border-t border-line">
-                    <td className="py-1.5 pr-3 font-medium text-foreground/45">{label}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums text-foreground/40">{textoDaBase(chave, base[chave])}</td>
-                    {HORIZONTES_PLANO.flatMap((h) => [
-                      <td key={`${h.valor}-campo`} className="px-1.5 py-1">
-                        <div
-                          className="relative ml-auto h-8 w-[160px] rounded-md bg-elevate/[0.04] text-foreground/45"
-                          title="Calculado — não se digita"
-                        >
-                          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground/30">
-                            {PREFIXO[chave]}
-                          </span>
-                          <span className="absolute inset-y-0 right-2 flex items-center text-sm tabular-nums">
-                            {textoCalculado(chave, plano.metas[h.valor][chave])}
-                          </span>
+                {LINHAS_DA_GRADE.map((chave) => (
+                  <tr key={chave} className="border-t border-line align-top">
+                    <td className={cn('py-1.5 pr-3 font-medium', ehDigitada(chave) ? 'text-foreground/85' : 'text-foreground/45')}>
+                      {chave === 'cpl' ? 'CPL médio' : ROTULO_DA_LINHA[chave]}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-foreground/55">{textoDaBase(chave, base[chave])}</td>
+                    {COLUNAS_DA_GRADE.map((coluna) => (
+                      <td key={coluna} className="px-1.5 py-1">
+                        {celulaDaGrade(coluna, chave, false)}
+                        <div className="mt-0.5 h-4 text-right">
+                          <CelulaVariacao chave={chave} valor={valorPlanejado(coluna, chave)} pontoA={base[chave]} />
                         </div>
-                      </td>,
-                      <td key={`${h.valor}-var`} className="px-2 py-1">
-                        <CelulaVariacao chave={chave} valor={plano.metas[h.valor][chave]} pontoA={base[chave]} />
-                      </td>,
-                    ])}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
@@ -981,52 +1006,13 @@ export function PlanejamentoCliente({
           })}
         </div>
 
-        {/* ---------------------------------------------------------------- 3. projeção temporal */}
+        {/* ---------------------------------------------------------------- 3. projeção × real */}
         <div className="mt-3 rounded-xl border border-line bg-surface p-3">
-          <h3 className="mb-0.5 text-sm font-semibold text-foreground">3 · Projeção temporal</h3>
+          <h3 className="mb-0.5 text-sm font-semibold text-foreground">3 · Projeção × Real</h3>
           <p className="mb-3 text-xs text-foreground/50">
-            O que as metas significam mês a mês — investimento, leads, vendas, faturamento e ROAS, em 6 ou 12 meses.
+            O cenário do cliente passo a passo e, mês a mês, o que se projeta ao lado do que já foi lançado em Métricas.
           </p>
-          <ProjecaoTemporalTabela plano={planoDaRota} />
-        </div>
-
-        {/* ---------------------------------------------------------------- 4. realizado × projetado */}
-        <div className="mt-3 rounded-xl border border-line bg-surface p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-foreground">4 · Realizado × projetado</h3>
-            {chavesComRota.length > 0 && (
-              <Select
-                options={chavesComRota.map((c) => ({ value: c.chave, label: c.label }))}
-                value={chaveEfetiva}
-                onChange={(e) => setChaveGrafico(e.target.value as ChavePlano)}
-                className="w-40"
-              />
-            )}
-          </div>
-
-          {chavesComRota.length === 0 ? (
-            <p className="py-6 text-center text-sm text-foreground/45">
-              {semData
-                ? 'Lance o primeiro mês para ver a rota.'
-                : 'Defina uma meta de 6 ou 12 meses para ver a rota.'}
-            </p>
-          ) : (
-            <>
-              <p className="mb-3 text-xs text-foreground/50">
-                {HORIZONTES_PLANO.every((h) => planoDaRota.metas[h.valor][chaveEfetiva] !== undefined)
-                  ? 'A rota passa pela meta de 6 meses antes de seguir pra de 12. '
-                  : 'Rota até a meta. '}
-                {temPontoDeA(base, chaveEfetiva)
-                  ? 'Parte do ponto A, o mesmo tanto a cada mês. '
-                  : 'Sem o número no ponto A, parte do primeiro mês lançado em Métricas. '}
-                "No caminho" é estar a menos de 10% do projetado.
-              </p>
-              <GraficoProjecao linhas={linhasDaProjecao} chave={chaveEfetiva} />
-              <div className="mt-3">
-                <TabelaProjecao linhas={linhasDaProjecao} chave={chaveEfetiva} />
-              </div>
-            </>
-          )}
+          <ProjecaoXReal plano={planoDaRota} realizado={realizado} />
         </div>
       </div>
 

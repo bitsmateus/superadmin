@@ -87,6 +87,13 @@ export interface Planejamento {
   atual: PontoA
   metas: Record<HorizontePlano, MetasPlano>
   /**
+   * O PRIMEIRO MÊS do plano (k = 1): pra quem não investe hoje, "no mês 1 investir X, com meta de X vendas e
+   * X de faturamento". Os leads dele saem de investimento ÷ `cplMedio`.
+   */
+  primeiroMes?: { investimento?: number; vendas?: number; receita?: number }
+  /** CPL médio estimado: a premissa que transforma investimento em leads quando não há meta de leads. */
+  cplMedio?: number
+  /**
    * Ponto de partida de uma métrica QUANDO O PONTO A NÃO TEM o número: o valor do primeiro mês lançado
    * em Métricas. Só serve pra traçar a rota; não é ponto A e não aparece como tal.
    */
@@ -104,6 +111,27 @@ export function baseDoPontoA(a: PontoA): MetasPlano {
   if (a.vendas !== null) base.vendas = a.vendas
   if (a.receita !== null) base.receita = a.receita
   return comMetasCalculadas(base)
+}
+
+/** Os leads do primeiro mês: investimento ÷ CPL médio. Undefined sem os dois. */
+export function leadsDoPrimeiroMes(plano: Planejamento): number | undefined {
+  const inv = plano.primeiroMes?.investimento
+  const cpl = plano.cplMedio
+  return inv !== undefined && cpl !== undefined && cpl > 0 ? inv / cpl : undefined
+}
+
+/** O valor da métrica no primeiro mês do plano (k = 1), quando existe. */
+export function doPrimeiroMes(plano: Planejamento, chave: ChavePlano): number | undefined {
+  const pm = plano.primeiroMes
+  if (!pm) return undefined
+  switch (chave) {
+    case 'investimento': return pm.investimento
+    case 'vendas': return pm.vendas
+    case 'receita': return pm.receita
+    case 'leads': return leadsDoPrimeiroMes(plano)
+    case 'cpl': return pm.investimento !== undefined && plano.cplMedio !== undefined ? plano.cplMedio : undefined
+    case 'roas': return pm.receita !== undefined && pm.investimento ? pm.receita / pm.investimento : undefined
+  }
 }
 
 /** Tem algum número do ponto A preenchido? */
@@ -193,6 +221,9 @@ export function rotaProjetada(plano: Planejamento, chave: ChavePlano): PontoDaRo
 
   const pontos: { k: number; valor: number }[] = []
   if (a !== undefined) pontos.push({ k: 0, valor: a })
+  // O primeiro mês é um ponto de passagem da rota (k = 1), entre o ponto A e a meta de 6 meses.
+  const m1 = doPrimeiroMes(plano, chave)
+  if (m1 !== undefined) pontos.push({ k: 1, valor: m1 })
   for (const h of HORIZONTES_PLANO) {
     const m = plano.metas[h.valor]?.[chave]
     if (m !== undefined) pontos.push({ k: h.meses, valor: m })
@@ -223,58 +254,91 @@ export function projetadoDoMes(plano: Planejamento, chave: ChavePlano, periodo: 
 }
 
 // ---------------------------------------------------------------------------------------------------
-// Projeção temporal (a tabela "mês 1, mês 2…" com totais)
+// Projeção × real, mês a mês (a tabela "mês 1, mês 2…" com totais)
 // ---------------------------------------------------------------------------------------------------
 
-export interface LinhaTemporal {
-  /** 1 = o primeiro mês depois do ponto A. */
-  k: number
-  /** 'YYYY-MM' do mês, quando há como saber (data do diagnóstico ou, na falta, o mês de hoje). */
-  mes: string
+type ChaveDaTabela = 'investimento' | 'leads' | 'vendas' | 'receita'
+export interface ValoresDoMes {
   investimento: number | null
   leads: number | null
   vendas: number | null
   receita: number | null
   /** Faturamento ÷ investimento. */
   roas: number | null
-  /** Leads que não vieram de uma meta de leads, e sim das vendas ÷ conversão do ponto A. */
+}
+export type SituacaoDaLinha = 'no_caminho' | 'acima' | 'abaixo' | 'sem_lancamento' | 'a_vir' | 'sem_comparacao'
+
+export interface LinhaTemporal {
+  /** 0 = o mês do diagnóstico (ponto A); 1 = o primeiro mês do plano. */
+  k: number
+  /** 'YYYY-MM' do mês, quando há como saber (data do diagnóstico ou, na falta, o mês de hoje). */
+  mes: string
+  projetado: ValoresDoMes
+  /** O que foi LANÇADO naquele mês em Métricas (null onde não há lançamento). */
+  real: ValoresDoMes
+  /** Leads que não vieram de uma meta de leads, e sim do CPL médio (ou das vendas ÷ conversão). */
   leadsEstimados: boolean
+  situacao: SituacaoDaLinha
+  /** Quanto o real ficou do projetado, em %, na métrica usada pra julgar o mês. Null sem comparação. */
+  desvioPct: number | null
 }
 
 export interface ProjecaoTemporal {
   meses: number
+  /** O ponto A (mês do diagnóstico) — contexto, fora dos totais. */
+  inicio: LinhaTemporal
   linhas: LinhaTemporal[]
-  total: Omit<LinhaTemporal, 'k' | 'mes' | 'leadsEstimados'>
-  /** Algum número parte de zero porque o ponto A não tinha aquela métrica (cliente que ainda não faz tráfego). */
+  /** O PLANO inteiro: soma do projetado nos N meses. */
+  total: ValoresDoMes
+  /** O que já foi realizado, e o projetado NOS MESMOS meses — pra comparar maçã com maçã. */
+  acumulado: { meses: number; projetado: ValoresDoMes; real: ValoresDoMes }
+  /** Algum número parte de zero porque o ponto A não tinha aquela métrica. */
   partiuDeZero: boolean
 }
 
+const vazios = (): ValoresDoMes => ({ investimento: null, leads: null, vendas: null, receita: null, roas: null })
+
 /**
- * A PROJEÇÃO TEMPORAL: o que se espera em cada mês dos próximos 6 ou 12, a partir das metas.
+ * A PROJEÇÃO × REAL: o que se espera em cada mês dos próximos 6 ou 12, ao lado do que foi lançado.
  *
  * Não é um cálculo exato — meta de faturamento e de vendas não se metrifica com precisão —, é uma
- * ESTIMATIVA ordenada: cresce em linha reta do ponto A até a meta de 6 meses e dela até a de 12.
- * Depois da última meta definida, o valor se MANTÉM (a meta de 6 meses sozinha vira um patamar nos
- * meses 7 a 12). Sem número no ponto A a conta parte de ZERO — é o cliente que ainda não faz tráfego,
- * e "tudo zerado" é um começo legítimo.
+ * ESTIMATIVA ordenada. A rota de cada métrica passa pelo ponto A (mês 0), pelo PRIMEIRO MÊS (k = 1) e
+ * pelas metas de 6 e 12 meses, em linha reta entre um ponto e o seguinte; depois da última meta o valor
+ * se mantém. Sem número no ponto A a conta parte de ZERO (cliente que ainda não faz tráfego).
  *
- * Metas de uma métrica que ninguém definiu ficam em branco (null), não em zero. Leads sem meta própria
- * saem das vendas ÷ conversão do ponto A (marcados como estimados), quando a conversão existe.
+ * Leads: com meta de leads (6/12 meses), segue a rota; sem ela, saem de investimento ÷ CPL médio (a
+ * premissa) e, na falta dele, de vendas ÷ conversão do ponto A — marcados como ESTIMADOS.
+ *
+ * O real vem de `realizado` (mês 'YYYY-MM' → métricas lançadas). Mês futuro é "a vir"; mês passado sem
+ * lançamento é "sem lançamento" — não é "abaixo", porque ninguém sabe o que aconteceu.
  */
-export function projecaoTemporal(plano: Planejamento, meses: 6 | 12, hoje: string = hojeISO()): ProjecaoTemporal {
+export function projecaoTemporal(
+  plano: Planejamento,
+  meses: 6 | 12,
+  opcoes: { realizado?: Record<string, Record<string, number>>; mesCorrente?: string; hoje?: string } = {},
+): ProjecaoTemporal {
+  const hoje = opcoes.hoje ?? hojeISO()
+  const realizado = opcoes.realizado ?? {}
+  const mesCorrente = opcoes.mesCorrente ?? hoje.slice(0, 7)
   const base = baseDoPontoA(plano.atual)
   let partiuDeZero = false
 
-  const valorEm = (chave: 'investimento' | 'leads' | 'vendas' | 'receita', k: number): number | null => {
+  const temMeta6ou12 = (chave: ChaveDaTabela) =>
+    plano.metas['6_meses']?.[chave] !== undefined || plano.metas['12_meses']?.[chave] !== undefined
+
+  /** Valor da rota (ponto A → mês 1 → 6 → 12) numa métrica, no mês k. Null sem nenhum ponto de chegada. */
+  const rota = (chave: ChaveDaTabela, k: number): number | null => {
+    const m1 = doPrimeiroMes(plano, chave)
     const m6 = plano.metas['6_meses']?.[chave]
     const m12 = plano.metas['12_meses']?.[chave]
-    if (m6 === undefined && m12 === undefined) return null
-    const pontos: { k: number; v: number }[] = []
+    if (m1 === undefined && m6 === undefined && m12 === undefined) return null
     const inicio = base[chave] ?? plano.partida?.[chave] ?? 0
     if (base[chave] === undefined && plano.partida?.[chave] === undefined) partiuDeZero = true
-    pontos.push({ k: 0, v: inicio })
+    const pontos: { k: number; v: number }[] = [{ k: 0, v: inicio }]
+    if (m1 !== undefined) pontos.push({ k: 1, v: m1 })
     if (m6 !== undefined) pontos.push({ k: 6, v: m6 })
     if (m12 !== undefined) pontos.push({ k: 12, v: m12 })
+    if (k <= 0) return inicio
     for (let i = 0; i < pontos.length - 1; i++) {
       const a = pontos[i]
       const b = pontos[i + 1]
@@ -285,36 +349,88 @@ export function projecaoTemporal(plano: Planejamento, meses: 6 | 12, hoje: strin
 
   const conv = plano.atual.conversao && plano.atual.conversao > 0 ? plano.atual.conversao / 100 : null
   const referencia = plano.dataDiagnostico ?? `${hoje.slice(0, 7)}-01`
-  const linhas: LinhaTemporal[] = []
-  for (let k = 1; k <= meses; k++) {
-    const investimento = valorEm('investimento', k)
-    const vendas = valorEm('vendas', k)
-    const receita = valorEm('receita', k)
-    let leads = valorEm('leads', k)
+
+  const doReal = (mes: string): ValoresDoMes => {
+    const r = realizado[mes] ?? {}
+    const pega = (c: string) => (r[c] !== undefined ? r[c] : null)
+    const inv = pega('investimento')
+    const rec = pega('receita')
+    return {
+      investimento: inv, leads: pega('leads'), vendas: pega('vendas'), receita: rec,
+      roas: rec !== null && inv ? rec / inv : null,
+    }
+  }
+
+  const montar = (k: number): LinhaTemporal => {
+    const mes = mesDoIndice(referencia, k)
+    const investimento = rota('investimento', k)
+    const vendas = rota('vendas', k)
+    const receita = rota('receita', k)
+    let leads: number | null = null
     let leadsEstimados = false
-    if (leads === null && vendas !== null && conv !== null) {
+    if (temMeta6ou12('leads')) {
+      leads = rota('leads', k)
+    } else if (investimento !== null && plano.cplMedio !== undefined && plano.cplMedio > 0) {
+      leads = investimento / plano.cplMedio
+      leadsEstimados = true
+    } else if (vendas !== null && conv !== null) {
       leads = vendas / conv
       leadsEstimados = true
     }
-    linhas.push({
-      k, mes: mesDoIndice(referencia, k), investimento, leads, vendas, receita,
-      roas: receita !== null && investimento ? receita / investimento : null, leadsEstimados,
-    })
+    const projetado: ValoresDoMes = {
+      investimento, leads, vendas, receita, roas: receita !== null && investimento ? receita / investimento : null,
+    }
+    const real = doReal(mes)
+
+    // Como o mês está contra o plano: pelo faturamento; na falta dele, vendas; depois leads.
+    let situacao: SituacaoDaLinha
+    let desvioPct: number | null = null
+    const temReal = real.investimento !== null || real.leads !== null || real.vendas !== null || real.receita !== null
+    if (!temReal) situacao = mes > mesCorrente ? 'a_vir' : 'sem_lancamento'
+    else {
+      const chave = (['receita', 'vendas', 'leads'] as const).find((c) => projetado[c] !== null && projetado[c] !== 0 && real[c] !== null)
+      if (!chave) situacao = 'sem_comparacao'
+      else {
+        desvioPct = ((real[chave]! - projetado[chave]!) / Math.abs(projetado[chave]!)) * 100
+        situacao = Math.abs(desvioPct) <= TOLERANCIA_NO_CAMINHO * 100 ? 'no_caminho' : desvioPct > 0 ? 'acima' : 'abaixo'
+      }
+    }
+    return { k, mes, projetado, real, leadsEstimados, situacao, desvioPct }
   }
-  const soma = (f: (l: LinhaTemporal) => number | null): number | null => {
-    const vs = linhas.map(f).filter((v): v is number => v !== null)
-    return vs.length ? vs.reduce((s, v) => s + v, 0) : null
+
+  const inicio = montar(0)
+  // O mês 0 mostra o ponto A como "projetado" (é de onde se parte), não uma projeção.
+  inicio.projetado = {
+    investimento: base.investimento ?? null, leads: base.leads ?? null, vendas: base.vendas ?? null,
+    receita: base.receita ?? null, roas: base.roas ?? null,
   }
-  const investimento = soma((l) => l.investimento)
-  const receita = soma((l) => l.receita)
+  inicio.leadsEstimados = false
+  inicio.situacao = 'sem_comparacao'
+  inicio.desvioPct = null
+  const linhas: LinhaTemporal[] = []
+  for (let k = 1; k <= meses; k++) linhas.push(montar(k))
+
+  const somar = (vs: (number | null)[]): number | null => {
+    const nums = vs.filter((v): v is number => v !== null)
+    return nums.length ? nums.reduce((acc, v) => acc + v, 0) : null
+  }
+  const totalDe = (f: (l: LinhaTemporal) => ValoresDoMes, subconjunto: LinhaTemporal[]): ValoresDoMes => {
+    const investimento = somar(subconjunto.map((l) => f(l).investimento))
+    const receita = somar(subconjunto.map((l) => f(l).receita))
+    return {
+      investimento, leads: somar(subconjunto.map((l) => f(l).leads)), vendas: somar(subconjunto.map((l) => f(l).vendas)),
+      receita, roas: receita !== null && investimento ? receita / investimento : null,
+    }
+  }
+  const comReal = linhas.filter((l) => ['no_caminho', 'acima', 'abaixo', 'sem_comparacao'].includes(l.situacao))
   return {
-    meses,
-    linhas,
-    total: {
-      investimento, leads: soma((l) => l.leads), vendas: soma((l) => l.vendas), receita,
-      roas: receita !== null && investimento ? receita / investimento : null,
+    meses, inicio, linhas, partiuDeZero,
+    total: totalDe((l) => l.projetado, linhas),
+    acumulado: {
+      meses: comReal.length,
+      projetado: comReal.length ? totalDe((l) => l.projetado, comReal) : vazios(),
+      real: comReal.length ? totalDe((l) => l.real, comReal) : vazios(),
     },
-    partiuDeZero,
   }
 }
 
@@ -520,10 +636,12 @@ export function variacaoContraPontoA(
   return { pct: v.pct, boa: chave === 'investimento' ? null : v.boa }
 }
 
-/** Tem alguma META de 6 ou 12 meses? É o que o semáforo compara com o realizado. */
+/** Tem alguma META (a do primeiro mês, de 6 ou de 12 meses)? É o que o semáforo compara com o realizado. */
 export function temPlanejamento(plano: Planejamento | null | undefined): plano is Planejamento {
   if (!plano) return false
-  return HORIZONTES_PLANO.some((h) => Object.keys(plano.metas[h.valor] ?? {}).length > 0)
+  const pm = plano.primeiroMes
+  const temPrimeiroMes = !!pm && (pm.investimento !== undefined || pm.vendas !== undefined || pm.receita !== undefined)
+  return temPrimeiroMes || HORIZONTES_PLANO.some((h) => Object.keys(plano.metas[h.valor] ?? {}).length > 0)
 }
 
 /** Tem QUALQUER número de planejamento: ponto A ou meta? Textos sozinhos não contam. */

@@ -38,6 +38,8 @@ export interface JornadaPublica {
     conversao: number | null;
     receita: number | null;
   };
+  /** O primeiro mês do plano (só números): investimento, vendas e faturamento, e o CPL médio da premissa. */
+  primeiro_mes: { investimento: number | null; vendas: number | null; faturamento: number | null; cpl_medio: number | null };
   cenarios: Record<string, { metas: Record<string, number>; objetivo: string | null }>;
   realizado: Record<string, Record<string, number>>;
 }
@@ -103,6 +105,12 @@ export function montarJornadaPublica(
         })
       ),
       receita: numero(p.faturamento_mensal),
+    },
+    primeiro_mes: {
+      investimento: numero(p.mes1_investimento),
+      vendas: numero(p.mes1_vendas),
+      faturamento: numero(p.mes1_faturamento),
+      cpl_medio: numero(p.cpl_medio),
     },
     cenarios,
     realizado,

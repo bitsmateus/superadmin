@@ -66,6 +66,10 @@ export function somarMesesNaData(data: string, meses: number): string {
 export const ROTULOS_PLANEJAMENTO: Record<string, string> = {
   situacao_atual: 'Situação de hoje',
   vendas_mes: 'Vendas/mês (ponto A)',
+  mes1_investimento: 'Mês 1: investimento',
+  mes1_vendas: 'Mês 1: meta de vendas',
+  mes1_faturamento: 'Mês 1: meta de faturamento',
+  cpl_medio: 'CPL médio (premissa do plano)',
   aguardando_cliente: 'Aguardando o cliente',
   lembrar_em: 'Lembrar de completar em',
   leads_mes: 'Leads/mês (ponto A)',

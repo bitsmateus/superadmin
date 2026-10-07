@@ -285,6 +285,8 @@ const SQL_CLIENTES = `
         'data_diagnostico', to_char(pl.data_diagnostico, 'YYYY-MM-DD'),
         'leads', pl.leads_mes, 'investimento', pl.investimento_mes, 'vendas', pl.vendas_mes,
         'ticket', pl.ticket_medio, 'conversao', pl.taxa_conversao, 'receita', pl.faturamento_mensal,
+        'mes1_investimento', pl.mes1_investimento, 'mes1_vendas', pl.mes1_vendas,
+        'mes1_faturamento', pl.mes1_faturamento, 'cpl_medio', pl.cpl_medio,
         'aguardando_cliente', pl.aguardando_cliente,
         'lembrar_em', to_char(pl.lembrar_em, 'YYYY-MM-DD'))
       FROM gc_planejamento pl WHERE pl.gc_cliente_id = c.id) AS planejamento,
@@ -1557,6 +1559,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       `SELECT situacao_atual, leads_mes, investimento_mes, vendas_mes, faturamento_mensal,
               to_char(data_diagnostico, 'YYYY-MM-DD') AS data_diagnostico,
               aguardando_cliente, to_char(lembrar_em, 'YYYY-MM-DD') AS lembrar_em,
+              mes1_investimento, mes1_vendas, mes1_faturamento, cpl_medio,
               portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo, origens
        FROM gc_planejamento WHERE gc_cliente_id = $1`,
       [clienteId]
@@ -1602,6 +1605,13 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         data_diagnostico: (p?.data_diagnostico as string | null) ?? null,
         aguardando_cliente: Boolean(p?.aguardando_cliente),
         lembrar_em: (p?.lembrar_em as string | null) ?? null,
+      },
+      // O primeiro mês do plano e a premissa de CPL (os leads do mês 1 = investimento ÷ CPL médio).
+      primeiro_mes: {
+        investimento: numero(p?.mes1_investimento),
+        vendas: numero(p?.mes1_vendas),
+        faturamento: numero(p?.mes1_faturamento),
+        cpl_medio: numero(p?.cpl_medio),
       },
       // A curva é sempre linear: o seletor linear/composta saiu da tela.
       curva: 'linear' as const,
@@ -1746,6 +1756,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     atual?: Record<string, unknown>;
     portal?: { ativo?: boolean; mostrar_situacao?: boolean; mostrar_objetivo?: boolean };
     origens?: unknown;
+    primeiro_mes?: Record<string, unknown>;
     cenarios?: Record<string, { onde_quer_chegar?: string; estrategia?: string; metas?: Record<string, unknown> }>;
   };
   const dataValida = (v: unknown): string | null =>
@@ -1775,6 +1786,14 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
           if (n !== null && n < 0) return reply.status(400).send({ message: `A meta de ${k} não pode ser negativa` });
         }
       }
+      const pm = corpo.primeiro_mes ?? {};
+      const primeiroMes = {
+        investimento: numero(pm.investimento), vendas: numero(pm.vendas),
+        faturamento: numero(pm.faturamento), cpl_medio: numero(pm.cpl_medio),
+      };
+      for (const [k, v] of Object.entries(primeiroMes)) {
+        if (v !== null && v < 0) return reply.status(400).send({ message: `${k === 'cpl_medio' ? 'O CPL médio' : 'O valor do mês 1'} não pode ser negativo` });
+      }
       const dataDiag = dataValida(a.data_diagnostico);
       const aguardando = Boolean(a.aguardando_cliente);
       // O lembrete só faz sentido enquanto se está aguardando o cliente.
@@ -1789,8 +1808,9 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
           `INSERT INTO gc_planejamento
              (gc_cliente_id, situacao_atual, leads_mes, investimento_mes, vendas_mes, ticket_medio,
               taxa_conversao, faturamento_mensal, data_diagnostico, curva, aguardando_cliente, lembrar_em,
-              portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo, atualizado_por, origens)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'linear',$10,$11,$12,$13,$14,$15,$16)
+              portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo, atualizado_por, origens,
+              mes1_investimento, mes1_vendas, mes1_faturamento, cpl_medio)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'linear',$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
            ON CONFLICT (gc_cliente_id) DO UPDATE SET
              situacao_atual = EXCLUDED.situacao_atual, leads_mes = EXCLUDED.leads_mes,
              investimento_mes = EXCLUDED.investimento_mes, vendas_mes = EXCLUDED.vendas_mes,
@@ -1801,6 +1821,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
                ? `portal_ativo = EXCLUDED.portal_ativo, portal_mostrar_situacao = EXCLUDED.portal_mostrar_situacao,
              portal_mostrar_objetivo = EXCLUDED.portal_mostrar_objetivo,`
                : ''}
+             mes1_investimento = EXCLUDED.mes1_investimento, mes1_vendas = EXCLUDED.mes1_vendas,
+             mes1_faturamento = EXCLUDED.mes1_faturamento, cpl_medio = EXCLUDED.cpl_medio,
              atualizado_por = EXCLUDED.atualizado_por, origens = EXCLUDED.origens, updated_at = NOW()`,
           [
             req.params.id, texto(a.situacao_atual), pontoA.leads_mes, pontoA.investimento_mes,
@@ -1815,6 +1837,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
                 )
               )
             ),
+            primeiroMes.investimento, primeiroMes.vendas, primeiroMes.faturamento, primeiroMes.cpl_medio,
           ]
         );
 
@@ -1876,6 +1899,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         vendas_mes: x.atual.vendas_mes, faturamento_mensal: x.atual.faturamento_mensal,
         data_diagnostico: x.atual.data_diagnostico, aguardando_cliente: x.atual.aguardando_cliente,
         lembrar_em: x.atual.lembrar_em, portal_ativo: x.portal.ativo,
+        mes1_investimento: x.primeiro_mes.investimento, mes1_vendas: x.primeiro_mes.vendas,
+        mes1_faturamento: x.primeiro_mes.faturamento, cpl_medio: x.primeiro_mes.cpl_medio,
         portal_mostrar_situacao: x.portal.mostrar_situacao, portal_mostrar_objetivo: x.portal.mostrar_objetivo,
         ...origensComoCampos(x.origens),
       });
@@ -2219,6 +2244,7 @@ async function jornadaDoPortal(clienteId: string, opcoes: { ignorarToggle?: bool
   const planejamento = await queryOne<Record<string, unknown>>(
     `SELECT situacao_atual, leads_mes, investimento_mes, vendas_mes, faturamento_mensal,
             to_char(data_diagnostico, 'YYYY-MM-DD') AS data_diagnostico, curva,
+            mes1_investimento, mes1_vendas, mes1_faturamento, cpl_medio,
             portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo
      FROM gc_planejamento WHERE gc_cliente_id = $1`,
     [clienteId]

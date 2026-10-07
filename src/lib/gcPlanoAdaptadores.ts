@@ -8,9 +8,23 @@ import {
 // A curva é sempre linear (o seletor saiu da tela) e CPL/ROAS são sempre calculados das metas digitadas:
 // o que vier gravado pra essas duas chaves, de planejamentos antigos, é ignorado em todos os adaptadores.
 
+/** O primeiro mês e o CPL médio (null vira ausente: "sem número" não é zero). */
+function primeiroMesDe(pm: { investimento: number | null; vendas: number | null; faturamento: number | null; cpl_medio: number | null } | undefined) {
+  const out: Pick<Planejamento, 'primeiroMes' | 'cplMedio'> = {}
+  if (!pm) return out
+  const mes: NonNullable<Planejamento['primeiroMes']> = {}
+  if (pm.investimento !== null) mes.investimento = Number(pm.investimento)
+  if (pm.vendas !== null) mes.vendas = Number(pm.vendas)
+  if (pm.faturamento !== null) mes.receita = Number(pm.faturamento)
+  if (Object.keys(mes).length) out.primeiroMes = mes
+  if (pm.cpl_medio !== null) out.cplMedio = Number(pm.cpl_medio)
+  return out
+}
+
 /** O planejamento como a API de edição entrega → o formato do cálculo. */
 export function planoDaApi(a: GcPlanejamentoApi): Planejamento {
   return {
+    ...primeiroMesDe(a.primeiro_mes),
     curva: 'linear',
     dataDiagnostico: a.atual.data_diagnostico,
     atual: montarPontoA({
@@ -29,6 +43,7 @@ export function planoDaApi(a: GcPlanejamentoApi): Planejamento {
 /** O bloco do portal → o formato do cálculo (a mesma rota projetada do painel). */
 export function planoDaJornada(j: GcJornadaPortal): Planejamento {
   return {
+    ...primeiroMesDe(j.primeiro_mes),
     curva: 'linear',
     dataDiagnostico: j.data_diagnostico,
     atual: montarPontoA({
@@ -65,6 +80,14 @@ export function planoDaLista(
   const temMeta = HORIZONTES_PLANO.some((h) => Object.keys(metas[h.valor]).length > 0)
   if (!p && !temMeta) return null
   return {
+    ...primeiroMesDe(
+      p
+        ? {
+            investimento: p.mes1_investimento ?? null, vendas: p.mes1_vendas ?? null,
+            faturamento: p.mes1_faturamento ?? null, cpl_medio: p.cpl_medio ?? null,
+          }
+        : undefined,
+    ),
     curva: 'linear',
     dataDiagnostico:
       p?.data_diagnostico ?? (c.primeiro_mes_metricas ? `${c.primeiro_mes_metricas}-01` : null),

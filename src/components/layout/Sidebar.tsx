@@ -144,8 +144,6 @@ function useGrupoAberto(chave: string): [boolean, React.Dispatch<React.SetStateA
 /** As sub-abas do grupo "Clientes NX Digital", na ordem em que aparecem. */
 const SUB_ABAS_CLIENTES_NX = [
   { to: '/clientesnxdigital/clientes', label: 'Clientes', icon: Users },
-  { to: '/clientesnxdigital/trafego', label: 'Tráfego', icon: BarChart3 },
-  { to: '/clientesnxdigital/estrategias', label: 'Estratégias', icon: Lightbulb },
 ]
 
 /** Chave estável de um item do menu pra guardar a ordem: a rota, ou o id quando é uma cópia

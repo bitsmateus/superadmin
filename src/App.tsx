@@ -62,12 +62,6 @@ const ClientesNxDigitalPage = React.lazy(() =>
 const ClienteNxDetalhePage = React.lazy(() =>
   import('./pages/ClienteNxDetalhePage').then((m) => ({ default: m.ClienteNxDetalhePage })),
 )
-const TrafegoNxPage = React.lazy(() =>
-  import('./pages/TrafegoNxPage').then((m) => ({ default: m.TrafegoNxPage })),
-)
-const EstrategiasNxPage = React.lazy(() =>
-  import('./pages/EstrategiasNxPage').then((m) => ({ default: m.EstrategiasNxPage })),
-)
 const FinanceiroClientesGeralPage = React.lazy(() =>
   import('./pages/FinanceiroClientesGeralPage').then((m) => ({ default: m.FinanceiroClientesGeralPage })),
 )
@@ -218,8 +212,9 @@ export default function App() {
           <Route path="/clientesnxdigital" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
           <Route path="/clientesnxdigital/clientes" element={<ClientesNxDigitalPage />} />
           <Route path="/clientesnxdigital/clientes/:id" element={<ClienteNxDetalhePage />} />
-          <Route path="/clientesnxdigital/trafego" element={<TrafegoNxPage />} />
-          <Route path="/clientesnxdigital/estrategias" element={<EstrategiasNxPage />} />
+          {/* As telas Tráfego e Estratégias saíram: quem tem o link antigo volta pra lista. */}
+          <Route path="/clientesnxdigital/trafego" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
+          <Route path="/clientesnxdigital/estrategias" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           {/* Uma cópia do menu Suporte tem rota só dela — ver SupportViewPage. */}
           <Route path="/visao/:pageId" element={<SupportViewPage />} />

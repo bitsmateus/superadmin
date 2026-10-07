@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useModuloNxNoCelular } from '@/hooks/useModuloNxNoCelular'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Loader2, MessageSquare, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
@@ -32,7 +32,8 @@ export function ClienteNxDetalhePage() {
   const navegar = useNavigate()
   const [detalhe, setDetalhe] = React.useState<GcClienteDetalhe | null>(null)
   const [carregando, setCarregando] = React.useState(true)
-  const [aba, setAba] = React.useState<Aba>('visao')
+  const [busca] = useSearchParams()
+  const [aba, setAba] = React.useState<Aba>(busca.get('aba') === 'relatorios' ? 'relatorios' : 'visao')
   const [editando, setEditando] = React.useState(false)
   const [confirmandoExclusao, setConfirmandoExclusao] = React.useState(false)
   const [notasAbertas, setNotasAbertas] = React.useState(false)

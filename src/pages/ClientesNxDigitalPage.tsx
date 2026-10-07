@@ -276,6 +276,11 @@ export function ClientesNxDigitalPage() {
   const [ordem, setOrdem] = React.useState<Ordem>('fila')
   const [modalAberto, setModalAberto] = React.useState(false)
   const pendencia = useLancamentoPendente()
+  // Sem a antiga grade de lançamento, o atalho leva ao primeiro cliente que falta (aba Métricas e relatórios).
+  const lancarPrimeiroPendente = () => {
+    const primeiro = pendencia.pendentes[0]
+    if (primeiro) navegar(`/clientesnxdigital/clientes/${primeiro.id}?aba=relatorios`)
+  }
   const [visao, setVisao] = React.useState<Visao>(lerVisao)
   const [agrupamento, setAgrupamento] = React.useState<Agrupamento>(lerAgrupamento)
   // A visão por situação tem o próprio mês e a própria carga: a lista principal é do mês corrente, e
@@ -481,7 +486,7 @@ export function ClientesNxDigitalPage() {
       <div className="space-y-4 px-4 pb-10 lg:px-6">
         <FaixaLancamento
           pendencia={pendencia}
-          onLancar={(p) => navegar(`/clientesnxdigital/trafego?lancar=${p}`)}
+          onLancar={lancarPrimeiroPendente}
         />
 
         {!carregando && clientes.length > 0 && (
@@ -657,7 +662,7 @@ export function ClientesNxDigitalPage() {
             carregando={carregandoSituacao}
             onPeriodo={setPeriodoSituacao}
             onAbrir={(id) => navegar(`/clientesnxdigital/clientes/${id}`)}
-            onLancar={(p) => navegar(`/clientesnxdigital/trafego?lancar=${p}`)}
+            onLancar={lancarPrimeiroPendente}
           />
         ) : visao === 'kanban' ? (
           <KanbanClientes

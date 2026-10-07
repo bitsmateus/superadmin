@@ -785,6 +785,21 @@ export function PlanejamentoCliente({
 
       {/* O conteúdo fica MONTADO mesmo recolhido: desmontar jogaria fora o que está sendo digitado. */}
       <div className={cn('border-t border-accent/15 p-4', !aberto && 'hidden')}>
+        {/* O RESUMO DO PLANO: a leitura de uma tela só — de onde parte, aonde vai e como. É o que se mostra ao cliente. */}
+        <div className="mb-3 rounded-xl border border-accent/20 bg-gradient-to-br from-accent/[0.06] to-transparent p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">Resumo do plano</h3>
+            {estadoDoMes && <PastilhaSaude estado={estadoDoMes.estado} texto={`Este mês: ${estadoDoMes.texto.toLowerCase()}`} />}
+          </div>
+          <CenarioEmPassos plano={planoDaRota} />
+          <p className="mt-2 text-xs text-foreground/55">
+            <span className="font-medium text-foreground/70">Como: </span>
+            {rascunho.estrategiaUsada.trim()
+              ? rascunho.estrategiaUsada.trim().split('\n')[0].slice(0, 160)
+              : 'estratégia ainda não escrita (passo 3).'}
+          </p>
+        </div>
+
         {guardado && (
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/[0.05] px-3 py-2 text-sm">
             <span className="text-foreground/85">

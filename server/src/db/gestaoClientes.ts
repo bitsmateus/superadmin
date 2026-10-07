@@ -363,6 +363,22 @@ const TABELAS = [
        ordem = ordem + 100, updated_at = NOW()
      WHERE campo = 'premissas'`,
 
+  // "Adicionar info": informações livres do mês de um cliente — um número relevante do tráfego, uma
+  // observação —, que não cabem nas métricas fixas. Opcionalmente entram no relatório do cliente.
+  `CREATE TABLE IF NOT EXISTS gc_infos_mes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    periodo_inicio DATE NOT NULL,
+    titulo TEXT NOT NULL,
+    valor TEXT NOT NULL DEFAULT '',
+    observacao TEXT NOT NULL DEFAULT '',
+    no_relatorio BOOLEAN NOT NULL DEFAULT false,
+    autor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_infos_mes_idx ON gc_infos_mes (gc_cliente_id, periodo_inicio)`,
+
   // "Estratégia usada": texto livre por cliente. A estratégia quase sempre é personalizada, então em vez de
   // escolher um modelo pronto a equipe escreve o que está sendo feito.
   `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS estrategia_usada TEXT NOT NULL DEFAULT ''`,

@@ -934,6 +934,71 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
+  // ------------------------------------------------------------------ infos do mês ("Adicionar info")
+  // GET /api/gc/clientes/:id/infos?periodo=YYYY-MM-DD — as informações livres do mês (ou de todos, sem período).
+  app.get<{ Params: { id: string }; Querystring: { periodo?: string } }>(
+    '/api/gc/clientes/:id/infos',
+    autenticado,
+    async (req) => {
+      return query(
+        `SELECT i.id, i.gc_cliente_id, to_char(i.periodo_inicio, 'YYYY-MM-DD') AS periodo_inicio, i.titulo, i.valor,
+                i.observacao, i.no_relatorio, i.created_at, p.name AS autor_nome
+         FROM gc_infos_mes i LEFT JOIN profiles p ON p.id = i.autor_id
+         WHERE i.gc_cliente_id = $1 AND ($2::date IS NULL OR i.periodo_inicio = $2::date)
+         ORDER BY i.periodo_inicio DESC, i.created_at`,
+        [req.params.id, req.query.periodo ? req.query.periodo.slice(0, 10) : null]
+      );
+    }
+  );
+
+  app.post<{
+    Params: { id: string };
+    Body: { periodo_inicio?: string; titulo?: string; valor?: string; observacao?: string; no_relatorio?: boolean };
+  }>('/api/gc/clientes/:id/infos', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const b = req.body ?? {};
+    if (!b.titulo?.trim()) return reply.status(400).send({ message: 'Dê um título à informação' });
+    if (!b.periodo_inicio || !/^\d{4}-\d{2}-\d{2}/.test(b.periodo_inicio)) {
+      return reply.status(400).send({ message: 'periodo_inicio é obrigatório' });
+    }
+    const criada = await queryOne(
+      `INSERT INTO gc_infos_mes (gc_cliente_id, periodo_inicio, titulo, valor, observacao, no_relatorio, autor_id)
+       VALUES ($1, $2::date, $3, $4, $5, $6, $7)
+       RETURNING id, gc_cliente_id, to_char(periodo_inicio, 'YYYY-MM-DD') AS periodo_inicio, titulo, valor,
+                 observacao, no_relatorio, created_at`,
+      [req.params.id, b.periodo_inicio.slice(0, 10), b.titulo.trim(), (b.valor ?? '').trim(), (b.observacao ?? '').trim(), Boolean(b.no_relatorio), sub]
+    );
+    return reply.status(201).send(criada);
+  });
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/api/gc/infos/:id',
+    autenticado,
+    async (req, reply) => {
+      const corpo = { ...(req.body ?? {}) };
+      if (typeof corpo.titulo === 'string' && !corpo.titulo.trim()) {
+        return reply.status(400).send({ message: 'O título não pode ficar vazio' });
+      }
+      const { sets, params } = montarUpdate(['titulo', 'valor', 'observacao', 'no_relatorio'], corpo);
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+      params.push(req.params.id);
+      const atualizada = await queryOne(
+        `UPDATE gc_infos_mes SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${params.length}
+         RETURNING id, gc_cliente_id, to_char(periodo_inicio, 'YYYY-MM-DD') AS periodo_inicio, titulo, valor,
+                   observacao, no_relatorio, created_at`,
+        params
+      );
+      if (!atualizada) return reply.status(404).send({ message: 'Informação não encontrada' });
+      return atualizada;
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/gc/infos/:id', autenticado, async (req, reply) => {
+    const apagada = await queryOne('DELETE FROM gc_infos_mes WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!apagada) return reply.status(404).send({ message: 'Informação não encontrada' });
+    return reply.status(204).send();
+  });
+
   // ------------------------------------------------------------------ métricas
   // GET /api/gc/clientes/:id/metricas — tudo o que já foi lançado, do mês mais novo pro mais
   // velho. O recorte por período fica no front, que já sabe qual mês está aberto na tela.

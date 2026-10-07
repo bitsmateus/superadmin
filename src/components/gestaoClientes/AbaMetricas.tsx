@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/Select'
 import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
+import { InfosDoMes } from '@/components/gestaoClientes/InfosDoMes'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import {
@@ -375,26 +376,14 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border border-line p-4">
+      <section className="rounded-2xl border border-line p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPeriodo((p) => somarMeses(p, -1))}
-              aria-label="Mês anterior"
-            >
+            <Button variant="ghost" size="sm" onClick={() => setPeriodo((p) => somarMeses(p, -1))} aria-label="Mês anterior">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-[160px] text-center text-sm font-semibold text-foreground">
-              {mesPorExtenso(periodo)}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPeriodo((p) => somarMeses(p, 1))}
-              aria-label="Próximo mês"
-            >
+            <span className="min-w-[160px] text-center text-sm font-semibold text-foreground">{mesPorExtenso(periodo)}</span>
+            <Button variant="ghost" size="sm" onClick={() => setPeriodo((p) => somarMeses(p, 1))} aria-label="Próximo mês">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -403,48 +392,43 @@ export function AbaMetricas({ clienteId }: { clienteId: string }) {
           </Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {CHAVES_EM_DESTAQUE.map((chave) => campoDoMes(chave))}
-        </div>
+        {/* Os campos e o que eles geram ficam LADO A LADO e juntos: preencher à esquerda, ver o resultado
+            (CPL, ROAS…) na hora à direita, sem esticar os campos pela largura toda da tela. */}
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,540px)_minmax(0,1fr)] lg:gap-8">
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/50">1 · Preencha o mês</p>
+            <div className="grid grid-cols-2 gap-3">{CHAVES_EM_DESTAQUE.map((chave) => campoDoMes(chave))}</div>
 
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={() => setMaisAberto((a) => !a)}
-            aria-expanded={mostrarMais}
-            className="flex items-center gap-1.5 text-xs font-medium text-foreground/55 transition-colors hover:text-foreground"
-          >
-            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !mostrarMais && '-rotate-90')} />
-            Mais métricas (opcional)
-            {!mostrarMais && algumOpcional && <span className="text-accent">· preenchidas</span>}
-          </button>
-          {mostrarMais && (
-            <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {CHAVES_OPCIONAIS.map((chave) => campoDoMes(chave))}
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setMaisAberto((a) => !a)}
+                aria-expanded={mostrarMais}
+                className="flex items-center gap-1.5 text-xs font-medium text-foreground/55 transition-colors hover:text-foreground"
+              >
+                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !mostrarMais && '-rotate-90')} />
+                Mais métricas (opcional)
+                {!mostrarMais && algumOpcional && <span className="text-accent">· preenchidas</span>}
+              </button>
+              {mostrarMais && <div className="mt-2 grid grid-cols-2 gap-3">{CHAVES_OPCIONAIS.map((chave) => campoDoMes(chave))}</div>}
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="mt-4 border-t border-line pt-3">
-          <p className="mb-2 text-xs uppercase tracking-wide text-foreground/45">
-            Calculado a partir do que foi lançado
-          </p>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {derivadasVisiveis.map((d) => (
-              <div key={d.chave} title={d.ajuda}>
-                <span className="text-xs text-foreground/50">{d.label}</span>
-                <span className="block text-base font-semibold tabular-nums text-foreground">
-                  {formatarMetrica(valoresDoMes[d.chave] ?? null, d.unidade)}
-                </span>
-                <Variacao
-                  chave={d.chave}
-                  atual={valoresDoMes[d.chave]}
-                  anterior={valoresAnteriores[d.chave]}
-                />
-              </div>
-            ))}
+          <div className="rounded-2xl bg-elevate/[0.03] p-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/50">2 · Calculado na hora</p>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
+              {derivadasVisiveis.map((d) => (
+                <div key={d.chave} title={d.ajuda}>
+                  <dt className="text-xs text-foreground/50">{d.label}</dt>
+                  <dd className="text-lg font-semibold tabular-nums text-foreground">{formatarMetrica(valoresDoMes[d.chave] ?? null, d.unidade)}</dd>
+                  <Variacao chave={d.chave} atual={valoresDoMes[d.chave]} anterior={valoresAnteriores[d.chave]} />
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
+
+        <InfosDoMes clienteId={clienteId} inicio={inicio} />
       </section>
 
       <BarraSalvar

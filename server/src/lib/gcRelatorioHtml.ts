@@ -54,6 +54,8 @@ export interface GcSnapshot {
   metas?: GcMetaSnapshot[];
   jornada?: { nome: string; status: string }[];
   estrategias?: { nome: string; status: string; feitos: number; total: number }[];
+  /** Informações livres do mês que a equipe marcou pra mostrar ao cliente. */
+  infos?: { titulo: string; valor: string; observacao: string }[];
   comentario_gestor?: string;
   proximos_passos?: string;
   publicado_em?: string;
@@ -338,6 +340,18 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
 
   ${secao('Detalhamento do período', cartoes ? `<div class="cartoes">${cartoes}</div>` : '')}
   ${secao('Metas', blocoMetas(snapshot.metas ?? []))}
+  ${secao(
+    'Informações do período',
+    (snapshot.infos ?? []).length
+      ? `<div class="cartoes" style="grid-template-columns:repeat(2,1fr)">${(snapshot.infos ?? [])
+          .map(
+            (i) => `<div class="cartao"><span class="rotulo">${escapar(i.titulo)}</span>${
+              i.valor ? `<span class="valor">${escapar(i.valor)}</span>` : ''
+            }${i.observacao ? `<span class="var neutra" style="font-weight:400">${escapar(i.observacao)}</span>` : ''}</div>`
+          )
+          .join('')}</div>`
+      : ''
+  )}
   ${secao(
     'Leitura do gestor',
     snapshot.comentario_gestor ? `<div class="texto-card">${escapar(snapshot.comentario_gestor)}</div>` : ''

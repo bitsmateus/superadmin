@@ -252,6 +252,20 @@ function Relatorio({
 
       <BlocoMetas snapshot={snapshot} />
 
+      {(snapshot.infos ?? []).length > 0 && (
+        <Secao titulo="Informações do período">
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {snapshot.infos!.map((i, k) => (
+              <li key={k} className="rounded-2xl border border-line px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">{i.titulo}</p>
+                {i.valor && <p className="text-lg font-bold tabular-nums text-foreground">{i.valor}</p>}
+                {i.observacao && <p className="mt-0.5 text-xs text-foreground/55">{i.observacao}</p>}
+              </li>
+            ))}
+          </ul>
+        </Secao>
+      )}
+
       {snapshot.comentario_gestor && (
         <Secao titulo="Leitura do gestor">
           <p className="whitespace-pre-wrap rounded-2xl border border-line border-l-[3px] border-l-accent bg-accent/[0.03] px-4 py-3.5 text-sm leading-relaxed text-foreground/85">

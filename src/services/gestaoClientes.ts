@@ -356,6 +356,19 @@ export interface GcMeta {
  * portal e o PDF leem só ela: relatório publicado não muda, nem que a métrica do mês seja
  * corrigida depois.
  */
+/** Uma informação livre do mês ("Adicionar info"): título, valor opcional e observação. */
+export interface GcInfoMes {
+  id: string
+  gc_cliente_id: string
+  periodo_inicio: string
+  titulo: string
+  valor: string
+  observacao: string
+  /** Marcada pra aparecer no relatório (e portal/PDF) do cliente. */
+  no_relatorio: boolean
+  autor_nome?: string | null
+}
+
 export interface GcSnapshot {
   versao: number
   cliente: { nome_empresa: string; segmento?: string; cidade?: string; responsavel_nome?: string | null }
@@ -388,6 +401,8 @@ export interface GcSnapshot {
   }[]
   jornada?: { nome: string; status: string }[]
   estrategias?: { nome: string; status: string; feitos: number; total: number }[]
+  /** Informações livres do mês que a equipe marcou pra mostrar ao cliente. */
+  infos?: { titulo: string; valor: string; observacao: string }[]
   comentario_gestor?: string
   proximos_passos?: string
   publicado_em?: string
@@ -686,6 +701,16 @@ export const gestaoClientes = {
 
   trafego: (periodo: string) =>
     api.get<GcClienteLista[]>(`/api/gc/trafego?periodo=${encodeURIComponent(periodo)}`),
+
+  infos: (clienteId: string, periodoInicio?: string) =>
+    api.get<GcInfoMes[]>(`/api/gc/clientes/${clienteId}/infos${periodoInicio ? `?periodo=${periodoInicio}` : ''}`),
+  criarInfo: (
+    clienteId: string,
+    dados: { periodo_inicio: string; titulo: string; valor?: string; observacao?: string; no_relatorio?: boolean },
+  ) => api.post<GcInfoMes>(`/api/gc/clientes/${clienteId}/infos`, dados),
+  atualizarInfo: (id: string, dados: Partial<Pick<GcInfoMes, 'titulo' | 'valor' | 'observacao' | 'no_relatorio'>>) =>
+    api.patch<GcInfoMes>(`/api/gc/infos/${id}`, dados),
+  excluirInfo: (id: string) => api.delete(`/api/gc/infos/${id}`),
 
   metas: (clienteId: string) => api.get<GcMeta[]>(`/api/gc/clientes/${clienteId}/metas`),
   criarMeta: (

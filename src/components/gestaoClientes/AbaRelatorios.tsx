@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import {
   avisosDoErro, gestaoClientes,
-  type GcClienteDetalhe, type GcLinkPublico, type GcMeta, type GcMetrica,
+  type GcClienteDetalhe, type GcInfoMes, type GcLinkPublico, type GcMeta, type GcMetrica,
   type GcRelatorio, type GcSnapshot,
 } from '@/services/gestaoClientes'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
@@ -45,6 +45,7 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
   const [relatorios, setRelatorios] = React.useState<GcRelatorio[]>([])
   const [metricas, setMetricas] = React.useState<GcMetrica[]>([])
   const [metas, setMetas] = React.useState<GcMeta[]>([])
+  const [infos, setInfos] = React.useState<GcInfoMes[]>([])
   const [link, setLink] = React.useState<GcLinkPublico | null>(null)
   const [carregando, setCarregando] = React.useState(true)
   const [periodo, setPeriodo] = React.useState(mesAtual())
@@ -54,12 +55,14 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
 
   const carregar = React.useCallback(async () => {
     try {
-      const [r, m, g, l] = await Promise.all([
+      const [r, m, g, l, inf] = await Promise.all([
         gestaoClientes.relatorios(clienteId),
         gestaoClientes.metricas(clienteId),
         gestaoClientes.metas(clienteId),
         gestaoClientes.linkDoCliente(clienteId),
+        gestaoClientes.infos(clienteId),
       ])
+      setInfos(inf)
       setRelatorios(r)
       setMetricas(m)
       setMetas(g)
@@ -127,6 +130,10 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
       feitos: e.itens.filter((i) => i.concluido).length,
       total: e.itens.length,
     })),
+    // Só as informações marcadas "no relatório do cliente" — as outras ficam internas.
+    infos: infos
+      .filter((i) => i.no_relatorio && String(i.periodo_inicio).slice(0, 10) === inicio)
+      .map((i) => ({ titulo: i.titulo, valor: i.valor, observacao: i.observacao })),
     comentario_gestor: comentario,
     proximos_passos: proximos,
   })

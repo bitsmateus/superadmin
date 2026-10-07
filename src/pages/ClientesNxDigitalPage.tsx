@@ -691,7 +691,6 @@ export function ClientesNxDigitalPage() {
                     <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Serviços</th>
                     <th className="px-4 py-2.5 font-medium">Etapa atual</th>
                     <th className="hidden px-4 py-2.5 font-medium sm:table-cell">Checklist</th>
-                    <th className="hidden px-4 py-2.5 font-medium xl:table-cell">Renovação</th>
                     <th className="hidden px-4 py-2.5 font-medium xl:table-cell">Último relatório</th>
                     <th className="hidden px-4 py-2.5 font-medium 2xl:table-cell">Portal</th>
                     <th className="px-4 py-2.5 font-medium">Status</th>
@@ -735,21 +734,6 @@ export function ClientesNxDigitalPage() {
   )
 }
 
-/** Próxima renovação: a data, e quanto falta — em vermelho se já venceu ou vence em até 30 dias. */
-function Renovacao({ data }: { data: string | null }) {
-  const dias = diasAteData(data)
-  if (dias === null) return <span className="text-xs text-foreground/35">sem data</span>
-  const urgente = dias <= DIAS_AVISO_RENOVACAO
-  return (
-    <span className={urgente ? 'text-danger' : 'text-foreground/80'}>
-      {dataBr(data)}
-      <span className="block text-xs">
-        {dias < 0 ? `venceu há ${Math.abs(dias)} dia(s)` : dias === 0 ? 'vence hoje' : `em ${dias} dia(s)`}
-      </span>
-    </span>
-  )
-}
-
 /**
  * O cliente como CARTÃO, pro celular: quem é, como está (com o motivo), em que etapa, quando renova.
  * É o que a tabela mostra em 11 colunas, na ordem em que se lê de cima pra baixo.
@@ -766,9 +750,8 @@ function CartaoCliente({
   const ordem = ['risco', 'atencao', 'neutro', 'bom', 'otimo']
   const porGravidade = [...saude.sinais].sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado))
   const pior =
-    porGravidade.find((x) => x.chave !== 'renovacao_sem_data' && (x.estado === 'risco' || x.estado === 'atencao')) ??
+    porGravidade.find((x) => (x.estado === 'risco' || x.estado === 'atencao')) ??
     porGravidade[0]
-  const dias = diasAteData(c.proxima_renovacao)
   return (
     <button
       type="button"
@@ -806,9 +789,6 @@ function CartaoCliente({
       <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground/50">
         <span>{c.etapa_atual ?? 'Jornada concluída'}</span>
         {Number(c.itens_atrasados) > 0 && <span className="text-danger">{Number(c.itens_atrasados)} atrasado(s)</span>}
-        <span className={dias !== null && dias <= DIAS_AVISO_RENOVACAO ? 'text-danger' : undefined}>
-          {dias === null ? 'sem data de renovação' : dias < 0 ? `renovação venceu há ${Math.abs(dias)} dia(s)` : `renova em ${dias} dia(s)`}
-        </span>
         {c.avaliacao ? (
           <span className={CORES_NOTA[c.avaliacao.nivel]}>nota: {rotuloNota(c.avaliacao.nivel)}</span>
         ) : (
@@ -838,11 +818,9 @@ function LinhaCliente({
   // O pior sinal explica a pastilha: "Risco" sozinho não diz o que foi, e é isso que faz a pessoa
   // abrir o cliente certo em vez de abrir todos.
   const ordem = ['risco', 'atencao', 'neutro', 'bom', 'otimo']
-  // "Sem data de renovação" tem aviso próprio acima da tabela: na linha só aparece quando é o ÚNICO
-  // motivo, senão o motivo de cada cliente fica escondido atrás de um texto igual em todos.
   const porGravidade = [...saude.sinais].sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado))
   const pior =
-    porGravidade.find((x) => x.chave !== 'renovacao_sem_data' && (x.estado === 'risco' || x.estado === 'atencao')) ??
+    porGravidade.find((x) => (x.estado === 'risco' || x.estado === 'atencao')) ??
     porGravidade[0]
 
   return (
@@ -959,9 +937,6 @@ function LinhaCliente({
       </td>
       <td className="hidden px-4 py-3 sm:table-cell">
         <BarraProgresso valor={progressoDoCliente(c)} />
-      </td>
-      <td className="hidden whitespace-nowrap px-4 py-3 xl:table-cell">
-        <Renovacao data={c.proxima_renovacao} />
       </td>
       <td className="hidden whitespace-nowrap px-4 py-3 xl:table-cell">
         {c.ultimo_relatorio ? (

@@ -76,8 +76,6 @@ const DESTINO_DO_SINAL: Record<string, { destino: Destino; rotulo: string }> = {
   avaliacao: { destino: 'avaliacao', rotulo: 'dar a nota' },
   status: { destino: 'editar', rotulo: 'editar o cliente' },
   servicos: { destino: 'servicos', rotulo: 'ver os serviços' },
-  renovacao: { destino: 'servicos', rotulo: 'ver a renovação' },
-  renovacao_sem_data: { destino: 'servicos', rotulo: 'informar a renovação' },
   jornada: { destino: 'jornada', rotulo: 'abrir a jornada' },
   pendencias: { destino: 'jornada', rotulo: 'abrir a jornada' },
   lancamento: { destino: 'metricas', rotulo: 'lançar as métricas' },
@@ -149,8 +147,6 @@ const ESTADO_DA_NOTA: Record<NonNullable<GcClienteLista['avaliacao']>['nivel'], 
 
 /** Sinais que dizem "ninguém está acompanhando": o risco nasce de falta de rotina, não de resultado. */
 const SINAIS_DE_ACOMPANHAMENTO: Record<string, string> = {
-  renovacao: 'renovação do contrato',
-  renovacao_sem_data: 'data de renovação não informada',
   relatorio: 'relatório',
   contato: 'contato com o cliente',
 }
@@ -281,41 +277,6 @@ export function avaliarSaude(c: GcClienteLista): Saude {
               : 'Nenhum serviço cadastrado',
         },
   )
-
-  // Serviço ativo SEM data de renovação: ninguém vai ser avisado de que o contrato acaba. É o caso
-  // dos clientes trazidos da base, e por isso aparece como atenção em vez de passar em branco.
-  const semDataDeRenovacao = (c.servicos ?? []).filter((s) => s.status === 'ativo' && !s.data_renovacao)
-  if (semDataDeRenovacao.length > 0) {
-    sinais.push({
-      chave: 'renovacao_sem_data',
-      titulo: 'Data de renovação',
-      estado: 'atencao',
-      detalhe: `${semDataDeRenovacao.length} serviço(s) ativo(s) sem data de renovação — sem ela ninguém é avisado do fim do contrato`,
-      pesaNoChurn: true,
-    })
-  }
-
-  // Renovação é hora de churn: se ninguém conversou antes da data, o cliente decide sozinho.
-  const renovacoes = (c.servicos ?? [])
-    .filter((s) => s.status === 'ativo' && s.data_renovacao)
-    .map((s) => diasAte(String(s.data_renovacao).slice(0, 10)))
-    .filter((d): d is number => d !== null)
-    .sort((a, b) => a - b)
-  if (renovacoes.length > 0) {
-    const proxima = renovacoes[0]
-    sinais.push({
-      chave: 'renovacao',
-      titulo: 'Renovação do contrato',
-      estado: proxima <= DIAS_AVISO_RENOVACAO ? 'atencao' : 'otimo',
-      detalhe:
-        proxima < 0
-          ? `Venceu há ${Math.abs(proxima)} dia(s) e não foi renovado`
-          : proxima === 0
-            ? 'Vence hoje'
-            : `Em ${proxima} dia(s)`,
-      pesaNoChurn: true,
-    })
-  }
 
   // ---------------------------------------------------------------- implantação e pendências
   const etapas = Number(c.etapas_total ?? 0)
@@ -579,14 +540,6 @@ export function avaliarSaude(c: GcClienteLista): Saude {
 
   // A nota de quem acompanha o cliente TEM PRIORIDADE: é o julgamento de quem conhece o caso, e os
   // sinais abaixo dela continuam listados pra mostrar os fatos que ela está pesando.
-  // Renovação VENCIDA ou SEM DATA tem peso fixo: o cliente nunca fica acima de "Atenção" por causa dela,
-  // não importa quantos outros sinais estejam verdes (nem se há planejamento). Só o risco real e a nota
-  // do gestor passam por cima.
-  const renovacaoPendente = sinais.some(
-    (x) => (x.chave === 'renovacao_sem_data') || (x.chave === 'renovacao' && x.detalhe.startsWith('Venceu')),
-  )
-  if (renovacaoPendente && (nivel === 'otimo' || nivel === 'bom' || nivel === 'neutro')) nivel = 'atencao'
-
   if (avaliacao) nivel = ESTADO_DA_NOTA[avaliacao.nivel]
 
   const sinaisDeChurn = sinais.filter(

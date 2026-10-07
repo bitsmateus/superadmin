@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
 import { PRIORIDADES, progressoDoCliente, type GcClienteLista, type GcPrioridade } from '@/services/gestaoClientes'
-import { DIAS_AVISO_RENOVACAO, type Saude } from '@/lib/gcSaude'
+import type { Saude } from '@/lib/gcSaude'
 import { mesPorExtenso, somarMeses } from '@/lib/gcMetricas'
 import { situacaoDoMes, type SituacaoDoMes } from '@/lib/gcLancamento'
 import { FAIXA_DA_SAUDE, estiloDoAvatar } from '@/lib/gcVisual'
@@ -86,8 +86,6 @@ function CartaoCliente({
   rodape?: React.ReactNode
 }) {
   const { cliente: c, saude } = item
-  const renov = diasAteData(c.proxima_renovacao)
-  const alertaRenov = renov !== null && renov <= DIAS_AVISO_RENOVACAO
 
   return (
     <article
@@ -142,11 +140,9 @@ function CartaoCliente({
         <span className="text-[10px] tabular-nums text-foreground/45">{progressoDoCliente(c)}%</span>
       </div>
 
-      {(Number(c.itens_atrasados) > 0 || alertaRenov) && (
+      {Number(c.itens_atrasados) > 0 && (
         <p className="mt-1.5 text-[11px] text-danger">
           {Number(c.itens_atrasados) > 0 && `${Number(c.itens_atrasados)} atrasado(s)`}
-          {Number(c.itens_atrasados) > 0 && alertaRenov && ' · '}
-          {alertaRenov && (renov! < 0 ? `renovação venceu há ${Math.abs(renov!)}d` : `renova em ${renov}d`)}
         </p>
       )}
 

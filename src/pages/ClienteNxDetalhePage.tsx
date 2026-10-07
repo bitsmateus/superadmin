@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useModuloNxNoCelular } from '@/hooks/useModuloNxNoCelular'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Loader2, MessageSquare, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
@@ -9,7 +9,6 @@ import { Tabs } from '@/components/ui/Tabs'
 import { Modal } from '@/components/ui/Modal'
 import { ModalCliente } from '@/components/gestaoClientes/ModalCliente'
 import { AbaVisaoGeral } from '@/components/gestaoClientes/AbaVisaoGeral'
-import { AbaJornada } from '@/components/gestaoClientes/AbaJornada'
 import { ModalNotas, PainelNotas } from '@/components/gestaoClientes/PainelNotas'
 import { AbaMetricas } from '@/components/gestaoClientes/AbaMetricas'
 import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
@@ -18,9 +17,8 @@ import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 import type { Destino } from '@/lib/gcSaude'
-import { gravarVisitados, lerVisitados, proximoSemData, semDataDeRenovacao } from '@/lib/gcFilaRenovacao'
 
-type Aba = 'visao' | 'jornada' | 'metricas' | 'planejamento' | 'estrategias' | 'relatorios' | 'notas'
+type Aba = 'visao' | 'metricas' | 'planejamento' | 'estrategias' | 'relatorios' | 'notas'
 
 /**
  * Detalhe do cliente de tráfego — Visão geral, Jornada e Histórico.
@@ -40,12 +38,6 @@ export function ClienteNxDetalhePage() {
   const [confirmandoExclusao, setConfirmandoExclusao] = React.useState(false)
   const [notasAbertas, setNotasAbertas] = React.useState(false)
   const [excluindo, setExcluindo] = React.useState(false)
-  // Fila "Completar agora" das datas de renovação (vem da lista de clientes).
-  const [params] = useSearchParams()
-  const naFila = params.get('completar') === 'renovacao'
-  const [restantes, setRestantes] = React.useState<number | null>(null)
-  const [indoProximo, setIndoProximo] = React.useState(false)
-
   const carregar = React.useCallback(async () => {
     try {
       setDetalhe(await gestaoClientes.detalhe(id))
@@ -60,44 +52,6 @@ export function ClienteNxDetalhePage() {
     void carregar()
   }, [carregar])
 
-  // Na fila: marca este cliente como visto, conta quantos faltam e leva pro bloco de serviços.
-  React.useEffect(() => {
-    if (!naFila || !detalhe) return
-    const visitados = Array.from(new Set([...lerVisitados(), id]))
-    gravarVisitados(visitados)
-    let cancelado = false
-    gestaoClientes
-      .listar()
-      .then((lista) => {
-        if (!cancelado) setRestantes(lista.filter((c) => semDataDeRenovacao(c) && c.id !== id && !visitados.includes(c.id)).length)
-      })
-      .catch(() => undefined)
-    setAba('visao')
-    const t = window.setTimeout(() => irPara('servicos'), 250)
-    return () => {
-      cancelado = true
-      window.clearTimeout(t)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [naFila, id, detalhe?.cliente.id])
-
-  const irParaProximo = async () => {
-    setIndoProximo(true)
-    try {
-      const proximo = proximoSemData(await gestaoClientes.listar(), lerVisitados(), id)
-      if (!proximo) {
-        toast.success('Todos os clientes já têm data de renovação (ou foram vistos)')
-        navegar('/clientesnxdigital/clientes')
-        return
-      }
-      navegar(`/clientesnxdigital/clientes/${proximo.id}?completar=renovacao`)
-    } catch (err) {
-      toast.error('Falha ao buscar o próximo: ' + (err as Error).message)
-    } finally {
-      setIndoProximo(false)
-    }
-  }
-
   /**
    * Leva pro lugar onde o sinal do semáforo se resolve. Os que moram na própria Visão geral
    * (avaliação, serviços) rolam até o bloco e o destacam por um instante; os outros trocam de aba
@@ -105,7 +59,6 @@ export function ClienteNxDetalhePage() {
    */
   const irPara = (destino: Destino) => {
     switch (destino) {
-      case 'jornada':
       case 'metricas':
       case 'planejamento':
       case 'relatorios':
@@ -200,20 +153,6 @@ export function ClienteNxDetalhePage() {
           <ArrowLeft className="h-4 w-4" /> Voltar para a lista
         </button>
 
-        {naFila && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/[0.05] px-4 py-3">
-            <p className="text-sm text-foreground/85">
-              <strong>Completando datas de renovação.</strong>{' '}
-              <span className="text-foreground/60">
-                Informe a data no bloco de serviços{restantes !== null ? ` · faltam ${restantes} cliente(s) depois deste` : ''}.
-              </span>
-            </p>
-            <Button size="sm" loading={indoProximo} onClick={() => void irParaProximo()}>
-              Próximo cliente sem data
-            </Button>
-          </div>
-        )}
-
         {carregando ? (
           <EsqueletoDeCarga tipo="ficha" />
         ) : !detalhe ? (
@@ -227,20 +166,8 @@ export function ClienteNxDetalhePage() {
               onChange={(v) => setAba(v as Aba)}
               items={[
                 { value: 'visao', label: 'Visão geral' },
-                {
-                  value: 'jornada',
-                  label: (
-                    <span className="flex items-center gap-1.5">
-                      Jornada
-                      <span className="text-xs tabular-nums text-foreground/45">
-                        {detalhe.jornada.filter((j) => j.status === 'concluida').length}/
-                        {detalhe.jornada.length}
-                      </span>
-                    </span>
-                  ),
-                },
-                { value: 'metricas', label: 'Métricas' },
                 { value: 'planejamento', label: 'Planejamento' },
+                { value: 'metricas', label: 'Métricas' },
                 // Só existe pra quem ainda tem estratégia com passos (a de hoje agora mora no Planejamento).
                 ...(detalhe.estrategias.length > 0
                   ? [
@@ -285,7 +212,6 @@ export function ClienteNxDetalhePage() {
                 onEditar={() => setEditando(true)}
               />
             )}
-            {aba === 'jornada' && <AbaJornada clienteId={id} jornada={detalhe.jornada} onMudou={carregar} />}
             {aba === 'metricas' && <AbaMetricas clienteId={id} />}
             {aba === 'planejamento' && (
               <AbaPlanejamento clienteId={id} cliente={detalhe.cliente} onMudou={carregar} />

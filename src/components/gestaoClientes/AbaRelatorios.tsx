@@ -12,7 +12,6 @@ import {
   type GcRelatorio, type GcSnapshot,
 } from '@/services/gestaoClientes'
 import { ModalAvisos } from '@/components/gestaoClientes/ModalAvisos'
-import { ConfigJornadaPortal } from '@/components/gestaoClientes/ConfigJornadaPortal'
 import { progressoDaMeta } from '@/lib/gcSaude'
 import {
   METRICAS_DERIVADAS, METRICAS_LANCADAS, comDerivadas, formatarMetrica,
@@ -416,7 +415,6 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
             </Button>
           </div>
         )}
-        <ConfigJornadaPortal clienteId={clienteId} />
       </section>
 
       <ModalAvisos

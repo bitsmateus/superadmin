@@ -2,14 +2,14 @@ import * as React from 'react'
 import { ArrowRight, Pin, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
+import { Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
-import { CampoData, DataMiuda } from '@/components/gestaoClientes/CampoData'
 import { RotinaMensal } from '@/components/gestaoClientes/RotinaMensal'
 import { ResumoPlanejamento } from '@/components/gestaoClientes/ResumoPlanejamento'
-import { mesAtual, mesPorExtenso, numeroDigitado } from '@/lib/gcMetricas'
-import { DIAS_AVISO_RENOVACAO, avaliarSaude, type Destino } from '@/lib/gcSaude'
+import { mesAtual, mesPorExtenso } from '@/lib/gcMetricas'
+import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
+import { avaliarSaude, type Destino } from '@/lib/gcSaude'
 import { AvaliacaoDoResultado, PainelSaude } from '@/components/gestaoClientes/Semaforo'
 import {
   PRIORIDADES, TIPOS_SERVICO, gestaoClientes,
@@ -43,34 +43,7 @@ function Campo({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
   )
 }
 
-/**
- * Aviso de renovação de um serviço: sem data, vencida, ou chegando (menos de 45 dias). Só pra
- * serviço ativo — um serviço cancelado não renova, e avisar dele seria ruído.
- */
-function AvisoDeRenovacao({ data, ativo }: { data: string | null; ativo: boolean }) {
-  if (!ativo) return null
-  if (!data) {
-    return (
-      <span className="mt-0.5 block text-xs font-medium text-danger">
-        Sem data de renovação — informe ao lado pra ser avisado do fim do contrato
-      </span>
-    )
-  }
-  const quando = new Date(`${String(data).slice(0, 10)}T12:00:00`).getTime()
-  const dias = Math.round((quando - Date.now()) / 86400000)
-  if (dias > DIAS_AVISO_RENOVACAO) return null
-  return (
-    <span className="mt-0.5 block text-xs font-medium text-danger">
-      {dias < 0
-        ? `Renovação venceu há ${Math.abs(dias)} dia(s)`
-        : dias === 0
-          ? 'Renovação vence hoje'
-          : `Renova em ${dias} dia(s) — hora de conversar com o cliente`}
-    </span>
-  )
-}
-
-/** Serviço novo — aparece no fim da lista quando a pessoa clica em "Adicionar serviço". */
+/** Serviço novo — o serviço e o que ele contempla. Sem datas: aqui é só "o que foi contratado". */
 function FormServico({
   clienteId,
   onPronto,
@@ -81,28 +54,14 @@ function FormServico({
   onCancelar: () => void
 }) {
   const [tipo, setTipo] = React.useState<GcTipoServico>('trafego_meta')
-  const [plano, setPlano] = React.useState('')
-  const [investimento, setInvestimento] = React.useState('')
-  const [inicio, setInicio] = React.useState<string | null>(null)
-  const [renovacao, setRenovacao] = React.useState<string | null>(null)
+  const [contempla, setContempla] = React.useState('')
   const [salvando, setSalvando] = React.useState(false)
 
   const salvar = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!renovacao) {
-      toast.error('Informe a data de renovação do serviço')
-      return
-    }
     setSalvando(true)
     try {
-      await gestaoClientes.criarServico(clienteId, {
-        tipo,
-        descricao_plano: plano,
-        // Campo em branco é "não sei ainda", não zero: zero diria que o cliente não investe nada.
-        investimento_previsto_mensal: numeroDigitado(investimento),
-        data_inicio: inicio,
-        data_renovacao: renovacao,
-      })
+      await gestaoClientes.criarServico(clienteId, { tipo, descricao_plano: contempla.trim() })
       await onPronto()
       onCancelar()
     } catch (err) {
@@ -114,33 +73,19 @@ function FormServico({
 
   return (
     <form onSubmit={salvar} className="rounded-xl border border-accent/30 bg-accent/[0.02] p-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Select
-          label="Serviço"
-          options={TIPOS_SERVICO.map((t) => ({ value: t.valor, label: t.label }))}
-          value={tipo}
-          onChange={(e) => setTipo(e.target.value as GcTipoServico)}
-        />
-        <Input
-          label="Investimento previsto / mês"
-          value={investimento}
-          onChange={(e) => setInvestimento(e.target.value)}
-          placeholder="1.500,00"
-        />
-        <div className="sm:col-span-2">
-          <Input
-            label="Plano"
-            value={plano}
-            onChange={(e) => setPlano(e.target.value)}
-            placeholder="O que está contratado nesse serviço"
-          />
-        </div>
-        <CampoData label="Início" value={inicio} onChange={setInicio} />
-        <CampoData
-          label="Renovação *"
-          value={renovacao}
-          onChange={setRenovacao}
-          hint={`obrigatória — o painel avisa quando faltar menos de ${DIAS_AVISO_RENOVACAO} dias`}
+      <Select
+        label="Serviço"
+        options={TIPOS_SERVICO.map((t) => ({ value: t.valor, label: t.label }))}
+        value={tipo}
+        onChange={(e) => setTipo(e.target.value as GcTipoServico)}
+      />
+      <div className="mt-3">
+        <Textarea
+          label="O que contempla"
+          rows={3}
+          value={contempla}
+          onChange={(e) => setContempla(e.target.value)}
+          placeholder="Ex.: gestão de tráfego no Meta Ads, 3 criativos por mês, relatório mensal…"
         />
       </div>
       <div className="mt-3 flex justify-end gap-2">
@@ -152,6 +97,63 @@ function FormServico({
         </Button>
       </div>
     </form>
+  )
+}
+
+/** Um serviço contratado: o nome, o que contempla (edita ao sair do campo), o status e a lixeira. */
+function LinhaDeServico({
+  servico: s,
+  onMudou,
+}: {
+  servico: GcServico
+  onMudou: () => Promise<void> | void
+}) {
+  const [contempla, setContempla] = React.useState(s.descricao_plano ?? '')
+  React.useEffect(() => setContempla(s.descricao_plano ?? ''), [s.descricao_plano])
+
+  const agir = async (fn: () => Promise<unknown>, falha: string) => {
+    try {
+      await fn()
+      await onMudou()
+    } catch (err) {
+      toast.error(falha + (err as Error).message)
+    }
+  }
+
+  return (
+    <div className="group rounded-xl border border-line p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium text-foreground">{TIPOS_SERVICO.find((t) => t.valor === s.tipo)?.label ?? s.tipo}</span>
+        <span className="flex items-center gap-2">
+          <Select
+            options={STATUS_SERVICO.map((o) => ({ value: o.valor, label: o.label }))}
+            value={s.status}
+            onChange={(e) => void agir(() => gestaoClientes.atualizarServico(s.id, { status: e.target.value as GcServico['status'] }), 'Falha ao salvar: ')}
+            className="w-32"
+          />
+          <button
+            type="button"
+            onClick={() => void agir(() => gestaoClientes.excluirServico(s.id), 'Falha ao excluir: ')}
+            className="text-foreground/25 transition-opacity hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
+            aria-label="Excluir serviço"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </span>
+      </div>
+      <Textarea
+        rows={2}
+        value={contempla}
+        onChange={(e) => setContempla(e.target.value)}
+        onBlur={() => {
+          if (contempla !== (s.descricao_plano ?? '')) {
+            void agir(() => gestaoClientes.atualizarServico(s.id, { descricao_plano: contempla }), 'Falha ao salvar: ')
+          }
+        }}
+        placeholder="O que esse serviço contempla…"
+        className="mt-2"
+      />
+    </div>
   )
 }
 
@@ -241,35 +243,22 @@ export function AbaVisaoGeral({
     { rotulo: 'Início', valor: cliente.data_inicio ? dataBr(cliente.data_inicio) : null },
   ]
 
-  const excluirServico = async (id: string) => {
+  // O texto de "informações do cliente" (o que foi combinado ao fechar, particularidades…). Salva pelo botão.
+  const [info, setInfo] = React.useState(cliente.observacoes_gerais ?? '')
+  const [salvandoInfo, setSalvandoInfo] = React.useState(false)
+  React.useEffect(() => setInfo(cliente.observacoes_gerais ?? ''), [cliente.observacoes_gerais, cliente.id])
+  const infoSuja = info !== (cliente.observacoes_gerais ?? '')
+  useAvisoAoSair(infoSuja)
+  const salvarInfo = async () => {
+    setSalvandoInfo(true)
     try {
-      await gestaoClientes.excluirServico(id)
-      await onMudou()
-    } catch (err) {
-      toast.error('Falha ao excluir: ' + (err as Error).message)
-    }
-  }
-
-  const trocarRenovacao = async (id: string, data: string | null) => {
-    // A data é obrigatória: o seletor deixa limpar, mas o servidor recusa — então nem tenta.
-    if (!data) {
-      toast.error('A data de renovação é obrigatória — escolha outra data em vez de apagar')
-      return
-    }
-    try {
-      await gestaoClientes.atualizarServico(id, { data_renovacao: data })
+      await gestaoClientes.atualizar(cliente.id, { observacoes_gerais: info })
+      toast.success('Informações salvas')
       await onMudou()
     } catch (err) {
       toast.error('Falha ao salvar: ' + (err as Error).message)
-    }
-  }
-
-  const trocarStatus = async (id: string, status: GcServico['status']) => {
-    try {
-      await gestaoClientes.atualizarServico(id, { status })
-      await onMudou()
-    } catch (err) {
-      toast.error('Falha ao salvar: ' + (err as Error).message)
+    } finally {
+      setSalvandoInfo(false)
     }
   }
 
@@ -308,16 +297,33 @@ export function AbaVisaoGeral({
           )}
         </section>
 
+        <section id="gc-informacoes" className="rounded-xl border border-line p-4">
+          <h2 className="mb-1 text-sm font-semibold text-foreground">Informações do cliente</h2>
+          <p className="mb-2 text-xs text-foreground/50">Registre aqui o que foi combinado ao fechar, valores, particularidades — o que o time precisa saber.</p>
+          <Textarea
+            rows={5}
+            value={info}
+            onChange={(e) => setInfo(e.target.value)}
+            placeholder="Ex.: Fechei com ele dia 07/10: plano de tráfego Meta + Google, entrada paga, quer começar com R$ 3.000 de verba…"
+          />
+          <div className="mt-2 flex items-center justify-end gap-2">
+            {infoSuja && <span className="text-xs text-warning">alterações não salvas</span>}
+            {infoSuja && (
+              <Button variant="ghost" size="sm" onClick={() => setInfo(cliente.observacoes_gerais ?? '')}>
+                Descartar
+              </Button>
+            )}
+            <Button size="sm" loading={salvandoInfo} disabled={!infoSuja} onClick={() => void salvarInfo()}>
+              Salvar
+            </Button>
+          </div>
+        </section>
+
         <section id="gc-servicos" className="rounded-xl border border-line p-4 transition-shadow">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-foreground">Serviços contratados</h2>
             {!adicionando && (
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<Plus className="h-3.5 w-3.5" />}
-                onClick={() => setAdicionando(true)}
-              >
+              <Button variant="secondary" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={() => setAdicionando(true)}>
                 Adicionar serviço
               </Button>
             )}
@@ -325,58 +331,12 @@ export function AbaVisaoGeral({
 
           <div className="space-y-2">
             {servicos.length === 0 && !adicionando && (
-              <p className="py-4 text-center text-sm text-foreground/50">
-                Nenhum serviço registrado.
-              </p>
+              <p className="py-4 text-center text-sm text-foreground/50">Nenhum serviço registrado.</p>
             )}
             {servicos.map((s) => (
-              <div
-                key={s.id}
-                className="group flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2.5"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-foreground">
-                    {TIPOS_SERVICO.find((t) => t.valor === s.tipo)?.label ?? s.tipo}
-                  </span>
-                  <span className="block truncate text-xs text-foreground/50">
-                    {s.descricao_plano || 'sem descrição'} · início {dataBr(s.data_inicio)}
-                  </span>
-                  <AvisoDeRenovacao data={s.data_renovacao} ativo={s.status === 'ativo'} />
-                </span>
-                <span className="flex shrink-0 items-center gap-1.5 text-xs text-foreground/50">
-                  renova
-                  <DataMiuda
-                    value={s.data_renovacao ? String(s.data_renovacao).slice(0, 10) : null}
-                    atrasado={!s.data_renovacao && s.status === 'ativo'}
-                    onChange={(v) => void trocarRenovacao(s.id, v)}
-                  />
-                </span>
-                <span className="text-sm tabular-nums text-foreground/80">
-                  {reais(s.investimento_previsto_mensal)}
-                </span>
-                <Select
-                  options={STATUS_SERVICO.map((o) => ({ value: o.valor, label: o.label }))}
-                  value={s.status}
-                  onChange={(e) => void trocarStatus(s.id, e.target.value as GcServico['status'])}
-                  className="w-32"
-                />
-                <button
-                  type="button"
-                  onClick={() => void excluirServico(s.id)}
-                  className="text-foreground/25 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
-                  aria-label="Excluir serviço"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              <LinhaDeServico key={s.id} servico={s} onMudou={onMudou} />
             ))}
-            {adicionando && (
-              <FormServico
-                clienteId={cliente.id}
-                onPronto={onMudou}
-                onCancelar={() => setAdicionando(false)}
-              />
-            )}
+            {adicionando && <FormServico clienteId={cliente.id} onPronto={onMudou} onCancelar={() => setAdicionando(false)} />}
           </div>
         </section>
       </div>
@@ -387,19 +347,6 @@ export function AbaVisaoGeral({
         <ResumoPlanejamento cliente={cliente} onAbrir={() => onIr?.('planejamento')} />
 
         <RotinaMensal clienteId={cliente.id} itens={detalhe.rotina ?? []} onMudou={onMudou} />
-
-        <section className="rounded-xl border border-line p-4">
-          <h2 className="mb-2 text-sm font-semibold text-foreground">Observações</h2>
-          {cliente.observacoes_gerais ? (
-            <p className="whitespace-pre-wrap text-sm text-foreground/80">
-              {cliente.observacoes_gerais}
-            </p>
-          ) : (
-            <p className="text-sm text-foreground/45">
-              Nada anotado. Use "Editar cliente" pra registrar combinados e particularidades.
-            </p>
-          )}
-        </section>
 
         <section className="rounded-xl border border-line p-4">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Onde o cliente está</h2>

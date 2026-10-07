@@ -5,7 +5,7 @@ import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
 import { validarMetricas } from '../lib/gcValidacao.js';
 import { garantirRecorrentes, sincronizarRotinaAutomatica } from '../lib/gcRecorrentes.js';
-import { CHAVES_REALIZADO_PUBLICO, montarJornadaPublica } from '../lib/gcPortalJornada.js';
+import { CHAVES_REALIZADO_PUBLICO, limparRoteiro, montarJornadaPublica } from '../lib/gcPortalJornada.js';
 import {
   CAMPOS_COM_ORIGEM, CHAVES_DIGITADAS, HORIZONTES_PLANEJAMENTO, baseDoPontoA, derivadosDoPontoA, diffDeCampos,
   sanearOrigens, somarMesesNaData,
@@ -1984,6 +1984,28 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     }
   );
 
+  // O roteiro mês a mês: [{ mes, texto }]. Mora fora do PUT do planejamento pra salvar sozinho; vai pro portal.
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/roteiro', autenticado, async (req) => {
+    const p = await queryOne<{ roteiro: unknown }>('SELECT roteiro FROM gc_planejamento WHERE gc_cliente_id = $1', [req.params.id]);
+    return { meses: limparRoteiro(p?.roteiro) };
+  });
+
+  app.put<{ Params: { id: string }; Body: { meses?: unknown } }>(
+    '/api/gc/clientes/:id/roteiro',
+    autenticado,
+    async (req) => {
+      const { sub } = req.user as { sub: string };
+      const meses = limparRoteiro(req.body?.meses);
+      await query(
+        `INSERT INTO gc_planejamento (gc_cliente_id, roteiro, atualizado_por) VALUES ($1,$2::jsonb,$3)
+         ON CONFLICT (gc_cliente_id) DO UPDATE SET roteiro = EXCLUDED.roteiro, atualizado_por = EXCLUDED.atualizado_por, updated_at = NOW()`,
+        [req.params.id, JSON.stringify(meses), sub]
+      );
+      await registrarEvento(req.params.id, 'Roteiro mês a mês atualizado', `${meses.length} mês(es)`, sub);
+      return { meses };
+    }
+  );
+
   // ------------------------------------------------------------------ relatórios
   // GET /api/gc/clientes/:id/relatorios — lista sem o snapshot (que é grande e só interessa quando
   // o relatório é aberto).
@@ -2252,7 +2274,7 @@ async function jornadaDoPortal(clienteId: string, opcoes: { ignorarToggle?: bool
   const planejamento = await queryOne<Record<string, unknown>>(
     `SELECT situacao_atual, leads_mes, investimento_mes, vendas_mes, faturamento_mensal,
             to_char(data_diagnostico, 'YYYY-MM-DD') AS data_diagnostico, curva,
-            mes1_investimento, mes1_vendas, mes1_faturamento, cpl_medio,
+            mes1_investimento, mes1_vendas, mes1_faturamento, cpl_medio, roteiro,
             portal_ativo, portal_mostrar_situacao, portal_mostrar_objetivo
      FROM gc_planejamento WHERE gc_cliente_id = $1`,
     [clienteId]

@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Flag, Sprout } from 'lucide-react'
+import { AVISO_DO_ROTEIRO } from '@/components/gestaoClientes/RoteiroDoPlano'
 import { GraficoProjecao } from '@/components/gestaoClientes/GraficoProjecao'
 import type { GcJornadaPortal } from '@/services/gestaoClientes'
 import {
@@ -73,6 +74,24 @@ export function JornadaPortal({ jornada }: { jornada: GcJornadaPortal }) {
         <h2 className="text-lg font-semibold text-foreground">Nossa jornada</h2>
         <p className="text-xs text-foreground/50">De onde partimos, aonde estamos indo e como o caminho está sendo cumprido.</p>
       </header>
+
+      {jornada.roteiro && jornada.roteiro.length > 0 && (
+        <div className="mb-5">
+          <h3 className="mb-2 text-xs uppercase tracking-wide text-foreground/45">O que vamos trabalhar, mês a mês</h3>
+          <ol className="space-y-2">
+            {jornada.roteiro.map((m) => (
+              <li key={m.mes} className="flex items-start gap-3 rounded-xl border border-line px-3 py-2.5">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/12 text-xs font-bold text-accent">{m.mes}</span>
+                <span className="text-sm text-foreground/85">
+                  <span className="mr-1 text-xs font-semibold uppercase text-foreground/45">Mês {m.mes}</span>
+                  <span className="block">{m.texto}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-2 text-xs italic text-foreground/50">{AVISO_DO_ROTEIRO}</p>
+        </div>
+      )}
 
       {(pontoA.length > 0 || jornada.situacao) && (
         <div>

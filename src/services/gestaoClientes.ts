@@ -544,6 +544,8 @@ export interface GcJornadaPortal {
   /** A situação de hoje, só se a equipe marcou pra mostrar. */
   situacao: string | null
   primeiro_mes: { investimento: number | null; vendas: number | null; faturamento: number | null; cpl_medio: number | null }
+  /** O que se trabalha em cada mês. */
+  roteiro?: { mes: number; texto: string }[]
   atual: {
     leads: number | null
     investimento: number | null
@@ -653,6 +655,9 @@ export const gestaoClientes = {
   ) => api.patch<GcEstrategia>(`/api/gc/estrategias/${id}`, dados),
   excluirEstrategia: (id: string) => api.delete(`/api/gc/estrategias/${id}`),
 
+  roteiro: (clienteId: string) => api.get<{ meses: { mes: number; texto: string }[] }>(`/api/gc/clientes/${clienteId}/roteiro`),
+  salvarRoteiro: (clienteId: string, meses: { mes: number; texto: string }[]) =>
+    api.put<{ meses: { mes: number; texto: string }[] }>(`/api/gc/clientes/${clienteId}/roteiro`, { meses }),
   planejamento: (clienteId: string) =>
     api.get<GcPlanejamentoApi>(`/api/gc/clientes/${clienteId}/planejamento`),
   salvarPlanejamento: (clienteId: string, dados: GcPlanejamentoEntrada) =>

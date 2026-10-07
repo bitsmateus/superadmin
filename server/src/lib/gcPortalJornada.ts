@@ -40,6 +40,8 @@ export interface JornadaPublica {
   };
   /** O primeiro mês do plano (só números): investimento, vendas e faturamento, e o CPL médio da premissa. */
   primeiro_mes: { investimento: number | null; vendas: number | null; faturamento: number | null; cpl_medio: number | null };
+  /** O que se trabalha em cada mês (planejamento inicial combinado ao fechar). */
+  roteiro: { mes: number; texto: string }[];
   cenarios: Record<string, { metas: Record<string, number>; objetivo: string | null }>;
   realizado: Record<string, Record<string, number>>;
 }
@@ -54,6 +56,18 @@ const numero = (v: unknown): number | null => {
 };
 
 const texto = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** O roteiro como [{ mes: 1..24, texto }], sem linhas vazias e em ordem. Aceita qualquer coisa que venha do banco ou da tela. */
+export function limparRoteiro(bruto: unknown): { mes: number; texto: string }[] {
+  if (!Array.isArray(bruto)) return [];
+  const porMes = new Map<number, string>();
+  for (const x of bruto) {
+    const mes = Number((x as { mes?: unknown })?.mes);
+    const texto = String((x as { texto?: unknown })?.texto ?? '').trim().slice(0, 300);
+    if (Number.isInteger(mes) && mes >= 1 && mes <= 24 && texto) porMes.set(mes, texto);
+  }
+  return [...porMes.entries()].sort((a, b) => a[0] - b[0]).map(([mes, texto]) => ({ mes, texto }));
+}
 
 export function montarJornadaPublica(
   e: EntradaJornada,
@@ -112,6 +126,7 @@ export function montarJornadaPublica(
       faturamento: numero(p.mes1_faturamento),
       cpl_medio: numero(p.cpl_medio),
     },
+    roteiro: limparRoteiro(p.roteiro),
     cenarios,
     realizado,
   };

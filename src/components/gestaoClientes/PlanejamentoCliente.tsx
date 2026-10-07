@@ -8,6 +8,7 @@ import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { MenuModelos, ModalModelosTexto, type AlvoDeModelo } from '@/components/gestaoClientes/ModelosDeTexto'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { PastilhaSaude } from '@/components/gestaoClientes/Semaforo'
+import { RoteiroDoPlano } from '@/components/gestaoClientes/RoteiroDoPlano'
 import { CenarioEmPassos, ProjecaoXReal } from '@/components/gestaoClientes/ProjecaoXReal'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import {
@@ -1015,6 +1016,8 @@ export function PlanejamentoCliente({
             </div>
           ))}
         </div>
+
+        <RoteiroDoPlano clienteId={clienteId} />
 
         {/* ---------------------------------------------------------------- 3. como vamos chegar lá */}
         <div className="mt-3 rounded-xl border border-line bg-surface p-3">

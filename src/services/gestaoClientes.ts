@@ -187,6 +187,17 @@ export interface GcBriefing {
   crm: string
   crm_email: string
   crm_senha: string
+  /** Cada item do checklist de entrada: 'sim' | 'nao' | 'nao_sei' | '' — e a observação dele. */
+  pagamento_anuncios: string
+  pagamento_obs: string
+  google_ads: string
+  google_ads_obs: string
+  analytics: string
+  analytics_obs: string
+  tag_manager: string
+  tag_manager_obs: string
+  meu_negocio: string
+  meu_negocio_obs: string
   extras: { rotulo: string; valor: string }[]
   perguntas: { pergunta: string; resposta: string }[]
 }

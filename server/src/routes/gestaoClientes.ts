@@ -2367,7 +2367,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       .filter((x) => campos.some((c) => x[c].trim() !== ''));
   };
 
-  const CAMPOS_BRIEFING = ['site', 'whatsapp_leads', 'instagram', 'instagram_senha', 'facebook', 'facebook_senha', 'crm', 'crm_email', 'crm_senha'] as const;
+  const CAMPOS_BRIEFING = ['site', 'whatsapp_leads', 'instagram', 'instagram_senha', 'facebook', 'facebook_senha', 'crm', 'crm_email', 'crm_senha',
+    'pagamento_anuncios', 'pagamento_obs', 'google_ads', 'google_ads_obs', 'analytics', 'analytics_obs', 'tag_manager', 'tag_manager_obs', 'meu_negocio', 'meu_negocio_obs'] as const;
 
   app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/briefing', autenticado, async (req) => {
     const b = await queryOne<Record<string, unknown>>(

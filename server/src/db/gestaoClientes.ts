@@ -507,6 +507,17 @@ const TABELAS = [
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS crm TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS crm_email TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS crm_senha TEXT NOT NULL DEFAULT ''`,
+  // Briefing de entrada: pagamento na conta de anúncios e contas Google (cada um: sim / não / não sei + observação).
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS pagamento_anuncios TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS pagamento_obs TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS google_ads TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS google_ads_obs TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS analytics TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS analytics_obs TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS tag_manager TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS tag_manager_obs TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS meu_negocio TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS meu_negocio_obs TEXT NOT NULL DEFAULT ''`,
   `CREATE INDEX IF NOT EXISTS gc_social_materiais_cliente_idx ON gc_social_materiais (gc_cliente_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS gc_social_producao_cliente_idx ON gc_social_producao (gc_cliente_id, status)`,
   // ---------------------------------------------------------------- briefing do cliente

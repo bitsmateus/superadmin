@@ -1,9 +1,11 @@
 import * as React from 'react'
+import { cn } from '@/lib/utils'
 import { Copy, ExternalLink, Eye, EyeOff, KeyRound, Loader2, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
+import { ArquivosDoCliente } from '@/components/gestaoClientes/ArquivosDoCliente'
 import { LogoDoCliente } from '@/components/gestaoClientes/LogoDoCliente'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import { gestaoClientes, type GcBriefing, type GcClienteLista } from '@/services/gestaoClientes'
@@ -17,6 +19,55 @@ const comoLink = (v: string) => (/^https?:\/\//i.test(v.trim()) ? v.trim() : `ht
  * perguntas e respostas do briefing, preenchidas à medida que o cliente responde. O número é o WhatsApp do
  * cadastro, então muda nos dois lugares.
  */
+const RESPOSTAS: { valor: string; rotulo: string; cor: string }[] = [
+  { valor: 'sim', rotulo: 'Sim', cor: 'border-success/50 bg-success/10 text-success' },
+  { valor: 'nao', rotulo: 'Não', cor: 'border-danger/50 bg-danger/10 text-danger' },
+  { valor: 'nao_sei', rotulo: 'Não sei', cor: 'border-warning/50 bg-warning/10 text-warning' },
+]
+
+/** Uma pergunta do checklist de entrada: Sim / Não / Não sei, e uma observação (ID da conta, quem tem acesso…). */
+function ItemDoChecklist({
+  pergunta, valor, obs, onValor, onObs, dica,
+}: {
+  pergunta: string
+  valor: string
+  obs: string
+  onValor: (v: string) => void
+  onObs: (v: string) => void
+  dica: string
+}) {
+  return (
+    <div className="rounded-xl border border-line p-3">
+      <p className="text-sm font-medium text-foreground">{pergunta}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="flex gap-1.5" role="group" aria-label={pergunta}>
+          {RESPOSTAS.map((x) => (
+            <button
+              key={x.valor}
+              type="button"
+              aria-pressed={valor === x.valor}
+              onClick={() => onValor(valor === x.valor ? '' : x.valor)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                valor === x.valor ? x.cor : 'border-line text-foreground/55 hover:text-foreground',
+              )}
+            >
+              {x.rotulo}
+            </button>
+          ))}
+        </div>
+        <input
+          value={obs}
+          onChange={(e) => onObs(e.target.value)}
+          placeholder={dica}
+          aria-label={`Observação: ${pergunta}`}
+          className="h-9 min-w-[10rem] flex-1 rounded-lg border border-line bg-surface px-2.5 text-sm text-foreground outline-none placeholder:text-foreground/30 focus:border-accent"
+        />
+      </div>
+    </div>
+  )
+}
+
 /** Campo de senha: escondido por padrão, com o olho pra mostrar e um botão pra copiar. */
 function CampoSenha({ rotulo, valor, onChange }: { rotulo: string; valor: string; onChange: (v: string) => void }) {
   const [visivel, setVisivel] = React.useState(false)
@@ -171,6 +222,60 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
             Adicionar campo
           </Button>
         </div>
+      </section>
+
+      {/* ------------------------------------------------------------ checklist de entrada */}
+      <section className="rounded-2xl border border-line p-4 sm:p-5">
+        <h2 className="mb-1 text-sm font-semibold text-foreground">Contas e pagamento</h2>
+        <p className="mb-3 text-xs text-foreground/50">Marque o que o cliente já tem e anote o que for preciso (ID da conta, e-mail com acesso…).</p>
+        <div className="space-y-2.5">
+          <ItemDoChecklist
+            pergunta="Forma de pagamento válida na conta de anúncios?"
+            valor={r.pagamento_anuncios}
+            obs={r.pagamento_obs}
+            onValor={(v) => setR({ ...r, pagamento_anuncios: v })}
+            onObs={(v) => setR({ ...r, pagamento_obs: v })}
+            dica="Ex.: cartão final 1234, boleto, pix…"
+          />
+          <ItemDoChecklist
+            pergunta="Google Ads"
+            valor={r.google_ads}
+            obs={r.google_ads_obs}
+            onValor={(v) => setR({ ...r, google_ads: v })}
+            onObs={(v) => setR({ ...r, google_ads_obs: v })}
+            dica="ID da conta, e-mail com acesso…"
+          />
+          <ItemDoChecklist
+            pergunta="Google Analytics"
+            valor={r.analytics}
+            obs={r.analytics_obs}
+            onValor={(v) => setR({ ...r, analytics: v })}
+            onObs={(v) => setR({ ...r, analytics_obs: v })}
+            dica="ID da propriedade, e-mail com acesso…"
+          />
+          <ItemDoChecklist
+            pergunta="Google Tag Manager"
+            valor={r.tag_manager}
+            obs={r.tag_manager_obs}
+            onValor={(v) => setR({ ...r, tag_manager: v })}
+            onObs={(v) => setR({ ...r, tag_manager_obs: v })}
+            dica="ID do contêiner (GTM-…), e-mail com acesso…"
+          />
+          <ItemDoChecklist
+            pergunta="Google Meu Negócio"
+            valor={r.meu_negocio}
+            obs={r.meu_negocio_obs}
+            onValor={(v) => setR({ ...r, meu_negocio: v })}
+            onObs={(v) => setR({ ...r, meu_negocio_obs: v })}
+            dica="Link do perfil, e-mail com acesso…"
+          />
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------ fotos, vídeos e arquivos */}
+      <section className="rounded-2xl border border-line p-4 sm:p-5">
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Fotos, vídeos e arquivos</h2>
+        <ArquivosDoCliente clienteId={cliente.id} />
       </section>
 
       {/* ------------------------------------------------------------ perguntas e respostas */}

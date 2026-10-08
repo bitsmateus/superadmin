@@ -1082,6 +1082,13 @@ END $$`);
   // Um alerta aberto por regra+entidade: a regra não repete todo dia, fica aberto até resolver.
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS traffic_alerts_open_uniq
     ON traffic_alerts(rule, entity_type, entity_id) WHERE resolved_at IS NULL`);
+  // Garante um envio por dia de cada relatório de tráfego (mesmo se o servidor reiniciar na janela).
+  await pool.query(`CREATE TABLE IF NOT EXISTS traffic_report_log (
+    dia DATE NOT NULL,
+    kind TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (dia, kind)
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS traffic_ai_reviews (
     dia DATE PRIMARY KEY,
     texto TEXT NOT NULL DEFAULT '',

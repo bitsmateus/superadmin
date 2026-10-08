@@ -53,6 +53,7 @@ import { startPulseDispatch } from './jobs/pulseDispatch.js';
 import { startAsaasSync } from './jobs/asaasSync.js';
 import { startRecorraiSync } from './jobs/recorraiSync.js';
 import { startMetaInsightsSync } from './jobs/metaInsightsSync.js';
+import { startTrafficDailyReport } from './jobs/trafficDailyReport.js';
 
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
@@ -168,6 +169,7 @@ async function main() {
   startAsaasSync();
   startRecorraiSync();
   startMetaInsightsSync();
+  startTrafficDailyReport();
   startPulseSweep();
   startPulseDispatch();
   await app.listen({ port: PORT, host: '0.0.0.0' });

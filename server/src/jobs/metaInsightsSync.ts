@@ -1,6 +1,7 @@
 import {
   metaAdsConfig, sincronizarCatalogoMeta, sincronizarInsightsMeta, temInsights,
 } from '../lib/metaInsights.js';
+import { avaliarAlertasTrafego } from '../lib/trafficAlerts.js';
 
 /**
  * Coleta diária de gasto do Meta (Inteligência de Tráfego, fase 1B).
@@ -36,7 +37,13 @@ async function rodar(catalogo: boolean): Promise<void> {
     }
     const dias = (await temInsights()) ? DIAS_REGRAVAR : DIAS_HISTORICO;
     const r = await sincronizarInsightsMeta(dias);
-    if (r) console.log(`[meta-sync] insights: ${r.linhas} linhas (${r.desde} → ${r.ate})`);
+    if (r) {
+      console.log(`[meta-sync] insights: ${r.linhas} linhas (${r.desde} → ${r.ate})`);
+      const a = await avaliarAlertasTrafego();
+      if (a.novos || a.resolvidos || a.enviados) {
+        console.log(`[traffic-alerts] ${a.novos} novo(s), ${a.resolvidos} resolvido(s), ${a.enviados} crítico(s) enviado(s)`);
+      }
+    }
   } catch (err) {
     console.error('[meta-sync] erro', err instanceof Error ? err.message : err);
   } finally {

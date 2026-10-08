@@ -60,7 +60,26 @@ import { startTrafficAiReview } from './jobs/trafficAiReview.js';
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
   // Atualizações do lead). 20MB de corpo dá espaço pra um PDF de ~14MB (base64 soma ~33%).
-  const app = Fastify({ logger: true, bodyLimit: 20 * 1024 * 1024 });
+  // O log de cada requisição NÃO pode carregar segredo na URL: o EventSource (GET /api/events?token=<jwt>)
+  // manda o JWT de sessão na query, e o serializer padrão gravava a URL inteira nos logs. Aqui qualquer
+  // parâmetro sensível da query vira [REDACTED] antes de ir pro log (a rota continua lendo o token normal).
+  const SENSIVEIS = /([?&](?:token|access_token|auth|jwt|key|secret|password|senha)=)[^&]*/gi;
+  const app = Fastify({
+    logger: {
+      serializers: {
+        req(req) {
+          return {
+            method: req.method,
+            url: typeof req.url === 'string' ? req.url.replace(SENSIVEIS, '$1[REDACTED]') : req.url,
+            hostname: req.hostname,
+            remoteAddress: req.ip,
+            remotePort: req.socket?.remotePort,
+          };
+        },
+      },
+    },
+    bodyLimit: 20 * 1024 * 1024,
+  });
 
   const JWT_SECRET = process.env.JWT_SECRET;
   if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required');

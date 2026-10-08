@@ -1,3 +1,4 @@
+import { nichoDoFormulario } from '../lib/trafegoNicho.js';
 import { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { query, queryOne } from '../db.js';
@@ -258,15 +259,15 @@ export async function webhookRoutes(app: FastifyInstance) {
           board_id, nome, empresa, telefone, position,
           meta_lead_id, origem_campanha, qualificacao, lead_raw,
           dor_cliente, numero_atendentes, tipo,
-          meta_campaign_id, meta_adset_id, meta_ad_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          meta_campaign_id, meta_adset_id, meta_ad_id, nicho
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
         ON CONFLICT (meta_lead_id) WHERE meta_lead_id IS NOT NULL DO NOTHING
         RETURNING *`,
         [
           board.id, req.body.nome ?? '', empresa, req.body.telefone ?? '', (max ?? -1) + 1,
           leadId, origemCampanha, JSON.stringify(qualificacao), JSON.stringify(raw),
           req.body.dor_cliente ?? '', req.body.numero_atendentes ?? '', req.body.tipo ?? '',
-          metaId(raw.campaign_id), metaId(raw.adset_id), metaId(raw.ad_id),
+          metaId(raw.campaign_id), metaId(raw.adset_id), metaId(raw.ad_id), nichoDoFormulario(qualificacao),
         ]
       );
 

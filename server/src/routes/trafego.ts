@@ -6,6 +6,7 @@ import {
 import { metaAdsConfig, sincronizarCatalogoMeta, sincronizarInsightsMeta } from '../lib/metaInsights.js';
 import { avaliarAlertasTrafego } from '../lib/trafficAlerts.js';
 import { marcarSugestao, rodarVarreduraIa } from '../lib/trafficAiReview.js';
+import { MOTIVOS_DESQUALIFICACAO } from '../lib/trafegoNicho.js';
 
 /**
  * Aba Tráfego (Inteligência de Tráfego, fase 3). Só leitura sobre o cruzamento gasto do Meta x
@@ -208,6 +209,48 @@ export async function trafegoRoutes(app: FastifyInstance) {
       return { leads };
     },
   );
+
+  /** Nicho que a campanha MIRA x nicho REAL que o lead informou no formulário, por contagem de leads. */
+  app.get<{ Querystring: { de?: string; ate?: string } }>('/api/trafego/nichos-real', opts, async (req) => {
+    const { de, ate } = periodo(req.query);
+    const linhas = await query<{ mirado: string; real: string; leads: string }>(
+      `SELECT COALESCE(NULLIF(btrim(c.nicho), ''), '(sem nicho)') AS mirado,
+         COALESCE(NULLIF(btrim(lr.nicho), ''), '(não informado)') AS real, count(*) AS leads
+       FROM lead_rows lr JOIN lead_boards lb ON lb.id = lr.board_id
+       LEFT JOIN meta_campaigns c ON c.campaign_id = lr.meta_campaign_id
+       WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL AND lr.meta_lead_id IS NOT NULL
+         AND (lr.created_at AT TIME ZONE '${TZ}')::date BETWEEN $1::date AND $2::date
+       GROUP BY 1, 2 ORDER BY count(*) DESC`, [de, ate]);
+    return { de, ate, linhas: linhas.map((l) => ({ mirado: l.mirado, real: l.real, leads: Number(l.leads) })) };
+  });
+
+  /** Origem de um lead (campanha, conjunto, anúncio, miniatura) — sem gasto, qualquer usuário logado. */
+  app.get<{ Params: { id: string } }>('/api/lead-rows/:id/origem', { onRequest: [app.authenticate] }, async (req) => {
+    const l = await queryOne<Record<string, string | null>>(
+      `SELECT meta_campaign_id, meta_adset_id, meta_ad_id, nicho, motivo_desqualificacao,
+         lead_raw->>'campaign_name' AS raw_campanha, lead_raw->>'adset_name' AS raw_conjunto, lead_raw->>'ad_name' AS raw_anuncio
+       FROM lead_rows WHERE id = $1`, [req.params.id]);
+    if (!l) return { origem: null, motivos: MOTIVOS_DESQUALIFICACAO };
+    const veioDoMeta = !!(l.meta_campaign_id || l.meta_adset_id || l.meta_ad_id);
+    if (!veioDoMeta) return { origem: null, motivos: MOTIVOS_DESQUALIFICACAO };
+    const [c, s, a] = await Promise.all([
+      l.meta_campaign_id ? queryOne<{ name: string; nicho: string; papel: string }>(`SELECT name, nicho, papel FROM meta_campaigns WHERE campaign_id = $1`, [l.meta_campaign_id]) : null,
+      l.meta_adset_id ? queryOne<{ name: string }>(`SELECT name FROM meta_adsets WHERE adset_id = $1`, [l.meta_adset_id]) : null,
+      l.meta_ad_id ? queryOne<{ name: string; thumbnail_url: string; preview_url: string; formato: string; titulo: string }>(
+        `SELECT name, thumbnail_url, preview_url, formato, titulo FROM meta_ads WHERE ad_id = $1`, [l.meta_ad_id]) : null,
+    ]);
+    return {
+      origem: {
+        campanha: { id: l.meta_campaign_id, nome: c?.name || l.raw_campanha || '', nichoMirado: c?.nicho ?? '', papel: c?.papel ?? '' },
+        conjunto: { id: l.meta_adset_id, nome: s?.name || l.raw_conjunto || '' },
+        anuncio: {
+          id: l.meta_ad_id, nome: a?.name || l.raw_anuncio || '', thumbnail: a?.thumbnail_url ?? '',
+          link: a?.preview_url ?? '', formato: a?.formato ?? '', titulo: a?.titulo ?? '',
+        },
+      },
+      motivos: MOTIVOS_DESQUALIFICACAO,
+    };
+  });
 
   app.get('/api/trafego/alertas', opts, async () => {
     const abertos = await query(

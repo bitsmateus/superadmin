@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { trafegoService } from '@/services/trafego'
-import { Estado, Painel, SeloBadge, brl, num, seloDe, useCarregar } from '@/components/trafego/format'
+import { Estado, Painel, SeloBadge, Vazio, brl, num, seloDe, useCarregar } from '@/components/trafego/format'
 
 const SEM_NICHO = '(sem nicho)'
 
@@ -33,6 +33,7 @@ export function NichosTab({ de, ate, versao }: { de: string; ate: string; versao
   const nichos = useCarregar(() => trafegoService.ranking('nicho', de, ate), [de, ate, versao])
   const camps = useCarregar(() => trafegoService.ranking('campanha', de, ate), [de, ate, versao])
   const semNicho = (camps.dados?.linhas ?? []).filter((c) => !(c.nicho ?? '').trim() && c.gasto > 0)
+  const real = useCarregar(() => trafegoService.nichosReal(de, ate), [de, ate, versao])
   const recarregar = () => { nichos.recarregar(); camps.recarregar() }
 
   return (
@@ -72,6 +73,32 @@ export function NichosTab({ de, ate, versao }: { de: string; ate: string; versao
           O veredito só vale com pelo menos R$ 300 gastos e 15 leads — antes disso o nicho aparece como "em teste".
           Este é o nicho que a campanha MIRA; o nicho real do lead entra quando o formulário perguntar o segmento.
         </p>
+        <Painel title="Nicho mirado x nicho real do lead">
+          {(real.dados?.linhas ?? []).length === 0 ? (
+            <Vazio>Sem leads do Meta no período.</Vazio>
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs text-foreground/50">
+                <tr><th className="py-1.5">Campanha mira</th><th>Lead informou</th><th className="text-right">Leads</th></tr>
+              </thead>
+              <tbody>
+                {(real.dados?.linhas ?? []).map((l, i) => {
+                  const igual = l.mirado.trim().toLowerCase() === l.real.trim().toLowerCase()
+                  return (
+                    <tr key={i} className="border-t border-line">
+                      <td className="py-1.5 text-foreground/80">{l.mirado}</td>
+                      <td className={igual ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground/70'}>{l.real}</td>
+                      <td className="text-right tabular-nums">{num(l.leads)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+          <p className="mt-2 text-[11px] text-foreground/35">
+            O nicho real vem da pergunta de segmento do formulário do Meta (ou do que o SDR marcar no card do lead). Verde = a campanha acertou o público.
+          </p>
+        </Painel>
         {semNicho.length > 0 && (
           <Painel title={`Campanhas sem nicho (${semNicho.length})`}>
             <ul>{semNicho.map((c) => <MarcarNicho key={c.id} id={c.id} nome={c.nome} onSaved={recarregar} />)}</ul>

@@ -47,6 +47,7 @@ import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useTeam, teamMemberLabel, type TeamMember } from '@/hooks/useTeam'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { leadBoardsService } from '@/services/leadBoards'
+import { LeadOrigemBlock } from '@/components/comercial/LeadOrigemBlock'
 import { leadNotesService } from '@/services/leadNotes'
 import { leadEventsService } from '@/services/leadEvents'
 import { leadLabelsService } from '@/services/leadLabels'
@@ -285,6 +286,13 @@ function LeadDetailModalInner({
                 {boards.filter((b) => b.page === board?.page).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </FieldRow>
+
+            <LeadOrigemBlock
+              leadRowId={row.id}
+              nicho={row.nicho}
+              motivoDesqualificacao={row.motivoDesqualificacao}
+              onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
+            />
 
             <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Empresa">
               <BoxedField value={row.empresa} onSave={(v) => leadBoardsService.updateRow(row.id, { empresa: v })} />

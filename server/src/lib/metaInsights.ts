@@ -1,3 +1,4 @@
+import { lerNomeCampanha } from './trafegoNicho.js';
 import { query } from '../db.js';
 
 /**
@@ -91,26 +92,30 @@ export async function sincronizarCatalogoMeta(): Promise<{ campanhas: number; co
     }, token),
   ]);
 
-  // nicho/papel NÃO entram no UPDATE: são preenchidos à mão/pela convenção de nomes e não podem
-  // ser sobrescritos a cada sync.
+  // nicho/papel: vêm da convenção "NICHO | PAPEL | OFERTA" do nome (lib/trafegoNicho.ts), mas só
+  // PREENCHEM quando o campo está vazio — o que foi marcado à mão na aba Tráfego nunca é sobrescrito.
   for (const c of campanhas) {
     await query(
-      `INSERT INTO meta_campaigns (campaign_id, name, objective, status, daily_budget, synced_at)
-       VALUES ($1,$2,$3,$4,$5,now())
+      `INSERT INTO meta_campaigns (campaign_id, name, objective, status, daily_budget, nicho, papel, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,now())
        ON CONFLICT (campaign_id) DO UPDATE SET name=EXCLUDED.name, objective=EXCLUDED.objective,
-         status=EXCLUDED.status, daily_budget=EXCLUDED.daily_budget, synced_at=now()`,
-      [c.id, c.name ?? '', c.objective ?? '', c.effective_status ?? '', cents(c.daily_budget)],
+         status=EXCLUDED.status, daily_budget=EXCLUDED.daily_budget, synced_at=now(),
+         nicho = CASE WHEN meta_campaigns.nicho = '' THEN EXCLUDED.nicho ELSE meta_campaigns.nicho END,
+         papel = CASE WHEN meta_campaigns.papel = '' THEN EXCLUDED.papel ELSE meta_campaigns.papel END`,
+      [c.id, c.name ?? '', c.objective ?? '', c.effective_status ?? '', cents(c.daily_budget),
+        lerNomeCampanha(c.name).nicho, lerNomeCampanha(c.name).papel],
     );
   }
   for (const s of conjuntos) {
     await query(
-      `INSERT INTO meta_adsets (adset_id, campaign_id, name, status, daily_budget, optimization_goal, targeting, synced_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,now())
+      `INSERT INTO meta_adsets (adset_id, campaign_id, name, status, daily_budget, optimization_goal, targeting, nicho, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
        ON CONFLICT (adset_id) DO UPDATE SET campaign_id=EXCLUDED.campaign_id, name=EXCLUDED.name,
          status=EXCLUDED.status, daily_budget=EXCLUDED.daily_budget, optimization_goal=EXCLUDED.optimization_goal,
-         targeting=EXCLUDED.targeting, synced_at=now()`,
+         targeting=EXCLUDED.targeting, synced_at=now(),
+         nicho = CASE WHEN meta_adsets.nicho = '' THEN EXCLUDED.nicho ELSE meta_adsets.nicho END`,
       [s.id, s.campaign_id ?? null, s.name ?? '', s.effective_status ?? '', cents(s.daily_budget),
-        s.optimization_goal ?? '', s.targeting ? JSON.stringify(s.targeting) : null],
+        s.optimization_goal ?? '', s.targeting ? JSON.stringify(s.targeting) : null, lerNomeCampanha(s.name).nicho],
     );
   }
   for (const a of anuncios) {

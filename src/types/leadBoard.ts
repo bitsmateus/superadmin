@@ -46,6 +46,10 @@ export interface LeadRow {
   tipo: string
   /** Etiqueta colorida do card (urgente/médio/baixo...), por aba — separada do Tipo. */
   etiqueta: string
+  /** Nicho REAL do lead (resposta do formulário do Meta ou marcado à mão) — aba Tráfego compara com o mirado. */
+  nicho: string
+  /** Motivo (lista fechada) de o lead ter sido desqualificado — vazio = lead válido. */
+  motivoDesqualificacao: string
   empresa: string
   telefone: string
   diaContato: string

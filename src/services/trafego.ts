@@ -47,6 +47,8 @@ export interface SugestaoIa {
   id: string; categoria: CategoriaIa; titulo: string; detalhe: string; dado: string
   status: 'pendente' | 'aceita' | 'ignorada'
 }
+export interface NichoRealLinha { mirado: string; real: string; leads: number }
+
 export interface RevisaoIa { dia: string; texto: string; sugestoes: SugestaoIa[]; created_at: string }
 
 const qs = (p: Record<string, string | undefined>) => {
@@ -67,6 +69,7 @@ export const trafegoService = {
   alertas: () => api.get<{ abertos: AlertaTrafego[]; resolvidos: AlertaTrafego[] }>('/api/trafego/alertas'),
   resolverAlerta: (id: string) => api.post(`/api/trafego/alertas/${id}/resolver`),
   ia: () => api.get<{ revisoes: RevisaoIa[] }>('/api/trafego/ia'),
+  nichosReal: (de: string, ate: string) => api.get<{ linhas: NichoRealLinha[] }>(`/api/trafego/nichos-real${qs({ de, ate })}`),
   rodarIa: () => api.post<{ dia: string; sugestoes: number }>('/api/trafego/ia/rodar'),
   marcarSugestao: (dia: string, id: string, status: 'aceita' | 'ignorada' | 'pendente') =>
     api.post(`/api/trafego/ia/${dia}/sugestoes/${id}`, { status }),

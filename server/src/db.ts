@@ -1005,6 +1005,13 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS meta_ad_id TEXT`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS nicho TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS motivo_desqualificacao TEXT NOT NULL DEFAULT ''`);
+  // Nicho REAL do lead: a resposta da pergunta de segmento do formulário do Meta (cai em qualificacao).
+  // Idempotente: só toca em lead ainda sem nicho cuja qualificação tem uma chave de segmento.
+  await pool.query(`UPDATE lead_rows lr SET nicho = sub.v FROM (
+      SELECT id, (SELECT left(btrim(replace(e.value, '_', ' ')), 80) FROM jsonb_each_text(qualificacao) e
+                  WHERE e.key ~* '(segment|nicho|ramo|atividade)' AND btrim(e.value) <> '' LIMIT 1) AS v
+      FROM lead_rows WHERE nicho = '' AND qualificacao IS NOT NULL AND qualificacao <> '{}'::jsonb) sub
+    WHERE lr.id = sub.id AND sub.v IS NOT NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_meta_campaign_idx ON lead_rows(meta_campaign_id) WHERE meta_campaign_id IS NOT NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_meta_adset_idx ON lead_rows(meta_adset_id) WHERE meta_adset_id IS NOT NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_meta_ad_idx ON lead_rows(meta_ad_id) WHERE meta_ad_id IS NOT NULL`);

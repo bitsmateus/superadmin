@@ -249,6 +249,20 @@ function LeadDetailModalInner({
               <ExternalLink className="h-3.5 w-3.5" />
               Acessar planos
             </a>
+            {!mostrarContrato && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!window.confirm(`Excluir "${row.nome || 'este card'}"? Ele vai pra Lixeira e dá pra restaurar depois.`)) return
+                  onClose()
+                  void leadBoardsService.deleteRow(row.id)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10 focus-ring"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Excluir
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}

@@ -153,7 +153,7 @@ function Moldura({ children, direita }: { children: React.ReactNode; direita?: R
           <div style={{ flex: 1, minWidth: 180 }}>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: '#C1503F', margin: 0 }}>Açougue — rateio do boi</h1>
             <p style={{ fontSize: 13, color: '#7A716A', margin: 0 }}>
-              Digite o preço da carcaça e os cortes se ajustam sozinhos.
+              Quanto cada corte custa de verdade depois da desossa — e por quanto vender.
             </p>
           </div>
           {direita}
@@ -258,7 +258,19 @@ function TelaLogin({ onEntrar }: { onEntrar: (u: AcougueUsuario) => void }) {
   )
 }
 
-// ── Tela principal ────────────────────────────────────────────────────────────
+// ── Tela principal (3 etapas: compra → o que saiu da peça → resultado) ─────────
+
+type Etapa = 1 | 2 | 3
+
+/** Corte que entra na conta: ativo e que não seja a linha antiga de "sebo / quebra geral" (quebra 100%). */
+const vendavel = (c: Corte) => c.ativo !== false && (Number(c.quebra) || 0) < 100
+
+/** Recalcula o índice (valor relativo) de cada corte a partir do preço que vende hoje. O índice só
+ *  depende da proporção entre os preços, então o custo usado aqui é irrelevante. */
+function comIndices(cortes: Corte[]): Corte[] {
+  const r = derivarIndices({ unidade: 'kg', custo: 1, margem: 0 }, cortes)
+  return r.erro ? cortes : r.cortes
+}
 
 function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => void }) {
   const [bases, setBases] = React.useState<AcougueBase[]>([])
@@ -267,6 +279,10 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
   const [salvando, setSalvando] = React.useState(false)
   const [historico, setHistorico] = React.useState<AcougueHistorico[] | null>(null)
   const [painelAcessos, setPainelAcessos] = React.useState(false)
+  const [etapa, setEtapa] = React.useState<Etapa>(1)
+  /** Preço que o dono pretende cobrar em cada corte (só nesta sessão): troca o sugerido pra conferir a margem. */
+  const [precoPraticado, setPrecoPraticado] = React.useState<Record<string, number>>({})
+  const [sujo, setSujo] = React.useState(false)
 
   const base = bases.find((b) => b.id === baseId) ?? null
 
@@ -302,7 +318,11 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     setBases((lista) => lista.map((b) => (b.id === base.id ? { ...b, ...dados } : b)))
     setSujo(true)
   }
-  const [sujo, setSujo] = React.useState(false)
+
+  // Mudou o custo, a margem ou a base: os preços "que vou cobrar" digitados antes não valem mais.
+  React.useEffect(() => {
+    setPrecoPraticado({})
+  }, [baseId, base?.custo, base?.margem, base?.unidade, base?.pesoPeca, base?.arredondamento])
 
   /** Acrescenta os cortes bovinos padrão (nome + código + participação + preço de hoje, vindos da
    *  planilha do sistema antigo) — quem ainda não existe na base entra novo; quem já existe mas
@@ -336,7 +356,7 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
       return
     }
     patch({
-      cortes: [
+      cortes: comIndices([
         ...cortesAtualizados,
         ...paraAdicionar.map((m) => ({
           ...novoCorte(),
@@ -345,7 +365,7 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
           participacao: m.participacao,
           precoAtual: m.precoAtual,
         })),
-      ],
+      ]),
     })
     const partes = [
       novos > 0 && `${novos} corte(s) adicionado(s)`,
@@ -354,34 +374,12 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     toast.success(partes.join(' · '))
   }
 
-  /** O sebo/gordura que sai na desossa não é um corte à venda — é peso que saiu da peça e já foi
-   *  pago, mas não vira receita nenhuma. Modelado como um corte comum com quebra=100%: entra na
-   *  conta de "peso dos cortes" (pra bater com o peso real da peça) mas pesoVendavel = participação
-   *  × (1-100%) = 0, então não recebe preço nem rateio — o custo dele é automaticamente coberto
-   *  encarecendo um pouco os cortes de verdade, exatamente como acontece na prática. Participação
-   *  começa em 0 porque isso varia de peça pra peça — a pessoa ajusta pelo que pesar dessa vez. */
-  const adicionarQuebraGeral = () => {
-    if (!base) return
-    const normaliza = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-    if (base.cortes.some((c) => normaliza(c.nome) === normaliza('Sebo / quebra geral da peça'))) {
-      toast.message('Essa base já tem a linha de quebra geral — ajuste a participação dela')
-      return
-    }
-    patch({
-      cortes: [
-        ...base.cortes,
-        { ...novoCorte(), nome: 'Sebo / quebra geral da peça', participacao: 0, quebra: 100, indice: 0 },
-      ],
-    })
-    toast.success('Adicionado — preenche a % de participação com o quanto perdeu dessa peça (ex.: 3,526kg numa peça de 83kg = 4,25%)')
-  }
-
   /** Trava/destrava o preço de todos os cortes de uma vez — útil quando a maioria já tem preço
    *  certo e só alguns poucos precisam recalcular. */
   const travarTodos = (valor: boolean) => {
     if (!base) return
     patch({ cortes: base.cortes.map((c) => ({ ...c, travado: valor })) })
-    toast.success(valor ? 'Todos os cortes travados' : 'Todos os cortes destravados')
+    toast.success(valor ? 'Todos os preços mantidos' : 'Todos os preços liberados pra recalcular')
   }
 
   // Salva sozinho 1,2s depois da última tecla — ninguém no açougue vai lembrar de clicar "salvar".
@@ -410,22 +408,72 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sujo, base?.id, base?.nome, base?.unidade, base?.custo, base?.pesoPeca, base?.margem, base?.arredondamento, base?.cortes])
 
-  const resultado = React.useMemo(
-    () =>
-      base
-        ? calcularRateio(
-            {
-              unidade: base.unidade,
-              custo: base.custo,
-              pesoPeca: base.pesoPeca ?? undefined,
-              margem: base.margem,
-              arredondamento: base.arredondamento,
-            },
-            base.cortes,
-          )
-        : null,
-    [base],
-  )
+  const peso = base?.pesoPeca ?? 0
+
+  /** Cortes que entram na conta. Base antiga que nunca teve os índices calculados (todos = 1) ganha
+   *  os índices a partir dos preços de hoje — sem isso todos os cortes sairiam com o mesmo preço. */
+  const cortesBase = React.useMemo(() => {
+    if (!base) return []
+    const lista = base.cortes.filter(vendavel)
+    const comPreco = lista.filter((c) => (c.participacao ?? 0) > 0 && (c.precoAtual ?? 0) > 0)
+    const nuncaCalculou = comPreco.length > 1 && comPreco.every((c) => Math.abs((c.indice ?? 1) - 1) < 1e-9)
+    return nuncaCalculou ? comIndices(lista) : lista
+  }, [base])
+
+  const calc = React.useMemo(() => {
+    if (!base) return null
+    const baseCalc = {
+      unidade: base.unidade,
+      custo: base.custo,
+      pesoPeca: base.pesoPeca ?? undefined,
+      margem: base.margem,
+      arredondamento: base.arredondamento,
+    }
+    const custoKg = custoPorKg(baseCalc)
+    // Custo de cada corte = o mesmo rateio, mas com margem zero e sem arredondar (o boi só "se paga").
+    const custos = calcularRateio(
+      { ...baseCalc, margem: 0, arredondamento: 'nenhum' },
+      cortesBase.map((c) => ({ ...c, travado: false })),
+    )
+    const sug = calcularRateio(baseCalc, cortesBase)
+    const linhas = sug.cortes.map((c) => {
+      const kg = (c.pesoVendavel * peso) / 100
+      const custo = custos.cortes.find((x) => x.id === c.id)?.precoExato ?? 0
+      const sugerido = c.precoNovo
+      const usado = precoPraticado[c.id] ?? sugerido
+      const lucro = usado - custo
+      return {
+        corte: c,
+        kg,
+        custo,
+        sugerido,
+        usado,
+        lucro,
+        margem: custo > 0 ? (lucro / custo) * 100 : 0,
+        variacao: c.precoAtual && c.precoAtual > 0 ? usado - c.precoAtual : null,
+      }
+    })
+    const kgTotal = linhas.reduce((s, l) => s + l.kg, 0)
+    const investimento = custoKg * peso
+    const faturamento = linhas.reduce((s, l) => s + l.kg * l.usado, 0)
+    const lucroBruto = faturamento - investimento
+    const avisos = sug.avisos.filter((a) => !a.startsWith('As participações'))
+    if (peso > 0 && kgTotal > peso * 1.0005) {
+      avisos.push(`Os cortes somam ${txt(kgTotal, 2)} kg, mais do que os ${txt(peso, 2)} kg que você comprou — confira os pesos.`)
+    }
+    return {
+      custoKg,
+      linhas,
+      kgTotal,
+      investimento,
+      faturamento,
+      lucroBruto,
+      margemGeral: investimento > 0 ? (lucroBruto / investimento) * 100 : 0,
+      custoReal: kgTotal > 0 ? investimento / kgTotal : 0,
+      perdaKg: Math.max(0, peso - kgTotal),
+      avisos,
+    }
+  }, [base, cortesBase, peso, precoPraticado])
 
   const criarBase = async () => {
     const nome = window.prompt('Nome da base (ex.: Boi desossado, Boi campo, Suíno)')?.trim()
@@ -434,6 +482,7 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
       const nova = await acougueApi.criarBase(nome)
       setBases((l) => [...l, nova].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
       setBaseId(nova.id)
+      setEtapa(1)
     } catch (err) {
       if (!semSessao(err)) toast.error((err as Error).message)
     }
@@ -452,48 +501,37 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     }
   }
 
-  const calcularIndices = () => {
-    if (!base) return
-    const r = derivarIndices(
-      { unidade: base.unidade, custo: base.custo, pesoPeca: base.pesoPeca ?? undefined, margem: base.margem },
-      base.cortes,
-    )
-    if (r.erro) {
-      toast.error(r.erro)
-      return
-    }
-    patch({ cortes: r.cortes, margem: r.margem })
-    toast.success(`Índices calculados · margem praticada hoje: ${txt(r.margem, 1)}%`)
-  }
-
   const aplicar = async () => {
-    if (!base || !resultado) return
+    if (!base || !calc) return
     const cortes = base.cortes.map((c) => {
-      const calc = resultado.cortes.find((x) => x.id === c.id)
-      return calc ? { ...c, precoAtual: calc.precoNovo } : c
+      const l = calc.linhas.find((x) => x.corte.id === c.id)
+      return l ? { ...c, indice: l.corte.indice, precoAtual: l.usado } : c
     })
     try {
-      await acougueApi.aplicar(base.id, cortes, resultado.custoKg, base.margem)
+      await acougueApi.aplicar(base.id, cortes, calc.custoKg, base.margem)
       setBases((l) => l.map((b) => (b.id === base.id ? { ...b, cortes } : b)))
       setSujo(false)
-      toast.success('Preços aplicados — agora eles são os preços atuais')
+      setPrecoPraticado({})
+      toast.success('Preços aplicados — agora eles são os preços de hoje')
     } catch (err) {
       if (!semSessao(err)) toast.error((err as Error).message)
     }
   }
 
   const exportarCsv = () => {
-    if (!base || !resultado) return
+    if (!base || !calc) return
     const linhas = [
-      'codigo;produto;preco_novo;preco_anterior;participacao_pct;indice',
-      ...resultado.cortes.map((c) =>
+      'codigo;produto;preco_novo;preco_anterior;kg;custo_kg;participacao_pct;indice',
+      ...calc.linhas.map((l) =>
         [
-          c.codigo ?? '',
-          c.nome,
-          txt(c.precoNovo),
-          txt(c.precoAtual ?? 0),
-          txt(c.participacao),
-          txt(c.indice, 4),
+          l.corte.codigo ?? '',
+          l.corte.nome,
+          txt(l.usado),
+          txt(l.corte.precoAtual ?? 0),
+          txt(l.kg, 3),
+          txt(l.custo),
+          txt(l.corte.participacao),
+          txt(l.corte.indice, 4),
         ].join(';'),
       ),
     ]
@@ -517,6 +555,43 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
 
   const setCorte = (id: string, dados: Partial<Corte>) =>
     patch({ cortes: (base?.cortes ?? []).map((c) => (c.id === id ? { ...c, ...dados } : c)) })
+
+  /** O operador digita kg; por baixo continua gravando a participação (% da peça) e zera a quebra. */
+  const setKg = (id: string, kg: number) => {
+    if (peso <= 0) return
+    patch({
+      cortes: comIndices(
+        (base?.cortes ?? []).map((c) => (c.id === id ? { ...c, participacao: (kg / peso) * 100, quebra: 0 } : c)),
+      ),
+    })
+  }
+
+  const setPrecoHoje = (id: string, preco: number) =>
+    patch({ cortes: comIndices((base?.cortes ?? []).map((c) => (c.id === id ? { ...c, precoAtual: preco } : c))) })
+
+  const custoOk = Boolean(base && calc && calc.custoKg > 0 && peso > 0)
+  const temCortes = Boolean(calc && calc.kgTotal > 0)
+
+  const irParaEtapa = (e: Etapa) => {
+    if (e >= 2 && !custoOk) {
+      toast.error('Preencha o peso e o valor pago na compra primeiro.')
+      setEtapa(1)
+      return
+    }
+    if (e === 3 && !temCortes) {
+      toast.error('Informe quantos kg saíram de pelo menos um corte.')
+      setEtapa(2)
+      return
+    }
+    setEtapa(e)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const ETAPAS: { n: Etapa; label: string }[] = [
+    { n: 1, label: 'Compra' },
+    { n: 2, label: 'Cortes' },
+    { n: 3, label: 'Resultado' },
+  ]
 
   return (
     <Moldura
@@ -547,6 +622,7 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                 onChange={(e) => {
                   setBaseId(e.target.value || null)
                   setHistorico(null)
+                  setEtapa(1)
                 }}
                 style={{ ...inputEstilo, width: 'auto', minWidth: 220, flex: '0 1 auto' }}
               >
@@ -571,256 +647,197 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
             </div>
             {bases.length === 0 && (
               <p style={{ fontSize: 13, color: '#7A716A', margin: '10px 0 0' }}>
-                Crie a primeira base (ex.: <strong>Boi desossado</strong>), cadastre os cortes com os preços que você já
-                pratica e clique em <strong>Calcular índices pelos preços de hoje</strong>. Depois é só mudar o preço do
-                boi.
+                Crie a primeira base (ex.: <strong>Boi desossado</strong>) e siga os 3 passos: o que você comprou, o que
+                saiu da peça e o resultado com o preço de cada corte.
               </p>
             )}
           </Card>
 
-          {base && resultado && (
+          {base && calc && (
             <>
-              {/* Custo da carcaça */}
-              <Card titulo="Preço da carcaça">
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {UNIDADES.map((u) => (
+              {/* Etapas */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                {ETAPAS.map((e) => {
+                  const ativa = etapa === e.n
+                  return (
                     <button
-                      key={u.id}
+                      key={e.n}
                       type="button"
-                      onClick={() => patch({ unidade: u.id })}
+                      onClick={() => irParaEtapa(e.n)}
                       style={{
-                        ...botaoSecundario,
-                        padding: '8px 14px',
-                        borderColor: base.unidade === u.id ? '#C1503F' : '#DED8D0',
-                        color: base.unidade === u.id ? '#C1503F' : '#2A2622',
-                        fontWeight: base.unidade === u.id ? 800 : 600,
+                        flex: 1,
+                        border: 'none',
+                        borderRadius: 999,
+                        padding: '10px 8px',
+                        fontSize: 14,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        background: ativa ? '#C1503F' : '#fff',
+                        color: ativa ? '#fff' : '#7A716A',
+                        boxShadow: ativa ? 'none' : 'inset 0 0 0 1px #DED8D0',
                       }}
-                      title={u.dica}
                     >
-                      {u.label}
+                      {e.n} · {e.label}
                     </button>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-                  {base.unidade === 'peca' ? (
-                    <>
-                      {/* Peça inteira: a pessoa sabe o peso e o preço por kg que pagou — o total é
-                          calculado sozinho (preço/kg × peso). Continua gravando em `custo` o valor
-                          TOTAL por baixo dos panos (custoPorKg já espera isso), só a exibição que
-                          muda: em vez de pedir o total, pergunta os dois números que a pessoa já tem
-                          na mão e multiplica. Preencher o peso ANTES do preço por kg — o preço por kg
-                          é sempre custo ÷ peso, então editar o peso depois de já ter um preço por kg
-                          certo mudaria o preço por kg sem querer. */}
-                      <Campo label="Peso da peça (kg)">
-                        <CampoDecimal
-                          valor={base.pesoPeca ?? 0}
-                          onCommit={(novoPeso) => patch({ pesoPeca: novoPeso })}
-                          style={{ ...inputEstilo, width: 120 }}
-                        />
-                      </Campo>
-                      <Campo label="R$ pago por kg">
-                        <CampoDecimal
-                          valor={(base.pesoPeca ?? 0) > 0 ? base.custo / (base.pesoPeca ?? 1) : 0}
-                          onCommit={(precoPorKg) => patch({ custo: Math.round(precoPorKg * (base.pesoPeca ?? 0) * 100) / 100 })}
-                          style={{ ...inputEstilo, width: 120 }}
-                        />
-                      </Campo>
-                      <Campo label="Total pago na peça">
-                        <div style={{ ...inputEstilo, width: 140, background: '#F4F1EC', color: '#7A716A' }}>{brl(base.custo)}</div>
-                      </Campo>
-                    </>
-                  ) : (
-                    <Campo label={base.unidade === 'arroba' ? 'R$ por arroba' : 'R$ por kg'}>
-                      <CampoDecimal valor={base.custo} onCommit={(n) => patch({ custo: n })} style={{ ...inputEstilo, width: 140 }} />
-                    </Campo>
-                  )}
-                  <Campo label="Margem sobre o custo (%)">
-                    <CampoDecimal valor={base.margem} onCommit={(n) => patch({ margem: n })} style={{ ...inputEstilo, width: 110 }} />
-                  </Campo>
-                  <Campo label="Arredondar">
-                    <select
-                      value={base.arredondamento}
-                      onChange={(e) => patch({ arredondamento: e.target.value as Arredondamento })}
-                      style={{ ...inputEstilo, width: 'auto' }}
-                    >
-                      {ARREDONDAMENTOS.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Campo>
-                </div>
-
-                {base.unidade === 'peca' && (
-                  <p style={{ margin: '8px 0 0', fontSize: 12, color: '#9A928B' }}>
-                    Preenche o peso primeiro, depois o preço por kg — o total é calculado sozinho.
-                  </p>
-                )}
-
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 16,
-                    flexWrap: 'wrap',
-                    marginTop: 12,
-                    paddingTop: 12,
-                    borderTop: '1px solid #EFE9E1',
-                  }}
-                >
-                  <Numero titulo="Custo por kg" valor={brl(resultado.custoKg)} />
-                  <Numero titulo="Preço médio do kg" valor={brl(resultado.precoMedio)} />
-                  <Numero titulo="Receita do boi (100 kg)" valor={brl(resultado.receitaReal)} />
-                  <Numero
-                    titulo="Margem real"
-                    valor={`${txt(resultado.margemReal, 1)}%`}
-                    alerta={Math.abs(resultado.margemReal - base.margem) > 1.5}
-                  />
-                  <Numero
-                    titulo="Peso dos cortes"
-                    valor={`${txt(resultado.participacaoTotal, 1)}%`}
-                    alerta={resultado.participacaoTotal > 100.5 || resultado.participacaoTotal < 80}
-                  />
-                </div>
-
-                {resultado.avisos.length > 0 && (
-                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: '#B25E1B' }}>
-                    {resultado.avisos.map((a) => (
-                      <li key={a}>{a}</li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-
-              {/* Ações */}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" onClick={calcularIndices} style={botaoSecundario}>
-                  📐 Calcular índices pelos preços de hoje
-                </button>
-                <button type="button" onClick={aplicar} style={botaoPrimario}>
-                  ✅ Aplicar preços novos
-                </button>
-                <button type="button" onClick={exportarCsv} style={botaoSecundario}>
-                  ⬇️ Exportar CSV
-                </button>
-                <button type="button" onClick={historico ? () => setHistorico(null) : abrirHistorico} style={botaoSecundario}>
-                  🕘 {historico ? 'Fechar histórico' : 'Histórico'}
-                </button>
+                  )
+                })}
               </div>
 
-              {historico && (
-                <Card titulo="Histórico de aplicações">
-                  {historico.length === 0 ? (
-                    <p style={{ fontSize: 13, color: '#7A716A', margin: 0 }}>Nenhuma aplicação ainda.</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {historico.map((h) => (
-                        <div key={h.id} style={{ fontSize: 13, color: '#5B534D' }}>
-                          <strong>{new Date(h.createdAt).toLocaleString('pt-BR')}</strong> · custo {brl(h.custoKg)}/kg ·
-                          margem {txt(h.margem, 1)}% · {h.cortes.length} corte(s)
-                          {h.usuario ? ` · ${h.usuario}` : ''}
-                        </div>
-                      ))}
-                    </div>
+              {etapa === 1 && (
+                <Card titulo="Etapa 1 de 3 · O que você comprou">
+                  <p style={{ fontSize: 13, color: '#7A716A', margin: '0 0 12px' }}>
+                    Informe como pagou e o peso da carcaça (ou da peça) que chegou.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {UNIDADES.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => patch({ unidade: u.id })}
+                        style={{
+                          ...botaoSecundario,
+                          padding: '8px 14px',
+                          borderColor: base.unidade === u.id ? '#C1503F' : '#DED8D0',
+                          color: base.unidade === u.id ? '#C1503F' : '#2A2622',
+                          fontWeight: base.unidade === u.id ? 800 : 600,
+                        }}
+                        title={u.dica}
+                      >
+                        {u.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+                    <Campo label="Peso da carcaça / peça (kg)">
+                      <CampoDecimal
+                        valor={base.pesoPeca ?? 0}
+                        onCommit={(novoPeso) => {
+                          // Peça inteira grava o TOTAL pago em `custo`; mexer no peso mantém o preço por kg.
+                          if (base.unidade === 'peca' && (base.pesoPeca ?? 0) > 0 && novoPeso > 0) {
+                            const porKg = base.custo / (base.pesoPeca ?? 1)
+                            patch({ pesoPeca: novoPeso, custo: Math.round(porKg * novoPeso * 100) / 100 })
+                          } else {
+                            patch({ pesoPeca: novoPeso > 0 ? novoPeso : null })
+                          }
+                        }}
+                        style={{ ...inputEstilo, width: 160 }}
+                      />
+                    </Campo>
+                    {base.unidade === 'peca' ? (
+                      <Campo label="R$ pago por kg">
+                        <CampoDecimal
+                          valor={peso > 0 ? base.custo / peso : 0}
+                          onCommit={(precoPorKg) => patch({ custo: Math.round(precoPorKg * peso * 100) / 100 })}
+                          style={{ ...inputEstilo, width: 140 }}
+                        />
+                      </Campo>
+                    ) : (
+                      <Campo label={base.unidade === 'arroba' ? 'R$ pago por arroba' : 'R$ pago por kg'}>
+                        <CampoDecimal valor={base.custo} onCommit={(n) => patch({ custo: n })} style={{ ...inputEstilo, width: 140 }} />
+                      </Campo>
+                    )}
+                    <Campo label="Margem sobre o custo (%)">
+                      <CampoDecimal valor={base.margem} onCommit={(n) => patch({ margem: n })} style={{ ...inputEstilo, width: 120 }} />
+                    </Campo>
+                    <Campo label="Arredondar preços">
+                      <select
+                        value={base.arredondamento}
+                        onChange={(e) => patch({ arredondamento: e.target.value as Arredondamento })}
+                        style={{ ...inputEstilo, width: 'auto' }}
+                      >
+                        {ARREDONDAMENTOS.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Campo>
+                  </div>
+                  {base.unidade === 'peca' && (
+                    <p style={{ margin: '8px 0 0', fontSize: 12, color: '#9A928B' }}>
+                      Preencha o peso primeiro, depois o preço por kg — o total pago é calculado sozinho.
+                    </p>
                   )}
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, paddingTop: 12, borderTop: '1px solid #EFE9E1' }}>
+                    <Numero titulo="Investimento na compra" valor={brl(calc.investimento)} />
+                    <Numero titulo="Custo por kg comprado" valor={brl(calc.custoKg)} />
+                  </div>
+                  <div style={{ marginTop: 14 }}>
+                    <button
+                      type="button"
+                      onClick={() => irParaEtapa(2)}
+                      style={{ ...botaoPrimario, width: '100%', opacity: custoOk ? 1 : 0.5 }}
+                    >
+                      Continuar →
+                    </button>
+                  </div>
                 </Card>
               )}
 
-              {/* Cortes */}
-              <Card
-                titulo="Cortes"
-                dica="Participação = quanto o corte representa do peso da carcaça. Índice = quanto ele vale em relação à média (1 = na média)."
-              >
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
-                    <thead>
-                      <tr style={{ textAlign: 'left', color: '#9A928B', fontSize: 11, textTransform: 'uppercase' }}>
-                        <th style={th}>Corte</th>
-                        <th style={th}>Código</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Part. %</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Quebra %</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Índice</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Preço hoje</th>
-                        <th style={{ ...th, textAlign: 'center' }}>Travar</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Preço novo</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Variação</th>
-                        <th style={th} />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {base.cortes.map((c) => {
-                        const calc = resultado.cortes.find((x) => x.id === c.id)
-                        const sobe = (calc?.variacao ?? 0) > 0
-                        return (
-                          <tr key={c.id} style={{ borderTop: '1px solid #EFE9E1' }}>
-                            <td style={td}>
-                              <input
-                                value={c.nome}
-                                onChange={(e) => setCorte(c.id, { nome: e.target.value })}
-                                placeholder="Ex.: Coxão mole"
-                                style={{ ...inputCelula, minWidth: 170 }}
-                              />
-                            </td>
-                            <td style={td}>
-                              <input
-                                value={c.codigo ?? ''}
-                                onChange={(e) => setCorte(c.id, { codigo: e.target.value })}
-                                placeholder="110261"
-                                style={{ ...inputCelula, width: 90 }}
-                              />
-                            </td>
-                            <td style={tdNum}>
-                              <CampoDecimal
-                                valor={c.participacao}
-                                onCommit={(n) => setCorte(c.id, { participacao: n })}
-                                style={{ ...inputCelula, width: 70, textAlign: 'right' }}
-                              />
-                            </td>
-                            <td style={tdNum}>
-                              <CampoDecimal
-                                valor={c.quebra ?? 0}
-                                onCommit={(n) => setCorte(c.id, { quebra: n })}
-                                style={{ ...inputCelula, width: 62, textAlign: 'right' }}
-                              />
-                            </td>
-                            <td style={tdNum}>
-                              <CampoDecimal
-                                valor={c.indice}
-                                casas={4}
-                                onCommit={(n) => setCorte(c.id, { indice: n })}
-                                style={{ ...inputCelula, width: 70, textAlign: 'right' }}
-                              />
-                            </td>
-                            <td style={tdNum}>
-                              <CampoDecimal
-                                valor={c.precoAtual ?? 0}
-                                onCommit={(n) => setCorte(c.id, { precoAtual: n })}
-                                style={{ ...inputCelula, width: 84, textAlign: 'right' }}
-                              />
-                            </td>
-                            <td style={{ ...td, textAlign: 'center' }}>
-                              <input
-                                type="checkbox"
-                                checked={Boolean(c.travado)}
-                                onChange={(e) => setCorte(c.id, { travado: e.target.checked })}
-                                title="Preço fixo: não recalcula e o resto compensa"
-                              />
-                            </td>
-                            <td style={{ ...tdNum, fontWeight: 800, fontSize: 15 }}>{brl(calc?.precoNovo ?? 0)}</td>
-                            <td style={{ ...tdNum, color: calc?.variacao == null ? '#9A928B' : sobe ? '#1F7A43' : '#C1503F' }}>
-                              {calc?.variacao == null
-                                ? '—'
-                                : `${sobe ? '+' : ''}${txt(calc.variacao)} (${sobe ? '+' : ''}${txt(calc.variacaoPct ?? 0, 1)}%)`}
-                            </td>
-                            <td style={td}>
-                              <div style={{ display: 'flex', gap: 4 }}>
-                                <Link
-                                  to={`/mercadonunes?produto=${encodeURIComponent(c.nome)}&preco=${txt(calc?.precoNovo ?? 0)}`}
-                                  style={{ ...botaoMini, textDecoration: 'none' }}
-                                  title="Gerar plaquinha com esse preço"
-                                >
-                                  🏷️
-                                </Link>
+              {etapa === 2 && (
+                <Card titulo="Etapa 2 de 3 · O que saiu da peça">
+                  <p style={{ fontSize: 13, color: '#7A716A', margin: '0 0 12px' }}>
+                    Depois da desossa, digite quantos <strong>kg</strong> saíram de cada corte. Deixe em branco o que não saiu. O sebo e o
+                    osso (a perda) são calculados sozinhos.
+                  </p>
+                  {peso <= 0 ? (
+                    <p style={{ fontSize: 13, color: '#B25E1B', margin: '0 0 12px' }}>
+                      Falta o peso da carcaça. Volte na etapa 1 e informe quantos kg você comprou.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+                      <Numero titulo="Comprado" valor={`${txt(peso, 2)} kg`} />
+                      <Numero
+                        titulo="Saiu em cortes"
+                        valor={`${txt(calc.kgTotal, 2)} kg`}
+                        alerta={calc.kgTotal > peso * 1.0005}
+                      />
+                      <Numero
+                        titulo="Perda (osso e sebo)"
+                        valor={`${txt(calc.perdaKg, 2)} kg · ${txt(peso > 0 ? (calc.perdaKg / peso) * 100 : 0, 1)}%`}
+                      />
+                    </div>
+                  )}
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 460 }}>
+                      <thead>
+                        <tr style={{ textAlign: 'left', color: '#9A928B', fontSize: 11, textTransform: 'uppercase' }}>
+                          <th style={th}>Corte</th>
+                          <th style={{ ...th, textAlign: 'right' }}>Kg que saiu</th>
+                          <th style={{ ...th, textAlign: 'right' }}>Vende hoje (R$/kg)</th>
+                          <th style={th} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {base.cortes.filter(vendavel).map((c) => {
+                          const kg = (pesoVendavelCorte(c) * peso) / 100
+                          return (
+                            <tr key={c.id} style={{ borderTop: '1px solid #EFE9E1' }}>
+                              <td style={td}>
+                                <input
+                                  value={c.nome}
+                                  onChange={(e) => setCorte(c.id, { nome: e.target.value })}
+                                  placeholder="Ex.: Coxão mole"
+                                  style={{ ...inputCelula, minWidth: 170 }}
+                                />
+                              </td>
+                              <td style={tdNum}>
+                                <CampoDecimal
+                                  valor={kg}
+                                  casas={3}
+                                  onCommit={(n) => setKg(c.id, n)}
+                                  style={{ ...inputCelula, width: 84, textAlign: 'right', opacity: peso > 0 ? 1 : 0.5 }}
+                                />
+                              </td>
+                              <td style={tdNum}>
+                                <CampoDecimal
+                                  valor={c.precoAtual ?? 0}
+                                  onCommit={(n) => setPrecoHoje(c.id, n)}
+                                  style={{ ...inputCelula, width: 90, textAlign: 'right' }}
+                                />
+                              </td>
+                              <td style={td}>
                                 <button
                                   type="button"
                                   onClick={() => patch({ cortes: base.cortes.filter((x) => x.id !== c.id) })}
@@ -829,56 +846,240 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                                 >
                                   ✕
                                 </button>
-                              </div>
-                            </td>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p style={{ fontSize: 11, color: '#9A928B', margin: '8px 0 0' }}>
+                    "Vende hoje" é o preço que o corte tem na bandeja agora — é ele que mostra o quanto cada corte vale em relação aos
+                    outros na hora de dividir o custo.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                    <button type="button" onClick={() => patch({ cortes: [...base.cortes, novoCorte()] })} style={botaoSecundario}>
+                      + Adicionar corte
+                    </button>
+                    <button
+                      type="button"
+                      onClick={adicionarCortesPadrao}
+                      style={botaoSecundario}
+                      title="Acrescenta os 28 cortes do rateio oficial de vocês (código, peso proporcional e preço de hoje)"
+                    >
+                      + Cortes padrão (rateio oficial)
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                    <button type="button" onClick={() => irParaEtapa(1)} style={botaoSecundario}>
+                      ← Voltar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => irParaEtapa(3)}
+                      style={{ ...botaoPrimario, flex: 1, opacity: temCortes ? 1 : 0.5 }}
+                    >
+                      Ver resultado →
+                    </button>
+                  </div>
+                </Card>
+              )}
+
+              {etapa === 3 && (
+                <>
+                  <Card titulo="Etapa 3 de 3 · Resultado da sua precificação">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+                      <CartaoResultado titulo="Investimento na compra" valor={brl(calc.investimento)} sub={`${txt(peso, 2)} kg a ${brl(calc.custoKg)}/kg`} />
+                      <CartaoResultado
+                        destaque
+                        titulo="Faturamento previsto"
+                        valor={brl(calc.faturamento)}
+                        sub={`vendendo ${txt(calc.kgTotal, 2)} kg`}
+                      />
+                      <CartaoResultado
+                        titulo="Lucro bruto"
+                        valor={brl(calc.lucroBruto)}
+                        sub={`${txt(calc.margemGeral, 1)}% sobre o custo`}
+                        verde={calc.lucroBruto >= 0}
+                        vermelho={calc.lucroBruto < 0}
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 12,
+                        padding: 12,
+                        borderRadius: 10,
+                        background: '#F4F1EC',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 14,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 11, color: '#9A928B', textTransform: 'uppercase' }}>Carne na compra</div>
+                        <div style={{ fontSize: 20, fontWeight: 800 }}>{brl(calc.custoKg)}/kg</div>
+                      </div>
+                      <div style={{ fontSize: 22, color: '#C1503F' }}>→</div>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#C1503F', textTransform: 'uppercase', fontWeight: 700 }}>
+                          Custo real depois da desossa
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#C1503F' }}>{brl(calc.custoReal)}/kg</div>
+                      </div>
+                      <p style={{ flex: '1 1 220px', margin: 0, fontSize: 12, color: '#7A716A' }}>
+                        De {txt(peso, 2)} kg comprados sobraram {txt(calc.kgTotal, 2)} kg vendáveis ({txt(calc.perdaKg, 2)} kg de
+                        osso e sebo). Por isso o kg que você vende custa mais do que você pagou.
+                      </p>
+                    </div>
+
+                    {calc.avisos.length > 0 && (
+                      <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: '#B25E1B' }}>
+                        {calc.avisos.map((a) => (
+                          <li key={a}>{a}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </Card>
+
+                  <Card
+                    titulo="Resultado por produto"
+                    dica="O preço sugerido já divide o custo conforme o valor de cada corte e fecha a margem pedida. Digite em “Vou cobrar” o preço que você pretende praticar pra ver o lucro e a margem."
+                  >
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 760 }}>
+                        <thead>
+                          <tr style={{ textAlign: 'left', color: '#9A928B', fontSize: 11, textTransform: 'uppercase' }}>
+                            <th style={th}>Corte</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Custo/kg</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Preço sugerido</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Vou cobrar</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Lucro/kg</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Margem</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Hoje</th>
+                            <th style={{ ...th, textAlign: 'center' }} title="Marque pra não recalcular esse preço">
+                              Manter
+                            </th>
+                            <th style={th} />
                           </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => patch({ cortes: [...base.cortes, novoCorte()] })}
-                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
-                  >
-                    + Adicionar corte
-                  </button>
-                  <button
-                    type="button"
-                    onClick={adicionarCortesPadrao}
-                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
-                    title="Acrescenta os 28 cortes do rateio oficial de vocês (código, % de participação e preço de hoje)"
-                  >
-                    + Cortes padrão (rateio oficial)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={adicionarQuebraGeral}
-                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
-                    title="O sebo/gordura que sai na desossa não é um corte à venda — entra como quebra geral da peça, não como um corte comum"
-                  >
-                    + Sebo / quebra geral da peça
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => travarTodos(true)}
-                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
-                    title="Trava o preço de todos os cortes de uma vez (nenhum é recalculado)"
-                  >
-                    🔒 Travar todos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => travarTodos(false)}
-                    style={{ ...botaoSecundario, alignSelf: 'flex-start' }}
-                    title="Destrava o preço de todos os cortes de uma vez"
-                  >
-                    🔓 Destravar todos
-                  </button>
-                </div>
-              </Card>
+                        </thead>
+                        <tbody>
+                          {calc.linhas.map((l) => {
+                            const c = l.corte
+                            const sobe = (l.variacao ?? 0) > 0
+                            const mudou = precoPraticado[c.id] !== undefined
+                            return (
+                              <tr key={c.id} style={{ borderTop: '1px solid #EFE9E1' }}>
+                                <td style={td}>
+                                  <div style={{ fontWeight: 700 }}>{c.nome}</div>
+                                  <div style={{ fontSize: 11, color: '#9A928B' }}>
+                                    {txt(l.kg, 3)} kg{c.codigo ? ` · cód. ${c.codigo}` : ''}
+                                  </div>
+                                </td>
+                                <td style={tdNum}>{brl(l.custo)}</td>
+                                <td style={{ ...tdNum, fontWeight: 800 }}>{brl(l.sugerido)}</td>
+                                <td style={tdNum}>
+                                  <CampoDecimal
+                                    valor={l.usado}
+                                    onCommit={(n) => setPrecoPraticado((p) => ({ ...p, [c.id]: n }))}
+                                    style={{
+                                      ...inputCelula,
+                                      width: 88,
+                                      textAlign: 'right',
+                                      fontWeight: 800,
+                                      borderColor: mudou ? '#C1503F' : '#DED8D0',
+                                    }}
+                                  />
+                                </td>
+                                <td style={{ ...tdNum, color: l.lucro >= 0 ? '#1F7A43' : '#C1503F', fontWeight: 700 }}>{brl(l.lucro)}</td>
+                                <td style={{ ...tdNum, color: l.margem >= base.margem - 0.5 ? '#1F7A43' : '#B25E1B', fontWeight: 700 }}>
+                                  {txt(l.margem, 1)}%
+                                </td>
+                                <td style={{ ...tdNum, color: l.variacao == null ? '#9A928B' : sobe ? '#1F7A43' : '#C1503F' }}>
+                                  {c.precoAtual ? brl(c.precoAtual) : '—'}
+                                  {l.variacao != null && l.variacao !== 0 && (
+                                    <div style={{ fontSize: 11 }}>
+                                      {sobe ? '+' : ''}
+                                      {txt(l.variacao)}
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ ...td, textAlign: 'center' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(c.travado)}
+                                    onChange={(e) => setCorte(c.id, { travado: e.target.checked })}
+                                    title="Preço fixo: não recalcula e os outros cortes compensam"
+                                  />
+                                </td>
+                                <td style={td}>
+                                  <Link
+                                    to={`/mercadonunes?produto=${encodeURIComponent(c.nome)}&preco=${txt(l.usado)}`}
+                                    style={{ ...botaoMini, textDecoration: 'none' }}
+                                    title="Gerar plaquinha com esse preço"
+                                  >
+                                    🏷️
+                                  </Link>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p style={{ fontSize: 11, color: '#9A928B', margin: '8px 0 0' }}>
+                      Margem = lucro ÷ custo do corte. A margem pedida na etapa 1 é de {txt(base.margem, 1)}%.
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                      <button type="button" onClick={() => travarTodos(true)} style={botaoSecundario} title="Mantém o preço de hoje em todos os cortes (nenhum é recalculado)">
+                        🔒 Manter todos
+                      </button>
+                      <button type="button" onClick={() => travarTodos(false)} style={botaoSecundario} title="Libera todos os cortes pra recalcular">
+                        🔓 Liberar todos
+                      </button>
+                      {Object.keys(precoPraticado).length > 0 && (
+                        <button type="button" onClick={() => setPrecoPraticado({})} style={botaoSecundario}>
+                          ↺ Voltar aos preços sugeridos
+                        </button>
+                      )}
+                    </div>
+                  </Card>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" onClick={() => irParaEtapa(2)} style={botaoSecundario}>
+                      ← Ajustar cortes
+                    </button>
+                    <button type="button" onClick={aplicar} style={botaoPrimario}>
+                      ✅ Aplicar preços
+                    </button>
+                    <button type="button" onClick={exportarCsv} style={botaoSecundario}>
+                      ⬇️ Exportar CSV
+                    </button>
+                    <button type="button" onClick={historico ? () => setHistorico(null) : abrirHistorico} style={botaoSecundario}>
+                      🕘 {historico ? 'Fechar histórico' : 'Histórico'}
+                    </button>
+                  </div>
+
+                  {historico && (
+                    <Card titulo="Histórico de aplicações">
+                      {historico.length === 0 ? (
+                        <p style={{ fontSize: 13, color: '#7A716A', margin: 0 }}>Nenhuma aplicação ainda.</p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {historico.map((h) => (
+                            <div key={h.id} style={{ fontSize: 13, color: '#5B534D' }}>
+                              <strong>{new Date(h.createdAt).toLocaleString('pt-BR')}</strong> · custo {brl(h.custoKg)}/kg ·
+                              margem {txt(h.margem, 1)}% · {h.cortes.length} corte(s)
+                              {h.usuario ? ` · ${h.usuario}` : ''}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>
@@ -886,6 +1087,45 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
 
       {painelAcessos && <PainelAcessos usuarioId={usuario.id} onFechar={() => setPainelAcessos(false)} />}
     </Moldura>
+  )
+}
+
+/** Peso vendável de um corte em 100 kg de carcaça (participação menos a quebra) — espelha o motor de cálculo. */
+function pesoVendavelCorte(c: Corte): number {
+  const q = Math.min(95, Math.max(0, Number(c.quebra) || 0))
+  return (Number(c.participacao) || 0) * (1 - q / 100)
+}
+
+function CartaoResultado({
+  titulo,
+  valor,
+  sub,
+  destaque,
+  verde,
+  vermelho,
+}: {
+  titulo: string
+  valor: string
+  sub?: string
+  destaque?: boolean
+  verde?: boolean
+  vermelho?: boolean
+}) {
+  return (
+    <div
+      style={{
+        borderRadius: 12,
+        padding: 14,
+        background: destaque ? '#C1503F' : '#F4F1EC',
+        color: destaque ? '#fff' : '#2A2622',
+      }}
+    >
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, opacity: destaque ? 0.85 : 0.6 }}>{titulo}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: destaque ? '#fff' : verde ? '#1F7A43' : vermelho ? '#C1503F' : '#2A2622' }}>
+        {valor}
+      </div>
+      {sub && <div style={{ fontSize: 12, opacity: destaque ? 0.85 : 0.6 }}>{sub}</div>}
+    </div>
   )
 }
 

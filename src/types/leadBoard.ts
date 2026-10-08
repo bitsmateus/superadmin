@@ -44,6 +44,8 @@ export interface LeadRow {
   boardId: string
   nome: string
   tipo: string
+  /** Etiqueta colorida do card (urgente/médio/baixo...), por aba — separada do Tipo. */
+  etiqueta: string
   empresa: string
   telefone: string
   diaContato: string
@@ -152,7 +154,7 @@ export interface LeadEvent {
 }
 
 /** Campos que usam etiqueta colorida selecionável (estilo Monday) em vez de texto livre. */
-export type LeadLabelField = 'tipo' | 'diaContato' | 'status' | 'sdr' | 'ligacao'
+export type LeadLabelField = 'tipo' | 'diaContato' | 'status' | 'sdr' | 'ligacao' | 'etiqueta'
 
 export interface LeadLabel {
   id: string

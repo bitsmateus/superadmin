@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Archive, ArchiveRestore, Calendar, ChevronsLeftRight, MessageCircle, Settings2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Calendar, ChevronDown, ChevronUp, MessageCircle, Settings2 } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
@@ -33,7 +33,6 @@ const COLLAPSED_STORAGE_KEY = 'comercial_kanban_collapsed'
 /** Status que representa "concluído e guardado" — vira a última coluna do Kanban de Demandas,
  * recolhida por padrão. É só um valor de Status (sem mudança no banco). */
 const ARCHIVE_STATUS = 'Arquivado'
-const COLLAPSED_W = 44
 const COLUMN_W = 256
 
 type Column = { key: string; label: string; color: string; archive?: boolean }
@@ -130,8 +129,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
   // sem medir o DOM, e usar isso pra dimensionar a barra de rolagem flutuante abaixo.
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const barRef = React.useRef<HTMLDivElement>(null)
-  const contentWidth = columns.reduce((sum, c) => sum + (isCollapsed(c) ? COLLAPSED_W : COLUMN_W), 0)
-    + Math.max(0, columns.length - 1) * 12
+  const contentWidth = columns.length * COLUMN_W + Math.max(0, columns.length - 1) * 12
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
   const onDragEnd = (e: DragEndEvent) => {
@@ -272,27 +270,6 @@ function KanbanColumn({
     () => rows.reduce((sum, r) => sum + parseBRLCents(r.valorImplementacao), 0),
     [rows],
   )
-  // Recolhida: faixa estreita com o nome na vertical e a contagem. Continua sendo alvo de
-  // arrastar (dá pra soltar um card direto no Arquivado sem abrir a coluna).
-  if (collapsed) {
-    return (
-      <div
-        ref={setNodeRef}
-        onClick={onToggle}
-        title={`Expandir "${col.label}"`}
-        className={cn(
-          'flex shrink-0 cursor-pointer flex-col items-center gap-2 overflow-hidden rounded-xl py-2 text-white transition-opacity hover:opacity-90',
-          isOver && 'ring-2 ring-accent/40',
-        )}
-        style={{ backgroundColor: col.color, width: COLLAPSED_W, minHeight: 140 }}
-      >
-        <ChevronsLeftRight className="h-3.5 w-3.5 shrink-0 rotate-90 opacity-80" />
-        <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-[11px] font-semibold">{rows.length}</span>
-        <span className="mt-1 text-sm font-semibold [text-orientation:mixed] [writing-mode:vertical-rl]">{col.label}</span>
-      </div>
-    )
-  }
-
   return (
     <div
       ref={setNodeRef}
@@ -315,13 +292,15 @@ function KanbanColumn({
         <button
           type="button"
           onClick={onToggle}
-          title="Recolher coluna"
+          title={collapsed ? 'Mostrar cards' : 'Recolher cards'}
           className="grid h-5 w-5 shrink-0 place-items-center rounded hover:bg-white/20"
         >
-          <ChevronsLeftRight className="h-3.5 w-3.5" />
+          {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
         </button>
       </div>
-      <div className="min-h-[40px] space-y-2 p-2">
+      {/* Recolhida: só os cards somem (a coluna e o cabeçalho continuam do mesmo tamanho). Ainda
+          dá pra soltar um card no cabeçalho pra mover pra essa coluna. */}
+      <div className={cn('min-h-[40px] space-y-2 p-2', collapsed && 'hidden')}>
         {rows.map((row) => (
           <KanbanCard
             key={row.id}
@@ -412,14 +391,14 @@ function KanbanCard({
           onPointerDown={(e) => e.stopPropagation()}
         >
           {overlay ? (
-            row.tipo && <span className="inline-block rounded px-2 py-0.5 text-[11px] font-semibold text-foreground/70">{row.tipo}</span>
+            row.etiqueta && <span className="inline-block rounded px-2 py-0.5 text-[11px] font-semibold text-foreground/70">{row.etiqueta}</span>
           ) : (
             <div className="w-fit max-w-full overflow-hidden rounded">
               <LeadLabelCell
-                field="tipo"
-                value={row.tipo}
+                field="etiqueta"
+                value={row.etiqueta}
                 pageId={tagPageId}
-                onChange={(next) => leadBoardsService.updateRow(row.id, { tipo: next })}
+                onChange={(next) => leadBoardsService.updateRow(row.id, { etiqueta: next })}
                 placeholder="+ Etiqueta"
                 className="min-h-0 w-auto max-w-full px-2 py-0.5 text-[11px] font-semibold"
               />

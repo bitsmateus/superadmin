@@ -15,6 +15,7 @@ const FIELD_TITLES: Record<LeadLabelField, string> = {
   status: 'Status',
   sdr: 'SDR',
   ligacao: 'Ligação',
+  etiqueta: 'Etiqueta',
 }
 
 export interface LeadLabelCellProps {

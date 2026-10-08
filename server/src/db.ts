@@ -575,7 +575,8 @@ END $$`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_labels_field_idx ON lead_labels(field)`);
   // "Tipo", "SDR" e "Ligação" também viraram etiqueta colorida — amplia o CHECK pra bancos já existentes.
   await pool.query(`ALTER TABLE lead_labels DROP CONSTRAINT IF EXISTS lead_labels_field_check`);
-  await pool.query(`ALTER TABLE lead_labels ADD CONSTRAINT lead_labels_field_check CHECK (field IN ('tipo', 'dia_contato', 'status', 'sdr', 'ligacao'))`);
+  await pool.query(`ALTER TABLE lead_labels ADD CONSTRAINT lead_labels_field_check CHECK (field IN ('tipo', 'dia_contato', 'status', 'sdr', 'ligacao', 'etiqueta'))`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS etiqueta TEXT NOT NULL DEFAULT ''`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_lead_labels ON lead_labels;

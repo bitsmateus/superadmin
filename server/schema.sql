@@ -405,6 +405,8 @@ CREATE TABLE IF NOT EXISTS lead_rows (
   -- Faltava aqui: db.ts cria lead_rows com `ligacao` e uma migracao faz UPDATE nela, entao um
   -- banco montado so pelo schema.sql quebrava ao subir o servidor ("column ligacao does not exist").
   ligacao TEXT NOT NULL DEFAULT '',
+  -- Etiqueta colorida do card (urgente/médio/baixo...), própria de cada aba — separada do "Tipo".
+  etiqueta TEXT NOT NULL DEFAULT '',
   numero TEXT NOT NULL DEFAULT '',
   dor_cliente TEXT NOT NULL DEFAULT '',
   numero_atendentes TEXT NOT NULL DEFAULT '',
@@ -518,7 +520,7 @@ CREATE TRIGGER lead_notes_decrement_trigger AFTER DELETE ON lead_notes
 -- global (é a lista de SDRs de verdade, usada pra travar/rotear leads entre abas).
 CREATE TABLE IF NOT EXISTS lead_labels (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  field TEXT NOT NULL CHECK (field IN ('tipo', 'dia_contato', 'status', 'sdr', 'ligacao')),
+  field TEXT NOT NULL CHECK (field IN ('tipo', 'dia_contato', 'status', 'sdr', 'ligacao', 'etiqueta')),
   name TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#9CA3AF',
   position INT NOT NULL DEFAULT 0,

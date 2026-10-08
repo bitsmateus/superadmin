@@ -1589,7 +1589,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
             ) : view === 'dashboard' ? (
               <LeadDashboardView rows={dashboardRows} boards={boards} onOpenLead={setOpenLeadId} sdrTabLabel={sdrLock ? 'Minhas métricas' : undefined} onlySdr={!!sdrLock} />
             ) : view === 'kanban' ? (
-              <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} />
+              <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} section={currentPage?.section} />
             ) : (
               <>
                 <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} />

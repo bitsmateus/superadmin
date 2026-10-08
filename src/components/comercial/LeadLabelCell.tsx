@@ -25,9 +25,13 @@ export interface LeadLabelCellProps {
   required?: boolean
   /** Aba dona das etiquetas — obrigatório pra tudo, exceto "sdr" (continua global). */
   pageId?: string
+  /** Estilo do botão da célula (ex.: chip compacto no card do Kanban). */
+  className?: string
+  /** Texto da célula quando vazia (padrão "Selecionar…"). */
+  placeholder?: string
 }
 
-export function LeadLabelCell({ field, value, onChange, required, pageId }: LeadLabelCellProps) {
+export function LeadLabelCell({ field, value, onChange, required, pageId, className, placeholder }: LeadLabelCellProps) {
   const labels = useLeadLabels(field, pageId)
   const [open, setOpen] = React.useState(false)
   // "Tipo" aceita texto livre além das etiquetas: ali o SDR anota o que o lead é/quer com as
@@ -101,10 +105,11 @@ export function LeadLabelCell({ field, value, onChange, required, pageId }: Lead
             : value ? 'text-foreground/75'
             : required ? 'bg-danger/10 text-danger ring-1 ring-inset ring-danger/30'
             : 'text-foreground/30',
+          className,
         )}
         style={value && (current || !aceitaTextoLivre) ? { backgroundColor: current?.color ?? '#9CA3AF' } : undefined}
       >
-        {value ? value : required ? 'Obrigatório' : 'Selecionar…'}
+        {value ? value : required ? 'Obrigatório' : (placeholder ?? 'Selecionar…')}
       </button>
 
       {balao && !open && createPortal(

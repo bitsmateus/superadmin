@@ -176,6 +176,13 @@ export interface GcSocialProducao {
   created_at: string
 }
 
+export interface GcBriefing {
+  site: string
+  instagram: string
+  extras: { rotulo: string; valor: string }[]
+  perguntas: { pergunta: string; resposta: string }[]
+}
+
 export interface GcRegistroHistorico {
   id: string
   gc_cliente_id: string
@@ -867,6 +874,10 @@ export const gestaoClientes = {
   atualizarRegistro: (id: string, dados: Partial<{ tipo: GcTipoHistorico; reuniao_tipo: GcReuniaoTipo | null; titulo: string; descricao: string; fixado: boolean; anexos: GcAnexo[] }>) =>
     api.patch<GcRegistroHistorico>(`/api/gc/historico/${id}`, dados),
   excluirRegistro: (id: string) => api.delete(`/api/gc/historico/${id}`),
+
+  // Briefing do cliente
+  briefing: (clienteId: string) => api.get<GcBriefing>(`/api/gc/clientes/${clienteId}/briefing`),
+  salvarBriefing: (clienteId: string, dados: GcBriefing) => api.put<GcBriefing>(`/api/gc/clientes/${clienteId}/briefing`, dados),
 
   // Social media
   socialResumo: () => api.get<GcSocialResumo[]>('/api/gc/social/resumo'),

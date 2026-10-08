@@ -2357,6 +2357,48 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
+  // ------------------------------------------------------------------ briefing do cliente
+  // Dados do cliente (site, Instagram, campos extras) e as perguntas e respostas do briefing.
+  const limparLista = <T extends Record<string, string>>(bruto: unknown, campos: (keyof T & string)[], max: number): T[] => {
+    if (!Array.isArray(bruto)) return [];
+    return bruto
+      .slice(0, max)
+      .map((x) => Object.fromEntries(campos.map((c) => [c, String((x as Record<string, unknown>)?.[c] ?? '').slice(0, 4000)])) as T)
+      .filter((x) => campos.some((c) => x[c].trim() !== ''));
+  };
+
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/briefing', autenticado, async (req) => {
+    const b = await queryOne<{ site: string; instagram: string; extras: unknown; perguntas: unknown }>(
+      'SELECT site, instagram, extras, perguntas FROM gc_briefing WHERE gc_cliente_id = $1',
+      [req.params.id]
+    );
+    return {
+      site: b?.site ?? '',
+      instagram: b?.instagram ?? '',
+      extras: limparLista<{ rotulo: string; valor: string }>(b?.extras, ['rotulo', 'valor'], 40),
+      perguntas: limparLista<{ pergunta: string; resposta: string }>(b?.perguntas, ['pergunta', 'resposta'], 200),
+    };
+  });
+
+  app.put<{
+    Params: { id: string };
+    Body: { site?: string; instagram?: string; extras?: unknown; perguntas?: unknown };
+  }>('/api/gc/clientes/:id/briefing', autenticado, async (req) => {
+    const { sub } = req.user as { sub: string };
+    const b = req.body ?? {};
+    const extras = limparLista<{ rotulo: string; valor: string }>(b.extras, ['rotulo', 'valor'], 40);
+    const perguntas = limparLista<{ pergunta: string; resposta: string }>(b.perguntas, ['pergunta', 'resposta'], 200);
+    await query(
+      `INSERT INTO gc_briefing (gc_cliente_id, site, instagram, extras, perguntas, atualizado_por)
+       VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6)
+       ON CONFLICT (gc_cliente_id) DO UPDATE SET site = EXCLUDED.site, instagram = EXCLUDED.instagram,
+         extras = EXCLUDED.extras, perguntas = EXCLUDED.perguntas, atualizado_por = EXCLUDED.atualizado_por, updated_at = NOW()`,
+      [req.params.id, String(b.site ?? '').trim().slice(0, 500), String(b.instagram ?? '').trim().slice(0, 200),
+       JSON.stringify(extras), JSON.stringify(perguntas), sub]
+    );
+    return { site: String(b.site ?? '').trim(), instagram: String(b.instagram ?? '').trim(), extras, perguntas };
+  });
+
   // ------------------------------------------------------------------ relatórios
   // GET /api/gc/clientes/:id/relatorios — lista sem o snapshot (que é grande e só interessa quando
   // o relatório é aberto).

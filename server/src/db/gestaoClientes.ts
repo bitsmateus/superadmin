@@ -501,6 +501,16 @@ const TABELAS = [
   )`,
   `CREATE INDEX IF NOT EXISTS gc_social_materiais_cliente_idx ON gc_social_materiais (gc_cliente_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS gc_social_producao_cliente_idx ON gc_social_producao (gc_cliente_id, status)`,
+  // ---------------------------------------------------------------- briefing do cliente
+  `CREATE TABLE IF NOT EXISTS gc_briefing (
+    gc_cliente_id UUID PRIMARY KEY REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    site TEXT NOT NULL DEFAULT '',
+    instagram TEXT NOT NULL DEFAULT '',
+    extras JSONB NOT NULL DEFAULT '[]',
+    perguntas JSONB NOT NULL DEFAULT '[]',
+    atualizado_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];
 
 /** As 9 etapas padrão da jornada, com o checklist inicial de cada uma. */

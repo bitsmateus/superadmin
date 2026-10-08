@@ -475,6 +475,17 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     }
   }, [base, cortesBase, peso, precoPraticado])
 
+  /** Margem que os preços de venda cadastrados (precoAtual × peso vendável de cada corte) já dão sobre
+   *  o custo da carcaça informado na compra. */
+  const margemAtual = React.useMemo(() => {
+    if (!base) return null
+    const r = derivarIndices(
+      { unidade: base.unidade, custo: base.custo, pesoPeca: base.pesoPeca ?? undefined, margem: base.margem },
+      cortesBase,
+    )
+    return r.erro ? null : r.margem
+  }, [base, cortesBase])
+
   const criarBase = async () => {
     const nome = window.prompt('Nome da base (ex.: Boi desossado, Boi campo, Suíno)')?.trim()
     if (!nome) return
@@ -753,6 +764,22 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                       </select>
                     </Campo>
                   </div>
+                  {margemAtual !== null && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+                      <span style={{ fontSize: 13, color: '#5B534D' }}>
+                        Pelos preços de venda cadastrados, a margem sobre o custo é de <b>{txt(margemAtual, 1)}%</b>.
+                      </span>
+                      {Math.abs(margemAtual - base.margem) >= 0.05 && (
+                        <button
+                          type="button"
+                          onClick={() => patch({ margem: Math.round(margemAtual * 100) / 100 })}
+                          style={{ ...botaoSecundario, padding: '6px 12px' }}
+                        >
+                          Usar {txt(margemAtual, 1)}%
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {base.unidade === 'peca' && (
                     <p style={{ margin: '8px 0 0', fontSize: 12, color: '#9A928B' }}>
                       Preencha o peso primeiro, depois o preço por kg — o total pago é calculado sozinho.

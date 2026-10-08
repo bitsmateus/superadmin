@@ -39,6 +39,7 @@ import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { PageActivityLogModal } from '@/components/comercial/PageActivityLogModal'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
+import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
@@ -1586,6 +1587,8 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                 description="Crie o primeiro quadro para começar a registrar leads."
                 action={<Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button>}
               />
+            ) : view === 'dashboard' && page === 'crm-luis-closer' ? (
+              <CloserMetricsGrid rows={visibleRows} boards={boards} onOpenLead={setOpenLeadId} />
             ) : view === 'dashboard' ? (
               <LeadDashboardView rows={dashboardRows} boards={boards} onOpenLead={setOpenLeadId} sdrTabLabel={sdrLock ? 'Minhas métricas' : undefined} onlySdr={!!sdrLock} />
             ) : view === 'kanban' ? (

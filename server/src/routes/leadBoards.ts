@@ -556,11 +556,11 @@ async function syncEspelhoReuniaoAgendada(leadRowId: string) {
     if (lead.espelho_origem_id) return;
     if (lead.status !== MILESTONE_AGENDADA && !ehQuadroReuniaoAgendada(lead.board_name)) return;
 
-    const jaEspelhada = await queryOne<{ id: string }>(
-      'SELECT id FROM lead_rows WHERE espelho_origem_id = $1',
+    const jaEspelhada = await queryOne<{ id: string; deleted_at: string | null }>(
+      'SELECT id, deleted_at FROM lead_rows WHERE espelho_origem_id = $1',
       [leadRowId]
     );
-    if (jaEspelhada) return;
+    if (jaEspelhada && !jaEspelhada.deleted_at) return;
 
     const destino =
       (await queryOne<{ id: string }>(
@@ -581,6 +581,15 @@ async function syncEspelhoReuniaoAgendada(leadRowId: string) {
       [destino.id]
     );
 
+    // A cópia foi retirada quando a lead voltou pro começo do funil e agora ela agendou de novo: restaura a mesma.
+    if (jaEspelhada?.deleted_at) {
+      await query(
+        `UPDATE lead_rows SET deleted_at = NULL, board_id = $2, status = $3, position = $4 WHERE id = $1`,
+        [jaEspelhada.id, destino.id, MILESTONE_AGENDADA, (max ?? -1) + 1]
+      );
+      return;
+    }
+
     await query(
       `INSERT INTO lead_rows (
         board_id, nome, tipo, empresa, telefone, dia_contato, ligacao, status, agendamento,
@@ -600,6 +609,9 @@ async function syncEspelhoReuniaoAgendada(leadRowId: string) {
     console.error('[espelho] falha ao espelhar lead pro CRM do closer', leadRowId, err);
   }
 }
+
+/** Status do começo do funil: nunca chegam ao CRM do closer. */
+const STATUS_INICIO_DO_FUNIL = new Set(['primeirocontato', 'leadsnovos']);
 
 /** Edição de conteúdo vai pro outro lado do espelho (original <-> cópia). É um pulo só: o UPDATE
  * daqui não passa pelo PATCH de novo, então não entra em loop. */
@@ -626,6 +638,14 @@ async function propagarEspelho(
       [espelhoOrigemId ?? leadRowId]
     );
     if (!parceiro) return;
+
+    // Lead que o Arthur devolve pro INÍCIO do funil (Primeiro Contato / Leads Novos) deixa de ser do closer:
+    // a reunião não vingou. A cópia sai do CRM do Luis (vai pra lixeira, dá pra recuperar) em vez de virar um
+    // quadro "Primeiro Contato" lá. Se a lead voltar a "Reunião agendada", a cópia é restaurada.
+    if (!espelhoOrigemId && novoStatus && STATUS_INICIO_DO_FUNIL.has(normalizaNome(novoStatus))) {
+      await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [parceiro.id]);
+      return;
+    }
 
     const sets: string[] = [];
     const params: unknown[] = [];

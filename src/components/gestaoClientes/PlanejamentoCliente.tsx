@@ -275,6 +275,177 @@ function Passo({ numero, pergunta, apoio }: { numero: number; pergunta: string; 
   )
 }
 
+/** Um campo de preencher do funil: rótulo, valor com prefixo (R$) ou sufixo (%). */
+function CampoDoFunil({
+  rotulo, valor, onChange, prefixo, sufixo, masc = 'reais', dica,
+}: {
+  rotulo: string
+  valor: string
+  onChange: (v: string) => void
+  prefixo?: string
+  sufixo?: string
+  masc?: 'reais' | 'inteiro'
+  dica?: string
+}) {
+  return (
+    <label className="block" title={dica}>
+      <span className="mb-1 block text-xs font-medium text-foreground/70">{rotulo}</span>
+      <span className="relative block">
+        {prefixo && <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-foreground/40">{prefixo}</span>}
+        <input
+          value={valor}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={(e) => onChange(mascararCampo(e.target.value, masc))}
+          onFocus={(e) => e.target.select()}
+          inputMode="decimal"
+          placeholder="0"
+          className={cn(
+            'h-10 w-full rounded-lg border border-line bg-surface text-right text-sm tabular-nums text-foreground outline-none placeholder:text-foreground/20 focus:border-accent focus:ring-2 focus:ring-accent/15',
+            prefixo ? 'pl-9' : 'pl-3',
+            sufixo ? 'pr-8' : 'pr-3',
+          )}
+        />
+        {sufixo && <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-foreground/40">{sufixo}</span>}
+      </span>
+    </label>
+  )
+}
+
+/** O que o plano calculou a partir do que foi preenchido acima: destaque verde, sem campo pra digitar. */
+function ResultadoDoFunil({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalhe?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-accent/[0.07] px-3 py-2">
+      <span className="text-xs text-foreground/60">{rotulo}</span>
+      <span className="text-right">
+        <span className="block text-base font-semibold tabular-nums text-foreground">{valor}</span>
+        {detalhe && <span className="block text-[11px] text-foreground/45">{detalhe}</span>}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Uma coluna do plano (Mês 1, 6 meses ou 12 meses) em degraus, do investimento até o faturamento:
+ *  1. investimento → 2. CPL médio = leads → 3. taxa de agendamento (opcional) = agendamentos
+ *  → 4. taxa de conversão = vendas → 5. ticket médio = faturamento.
+ * O que se calcula aparece como resultado; se faltar o número que o calcula, o campo vira digitável (preencher à mão).
+ */
+function ColunaDoFunil({
+  coluna, titulo, subtitulo, r, anterior, onInvestimento, onCpl, onFunil, onManual,
+}: {
+  coluna: ColunaDaGrade
+  titulo: string
+  subtitulo: string
+  r: Rascunho
+  /** O investimento da coluna anterior, pra mostrar a evolução. */
+  anterior?: number | null
+  onInvestimento: (v: string) => void
+  onCpl: (v: string) => void
+  onFunil: (campo: keyof FunilDaColuna, v: string) => void
+  onManual: (chave: 'leads' | 'vendas' | 'receita', v: string) => void
+}) {
+  const mes1 = coluna === 'mes1'
+  const metas = mes1 ? null : r.cenarios[coluna].metas
+  const f = r.funil[coluna]
+  const invTxt = mes1 ? r.mes1.investimento : metas!.investimento
+  const cplTxt = mes1 ? r.cplMedio : f.cpl
+  const inv = numeroDigitado(invTxt)
+  const cpl = numeroDigitado(cplTxt)
+  const ag = numeroDigitado(f.agendamento)
+  const conv = numeroDigitado(f.conversao)
+  const ticket = numeroDigitado(f.ticket)
+
+  const leads = inv !== null && cpl !== null && cpl > 0 ? inv / cpl : null
+  const agendados = leads !== null && ag !== null ? leads * (ag / 100) : null
+  const vendasCalc = leads !== null && conv !== null ? Math.round((agendados ?? leads) * (conv / 100)) : null
+  const vendasTxt = mes1 ? r.mes1.vendas : metas!.vendas
+  const vendas = vendasCalc ?? numeroDigitado(vendasTxt)
+  const receitaCalc = vendasCalc !== null && ticket !== null ? vendasCalc * ticket : null
+  const receitaTxt = mes1 ? r.mes1.receita : metas!.receita
+  const receita = receitaCalc ?? numeroDigitado(receitaTxt)
+  const roas = inv && receita ? receita / inv : null
+  const custoVenda = inv && vendas ? inv / vendas : null
+  const reais = (n: number | null) => formatarMetrica(n, 'reais')
+  const inteiro = (n: number | null) => (n === null ? '—' : Math.round(n).toLocaleString('pt-BR'))
+  const evolucao =
+    anterior && inv !== null && anterior > 0 && inv !== anterior
+      ? `${inv > anterior ? '+' : ''}${(((inv - anterior) / anterior) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% sobre a coluna anterior`
+      : undefined
+
+  const degrau = (n: number, texto: string) => (
+    <p className="mb-1.5 mt-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
+      <span className="grid h-4 w-4 place-items-center rounded-full bg-accent/15 text-[10px] text-accent">{n}</span>
+      {texto}
+    </p>
+  )
+
+  return (
+    <div className="rounded-xl border border-line bg-elevate/[0.02] p-3.5">
+      <p className="text-sm font-semibold text-foreground">{titulo}</p>
+      <p className="text-xs text-foreground/50">{subtitulo}</p>
+
+      {degrau(1, 'Quanto investir')}
+      <CampoDoFunil rotulo="Investimento por mês" prefixo="R$" valor={invTxt} onChange={onInvestimento} />
+      {evolucao && <p className="mt-1 text-[11px] text-foreground/45">{evolucao}</p>}
+
+      {degrau(2, 'Quanto custa cada lead')}
+      <CampoDoFunil rotulo="CPL médio" prefixo="R$" valor={cplTxt} onChange={onCpl} dica="Custo médio por lead que você estima" />
+      <div className="mt-2">
+        {leads !== null ? (
+          <ResultadoDoFunil rotulo="Leads por mês" valor={inteiro(leads)} detalhe={`${reais(inv)} ÷ ${reais(cpl)}`} />
+        ) : mes1 ? (
+          <p className="rounded-lg border border-dashed border-line px-3 py-2 text-xs text-foreground/40">Preencha o investimento e o CPL pra ver os leads.</p>
+        ) : (
+          <CampoDoFunil rotulo="Leads por mês (digite, se não usar o CPL)" valor={metas!.leads} onChange={(v) => onManual('leads', v)} masc="inteiro" />
+        )}
+      </div>
+
+      {degrau(3, 'Quantos agendam (opcional)')}
+      <CampoDoFunil rotulo="Taxa de agendamento" sufixo="%" valor={f.agendamento} onChange={(v) => onFunil('agendamento', v)} dica="% dos leads que agendam. Deixe em branco pra ir direto dos leads às vendas" />
+      {agendados !== null && (
+        <div className="mt-2">
+          <ResultadoDoFunil rotulo="Agendamentos" valor={inteiro(agendados)} />
+        </div>
+      )}
+
+      {degrau(4, 'Quantos compram')}
+      <CampoDoFunil rotulo="Taxa de conversão" sufixo="%" valor={f.conversao} onChange={(v) => onFunil('conversao', v)} dica={ag !== null ? '% dos agendamentos que viram venda' : '% dos leads que viram venda'} />
+      <div className="mt-2">
+        {vendasCalc !== null ? (
+          <ResultadoDoFunil rotulo="Vendas" valor={inteiro(vendasCalc)} detalhe={`${inteiro(agendados ?? leads)} × ${conv!.toLocaleString('pt-BR')}%`} />
+        ) : (
+          <CampoDoFunil rotulo="Vendas (digite, se não usar a conversão)" valor={vendasTxt} onChange={(v) => onManual('vendas', v)} masc="inteiro" />
+        )}
+      </div>
+
+      {degrau(5, 'Quanto fatura')}
+      <CampoDoFunil rotulo="Ticket médio" prefixo="R$" valor={f.ticket} onChange={(v) => onFunil('ticket', v)} dica="Valor médio de cada venda" />
+      <div className="mt-2">
+        {receitaCalc !== null ? (
+          <ResultadoDoFunil rotulo="Faturamento" valor={reais(receitaCalc)} detalhe={`${inteiro(vendasCalc)} × ${reais(ticket)}`} />
+        ) : (
+          <CampoDoFunil rotulo="Faturamento (digite, se não usar o ticket)" prefixo="R$" valor={receitaTxt} onChange={(v) => onManual('receita', v)} />
+        )}
+      </div>
+
+      {(roas !== null || custoVenda !== null) && (
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-2 text-xs text-foreground/60">
+          {roas !== null && (
+            <span>
+              Retorno: <strong className="text-foreground">{roas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}x</strong>
+            </span>
+          )}
+          {custoVenda !== null && (
+            <span>
+              Custo por venda: <strong className="text-foreground">{reais(custoVenda)}</strong>
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const CHAVE_ABERTO = (id: string) => `gc:planejamento:aberto:${id}`
 
 /** As colunas da grade do plano, na ordem em que aparecem: o primeiro mês e as duas metas. */
@@ -972,123 +1143,43 @@ export function PlanejamentoCliente({
           <Passo
             numero={2}
             pergunta="Onde queremos chegar?"
-            apoio="As metas. No Mês 1: quanto investir e o que se espera. Depois, 6 e 12 meses. Os leads saem do investimento ÷ CPL médio que você estima."
+            apoio="Preencha de cima pra baixo: investimento, CPL (dá os leads), taxa de conversão (dá as vendas) e ticket médio (dá o faturamento). Mês 1, depois as metas de 6 e 12 meses."
           />
 
-          {/* Celular: um cartão por métrica, com as três colunas lado a lado. A tabela fica de tablet pra cima. */}
-          <div className="space-y-2 sm:hidden">
-            {LINHAS_DA_GRADE.map((chave) => (
-              <div key={chave} className="rounded-lg border border-line p-2.5">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className={cn('text-sm font-medium', ehDigitada(chave) ? 'text-foreground/85' : 'text-foreground/45')}>
-                    {chave === 'cpl' ? 'CPL (médio no mês 1)' : ROTULO_DA_LINHA[chave]}
-                  </span>
-                  <span className="text-xs tabular-nums text-foreground/50">Ponto A: {textoDaBase(chave, base[chave])}</span>
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-1.5">
-                  {COLUNAS_DA_GRADE.map((coluna) => (
-                    <div key={coluna} className="min-w-0">
-                      <span className="mb-1 block truncate text-[10.5px] text-foreground/45">{ROTULO_DA_COLUNA[coluna].replace('Meta ', '')}</span>
-                      {celulaDaGrade(coluna, chave, true)}
-                      <div className="mt-0.5 h-4">
-                        <CelulaVariacao chave={chave} valor={valorPlanejado(coluna, chave)} pontoA={base[chave]} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          {/* O ponto A: de onde o cliente parte. */}
+          <div className="mb-3 rounded-lg border border-line bg-elevate/[0.03] px-3 py-2 text-xs text-foreground/70">
+            <span className="font-semibold text-foreground">Ponto A (hoje): </span>
+            {!base.investimento && !base.leads && !base.vendas && !base.receita
+              ? 'o cliente ainda não investe — o plano parte do zero.'
+              : [
+                  base.investimento !== undefined ? `investe ${formatarMetrica(base.investimento, 'reais')}/mês` : null,
+                  base.leads !== undefined ? `${formatarMetrica(base.leads, 'inteiro')} leads` : null,
+                  base.vendas !== undefined ? `${formatarMetrica(base.vendas, 'inteiro')} vendas` : null,
+                  base.receita !== undefined ? `faturamento ${formatarMetrica(base.receita, 'reais')}` : null,
+                ].filter(Boolean).join(' · ')}
           </div>
 
-          <div className="hidden overflow-x-auto sm:block">
-            <table className="w-full max-w-[820px] text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-foreground/45">
-                <tr>
-                  <th className="py-1.5 pr-3 font-medium">Métrica</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Ponto A</th>
-                  {COLUNAS_DA_GRADE.map((c) => (
-                    <th key={c} className="px-2 py-1.5 text-right font-medium">{ROTULO_DA_COLUNA[c]}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {LINHAS_DA_GRADE.map((chave) => (
-                  <tr key={chave} className="border-t border-line align-top">
-                    <td className={cn('py-1.5 pr-3 font-medium', ehDigitada(chave) ? 'text-foreground/85' : 'text-foreground/45')}>
-                      {chave === 'cpl' ? 'CPL médio' : ROTULO_DA_LINHA[chave]}
-                    </td>
-                    <td className="px-2 py-1.5 text-right tabular-nums text-foreground/55">{textoDaBase(chave, base[chave])}</td>
-                    {COLUNAS_DA_GRADE.map((coluna) => (
-                      <td key={coluna} className="px-1.5 py-1">
-                        {celulaDaGrade(coluna, chave, false)}
-                        <div className="mt-0.5 h-4 text-right">
-                          <CelulaVariacao chave={chave} valor={valorPlanejado(coluna, chave)} pontoA={base[chave]} />
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* ------------------------------------------------------------ o funil: do investimento até a venda */}
-          <div className="mt-4 rounded-xl border border-line bg-elevate/[0.02] p-3">
-            <p className="text-sm font-semibold text-foreground">Funil: do investimento até a venda</p>
-            <p className="mb-3 text-xs text-foreground/50">
-              Preencha o CPL, a taxa de agendamento e a de conversão: o plano calcula leads, agendamentos, vendas e (com o ticket médio) o faturamento.
-              Investimento ÷ CPL = leads → × taxa de agendamento = agendamentos → × taxa de conversão = vendas → × ticket = faturamento.
-            </p>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {COLUNAS_DA_GRADE.map((coluna) => {
-                const f = rascunho.funil[coluna]
-                const mes1 = coluna === 'mes1'
-                const inv = numeroDigitado(mes1 ? rascunho.mes1.investimento : rascunho.cenarios[coluna].metas.investimento)
-                const cpl = numeroDigitado(mes1 ? rascunho.cplMedio : f.cpl)
-                const ag = numeroDigitado(f.agendamento)
-                const conv = numeroDigitado(f.conversao)
-                const leads = inv !== null && cpl ? inv / cpl : null
-                const agendados = leads !== null && ag !== null ? leads * (ag / 100) : null
-                const vendas = leads !== null && conv !== null ? Math.round((agendados ?? leads) * (conv / 100)) : null
-                const campo = (rotulo: string, valor: string, onChange: (v: string) => void, sufixo: string, prefixo?: string) => (
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] text-foreground/55">{rotulo}</span>
-                    <span className="relative block">
-                      {prefixo && <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-foreground/40">{prefixo}</span>}
-                      <input
-                        value={valor}
-                        onChange={(e) => onChange(e.target.value)}
-                        onBlur={(e) => onChange(mascararCampo(e.target.value, 'reais'))}
-                        onFocus={(e) => e.target.select()}
-                        inputMode="decimal"
-                        placeholder="0"
-                        className={cn(
-                          'h-9 w-full rounded-md border border-line bg-surface pr-7 text-right text-sm tabular-nums text-foreground outline-none focus:border-accent focus:ring-2 focus:ring-accent/15',
-                          prefixo ? 'pl-8' : 'pl-2',
-                        )}
-                      />
-                      {sufixo && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-foreground/40">{sufixo}</span>}
-                    </span>
-                  </label>
-                )
-                return (
-                  <div key={coluna} className="rounded-lg border border-line bg-surface p-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-accent">{ROTULO_DA_COLUNA[coluna]}</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {!mes1 && campo('CPL médio', f.cpl, (v) => mudarFunil(coluna, 'cpl', v), '', 'R$')}
-                      {campo('Taxa de agendamento', f.agendamento, (v) => mudarFunil(coluna, 'agendamento', v), '%')}
-                      {campo('Taxa de conversão', f.conversao, (v) => mudarFunil(coluna, 'conversao', v), '%')}
-                      {campo('Ticket médio', f.ticket, (v) => mudarFunil(coluna, 'ticket', v), '', 'R$')}
-                    </div>
-                    <p className="mt-2 text-[11px] leading-snug text-foreground/55">
-                      {leads === null
-                        ? 'Preencha o investimento e o CPL médio pra calcular.'
-                        : `${Math.round(leads).toLocaleString('pt-BR')} leads${agendados !== null ? ` → ${Math.round(agendados).toLocaleString('pt-BR')} agendamentos` : ''}${vendas !== null ? ` → ${vendas.toLocaleString('pt-BR')} vendas` : ''}`}
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
+          {/* Três colunas em degraus: Mês 1 → 6 meses → 12 meses. No celular ficam uma embaixo da outra. */}
+          <div className="grid gap-3 lg:grid-cols-3">
+            {COLUNAS_DA_GRADE.map((coluna, i) => {
+              const anterior = i === 0 ? base.investimento ?? null : numeroDigitado(
+                COLUNAS_DA_GRADE[i - 1] === 'mes1' ? rascunho.mes1.investimento : rascunho.cenarios[COLUNAS_DA_GRADE[i - 1] as HorizontePlano].metas.investimento,
+              )
+              return (
+                <ColunaDoFunil
+                  key={coluna}
+                  coluna={coluna}
+                  titulo={coluna === 'mes1' ? 'Mês 1' : coluna === '6_meses' ? 'Meta de 6 meses' : 'Meta de 12 meses'}
+                  subtitulo={coluna === 'mes1' ? 'O primeiro mês do plano' : coluna === '6_meses' ? 'Onde queremos estar em 6 meses' : 'Onde queremos estar em 12 meses'}
+                  r={rascunho}
+                  anterior={anterior}
+                  onInvestimento={(v) => mudarCampo(coluna, 'investimento', v)}
+                  onCpl={(v) => (coluna === 'mes1' ? mudarCampo('mes1', 'cpl', v) : mudarFunil(coluna, 'cpl', v))}
+                  onFunil={(campo, v) => mudarFunil(coluna, campo, v)}
+                  onManual={(chave, v) => mudarCampo(coluna, chave, v)}
+                />
+              )
+            })}
           </div>
         </div>
 

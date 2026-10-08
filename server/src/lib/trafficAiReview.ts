@@ -126,7 +126,8 @@ async function chamarClaude(entrada: Record<string, unknown>): Promise<string> {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 2000,
+      // Folga grande: se o modelo "pensar" antes de responder, o raciocínio também consome este limite.
+      max_tokens: 8000,
       system: SISTEMA,
       messages: [{ role: 'user', content: `Dados da conta (JSON):\n${JSON.stringify(entrada)}` }],
     }),
@@ -137,8 +138,11 @@ async function chamarClaude(entrada: Record<string, unknown>): Promise<string> {
   }
   const data = (await res.json()) as { content?: BlocoAnthropic[]; stop_reason?: string };
   if (data.stop_reason === 'refusal') throw new Error('A IA recusou o pedido.');
-  const texto = (data.content ?? []).find((b) => b.type === 'text')?.text?.trim();
-  if (!texto) throw new Error('A IA não retornou texto.');
+  const texto = (data.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
+  if (!texto) {
+    const tipos = (data.content ?? []).map((b) => b.type).join(', ') || 'nenhum';
+    throw new Error(`A IA não retornou texto (motivo de parada: ${data.stop_reason ?? 'desconhecido'}; blocos: ${tipos}; modelo: ${MODEL}).`);
+  }
   return texto;
 }
 

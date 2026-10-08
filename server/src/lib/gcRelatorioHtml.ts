@@ -345,7 +345,6 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
   ${frase ? `<div class="frase">${frase}</div>` : ''}
 
   ${secao('Detalhamento do período', cartoes ? `<div class="cartoes">${cartoes}</div>` : '')}
-  ${secao('Metas', blocoMetas(snapshot.metas ?? []))}
   ${secao(
     'Informações do período',
     (snapshot.infos ?? []).length
@@ -366,7 +365,6 @@ export function montarHtmlRelatorio(snapshot: GcSnapshot): string {
     'Próximos passos',
     snapshot.proximos_passos ? `<div class="texto-card">${escapar(snapshot.proximos_passos)}</div>` : ''
   )}
-  ${secao('Estratégias em curso', estrategias)}
 
   <div class="observacao">
     <strong>Sobre as informações deste relatório.</strong> Elas refletem a última atualização feita pela equipe da NX${

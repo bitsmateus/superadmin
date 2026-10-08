@@ -251,7 +251,6 @@ function Relatorio({
         </Secao>
       )}
 
-      <BlocoMetas snapshot={snapshot} />
 
       {(snapshot.infos ?? []).length > 0 && (
         <Secao titulo="Informações do período">
@@ -283,26 +282,6 @@ function Relatorio({
         </Secao>
       )}
 
-      {(snapshot.estrategias ?? []).length > 0 && (
-        <Secao titulo="O que está rodando">
-          <ul className="space-y-2">
-            {snapshot.estrategias!.map((e, i) => {
-              const pct = e.total ? Math.round((e.feitos / e.total) * 100) : 0
-              return (
-                <li key={i} className="flex items-center gap-3 text-sm">
-                  <span className="min-w-0 flex-1 truncate text-foreground/85">{e.nome}</span>
-                  <span className="h-1.5 w-24 overflow-hidden rounded-full bg-elevate/[0.08]">
-                    <span className="block h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
-                  </span>
-                  <span className="w-12 text-right text-xs text-foreground/50">
-                    {e.feitos}/{e.total}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        </Secao>
-      )}
     </article>
   )
 }

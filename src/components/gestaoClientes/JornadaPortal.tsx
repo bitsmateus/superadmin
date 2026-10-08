@@ -29,6 +29,31 @@ function dataBr(data: string | null): string {
  * Sem faixa de desvio: no portal o gráfico é "o que combinamos × o que está acontecendo". O desvio
  * em percentual é ferramenta de acompanhamento interno.
  */
+/** CPL, conversão, ticket médio, custo por venda e retorno: só os que as contas permitem. */
+function indicadoresDe(inv?: number | null, leads?: number | null, vendas?: number | null, receita?: number | null) {
+  const out: { rotulo: string; valor: string }[] = []
+  if (inv && leads) out.push({ rotulo: 'Custo por lead', valor: formatarMetrica(inv / leads, 'reais') })
+  if (leads && vendas) out.push({ rotulo: 'Conversão', valor: `${((vendas / leads) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` })
+  if (receita && vendas) out.push({ rotulo: 'Ticket médio', valor: formatarMetrica(receita / vendas, 'reais') })
+  if (inv && vendas) out.push({ rotulo: 'Custo por venda', valor: formatarMetrica(inv / vendas, 'reais') })
+  if (inv && receita) out.push({ rotulo: 'Retorno sobre o investimento', valor: `${(receita / inv).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}x` })
+  return out
+}
+
+function Indicadores({ itens }: { itens: { rotulo: string; valor: string }[] }) {
+  if (itens.length === 0) return null
+  return (
+    <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-0.5 border-t border-line/70 pt-2 sm:grid-cols-2">
+      {itens.map((i) => (
+        <div key={i.rotulo} className="flex items-baseline justify-between gap-2">
+          <dt className="text-[11px] text-foreground/45">{i.rotulo}</dt>
+          <dd className="text-xs font-medium tabular-nums text-foreground/75">{i.valor}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
 export function JornadaPortal({ jornada }: { jornada: GcJornadaPortal }) {
   const plano = React.useMemo(() => planoDaJornada(jornada), [jornada])
   const realizado = React.useMemo(() => {
@@ -138,6 +163,7 @@ export function JornadaPortal({ jornada }: { jornada: GcJornadaPortal }) {
                     </div>
                   ))}
                 </dl>
+                <Indicadores itens={indicadoresDe(pm?.investimento, leadsMes1, pm?.vendas, pm?.faturamento)} />
               </div>
             )}
             {HORIZONTES_PLANO.map((h) => {
@@ -158,40 +184,11 @@ export function JornadaPortal({ jornada }: { jornada: GcJornadaPortal }) {
                       </div>
                     ))}
                   </dl>
+                  <Indicadores itens={indicadoresDe(c.metas.investimento, c.metas.leads, c.metas.vendas, c.metas.receita)} />
                 </div>
               )
             })}
           </div>
-        </div>
-      )}
-
-      {chave && (
-        <div className="mt-5">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-xs uppercase tracking-wide text-foreground/45">O caminho: combinado × realizado</h3>
-            {disponiveis.length > 1 && (
-              <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="Métrica do gráfico">
-                {disponiveis.map((d) => (
-                  <button
-                    key={d.chave}
-                    type="button"
-                    onClick={() => setEscolhida(d.chave)}
-                    aria-pressed={chave === d.chave}
-                    className={cn(
-                      'h-8 px-3 text-xs transition-colors',
-                      chave === d.chave ? 'bg-elevate/[0.08] text-foreground' : 'text-foreground/50 hover:text-foreground/80',
-                    )}
-                  >
-                    {d.chave === 'receita' ? 'Faturamento' : d.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <GraficoProjecao linhas={linhas} chave={chave} mostrarDesvio={false} />
-          <p className="mt-1 text-[11px] text-foreground/40">
-            O realizado aparece mês a mês, conforme os relatórios são publicados.
-          </p>
         </div>
       )}
     </section>

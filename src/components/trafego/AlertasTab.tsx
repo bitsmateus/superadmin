@@ -50,8 +50,20 @@ export function AlertasTab({ versao }: { versao: number }) {
   const [rodando, setRodando] = React.useState(false)
   const rodarIa = async () => {
     setRodando(true)
-    try { const r = await trafegoService.rodarIa(); toast.success(`Varredura pronta: ${r.sugestoes} sugestão(ões)`); ia.recarregar() }
-    catch (e) { toast.error((e as Error).message) }
+    try {
+      await trafegoService.rodarIa()
+      // A IA leva de 20s a alguns minutos: acompanha o status em vez de segurar a conexão aberta.
+      for (let i = 0; i < 100; i++) {
+        await new Promise((ok) => setTimeout(ok, 3000))
+        const s = await trafegoService.statusIa()
+        if (!s.rodando) {
+          if (s.erro) toast.error('Varredura falhou: ' + s.erro)
+          else { toast.success('Varredura pronta'); ia.recarregar() }
+          return
+        }
+      }
+      toast.error('A varredura está demorando mais que o normal — volte e atualize em instantes.')
+    } catch (e) { toast.error((e as Error).message) }
     finally { setRodando(false) }
   }
 

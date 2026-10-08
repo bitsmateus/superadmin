@@ -279,14 +279,23 @@ export async function trafegoRoutes(app: FastifyInstance) {
     revisoes: await query(`SELECT to_char(dia,'YYYY-MM-DD') AS dia, texto, sugestoes, created_at FROM traffic_ai_reviews ORDER BY dia DESC LIMIT 30`),
   }));
 
-  /** Roda a varredura da IA agora (a de hoje é substituída). */
+  /** Estado da última varredura manual — a chamada à IA demora, então roda em segundo plano. */
+  const varredura: { rodando: boolean; erro: string | null; fim: string | null } = { rodando: false, erro: null, fim: null };
+
+  app.get('/api/trafego/ia/status', opts, async () => varredura);
+
+  /** Dispara a varredura da IA agora (a de hoje é substituída). Responde na hora; o resultado vem por /ia/status. */
   app.post('/api/trafego/ia/rodar', opts, async (_req, reply) => {
     if (!process.env.ANTHROPIC_API_KEY) return reply.status(400).send({ message: 'ANTHROPIC_API_KEY não configurada no servidor' });
-    try {
-      return await rodarVarreduraIa();
-    } catch (err) {
-      return reply.status(502).send({ message: err instanceof Error ? err.message : 'Falha na varredura da IA' });
-    }
+    if (varredura.rodando) return reply.status(202).send({ iniciado: false, rodando: true });
+    varredura.rodando = true; varredura.erro = null;
+    void rodarVarreduraIa()
+      .catch((err) => {
+        varredura.erro = err instanceof Error ? err.message : 'Falha na varredura da IA';
+        console.error('[traffic-ai] varredura manual falhou:', varredura.erro);
+      })
+      .finally(() => { varredura.rodando = false; varredura.fim = new Date().toISOString(); });
+    return reply.status(202).send({ iniciado: true, rodando: true });
   });
 
   /** Aceitar ou ignorar uma sugestão da IA (vira histórico). */

@@ -18,7 +18,7 @@ import { leadLabelsService } from '@/services/leadLabels'
 import { LeadLabelCell, ManageLabelsModal } from '@/components/comercial/LeadLabelCell'
 import { cn } from '@/lib/utils'
 import { formatBRLCompact, parseBRLCents } from '@/lib/currency'
-import type { LeadBoard, LeadPageSection, LeadRow } from '@/types/leadBoard'
+import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 type GroupField = 'status' | 'diaContato'
 
@@ -59,14 +59,11 @@ export interface LeadKanbanBoardProps {
   rows: LeadRow[]
   allBoards: LeadBoard[]
   onOpenLead: (id: string) => void
-  /** Menu dono da aba — só 'demandas' ganha coluna Arquivado e etiqueta no card. */
-  section?: LeadPageSection
 }
 
 /** Visão alternativa em quadro — mesmos leads da lista, agrupados por Status ou Dia de
  * contato (à escolha) em vez de por quadro. Arrastar um card muda o campo agrupado. */
-export function LeadKanbanBoard({ rows, allBoards, onOpenLead, section }: LeadKanbanBoardProps) {
-  const isDemandas = section === 'demandas'
+export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoardProps) {
   const [groupField, setGroupField] = React.useState<GroupField>(() => {
     try {
       return window.localStorage.getItem(GROUP_STORAGE_KEY) === 'diaContato' ? 'diaContato' : 'status'
@@ -87,7 +84,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead, section }: LeadKa
   const [manageOpen, setManageOpen] = React.useState(false)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
-  const withArchive = isDemandas && groupField === 'status'
+  const withArchive = groupField === 'status'
   const columns = React.useMemo<Column[]>(() => {
     const noneLabel = groupField === 'status' ? 'Sem status' : 'Sem dia de contato'
     const cols: Column[] = [
@@ -212,7 +209,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead, section }: LeadKa
               onOpenLead={onOpenLead}
               collapsed={isCollapsed(col)}
               onToggle={() => toggleCollapsed(col)}
-              showTag={isDemandas}
+              showTag
               tagPageId={pageId}
               onArchive={withArchive ? (row) => moveToColumn(row, col.archive ? (doneLabel ?? '') : ARCHIVE_STATUS) : undefined}
             />
@@ -220,7 +217,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead, section }: LeadKa
         </div>
         {createPortal(
           <DragOverlay>
-            {activeRow && <KanbanCard row={activeRow} overlay onOpenLead={() => {}} showTag={isDemandas} tagPageId={pageId} />}
+            {activeRow && <KanbanCard row={activeRow} overlay onOpenLead={() => {}} showTag tagPageId={pageId} />}
           </DragOverlay>,
           document.body,
         )}
@@ -354,7 +351,7 @@ function KanbanCard({
   row: LeadRow
   overlay?: boolean
   onOpenLead: (id: string) => void
-  /** Mostra a etiqueta (Tipo) no card — usada em Demandas pra marcar urgência. */
+  /** Mostra a etiqueta (Tipo) no card — pra marcar urgência. */
   showTag?: boolean
   tagPageId?: string
   archived?: boolean

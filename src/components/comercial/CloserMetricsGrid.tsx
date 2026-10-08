@@ -6,9 +6,56 @@ import { api } from '@/services/api'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
+interface ItemDaLista { id: string; nome: string; status: string }
+interface GrupoDaLista { titulo: string; itens: ItemDaLista[] }
+
+/**
+ * Passando o mouse (ou tocando, no celular) mostra QUAIS leads formam o número: o nome de cada uma e a etapa em que está hoje.
+ */
+function ComLista({ grupos, children, className }: { grupos: GrupoDaLista[]; children: React.ReactNode; className?: string }) {
+  const [aberto, setAberto] = React.useState(false)
+  return (
+    <div
+      className={cn('relative', className)}
+      onMouseEnter={() => setAberto(true)}
+      onMouseLeave={() => setAberto(false)}
+      onFocus={() => setAberto(true)}
+      onBlur={() => setAberto(false)}
+      onClick={() => setAberto((a) => !a)}
+      tabIndex={0}
+    >
+      {children}
+      {aberto && (
+        <div className="absolute left-1/2 top-full z-30 mt-1 max-h-72 w-72 max-w-[85vw] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-card p-2 text-left shadow-xl">
+          {grupos.map((g) => (
+            <div key={g.titulo} className="mb-2 last:mb-0">
+              <p className="px-1 pb-1 text-[11px] font-semibold text-foreground/70">
+                {g.titulo} <span className="font-normal text-foreground/40">({g.itens.length})</span>
+              </p>
+              {g.itens.length === 0 ? (
+                <p className="px-1 pb-1 text-[11px] text-foreground/40">Nenhuma.</p>
+              ) : (
+                <ul className="space-y-0.5">
+                  {g.itens.map((i) => (
+                    <li key={i.id} className="flex items-baseline justify-between gap-2 rounded-md px-1 py-0.5 text-[11px] hover:bg-elevate/[0.05]">
+                      <span className="min-w-0 truncate text-foreground/85">{i.nome}</span>
+                      <span className="shrink-0 text-foreground/40">{i.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const pct = (n: number) => `${Math.round(n * 100)}%`
 
-function Anel({ icone, rotulo, cor, valor, detalhe }: {
+function Anel({ icone, rotulo, cor, valor, detalhe, grupos }: {
+  grupos: GrupoDaLista[]
   icone: React.ReactNode
   rotulo: string
   cor: string
@@ -18,7 +65,7 @@ function Anel({ icone, rotulo, cor, valor, detalhe }: {
 }) {
   const deg = Math.max(0, Math.min(1, valor)) * 360
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3">
+    <ComLista grupos={grupos} className="flex cursor-default flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3">
       <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(${cor} ${deg}deg, #E5E7EB 0deg)` }}>
         <div className="grid h-[52px] w-[52px] place-items-center rounded-full bg-card text-sm font-bold" style={{ color: cor }}>
           {pct(valor)}
@@ -29,7 +76,7 @@ function Anel({ icone, rotulo, cor, valor, detalhe }: {
         {rotulo}
       </span>
       <span className="text-[10px] text-foreground/40">{detalhe}</span>
-    </div>
+    </ComLista>
   )
 }
 
@@ -49,23 +96,27 @@ export function CloserMetricsGrid({ closer = 'Luis' }: {
 }) {
   const monthFilter = useMonthFilter(React.useMemo(() => [addMonthsToId(currentMonthId(), -1)], []))
   const { from, to } = monthFilter.bounds
-  const [dados, setDados] = React.useState<{ agendadas: number; compareceu: number; no_show: number; vendas: number } | null>(null)
+  const [dados, setDados] = React.useState<{
+    agendadas: number; compareceu: number; no_show: number; vendas: number
+    lista: { agendadas: ItemDaLista[]; compareceu: ItemDaLista[]; no_show: ItemDaLista[]; vendas: ItemDaLista[] }
+  } | null>(null)
 
   // Vem do servidor: é a mesma conta (e as mesmas leads) das Métricas por SDR do Arthur, então os dois batem.
   React.useEffect(() => {
     let vivo = true
     setDados(null)
     api
-      .get<{ agendadas: number; compareceu: number; no_show: number; vendas: number }>(
+      .get<NonNullable<typeof dados>>(
         `/api/closer-metrics?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       )
       .then((r) => vivo && setDados(r))
-      .catch(() => vivo && setDados({ agendadas: 0, compareceu: 0, no_show: 0, vendas: 0 }))
+      .catch(() => vivo && setDados({ agendadas: 0, compareceu: 0, no_show: 0, vendas: 0, lista: { agendadas: [], compareceu: [], no_show: [], vendas: [] } }))
     return () => {
       vivo = false
     }
   }, [from, to])
 
+  const lista = dados?.lista ?? { agendadas: [], compareceu: [], no_show: [], vendas: [] }
   const agendadas = dados?.agendadas ?? 0
   const compareceu = dados?.compareceu ?? 0
   const noShow = dados?.no_show ?? 0
@@ -91,19 +142,20 @@ export function CloserMetricsGrid({ closer = 'Luis' }: {
         </div>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <div className="flex flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
+          <ComLista grupos={[{ titulo: 'Reuniões agendadas', itens: lista.agendadas }]} className="flex cursor-default flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
             <span className="text-3xl font-bold text-accent">{dados ? agendadas : '…'}</span>
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/80">
               <CalendarCheck className="h-3 w-3 text-accent" /> Reuniões agendadas
             </span>
             <span className="text-[10px] text-foreground/40">total no período</span>
-          </div>
+          </ComLista>
           <Anel
             icone={<UserCheck className="h-3 w-3" />}
             rotulo="% de comparecimento"
             cor="#06B6D4"
             valor={m.comparecimento}
             detalhe={`${compareceu} de ${comDesfecho}`}
+            grupos={[{ titulo: 'Compareceram (reunião realizada)', itens: lista.compareceu }, { titulo: 'Não compareceram', itens: lista.no_show }]}
           />
           <Anel
             icone={<TrendingUp className="h-3 w-3" />}
@@ -111,6 +163,7 @@ export function CloserMetricsGrid({ closer = 'Luis' }: {
             cor="#22C55E"
             valor={m.conversao}
             detalhe={`${vendas} venda(s) de ${compareceu} realizadas`}
+            grupos={[{ titulo: 'Vendas', itens: lista.vendas }, { titulo: 'Reuniões realizadas', itens: lista.compareceu }]}
           />
         </div>
         <ul className="mt-3 space-y-0.5 text-[11px] leading-snug text-foreground/45">

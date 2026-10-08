@@ -1555,20 +1555,28 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const compareceu = `(lr.status = ANY($2) OR EXISTS (
         SELECT 1 FROM lead_events le WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($2)
       ))`;
-      const [r] = await query<{ agendadas: number; compareceu: number; no_show: number; vendas: number }>(
-        `SELECT
-           count(*) FILTER (WHERE ${foiAgendada})::int AS agendadas,
-           count(*) FILTER (WHERE ${foiAgendada} AND ${compareceu})::int AS compareceu,
-           count(*) FILTER (WHERE lr.status = 'Reunião não comparecida')::int AS no_show,
-           count(*) FILTER (WHERE lr.status = $5)::int AS vendas
+      const leads = await query<{ id: string; nome: string; status: string; agendada: boolean; compareceu: boolean }>(
+        `SELECT lr.id, lr.nome, lr.status,
+           ${foiAgendada} AS agendada,
+           ${compareceu} AS compareceu
          FROM lead_rows lr
          JOIN lead_boards lb ON lb.id = lr.board_id
          WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL
            AND COALESCE(lr.sdr, '') <> ''
-           AND (lr.created_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $3::date AND $4::date`,
-        [REUNIAO_STATUSES, POS_REUNIAO_STATUSES, from, to, MILESTONE_VENDIDO]
+           AND (lr.created_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $3::date AND $4::date
+         ORDER BY lr.nome`,
+        [REUNIAO_STATUSES, POS_REUNIAO_STATUSES, from, to]
       );
-      return r;
+      // Além das contagens, os nomes (e a etapa de hoje) de cada grupo — pra conferir passando o mouse.
+      const item = (l: { id: string; nome: string; status: string }) => ({ id: l.id, nome: l.nome || 'Sem nome', status: l.status });
+      const agendadas = leads.filter((l) => l.agendada).map(item);
+      const realizadas = leads.filter((l) => l.agendada && l.compareceu).map(item);
+      const noShow = leads.filter((l) => l.status === 'Reunião não comparecida').map(item);
+      const vendas = leads.filter((l) => l.status === MILESTONE_VENDIDO).map(item);
+      return {
+        agendadas: agendadas.length, compareceu: realizadas.length, no_show: noShow.length, vendas: vendas.length,
+        lista: { agendadas, compareceu: realizadas, no_show: noShow, vendas },
+      };
     }
   );
 

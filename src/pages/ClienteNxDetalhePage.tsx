@@ -226,7 +226,7 @@ export function ClienteNxDetalhePage() {
               <AbaEstrategias estrategias={detalhe.estrategias} onMudou={carregar} />
             )}
             {aba === 'notas' && (
-              <PainelNotas historico={detalhe.historico} clienteId={id} onMudou={carregar} />
+              <PainelNotas historico={detalhe.historico} clienteId={id} onMudou={carregar} rotina={detalhe.rotina ?? []} />
             )}
           </>
         )}

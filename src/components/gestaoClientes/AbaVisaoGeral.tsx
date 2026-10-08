@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
-import { RotinaMensal } from '@/components/gestaoClientes/RotinaMensal'
 import { ResumoPlanejamento } from '@/components/gestaoClientes/ResumoPlanejamento'
 import { mesAtual, mesPorExtenso } from '@/lib/gcMetricas'
 import { LogoDoCliente } from '@/components/gestaoClientes/LogoDoCliente'
@@ -371,8 +370,6 @@ export function AbaVisaoGeral({
         <QuadroDeAvisos detalhe={detalhe} onVerNotas={onVerNotas} />
 
         <ResumoPlanejamento cliente={cliente} onAbrir={() => onIr?.('planejamento')} />
-
-        <RotinaMensal clienteId={cliente.id} itens={detalhe.rotina ?? []} onMudou={onMudou} />
 
         <section className="rounded-xl border border-line p-4">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Onde o cliente está</h2>

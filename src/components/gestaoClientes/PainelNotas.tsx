@@ -1,9 +1,11 @@
 import * as React from 'react'
 import {
-  AlertTriangle, Clock, FileText, Image as ImageIcon, MessageSquare, Paperclip, Pencil, Phone, Pin, PinOff, Send,
+  AlertTriangle, Clock, FileText, Image as ImageIcon, MessageSquare, Paperclip, Pencil, Phone, Pin, PinOff, RefreshCcw, Send,
   SlidersHorizontal, StickyNote, Trash2, Users, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { RotinaMensal } from '@/components/gestaoClientes/RotinaMensal'
+import { mesPorExtenso } from '@/lib/gcMetricas'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -11,7 +13,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import {
   TIPOS_HISTORICO, TIPOS_REUNIAO, gestaoClientes,
-  type GcAnexo, type GcRegistroHistorico, type GcReuniaoTipo, type GcTipoHistorico,
+  type GcAnexo, type GcItemRotina, type GcRegistroHistorico, type GcReuniaoTipo, type GcTipoHistorico,
 } from '@/services/gestaoClientes'
 import { cn } from '@/lib/utils'
 
@@ -354,7 +356,7 @@ function CartaoDeNota({
   )
 }
 
-type Aba = 'atualizacoes' | 'arquivos' | 'linha'
+type Aba = 'atualizacoes' | 'rotina' | 'arquivos' | 'linha'
 
 /**
  * Notas do cliente — o bloco compartilhado da equipe, no formato do painel de lead do CRM:
@@ -376,10 +378,13 @@ export function PainelNotas({
   historico,
   clienteId,
   onMudou,
+  rotina,
 }: {
   historico: GcRegistroHistorico[]
   clienteId: string
   onMudou: () => Promise<void> | void
+  /** Os itens da rotina mensal. Sem isso a aba "Rotina e reuniões" não aparece (ex.: na janela rápida de notas). */
+  rotina?: GcItemRotina[]
 }) {
   const [aba, setAba] = React.useState<Aba>('atualizacoes')
   const [tipo, setTipo] = React.useState<GcTipoHistorico>('nota')
@@ -443,8 +448,12 @@ export function PainelNotas({
     total: historico.filter((r) => r.tipo === 'reuniao' && r.reuniao_tipo === t.valor).length,
   }))
 
+  const reunioesFeitas = historico
+    .filter((r) => r.tipo === 'reuniao')
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
   const abas: { valor: Aba; label: string; icone: React.ElementType; contagem: number }[] = [
     { valor: 'atualizacoes', label: 'Atualizações', icone: MessageSquare, contagem: daEquipe.length },
+    ...(rotina ? [{ valor: 'rotina' as Aba, label: 'Rotina e reuniões', icone: RefreshCcw, contagem: reunioesFeitas.length }] : []),
     { valor: 'arquivos', label: 'Arquivos', icone: Paperclip, contagem: arquivos.length },
     { valor: 'linha', label: 'Linha do tempo', icone: Clock, contagem: historico.length },
   ]
@@ -600,6 +609,52 @@ export function PainelNotas({
             </ol>
           )}
         </>
+      )}
+
+      {aba === 'rotina' && rotina && (
+        <div className="space-y-4">
+          <RotinaMensal clienteId={clienteId} itens={rotina} onMudou={onMudou} />
+
+          <section className="rounded-xl border border-line p-4">
+            <h2 className="mb-1 text-sm font-semibold text-foreground">Reuniões e alinhamentos registrados</h2>
+            <p className="mb-3 text-xs text-foreground/50">
+              Tudo que já foi registrado como reunião, do mais novo pro mais antigo — o controle do que já foi feito com este cliente.
+            </p>
+            {reunioesFeitas.length === 0 ? (
+              <p className="py-4 text-center text-sm text-foreground/45">Nenhuma reunião registrada ainda. Use “Registrar alinhamento” acima.</p>
+            ) : (
+              <ol className="space-y-3">
+                {Array.from(
+                  reunioesFeitas.reduce((m, r) => {
+                    const mes = String(r.created_at).slice(0, 7)
+                    m.set(mes, [...(m.get(mes) ?? []), r])
+                    return m
+                  }, new Map<string, GcRegistroHistorico[]>()),
+                ).map(([mes, doMes]) => (
+                  <li key={mes}>
+                    <p className="mb-1 text-[11px] uppercase tracking-wide text-foreground/40">
+                      {mesPorExtenso(mes)} · {doMes.length} {doMes.length === 1 ? 'registro' : 'registros'}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {doMes.map((r) => (
+                        <li key={r.id} className="rounded-xl border border-line px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <Badge tone="info">{rotuloReuniao(r)}</Badge>
+                            <span className="text-xs text-foreground/50">
+                              {new Date(r.created_at).toLocaleDateString('pt-BR')}
+                              {r.autor_nome ? ` · ${r.autor_nome}` : ''}
+                            </span>
+                          </div>
+                          {r.descricao && <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm text-foreground/80">{r.descricao}</p>}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </div>
       )}
 
       {aba === 'arquivos' && (

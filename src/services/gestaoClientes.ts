@@ -140,6 +140,42 @@ export interface GcDemanda {
   created_at: string
 }
 
+export type GcSocialStatus = 'para_producao' | 'em_producao' | 'pronto'
+
+export interface GcSocialResumo {
+  id: string
+  nome_empresa: string
+  logo_url: string | null
+  segmento: string
+  status: string
+  materiais: number
+  para_producao: number
+  em_producao: number
+  prontas: number
+  editores: string[]
+}
+
+export interface GcSocialMaterial {
+  id: string
+  tipo: 'arquivo' | 'link'
+  titulo: string
+  url: string
+  anexo: { id: string; name: string; type: string; size: number; dataUrl: string } | null
+  created_at: string
+  autor_nome?: string | null
+}
+
+export interface GcSocialProducao {
+  id: string
+  titulo: string
+  descricao: string
+  status: GcSocialStatus
+  editor_id: string | null
+  editor_nome: string | null
+  prazo: string | null
+  created_at: string
+}
+
 export interface GcRegistroHistorico {
   id: string
   gc_cliente_id: string
@@ -831,6 +867,21 @@ export const gestaoClientes = {
   atualizarRegistro: (id: string, dados: Partial<{ tipo: GcTipoHistorico; reuniao_tipo: GcReuniaoTipo | null; titulo: string; descricao: string; fixado: boolean; anexos: GcAnexo[] }>) =>
     api.patch<GcRegistroHistorico>(`/api/gc/historico/${id}`, dados),
   excluirRegistro: (id: string) => api.delete(`/api/gc/historico/${id}`),
+
+  // Social media
+  socialResumo: () => api.get<GcSocialResumo[]>('/api/gc/social/resumo'),
+  social: (clienteId: string) =>
+    api.get<{ materiais: GcSocialMaterial[]; producao: GcSocialProducao[] }>(`/api/gc/clientes/${clienteId}/social`),
+  criarSocialMaterial: (clienteId: string, dados: { tipo: 'arquivo' | 'link'; titulo?: string; url?: string; anexo?: GcSocialMaterial['anexo'] }) =>
+    api.post<GcSocialMaterial>(`/api/gc/clientes/${clienteId}/social/materiais`, dados),
+  excluirSocialMaterial: (id: string) => api.delete(`/api/gc/social/materiais/${id}`),
+  criarSocialProducao: (clienteId: string, dados: {
+    titulo: string; descricao?: string; status?: GcSocialStatus; editor_id?: string | null; prazo?: string | null
+  }) => api.post<GcSocialProducao>(`/api/gc/clientes/${clienteId}/social/producao`, dados),
+  atualizarSocialProducao: (id: string, dados: Partial<{
+    titulo: string; descricao: string; status: GcSocialStatus; editor_id: string | null; prazo: string | null
+  }>) => api.patch<GcSocialProducao>(`/api/gc/social/producao/${id}`, dados),
+  excluirSocialProducao: (id: string) => api.delete(`/api/gc/social/producao/${id}`),
 
   // Kanban de demandas
   demandasColunas: () => api.get<GcDemandaColuna[]>('/api/gc/demandas/colunas'),

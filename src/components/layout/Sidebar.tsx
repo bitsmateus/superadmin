@@ -44,6 +44,7 @@ import {
   UserCircle2,
   Users,
   KanbanSquare,
+  Palette,
   Wallet,
   Zap,
 } from 'lucide-react'
@@ -146,6 +147,7 @@ function useGrupoAberto(chave: string): [boolean, React.Dispatch<React.SetStateA
 const SUB_ABAS_CLIENTES_NX = [
   { to: '/clientesnxdigital/clientes', label: 'Clientes', icon: Users },
   { to: '/clientesnxdigital/demandas', label: 'Kanban demandas', icon: KanbanSquare },
+  { to: '/clientesnxdigital/socialmedia', label: 'Social media', icon: Palette },
 ]
 
 /** Chave estável de um item do menu pra guardar a ordem: a rota, ou o id quando é uma cópia

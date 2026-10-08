@@ -2246,6 +2246,117 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
+  // ------------------------------------------------------------------ social media
+  // A designer anexa fotos/arquivos e links (Drive etc.) por cliente e acompanha a produção: o que falta produzir,
+  // o que está em produção e qual editor está editando.
+  const STATUS_PRODUCAO = ['para_producao', 'em_producao', 'pronto'];
+
+  // Resumo de TODOS os clientes: a lista da aba. Sem os arquivos (são pesados), só as contagens e os editores.
+  app.get('/api/gc/social/resumo', autenticado, async () => {
+    return query(
+      `SELECT c.id, c.nome_empresa, c.logo_url, c.segmento, c.status,
+              (SELECT count(*) FROM gc_social_materiais m WHERE m.gc_cliente_id = c.id)::int AS materiais,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status = 'para_producao')::int AS para_producao,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status = 'em_producao')::int AS em_producao,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status = 'pronto')::int AS prontas,
+              COALESCE((SELECT array_agg(DISTINCT pr.name) FROM gc_social_producao p JOIN profiles pr ON pr.id = p.editor_id
+                        WHERE p.gc_cliente_id = c.id AND p.status = 'em_producao'), '{}') AS editores
+       FROM gc_clientes c
+       WHERE c.status <> 'encerrado'
+       ORDER BY c.nome_empresa`
+    );
+  });
+
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/social', autenticado, async (req) => {
+    const materiais = await query(
+      `SELECT m.id, m.tipo, m.titulo, m.url, m.anexo, m.created_at, p.name AS autor_nome
+       FROM gc_social_materiais m LEFT JOIN profiles p ON p.id = m.criado_por
+       WHERE m.gc_cliente_id = $1 ORDER BY m.created_at DESC`,
+      [req.params.id]
+    );
+    const producao = await query(
+      `SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome,
+              to_char(d.prazo, 'YYYY-MM-DD') AS prazo, d.created_at, d.updated_at
+       FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id
+       WHERE d.gc_cliente_id = $1 ORDER BY d.created_at DESC`,
+      [req.params.id]
+    );
+    return { materiais, producao };
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: { tipo?: string; titulo?: string; url?: string; anexo?: Record<string, unknown> | null };
+  }>('/api/gc/clientes/:id/social/materiais', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const b = req.body ?? {};
+    const tipo = b.tipo === 'arquivo' ? 'arquivo' : 'link';
+    const titulo = String(b.titulo ?? '').trim().slice(0, 200);
+    const url = String(b.url ?? '').trim();
+    if (tipo === 'link' && !/^https?:\/\//i.test(url)) {
+      return reply.status(400).send({ message: 'O link precisa começar com http:// ou https://' });
+    }
+    if (tipo === 'arquivo' && !(b.anexo && typeof b.anexo.dataUrl === 'string')) {
+      return reply.status(400).send({ message: 'Envie um arquivo' });
+    }
+    if (tipo === 'link' && !titulo) return reply.status(400).send({ message: 'Dê um nome ao link' });
+    const criado = await queryOne(
+      `INSERT INTO gc_social_materiais (gc_cliente_id, tipo, titulo, url, anexo, criado_por)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6)
+       RETURNING id, tipo, titulo, url, anexo, created_at`,
+      [req.params.id, tipo, titulo || String(b.anexo?.name ?? 'arquivo'), tipo === 'link' ? url : '', b.anexo ? JSON.stringify(b.anexo) : null, sub]
+    );
+    return reply.status(201).send(criado);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/gc/social/materiais/:id', autenticado, async (req, reply) => {
+    const r = await queryOne('DELETE FROM gc_social_materiais WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!r) return reply.status(404).send({ message: 'Material não encontrado' });
+    return reply.status(204).send();
+  });
+
+  const SELECT_PRODUCAO = `
+    SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome,
+           to_char(d.prazo, 'YYYY-MM-DD') AS prazo, d.created_at, d.updated_at
+    FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id`;
+
+  app.post<{
+    Params: { id: string };
+    Body: { titulo?: string; descricao?: string; status?: string; editor_id?: string | null; prazo?: string | null };
+  }>('/api/gc/clientes/:id/social/producao', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const b = req.body ?? {};
+    const titulo = String(b.titulo ?? '').trim().slice(0, 200);
+    if (!titulo) return reply.status(400).send({ message: 'Dê um título à demanda de produção' });
+    const status = STATUS_PRODUCAO.includes(String(b.status)) ? String(b.status) : 'para_producao';
+    const criado = await queryOne<{ id: string }>(
+      `INSERT INTO gc_social_producao (gc_cliente_id, titulo, descricao, status, editor_id, prazo, criado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [req.params.id, titulo, String(b.descricao ?? ''), status, b.editor_id || null, b.prazo || null, sub]
+    );
+    return reply.status(201).send(await queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [criado!.id]));
+  });
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>('/api/gc/social/producao/:id', autenticado, async (req, reply) => {
+    const corpo = { ...(req.body ?? {}) };
+    if (corpo.titulo !== undefined && !String(corpo.titulo).trim()) {
+      return reply.status(400).send({ message: 'Dê um título à demanda de produção' });
+    }
+    if (corpo.status !== undefined && !STATUS_PRODUCAO.includes(String(corpo.status))) delete corpo.status;
+    const { sets, params } = montarUpdate(['titulo', 'descricao', 'status', 'editor_id', 'prazo'], corpo);
+    if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+    params.push(req.params.id);
+    const r = await queryOne(`UPDATE gc_social_producao SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${params.length} RETURNING id`, params);
+    if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
+    return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/gc/social/producao/:id', autenticado, async (req, reply) => {
+    const r = await queryOne('DELETE FROM gc_social_producao WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
+    return reply.status(204).send();
+  });
+
   // ------------------------------------------------------------------ relatórios
   // GET /api/gc/clientes/:id/relatorios — lista sem o snapshot (que é grande e só interessa quando
   // o relatório é aberto).

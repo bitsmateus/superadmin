@@ -54,10 +54,11 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   // Clientes.
   { key: 'nxdigital_clientes', label: 'Clientes', path: '/clientesnxdigital/clientes', group: 'nxdigital' },
   { key: 'nxdigital_demandas', label: 'Kanban demandas', path: '/clientesnxdigital/demandas', group: 'nxdigital' },
+  { key: 'nxdigital_socialmedia', label: 'Social media', path: '/clientesnxdigital/socialmedia', group: 'nxdigital' },
 ]
 
 /** As chaves das abas do NX DIGITAL. */
-export const CHAVES_NX_DIGITAL = ['nxdigital_clientes', 'nxdigital_demandas'] as const
+export const CHAVES_NX_DIGITAL = ['nxdigital_clientes', 'nxdigital_demandas', 'nxdigital_socialmedia'] as const
 
 /** A pessoa restrita pode abrir a Agenda? Com a marca "Agenda" ou com o Comercial liberado. */
 export function acessoAAgenda(allowed: Set<string>): boolean {

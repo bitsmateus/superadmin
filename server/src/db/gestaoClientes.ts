@@ -476,6 +476,31 @@ const TABELAS = [
   )`,
   `CREATE INDEX IF NOT EXISTS gc_demandas_cliente_idx ON gc_demandas (gc_cliente_id)`,
   `CREATE INDEX IF NOT EXISTS gc_demandas_coluna_idx ON gc_demandas (coluna_id, ordem)`,
+  // ---------------------------------------------------------------- social media (designer / editores)
+  `CREATE TABLE IF NOT EXISTS gc_social_materiais (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL CHECK (tipo IN ('arquivo','link')),
+    titulo TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    anexo JSONB,
+    criado_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS gc_social_producao (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    titulo TEXT NOT NULL,
+    descricao TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'para_producao' CHECK (status IN ('para_producao','em_producao','pronto')),
+    editor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    prazo DATE,
+    criado_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_social_materiais_cliente_idx ON gc_social_materiais (gc_cliente_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS gc_social_producao_cliente_idx ON gc_social_producao (gc_cliente_id, status)`,
 ];
 
 /** As 9 etapas padrão da jornada, com o checklist inicial de cada uma. */

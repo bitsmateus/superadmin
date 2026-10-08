@@ -794,7 +794,12 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                       />
                       <Numero
                         titulo="Perda (osso e sebo)"
-                        valor={`${txt(calc.perdaKg, 2)} kg · ${txt(peso > 0 ? (calc.perdaKg / peso) * 100 : 0, 1)}%`}
+                        valor={
+                          calc.kgTotal > peso * 1.0005
+                            ? 'confira os pesos'
+                            : `${txt(calc.perdaKg, 2)} kg · ${txt(peso > 0 ? (calc.perdaKg / peso) * 100 : 0, 1)}%`
+                        }
+                        alerta={calc.kgTotal > peso * 1.0005}
                       />
                     </div>
                   )}
@@ -834,7 +839,12 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                                 <CampoDecimal
                                   valor={c.precoAtual ?? 0}
                                   onCommit={(n) => setPrecoHoje(c.id, n)}
-                                  style={{ ...inputCelula, width: 90, textAlign: 'right' }}
+                                  style={{
+                                    ...inputCelula,
+                                    width: 90,
+                                    textAlign: 'right',
+                                    borderColor: kg > 0 && !(c.precoAtual && c.precoAtual > 0) ? '#E0A030' : '#DED8D0',
+                                  }}
                                 />
                               </td>
                               <td style={td}>
@@ -934,6 +944,32 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                       </p>
                     </div>
 
+                    {calc.linhas.some((l) => l.corte.travado) && (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          padding: 12,
+                          borderRadius: 10,
+                          background: '#FFF4E5',
+                          border: '1px solid #F0C98F',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <p style={{ flex: '1 1 260px', margin: 0, fontSize: 13, color: '#8A4B0F' }}>
+                          <strong>
+                            {calc.linhas.filter((l) => l.corte.travado).length} de {calc.linhas.length} cortes estão com o preço mantido
+                          </strong>{' '}
+                          (coluna “Manter”): eles ficam no preço de hoje e não recalculam com o novo custo.
+                        </p>
+                        <button type="button" onClick={() => travarTodos(false)} style={botaoPrimario}>
+                          Liberar todos e recalcular
+                        </button>
+                      </div>
+                    )}
+
                     {calc.avisos.length > 0 && (
                       <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: '#B25E1B' }}>
                         {calc.avisos.map((a) => (
@@ -976,6 +1012,9 @@ function Rateio({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                                   <div style={{ fontSize: 11, color: '#9A928B' }}>
                                     {txt(l.kg, 3)} kg{c.codigo ? ` · cód. ${c.codigo}` : ''}
                                   </div>
+                                  {!(c.precoAtual && c.precoAtual > 0) && !c.travado && (
+                                    <div style={{ fontSize: 11, color: '#B25E1B' }}>sem preço de hoje: usei o valor médio do boi</div>
+                                  )}
                                 </td>
                                 <td style={tdNum}>{brl(l.custo)}</td>
                                 <td style={{ ...tdNum, fontWeight: 800 }}>{brl(l.sugerido)}</td>

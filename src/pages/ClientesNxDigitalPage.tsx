@@ -18,8 +18,8 @@ import { ModalMoverEtapa } from '@/components/gestaoClientes/ModalMoverEtapa'
 import { FaixaLancamento } from '@/components/gestaoClientes/FaixaLancamento'
 import { useLancamentoPendente } from '@/hooks/useLancamentoPendente'
 import {
-  NIVEIS_AVALIACAO, PRIORIDADES, TIPOS_SERVICO, gestaoClientes, progressoDoCliente,
-  type GcClienteLista, type GcNivelAvaliacao, type GcPreviaMover, type GcPrioridade,
+  NIVEIS_AVALIACAO, PRIORIDADES, TIPOS_REUNIAO, TIPOS_SERVICO, gestaoClientes, progressoDoCliente,
+  type GcClienteLista, type GcNivelAvaliacao, type GcPreviaMover, type GcPrioridade, type GcReuniaoTipo,
   type GcStatusCliente,
 } from '@/services/gestaoClientes'
 import {
@@ -31,6 +31,16 @@ import { EsqueletoDeCarga } from '@/components/gestaoClientes/EsqueletoDeCarga'
 import { FAIXA_DA_SAUDE, estiloDoAvatar } from '@/lib/gcVisual'
 import { AvatarCliente } from '@/components/gestaoClientes/AvatarCliente'
 import { cn } from '@/lib/utils'
+
+/** Resumo interno das reuniões do mês ("Alin. 2 · Ret. 0"): só pra equipe, nunca vai pro portal do cliente. */
+const SIGLA_REUNIAO: Record<GcReuniaoTipo, string> = { alinhamento: 'Alin.', entrega: 'Entr.', ia: 'IA', retencao: 'Ret.' }
+function ReunioesDoMes({ c }: { c: GcClienteLista }) {
+  return (
+    <span className="block truncate text-[11px] tabular-nums text-foreground/45" title="Reuniões no mês (só equipe)">
+      {TIPOS_REUNIAO.map((t) => `${SIGLA_REUNIAO[t.valor]} ${c.reunioes?.[t.valor]?.mes ?? 0}`).join(' · ')}
+    </span>
+  )
+}
 
 const ABAS: { value: GcStatusCliente | 'todos'; label: string }[] = [
   { value: 'ativo', label: 'Ativos' },
@@ -269,6 +279,8 @@ export function ClientesNxDigitalPage() {
   const [busca, setBusca] = React.useState('')
   const [aba, setAba] = React.useState<GcStatusCliente | 'todos'>('ativo')
   const [soProblemas, setSoProblemas] = React.useState(false)
+  /** Filtra quem NÃO teve reunião desse tipo no mês corrente (ex.: sem retenção). */
+  const [semReuniao, setSemReuniao] = React.useState<GcReuniaoTipo | ''>('')
   // Preferências de exibição, lembradas neste navegador: a lista padrão é a de trabalho — sem a coluna de
   // prioridade e sem os clientes de teste.
   const [mostrarTeste, setMostrarTeste] = React.useState(() => lerPreferencia('gc:lista:teste'))
@@ -417,6 +429,7 @@ export function ClientesNxDigitalPage() {
     if (c.fora_dos_totais && !mostrarTeste) return false
     if (aba !== 'todos' && c.status !== aba) return false
     if (soProblemas && saude.nivel !== 'risco' && saude.nivel !== 'atencao') return false
+    if (semReuniao && (c.reunioes?.[semReuniao]?.mes ?? 0) > 0) return false
     if (!termo) return true
     const digitos = termo.replace(/\D/g, '')
     return (
@@ -443,7 +456,7 @@ export function ClientesNxDigitalPage() {
         .filter(passaNoFiltro)
         .sort(comparador),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clientesSituacao, aba, soProblemas, termo, ordem, mostrarTeste],
+    [clientesSituacao, aba, soProblemas, semReuniao, termo, ordem, mostrarTeste],
   )
 
   const contagem = (status: GcStatusCliente | 'todos') =>
@@ -613,6 +626,21 @@ export function ClientesNxDigitalPage() {
               </label>
             )}
             <label className="flex items-center gap-1.5 text-xs text-foreground/50">
+              <select
+                value={semReuniao}
+                onChange={(e) => setSemReuniao(e.target.value as GcReuniaoTipo | '')}
+                aria-label="Filtrar por reunião do mês"
+                className="h-9 rounded-lg border border-line bg-transparent px-2 text-sm text-foreground outline-none focus:border-accent/60"
+              >
+                <option value="">Reuniões: todas</option>
+                {TIPOS_REUNIAO.map((t) => (
+                  <option key={t.valor} value={t.valor}>
+                    Sem {t.label.toLowerCase()} no mês
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-foreground/50">
               <ArrowUpDown className="h-3.5 w-3.5" />
               <select
                 value={ordem}
@@ -778,6 +806,7 @@ function CartaoCliente({
           <span className="block truncate text-xs text-foreground/50">
             {[c.nome_contato, c.responsavel_nome].filter(Boolean).join(' · ') || '—'}
           </span>
+          <ReunioesDoMes c={c} />
         </span>
         <PastilhaSaude estado={saude.nivel} />
       </span>
@@ -862,6 +891,7 @@ function LinhaCliente({
             <span className="block truncate text-xs text-foreground/50">
               {[c.nome_contato, c.responsavel_nome].filter(Boolean).join(' · ') || '—'}
             </span>
+            <ReunioesDoMes c={c} />
           </span>
         </div>
       </td>

@@ -50,7 +50,7 @@ export const TIPOS_SERVICO: { valor: GcTipoServico; label: string }[] = [
 export const TIPOS_HISTORICO: { valor: GcTipoHistorico; label: string }[] = [
   { valor: 'nota', label: 'Nota' },
   // É este tipo que marca sozinho o item "Alinhamento mensal" da jornada e da rotina.
-  { valor: 'reuniao', label: 'Reunião/alinhamento' },
+  { valor: 'reuniao', label: 'Reunião' },
   { valor: 'ligacao', label: 'Ligação' },
   { valor: 'reclamacao', label: 'Reclamação' },
   { valor: 'ajuste', label: 'Ajuste' },

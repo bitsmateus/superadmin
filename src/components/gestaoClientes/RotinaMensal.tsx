@@ -1,6 +1,5 @@
 import * as React from 'react'
 import { AlertTriangle, Check, RefreshCcw } from 'lucide-react'
-import { RegistrarAlinhamento } from '@/components/gestaoClientes/RegistrarAlinhamento'
 import type { GcItemRotina } from '@/services/gestaoClientes'
 import { mesPorExtenso } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
@@ -38,7 +37,6 @@ export function RotinaMensal({
         <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <RefreshCcw className="h-4 w-4 text-accent" /> Rotina mensal
         </h2>
-        <RegistrarAlinhamento clienteId={clienteId} onRegistrado={onMudou} />
       </div>
       {itens.length === 0 && (
         <p className="text-sm text-foreground/45">Os itens do mês aparecem aqui quando o mês fecha.</p>

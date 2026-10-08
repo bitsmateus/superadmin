@@ -621,7 +621,7 @@ export function PainelNotas({
               Tudo que já foi registrado como reunião, do mais novo pro mais antigo — o controle do que já foi feito com este cliente.
             </p>
             {reunioesFeitas.length === 0 ? (
-              <p className="py-4 text-center text-sm text-foreground/45">Nenhuma reunião registrada ainda. Use “Registrar alinhamento” acima.</p>
+              <p className="py-4 text-center text-sm text-foreground/45">Nenhuma reunião registrada ainda. Em Atualizações, escolha o tipo “Reunião” e marque se foi Alinhamento, Entrega, IA ou Retenção.</p>
             ) : (
               <ol className="space-y-3">
                 {Array.from(

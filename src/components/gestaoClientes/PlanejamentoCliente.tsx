@@ -1090,21 +1090,6 @@ export function PlanejamentoCliente({
               })}
             </div>
           </div>
-
-          {/* ------------------------------------------------------------ avisos (discretos, não bloqueiam) */}
-          {avisos.length > 0 && (
-            <ul className="mt-3 space-y-1.5">
-              {avisos.map((texto, i) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-2 rounded-md border border-warning/25 bg-warning/[0.05] px-2.5 py-1.5 text-xs text-foreground/75"
-                >
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-                  <span>{texto}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
 
         {/* ---------------------------------------------------------------- o que se quer em palavras (passo 2) */}

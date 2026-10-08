@@ -217,6 +217,7 @@ const HOJE = `(NOW() AT TIME ZONE 'America/Sao_Paulo')::date`;
  * mês que fechou (relatório publicado; nota de reunião/alinhamento). São derivados na leitura, nunca
  * gravados como concluídos — senão o do mês passado continuaria "feito" no mês seguinte.
  */
+const REUNIAO_TIPOS = ['alinhamento', 'entrega', 'ia', 'retencao'];
 const TITULOS_AUTOMATICOS_SQL = `('Relatório do mês publicado', 'Alinhamento mensal com o cliente')`;
 /** O mês que fechou, como a data do primeiro dia. */
 const MES_QUE_FECHOU_SQL = `(date_trunc('month', ${HOJE}) - INTERVAL '1 month')::date`;
@@ -267,6 +268,13 @@ const SQL_CLIENTES = `
       WHERE h.gc_cliente_id = c.id AND h.tipo <> 'evento_sistema') AS ultimo_contato,
     (SELECT max(r.periodo_inicio) FROM gc_relatorios r
       WHERE r.gc_cliente_id = c.id AND r.status = 'publicado') AS ultimo_relatorio,
+    -- Reuniões por subtipo (total e do mês corrente): base pra metrificar o atendimento.
+    COALESCE((SELECT json_object_agg(t.reuniao_tipo, json_build_object('total', t.total, 'mes', t.mes))
+      FROM (SELECT h.reuniao_tipo, count(*) AS total,
+                   count(*) FILTER (WHERE date_trunc('month', h.created_at) = date_trunc('month', NOW())) AS mes
+            FROM gc_historico h
+            WHERE h.gc_cliente_id = c.id AND h.tipo = 'reuniao' AND h.reuniao_tipo IS NOT NULL
+            GROUP BY h.reuniao_tipo) t), '{}'::json) AS reunioes,
     -- Quando o cliente abriu o portal pela última vez: responde "ele está lendo o que mandamos?".
     (SELECT max(a.acessado_em) FROM gc_acessos_link a
       JOIN gc_links_publicos l ON l.id = a.link_id
@@ -889,12 +897,16 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   app.post<{
     Params: { id: string };
     Body: {
-      tipo?: string; titulo?: string; descricao?: string; fixado?: boolean;
+      tipo?: string; reuniao_tipo?: string | null; titulo?: string; descricao?: string; fixado?: boolean;
       anexos?: { id: string; name: string; type: string; size: number; dataUrl: string }[];
     };
   }>('/api/gc/clientes/:id/historico', autenticado, async (req, reply) => {
     const { sub } = req.user as { sub: string };
     const { tipo, titulo, descricao, fixado, anexos } = req.body ?? {};
+    const reuniaoTipo = tipo === 'reuniao' ? (req.body?.reuniao_tipo ?? 'alinhamento') : null;
+    if (reuniaoTipo && !REUNIAO_TIPOS.includes(reuniaoTipo)) {
+      return reply.status(400).send({ message: 'Tipo de reunião inválido' });
+    }
     const comAnexo = Array.isArray(anexos) && anexos.length > 0;
     // Print colado sem texto é um registro válido ("olha o que apareceu no painel") — por isso o
     // anexo também conta como conteúdo.
@@ -902,10 +914,10 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ message: 'Escreva algo ou anexe um print' });
     }
     const criado = await queryOne(
-      `INSERT INTO gc_historico (gc_cliente_id, tipo, titulo, descricao, autor_id, fixado, anexos)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO gc_historico (gc_cliente_id, tipo, reuniao_tipo, titulo, descricao, autor_id, fixado, anexos)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [
-        req.params.id, tipo ?? 'nota', titulo ?? '', descricao ?? '', sub, fixado ?? false,
+        req.params.id, tipo ?? 'nota', reuniaoTipo, titulo ?? '', descricao ?? '', sub, fixado ?? false,
         JSON.stringify(anexos ?? []),
       ]
     );
@@ -918,10 +930,16 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     autenticado,
     async (req, reply) => {
       const corpo = { ...(req.body ?? {}) };
+      // Subtipo só existe em reunião: virou outro tipo, zera; virou reunião sem subtipo, é alinhamento.
+      if (corpo.tipo !== undefined && corpo.tipo !== 'reuniao') corpo.reuniao_tipo = null;
+      else if (corpo.tipo === 'reuniao' && corpo.reuniao_tipo == null) corpo.reuniao_tipo = 'alinhamento';
+      if (corpo.reuniao_tipo != null && !REUNIAO_TIPOS.includes(String(corpo.reuniao_tipo))) {
+        return reply.status(400).send({ message: 'Tipo de reunião inválido' });
+      }
       // JSONB precisa chegar como texto JSON; mandar o array cru viraria "{...}" do Postgres.
       if (corpo.anexos !== undefined) corpo.anexos = JSON.stringify(corpo.anexos);
       const { sets, params } = montarUpdate(
-        ['tipo', 'titulo', 'descricao', 'fixado', 'anexos'],
+        ['tipo', 'reuniao_tipo', 'titulo', 'descricao', 'fixado', 'anexos'],
         corpo
       );
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });

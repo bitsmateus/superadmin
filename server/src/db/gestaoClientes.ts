@@ -437,6 +437,13 @@ const TABELAS = [
   // [{ id, name, type, size, dataUrl }]. Fica no banco (data URL) como o resto do projeto, em vez
   // de depender de um bucket que não existe aqui.
   `ALTER TABLE gc_historico ADD COLUMN IF NOT EXISTS anexos JSONB NOT NULL DEFAULT '[]'`,
+  // Subtipo da reunião (só quando tipo = 'reuniao'): serve pra metrificar o atendimento — quantos
+  // alinhamentos cada cliente teve, quem teve call de retenção. É dado INTERNO: o portal do cliente
+  // lê só o snapshot do relatório, nunca o histórico.
+  `ALTER TABLE gc_historico ADD COLUMN IF NOT EXISTS reuniao_tipo TEXT
+     CHECK (reuniao_tipo IS NULL OR reuniao_tipo IN ('alinhamento','entrega','ia','retencao'))`,
+  // Reuniões que já existiam eram todas "Registrar alinhamento".
+  `UPDATE gc_historico SET reuniao_tipo = 'alinhamento' WHERE tipo = 'reuniao' AND reuniao_tipo IS NULL`,
 
   // Índices de leitura das telas
   `CREATE INDEX IF NOT EXISTS gc_servicos_cliente_idx ON gc_servicos (gc_cliente_id)`,

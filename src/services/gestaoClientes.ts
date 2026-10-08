@@ -28,6 +28,16 @@ export type GcTipoServico =
 export type GcTipoHistorico =
   | 'nota' | 'reuniao' | 'ligacao' | 'reclamacao' | 'ajuste' | 'evento_sistema'
 
+/** Subtipo da reunião — só pra uso interno (métrica de atendimento), nunca aparece no portal do cliente. */
+export type GcReuniaoTipo = 'alinhamento' | 'entrega' | 'ia' | 'retencao'
+
+export const TIPOS_REUNIAO: { valor: GcReuniaoTipo; label: string }[] = [
+  { valor: 'alinhamento', label: 'Alinhamento' },
+  { valor: 'entrega', label: 'Entrega' },
+  { valor: 'ia', label: 'IA' },
+  { valor: 'retencao', label: 'Retenção' },
+]
+
 export const TIPOS_SERVICO: { valor: GcTipoServico; label: string }[] = [
   { valor: 'trafego_meta', label: 'Tráfego — Meta' },
   { valor: 'trafego_google', label: 'Tráfego — Google' },
@@ -134,6 +144,8 @@ export interface GcRegistroHistorico {
   id: string
   gc_cliente_id: string
   tipo: GcTipoHistorico
+  /** Só quando tipo = 'reuniao'. */
+  reuniao_tipo?: GcReuniaoTipo | null
   titulo: string
   descricao: string
   autor_id: string | null
@@ -180,6 +192,8 @@ export interface GcClienteLista {
   ultimo_contato: string | null
   /** Primeiro dia do período do último relatório publicado. */
   ultimo_relatorio: string | null
+  /** Reuniões por subtipo: total e do mês corrente. Subtipo sem reunião não vem. */
+  reunioes?: Partial<Record<GcReuniaoTipo, { total: number; mes: number }>>
   /** Última vez que o cliente abriu o portal. Null = nunca abriu (ou nunca teve link). */
   ultimo_acesso_portal: string | null
   /** A renovação mais próxima entre os serviços ativos. */
@@ -811,10 +825,10 @@ export const gestaoClientes = {
   registrar: (
     clienteId: string,
     dados: {
-      tipo?: GcTipoHistorico; titulo?: string; descricao: string; fixado?: boolean; anexos?: GcAnexo[]
+      tipo?: GcTipoHistorico; reuniao_tipo?: GcReuniaoTipo; titulo?: string; descricao: string; fixado?: boolean; anexos?: GcAnexo[]
     },
   ) => api.post<GcRegistroHistorico>(`/api/gc/clientes/${clienteId}/historico`, dados),
-  atualizarRegistro: (id: string, dados: Partial<{ tipo: GcTipoHistorico; titulo: string; descricao: string; fixado: boolean; anexos: GcAnexo[] }>) =>
+  atualizarRegistro: (id: string, dados: Partial<{ tipo: GcTipoHistorico; reuniao_tipo: GcReuniaoTipo | null; titulo: string; descricao: string; fixado: boolean; anexos: GcAnexo[] }>) =>
     api.patch<GcRegistroHistorico>(`/api/gc/historico/${id}`, dados),
   excluirRegistro: (id: string) => api.delete(`/api/gc/historico/${id}`),
 

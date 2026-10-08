@@ -10,8 +10,8 @@ import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import {
-  TIPOS_HISTORICO, gestaoClientes,
-  type GcAnexo, type GcRegistroHistorico, type GcTipoHistorico,
+  TIPOS_HISTORICO, TIPOS_REUNIAO, gestaoClientes,
+  type GcAnexo, type GcRegistroHistorico, type GcReuniaoTipo, type GcTipoHistorico,
 } from '@/services/gestaoClientes'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +28,33 @@ const TOM: Partial<Record<GcTipoHistorico, 'info' | 'warning' | 'danger' | 'neut
 function rotuloTipo(tipo: GcTipoHistorico): string {
   if (tipo === 'evento_sistema') return 'Sistema'
   return TIPOS_HISTORICO.find((t) => t.valor === tipo)?.label ?? tipo
+}
+
+function rotuloReuniao(r: Pick<GcRegistroHistorico, 'tipo' | 'reuniao_tipo'>): string {
+  const sub = r.tipo === 'reuniao' ? TIPOS_REUNIAO.find((t) => t.valor === r.reuniao_tipo)?.label : null
+  return sub ? `Reunião · ${sub}` : rotuloTipo(r.tipo)
+}
+
+/** Escolha do tipo da reunião (Alinhamento/Entrega/IA/Retenção) — aparece só quando o registro é reunião. */
+function SeletorReuniao({ valor, onChange }: { valor: GcReuniaoTipo; onChange: (v: GcReuniaoTipo) => void }) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Tipo da reunião">
+      <span className="text-xs text-foreground/45">Tipo da reunião:</span>
+      {TIPOS_REUNIAO.map((t) => (
+        <button
+          key={t.valor}
+          type="button"
+          onClick={() => onChange(t.valor)}
+          className={cn(
+            'rounded-full border px-2.5 py-1 text-xs transition-colors',
+            valor === t.valor ? 'border-accent/50 bg-accent/10 font-medium text-accent' : 'border-line text-foreground/55 hover:text-foreground',
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 function quando(iso: string): string {
@@ -142,6 +169,7 @@ function CartaoDeNota({
   const [editando, setEditando] = React.useState(false)
   const [texto, setTexto] = React.useState(r.descricao)
   const [tipo, setTipo] = React.useState<GcTipoHistorico>(r.tipo)
+  const [reuniaoTipo, setReuniaoTipo] = React.useState<GcReuniaoTipo>(r.reuniao_tipo ?? 'alinhamento')
   const [anexos, setAnexos] = React.useState<GcAnexo[]>(r.anexos ?? [])
   const [salvando, setSalvando] = React.useState(false)
   const inputArquivo = React.useRef<HTMLInputElement>(null)
@@ -152,6 +180,7 @@ function CartaoDeNota({
   const abrirEdicao = () => {
     setTexto(r.descricao)
     setTipo(r.tipo)
+    setReuniaoTipo(r.reuniao_tipo ?? 'alinhamento')
     setAnexos(r.anexos ?? [])
     setEditando(true)
   }
@@ -172,7 +201,9 @@ function CartaoDeNota({
     }
     setSalvando(true)
     try {
-      await gestaoClientes.atualizarRegistro(r.id, { descricao: texto.trim(), tipo, anexos })
+      await gestaoClientes.atualizarRegistro(r.id, {
+        descricao: texto.trim(), tipo, anexos, reuniao_tipo: tipo === 'reuniao' ? reuniaoTipo : null,
+      })
       await onMudou()
       setEditando(false)
       toast.success('Nota atualizada')
@@ -208,7 +239,7 @@ function CartaoDeNota({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {r.fixado && <Pin className="h-3.5 w-3.5 text-accent" />}
             <span className="text-sm font-semibold text-foreground">{r.autor_nome ?? 'Equipe'}</span>
-            <Badge tone={TOM[r.tipo] ?? 'neutral'}>{rotuloTipo(r.tipo)}</Badge>
+            <Badge tone={TOM[r.tipo] ?? 'neutral'}>{rotuloReuniao(r)}</Badge>
             <span className="text-xs text-foreground/45" title={dataCompleta(r.created_at)}>
               {quando(r.created_at)}
             </span>
@@ -237,6 +268,7 @@ function CartaoDeNota({
                   </button>
                 ))}
               </div>
+              {tipo === 'reuniao' && <SeletorReuniao valor={reuniaoTipo} onChange={setReuniaoTipo} />}
               {anexos.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {anexos.map((a) => (
@@ -351,6 +383,7 @@ export function PainelNotas({
 }) {
   const [aba, setAba] = React.useState<Aba>('atualizacoes')
   const [tipo, setTipo] = React.useState<GcTipoHistorico>('nota')
+  const [reuniaoTipo, setReuniaoTipo] = React.useState<GcReuniaoTipo>('alinhamento')
   const [texto, setTexto] = React.useState('')
   const [pendentes, setPendentes] = React.useState<GcAnexo[]>([])
   const [fixar, setFixar] = React.useState(false)
@@ -370,6 +403,7 @@ export function PainelNotas({
     try {
       await gestaoClientes.registrar(clienteId, {
         tipo,
+        reuniao_tipo: tipo === 'reuniao' ? reuniaoTipo : undefined,
         descricao: texto.trim(),
         fixado: fixar,
         anexos: pendentes,
@@ -403,6 +437,12 @@ export function PainelNotas({
     setPendentes((p) => [...p, ...lidos])
   }
 
+  // Contagem interna por tipo de reunião (histórico todo do cliente) — pra metrificar o atendimento.
+  const reunioes = TIPOS_REUNIAO.map((t) => ({
+    ...t,
+    total: historico.filter((r) => r.tipo === 'reuniao' && r.reuniao_tipo === t.valor).length,
+  }))
+
   const abas: { valor: Aba; label: string; icone: React.ElementType; contagem: number }[] = [
     { valor: 'atualizacoes', label: 'Atualizações', icone: MessageSquare, contagem: daEquipe.length },
     { valor: 'arquivos', label: 'Arquivos', icone: Paperclip, contagem: arquivos.length },
@@ -411,6 +451,20 @@ export function PainelNotas({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-1.5 text-xs" title="Visível só pra equipe">
+        <span className="text-foreground/45">Reuniões:</span>
+        {reunioes.map((t) => (
+          <span
+            key={t.valor}
+            className={cn(
+              'rounded-full border px-2 py-0.5 tabular-nums',
+              t.total > 0 ? 'border-accent/40 bg-accent/10 text-accent' : 'border-line text-foreground/40',
+            )}
+          >
+            {t.label} {t.total}
+          </span>
+        ))}
+      </div>
       <div className="-mx-1 flex items-center gap-1 overflow-x-auto border-b border-line px-1">
         {abas.map((a) => (
           <button
@@ -443,6 +497,8 @@ export function PainelNotas({
               }}
               placeholder="Escreva o que a equipe precisa saber — e cole o print com Ctrl+V."
             />
+
+            {tipo === 'reuniao' && <SeletorReuniao valor={reuniaoTipo} onChange={setReuniaoTipo} />}
 
             {pendentes.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -603,7 +659,7 @@ export function PainelNotas({
               />
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-foreground">
-                  {r.titulo || r.descricao?.split('\n')[0] || rotuloTipo(r.tipo)}
+                  {r.titulo || r.descricao?.split('\n')[0] || rotuloReuniao(r)}
                 </span>
                 <span className="text-xs text-foreground/45">
                   {quando(r.created_at)}

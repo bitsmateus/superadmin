@@ -15,6 +15,7 @@ import {
   Copy,
   FileBarChart,
   FileSearch,
+  Megaphone,
   FileText,
   BarChart3,
   HeartCrack,
@@ -420,6 +421,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
 
   const secondaryItems = withDuplicates(
     [
+      // Gasto da empresa: só admin e supervisor (SDR não vê). A API também bloqueia.
+      ...(seeFinancials ? [{ to: '/trafego', label: 'Tráfego', icon: Megaphone }] : []),
       ...(isAdmin
         ? [{ to: '/kb', label: 'Conhecimento', icon: BookOpen }]
         : []),

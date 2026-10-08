@@ -77,6 +77,9 @@ const FinanceiroClientesGeralPage = React.lazy(() =>
 const FinanceiroContasPagarPage = React.lazy(() =>
   import('./pages/FinanceiroContasPagarPage').then((m) => ({ default: m.FinanceiroContasPagarPage })),
 )
+const TrafegoPage = React.lazy(() =>
+  import('./pages/TrafegoPage').then((m) => ({ default: m.TrafegoPage })),
+)
 const TicketsPage = React.lazy(() =>
   import('./pages/TicketsPage').then((m) => ({ default: m.TicketsPage })),
 )
@@ -235,6 +238,7 @@ export default function App() {
           <Route path="/tenants" element={<TenantsPage />} />
           <Route path="/tenants/:serverId/:id" element={<TenantDetailPage />} />
           <Route path="/financeiro" element={<FinancePage />} />
+          <Route path="/trafego" element={<TrafegoPage />} />
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/tickets/:id" element={<TicketsPage />} />
           <Route path="/templates" element={<TemplatesPage />} />

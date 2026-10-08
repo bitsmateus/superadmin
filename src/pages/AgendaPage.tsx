@@ -2,13 +2,16 @@ import * as React from 'react'
 import {
   Building2,
   Calendar,
+  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
   Clock,
   Copy,
+  List,
   Loader2,
   MessageSquareText,
+  Pencil,
   PlusCircle,
   Search,
   Settings,
@@ -23,12 +26,14 @@ import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { useAgendaEvents, useAgendaSlots, useCreateMeeting, useDeleteMeeting } from '@/hooks/useAgenda'
+import {
+  useAgendaEvents, useAgendaSlots, useCreateMeeting, useDeleteMeeting, useRescheduleMeeting, useUpdateMeeting,
+} from '@/hooks/useAgenda'
 import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
 import { useClients } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { resolveArea } from '@/services/supabase'
-import type { CalendarEvent, MeetingType } from '@/api/agenda'
+import { SUPPORT_SUBTYPES, type CalendarEvent, type MeetingType, type SupportSubtype } from '@/api/agenda'
 import { asText, cn } from '@/lib/utils'
 import { isSameDay } from '@/lib/time'
 
@@ -103,6 +108,10 @@ function startOfWeek(d: Date): Date {
   return date
 }
 
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+
 function addDays(d: Date, n: number): Date {
   const date = new Date(d)
   date.setDate(date.getDate() + n)
@@ -125,6 +134,20 @@ function fmtDayMonth(d: Date): string {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
 }
 
+/** Data (YYYY-MM-DD) e hora (HH:mm) no fuso de São Paulo — o que o formulário de edição mostra. */
+function spDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+}
+function spTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Sao_Paulo' })
+}
+
+/** "Suporte · Alinhamento" quando a reunião de suporte tem tipo; senão só Comercial/Suporte. */
+function tipoBadge(e: CalendarEvent): string {
+  const sub = e.subtipo ? SUPPORT_SUBTYPES.find((s) => s.value === e.subtipo)?.label : null
+  return sub ? `${tipoLabel(e.tipo)} · ${sub}` : tipoLabel(e.tipo)
+}
+
 function tipoLabel(tipo: MeetingType | null): string {
   if (tipo === 'comercial') return 'Comercial'
   if (tipo === 'suporte') return 'Suporte'
@@ -135,6 +158,23 @@ function tipoLabel(tipo: MeetingType | null): string {
 function isNotConfiguredError(err: unknown): boolean {
   const body = (err as { body?: { code?: string } } | undefined)?.body
   return body?.code === 'not_configured'
+}
+
+type Visao = 'lista' | 'calendario'
+const VISAO_KEY = 'agenda-visao'
+
+function lerVisao(): Visao {
+  try {
+    return window.localStorage.getItem(VISAO_KEY) === 'calendario' ? 'calendario' : 'lista'
+  } catch {
+    return 'lista'
+  }
+}
+
+/** Diferença em dias de calendário (local) entre duas datas — arredonda pra não tropeçar em horário de verão. */
+function diffDias(a: Date, b: Date): number {
+  const dia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  return Math.round((dia(a) - dia(b)) / 86_400_000)
 }
 
 export function AgendaPage() {
@@ -160,17 +200,34 @@ export function AgendaPage() {
     filtro.tipo === 'comercial' ? 'comercial' : filtro.tipo === 'suporte' ? 'entrega' : undefined,
   )
 
-  const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()))
-  const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart])
+  const [visao, setVisaoState] = React.useState<Visao>(lerVisao)
+  const setVisao = (v: Visao) => {
+    setVisaoState(v)
+    try { window.localStorage.setItem(VISAO_KEY, v) } catch { /* ignore */ }
+  }
+  // `anchor` é qualquer dia do período mostrado: a semana (lista) ou o mês (calendário) sai dele.
+  const [anchor, setAnchor] = React.useState(() => new Date())
+  const weekStart = React.useMemo(() => startOfWeek(anchor), [anchor])
+  // Grade do mês: começa na segunda da semana do dia 1º e tem 6 semanas (42 dias) — altura fixa.
+  const gridStart = React.useMemo(() => startOfWeek(startOfMonth(anchor)), [anchor])
+  const rangeStart = visao === 'lista' ? weekStart : gridStart
+  const rangeEnd = React.useMemo(() => addDays(rangeStart, visao === 'lista' ? 7 : 42), [rangeStart, visao])
   const { data, isLoading, isError, error, refetch, isFetching } = useAgendaEvents(
-    weekStart.toISOString(),
-    weekEnd.toISOString(),
+    rangeStart.toISOString(),
+    rangeEnd.toISOString(),
   )
-  const [newOpen, setNewOpen] = React.useState(false)
-  const [newDefaultDate, setNewDefaultDate] = React.useState<string>(() => toDateInput(new Date()))
+  const [modal, setModal] = React.useState<{ open: boolean; event: CalendarEvent | null; date: string }>({
+    open: false,
+    event: null,
+    date: toDateInput(new Date()),
+  })
+  const abrirNovo = (date: string) => setModal({ open: true, event: null, date })
+  const abrirEvento = (event: CalendarEvent) => setModal({ open: true, event, date: toDateInput(new Date(event.start)) })
   const deleteMeeting = useDeleteMeeting()
+  const reschedule = useRescheduleMeeting()
 
   const days = React.useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
+  const gridDays = React.useMemo(() => Array.from({ length: 42 }, (_, i) => addDays(gridStart, i)), [gridStart])
   // Separação Comercial/Suporte É esse filtro — pra quem tem área travada, `filtro.tipo` nunca
   // muda do que `tipoTravado` definiu, então o outro tipo nunca aparece nem passando a semana.
   const events = (data?.events ?? []).filter((e) => {
@@ -190,13 +247,70 @@ export function AgendaPage() {
     toast.success('Mensagem copiada')
   }
 
-  const onCancel = (e: CalendarEvent) => {
+  const onCancel = (e: CalendarEvent, depois?: () => void) => {
     if (!window.confirm(`Cancelar a reunião "${e.clienteNome ?? e.title}"?\n\nIsso exclui o evento da agenda do Google.`)) return
     deleteMeeting.mutate(e.id, {
-      onSuccess: () => toast.success('Reunião cancelada'),
+      onSuccess: () => {
+        toast.success('Reunião cancelada')
+        depois?.()
+      },
       onError: (err) => toast.error('Falha ao cancelar: ' + (err instanceof Error ? err.message : 'erro')),
     })
   }
+
+  // Arrastar: mantém o horário e troca só o dia.
+  const [arrastando, setArrastando] = React.useState<string | null>(null)
+  const [diaAlvo, setDiaAlvo] = React.useState<string | null>(null)
+  const moverPara = (eventId: string, day: Date) => {
+    const e = (data?.events ?? []).find((x) => x.id === eventId)
+    if (!e) return
+    const delta = diffDias(day, new Date(e.start))
+    if (delta === 0) return
+    const ms = delta * 86_400_000
+    const start = new Date(new Date(e.start).getTime() + ms).toISOString()
+    const end = new Date(new Date(e.end).getTime() + ms).toISOString()
+    reschedule.mutate(
+      { id: e.id, start, end },
+      {
+        onSuccess: () => toast.success(`Reunião movida para ${fmtDayMonth(day)}`),
+        onError: (err) => toast.error('Falha ao mover: ' + (err instanceof Error ? err.message : 'erro')),
+      },
+    )
+  }
+  const dnd = (day: Date) => ({
+    onDragOver: (ev: React.DragEvent) => {
+      if (!arrastando) return
+      ev.preventDefault()
+      setDiaAlvo(day.toDateString())
+    },
+    onDragLeave: () => setDiaAlvo((d) => (d === day.toDateString() ? null : d)),
+    onDrop: (ev: React.DragEvent) => {
+      ev.preventDefault()
+      const id = arrastando ?? ev.dataTransfer.getData('text/plain')
+      setArrastando(null)
+      setDiaAlvo(null)
+      if (id) moverPara(id, day)
+    },
+  })
+  const dragEvento = (e: CalendarEvent) => ({
+    draggable: true,
+    onDragStart: (ev: React.DragEvent) => {
+      ev.dataTransfer.setData('text/plain', e.id)
+      ev.dataTransfer.effectAllowed = 'move'
+      setArrastando(e.id)
+    },
+    onDragEnd: () => {
+      setArrastando(null)
+      setDiaAlvo(null)
+    },
+  })
+
+  const navegar = (dir: -1 | 1) =>
+    setAnchor(visao === 'lista' ? addDays(anchor, 7 * dir) : new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1))
+  const titulo =
+    visao === 'lista'
+      ? `${fmtDayMonth(days[0])} – ${fmtDayMonth(days[6])}`
+      : anchor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 
   if (isError && isNotConfiguredError(error)) {
     return (
@@ -215,13 +329,7 @@ export function AgendaPage() {
         title="Agenda"
         subtitle="Reuniões comerciais e de suporte"
         rightSlot={
-          <Button
-            onClick={() => {
-              setNewDefaultDate(toDateInput(new Date()))
-              setNewOpen(true)
-            }}
-            leftIcon={<PlusCircle className="h-4 w-4" />}
-          >
+          <Button onClick={() => abrirNovo(toDateInput(new Date()))} leftIcon={<PlusCircle className="h-4 w-4" />}>
             Nova reunião
           </Button>
         }
@@ -230,20 +338,40 @@ export function AgendaPage() {
       <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setWeekStart(addDays(weekStart, -7))}>
+            <Button size="sm" variant="secondary" onClick={() => navegar(-1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => setWeekStart(startOfWeek(new Date()))}>
+            <Button size="sm" variant="secondary" onClick={() => setAnchor(new Date())}>
               Hoje
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => setWeekStart(addDays(weekStart, 7))}>
+            <Button size="sm" variant="secondary" onClick={() => navegar(1)}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <span className="ml-2 text-sm text-foreground/60">
-              {fmtDayMonth(days[0])} – {fmtDayMonth(days[6])}
-            </span>
+            <span className="ml-2 text-sm capitalize text-foreground/60">{titulo}</span>
           </div>
-          {isFetching && !isLoading && <Loader2 className="h-4 w-4 animate-spin text-foreground/40" />}
+          <div className="flex items-center gap-3">
+            {isFetching && !isLoading && <Loader2 className="h-4 w-4 animate-spin text-foreground/40" />}
+            <div className="inline-flex overflow-hidden rounded-lg border border-line" role="group" aria-label="Visualização">
+              {([
+                { value: 'lista' as Visao, label: 'Lista', icon: List },
+                { value: 'calendario' as Visao, label: 'Calendário', icon: CalendarDays },
+              ]).map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => setVisao(o.value)}
+                  aria-pressed={visao === o.value}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                    visao === o.value ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
+                  )}
+                >
+                  <o.icon className="h-3.5 w-3.5" />
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="mb-5 flex flex-wrap items-center gap-3">
@@ -277,6 +405,7 @@ export function AgendaPage() {
               options={[{ value: '', label: 'Todos os colaboradores' }, ...responsavelOptionsFiltro]}
             />
           </div>
+          <span className="text-[11px] text-foreground/40">Arraste uma reunião para outro dia para reagendar.</span>
         </div>
 
         {isError ? (
@@ -292,6 +421,17 @@ export function AgendaPage() {
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-24 w-full" />
           </div>
+        ) : visao === 'calendario' ? (
+          <MonthGrid
+            days={gridDays}
+            mes={anchor.getMonth()}
+            eventsByDay={eventsByDay}
+            diaAlvo={diaAlvo}
+            dnd={dnd}
+            dragEvento={dragEvento}
+            onOpen={abrirEvento}
+            onNew={(day) => abrirNovo(toDateInput(day))}
+          />
         ) : (
           <div className="space-y-3">
             {days.map((day) => {
@@ -300,7 +440,12 @@ export function AgendaPage() {
               return (
                 <section
                   key={day.toISOString()}
-                  className={cn('overflow-hidden rounded-xl border bg-card', today ? 'border-accent/40' : 'border-line')}
+                  {...dnd(day)}
+                  className={cn(
+                    'overflow-hidden rounded-xl border bg-card transition-shadow',
+                    today ? 'border-accent/40' : 'border-line',
+                    diaAlvo === day.toDateString() && 'ring-2 ring-accent/50',
+                  )}
                 >
                   <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
                     <Calendar className="h-4 w-4 text-foreground/45" />
@@ -313,10 +458,7 @@ export function AgendaPage() {
                     <button
                       type="button"
                       title="Nova reunião neste dia"
-                      onClick={() => {
-                        setNewDefaultDate(toDateInput(day))
-                        setNewOpen(true)
-                      }}
+                      onClick={() => abrirNovo(toDateInput(day))}
                       className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
                     >
                       <PlusCircle className="h-3.5 w-3.5" />
@@ -328,70 +470,89 @@ export function AgendaPage() {
                     <ul className="divide-y divide-line/60">
                       {dayEvents.map((e) => {
                         const cor = corDoColaborador(e.responsavel)
+                        const parar = (fn: () => void) => (ev: React.MouseEvent) => {
+                          ev.stopPropagation()
+                          fn()
+                        }
                         return (
-                        <li
-                          key={e.id}
-                          className="flex flex-wrap items-center justify-between gap-3 border-l-[3px] px-4 py-3"
-                          style={{ borderLeftColor: cor }}
-                        >
-                          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                            <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">
-                              {fmtHour(e.start)}–{fmtHour(e.end)}
-                            </span>
-                            <Badge tone={e.tipo === 'comercial' ? 'info' : e.tipo === 'suporte' ? 'warning' : 'neutral'}>
-                              {tipoLabel(e.tipo)}
-                            </Badge>
-                            <div className="min-w-0">
-                              <div className="truncate text-sm text-foreground">{asText(e.clienteNome, e.title)}</div>
-                              {e.responsavel && (
-                                <div className="flex items-center gap-1 text-[11px] font-medium" style={{ color: cor }}>
-                                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: cor }} />
-                                  {e.responsavel}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            {e.meetLink && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => window.open(e.meetLink!, '_blank', 'noopener')}
-                                  leftIcon={<Video className="h-3.5 w-3.5" />}
-                                >
-                                  Entrar
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  title="Copiar link da reunião"
-                                  onClick={() => copyLink(e.meetLink!)}
-                                  leftIcon={<Copy className="h-3.5 w-3.5" />}
-                                >
-                                  Copiar link
-                                </Button>
-                              </>
+                          <li
+                            key={e.id}
+                            {...dragEvento(e)}
+                            onClick={() => abrirEvento(e)}
+                            className={cn(
+                              'flex cursor-pointer flex-wrap items-center justify-between gap-3 border-l-[6px] px-4 py-3 transition-colors hover:brightness-95',
+                              arrastando === e.id && 'opacity-40',
                             )}
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              title="Copiar mensagem de convite"
-                              onClick={() => copyMessage(e)}
-                              leftIcon={<MessageSquareText className="h-3.5 w-3.5" />}
-                            >
-                              Copiar mensagem
-                            </Button>
-                            <button
-                              type="button"
-                              title="Cancelar reunião"
-                              onClick={() => onCancel(e)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </li>
+                            style={{ borderLeftColor: cor, backgroundColor: `${cor}1F` }}
+                          >
+                            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+                              <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                                {fmtHour(e.start)}–{fmtHour(e.end)}
+                              </span>
+                              <Badge tone={e.tipo === 'comercial' ? 'info' : e.tipo === 'suporte' ? 'warning' : 'neutral'}>
+                                {tipoBadge(e)}
+                              </Badge>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-foreground">{asText(e.clienteNome, e.title)}</div>
+                                {e.responsavel && (
+                                  <div className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: cor }}>
+                                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: cor }} />
+                                    {e.responsavel}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              {e.meetLink && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={parar(() => window.open(e.meetLink!, '_blank', 'noopener'))}
+                                    leftIcon={<Video className="h-3.5 w-3.5" />}
+                                  >
+                                    Entrar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    title="Copiar link da reunião"
+                                    onClick={parar(() => copyLink(e.meetLink!))}
+                                    leftIcon={<Copy className="h-3.5 w-3.5" />}
+                                  >
+                                    Copiar link
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                title="Copiar mensagem de convite"
+                                onClick={parar(() => copyMessage(e))}
+                                leftIcon={<MessageSquareText className="h-3.5 w-3.5" />}
+                              >
+                                Copiar mensagem
+                              </Button>
+                              <button
+                                type="button"
+                                title="Editar reunião"
+                                aria-label="Editar reunião"
+                                onClick={parar(() => abrirEvento(e))}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-card text-foreground/50 ring-1 ring-line hover:bg-accent/10 hover:text-accent hover:ring-accent/30"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                title="Cancelar reunião"
+                                aria-label="Cancelar reunião"
+                                onClick={parar(() => onCancel(e))}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-card text-foreground/40 ring-1 ring-line hover:bg-danger/10 hover:text-danger hover:ring-danger/30"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </li>
                         )
                       })}
                     </ul>
@@ -403,8 +564,103 @@ export function AgendaPage() {
         )}
       </div>
 
-      <NewMeetingModal open={newOpen} defaultDate={newDefaultDate} travado={travado} onClose={() => setNewOpen(false)} />
+      <MeetingModal
+        open={modal.open}
+        event={modal.event}
+        defaultDate={modal.date}
+        travado={travado}
+        onClose={() => setModal((m) => ({ ...m, open: false }))}
+        onCopyLink={copyLink}
+        onCopyMessage={copyMessage}
+        onCancelMeeting={(e) => onCancel(e, () => setModal((m) => ({ ...m, open: false })))}
+      />
     </>
+  )
+}
+
+/** Visão "Calendário": grade do mês (seg–dom). Chips coloridos por colaborador; arrastar chip troca o dia. */
+function MonthGrid({
+  days, mes, eventsByDay, diaAlvo, dnd, dragEvento, onOpen, onNew,
+}: {
+  days: Date[]
+  mes: number
+  eventsByDay: (d: Date) => CalendarEvent[]
+  diaAlvo: string | null
+  dnd: (d: Date) => React.HTMLAttributes<HTMLElement>
+  dragEvento: (e: CalendarEvent) => React.HTMLAttributes<HTMLElement>
+  onOpen: (e: CalendarEvent) => void
+  onNew: (d: Date) => void
+}) {
+  const MAX = 3
+  return (
+    <div className="overflow-x-auto">
+      <div className="min-w-[720px] overflow-hidden rounded-xl border border-line bg-card">
+        <div className="grid grid-cols-7 border-b border-line bg-elevate/[0.03]">
+          {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((d) => (
+            <div key={d} className="px-2 py-2 text-center text-xs font-medium text-foreground/50">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {days.map((day) => {
+            const evs = eventsByDay(day)
+            const today = isSameDay(day, new Date())
+            const foraDoMes = day.getMonth() !== mes
+            return (
+              <div
+                key={day.toISOString()}
+                {...dnd(day)}
+                className={cn(
+                  'group min-h-[112px] border-b border-r border-line/60 p-1.5 transition-colors',
+                  foraDoMes && 'bg-elevate/[0.025]',
+                  diaAlvo === day.toDateString() && 'bg-accent/10 ring-2 ring-inset ring-accent/50',
+                )}
+              >
+                <div className="mb-1 flex items-center justify-between">
+                  <span
+                    className={cn(
+                      'grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs tabular-nums',
+                      today ? 'bg-accent font-semibold text-white' : foraDoMes ? 'text-foreground/30' : 'text-foreground/70',
+                    )}
+                  >
+                    {day.getDate()}
+                  </span>
+                  <button
+                    type="button"
+                    title="Nova reunião neste dia"
+                    onClick={() => onNew(day)}
+                    className="rounded p-0.5 text-foreground/30 opacity-0 hover:bg-elevate/[0.06] hover:text-foreground group-hover:opacity-100"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  {evs.slice(0, MAX).map((e) => {
+                    const cor = corDoColaborador(e.responsavel)
+                    return (
+                      <button
+                        key={e.id}
+                        type="button"
+                        {...dragEvento(e)}
+                        onClick={() => onOpen(e)}
+                        title={`${fmtHour(e.start)} · ${tipoBadge(e)} · ${asText(e.clienteNome, e.title)}${e.responsavel ? ` · ${e.responsavel}` : ''}`}
+                        className="flex w-full items-center gap-1 truncate rounded border-l-[4px] px-1.5 py-0.5 text-left text-[11px] text-foreground hover:brightness-95"
+                        style={{ borderLeftColor: cor, backgroundColor: `${cor}33` }}
+                      >
+                        <span className="shrink-0 font-semibold tabular-nums">{fmtHour(e.start)}</span>
+                        <span className="truncate">{asText(e.clienteNome, e.title)}</span>
+                      </button>
+                    )
+                  })}
+                  {evs.length > MAX && (
+                    <p className="px-1 text-[11px] text-foreground/45">+{evs.length - MAX} mais</p>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -434,24 +690,37 @@ function SetupPendingPanel() {
   )
 }
 
-function NewMeetingModal({
+/** Mesmo modal pra criar e pra ver/editar: com `event` abre as informações da reunião já editáveis. */
+function MeetingModal({
   open,
+  event,
   defaultDate,
   travado,
   onClose,
+  onCopyLink,
+  onCopyMessage,
+  onCancelMeeting,
 }: {
   open: boolean
+  /** Reunião aberta pra ver/editar. null = nova reunião. */
+  event: CalendarEvent | null
   defaultDate: string
   /** Área travada pelo profile.area de quem está criando (ver tipoTravado) — null = sem trava,
    * pode escolher o tipo livremente. Evita criar uma reunião que depois nem ela mesma verá. */
   travado: MeetingType | null
   onClose: () => void
+  onCopyLink: (link: string) => void
+  onCopyMessage: (e: CalendarEvent) => void
+  onCancelMeeting: (e: CalendarEvent) => void
 }) {
   const clients = useClients()
   const { data: profiles } = useTeamProfiles()
   const createMeeting = useCreateMeeting()
+  const updateMeeting = useUpdateMeeting()
+  const editando = event !== null
 
   const [tipo, setTipo] = React.useState<MeetingType>(travado ?? 'comercial')
+  const [subtipo, setSubtipo] = React.useState<SupportSubtype | ''>('')
   const [clienteNome, setClienteNome] = React.useState('')
   const [clienteId, setClienteId] = React.useState<string | null>(null)
   const [clienteSearchOpen, setClienteSearchOpen] = React.useState(false)
@@ -464,17 +733,31 @@ function NewMeetingModal({
 
   React.useEffect(() => {
     if (!open) return
-    setTipo(travado ?? 'comercial')
-    setClienteNome('')
-    setClienteId(null)
-    setResponsavel('')
-    setDate(defaultDate)
-    setDuration(60)
-    setSelectedStart(null)
-    setManualTime('')
-    setObs('')
+    if (event) {
+      setTipo(event.tipo ?? travado ?? 'comercial')
+      setSubtipo(event.subtipo ?? '')
+      setClienteNome(event.clienteNome ?? event.title)
+      setClienteId(event.clienteId)
+      setResponsavel(event.responsavel ?? '')
+      setDate(spDate(event.start))
+      setDuration(Math.max(15, Math.round((new Date(event.end).getTime() - new Date(event.start).getTime()) / 60_000)))
+      setSelectedStart(null)
+      setManualTime(spTime(event.start))
+      setObs(event.obs ?? '')
+    } else {
+      setTipo(travado ?? 'comercial')
+      setSubtipo('')
+      setClienteNome('')
+      setClienteId(null)
+      setResponsavel('')
+      setDate(defaultDate)
+      setDuration(60)
+      setSelectedStart(null)
+      setManualTime('')
+      setObs('')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultDate, travado])
+  }, [open, event, defaultDate, travado])
 
   const slotsQuery = useAgendaSlots(open ? date : null, duration)
 
@@ -487,6 +770,14 @@ function NewMeetingModal({
   }, [clients, clienteNome])
 
   const responsavelOptions = profileOptions(profiles, tipo === 'comercial' ? 'comercial' : 'entrega')
+  // Se o responsável salvo no evento não está mais na lista (ex.: saiu do time), continua selecionável.
+  const responsavelComAtual =
+    responsavel && !responsavelOptions.some((o) => o.value === responsavel)
+      ? [...responsavelOptions, { value: responsavel, label: responsavel }]
+      : responsavelOptions
+  const duracoes = DURATION_OPTIONS.some((o) => o.value === String(duration))
+    ? DURATION_OPTIONS
+    : [...DURATION_OPTIONS, { value: String(duration), label: `${duration} min` }].sort((a, b) => Number(a.value) - Number(b.value))
 
   const startISO = React.useMemo(() => {
     if (selectedStart) return selectedStart
@@ -495,69 +786,155 @@ function NewMeetingModal({
   }, [selectedStart, manualTime, date])
 
   const canSubmit = Boolean(clienteNome.trim() && responsavel.trim() && startISO)
+  const pending = createMeeting.isPending || updateMeeting.isPending
 
   const onSubmit = () => {
     if (!startISO) return
     const end = new Date(new Date(startISO).getTime() + duration * 60_000).toISOString()
-    createMeeting.mutate(
-      { tipo, clienteId, clienteNome: clienteNome.trim(), responsavel: responsavel.trim(), start: startISO, end, obs: obs.trim() || undefined },
-      {
-        onSuccess: (res) => {
-          onClose()
-          toast.success(
-            <div className="flex flex-col gap-1.5">
-              <span>Reunião criada com sucesso.</span>
-              {res.event.meetLink && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(res.event.meetLink!).catch(() => {})
-                    toast.success('Link copiado')
-                  }}
-                  className="inline-flex w-fit items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs hover:bg-elevate/[0.04]"
-                >
-                  <Copy className="h-3 w-3" /> Copiar link do Meet
-                </button>
-              )}
-            </div>,
-          )
+    const input = {
+      tipo,
+      subtipo: tipo === 'suporte' && subtipo ? subtipo : null,
+      clienteId,
+      clienteNome: clienteNome.trim(),
+      responsavel: responsavel.trim(),
+      start: startISO,
+      end,
+      obs: obs.trim() || undefined,
+    }
+    if (event) {
+      updateMeeting.mutate(
+        { id: event.id, input },
+        {
+          onSuccess: () => {
+            onClose()
+            toast.success('Reunião atualizada')
+          },
+          onError: (err) => toast.error('Falha ao salvar: ' + (err instanceof Error ? err.message : 'erro')),
         },
-        onError: (err) => toast.error('Falha ao criar reunião: ' + (err instanceof Error ? err.message : 'erro')),
+      )
+      return
+    }
+    createMeeting.mutate(input, {
+      onSuccess: (res) => {
+        onClose()
+        toast.success(
+          <div className="flex flex-col gap-1.5">
+            <span>Reunião criada com sucesso.</span>
+            {res.event.meetLink && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(res.event.meetLink!).catch(() => {})
+                  toast.success('Link copiado')
+                }}
+                className="inline-flex w-fit items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs hover:bg-elevate/[0.04]"
+              >
+                <Copy className="h-3 w-3" /> Copiar link do Meet
+              </button>
+            )}
+          </div>,
+        )
       },
-    )
+      onError: (err) => toast.error('Falha ao criar reunião: ' + (err instanceof Error ? err.message : 'erro')),
+    })
   }
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Nova reunião"
-      description="Cria o evento direto na agenda compartilhada, com link do Meet."
+      title={editando ? 'Reunião' : 'Nova reunião'}
+      description={
+        editando
+          ? 'Informações da reunião — edite o que precisar e salve para atualizar a agenda do Google.'
+          : 'Cria o evento direto na agenda compartilhada, com link do Meet.'
+      }
       size="md"
       footer={
         <>
+          {event && (
+            <Button
+              variant="ghost"
+              className="mr-auto text-danger hover:bg-danger/10"
+              leftIcon={<Trash2 className="h-4 w-4" />}
+              onClick={() => onCancelMeeting(event)}
+            >
+              Cancelar reunião
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose}>
-            Cancelar
+            {editando ? 'Fechar' : 'Cancelar'}
           </Button>
-          <Button onClick={onSubmit} disabled={!canSubmit} loading={createMeeting.isPending}>
-            Criar reunião
+          <Button onClick={onSubmit} disabled={!canSubmit} loading={pending}>
+            {editando ? 'Salvar alterações' : 'Criar reunião'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        {travado ? (
+        {event && (
+          <div className="flex flex-wrap items-center gap-2">
+            {event.meetLink && (
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => window.open(event.meetLink!, '_blank', 'noopener')}
+                  leftIcon={<Video className="h-3.5 w-3.5" />}
+                >
+                  Entrar
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => onCopyLink(event.meetLink!)} leftIcon={<Copy className="h-3.5 w-3.5" />}>
+                  Copiar link
+                </Button>
+              </>
+            )}
+            <Button size="sm" variant="secondary" onClick={() => onCopyMessage(event)} leftIcon={<MessageSquareText className="h-3.5 w-3.5" />}>
+              Copiar mensagem
+            </Button>
+          </div>
+        )}
+
+        {travado && !editando ? (
           <Badge tone={travado === 'comercial' ? 'info' : 'warning'}>{tipoLabel(travado)}</Badge>
         ) : (
           <Select
             label="Tipo"
             value={tipo}
-            onChange={(e) => setTipo(e.target.value as MeetingType)}
+            onChange={(e) => {
+              setTipo(e.target.value as MeetingType)
+              if (e.target.value !== 'suporte') setSubtipo('')
+            }}
             options={[
               { value: 'comercial', label: 'Comercial' },
               { value: 'suporte', label: 'Suporte' },
             ]}
+            disabled={Boolean(travado)}
           />
+        )}
+
+        {tipo === 'suporte' && (
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-foreground/55">Tipo da reunião de suporte</p>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Tipo da reunião de suporte">
+              {SUPPORT_SUBTYPES.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => setSubtipo(subtipo === t.value ? '' : t.value)}
+                  aria-pressed={subtipo === t.value}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                    subtipo === t.value
+                      ? 'border-accent/50 bg-accent/10 text-accent'
+                      : 'border-line text-foreground/60 hover:bg-elevate/[0.04]',
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="relative">
@@ -603,7 +980,7 @@ function NewMeetingModal({
           label="Responsável"
           value={responsavel}
           onChange={(e) => setResponsavel(e.target.value)}
-          options={[{ value: '', label: '— Selecione —' }, ...responsavelOptions]}
+          options={[{ value: '', label: '— Selecione —' }, ...responsavelComAtual]}
         />
 
         <div className="grid grid-cols-2 gap-3">
@@ -623,7 +1000,7 @@ function NewMeetingModal({
               setDuration(Number(e.target.value))
               setSelectedStart(null)
             }}
-            options={DURATION_OPTIONS}
+            options={duracoes}
           />
         </div>
 

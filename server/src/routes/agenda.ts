@@ -4,8 +4,12 @@ import {
   listCalendarEvents,
   createCalendarEvent,
   deleteCalendarEvent,
+  updateCalendarEvent,
+  rescheduleCalendarEvent,
   getFreeSlots,
+  SUPPORT_SUBTYPES,
   type MeetingType,
+  type SupportSubtype,
 } from '../lib/googleCalendar.js';
 
 function notConfigured(reply: { status: (c: number) => { send: (b: unknown) => unknown } }) {
@@ -57,6 +61,7 @@ export async function agendaRoutes(app: FastifyInstance) {
   app.post<{
     Body: {
       tipo?: string;
+      subtipo?: string | null;
       clienteId?: string | null;
       clienteNome?: string;
       responsavel?: string;
@@ -66,9 +71,12 @@ export async function agendaRoutes(app: FastifyInstance) {
     };
   }>('/api/agenda/events', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!isGoogleCalendarConfigured()) return notConfigured(reply);
-    const { tipo, clienteId, clienteNome, responsavel, start, end, obs } = req.body ?? {};
+    const { tipo, subtipo, clienteId, clienteNome, responsavel, start, end, obs } = req.body ?? {};
     if (tipo !== 'comercial' && tipo !== 'suporte') {
       return reply.status(400).send({ message: 'tipo precisa ser "comercial" ou "suporte"' });
+    }
+    if (subtipo && !SUPPORT_SUBTYPES.includes(subtipo as SupportSubtype)) {
+      return reply.status(400).send({ message: 'subtipo inválido' });
     }
     if (!clienteNome?.trim() || !responsavel?.trim() || !start || !end) {
       return reply.status(400).send({ message: 'clienteNome, responsavel, start e end são obrigatórios' });
@@ -76,6 +84,7 @@ export async function agendaRoutes(app: FastifyInstance) {
     try {
       const event = await createCalendarEvent({
         tipo: tipo as MeetingType,
+        subtipo: (subtipo as SupportSubtype | null | undefined) ?? null,
         clienteId: clienteId ?? null,
         clienteNome: clienteNome.trim(),
         responsavel: responsavel.trim(),
@@ -84,6 +93,56 @@ export async function agendaRoutes(app: FastifyInstance) {
         obs,
       });
       return reply.status(201).send({ event });
+    } catch (err) {
+      return reply.status(502).send({ message: String((err as Error).message ?? err).slice(0, 300) });
+    }
+  });
+
+  // Edição completa (modal) ou só reagendamento (arrastar): com `reschedule: true` o corpo precisa
+  // apenas de start/end e o resto do evento fica intocado.
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      reschedule?: boolean;
+      tipo?: string;
+      subtipo?: string | null;
+      clienteId?: string | null;
+      clienteNome?: string;
+      responsavel?: string;
+      start?: string;
+      end?: string;
+      obs?: string;
+    };
+  }>('/api/agenda/events/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!isGoogleCalendarConfigured()) return notConfigured(reply);
+    const { reschedule, tipo, subtipo, clienteId, clienteNome, responsavel, start, end, obs } = req.body ?? {};
+    if (!start || !end || Number.isNaN(Date.parse(start)) || Number.isNaN(Date.parse(end))) {
+      return reply.status(400).send({ message: 'start e end são obrigatórios' });
+    }
+    try {
+      if (reschedule) {
+        return { event: await rescheduleCalendarEvent(req.params.id, start, end) };
+      }
+      if (tipo !== 'comercial' && tipo !== 'suporte') {
+        return reply.status(400).send({ message: 'tipo precisa ser "comercial" ou "suporte"' });
+      }
+      if (subtipo && !SUPPORT_SUBTYPES.includes(subtipo as SupportSubtype)) {
+        return reply.status(400).send({ message: 'subtipo inválido' });
+      }
+      if (!clienteNome?.trim() || !responsavel?.trim()) {
+        return reply.status(400).send({ message: 'clienteNome e responsavel são obrigatórios' });
+      }
+      const event = await updateCalendarEvent(req.params.id, {
+        tipo: tipo as MeetingType,
+        subtipo: (subtipo as SupportSubtype | null | undefined) ?? null,
+        clienteId: clienteId ?? null,
+        clienteNome: clienteNome.trim(),
+        responsavel: responsavel.trim(),
+        start,
+        end,
+        obs,
+      });
+      return { event };
     } catch (err) {
       return reply.status(502).send({ message: String((err as Error).message ?? err).slice(0, 300) });
     }

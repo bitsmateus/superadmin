@@ -49,14 +49,22 @@ const SLOT_STEP_MIN = 30;
 const SP_OFFSET = '-03:00';
 
 export type MeetingType = 'comercial' | 'suporte';
+/** Subtipo das reuniões de suporte — base pra metrificar o atendimento (IQE). */
+export type SupportSubtype = 'entrega' | 'alinhamento' | 'ia' | 'retencao';
+export const SUPPORT_SUBTYPES: SupportSubtype[] = ['entrega', 'alinhamento', 'ia', 'retencao'];
+const SUBTYPE_LABEL: Record<SupportSubtype, string> = {
+  entrega: 'Entrega', alinhamento: 'Alinhamento', ia: 'IA', retencao: 'Retenção',
+};
 
 export interface CalendarEvent {
   id: string;
   tipo: MeetingType | null;
+  subtipo: SupportSubtype | null;
   title: string;
   clienteNome: string | null;
   clienteId: string | null;
   responsavel: string | null;
+  obs: string | null;
   start: string;
   end: string;
   meetLink: string | null;
@@ -65,6 +73,7 @@ export interface CalendarEvent {
 
 export interface CreateMeetingInput {
   tipo: MeetingType;
+  subtipo?: SupportSubtype | null;
   clienteId?: string | null;
   clienteNome: string;
   responsavel: string;
@@ -137,9 +146,17 @@ function normalizeEvent(raw: Record<string, unknown>): CalendarEvent | null {
     conferenceEntryPoints?.find((e) => e.entryPointType === 'video')?.uri as string | undefined ??
     null;
 
+  const subtipoRaw = ext.subtipo as SupportSubtype | undefined;
+  // As observações moram na descrição, depois da linha em branco que segue o cabeçalho.
+  const description = String(raw.description ?? '');
+  const blank = description.indexOf('\n\n');
+  const obs = blank >= 0 ? description.slice(blank + 2).trim() : '';
+
   return {
     id: String(raw.id ?? ''),
     tipo,
+    subtipo: tipo === 'suporte' && subtipoRaw && SUPPORT_SUBTYPES.includes(subtipoRaw) ? subtipoRaw : null,
+    obs: obs || null,
     title: String(raw.summary ?? '(sem título)'),
     clienteNome: (ext.clienteNome as string | undefined) ?? null,
     clienteId: (ext.clienteId as string | undefined) || null,
@@ -167,15 +184,17 @@ export async function listCalendarEvents(timeMinISO: string, timeMaxISO: string)
 
 function buildEventBody(input: CreateMeetingInput, withConferenceRequest: boolean) {
   const tipoLabel = input.tipo === 'comercial' ? 'Comercial' : 'Suporte';
+  const subtipo = input.tipo === 'suporte' ? input.subtipo ?? null : null;
+  const tipoTexto = subtipo ? `${tipoLabel} · ${SUBTYPE_LABEL[subtipo]}` : tipoLabel;
   const descricaoLinhas = [
-    `Tipo: ${tipoLabel}`,
+    `Tipo: ${tipoTexto}`,
     `Cliente: ${input.clienteNome}`,
     `Responsável: ${input.responsavel}`,
   ];
   if (input.obs?.trim()) descricaoLinhas.push('', input.obs.trim());
 
   return {
-    summary: `[${tipoLabel}] ${input.clienteNome}`,
+    summary: `[${tipoTexto}] ${input.clienteNome}`,
     description: descricaoLinhas.join('\n'),
     start: { dateTime: input.start, timeZone: 'America/Sao_Paulo' },
     end: { dateTime: input.end, timeZone: 'America/Sao_Paulo' },
@@ -186,6 +205,7 @@ function buildEventBody(input: CreateMeetingInput, withConferenceRequest: boolea
       private: {
         origem: 'superadmin',
         tipo: input.tipo,
+        subtipo: subtipo ?? '',
         clienteId: input.clienteId ?? '',
         clienteNome: input.clienteNome,
         responsavel: input.responsavel,
@@ -209,6 +229,23 @@ export async function updateCalendarEvent(eventId: string, input: CreateMeetingI
   const body = (await calendarFetch(
     `/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`,
     { method: 'PATCH', body: JSON.stringify(buildEventBody(input, false)) },
+  )) as Record<string, unknown>;
+  const event = normalizeEvent(body);
+  if (!event) throw new Error('Google Calendar retornou um evento inesperado');
+  return event;
+}
+
+/** Move o evento (arrastar na agenda): mexe só em start/end, sem reescrever título nem descrição. */
+export async function rescheduleCalendarEvent(eventId: string, start: string, end: string): Promise<CalendarEvent> {
+  const body = (await calendarFetch(
+    `/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        start: { dateTime: start, timeZone: 'America/Sao_Paulo' },
+        end: { dateTime: end, timeZone: 'America/Sao_Paulo' },
+      }),
+    },
   )) as Record<string, unknown>;
   const event = normalizeEvent(body);
   if (!event) throw new Error('Google Calendar retornou um evento inesperado');

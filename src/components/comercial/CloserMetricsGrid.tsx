@@ -1,67 +1,35 @@
 import * as React from 'react'
-import { CalendarCheck, UserCheck, UserX, TrendingUp, UserRound } from 'lucide-react'
-import { useMonthFilter, withinBounds, addMonthsToId, currentMonthId } from '@/hooks/useMonthFilter'
+import { CalendarCheck, UserCheck, TrendingUp, UserRound } from 'lucide-react'
+import { useMonthFilter, addMonthsToId, currentMonthId } from '@/hooks/useMonthFilter'
 import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
-import { ClickableStat } from '@/components/comercial/ClickableStat'
+import { api } from '@/services/api'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
-/** Sem acento, sem pontuação, minúsculo — compara o status mesmo escrito diferente em cada quadro. */
-const norm = (s: string) =>
-  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
-
-type Grupo = 'agendada' | 'noshow' | 'compareceu' | 'venda' | 'outro'
-
-/** Onde a lead está no funil do closer. Reunião realizada = chegou à proposta, ao follow-up ou à venda. */
-function grupoDoStatus(status: string): Grupo {
-  const s = norm(status)
-  if (s === 'reuniaoagendada') return 'agendada'
-  if (s === 'reuniaonaocomparecida') return 'noshow'
-  if (s === 'vendido') return 'venda'
-  if (s.startsWith('propostaenviada') || s.startsWith('followup')) return 'compareceu'
-  return 'outro'
-}
-
 const pct = (n: number) => `${Math.round(n * 100)}%`
 
-function Anel({ icone, rotulo, cor, valor, detalhe, matches, boards, onOpenLead }: {
+function Anel({ icone, rotulo, cor, valor, detalhe }: {
   icone: React.ReactNode
   rotulo: string
   cor: string
   /** 0..1 */
   valor: number
   detalhe: string
-  matches: LeadRow[]
-  boards: LeadBoard[]
-  onOpenLead: (id: string) => void
 }) {
   const deg = Math.max(0, Math.min(1, valor)) * 360
   return (
-    <ClickableStat matches={matches} boards={boards} onOpenLead={onOpenLead}>
-      {(onClick, ref) => (
-        <button
-          ref={ref}
-          type="button"
-          onClick={onClick}
-          disabled={matches.length === 0}
-          className={cn(
-            'flex flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3 transition-opacity',
-            matches.length > 0 ? 'cursor-pointer hover:opacity-70' : 'cursor-default',
-          )}
-        >
-          <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(${cor} ${deg}deg, #E5E7EB 0deg)` }}>
-            <div className="grid h-[52px] w-[52px] place-items-center rounded-full bg-card text-sm font-bold" style={{ color: cor }}>
-              {pct(valor)}
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/80">
-            <span style={{ color: cor }}>{icone}</span>
-            {rotulo}
-          </span>
-          <span className="text-[10px] text-foreground/40">{detalhe}</span>
-        </button>
-      )}
-    </ClickableStat>
+    <div className="flex flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3">
+      <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(${cor} ${deg}deg, #E5E7EB 0deg)` }}>
+        <div className="grid h-[52px] w-[52px] place-items-center rounded-full bg-card text-sm font-bold" style={{ color: cor }}>
+          {pct(valor)}
+        </div>
+      </div>
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/80">
+        <span style={{ color: cor }}>{icone}</span>
+        {rotulo}
+      </span>
+      <span className="text-[10px] text-foreground/40">{detalhe}</span>
+    </div>
   )
 }
 
@@ -73,29 +41,40 @@ function Anel({ icone, rotulo, cor, valor, detalhe, matches, boards, onOpenLead 
  *  - No-show = o complemento: no-show ÷ (realizadas + no-show);
  *  - Conversão = vendas ÷ reuniões realizadas.
  */
-export function CloserMetricsGrid({ rows, boards, onOpenLead, closer = 'Luis' }: {
-  rows: LeadRow[]
-  boards: LeadBoard[]
-  onOpenLead: (id: string) => void
+export function CloserMetricsGrid({ closer = 'Luis' }: {
+  rows?: LeadRow[]
+  boards?: LeadBoard[]
+  onOpenLead?: (id: string) => void
   closer?: string
 }) {
   const monthFilter = useMonthFilter(React.useMemo(() => [addMonthsToId(currentMonthId(), -1)], []))
+  const { from, to } = monthFilter.bounds
+  const [dados, setDados] = React.useState<{ agendadas: number; compareceu: number; no_show: number; vendas: number } | null>(null)
 
-  const m = React.useMemo(() => {
-    const doPeriodo = rows.filter((r) => withinBounds(r.createdAt, monthFilter.bounds))
-    const por = (g: Grupo) => doPeriodo.filter((r) => grupoDoStatus(r.status) === g)
-    const agendada = por('agendada')
-    const noShow = por('noshow')
-    const venda = por('venda')
-    const compareceu = [...por('compareceu'), ...venda]
-    const comDesfecho = compareceu.length + noShow.length
-    return {
-      doPeriodo, agendada, noShow, venda, compareceu, comDesfecho,
-      comparecimento: comDesfecho > 0 ? compareceu.length / comDesfecho : 0,
-      noShowPct: comDesfecho > 0 ? noShow.length / comDesfecho : 0,
-      conversao: compareceu.length > 0 ? venda.length / compareceu.length : 0,
+  // Vem do servidor: é a mesma conta (e as mesmas leads) das Métricas por SDR do Arthur, então os dois batem.
+  React.useEffect(() => {
+    let vivo = true
+    setDados(null)
+    api
+      .get<{ agendadas: number; compareceu: number; no_show: number; vendas: number }>(
+        `/api/closer-metrics?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      )
+      .then((r) => vivo && setDados(r))
+      .catch(() => vivo && setDados({ agendadas: 0, compareceu: 0, no_show: 0, vendas: 0 }))
+    return () => {
+      vivo = false
     }
-  }, [rows, monthFilter.bounds])
+  }, [from, to])
+
+  const agendadas = dados?.agendadas ?? 0
+  const compareceu = dados?.compareceu ?? 0
+  const noShow = dados?.no_show ?? 0
+  const vendas = dados?.vendas ?? 0
+  const comDesfecho = compareceu + noShow
+  const m = {
+    comparecimento: comDesfecho > 0 ? compareceu / comDesfecho : 0,
+    conversao: compareceu > 0 ? vendas / compareceu : 0,
+  }
 
   return (
     <div className="space-y-4">
@@ -112,45 +91,26 @@ export function CloserMetricsGrid({ rows, boards, onOpenLead, closer = 'Luis' }:
         </div>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <ClickableStat matches={m.doPeriodo} boards={boards} onOpenLead={onOpenLead}>
-            {(onClick, ref) => (
-              <button
-                ref={ref}
-                type="button"
-                onClick={onClick}
-                disabled={m.doPeriodo.length === 0}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3 transition-opacity',
-                  m.doPeriodo.length > 0 ? 'cursor-pointer hover:opacity-70' : 'cursor-default',
-                )}
-              >
-                <span className="text-3xl font-bold text-accent">{m.doPeriodo.length}</span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/80">
-                  <CalendarCheck className="h-3 w-3 text-accent" /> Reuniões agendadas
-                </span>
-                <span className="text-[10px] text-foreground/40">total no período</span>
-              </button>
-            )}
-          </ClickableStat>
+          <div className="flex flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
+            <span className="text-3xl font-bold text-accent">{dados ? agendadas : '…'}</span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/80">
+              <CalendarCheck className="h-3 w-3 text-accent" /> Reuniões agendadas
+            </span>
+            <span className="text-[10px] text-foreground/40">total no período</span>
+          </div>
           <Anel
             icone={<UserCheck className="h-3 w-3" />}
             rotulo="% de comparecimento"
             cor="#06B6D4"
             valor={m.comparecimento}
-            detalhe={`${m.compareceu.length} de ${m.comDesfecho}`}
-            matches={m.compareceu}
-            boards={boards}
-            onOpenLead={onOpenLead}
+            detalhe={`${compareceu} de ${comDesfecho}`}
           />
           <Anel
             icone={<TrendingUp className="h-3 w-3" />}
             rotulo="% de conversão"
             cor="#22C55E"
             valor={m.conversao}
-            detalhe={`${m.venda.length} venda(s) de ${m.compareceu.length} realizadas`}
-            matches={m.venda}
-            boards={boards}
-            onOpenLead={onOpenLead}
+            detalhe={`${vendas} venda(s) de ${compareceu} realizadas`}
           />
         </div>
         <ul className="mt-3 space-y-0.5 text-[11px] leading-snug text-foreground/45">

@@ -1536,6 +1536,42 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     );
   });
 
+  // GET /api/closer-metrics?from=YYYY-MM-DD&to=YYYY-MM-DD — as métricas do CLOSER. É a MESMA conta do Arthur: as leads
+  // do closer são as que o SDR agendou, então reunião agendada (teve reunião marcada e segue no funil), compareceu
+  // (chegou em proposta/follow-up/venda) e no-show saem das mesmas regras e das mesmas leads — só que somadas
+  // aqui, sem depender de quais quadros quem olha pode abrir. Só devolve contagens, nenhum dado de lead.
+  app.get<{ Querystring: { from?: string; to?: string } }>(
+    '/api/closer-metrics',
+    { onRequest: [app.authenticate] },
+    async (req) => {
+      const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from ?? '') ? req.query.from! : '1970-01-01';
+      const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to ?? '') ? req.query.to! : '2999-12-31';
+      const foiAgendada = `(
+        (lr.status = ANY($1) OR EXISTS (
+          SELECT 1 FROM lead_events le WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($1)
+        ))
+        AND (lr.status = ANY($1) OR lr.status = ANY($2) OR lr.status = 'Perdidos')
+      )`;
+      const compareceu = `(lr.status = ANY($2) OR EXISTS (
+        SELECT 1 FROM lead_events le WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($2)
+      ))`;
+      const [r] = await query<{ agendadas: number; compareceu: number; no_show: number; vendas: number }>(
+        `SELECT
+           count(*) FILTER (WHERE ${foiAgendada})::int AS agendadas,
+           count(*) FILTER (WHERE ${foiAgendada} AND ${compareceu})::int AS compareceu,
+           count(*) FILTER (WHERE lr.status = 'Reunião não comparecida')::int AS no_show,
+           count(*) FILTER (WHERE lr.status = $5)::int AS vendas
+         FROM lead_rows lr
+         JOIN lead_boards lb ON lb.id = lr.board_id
+         WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL
+           AND COALESCE(lr.sdr, '') <> ''
+           AND (lr.created_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $3::date AND $4::date`,
+        [REUNIAO_STATUSES, POS_REUNIAO_STATUSES, from, to, MILESTONE_VENDIDO]
+      );
+      return r;
+    }
+  );
+
   // GET /api/lead-notes?lead_row_id=xxx — bloco de anotações/atualizações do lead
   app.get<{ Querystring: { lead_row_id?: string } }>(
     '/api/lead-notes',

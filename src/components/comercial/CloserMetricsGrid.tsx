@@ -111,7 +111,7 @@ export function CloserMetricsGrid({ rows, boards, onOpenLead, closer = 'Luis' }:
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
           <ClickableStat matches={m.doPeriodo} boards={boards} onOpenLead={onOpenLead}>
             {(onClick, ref) => (
               <button
@@ -152,22 +152,11 @@ export function CloserMetricsGrid({ rows, boards, onOpenLead, closer = 'Luis' }:
             boards={boards}
             onOpenLead={onOpenLead}
           />
-          <Anel
-            icone={<UserX className="h-3 w-3" />}
-            rotulo="% de no-show"
-            cor="#EF4444"
-            valor={m.noShowPct}
-            detalhe={`${m.noShow.length} de ${m.comDesfecho}`}
-            matches={m.noShow}
-            boards={boards}
-            onOpenLead={onOpenLead}
-          />
         </div>
         <ul className="mt-3 space-y-0.5 text-[11px] leading-snug text-foreground/45">
           <li><strong className="font-semibold text-foreground/60">Reuniões agendadas:</strong> o total no período.</li>
           <li><strong className="font-semibold text-foreground/60">% de comparecimento:</strong> realizadas ÷ (realizadas + no-show).</li>
           <li><strong className="font-semibold text-foreground/60">% de conversão:</strong> vendas ÷ reuniões realizadas.</li>
-          <li><strong className="font-semibold text-foreground/60">% de no-show:</strong> no-show ÷ (realizadas + no-show).</li>
           <li className="pt-1">Reunião realizada = a lead chegou em Proposta enviada, Follow-up ou Vendido. Quem ainda está em “Reunião agendada” não entra nas porcentagens.</li>
         </ul>
       </div>

@@ -988,6 +988,107 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS qualificacao JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS lead_raw JSONB`);
 
+  // Inteligência de Tráfego: IDs do Meta em colunas próprias (antes só existiam dentro de
+  // lead_raw) pra cruzar com o gasto por anúncio sem consultar JSON em todo relatório.
+  // nicho / motivo_desqualificacao são preenchidos depois (nome da campanha, aba Tráfego, SDR).
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS meta_campaign_id TEXT`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS meta_adset_id TEXT`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS meta_ad_id TEXT`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS nicho TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS motivo_desqualificacao TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_meta_campaign_idx ON lead_rows(meta_campaign_id) WHERE meta_campaign_id IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_meta_adset_idx ON lead_rows(meta_adset_id) WHERE meta_adset_id IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_meta_ad_idx ON lead_rows(meta_ad_id) WHERE meta_ad_id IS NOT NULL`);
+  // Backfill dos leads antigos a partir do lead_raw. Idempotente: só toca em linha ainda sem ad_id.
+  await pool.query(`UPDATE lead_rows SET
+      meta_campaign_id = NULLIF(lead_raw->>'campaign_id', ''),
+      meta_adset_id = NULLIF(lead_raw->>'adset_id', ''),
+      meta_ad_id = NULLIF(lead_raw->>'ad_id', '')
+    WHERE lead_raw IS NOT NULL AND meta_ad_id IS NULL AND meta_campaign_id IS NULL
+      AND (lead_raw->>'ad_id' <> '' OR lead_raw->>'campaign_id' <> '')`);
+
+  // Gasto do Meta por anúncio por dia (preenchido pelo metaInsightsSync, fase 1B) + catálogo.
+  await pool.query(`CREATE TABLE IF NOT EXISTS meta_campaigns (
+    campaign_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    objective TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    daily_budget NUMERIC(14,2),
+    nicho TEXT NOT NULL DEFAULT '',
+    papel TEXT NOT NULL DEFAULT '',
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS meta_adsets (
+    adset_id TEXT PRIMARY KEY,
+    campaign_id TEXT,
+    name TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    daily_budget NUMERIC(14,2),
+    optimization_goal TEXT NOT NULL DEFAULT '',
+    targeting JSONB,
+    nicho TEXT NOT NULL DEFAULT '',
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS meta_ads (
+    ad_id TEXT PRIMARY KEY,
+    adset_id TEXT,
+    campaign_id TEXT,
+    name TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    formato TEXT NOT NULL DEFAULT '',
+    thumbnail_url TEXT NOT NULL DEFAULT '',
+    titulo TEXT NOT NULL DEFAULT '',
+    texto TEXT NOT NULL DEFAULT '',
+    preview_url TEXT NOT NULL DEFAULT '',
+    first_day DATE,
+    last_day DATE,
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS meta_ad_insights_daily (
+    dia DATE NOT NULL,
+    ad_id TEXT NOT NULL,
+    adset_id TEXT,
+    campaign_id TEXT,
+    spend NUMERIC(14,2) NOT NULL DEFAULT 0,
+    impressions BIGINT NOT NULL DEFAULT 0,
+    reach BIGINT NOT NULL DEFAULT 0,
+    frequency NUMERIC(8,3) NOT NULL DEFAULT 0,
+    link_clicks BIGINT NOT NULL DEFAULT 0,
+    ctr NUMERIC(8,4) NOT NULL DEFAULT 0,
+    cpm NUMERIC(14,4) NOT NULL DEFAULT 0,
+    meta_leads INT NOT NULL DEFAULT 0,
+    video_3s BIGINT NOT NULL DEFAULT 0,
+    video_p25 BIGINT NOT NULL DEFAULT 0,
+    video_p50 BIGINT NOT NULL DEFAULT 0,
+    video_p75 BIGINT NOT NULL DEFAULT 0,
+    video_p100 BIGINT NOT NULL DEFAULT 0,
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (dia, ad_id)
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS meta_insights_campaign_idx ON meta_ad_insights_daily(campaign_id, dia)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS meta_insights_adset_idx ON meta_ad_insights_daily(adset_id, dia)`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS traffic_alerts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    rule TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (level IN ('critico','atencao','oportunidade')),
+    entity_type TEXT NOT NULL DEFAULT '',
+    entity_id TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '',
+    sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at TIMESTAMPTZ
+  )`);
+  // Um alerta aberto por regra+entidade: a regra não repete todo dia, fica aberto até resolver.
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS traffic_alerts_open_uniq
+    ON traffic_alerts(rule, entity_type, entity_id) WHERE resolved_at IS NULL`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS traffic_ai_reviews (
+    dia DATE PRIMARY KEY,
+    texto TEXT NOT NULL DEFAULT '',
+    sugestoes JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+
   // Assinaturas de Web Push (PWA) — um dispositivo assina automaticamente ao logar (ver
   // usePushSubscription no front), sem botão de opt-in. Quem de fato recebe cada notificação é
   // decidido na hora do envio (ex.: só quem tem acesso ao quadro do lead), não aqui — por isso

@@ -213,6 +213,11 @@ export async function webhookRoutes(app: FastifyInstance) {
       const campanha = typeof raw.campaign_name === 'string' ? raw.campaign_name : '';
       const conjunto = typeof raw.adset_name === 'string' ? raw.adset_name : '';
       const origemCampanha = [campanha, conjunto].filter(Boolean).join(' / ');
+      // IDs do Meta podem chegar como string ou número; vazio vira NULL (chave do cruzamento com o gasto).
+      const metaId = (v: unknown): string | null => {
+        const s = typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '';
+        return s || null;
+      };
 
       // Quadro de destino: por padrão o primeiro quadro da aba "Novos Leads" (o quadro de entrada
       // do funil comercial) — dá pra apontar pra outro quadro específico via META_LEADS_BOARD_ID,
@@ -252,14 +257,16 @@ export async function webhookRoutes(app: FastifyInstance) {
         `INSERT INTO lead_rows (
           board_id, nome, empresa, telefone, position,
           meta_lead_id, origem_campanha, qualificacao, lead_raw,
-          dor_cliente, numero_atendentes, tipo
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          dor_cliente, numero_atendentes, tipo,
+          meta_campaign_id, meta_adset_id, meta_ad_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         ON CONFLICT (meta_lead_id) WHERE meta_lead_id IS NOT NULL DO NOTHING
         RETURNING *`,
         [
           board.id, req.body.nome ?? '', empresa, req.body.telefone ?? '', (max ?? -1) + 1,
           leadId, origemCampanha, JSON.stringify(qualificacao), JSON.stringify(raw),
           req.body.dor_cliente ?? '', req.body.numero_atendentes ?? '', req.body.tipo ?? '',
+          metaId(raw.campaign_id), metaId(raw.adset_id), metaId(raw.ad_id),
         ]
       );
 

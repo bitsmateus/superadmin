@@ -67,41 +67,49 @@ export function SocialMediaPage() {
         ) : visiveis.length === 0 ? (
           <p className="py-12 text-center text-sm text-foreground/50">Nenhum cliente encontrado.</p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {visiveis.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => navegar(`/clientesnxdigital/socialmedia/${c.id}`)}
-                className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md"
-              >
-                <span className="flex items-center gap-3">
-                  <AvatarCliente nome={c.nome_empresa} logoUrl={c.logo_url} className="h-10 w-10 rounded-xl text-xs" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-foreground">{c.nome_empresa}</span>
-                    <span className="block truncate text-xs text-foreground/50">{c.segmento || '—'}</span>
-                  </span>
-                </span>
-                <span className="grid grid-cols-3 gap-2 text-center">
-                  {[
-                    { n: c.para_producao, rotulo: 'para produzir', cor: 'text-warning' },
-                    { n: c.em_producao, rotulo: 'em produção', cor: 'text-accent' },
-                    { n: c.prontas, rotulo: 'prontas', cor: 'text-success' },
-                  ].map((x) => (
-                    <span key={x.rotulo} className="rounded-lg bg-elevate/[0.04] px-1 py-1.5">
-                      <span className={cn('block text-base font-semibold tabular-nums', x.n > 0 ? x.cor : 'text-foreground/30')}>{x.n}</span>
-                      <span className="block text-[10px] text-foreground/45">{x.rotulo}</span>
+          <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+            {/* Cabeçalho da lista (só de tablet pra cima). */}
+            <div className="hidden grid-cols-[minmax(0,2fr)_90px_90px_90px_minmax(0,1.4fr)_110px] items-center gap-3 border-b border-line bg-elevate/[0.03] px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-foreground/45 md:grid">
+              <span>Cliente</span>
+              <span className="text-center">Para produzir</span>
+              <span className="text-center">Em produção</span>
+              <span className="text-center">Prontas</span>
+              <span>Editando</span>
+              <span className="text-right">Arquivos/links</span>
+            </div>
+            <ul className="divide-y divide-line">
+              {visiveis.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => navegar(`/clientesnxdigital/socialmedia/${c.id}`)}
+                    className="grid w-full grid-cols-3 items-center gap-x-3 gap-y-2 px-4 py-3 text-left transition-colors hover:bg-elevate/[0.03] md:grid-cols-[minmax(0,2fr)_90px_90px_90px_minmax(0,1.4fr)_110px]"
+                  >
+                    <span className="col-span-3 flex min-w-0 items-center gap-3 md:col-span-1">
+                      <AvatarCliente nome={c.nome_empresa} logoUrl={c.logo_url} className="h-9 w-9 rounded-xl text-xs" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-foreground">{c.nome_empresa}</span>
+                        <span className="block truncate text-xs text-foreground/50">{c.segmento || '—'}</span>
+                      </span>
                     </span>
-                  ))}
-                </span>
-                <span className="flex items-center justify-between gap-2 text-xs text-foreground/55">
-                  <span className="min-w-0 truncate">
-                    {c.editores.length > 0 ? `Editando: ${c.editores.join(', ')}` : 'Ninguém editando'}
-                  </span>
-                  <span className="shrink-0">{c.materiais} arquivo(s)/link(s)</span>
-                </span>
-              </button>
-            ))}
+                    {[
+                      { n: c.para_producao, rotulo: 'para produzir', cor: 'text-warning' },
+                      { n: c.em_producao, rotulo: 'em produção', cor: 'text-accent' },
+                      { n: c.prontas, rotulo: 'prontas', cor: 'text-success' },
+                    ].map((x) => (
+                      <span key={x.rotulo} className="text-center">
+                        <span className={cn('block text-base font-semibold tabular-nums', x.n > 0 ? x.cor : 'text-foreground/25')}>{x.n}</span>
+                        <span className="block text-[10px] text-foreground/45 md:hidden">{x.rotulo}</span>
+                      </span>
+                    ))}
+                    <span className="col-span-2 min-w-0 truncate text-xs text-foreground/60 md:col-span-1">
+                      {c.editores.length > 0 ? c.editores.join(', ') : <span className="text-foreground/35">Ninguém editando</span>}
+                    </span>
+                    <span className="text-right text-xs text-foreground/55">{c.materiais}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>

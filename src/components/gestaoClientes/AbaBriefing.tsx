@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ExternalLink, Loader2, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Eye, EyeOff, KeyRound, Loader2, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
@@ -8,13 +8,7 @@ import { LogoDoCliente } from '@/components/gestaoClientes/LogoDoCliente'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import { gestaoClientes, type GcBriefing, type GcClienteLista } from '@/services/gestaoClientes'
 
-interface Rascunho {
-  site: string
-  instagram: string
-  whatsapp: string
-  extras: { rotulo: string; valor: string }[]
-  perguntas: { pergunta: string; resposta: string }[]
-}
+type Rascunho = GcBriefing
 
 const comoLink = (v: string) => (/^https?:\/\//i.test(v.trim()) ? v.trim() : `https://${v.trim()}`)
 
@@ -23,6 +17,41 @@ const comoLink = (v: string) => (/^https?:\/\//i.test(v.trim()) ? v.trim() : `ht
  * perguntas e respostas do briefing, preenchidas à medida que o cliente responde. O número é o WhatsApp do
  * cadastro, então muda nos dois lugares.
  */
+/** Campo de senha: escondido por padrão, com o olho pra mostrar e um botão pra copiar. */
+function CampoSenha({ rotulo, valor, onChange }: { rotulo: string; valor: string; onChange: (v: string) => void }) {
+  const [visivel, setVisivel] = React.useState(false)
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(valor)
+      toast.success('Senha copiada')
+    } catch {
+      toast.error('Não consegui copiar')
+    }
+  }
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-foreground/70">{rotulo}</span>
+      <span className="relative block">
+        <input
+          type={visivel ? 'text' : 'password'}
+          autoComplete="new-password"
+          value={valor}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-10 w-full rounded-lg border border-line bg-surface pl-3 pr-[4.5rem] text-sm text-foreground outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+        />
+        <span className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+          <button type="button" onClick={() => setVisivel((v) => !v)} className="rounded-md p-1.5 text-foreground/40 hover:text-foreground" aria-label={visivel ? 'Esconder a senha' : 'Mostrar a senha'}>
+            {visivel ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+          <button type="button" disabled={!valor} onClick={() => void copiar()} className="rounded-md p-1.5 text-foreground/40 hover:text-foreground disabled:opacity-30" aria-label="Copiar a senha">
+            <Copy className="h-4 w-4" />
+          </button>
+        </span>
+      </span>
+    </label>
+  )
+}
+
 export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onMudou: () => Promise<void> | void }) {
   const [gravado, setGravado] = React.useState<GcBriefing | null>(null)
   const [r, setR] = React.useState<Rascunho | null>(null)
@@ -30,8 +59,8 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
 
   const aplicar = React.useCallback((b: GcBriefing) => {
     setGravado(b)
-    setR({ site: b.site, instagram: b.instagram, whatsapp: cliente.whatsapp_contato ?? '', extras: b.extras, perguntas: b.perguntas })
-  }, [cliente.whatsapp_contato])
+    setR(b)
+  }, [])
 
   React.useEffect(() => {
     gestaoClientes
@@ -48,22 +77,16 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
     })
   const sujo =
     !!r && !!gravado &&
-    limpo(r) !== limpo({ site: gravado.site, instagram: gravado.instagram, whatsapp: cliente.whatsapp_contato ?? '', extras: gravado.extras, perguntas: gravado.perguntas })
+    limpo(r) !== limpo(gravado)
   useAvisoAoSair(sujo)
 
   const salvar = async () => {
     if (!r) return
     setSalvando(true)
     try {
-      const salvo = await gestaoClientes.salvarBriefing(cliente.id, {
-        site: r.site, instagram: r.instagram, extras: r.extras, perguntas: r.perguntas,
-      })
-      if (r.whatsapp !== (cliente.whatsapp_contato ?? '')) {
-        await gestaoClientes.atualizar(cliente.id, { whatsapp_contato: r.whatsapp })
-        await onMudou()
-      }
+      const salvo = await gestaoClientes.salvarBriefing(cliente.id, r)
       setGravado(salvo)
-      setR((x) => (x ? { ...x, site: salvo.site, instagram: salvo.instagram, extras: salvo.extras, perguntas: salvo.perguntas } : x))
+      setR(salvo)
       toast.success('Briefing salvo')
     } catch (err) {
       toast.error('Falha ao salvar: ' + (err as Error).message)
@@ -96,8 +119,24 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
               </a>
             )}
           </div>
-          <Input label="Número / WhatsApp" value={r.whatsapp} onChange={(e) => setR({ ...r, whatsapp: e.target.value })} placeholder="(84) 99999-9999" inputMode="tel" />
+          <Input label="WhatsApp pra receber os leads" value={r.whatsapp_leads} onChange={(e) => setR({ ...r, whatsapp_leads: e.target.value })} placeholder="(84) 99999-9999" inputMode="tel" />
+        </div>
+
+        <p className="mb-1.5 mt-5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-foreground/45">
+          <KeyRound className="h-3.5 w-3.5" /> Acessos <span className="normal-case text-foreground/35">· só a equipe vê</span>
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
           <Input label="Instagram" value={r.instagram} onChange={(e) => setR({ ...r, instagram: e.target.value })} placeholder="@empresa" />
+          <CampoSenha rotulo="Senha do Instagram" valor={r.instagram_senha} onChange={(v) => setR({ ...r, instagram_senha: v })} />
+          <Input label="Facebook (login ou página)" value={r.facebook} onChange={(e) => setR({ ...r, facebook: e.target.value })} placeholder="login ou link da página" />
+          <CampoSenha rotulo="Senha do Facebook" valor={r.facebook_senha} onChange={(v) => setR({ ...r, facebook_senha: v })} />
+        </div>
+
+        <p className="mb-1.5 mt-5 text-xs font-medium uppercase tracking-wide text-foreground/45">CRM utilizado</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Input label="CRM" value={r.crm} onChange={(e) => setR({ ...r, crm: e.target.value })} placeholder="Ex.: RD Station, Kommo, Bitrix…" />
+          <Input label="E-mail do CRM" value={r.crm_email} onChange={(e) => setR({ ...r, crm_email: e.target.value })} placeholder="login@empresa.com" inputMode="email" />
+          <CampoSenha rotulo="Senha do CRM" valor={r.crm_senha} onChange={(v) => setR({ ...r, crm_senha: v })} />
         </div>
 
         <p className="mb-1.5 mt-5 text-xs font-medium uppercase tracking-wide text-foreground/45">Outras informações</p>

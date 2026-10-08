@@ -499,6 +499,14 @@ const TABELAS = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  // Briefing: WhatsApp que recebe os leads, acessos (Instagram, Facebook, CRM). Só a equipe vê; nunca vai pro portal.
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS whatsapp_leads TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS instagram_senha TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS facebook TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS facebook_senha TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS crm TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS crm_email TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS crm_senha TEXT NOT NULL DEFAULT ''`,
   `CREATE INDEX IF NOT EXISTS gc_social_materiais_cliente_idx ON gc_social_materiais (gc_cliente_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS gc_social_producao_cliente_idx ON gc_social_producao (gc_cliente_id, status)`,
   // ---------------------------------------------------------------- briefing do cliente

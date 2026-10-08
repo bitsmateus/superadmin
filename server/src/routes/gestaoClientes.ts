@@ -2367,36 +2367,38 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       .filter((x) => campos.some((c) => x[c].trim() !== ''));
   };
 
+  const CAMPOS_BRIEFING = ['site', 'whatsapp_leads', 'instagram', 'instagram_senha', 'facebook', 'facebook_senha', 'crm', 'crm_email', 'crm_senha'] as const;
+
   app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/briefing', autenticado, async (req) => {
-    const b = await queryOne<{ site: string; instagram: string; extras: unknown; perguntas: unknown }>(
-      'SELECT site, instagram, extras, perguntas FROM gc_briefing WHERE gc_cliente_id = $1',
+    const b = await queryOne<Record<string, unknown>>(
+      `SELECT ${CAMPOS_BRIEFING.join(', ')}, extras, perguntas FROM gc_briefing WHERE gc_cliente_id = $1`,
       [req.params.id]
     );
     return {
-      site: b?.site ?? '',
-      instagram: b?.instagram ?? '',
+      ...Object.fromEntries(CAMPOS_BRIEFING.map((c) => [c, String(b?.[c] ?? '')])),
       extras: limparLista<{ rotulo: string; valor: string }>(b?.extras, ['rotulo', 'valor'], 40),
       perguntas: limparLista<{ pergunta: string; resposta: string }>(b?.perguntas, ['pergunta', 'resposta'], 200),
     };
   });
 
-  app.put<{
-    Params: { id: string };
-    Body: { site?: string; instagram?: string; extras?: unknown; perguntas?: unknown };
-  }>('/api/gc/clientes/:id/briefing', autenticado, async (req) => {
+  app.put<{ Params: { id: string }; Body: Record<string, unknown> }>('/api/gc/clientes/:id/briefing', autenticado, async (req) => {
     const { sub } = req.user as { sub: string };
     const b = req.body ?? {};
+    const campos = Object.fromEntries(CAMPOS_BRIEFING.map((c) => [c, String(b[c] ?? '').trim().slice(0, 500)]));
     const extras = limparLista<{ rotulo: string; valor: string }>(b.extras, ['rotulo', 'valor'], 40);
     const perguntas = limparLista<{ pergunta: string; resposta: string }>(b.perguntas, ['pergunta', 'resposta'], 200);
+    const colunas = CAMPOS_BRIEFING.join(', ');
+    const marcadores = CAMPOS_BRIEFING.map((_, i) => `$${i + 2}`).join(',');
+    const n = CAMPOS_BRIEFING.length;
     await query(
-      `INSERT INTO gc_briefing (gc_cliente_id, site, instagram, extras, perguntas, atualizado_por)
-       VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6)
-       ON CONFLICT (gc_cliente_id) DO UPDATE SET site = EXCLUDED.site, instagram = EXCLUDED.instagram,
+      `INSERT INTO gc_briefing (gc_cliente_id, ${colunas}, extras, perguntas, atualizado_por)
+       VALUES ($1, ${marcadores}, $${n + 2}::jsonb, $${n + 3}::jsonb, $${n + 4})
+       ON CONFLICT (gc_cliente_id) DO UPDATE SET
+         ${CAMPOS_BRIEFING.map((c) => `${c} = EXCLUDED.${c}`).join(', ')},
          extras = EXCLUDED.extras, perguntas = EXCLUDED.perguntas, atualizado_por = EXCLUDED.atualizado_por, updated_at = NOW()`,
-      [req.params.id, String(b.site ?? '').trim().slice(0, 500), String(b.instagram ?? '').trim().slice(0, 200),
-       JSON.stringify(extras), JSON.stringify(perguntas), sub]
+      [req.params.id, ...CAMPOS_BRIEFING.map((c) => campos[c]), JSON.stringify(extras), JSON.stringify(perguntas), sub]
     );
-    return { site: String(b.site ?? '').trim(), instagram: String(b.instagram ?? '').trim(), extras, perguntas };
+    return { ...campos, extras, perguntas };
   });
 
   // ------------------------------------------------------------------ relatórios

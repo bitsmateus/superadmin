@@ -178,7 +178,15 @@ export interface GcSocialProducao {
 
 export interface GcBriefing {
   site: string
+  /** O WhatsApp que recebe os leads das campanhas. */
+  whatsapp_leads: string
   instagram: string
+  instagram_senha: string
+  facebook: string
+  facebook_senha: string
+  crm: string
+  crm_email: string
+  crm_senha: string
   extras: { rotulo: string; valor: string }[]
   perguntas: { pergunta: string; resposta: string }[]
 }

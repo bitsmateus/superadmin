@@ -1555,8 +1555,9 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const compareceu = `(lr.status = ANY($2) OR EXISTS (
         SELECT 1 FROM lead_events le WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($2)
       ))`;
-      const leads = await query<{ id: string; nome: string; status: string; agendada: boolean; compareceu: boolean }>(
+      const leads = await query<{ id: string; nome: string; status: string; agendada: boolean; compareceu: boolean; copia_id: string | null }>(
         `SELECT lr.id, lr.nome, lr.status,
+           (SELECT c.id FROM lead_rows c WHERE c.espelho_origem_id = lr.id AND c.deleted_at IS NULL LIMIT 1) AS copia_id,
            ${foiAgendada} AS agendada,
            ${compareceu} AS compareceu
          FROM lead_rows lr
@@ -1568,7 +1569,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         [REUNIAO_STATUSES, POS_REUNIAO_STATUSES, from, to]
       );
       // Além das contagens, os nomes (e a etapa de hoje) de cada grupo — pra conferir passando o mouse.
-      const item = (l: { id: string; nome: string; status: string }) => ({ id: l.id, nome: l.nome || 'Sem nome', status: l.status });
+      // `abrir_id`: a cópia do CRM do closer quando existe (é a que ele consegue abrir), senão a própria lead.
+      const item = (l: { id: string; nome: string; status: string; copia_id: string | null }) => ({
+        id: l.id, abrir_id: l.copia_id ?? l.id, nome: l.nome || 'Sem nome', status: l.status,
+      });
       const agendadas = leads.filter((l) => l.agendada).map(item);
       const realizadas = leads.filter((l) => l.agendada && l.compareceu).map(item);
       const noShow = leads.filter((l) => l.status === 'Reunião não comparecida').map(item);

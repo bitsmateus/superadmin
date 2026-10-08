@@ -6,13 +6,13 @@ import { api } from '@/services/api'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
-interface ItemDaLista { id: string; nome: string; status: string }
+interface ItemDaLista { id: string; abrir_id: string; nome: string; status: string }
 interface GrupoDaLista { titulo: string; itens: ItemDaLista[] }
 
 /**
  * Passando o mouse (ou tocando, no celular) mostra QUAIS leads formam o número: o nome de cada uma e a etapa em que está hoje.
  */
-function ComLista({ grupos, children, className }: { grupos: GrupoDaLista[]; children: React.ReactNode; className?: string }) {
+function ComLista({ grupos, children, className, onOpenLead }: { grupos: GrupoDaLista[]; children: React.ReactNode; className?: string; onOpenLead?: (id: string) => void }) {
   const [aberto, setAberto] = React.useState(false)
   return (
     <div
@@ -37,9 +37,21 @@ function ComLista({ grupos, children, className }: { grupos: GrupoDaLista[]; chi
               ) : (
                 <ul className="space-y-0.5">
                   {g.itens.map((i) => (
-                    <li key={i.id} className="flex items-baseline justify-between gap-2 rounded-md px-1 py-0.5 text-[11px] hover:bg-elevate/[0.05]">
-                      <span className="min-w-0 truncate text-foreground/85">{i.nome}</span>
-                      <span className="shrink-0 text-foreground/40">{i.status}</span>
+                    <li key={i.id}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          // Abre os dados da lead; não deixa o clique fechar o balão antes.
+                          e.stopPropagation()
+                          onOpenLead?.(i.abrir_id)
+                          setAberto(false)
+                        }}
+                        className="flex w-full items-baseline justify-between gap-2 rounded-md px-1 py-0.5 text-left text-[11px] hover:bg-accent/10"
+                        title="Abrir os dados da lead"
+                      >
+                        <span className="min-w-0 truncate text-foreground/85 underline-offset-2 hover:text-accent hover:underline">{i.nome}</span>
+                        <span className="shrink-0 text-foreground/40">{i.status}</span>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -54,7 +66,8 @@ function ComLista({ grupos, children, className }: { grupos: GrupoDaLista[]; chi
 
 const pct = (n: number) => `${Math.round(n * 100)}%`
 
-function Anel({ icone, rotulo, cor, valor, detalhe, grupos }: {
+function Anel({ icone, rotulo, cor, valor, detalhe, grupos, onOpenLead }: {
+  onOpenLead?: (id: string) => void
   grupos: GrupoDaLista[]
   icone: React.ReactNode
   rotulo: string
@@ -65,7 +78,7 @@ function Anel({ icone, rotulo, cor, valor, detalhe, grupos }: {
 }) {
   const deg = Math.max(0, Math.min(1, valor)) * 360
   return (
-    <ComLista grupos={grupos} className="flex cursor-default flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3">
+    <ComLista grupos={grupos} onOpenLead={onOpenLead} className="flex cursor-default flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3">
       <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(${cor} ${deg}deg, #E5E7EB 0deg)` }}>
         <div className="grid h-[52px] w-[52px] place-items-center rounded-full bg-card text-sm font-bold" style={{ color: cor }}>
           {pct(valor)}
@@ -88,7 +101,7 @@ function Anel({ icone, rotulo, cor, valor, detalhe, grupos }: {
  *  - No-show = o complemento: no-show ÷ (realizadas + no-show);
  *  - Conversão = vendas ÷ reuniões realizadas.
  */
-export function CloserMetricsGrid({ closer = 'Luis' }: {
+export function CloserMetricsGrid({ closer = 'Luis', onOpenLead }: {
   rows?: LeadRow[]
   boards?: LeadBoard[]
   onOpenLead?: (id: string) => void
@@ -142,7 +155,7 @@ export function CloserMetricsGrid({ closer = 'Luis' }: {
         </div>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <ComLista grupos={[{ titulo: 'Reuniões agendadas', itens: lista.agendadas }]} className="flex cursor-default flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
+          <ComLista grupos={[{ titulo: 'Reuniões agendadas', itens: lista.agendadas }]} onOpenLead={onOpenLead} className="flex cursor-default flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
             <span className="text-3xl font-bold text-accent">{dados ? agendadas : '…'}</span>
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/80">
               <CalendarCheck className="h-3 w-3 text-accent" /> Reuniões agendadas
@@ -155,6 +168,7 @@ export function CloserMetricsGrid({ closer = 'Luis' }: {
             cor="#06B6D4"
             valor={m.comparecimento}
             detalhe={`${compareceu} de ${comDesfecho}`}
+            onOpenLead={onOpenLead}
             grupos={[{ titulo: 'Compareceram (reunião realizada)', itens: lista.compareceu }, { titulo: 'Não compareceram', itens: lista.no_show }]}
           />
           <Anel
@@ -163,6 +177,7 @@ export function CloserMetricsGrid({ closer = 'Luis' }: {
             cor="#22C55E"
             valor={m.conversao}
             detalhe={`${vendas} venda(s) de ${compareceu} realizadas`}
+            onOpenLead={onOpenLead}
             grupos={[{ titulo: 'Vendas', itens: lista.vendas }, { titulo: 'Reuniões realizadas', itens: lista.compareceu }]}
           />
         </div>

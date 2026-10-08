@@ -8,6 +8,19 @@ export const brl = (v: number | null | undefined): string =>
 export const num = (v: number | null | undefined): string =>
   v == null ? '—' : new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(v)
 
+/** 1,8x — retorno do primeiro mês (MRR + implantação) por real gasto. */
+export const vezes = (v: number | null | undefined): string =>
+  v == null ? '—' : `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(v)}x`
+
+export const meses = (v: number | null | undefined): string =>
+  v == null ? '—' : v === 0 ? 'já pago' : `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(v)} meses`
+
+export function horas(v: number | null | undefined): string {
+  if (v == null) return '—'
+  if (v < 1) return `${Math.round(v * 60)} min`
+  return v < 48 ? `${v.toFixed(1).replace('.', ',')} h` : `${(v / 24).toFixed(1).replace('.', ',')} dias`
+}
+
 export function diaCurto(iso: string): string {
   const [, m, d] = iso.split('-')
   return `${d}/${m}`

@@ -1,6 +1,7 @@
 import { query, queryOne } from '../db.js';
 import { sendToSupportGroupId } from './supportGroup.js';
-import { brl, dataSp, rankingTrafego, totaisTrafego } from './trafegoMetricas.js';
+import { brl, dataSp, desqualificacaoPorCampanha, leadsSemContato, rankingTrafego, totaisTrafego } from './trafegoMetricas.js';
+import { papelDe } from './trafegoNicho.js';
 
 /**
  * Regras de alerta de tráfego (valores iniciais do documento; ajustar na calibração).
@@ -23,6 +24,12 @@ const LIM = {
   orcamentoBaixo: 60,         // R$/dia: abaixo disso o conjunto é candidato a escalar
   oportunidadeFator: 0.7,
   oportunidadeMinReunioes: 2,
+  desqualificacaoPct: 0.5,    // mais de 50% dos leads da campanha desqualificados em 14 dias
+  desqualificacaoMinLeads: 10,
+  semContatoHoras: 24,
+  testeMinGasto: 300,         // volume mínimo pra um TESTE ter veredito
+  testeMinLeads: 15,
+  testeMinReunioes: 1,
 };
 
 type Nivel = 'critico' | 'atencao' | 'oportunidade';
@@ -36,7 +43,7 @@ async function calcular(): Promise<{ disparos: Disparo[]; regras: string[] }> {
   const horaSp = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }).format(new Date())) % 24;
   const regras = [
     'ad_sem_lead', 'integracao_leads', 'conta_sem_gasto', 'ad_reprovado', 'cpl_alto', 'frequencia_alta',
-    'ctr_caiu', 'sem_agendamento', 'candidato_escalar',
+    'ctr_caiu', 'sem_agendamento', 'candidato_escalar', 'desqualificacao_alta', 'lead_sem_contato', 'teste_bateu_escala',
   ];
 
   // Crítico: anúncio gastou muito hoje e não trouxe lead.
@@ -142,6 +149,38 @@ async function calcular(): Promise<{ disparos: Disparo[]; regras: string[] }> {
         && s.custoReuniao < LIM.oportunidadeFator * conta7.custoReuniao) {
         d.push({ rule: 'candidato_escalar', level: 'oportunidade', entityType: 'conjunto', entityId: s.id,
           message: `${nomeDe(s.nome, s.id)}: ${brl(s.custoReuniao)} por reunião (média ${brl(conta7.custoReuniao)}), verba ${brl(verba)}/dia — candidato a escalar` });
+      }
+    }
+  }
+  // Atenção: mais da metade dos leads da campanha desqualificados em 14 dias (público/oferta errados).
+  for (const c of await desqualificacaoPorCampanha(dataSp(13), hoje)) {
+    if (c.leads >= LIM.desqualificacaoMinLeads && c.desq / c.leads > LIM.desqualificacaoPct) {
+      d.push({ rule: 'desqualificacao_alta', level: 'atencao', entityType: 'campanha', entityId: c.id,
+        message: `${nomeDe(c.nome, c.id)}: ${Math.round((c.desq / c.leads) * 100)}% dos leads desqualificados em 14 dias (${c.desq} de ${c.leads})` });
+    }
+  }
+
+  // Atenção: lead do Meta esperando contato do SDR há mais de 24h (a "janela quente" já passou).
+  const parados = await leadsSemContato(LIM.semContatoHoras);
+  if (parados.total > 0) {
+    d.push({ rule: 'lead_sem_contato', level: 'atencao', entityType: 'conta', entityId: 'conta',
+      message: `${parados.total} lead(s) do Meta sem contato do SDR há mais de ${LIM.semContatoHoras}h (o mais antigo espera ${Math.round(parados.maisAntigoHoras)}h)` });
+  }
+
+  // Oportunidade: campanha de TESTE que atingiu o volume mínimo e já custa menos por reunião que a média de ESCALA.
+  const camps30 = await rankingTrafego('campanha', dataSp(29), hoje);
+  const papeis = new Map((await query<{ campaign_id: string; papel: string }>(`SELECT campaign_id, papel FROM meta_campaigns`)).map((p) => [p.campaign_id, p.papel]));
+  const escala = camps30.filter((c) => papelDe(papeis.get(c.id) ?? '') === 'escala');
+  const gastoEscala = escala.reduce((s, c) => s + c.gasto, 0);
+  const reunioesEscala = escala.reduce((s, c) => s + c.reunioes, 0);
+  if (reunioesEscala > 0) {
+    const mediaEscala = gastoEscala / reunioesEscala;
+    for (const c of camps30) {
+      if (papelDe(papeis.get(c.id) ?? '') !== 'teste') continue;
+      if (c.gasto >= LIM.testeMinGasto && c.leads >= LIM.testeMinLeads && c.reunioes >= LIM.testeMinReunioes
+        && c.custoReuniao != null && c.custoReuniao <= mediaEscala) {
+        d.push({ rule: 'teste_bateu_escala', level: 'oportunidade', entityType: 'campanha', entityId: c.id,
+          message: `${nomeDe(c.nome, c.id)} (teste): ${brl(c.custoReuniao)} por reunião com ${brl(c.gasto)} gastos e ${c.leads} leads — abaixo da média das campanhas de escala (${brl(mediaEscala)}). Pode virar escala` });
       }
     }
   }

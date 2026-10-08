@@ -8,6 +8,7 @@ export type FiltroPapel = 'todos' | 'escala' | 'teste'
 export interface TotaisTrafego {
   gasto: number; leads: number; agendadas: number; reunioes: number; vendas: number
   cpl: number | null; custoReuniao: number | null; cac: number | null
+  mrr: number; implantacao: number; roas: number | null; paybackMeses: number | null
 }
 
 export interface PontoSerie { dia: string; gasto: number; leadsMeta: number; leadsCrm: number; reunioes: number }
@@ -17,6 +18,7 @@ export interface ResumoTrafego {
   atual: TotaisTrafego; anterior: TotaisTrafego
   serie: PontoSerie[]
   ultimaSincronizacao: string | null
+  primeiroContato: { horasMedia: number | null; comContato: number; total: number }
   configurado: boolean
 }
 
@@ -25,6 +27,7 @@ export interface LinhaTrafego {
   gasto: number; impressoes: number; cliquesLink: number; frequencia: number
   leads: number; agendadas: number; reunioes: number; vendas: number
   cpl: number | null; custoAgendamento: number | null; custoReuniao: number | null; cac: number | null
+  mrr: number; implantacao: number; roas: number | null; paybackMeses: number | null
   // metadados (campanha/conjunto/anúncio)
   campaignId?: string | null; adsetId?: string | null
   status?: string; nicho?: string; papel?: string

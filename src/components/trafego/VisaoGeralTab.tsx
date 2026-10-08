@@ -1,7 +1,7 @@
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { trafegoService, type PontoSerie, type TotaisTrafego } from '@/services/trafego'
-import { Estado, Painel, brl, diaCurto, num, useCarregar } from '@/components/trafego/format'
+import { Estado, Painel, brl, diaCurto, horas, meses, num, useCarregar, vezes } from '@/components/trafego/format'
 
 interface CardDef {
   label: string
@@ -20,6 +20,9 @@ const CARDS: CardDef[] = [
   { label: 'Custo por reunião', valor: (t) => t.custoReuniao, fmt: brl, menorMelhor: true },
   { label: 'Vendas', valor: (t) => t.vendas, fmt: num },
   { label: 'CAC', valor: (t) => t.cac, fmt: brl, menorMelhor: true },
+  { label: 'MRR novo', valor: (t) => t.mrr, fmt: brl },
+  { label: 'ROAS (1º mês)', valor: (t) => t.roas, fmt: vezes },
+  { label: 'Payback', valor: (t) => t.paybackMeses, fmt: meses, menorMelhor: true },
 ]
 
 function Variacao({ atual, anterior, menorMelhor }: { atual: number | null; anterior: number | null; menorMelhor?: boolean }) {
@@ -90,11 +93,20 @@ export function VisaoGeralTab({ de, ate, versao }: { de: string; ate: string; ve
               </div>
             ))}
           </div>
+          <div className="rounded-xl border border-line bg-card p-3">
+            <p className="text-xs text-foreground/50">Tempo até o 1º contato do SDR</p>
+            <p className="mt-1 text-xl font-semibold text-foreground">{horas(dados.primeiroContato.horasMedia)}</p>
+            <p className="text-[11px] text-foreground/40">
+              {dados.primeiroContato.comContato} de {dados.primeiroContato.total} leads do Meta já foram tocados
+            </p>
+          </div>
           <Painel title="Gasto e leads por dia">
             <GraficoSerie serie={dados.serie} />
           </Painel>
           <p className="text-[11px] text-foreground/35">
             Leads, agendamentos, reuniões e vendas contam só leads vindos do Meta que ENTRARAM no período (por safra).
+            MRR e implantação vêm da aba Vendas, só de vendas ligadas ao lead de origem. ROAS = (MRR + implantação) ÷ gasto; payback = meses de MRR para pagar o gasto, descontada a implantação.
+            Primeiro contato = primeira mudança de status, dia de contato, SDR ou Atualização no lead.
             {dados.ultimaSincronizacao && ` Gasto atualizado em ${new Date(dados.ultimaSincronizacao).toLocaleString('pt-BR')}.`}
           </p>
         </div>

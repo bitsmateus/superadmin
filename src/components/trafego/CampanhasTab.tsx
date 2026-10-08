@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
 import { trafegoService, type FiltroPapel, type LinhaTrafego } from '@/services/trafego'
-import { Estado, SeloBadge, brl, num, seloDe, useCarregar } from '@/components/trafego/format'
+import { Estado, SeloBadge, brl, meses, num, seloDe, useCarregar, vezes } from '@/components/trafego/format'
 
 type Alvo = { chave: 'ad_id' | 'adset_id' | 'campaign_id'; id: string; nome: string }
 
@@ -42,7 +42,7 @@ export function LeadsModal({ alvo, onClose }: { alvo: Alvo | null; onClose: () =
   )
 }
 
-const COLS = ['Gasto', 'Leads', 'CPL', 'Agend.', 'Reun.', 'Custo/reun.', 'Vendas', 'CAC']
+const COLS = ['Gasto', 'Leads', 'CPL', 'Agend.', 'Reun.', 'Custo/reun.', 'Vendas', 'CAC', 'MRR', 'ROAS', 'Payback']
 
 function Celulas({ l }: { l: LinhaTrafego }) {
   return (
@@ -55,6 +55,9 @@ function Celulas({ l }: { l: LinhaTrafego }) {
       <td className="px-2 text-right font-medium tabular-nums">{brl(l.custoReuniao)}</td>
       <td className="px-2 text-right tabular-nums">{num(l.vendas)}</td>
       <td className="px-2 text-right tabular-nums">{brl(l.cac)}</td>
+      <td className="px-2 text-right tabular-nums">{brl(l.mrr)}</td>
+      <td className="px-2 text-right tabular-nums">{vezes(l.roas)}</td>
+      <td className="px-2 text-right tabular-nums">{meses(l.paybackMeses)}</td>
     </>
   )
 }
@@ -100,7 +103,7 @@ export function CampanhasTab({ de, ate, papel, versao }: { de: string; ate: stri
   return (
     <Estado carregando={camp.carregando} erro={camp.erro}>
       <div className="overflow-x-auto rounded-xl border border-line bg-card">
-        <table className="w-full min-w-[900px] text-sm">
+        <table className="w-full min-w-[1150px] text-sm">
           <thead className="border-b border-line text-left text-xs text-foreground/50">
             <tr>
               <th className="px-3 py-2">Campanha › conjunto › anúncio (melhor custo por reunião primeiro)</th>

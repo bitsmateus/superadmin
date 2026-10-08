@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query, queryOne } from '../db.js';
 import {
-  dataSp, rankingTrafego, totaisTrafego, type LinhaTrafego, type NivelTrafego,
+  dataSp, rankingTrafego, tempoPrimeiroContato, totaisTrafego, type LinhaTrafego, type NivelTrafego,
 } from '../lib/trafegoMetricas.js';
 import { metaAdsConfig, sincronizarCatalogoMeta, sincronizarInsightsMeta } from '../lib/metaInsights.js';
 import { avaliarAlertasTrafego } from '../lib/trafficAlerts.js';
@@ -98,17 +98,21 @@ function agrupar(linhas: LinhaRica[], chave: (l: LinhaRica) => string): LinhaTra
     const g = grupos.get(k) ?? {
       id: k, nome: k, gasto: 0, impressoes: 0, cliquesLink: 0, frequencia: 0, leads: 0, agendadas: 0,
       reunioes: 0, vendas: 0, cpl: null, custoAgendamento: null, custoReuniao: null, cac: null,
+      mrr: 0, implantacao: 0, roas: null, paybackMeses: null,
     };
     // frequência agregada ponderada pelas impressões
     g.frequencia = g.impressoes + l.impressoes > 0
       ? (g.frequencia * g.impressoes + l.frequencia * l.impressoes) / (g.impressoes + l.impressoes) : 0;
     g.gasto += l.gasto; g.impressoes += l.impressoes; g.cliquesLink += l.cliquesLink;
     g.leads += l.leads; g.agendadas += l.agendadas; g.reunioes += l.reunioes; g.vendas += l.vendas;
+    g.mrr += l.mrr; g.implantacao += l.implantacao;
     grupos.set(k, g);
   }
   return [...grupos.values()].map((g) => ({
     ...g, cpl: razao(g.gasto, g.leads), custoAgendamento: razao(g.gasto, g.agendadas),
     custoReuniao: razao(g.gasto, g.reunioes), cac: razao(g.gasto, g.vendas),
+    roas: g.gasto > 0 ? (g.mrr + g.implantacao) / g.gasto : null,
+    paybackMeses: g.mrr > 0 ? Math.max(0, g.gasto - g.implantacao) / g.mrr : null,
   }));
 }
 
@@ -150,12 +154,13 @@ export async function trafegoRoutes(app: FastifyInstance) {
     const { de, ate } = periodo(req.query);
     const dias = diasEntre(de, ate);
     const antes = { de: somaDias(de, -dias), ate: somaDias(de, -1) };
-    const [atual, anterior, serie, ultima] = await Promise.all([
+    const [atual, anterior, serie, ultima, contato] = await Promise.all([
       totaisTrafego(de, ate), totaisTrafego(antes.de, antes.ate), serieDiaria(de, ate),
       queryOne<{ synced_at: string | null }>(`SELECT MAX(synced_at) AS synced_at FROM meta_ad_insights_daily`),
+      tempoPrimeiroContato(de, ate),
     ]);
     return {
-      de, ate, atual, anterior, serie, ultimaSincronizacao: ultima?.synced_at ?? null,
+      de, ate, atual, anterior, serie, primeiroContato: contato, ultimaSincronizacao: ultima?.synced_at ?? null,
       configurado: metaAdsConfig() !== null,
     };
   });

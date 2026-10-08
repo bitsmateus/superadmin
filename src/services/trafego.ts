@@ -42,7 +42,12 @@ export interface LeadDoAnuncio {
   id: string; nome: string; empresa: string; status: string; created_at: string; quadro: string; pagina: string
 }
 
-export interface RevisaoIa { dia: string; texto: string; sugestoes: unknown[]; created_at: string }
+export type CategoriaIa = 'verba' | 'criativo' | 'publico' | 'nicho' | 'copy' | 'operacao'
+export interface SugestaoIa {
+  id: string; categoria: CategoriaIa; titulo: string; detalhe: string; dado: string
+  status: 'pendente' | 'aceita' | 'ignorada'
+}
+export interface RevisaoIa { dia: string; texto: string; sugestoes: SugestaoIa[]; created_at: string }
 
 const qs = (p: Record<string, string | undefined>) => {
   const s = new URLSearchParams()
@@ -62,6 +67,9 @@ export const trafegoService = {
   alertas: () => api.get<{ abertos: AlertaTrafego[]; resolvidos: AlertaTrafego[] }>('/api/trafego/alertas'),
   resolverAlerta: (id: string) => api.post(`/api/trafego/alertas/${id}/resolver`),
   ia: () => api.get<{ revisoes: RevisaoIa[] }>('/api/trafego/ia'),
+  rodarIa: () => api.post<{ dia: string; sugestoes: number }>('/api/trafego/ia/rodar'),
+  marcarSugestao: (dia: string, id: string, status: 'aceita' | 'ignorada' | 'pendente') =>
+    api.post(`/api/trafego/ia/${dia}/sugestoes/${id}`, { status }),
   marcarCampanha: (id: string, patch: { nicho?: string; papel?: string }) =>
     api.put(`/api/trafego/campanhas/${id}`, patch),
   sincronizar: () => api.post('/api/trafego/sync'),

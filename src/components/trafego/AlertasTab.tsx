@@ -1,6 +1,8 @@
+import * as React from 'react'
+import { Check, Loader2, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { trafegoService, type AlertaTrafego } from '@/services/trafego'
+import { trafegoService, type AlertaTrafego, type CategoriaIa, type SugestaoIa } from '@/services/trafego'
 import { Estado, Painel, Vazio, useCarregar } from '@/components/trafego/format'
 
 const NIVEL: Record<AlertaTrafego['level'], { rotulo: string; classe: string }> = {
@@ -9,10 +11,49 @@ const NIVEL: Record<AlertaTrafego['level'], { rotulo: string; classe: string }> 
   oportunidade: { rotulo: 'Oportunidade', classe: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' },
 }
 
+const CATEGORIA_IA: Record<CategoriaIa, string> = {
+  verba: 'Verba', criativo: 'Criativo', publico: 'Público', nicho: 'Nicho', copy: 'Copy', operacao: 'Operação',
+}
+
+function CartaoSugestao({ dia, s, onMudou }: { dia: string; s: SugestaoIa; onMudou: () => void }) {
+  const marcar = async (status: 'aceita' | 'ignorada' | 'pendente') => {
+    try { await trafegoService.marcarSugestao(dia, s.id, status); onMudou() }
+    catch (e) { toast.error('Falha ao salvar: ' + (e as Error).message) }
+  }
+  return (
+    <div className={cn('rounded-lg border border-line p-3', s.status !== 'pendente' && 'opacity-60')}>
+      <div className="flex items-start gap-2">
+        <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">{CATEGORIA_IA[s.categoria]}</span>
+        <h4 className="min-w-0 flex-1 text-sm font-medium text-foreground">{s.titulo}</h4>
+        {s.status !== 'pendente' && (
+          <button type="button" onClick={() => void marcar('pendente')} className="shrink-0 text-[11px] text-foreground/40 hover:text-foreground">
+            {s.status === 'aceita' ? 'aceita' : 'ignorada'} · desfazer
+          </button>
+        )}
+      </div>
+      {s.detalhe && <p className="mt-1.5 whitespace-pre-wrap text-sm text-foreground/80">{s.detalhe}</p>}
+      {s.dado && <p className="mt-1.5 text-xs text-foreground/45">Dado: {s.dado}</p>}
+      {s.status === 'pendente' && (
+        <div className="mt-2 flex gap-2">
+          <button type="button" onClick={() => void marcar('aceita')} className="inline-flex items-center gap-1 rounded-md bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/20"><Check className="h-3 w-3" />Aceitar</button>
+          <button type="button" onClick={() => void marcar('ignorada')} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-foreground/50 hover:bg-elevate/[0.06]"><X className="h-3 w-3" />Ignorar</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Alertas abertos (com "Resolver"), os últimos resolvidos e o histórico da varredura da IA. */
 export function AlertasTab({ versao }: { versao: number }) {
   const alertas = useCarregar(() => trafegoService.alertas(), [versao])
   const ia = useCarregar(() => trafegoService.ia(), [versao])
+  const [rodando, setRodando] = React.useState(false)
+  const rodarIa = async () => {
+    setRodando(true)
+    try { const r = await trafegoService.rodarIa(); toast.success(`Varredura pronta: ${r.sugestoes} sugestão(ões)`); ia.recarregar() }
+    catch (e) { toast.error((e as Error).message) }
+    finally { setRodando(false) }
+  }
 
   const resolver = async (id: string) => {
     try { await trafegoService.resolverAlerta(id); alertas.recarregar() }
@@ -56,15 +97,27 @@ export function AlertasTab({ versao }: { versao: number }) {
       </Estado>
 
       <Estado carregando={ia.carregando} erro={ia.erro}>
-        <Painel title="Varredura diária com IA">
+        <Painel
+          title="Varredura diária com IA"
+          action={(
+            <button type="button" onClick={() => void rodarIa()} disabled={rodando}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-foreground/60 hover:bg-elevate/[0.04] disabled:opacity-50">
+              {rodando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Rodar agora
+            </button>
+          )}
+        >
           {ia.dados?.revisoes.length === 0 && (
-            <Vazio>Ainda sem varreduras — a revisão diária com IA entra na próxima fase.</Vazio>
+            <Vazio>Ainda sem varreduras. Ela roda sozinha todo dia às 08h05 (precisa de ANTHROPIC_API_KEY no servidor) — ou clique em "Rodar agora".</Vazio>
           )}
           <div className="space-y-3">
             {ia.dados?.revisoes.map((r) => (
               <div key={r.dia} className="rounded-lg border border-line p-3">
                 <p className="text-xs font-medium text-foreground/50">{r.dia.split('-').reverse().join('/')}</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">{r.texto}</p>
+                <div className="mt-2 space-y-2">
+                  {r.sugestoes.map((s) => <CartaoSugestao key={s.id} dia={r.dia} s={s} onMudou={ia.recarregar} />)}
+                </div>
               </div>
             ))}
           </div>

@@ -5,6 +5,7 @@ import {
 } from '../lib/trafegoMetricas.js';
 import { metaAdsConfig, sincronizarCatalogoMeta, sincronizarInsightsMeta } from '../lib/metaInsights.js';
 import { avaliarAlertasTrafego } from '../lib/trafficAlerts.js';
+import { marcarSugestao, rodarVarreduraIa } from '../lib/trafficAiReview.js';
 
 /**
  * Aba Tráfego (Inteligência de Tráfego, fase 3). Só leitura sobre o cruzamento gasto do Meta x
@@ -229,6 +230,28 @@ export async function trafegoRoutes(app: FastifyInstance) {
   app.get('/api/trafego/ia', opts, async () => ({
     revisoes: await query(`SELECT to_char(dia,'YYYY-MM-DD') AS dia, texto, sugestoes, created_at FROM traffic_ai_reviews ORDER BY dia DESC LIMIT 30`),
   }));
+
+  /** Roda a varredura da IA agora (a de hoje é substituída). */
+  app.post('/api/trafego/ia/rodar', opts, async (_req, reply) => {
+    if (!process.env.ANTHROPIC_API_KEY) return reply.status(400).send({ message: 'ANTHROPIC_API_KEY não configurada no servidor' });
+    try {
+      return await rodarVarreduraIa();
+    } catch (err) {
+      return reply.status(502).send({ message: err instanceof Error ? err.message : 'Falha na varredura da IA' });
+    }
+  });
+
+  /** Aceitar ou ignorar uma sugestão da IA (vira histórico). */
+  app.post<{ Params: { dia: string; id: string }; Body: { status?: string } }>(
+    '/api/trafego/ia/:dia/sugestoes/:id', opts, async (req, reply) => {
+      const status = req.body?.status;
+      if (status !== 'aceita' && status !== 'ignorada' && status !== 'pendente') return reply.status(400).send({ message: 'status inválido' });
+      if (!DATA_RE.test(req.params.dia)) return reply.status(400).send({ message: 'dia inválido' });
+      const ok = await marcarSugestao(req.params.dia, req.params.id, status);
+      if (!ok) return reply.status(404).send({ message: 'Sugestão não encontrada' });
+      return { ok: true };
+    },
+  );
 
   /** Marca nicho e/ou papel (escala/teste) da campanha — o sync do catálogo não sobrescreve. */
   app.put<{ Params: { id: string }; Body: { nicho?: string; papel?: string } }>(

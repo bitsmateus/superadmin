@@ -283,8 +283,9 @@ export function ClientesNxDigitalPage() {
   const [semReuniao, setSemReuniao] = React.useState<GcReuniaoTipo | ''>('')
   // Preferências de exibição, lembradas neste navegador: a lista padrão é a de trabalho — sem a coluna de
   // prioridade e sem os clientes de teste.
-  const [mostrarTeste, setMostrarTeste] = React.useState(() => lerPreferencia('gc:lista:teste'))
-  const [mostrarPrioridade, setMostrarPrioridade] = React.useState(() => lerPreferencia('gc:lista:prioridade'))
+  // Sempre à mostra: sem os seletores "Mostrar clientes de teste" e "Prioridade".
+  const mostrarTeste = true
+  const mostrarPrioridade = true
   const [ordem, setOrdem] = React.useState<Ordem>('fila')
   const [modalAberto, setModalAberto] = React.useState(false)
   const pendencia = useLancamentoPendente()
@@ -604,26 +605,6 @@ export function ClientesNxDigitalPage() {
                   </button>
                 ))}
               </div>
-            )}
-            <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-foreground/55">
-              <input
-                type="checkbox"
-                checked={mostrarTeste}
-                onChange={(e) => escolherPreferencia('gc:lista:teste', e.target.checked, setMostrarTeste)}
-                className="h-3.5 w-3.5 rounded border-line"
-              />
-              Mostrar clientes de teste{foraDosTotais > 0 ? ` (${foraDosTotais})` : ''}
-            </label>
-            {visao === 'tabela' && (
-              <label className="hidden cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-foreground/55 sm:flex">
-                <input
-                  type="checkbox"
-                  checked={mostrarPrioridade}
-                  onChange={(e) => escolherPreferencia('gc:lista:prioridade', e.target.checked, setMostrarPrioridade)}
-                  className="h-3.5 w-3.5 rounded border-line"
-                />
-                Prioridade
-              </label>
             )}
             <label className="flex items-center gap-1.5 text-xs text-foreground/50">
               <select

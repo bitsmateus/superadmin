@@ -380,7 +380,7 @@ export function AbaVisaoGeral({
             <div className="flex items-center justify-between">
               <span className="text-foreground/60">Etapa atual</span>
               <span className="text-right font-medium text-foreground">
-                {detalhe.jornada.find((j) => j.status !== 'concluida')?.nome ?? 'Jornada concluída'}
+                {detalhe.jornada.find((j) => j.status !== 'concluida')?.nome ?? 'Churn'}
               </span>
             </div>
             <div className="flex items-center justify-between">

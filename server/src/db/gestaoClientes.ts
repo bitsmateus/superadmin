@@ -497,7 +497,6 @@ const ETAPAS_PADRAO: { nome: string; itens: string[] }[] = [
   { nome: 'Go-live', itens: ['Primeiros leads chegando', 'Cliente avisado de que está no ar'] },
   { nome: 'Revisão de 30 dias', itens: ['Reunião de 30 dias realizada', 'Ajustes de campanha definidos'] },
   { nome: 'Acompanhamento mensal', itens: ['Relatório do mês publicado', 'Alinhamento mensal com o cliente'] },
-  { nome: 'Renovação', itens: ['Conversa de renovação feita', 'Renovação confirmada'] },
 ];
 
 /** Estratégias prontas pra aplicar num cliente — o time ajusta e cria outras pela tela. */

@@ -290,7 +290,7 @@ export function avaliarSaude(c: GcClienteLista): Saude {
       etapasAtrasadas > 0
         ? `${etapasAtrasadas} etapa(s) com prazo vencido`
         : etapas > 0 && feitas === etapas
-          ? 'Jornada concluída'
+          ? 'Churn'
           : `${feitas} de ${etapas} etapas · ${c.etapa_atual ?? '—'}`,
   })
 

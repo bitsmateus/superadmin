@@ -620,8 +620,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       if (alvo < 0) return reply.status(404).send({ message: 'Etapa de destino não encontrada' });
       const atual = jornada.findIndex((j) => j.status !== 'concluida');
       const atualIdx = atual < 0 ? jornada.length : atual;
-      const destinoNome = alvo >= jornada.length ? 'Jornada concluída' : jornada[alvo].nome;
-      const origemNome = atualIdx >= jornada.length ? 'Jornada concluída' : jornada[atualIdx].nome;
+      const destinoNome = alvo >= jornada.length ? 'Churn' : jornada[alvo].nome;
+      const origemNome = atualIdx >= jornada.length ? 'Churn' : jornada[atualIdx].nome;
 
       if (alvo === atualIdx) return { sem_mudanca: true, origem: origemNome, destino: destinoNome };
 

@@ -816,7 +816,7 @@ function CartaoCliente({
         </span>
       )}
       <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground/50">
-        <span>{c.etapa_atual ?? 'Jornada concluída'}</span>
+        <span>{c.etapa_atual ?? 'Churn'}</span>
         {Number(c.itens_atrasados) > 0 && <span className="text-danger">{Number(c.itens_atrasados)} atrasado(s)</span>}
         {c.avaliacao ? (
           <span className={CORES_NOTA[c.avaliacao.nivel]}>nota: {rotuloNota(c.avaliacao.nivel)}</span>
@@ -951,7 +951,7 @@ function LinhaCliente({
       </td>
       <td className="px-4 py-3">
         <span className="text-foreground/80">
-          {c.etapa_atual ?? <span className="text-success">Jornada concluída</span>}
+          {c.etapa_atual ?? <span className="text-danger">Churn</span>}
         </span>
         <span className="block text-xs text-foreground/45">
           {Number(c.etapas_concluidas)} de {Number(c.etapas_total)} etapas

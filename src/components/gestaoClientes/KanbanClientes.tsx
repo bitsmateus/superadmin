@@ -190,7 +190,7 @@ export function KanbanClientes({
     return () => window.clearInterval(id)
   }, [arrastando])
 
-  const todas: ColunaKanban[] = [...colunas, { id: 'fim', nome: 'Jornada concluída' }]
+  const todas: ColunaKanban[] = [...colunas, { id: 'fim', nome: 'Churn' }]
   const porColuna = new Map<string, Item[]>()
   for (const col of todas) porColuna.set(col.id, [])
   const sem: Item[] = []
@@ -238,7 +238,7 @@ export function KanbanClientes({
               <header className="flex items-center justify-between gap-2 px-3.5 py-3">
                 <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground" title={col.nome}>
                   <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-accent/15 text-[10px] font-bold tabular-nums text-accent">
-                    {col.id === 'fim' ? '✓' : ordemDaColuna + 1}
+                    {col.id === 'fim' ? '×' : ordemDaColuna + 1}
                   </span>
                   <span className="truncate">{col.nome}</span>
                 </h3>

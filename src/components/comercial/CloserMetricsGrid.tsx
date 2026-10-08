@@ -163,9 +163,13 @@ export function CloserMetricsGrid({ rows, boards, onOpenLead, closer = 'Luis' }:
             onOpenLead={onOpenLead}
           />
         </div>
-        <p className="mt-3 text-[11px] leading-snug text-foreground/40">
-          Reunião realizada = a lead chegou em Proposta enviada, Follow-up ou Vendido. Quem ainda está em “Reunião agendada” não entra nas porcentagens.
-        </p>
+        <ul className="mt-3 space-y-0.5 text-[11px] leading-snug text-foreground/45">
+          <li><strong className="font-semibold text-foreground/60">Reuniões agendadas:</strong> o total no período.</li>
+          <li><strong className="font-semibold text-foreground/60">% de comparecimento:</strong> realizadas ÷ (realizadas + no-show).</li>
+          <li><strong className="font-semibold text-foreground/60">% de conversão:</strong> vendas ÷ reuniões realizadas.</li>
+          <li><strong className="font-semibold text-foreground/60">% de no-show:</strong> no-show ÷ (realizadas + no-show).</li>
+          <li className="pt-1">Reunião realizada = a lead chegou em Proposta enviada, Follow-up ou Vendido. Quem ainda está em “Reunião agendada” não entra nas porcentagens.</li>
+        </ul>
       </div>
     </div>
   )

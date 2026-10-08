@@ -423,7 +423,7 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
   )
 }
 
-export function SdrFilterButton({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+export function SdrFilterButton({ value, onChange, rotulo = 'SDR' }: { value: string | null; onChange: (v: string | null) => void; rotulo?: string }) {
   const labels = useLeadLabels('sdr')
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
@@ -440,7 +440,7 @@ export function SdrFilterButton({ value, onChange }: { value: string | null; onC
         onClick={() => setOpen((o) => !o)}
         className={value ? 'text-accent' : undefined}
       >
-        {value ? `SDR: ${value}` : 'SDR'}
+        {value ? `${rotulo}: ${value}` : rotulo}
       </ToolbarButton>
       {open && (
         <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border border-line bg-card p-1.5 shadow-xl">
@@ -832,7 +832,10 @@ function BoardGroup({
   const toggleSort = (key: LeadRowField | 'createdAt') => {
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
   }
-  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name)
+  // No CRM do Luis Closer a coluna que se chama SDR nos outros CRMs aparece como Closer.
+  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name).map((c) =>
+    board.page === 'crm-luis-closer' && c.key === 'sdr' ? { ...c, label: 'Closer' } : c,
+  )
   const tableWidth = CHECKBOX_COL_WIDTH
     + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
 
@@ -1563,7 +1566,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   Kanban
                 </button>
               </div>
-              <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} />
+              <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />
               <ToolbarButton
                 icon={<Filter className="h-3.5 w-3.5" />}
                 onClick={() => setFiltersOpen(true)}

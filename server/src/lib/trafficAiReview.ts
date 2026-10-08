@@ -165,7 +165,7 @@ export function interpretarResposta(bruto: string): { resumo: string; sugestoes:
 }
 
 /** Roda a varredura de hoje e grava (substitui a de hoje, se já existir). */
-export async function rodarVarreduraIa(): Promise<{ dia: string; sugestoes: number }> {
+export async function rodarVarreduraIa(): Promise<{ dia: string; sugestoes: number; resumo: string; gravado: boolean }> {
   const dia = dataSp(0);
   const { resumo, sugestoes } = interpretarResposta(await chamarClaude(await montarEntradaIa()));
   await query(
@@ -173,7 +173,8 @@ export async function rodarVarreduraIa(): Promise<{ dia: string; sugestoes: numb
      ON CONFLICT (dia) DO UPDATE SET texto = EXCLUDED.texto, sugestoes = EXCLUDED.sugestoes, created_at = now()`,
     [dia, resumo, JSON.stringify(sugestoes)],
   );
-  return { dia, sugestoes: sugestoes.length };
+  const conferido = await query<{ n: string }>(`SELECT count(*) AS n FROM traffic_ai_reviews WHERE dia = $1::date`, [dia]);
+  return { dia, sugestoes: sugestoes.length, resumo, gravado: Number(conferido[0]?.n ?? 0) > 0 };
 }
 
 /** Aceitar / ignorar uma sugestão (vira histórico). Retorna false se não achou. */

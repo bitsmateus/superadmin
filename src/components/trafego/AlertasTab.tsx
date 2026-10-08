@@ -58,7 +58,13 @@ export function AlertasTab({ versao }: { versao: number }) {
         const s = await trafegoService.statusIa()
         if (!s.rodando) {
           if (s.erro) toast.error('Varredura falhou: ' + s.erro)
-          else { toast.success('Varredura pronta'); ia.recarregar() }
+          else {
+            const res = s.resultado
+            if (!res) toast.message('Varredura terminou, mas o servidor não devolveu o resultado — recarregue a página.')
+            else if (!res.gravado) toast.error('A IA respondeu, mas a varredura não ficou gravada no banco.')
+            else toast.success(`Varredura pronta: ${res.sugestoes} sugestão(ões) gravada(s) em ${res.dia.split('-').reverse().join('/')}`)
+            ia.recarregar()
+          }
           return
         }
       }

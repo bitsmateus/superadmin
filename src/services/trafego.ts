@@ -74,7 +74,7 @@ export const trafegoService = {
   ia: () => api.get<{ revisoes: RevisaoIa[] }>('/api/trafego/ia'),
   nichosReal: (de: string, ate: string) => api.get<{ linhas: NichoRealLinha[] }>(`/api/trafego/nichos-real${qs({ de, ate })}`),
   rodarIa: () => api.post<{ iniciado: boolean; rodando: boolean }>('/api/trafego/ia/rodar'),
-  statusIa: () => api.get<{ rodando: boolean; erro: string | null; fim: string | null }>('/api/trafego/ia/status'),
+  statusIa: () => api.get<{ rodando: boolean; erro: string | null; fim: string | null; resultado: { dia: string; sugestoes: number; resumo: string; gravado: boolean } | null }>('/api/trafego/ia/status'),
   marcarSugestao: (dia: string, id: string, status: 'aceita' | 'ignorada' | 'pendente') =>
     api.post(`/api/trafego/ia/${dia}/sugestoes/${id}`, { status }),
   marcarCampanha: (id: string, patch: { nicho?: string; papel?: string }) =>

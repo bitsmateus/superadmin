@@ -1463,12 +1463,19 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     // agendada"/"Reunião não comparecida", ou passou por uma delas na história. Proposta enviada
     // direto do primeiro contato NÃO conta — é venda sem reunião, e deixar entrar inflava o
     // denominador do funil com quem nunca agendou nada.
+    // E o lead SEGUE NO FUNIL: hoje está em Reunião agendada/não comparecida, seguiu pra proposta,
+    // follow-up, venda, ou foi dado como Perdido depois da reunião. Quem teve a reunião marcada e
+    // depois voltou pra Primeiro Contato ou foi pra Disparo em massa (marcação errada ou que não
+    // aconteceu) não é agendamento de verdade — no mês do Arthur eram 13 dos 24 "agendados".
     const everAgendadaSql = `(
-      lr.status = ANY($2)
-      OR EXISTS (
-        SELECT 1 FROM lead_events le
-        WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($2)
+      (
+        lr.status = ANY($2)
+        OR EXISTS (
+          SELECT 1 FROM lead_events le
+          WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($2)
+        )
       )
+      AND (lr.status = ANY($2) OR lr.status = ANY($4) OR lr.status = 'Perdidos')
     )`;
     // "ever_compareceu" = chegou a uma etapa que só existe depois da reunião (proposta, follow-up
     // de proposta, venda). Prova positiva de que a conversa aconteceu.

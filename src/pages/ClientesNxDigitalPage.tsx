@@ -953,12 +953,6 @@ function LinhaCliente({
         <span className="text-foreground/80">
           {c.etapa_atual ?? <span className="text-danger">Churn</span>}
         </span>
-        <span className="block text-xs text-foreground/45">
-          {Number(c.etapas_concluidas)} de {Number(c.etapas_total)} etapas
-          {Number(c.itens_atrasados) > 0 && (
-            <span className="text-danger"> · {Number(c.itens_atrasados)} atrasado(s)</span>
-          )}
-        </span>
       </td>
       <td className="hidden px-4 py-3 sm:table-cell">
         <BarraProgresso valor={progressoDoCliente(c)} />

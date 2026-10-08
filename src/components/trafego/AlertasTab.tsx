@@ -1,8 +1,11 @@
 import * as React from 'react'
-import { Check, Loader2, Sparkles, X } from 'lucide-react'
+import { Check, Loader2, MessageCircle, Sparkles, X, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { trafegoService, type AlertaTrafego, type CategoriaIa, type SugestaoIa } from '@/services/trafego'
+import { useAuth } from '@/hooks/useAuth'
+import { trafegoService, type AcaoMeta, type AlertaTrafego, type CategoriaIa, type SugestaoIa } from '@/services/trafego'
+import { ChatSugestao } from '@/components/trafego/ChatSugestao'
+import { ConfirmarAcaoModal } from '@/components/trafego/ConfirmarAcaoModal'
 import { Estado, Painel, Vazio, useCarregar } from '@/components/trafego/format'
 
 const NIVEL: Record<AlertaTrafego['level'], { rotulo: string; classe: string }> = {
@@ -15,13 +18,34 @@ const CATEGORIA_IA: Record<CategoriaIa, string> = {
   verba: 'Verba', criativo: 'Criativo', publico: 'Público', nicho: 'Nicho', copy: 'Copy', operacao: 'Operação',
 }
 
-function CartaoSugestao({ dia, s, onMudou }: { dia: string; s: SugestaoIa; onMudou: () => void }) {
+function rotuloAcao(a: AcaoMeta): string {
+  const alvo = a.nivel === 'campanha' ? 'campanha' : a.nivel === 'conjunto' ? 'conjunto' : 'anúncio'
+  if (a.tipo === 'pausar') return `Pausar ${alvo} no Meta`
+  if (a.tipo === 'ativar') return `Reativar ${alvo} no Meta`
+  return `Mudar orçamento no Meta`
+}
+
+/** Ação inversa pra "Reverter" a partir do que foi registrado ao aplicar. */
+function acaoInversa(s: SugestaoIa): AcaoMeta | null {
+  const ap = s.aplicada
+  if (!ap) return null
+  const a = ap.acao
+  if (a.tipo === 'pausar') return { tipo: 'ativar', nivel: a.nivel, id: a.id }
+  if (a.tipo === 'ativar') return { tipo: 'pausar', nivel: a.nivel, id: a.id }
+  const antes = (ap.antes as { orcamentoDia?: number | null } | null)?.orcamentoDia
+  return typeof antes === 'number' ? { tipo: 'orcamento', nivel: a.nivel, id: a.id, valor: antes } : null
+}
+
+function CartaoSugestao({ dia, s, onMudou, admin }: { dia: string; s: SugestaoIa; onMudou: () => void; admin: boolean }) {
+  const [conversando, setConversando] = React.useState(false)
+  const [confirmar, setConfirmar] = React.useState<{ acao: AcaoMeta; reversao: boolean } | null>(null)
   const marcar = async (status: 'aceita' | 'ignorada' | 'pendente') => {
     try { await trafegoService.marcarSugestao(dia, s.id, status); onMudou() }
     catch (e) { toast.error('Falha ao salvar: ' + (e as Error).message) }
   }
+  const inversa = acaoInversa(s)
   return (
-    <div className={cn('rounded-lg border border-line p-3', s.status !== 'pendente' && 'opacity-60')}>
+    <div className={cn('rounded-lg border border-line p-3', s.status !== 'pendente' && !conversando && 'opacity-70')}>
       <div className="flex items-start gap-2">
         <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">{CATEGORIA_IA[s.categoria]}</span>
         <h4 className="min-w-0 flex-1 text-sm font-medium text-foreground">{s.titulo}</h4>
@@ -33,18 +57,56 @@ function CartaoSugestao({ dia, s, onMudou }: { dia: string; s: SugestaoIa; onMud
       </div>
       {s.detalhe && <p className="mt-1.5 whitespace-pre-wrap text-sm text-foreground/80">{s.detalhe}</p>}
       {s.dado && <p className="mt-1.5 text-xs text-foreground/45">Dado: {s.dado}</p>}
-      {s.status === 'pendente' && (
-        <div className="mt-2 flex gap-2">
-          <button type="button" onClick={() => void marcar('aceita')} className="inline-flex items-center gap-1 rounded-md bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/20"><Check className="h-3 w-3" />Aceitar</button>
-          <button type="button" onClick={() => void marcar('ignorada')} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-foreground/50 hover:bg-elevate/[0.06]"><X className="h-3 w-3" />Ignorar</button>
-        </div>
+
+      {s.aplicada && (
+        <p className="mt-2 rounded-md bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+          Aplicado no Meta por {s.aplicada.por} em {new Date(s.aplicada.em).toLocaleString('pt-BR')}: {s.aplicada.titulo}.
+          {admin && inversa && (
+            <button type="button" onClick={() => setConfirmar({ acao: inversa, reversao: true })} className="ml-2 font-medium underline">Reverter</button>
+          )}
+        </p>
       )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {s.acao && !s.aplicada && (admin ? (
+          <button type="button" onClick={() => setConfirmar({ acao: s.acao as AcaoMeta, reversao: false })}
+            className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90">
+            <Zap className="h-3 w-3" />{rotuloAcao(s.acao)}
+          </button>
+        ) : (
+          <span className="text-[11px] text-foreground/40" title="Só administrador aplica mudanças no Meta">Ação no Meta: só administrador</span>
+        ))}
+        {s.status === 'pendente' && (
+          <>
+            <button type="button" onClick={() => void marcar('aceita')} className="inline-flex items-center gap-1 rounded-md bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/20"><Check className="h-3 w-3" />Aceitar</button>
+            <button type="button" onClick={() => void marcar('ignorada')} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-foreground/50 hover:bg-elevate/[0.06]"><X className="h-3 w-3" />Ignorar</button>
+          </>
+        )}
+        <button type="button" onClick={() => setConversando((v) => !v)}
+          className={cn('ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs font-medium hover:bg-elevate/[0.06]', conversando ? 'bg-elevate/[0.06] text-foreground' : 'text-foreground/60')}>
+          <MessageCircle className="h-3 w-3" />Conversar com a IA
+        </button>
+      </div>
+      {s.status === 'pendente' && s.acao && (
+        <p className="mt-1.5 text-[11px] text-foreground/35">“Aceitar” e “Ignorar” só registram sua decisão. Só “{rotuloAcao(s.acao)}” altera o Meta, e antes mostra tudo para você confirmar.</p>
+      )}
+
+      {conversando && <ChatSugestao dia={dia} sugestaoId={s.id} />}
+      <ConfirmarAcaoModal
+        acao={confirmar?.acao ?? null}
+        reversao={confirmar?.reversao}
+        sugestao={{ dia, id: s.id }}
+        onClose={() => setConfirmar(null)}
+        onAplicada={onMudou}
+      />
     </div>
   )
 }
 
 /** Alertas abertos (com "Resolver"), os últimos resolvidos e o histórico da varredura da IA. */
 export function AlertasTab({ versao }: { versao: number }) {
+  const { profile } = useAuth()
+  const admin = profile?.role === 'admin'
   const alertas = useCarregar(() => trafegoService.alertas(), [versao])
   const ia = useCarregar(() => trafegoService.ia(), [versao])
   const [rodando, setRodando] = React.useState(false)
@@ -134,7 +196,7 @@ export function AlertasTab({ versao }: { versao: number }) {
                 <p className="text-xs font-medium text-foreground/50">{r.dia.split('-').reverse().join('/')}</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">{r.texto}</p>
                 <div className="mt-2 space-y-2">
-                  {r.sugestoes.map((s) => <CartaoSugestao key={s.id} dia={r.dia} s={s} onMudou={ia.recarregar} />)}
+                  {r.sugestoes.map((s) => <CartaoSugestao key={s.id} dia={r.dia} s={s} onMudou={ia.recarregar} admin={admin} />)}
                 </div>
               </div>
             ))}

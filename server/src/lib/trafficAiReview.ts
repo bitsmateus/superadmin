@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { query } from '../db.js';
+import { acaoValida, type AcaoMeta } from './trafficMetaActions.js';
 import { dataSp, rankingTrafego, totaisTrafego, type LinhaTrafego, type NivelTrafego } from './trafegoMetricas.js';
 
 /**
@@ -22,13 +23,17 @@ export interface SugestaoIa {
   detalhe: string;
   dado: string;
   status: StatusSugestao;
+  /** Ação concreta no Meta que a sugestão propõe (o usuário confirma antes de aplicar). */
+  acao?: AcaoMeta;
+  /** Preenchido quando a ação foi aplicada no Meta pelo painel. */
+  aplicada?: { em: string; por: string; antes: unknown; depois: unknown; titulo: string; acao: AcaoMeta };
 }
 
 const arredonda = (v: number | null): number | null => (v == null ? null : Math.round(v * 100) / 100);
 
 function enxuto(l: LinhaTrafego) {
   return {
-    nome: l.nome, gasto: arredonda(l.gasto), leads: l.leads, agendamentos: l.agendadas, reunioes: l.reunioes,
+    id: l.id, nome: l.nome, gasto: arredonda(l.gasto), leads: l.leads, agendamentos: l.agendadas, reunioes: l.reunioes,
     vendas: l.vendas, cpl: arredonda(l.cpl), custo_reuniao: arredonda(l.custoReuniao), cac: arredonda(l.cac),
     frequencia: arredonda(l.frequencia),
   };
@@ -108,8 +113,9 @@ Regras:
 - Não repita sugestões já aceitas ou ignoradas nos últimos 7 dias (campo sugestoes_ultimos_7_dias), a menos que o dado tenha mudado de forma relevante.
 - Se não houver nada relevante, devolva menos sugestões (ou nenhuma). Não encha linguiça.
 - Você só sugere; nunca diga que já alterou algo.
+- Se a sugestão for PAUSAR, REATIVAR ou MUDAR O ORÇAMENTO DIÁRIO de UMA campanha, conjunto ou anúncio específico, inclua o campo "acao" com: tipo ("pausar", "ativar" ou "orcamento"), nivel ("campanha", "conjunto" ou "anuncio") e id (copie exatamente o campo "id" do item no JSON; nunca invente). Para "orcamento", inclua também "valor" = novo orçamento diário em reais (número), entre 50% e 150% do atual quando possível. Orçamento só existe em campanha e conjunto. Se a sugestão não for uma ação direta nesses termos (copy, público, criativo novo, operação), NÃO inclua "acao".
 Responda SOMENTE com JSON válido, sem markdown, neste formato:
-{"resumo":"2 a 4 frases sobre como a conta está","sugestoes":[{"categoria":"verba","titulo":"curto e direto","detalhe":"o que fazer e por quê","dado":"os números que sustentam"}]}`;
+{"resumo":"2 a 4 frases sobre como a conta está","sugestoes":[{"categoria":"verba","titulo":"curto e direto","detalhe":"o que fazer e por quê","dado":"os números que sustentam","acao":{"tipo":"pausar","nivel":"campanha","id":"123"}}]}`;
 
 interface BlocoAnthropic { type: string; text?: string }
 
@@ -159,7 +165,12 @@ export function interpretarResposta(bruto: string): { resumo: string; sugestoes:
     const categoria = CATEGORIAS.includes(r.categoria as CategoriaSugestao) ? (r.categoria as CategoriaSugestao) : 'operacao';
     const titulo = texto(r.titulo, 140);
     if (!titulo) continue;
-    sugestoes.push({ id: randomUUID(), categoria, titulo, detalhe: texto(r.detalhe, 700), dado: texto(r.dado, 400), status: 'pendente' });
+    const acaoBruta = r.acao && typeof r.acao === 'object' ? (r.acao as Record<string, unknown>) : null;
+    const acao = acaoBruta ? { ...acaoBruta, id: String(acaoBruta.id ?? '') } : null;
+    sugestoes.push({
+      id: randomUUID(), categoria, titulo, detalhe: texto(r.detalhe, 700), dado: texto(r.dado, 400), status: 'pendente',
+      ...(acao && acaoValida(acao) ? { acao: acao as AcaoMeta } : {}),
+    });
   }
   return { resumo: texto(obj.resumo, 800), sugestoes };
 }
@@ -175,6 +186,75 @@ export async function rodarVarreduraIa(): Promise<{ dia: string; sugestoes: numb
   );
   const conferido = await query<{ n: string }>(`SELECT count(*) AS n FROM traffic_ai_reviews WHERE dia = $1::date`, [dia]);
   return { dia, sugestoes: sugestoes.length, resumo, gravado: Number(conferido[0]?.n ?? 0) > 0 };
+}
+
+// ── Conversa com a IA sobre uma sugestão ──────────────────────────────────────
+
+const cacheEntrada = new Map<string, { em: number; entrada: Record<string, unknown> }>();
+
+async function entradaEmCache(dia: string): Promise<Record<string, unknown>> {
+  const c = cacheEntrada.get(dia);
+  if (c && Date.now() - c.em < 10 * 60_000) return c.entrada;
+  const entrada = await montarEntradaIa();
+  cacheEntrada.set(dia, { em: Date.now(), entrada });
+  return entrada;
+}
+
+export interface MensagemChat { role: 'user' | 'assistant'; content: string }
+
+const SISTEMA_CHAT = `Você é o analista de tráfego pago que gerou a sugestão abaixo e agora conversa com o gestor da conta. Responda em português do Brasil, de forma direta e didática.
+- Explique o PORQUÊ da sugestão usando os dados do JSON recebido (cite os números). Se a pessoa discordar ou trouxer contexto novo (ex.: "essa campanha é de visita ao perfil, não de lead"), considere, admita se a sugestão estava errada ou incompleta e diga o que mudaria.
+- Não invente dados que não estão no JSON. Se faltar informação, diga o que falta e onde a pessoa vê (Gerenciador de Anúncios, CRM).
+- Você não executa nada: aplicar uma ação no Meta é feito pelo botão "Aplicar no Meta" do painel, depois de uma tela de confirmação. Não diga que já fez algo.
+- Seja conciso (até ~200 palavras), salvo se pedirem detalhe.`;
+
+export async function conversarSobreSugestao(dia: string, sugestaoId: string, historico: MensagemChat[], mensagem: string): Promise<string> {
+  const r = await query<{ texto: string; sugestoes: SugestaoIa[] }>(`SELECT texto, sugestoes FROM traffic_ai_reviews WHERE dia = $1::date`, [dia]);
+  const sugestao = r[0]?.sugestoes?.find((s) => s.id === sugestaoId);
+  if (!sugestao) throw new Error('Sugestão não encontrada.');
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY não configurada no servidor.');
+
+  const entrada = await entradaEmCache(dia);
+  const dadosSugestao = JSON.stringify({
+    categoria: sugestao.categoria, titulo: sugestao.titulo, detalhe: sugestao.detalhe, dado: sugestao.dado, acao: sugestao.acao ?? null,
+  });
+  const system = [
+    SISTEMA_CHAT,
+    `Sugestão em discussão:\n${dadosSugestao}`,
+    `Resumo da conta feito pela varredura:\n${r[0]?.texto ?? ''}`,
+    `Dados da conta (JSON):\n${JSON.stringify(entrada)}`,
+  ].join('\n\n');
+
+  // Histórico vindo do navegador: só os últimos turnos, alternando user/assistant, terminando na pergunta nova.
+  const limpo = historico
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+    .slice(-10)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }));
+  while (limpo.length && limpo[0].role !== 'user') limpo.shift();
+  const messages: MensagemChat[] = [];
+  for (const m of limpo) if (!messages.length || messages[messages.length - 1].role !== m.role) messages.push(m);
+  if (messages.length && messages[messages.length - 1].role === 'user') messages.pop();
+  messages.push({ role: 'user', content: mensagem.slice(0, 4000) });
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      ...(process.env.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID } : {}),
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ model: MODEL, max_tokens: 4000, system, messages }),
+  });
+  if (!res.ok) {
+    const detalhe = await res.text().catch(() => '');
+    throw new Error(`Claude API ${res.status}: ${detalhe.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as { content?: BlocoAnthropic[]; stop_reason?: string };
+  const texto = (data.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
+  if (!texto) throw new Error(`A IA não retornou texto (motivo de parada: ${data.stop_reason ?? 'desconhecido'}).`);
+  return texto;
 }
 
 /** Aceitar / ignorar uma sugestão (vira histórico). Retorna false se não achou. */

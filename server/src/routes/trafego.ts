@@ -5,7 +5,8 @@ import {
 } from '../lib/trafegoMetricas.js';
 import { metaAdsConfig, sincronizarCatalogoMeta, sincronizarInsightsMeta } from '../lib/metaInsights.js';
 import { avaliarAlertasTrafego } from '../lib/trafficAlerts.js';
-import { marcarSugestao, rodarVarreduraIa } from '../lib/trafficAiReview.js';
+import { conversarSobreSugestao, marcarSugestao, rodarVarreduraIa, type MensagemChat } from '../lib/trafficAiReview.js';
+import { ErroAcao, executarAcao, historicoAcoes, previaAcao, type AcaoMeta } from '../lib/trafficMetaActions.js';
 import { MOTIVOS_DESQUALIFICACAO } from '../lib/trafegoNicho.js';
 
 /**
@@ -311,6 +312,53 @@ export async function trafegoRoutes(app: FastifyInstance) {
       return { ok: true };
     },
   );
+
+  /** Conversa com a IA sobre UMA sugestão (explicar o porquê, tirar dúvidas). O histórico vem do navegador. */
+  app.post<{ Params: { dia: string; id: string }; Body: { mensagem?: string; historico?: MensagemChat[] } }>(
+    '/api/trafego/ia/:dia/sugestoes/:id/chat', opts, async (req, reply) => {
+      const mensagem = (req.body?.mensagem ?? '').trim();
+      if (!mensagem) return reply.status(400).send({ message: 'Escreva uma mensagem' });
+      if (!DATA_RE.test(req.params.dia)) return reply.status(400).send({ message: 'dia inválido' });
+      try {
+        const resposta = await conversarSobreSugestao(req.params.dia, req.params.id, Array.isArray(req.body?.historico) ? req.body.historico : [], mensagem);
+        return { resposta };
+      } catch (err) {
+        return reply.status(502).send({ message: err instanceof Error ? err.message : 'Falha na conversa com a IA' });
+      }
+    },
+  );
+
+  // ── Ações no Meta (só ADMIN): prévia -> confirmação na tela -> execução. Ver lib/trafficMetaActions.ts. ──
+  const soAdmin = async (req: FastifyRequest, reply: FastifyReply) => {
+    if ((req.user as { role?: string }).role !== 'admin') reply.status(403).send({ message: 'Só administrador pode aplicar mudanças no Meta' });
+  };
+  const optsAdmin = { onRequest: [app.authenticate, soAdmin] };
+
+  app.post<{ Body: { acao?: AcaoMeta } }>('/api/trafego/acoes/previa', optsAdmin, async (req, reply) => {
+    try {
+      return await previaAcao(req.body?.acao as AcaoMeta);
+    } catch (err) {
+      return reply.status(err instanceof ErroAcao ? 422 : 502).send({ message: err instanceof Error ? err.message : 'Falha ao consultar o Meta' });
+    }
+  });
+
+  app.post<{ Body: { acao?: AcaoMeta; confirmado?: boolean; reversao?: boolean; sugestao?: { dia: string; id: string } } }>(
+    '/api/trafego/acoes/executar', optsAdmin, async (req, reply) => {
+      // Segunda trava no servidor: sem o aceite explícito vindo da tela de confirmação, nada roda.
+      if (req.body?.confirmado !== true) return reply.status(400).send({ message: 'Ação não confirmada' });
+      const { sub } = req.user as { sub: string };
+      const perfil = await queryOne<{ name: string | null; email: string }>('SELECT name, email FROM profiles WHERE id = $1', [sub]);
+      const ref = req.body.sugestao && DATA_RE.test(req.body.sugestao.dia) ? req.body.sugestao : undefined;
+      try {
+        const r = await executarAcao(req.body.acao as AcaoMeta, { id: sub, nome: perfil?.name || perfil?.email || 'Admin' }, ref, req.body.reversao === true);
+        return { ok: true, antes: r.previa.antes, depois: r.aplicado };
+      } catch (err) {
+        return reply.status(err instanceof ErroAcao ? 422 : 502).send({ message: err instanceof Error ? err.message : 'Falha ao aplicar no Meta' });
+      }
+    },
+  );
+
+  app.get('/api/trafego/acoes', opts, async () => ({ acoes: await historicoAcoes(30) }));
 
   /** Marca nicho e/ou papel (escala/teste) da campanha — o sync do catálogo não sobrescreve. */
   app.put<{ Params: { id: string }; Body: { nicho?: string; papel?: string } }>(

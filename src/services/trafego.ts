@@ -46,9 +46,18 @@ export interface LeadDoAnuncio {
 }
 
 export type CategoriaIa = 'verba' | 'criativo' | 'publico' | 'nicho' | 'copy' | 'operacao'
+export interface AcaoMeta { tipo: 'pausar' | 'ativar' | 'orcamento'; nivel: 'campanha' | 'conjunto' | 'anuncio'; id: string; valor?: number }
+export interface EstadoMeta { status: string; orcamentoDia: number | null }
+export interface PreviaAcao {
+  acao: AcaoMeta; nome: string; antes: EstadoMeta; depois: EstadoMeta; titulo: string
+  comoFunciona: string[]; avisos: string[]; orcamentoMin: number | null; orcamentoMax: number | null
+}
+export interface MensagemChat { role: 'user' | 'assistant'; content: string }
 export interface SugestaoIa {
   id: string; categoria: CategoriaIa; titulo: string; detalhe: string; dado: string
   status: 'pendente' | 'aceita' | 'ignorada'
+  acao?: AcaoMeta
+  aplicada?: { em: string; por: string; antes: unknown; depois: unknown; titulo: string; acao: AcaoMeta }
 }
 export interface NichoRealLinha { mirado: string; real: string; leads: number }
 
@@ -73,6 +82,11 @@ export const trafegoService = {
   resolverAlerta: (id: string) => api.post(`/api/trafego/alertas/${id}/resolver`),
   ia: () => api.get<{ revisoes: RevisaoIa[] }>('/api/trafego/ia'),
   nichosReal: (de: string, ate: string) => api.get<{ linhas: NichoRealLinha[] }>(`/api/trafego/nichos-real${qs({ de, ate })}`),
+  previaAcao: (acao: AcaoMeta) => api.post<PreviaAcao>('/api/trafego/acoes/previa', { acao }),
+  executarAcao: (acao: AcaoMeta, sugestao?: { dia: string; id: string }, reversao = false) =>
+    api.post('/api/trafego/acoes/executar', { acao, confirmado: true, sugestao, reversao }),
+  conversarSugestao: (dia: string, id: string, mensagem: string, historico: MensagemChat[]) =>
+    api.post<{ resposta: string }>(`/api/trafego/ia/${dia}/sugestoes/${id}/chat`, { mensagem, historico }),
   rodarIa: () => api.post<{ iniciado: boolean; rodando: boolean }>('/api/trafego/ia/rodar'),
   statusIa: () => api.get<{ rodando: boolean; erro: string | null; fim: string | null; resultado: { dia: string; sugestoes: number; resumo: string; gravado: boolean } | null }>('/api/trafego/ia/status'),
   marcarSugestao: (dia: string, id: string, status: 'aceita' | 'ignorada' | 'pendente') =>

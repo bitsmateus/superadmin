@@ -1105,6 +1105,23 @@ END $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (dia, kind)
   )`);
+  // Registro de toda ação aplicada no Meta pelo painel (pausar/ativar/orçamento): quem, quando, antes e depois.
+  await pool.query(`CREATE TABLE IF NOT EXISTS traffic_actions_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    user_id UUID,
+    user_name TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL,
+    nivel TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    entity_name TEXT NOT NULL DEFAULT '',
+    antes JSONB,
+    depois JSONB,
+    ok BOOLEAN NOT NULL DEFAULT false,
+    erro TEXT,
+    sugestao_dia DATE,
+    sugestao_id TEXT
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS traffic_ai_reviews (
     dia DATE PRIMARY KEY,
     texto TEXT NOT NULL DEFAULT '',

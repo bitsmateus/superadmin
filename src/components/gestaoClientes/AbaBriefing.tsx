@@ -7,6 +7,7 @@ import { Input, Textarea } from '@/components/ui/Input'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { ArquivosDoCliente } from '@/components/gestaoClientes/ArquivosDoCliente'
 import { LogoDoCliente } from '@/components/gestaoClientes/LogoDoCliente'
+import { BRIEFING_MODELO, comModeloDoBriefing } from '@/lib/gcBriefingModelo'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import { gestaoClientes, type GcBriefing, type GcClienteLista } from '@/services/gestaoClientes'
 
@@ -108,9 +109,11 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
   const [r, setR] = React.useState<Rascunho | null>(null)
   const [salvando, setSalvando] = React.useState(false)
 
+  // As 27 perguntas do modelo sempre aparecem; o que já foi respondido (e as perguntas acrescentadas) vem junto.
   const aplicar = React.useCallback((b: GcBriefing) => {
-    setGravado(b)
-    setR(b)
+    const comModelo = { ...b, perguntas: comModeloDoBriefing(b.perguntas) }
+    setGravado(comModelo)
+    setR(comModelo)
   }, [])
 
   React.useEffect(() => {
@@ -136,8 +139,7 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
     setSalvando(true)
     try {
       const salvo = await gestaoClientes.salvarBriefing(cliente.id, r)
-      setGravado(salvo)
-      setR(salvo)
+      aplicar(salvo)
       toast.success('Briefing salvo')
     } catch (err) {
       toast.error('Falha ao salvar: ' + (err as Error).message)
@@ -280,52 +282,83 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
 
       {/* ------------------------------------------------------------ perguntas e respostas */}
       <section className="rounded-2xl border border-line p-4 sm:p-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <MessageCircleQuestion className="h-4 w-4 text-accent" /> Perguntas e respostas
           </h2>
-          <Button size="sm" variant="secondary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setR({ ...r, perguntas: [...r.perguntas, { pergunta: '', resposta: '' }] })}>
-            Adicionar pergunta
-          </Button>
+          <span className="text-xs tabular-nums text-foreground/50">
+            {r.perguntas.filter((p) => p.resposta.trim()).length} de {r.perguntas.length} respondidas
+          </span>
         </div>
-        {r.perguntas.length === 0 ? (
-          <p className="py-4 text-center text-sm text-foreground/45">
-            Nenhuma pergunta ainda. Adicione as perguntas do briefing e vá preenchendo as respostas do cliente.
-          </p>
-        ) : (
-          <ol className="space-y-3">
-            {r.perguntas.map((p, i) => (
-              <li key={i} className="rounded-xl border border-line p-3">
+        <p className="mb-4 text-xs text-foreground/50">
+          Onde houver <strong className="text-warning">indicador</strong>, a resposta precisa de número (R$, %, quantidade ou prazo). Se o cliente não souber, marque “Não sabe”: isso já é um diagnóstico.
+        </p>
+
+        {r.perguntas.map((p, i) => {
+          const modelo = i < BRIEFING_MODELO.length && BRIEFING_MODELO[i].pergunta === p.pergunta ? BRIEFING_MODELO[i] : null
+          const novoBloco = modelo && (i === 0 || BRIEFING_MODELO[i - 1].bloco !== modelo.bloco)
+          const mudar = (campo: 'pergunta' | 'resposta', valor: string) =>
+            setR({ ...r, perguntas: r.perguntas.map((x, j) => (j === i ? { ...x, [campo]: valor } : x)) })
+          return (
+            <React.Fragment key={i}>
+              {novoBloco && <h3 className="mb-2 mt-5 border-b border-line pb-1 text-sm font-semibold text-foreground first:mt-0">{modelo.bloco}</h3>}
+              {!modelo && i === BRIEFING_MODELO.length && (
+                <h3 className="mb-2 mt-5 border-b border-line pb-1 text-sm font-semibold text-foreground">Outras perguntas</h3>
+              )}
+              <div className="mb-3 rounded-xl border border-line p-3">
                 <div className="flex items-start gap-2">
-                  <span className="mt-2 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/12 text-xs font-bold text-accent">{i + 1}</span>
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <Input
-                      aria-label="Pergunta"
-                      value={p.pergunta}
-                      onChange={(ev) => setR({ ...r, perguntas: r.perguntas.map((x, j) => (j === i ? { ...x, pergunta: ev.target.value } : x)) })}
-                      placeholder="Pergunta (ex.: Qual o diferencial da empresa?)"
-                    />
+                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/12 text-xs font-bold text-accent">{i + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    {modelo ? (
+                      <>
+                        <p className="text-sm font-medium text-foreground">{p.pergunta}</p>
+                        <p className="mt-0.5 text-xs text-foreground/45">Por que importa: {modelo.porque}</p>
+                        {modelo.indicador && (
+                          <p className="mt-0.5 text-xs">
+                            <span className="font-semibold text-warning">Indicador:</span> <span className="text-foreground/65">{modelo.indicador}</span>
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <Input aria-label="Pergunta" value={p.pergunta} onChange={(ev) => mudar('pergunta', ev.target.value)} placeholder="Pergunta" />
+                    )}
                     <Textarea
-                      aria-label="Resposta"
+                      aria-label={`Resposta da pergunta ${i + 1}`}
                       rows={2}
+                      className="mt-2"
                       value={p.resposta}
-                      onChange={(ev) => setR({ ...r, perguntas: r.perguntas.map((x, j) => (j === i ? { ...x, resposta: ev.target.value } : x)) })}
+                      onChange={(ev) => mudar('resposta', ev.target.value)}
                       placeholder="Resposta do cliente"
                     />
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => mudar('resposta', 'Não sabe')}
+                        className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-foreground/55 hover:border-warning/50 hover:text-warning"
+                      >
+                        Não sabe
+                      </button>
+                      {!modelo && (
+                        <button
+                          type="button"
+                          onClick={() => setR({ ...r, perguntas: r.perguntas.filter((_, j) => j !== i) })}
+                          className="p-1 text-foreground/30 hover:text-danger"
+                          aria-label="Remover pergunta"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setR({ ...r, perguntas: r.perguntas.filter((_, j) => j !== i) })}
-                    className="mt-2 p-1 text-foreground/30 hover:text-danger"
-                    aria-label="Remover pergunta"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
                 </div>
-              </li>
-            ))}
-          </ol>
-        )}
+              </div>
+            </React.Fragment>
+          )
+        })}
+
+        <Button size="sm" variant="secondary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setR({ ...r, perguntas: [...r.perguntas, { pergunta: '', resposta: '' }] })}>
+          Adicionar outra pergunta
+        </Button>
       </section>
 
       <BarraSalvar

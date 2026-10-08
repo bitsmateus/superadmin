@@ -787,7 +787,6 @@ function CartaoCliente({
           <span className="block truncate text-xs text-foreground/50">
             {[c.nome_contato, c.responsavel_nome].filter(Boolean).join(' · ') || '—'}
           </span>
-          <ReunioesDoMes c={c} />
         </span>
         <PastilhaSaude estado={saude.nivel} />
       </span>
@@ -872,7 +871,6 @@ function LinhaCliente({
             <span className="block truncate text-xs text-foreground/50">
               {[c.nome_contato, c.responsavel_nome].filter(Boolean).join(' · ') || '—'}
             </span>
-            <ReunioesDoMes c={c} />
           </span>
         </div>
       </td>

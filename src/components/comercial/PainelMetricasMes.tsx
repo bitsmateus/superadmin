@@ -63,9 +63,11 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
 
   const dados = React.useMemo(() => {
     const { from, to } = limitesDoMes(monthId)
+    // Só entra lead com SDR/closer atribuído (hoje Arthur e Luis): é o que as Métricas por SDR somam. Lead de
+    // projetos/demandas sem responsável de vendas não é do funil comercial e inflava o total.
     const leva = rows.filter((r) => {
       const d = diaLocal(r.createdAt)
-      return d >= from && d <= to
+      return !!r.sdr && d >= from && d <= to
     })
     const agendados = leva.filter((r) => milestoneById.get(r.id)?.everAgendada)
     const compareceram = agendados.filter((r) => milestoneById.get(r.id)?.everCompareceu)
@@ -90,10 +92,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
     // investimento); sem ele preenchido, usa o que o CRM tem — melhor um número real do que zero.
     // Um só, usado no CPL, no funil e na meta: antes a meta olhava só o digitado e mostrava 0 de
     // 400 com o CRM cheio de lead.
-    const leadsGerados = month?.leadsGerados || rows.filter((r) => {
-      const d = diaLocal(r.createdAt)
-      return d >= from && d <= to
-    }).length
+    const leadsGerados = month?.leadsGerados || leva.length
     const permanencia = month?.permanenciaMedia ?? 0
 
     const vendas = vendasDoMes.length

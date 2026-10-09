@@ -40,9 +40,8 @@ function Variacao({ atual, anterior, menorMelhor }: { atual: number | null; ante
 }
 
 /** Barras de gasto por dia com a linha de leads do CRM por cima — SVG puro. */
-export function GraficoSerie({ serie }: { serie: PontoSerie[] }) {
-  const W = 800, H = 180, PAD = 24
-  if (!serie.length) return null
+function Barras({ serie, W, H, className }: { serie: PontoSerie[]; W: number; H: number; className: string }) {
+  const PAD = 24
   const maxGasto = Math.max(1, ...serie.map((p) => p.gasto))
   const maxLeads = Math.max(1, ...serie.map((p) => p.leadsCrm))
   const passo = (W - PAD * 2) / serie.length
@@ -52,20 +51,31 @@ export function GraficoSerie({ serie }: { serie: PontoSerie[] }) {
   const linha = serie.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${yLeads(p.leadsCrm)}`).join(' ')
   const rotulos = serie.length <= 10 ? serie.map((_, i) => i) : [0, Math.floor(serie.length / 2), serie.length - 1]
   return (
+    <svg viewBox={`0 0 ${W} ${H}`} className={className} role="img" aria-label="Gasto e leads por dia">
+      {serie.map((p, i) => (
+        <rect key={p.dia} x={x(i) - Math.max(1, passo * 0.35)} width={Math.max(2, passo * 0.7)}
+          y={yGasto(p.gasto)} height={H - PAD - yGasto(p.gasto)} rx={2} className="fill-accent/40">
+          <title>{`${diaCurto(p.dia)} · gasto ${brl(p.gasto)} · ${p.leadsCrm} leads · ${p.reunioes} reuniões`}</title>
+        </rect>
+      ))}
+      <path d={linha} fill="none" strokeWidth={2} className="stroke-emerald-500" />
+      {rotulos.map((i) => (
+        <text key={i} x={x(i)} y={H - 6} textAnchor="middle" className="fill-foreground/40 text-[11px]">{diaCurto(serie[i].dia)}</text>
+      ))}
+    </svg>
+  )
+}
+
+export function GraficoSerie({ serie }: { serie: PontoSerie[] }) {
+  if (!serie.length) return null
+  const maxGasto = Math.max(1, ...serie.map((p) => p.gasto))
+  const maxLeads = Math.max(1, ...serie.map((p) => p.leadsCrm))
+  return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Gasto e leads por dia">
-        {serie.map((p, i) => (
-          <rect key={p.dia} x={x(i) - Math.max(1, passo * 0.35)} width={Math.max(2, passo * 0.7)}
-            y={yGasto(p.gasto)} height={H - PAD - yGasto(p.gasto)} rx={2} className="fill-accent/40">
-            <title>{`${diaCurto(p.dia)} · gasto ${brl(p.gasto)} · ${p.leadsCrm} leads · ${p.reunioes} reuniões`}</title>
-          </rect>
-        ))}
-        <path d={linha} fill="none" strokeWidth={2} className="stroke-emerald-500" />
-        {rotulos.map((i) => (
-          <text key={i} x={x(i)} y={H - 6} textAnchor="middle" className="fill-foreground/40 text-[11px]">{diaCurto(serie[i].dia)}</text>
-        ))}
-      </svg>
-      <div className="mt-1 flex flex-wrap gap-4 text-[11px] text-foreground/50">
+      {/* No celular o desenho é mais estreito e alto: com 800 de largura as barras e as datas ficavam minúsculas. */}
+      <Barras serie={serie} W={360} H={200} className="w-full sm:hidden" />
+      <Barras serie={serie} W={800} H={180} className="w-full max-sm:hidden" />
+      <div className="mt-1 flex flex-wrap gap-4 text-[11px] text-foreground/50 max-sm:gap-x-4 max-sm:gap-y-1">
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-accent/40" />Gasto por dia (máx. {brl(maxGasto)})</span>
         <span className="inline-flex items-center gap-1.5"><i className="h-0.5 w-3 bg-emerald-500" />Leads no CRM por dia (máx. {maxLeads})</span>
       </div>

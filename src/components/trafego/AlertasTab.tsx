@@ -46,11 +46,11 @@ function CartaoSugestao({ dia, s, onMudou, admin }: { dia: string; s: SugestaoIa
   const inversa = acaoInversa(s)
   return (
     <div className={cn('rounded-lg border border-line p-3', s.status !== 'pendente' && !conversando && 'opacity-70')}>
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2 max-sm:flex-wrap">
         <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">{CATEGORIA_IA[s.categoria]}</span>
         <h4 className="min-w-0 flex-1 text-sm font-medium text-foreground">{s.titulo}</h4>
         {s.status !== 'pendente' && (
-          <button type="button" onClick={() => void marcar('pendente')} className="shrink-0 text-[11px] text-foreground/40 hover:text-foreground">
+          <button type="button" onClick={() => void marcar('pendente')} className="shrink-0 text-[11px] text-foreground/40 hover:text-foreground max-sm:order-last max-sm:min-h-8 max-sm:w-full max-sm:text-right">
             {s.status === 'aceita' ? 'aceita' : 'ignorada'} · desfazer
           </button>
         )}
@@ -62,7 +62,7 @@ function CartaoSugestao({ dia, s, onMudou, admin }: { dia: string; s: SugestaoIa
         <p className="mt-2 rounded-md bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-700 dark:text-emerald-400">
           Aplicado no Meta por {s.aplicada.por} em {new Date(s.aplicada.em).toLocaleString('pt-BR')}: {s.aplicada.titulo}.
           {admin && inversa && (
-            <button type="button" onClick={() => setConfirmar({ acao: inversa, reversao: true })} className="ml-2 font-medium underline">Reverter</button>
+            <button type="button" onClick={() => setConfirmar({ acao: inversa, reversao: true })} className="ml-2 font-medium underline max-sm:inline-block max-sm:py-1">Reverter</button>
           )}
         </p>
       )}
@@ -70,7 +70,7 @@ function CartaoSugestao({ dia, s, onMudou, admin }: { dia: string; s: SugestaoIa
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {s.acao && !s.aplicada && (admin ? (
           <button type="button" onClick={() => setConfirmar({ acao: s.acao as AcaoMeta, reversao: false })}
-            className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90">
+            className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 max-sm:py-2">
             <Zap className="h-3 w-3" />{rotuloAcao(s.acao)}
           </button>
         ) : (
@@ -78,12 +78,12 @@ function CartaoSugestao({ dia, s, onMudou, admin }: { dia: string; s: SugestaoIa
         ))}
         {s.status === 'pendente' && (
           <>
-            <button type="button" onClick={() => void marcar('aceita')} className="inline-flex items-center gap-1 rounded-md bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/20"><Check className="h-3 w-3" />Aceitar</button>
-            <button type="button" onClick={() => void marcar('ignorada')} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-foreground/50 hover:bg-elevate/[0.06]"><X className="h-3 w-3" />Ignorar</button>
+            <button type="button" onClick={() => void marcar('aceita')} className="inline-flex items-center gap-1 rounded-md bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/20 max-sm:py-2"><Check className="h-3 w-3" />Aceitar</button>
+            <button type="button" onClick={() => void marcar('ignorada')} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-foreground/50 hover:bg-elevate/[0.06] max-sm:py-2"><X className="h-3 w-3" />Ignorar</button>
           </>
         )}
         <button type="button" onClick={() => setConversando((v) => !v)}
-          className={cn('ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs font-medium hover:bg-elevate/[0.06]', conversando ? 'bg-elevate/[0.06] text-foreground' : 'text-foreground/60')}>
+          className={cn('ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs font-medium hover:bg-elevate/[0.06] max-sm:py-2', conversando ? 'bg-elevate/[0.06] text-foreground' : 'text-foreground/60')}>
           <MessageCircle className="h-3 w-3" />Conversar com a IA
         </button>
       </div>
@@ -147,14 +147,14 @@ export function AlertasTab({ versao }: { versao: number }) {
           {alertas.dados?.abertos.length === 0 && <Vazio>Nenhum alerta aberto. Tudo dentro dos limites.</Vazio>}
           <ul className="space-y-2">
             {alertas.dados?.abertos.map((a) => (
-              <li key={a.id} className="flex items-start gap-3 rounded-lg border border-line p-2.5">
+              <li key={a.id} className="flex items-start gap-3 rounded-lg border border-line p-2.5 max-sm:flex-wrap max-sm:items-center max-sm:gap-x-2 max-sm:gap-y-1">
                 <span className={cn('mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', NIVEL[a.level].classe)}>{NIVEL[a.level].rotulo}</span>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 max-sm:order-last max-sm:basis-full">
                   <p className="text-sm text-foreground">{a.message}</p>
                   <p className="mt-0.5 text-[11px] text-foreground/35">{new Date(a.created_at).toLocaleString('pt-BR')}</p>
                 </div>
                 <button type="button" onClick={() => void resolver(a.id)}
-                  className="shrink-0 rounded-md px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/10">Resolver</button>
+                  className="shrink-0 rounded-md px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/10 max-sm:ml-auto max-sm:py-2">Resolver</button>
               </li>
             ))}
           </ul>
@@ -181,7 +181,7 @@ export function AlertasTab({ versao }: { versao: number }) {
           title="Varredura diária com IA"
           action={(
             <button type="button" onClick={() => void rodarIa()} disabled={rodando}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-foreground/60 hover:bg-elevate/[0.04] disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-foreground/60 hover:bg-elevate/[0.04] disabled:opacity-50 max-sm:py-2">
               {rodando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Rodar agora
             </button>
@@ -192,7 +192,7 @@ export function AlertasTab({ versao }: { versao: number }) {
           )}
           <div className="space-y-3">
             {ia.dados?.revisoes.map((r) => (
-              <div key={r.dia} className="rounded-lg border border-line p-3">
+              <div key={r.dia} className="rounded-lg border border-line p-3 max-sm:rounded-none max-sm:border-0 max-sm:p-0">
                 <p className="text-xs font-medium text-foreground/50">{r.dia.split('-').reverse().join('/')}</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">{r.texto}</p>
                 <div className="mt-2 space-y-2">

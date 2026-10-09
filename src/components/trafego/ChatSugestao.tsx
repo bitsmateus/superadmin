@@ -44,14 +44,14 @@ export function ChatSugestao({ dia, sugestaoId }: { dia: string; sugestaoId: str
         <div className="mb-2 flex flex-wrap gap-1.5">
           {EXEMPLOS.map((e) => (
             <button key={e} type="button" onClick={() => void enviar(e)}
-              className="rounded-full border border-line px-2.5 py-1 text-xs text-foreground/70 hover:bg-elevate/[0.06]">{e}</button>
+              className="rounded-full border border-line px-2.5 py-1 text-xs text-foreground/70 hover:bg-elevate/[0.06] max-sm:py-2 max-sm:text-left">{e}</button>
           ))}
         </div>
       )}
       <div className="max-h-80 space-y-2 overflow-y-auto">
         {mensagens.map((m, i) => (
           <div key={i} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
-            <p className={cn('max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm',
+            <p className={cn('max-w-[85%] whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-sm max-sm:max-w-[92%]',
               m.role === 'user' ? 'bg-accent/10 text-foreground' : 'bg-card text-foreground ring-1 ring-line')}>{m.content}</p>
           </div>
         ))}
@@ -69,8 +69,8 @@ export function ChatSugestao({ dia, sugestaoId }: { dia: string; sugestaoId: str
           className="h-9 min-w-0 flex-1 rounded-md border border-line bg-surface px-2.5 text-sm placeholder:text-foreground/30 focus:border-accent focus:outline-none"
         />
         <button type="submit" disabled={!texto.trim() || enviando}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-sm font-medium text-white disabled:opacity-40">
-          <Send className="h-3.5 w-3.5" />Enviar
+          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-sm font-medium text-white disabled:opacity-40 max-sm:w-9 max-sm:shrink-0 max-sm:justify-center max-sm:px-0">
+          <Send className="h-3.5 w-3.5" /><span className="max-sm:sr-only">Enviar</span>
         </button>
       </form>
     </div>

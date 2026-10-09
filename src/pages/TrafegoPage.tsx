@@ -38,14 +38,17 @@ function dataSp(dias: number): string {
     .format(new Date(Date.now() - dias * 86_400_000))
 }
 
-function Pilula({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: React.ReactNode }) {
+function Pilula({ ativo, onClick, children, className }: { ativo: boolean; onClick: () => void; children: React.ReactNode; className?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
         'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+        // No celular: alvo de toque de 32px e sem quebrar o rótulo.
+        'max-sm:shrink-0 max-sm:whitespace-nowrap max-sm:py-2',
         ativo ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/50 hover:bg-elevate/[0.04]',
+        className,
       )}
     >
       {children}
@@ -87,27 +90,29 @@ export function TrafegoPage() {
         breadcrumbs={[{ label: 'Grupo NX Digital', to: '/' }, { label: 'Tráfego' }]}
       />
       <div className="flex min-h-screen flex-col gap-4 bg-bg px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card p-3">
-          <div className="flex flex-wrap items-center gap-1.5">
+        {/* No celular: abas numa faixa que rola de lado; embaixo, períodos (esticados) + sincronizar só com o ícone,
+         * e o filtro de papel numa linha própria. Do sm pra cima fica tudo como sempre. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card p-3 max-sm:gap-2 max-sm:p-2">
+          <div className="flex flex-wrap items-center gap-1.5 max-sm:w-full max-sm:flex-nowrap max-sm:gap-1 max-sm:overflow-x-auto max-sm:p-px max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden">
             {ABAS.map((a) => <Pilula key={a.id} ativo={aba === a.id} onClick={() => setAba(a.id)}>{a.label}</Pilula>)}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 max-sm:w-full max-sm:gap-2 max-sm:border-t max-sm:border-line max-sm:pt-2">
             {usaPapel && (
-              <div className="flex items-center gap-1">
-                {PAPEIS.map((p) => <Pilula key={p.id} ativo={papel === p.id} onClick={() => setPapel(p.id)}>{p.label}</Pilula>)}
+              <div className="flex items-center gap-1 max-sm:order-last max-sm:w-full">
+                {PAPEIS.map((p) => <Pilula key={p.id} ativo={papel === p.id} onClick={() => setPapel(p.id)} className="max-sm:flex-1">{p.label}</Pilula>)}
               </div>
             )}
-            <div className="flex items-center gap-1">
-              {PERIODOS.map((p) => <Pilula key={p.dias} ativo={dias === p.dias} onClick={() => setDias(p.dias)}>{p.label}</Pilula>)}
+            <div className="flex items-center gap-1 max-sm:min-w-0 max-sm:flex-1">
+              {PERIODOS.map((p) => <Pilula key={p.dias} ativo={dias === p.dias} onClick={() => setDias(p.dias)} className="max-sm:flex-1 max-sm:px-1">{p.label}</Pilula>)}
             </div>
             <button
               type="button"
               onClick={() => void sincronizar()}
               disabled={sincronizando}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-foreground/60 hover:bg-elevate/[0.04] disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-foreground/60 hover:bg-elevate/[0.04] disabled:opacity-50 max-sm:h-8 max-sm:w-8 max-sm:shrink-0 max-sm:justify-center max-sm:p-0"
             >
               {sincronizando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Sincronizar agora
+              <span className="max-sm:sr-only">Sincronizar agora</span>
             </button>
           </div>
         </div>

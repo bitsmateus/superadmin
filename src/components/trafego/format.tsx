@@ -56,12 +56,12 @@ export function Painel({ title, action, children, className }: {
   return (
     <section className={cn('rounded-xl border border-line bg-card', className)}>
       {(title || action) && (
-        <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5">
+        <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5 max-sm:px-3">
           <h2 className="text-sm font-semibold text-foreground">{title}</h2>
           {action}
         </header>
       )}
-      <div className="p-4">{children}</div>
+      <div className="p-4 max-sm:p-3">{children}</div>
     </section>
   )
 }

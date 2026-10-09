@@ -40,12 +40,12 @@ export function CriativosTab({ de, ate, papel, versao }: { de: string; ate: stri
                   <div><dt className="text-foreground/40">Custo/reun.</dt><dd className="font-medium text-foreground">{brl(a.custoReuniao)}</dd></div>
                   <div><dt className="text-foreground/40">Freq.</dt><dd className="font-medium text-foreground">{a.frequencia.toFixed(1)}</dd></div>
                 </dl>
-                <div className="mt-1.5 flex items-center gap-2">
+                <div className="mt-1.5 flex items-center gap-2 max-sm:mt-0.5 max-sm:gap-4">
                   <button type="button" onClick={() => setLeadsDe({ id: a.id, nome: a.nome })}
-                    className="inline-flex items-center gap-1 text-[11px] text-accent hover:underline"><Users className="h-3 w-3" />Ver leads</button>
+                    className="inline-flex items-center gap-1 text-[11px] text-accent hover:underline max-sm:min-h-8 max-sm:text-xs"><Users className="h-3 w-3" />Ver leads</button>
                   {a.previewUrl && (
                     <a href={a.previewUrl} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] text-foreground/45 hover:text-foreground"><ExternalLink className="h-3 w-3" />Anúncio</a>
+                      className="inline-flex items-center gap-1 text-[11px] text-foreground/45 hover:text-foreground max-sm:min-h-8 max-sm:text-xs"><ExternalLink className="h-3 w-3" />Anúncio</a>
                   )}
                 </div>
               </div>

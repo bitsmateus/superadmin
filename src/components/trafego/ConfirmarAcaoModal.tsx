@@ -90,7 +90,7 @@ export function ConfirmarAcaoModal({ acao, sugestao, reversao, onClose, onAplica
                 if (Number.isFinite(n) && n > 0) setValorAplicado(Math.round(n * 100) / 100)
               }}
               inputMode="decimal"
-              className="mt-1 h-9 w-40 rounded-md border border-line bg-surface px-2 text-sm text-foreground focus:border-accent focus:outline-none"
+              className="mt-1 h-9 w-40 rounded-md border border-line bg-surface px-2 text-sm text-foreground focus:border-accent focus:outline-none max-sm:block"
             />
           </label>
         )}
@@ -102,7 +102,7 @@ export function ConfirmarAcaoModal({ acao, sugestao, reversao, onClose, onAplica
                 <p className="text-[11px] uppercase tracking-wide text-foreground/40">{NIVEL[p.acao.nivel]}</p>
                 <p className="break-words text-sm font-semibold text-foreground">{p.nome}</p>
                 <p className="mt-1 text-sm font-medium text-foreground">{p.titulo}</p>
-                <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
+                <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm max-sm:gap-1.5">
                   <div className="rounded-md bg-elevate/[0.05] p-2.5">
                     <p className="text-[11px] text-foreground/40">Hoje no Meta</p>
                     <p className="font-medium text-foreground">{rotuloStatus(p.antes.status)}</p>
@@ -139,7 +139,7 @@ export function ConfirmarAcaoModal({ acao, sugestao, reversao, onClose, onAplica
               </p>
 
               <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
-                <input type="checkbox" checked={ciente} onChange={(e) => setCiente(e.target.checked)} className="mt-1" />
+                <input type="checkbox" checked={ciente} onChange={(e) => setCiente(e.target.checked)} className="mt-1 max-sm:mt-0.5 max-sm:h-5 max-sm:w-5 max-sm:shrink-0" />
                 Entendi o que vai mudar e quero aplicar essa mudança na campanha real no Meta.
               </label>
             </>
@@ -148,13 +148,14 @@ export function ConfirmarAcaoModal({ acao, sugestao, reversao, onClose, onAplica
 
         {erroAplicar && <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{erroAplicar}</p>}
 
-        <div className="flex justify-end gap-2 border-t border-line pt-3">
+        {/* No celular os dois botões ficam um embaixo do outro, largura toda, com o de confirmar em cima. */}
+        <div className="flex justify-end gap-2 border-t border-line pt-3 max-sm:flex-col-reverse">
           <button type="button" onClick={onClose} disabled={aplicando}
             className="rounded-md px-3 py-2 text-sm font-medium text-foreground/60 hover:bg-elevate/[0.06] disabled:opacity-50">
             Cancelar (não alterar nada)
           </button>
           <button type="button" onClick={() => void aplicar()} disabled={!p || !ciente || aplicando}
-            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40">
+            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40 max-sm:justify-center max-sm:py-2.5">
             {aplicando && <Loader2 className="h-4 w-4 animate-spin" />}
             Confirmar e aplicar no Meta
           </button>

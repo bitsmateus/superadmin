@@ -19,7 +19,20 @@ export function LeadsModal({ alvo, onClose }: { alvo: Alvo | null; onClose: () =
         {dados && dados.leads.length === 0 && <p className="py-6 text-center text-sm text-foreground/40">Nenhum lead.</p>}
         {dados && dados.leads.length > 0 && (
           <div className="max-h-[60vh] overflow-y-auto">
-            <table className="w-full text-left text-sm">
+            {/* No celular: uma linha por lead, sem colunas espremidas. */}
+            <ul className="divide-y divide-line sm:hidden">
+              {dados.leads.map((l) => (
+                <li key={l.id} className="py-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{l.nome || 'Sem nome'}</span>
+                    <span className="shrink-0 text-xs text-foreground/50">{new Date(l.created_at).toLocaleDateString('pt-BR')}</span>
+                  </div>
+                  {l.empresa && <p className="text-xs text-foreground/40">{l.empresa}</p>}
+                  <p className="mt-0.5 text-xs text-foreground/60">{l.status || '—'} · <span className="text-foreground/45">{l.quadro}</span></p>
+                </li>
+              ))}
+            </ul>
+            <table className="w-full text-left text-sm max-sm:hidden">
               <thead className="text-xs text-foreground/50">
                 <tr><th className="py-1.5">Lead</th><th>Status</th><th>Quadro</th><th className="text-right">Entrou</th></tr>
               </thead>
@@ -72,12 +85,66 @@ function PapelSelect({ id, valor, onSaved }: { id: string; valor: string; onSave
         try { await trafegoService.marcarCampanha(id, { papel: e.target.value }); onSaved() }
         catch (err) { toast.error('Falha ao salvar: ' + (err as Error).message) }
       }}
-      className="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[11px] text-foreground/70"
+      className="rounded-md border border-line bg-surface px-1.5 py-0.5 text-[11px] text-foreground/70 max-sm:h-8 max-sm:text-xs"
     >
       <option value="">sem papel</option>
       <option value="escala">escala</option>
       <option value="teste">teste</option>
     </select>
+  )
+}
+
+/* ---------- Celular: a árvore campanha › conjunto › anúncio vira cartões ---------- */
+
+/** Os números principais em grade (4 por linha); o resto numa linha miúda embaixo. */
+function MetricasCartao({ l }: { l: LinhaTrafego }) {
+  const itens: [string, string, boolean?][] = [
+    ['Gasto', brl(l.gasto)], ['Leads', num(l.leads)], ['CPL', brl(l.cpl)], ['Reuniões', num(l.reunioes)],
+    ['Custo/reun.', brl(l.custoReuniao), true], ['Vendas', num(l.vendas)], ['CAC', brl(l.cac)], ['ROAS', vezes(l.roas)],
+  ]
+  return (
+    <>
+      <dl className="mt-2 grid grid-cols-4 gap-x-2 gap-y-1.5 text-xs">
+        {itens.map(([rotulo, valor, destaque]) => (
+          <div key={rotulo} className="min-w-0">
+            <dt className="truncate text-[10px] text-foreground/40">{rotulo}</dt>
+            <dd className={destaque ? 'font-semibold tabular-nums text-foreground' : 'font-medium tabular-nums text-foreground/85'}>{valor}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-1.5 text-[11px] tabular-nums text-foreground/45">
+        Agend. {num(l.agendadas)} · MRR {brl(l.mrr)} · Payback {meses(l.paybackMeses)}
+      </p>
+    </>
+  )
+}
+
+function BotaoLeads({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" title="Ver leads" aria-label="Ver leads" onClick={onClick}
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-foreground/40 hover:bg-elevate/[0.08] hover:text-foreground">
+      <Users className="h-4 w-4" />
+    </button>
+  )
+}
+
+/** Cabeçalho tocável (abre/fecha o nível de baixo) + botão de leads ao lado. */
+function CabecalhoCartao({ aberto, onAlternar, temFilhos, onLeads, children }: {
+  aberto: boolean; onAlternar?: () => void; temFilhos: boolean; onLeads: () => void; children: React.ReactNode
+}) {
+  const Chevron = aberto ? ChevronDown : ChevronRight
+  return (
+    <div className="flex items-start gap-1">
+      {temFilhos ? (
+        <button type="button" onClick={onAlternar} aria-expanded={aberto} className="-ml-1 flex min-h-8 min-w-0 flex-1 items-start gap-1 rounded-md py-1 text-left">
+          <Chevron className="mt-0.5 h-4 w-4 shrink-0 text-foreground/50" />
+          <span className="min-w-0 flex-1">{children}</span>
+        </button>
+      ) : (
+        <div className="min-h-8 min-w-0 flex-1 py-1">{children}</div>
+      )}
+      <BotaoLeads onClick={onLeads} />
+    </div>
   )
 }
 
@@ -102,7 +169,73 @@ export function CampanhasTab({ de, ate, papel, versao }: { de: string; ate: stri
 
   return (
     <Estado carregando={camp.carregando} erro={camp.erro}>
-      <div className="overflow-x-auto rounded-xl border border-line bg-card">
+      {/* Celular: um cartão por campanha (a tabela tem 12 colunas e não cabe); toque pra abrir conjuntos e anúncios. */}
+      <div className="space-y-2 sm:hidden">
+        <p className="px-1 text-[11px] text-foreground/45">Melhor custo por reunião primeiro. Toque na campanha pra ver os conjuntos e, no conjunto, os anúncios.</p>
+        {(camp.dados?.linhas ?? []).length === 0 && (
+          <p className="rounded-xl border border-line bg-card py-8 text-center text-sm text-foreground/40">Sem dados no período.</p>
+        )}
+        {(camp.dados?.linhas ?? []).map((c) => {
+          const aberta = abertos.has(`c:${c.id}`)
+          const conjuntos = conjuntosPorCampanha.get(c.id) ?? []
+          return (
+            <article key={c.id} className="rounded-xl border border-line bg-card p-3">
+              <CabecalhoCartao aberto={aberta} onAlternar={() => alternar(`c:${c.id}`)} temFilhos={conjuntos.length > 0}
+                onLeads={() => setLeadsDe({ chave: 'campaign_id', id: c.id, nome: c.nome })}>
+                <span className="break-words text-sm font-medium leading-snug text-foreground">{c.nome}</span>
+              </CabecalhoCartao>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <SeloBadge selo={seloDe(c)} />
+                <PapelSelect id={c.id} valor={c.papel ?? ''} onSaved={camp.recarregar} />
+                {c.status && c.status !== 'ACTIVE' && <span className="text-[11px] text-foreground/35">{c.status.toLowerCase()}</span>}
+                {conjuntos.length > 0 && <span className="ml-auto text-[11px] text-foreground/40">{conjuntos.length} conjunto{conjuntos.length === 1 ? '' : 's'}</span>}
+              </div>
+              <MetricasCartao l={c} />
+              {aberta && conjuntos.length > 0 && (
+                <ul className="mt-3 space-y-2 border-t border-line pt-3">
+                  {conjuntos.map((st) => {
+                    const sAberto = abertos.has(`s:${st.id}`)
+                    const anuncios = anunciosPorConjunto.get(st.id) ?? []
+                    return (
+                      <li key={st.id} className="rounded-lg bg-elevate/[0.03] p-2.5 border border-line">
+                        <CabecalhoCartao aberto={sAberto} onAlternar={() => alternar(`s:${st.id}`)} temFilhos={anuncios.length > 0}
+                          onLeads={() => setLeadsDe({ chave: 'adset_id', id: st.id, nome: st.nome })}>
+                          <span className="break-words text-[13px] leading-snug text-foreground/85">{st.nome}</span>
+                        </CabecalhoCartao>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                          <SeloBadge selo={seloDe(st)} />
+                          {st.orcamentoDia != null && <span className="text-[11px] text-foreground/40">{brl(st.orcamentoDia)}/dia</span>}
+                          {anuncios.length > 0 && <span className="ml-auto text-[11px] text-foreground/40">{anuncios.length} anúncio{anuncios.length === 1 ? '' : 's'}</span>}
+                        </div>
+                        <MetricasCartao l={st} />
+                        {sAberto && anuncios.length > 0 && (
+                          <ul className="mt-2.5 space-y-2 border-t border-line/60 pt-2.5">
+                            {anuncios.map((a) => (
+                              <li key={a.id} className="rounded-md bg-card p-2.5 border border-line">
+                                <div className="flex items-start gap-2">
+                                  {a.thumbnail && <img src={a.thumbnail} alt="" className="h-9 w-9 shrink-0 rounded object-cover" loading="lazy" />}
+                                  <div className="min-w-0 flex-1 py-0.5">
+                                    <p className="break-words text-[13px] leading-snug text-foreground/80">{a.nome}</p>
+                                    {seloDe(a) && <div className="mt-1"><SeloBadge selo={seloDe(a)} /></div>}
+                                  </div>
+                                  <BotaoLeads onClick={() => setLeadsDe({ chave: 'ad_id', id: a.id, nome: a.nome })} />
+                                </div>
+                                <MetricasCartao l={a} />
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </article>
+          )
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-line bg-card sm:block">
         <table className="w-full min-w-[1150px] text-sm">
           <thead className="border-b border-line text-left text-xs text-foreground/50">
             <tr>

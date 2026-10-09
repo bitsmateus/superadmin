@@ -2147,7 +2147,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   const SELECT_DEMANDA = `
     SELECT d.id, d.gc_cliente_id, c.nome_empresa AS cliente_nome, c.logo_url AS cliente_logo, d.coluna_id, d.ordem,
            d.titulo, d.descricao, d.prioridade, to_char(d.prazo, 'YYYY-MM-DD') AS prazo,
-           d.responsavel_id, p.name AS responsavel_nome, d.concluida_em, d.created_at, d.updated_at
+           d.responsavel_id, p.name AS responsavel_nome, d.concluida_em, d.created_at, d.updated_at,
+           COALESCE(d.coluna_desde, d.created_at) AS coluna_desde
     FROM gc_demandas d
     JOIN gc_clientes c ON c.id = d.gc_cliente_id
     LEFT JOIN profiles p ON p.id = d.responsavel_id`;
@@ -2225,6 +2226,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
           if (ids[i] === req.params.id) {
             await client.query(
               `UPDATE gc_demandas SET coluna_id = $2, ordem = $3, updated_at = NOW(),
+                 coluna_desde = CASE WHEN coluna_id <> $2 THEN NOW() ELSE coluna_desde END,
                  concluida_em = CASE WHEN $4::boolean THEN COALESCE(concluida_em, NOW()) ELSE NULL END WHERE id = $1`,
               [ids[i], destino.id, i, destino.concluida]
             );

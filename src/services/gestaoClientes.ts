@@ -138,6 +138,8 @@ export interface GcDemanda {
   responsavel_nome: string | null
   concluida_em: string | null
   created_at: string
+  /** Desde quando está na coluna atual (a criação, se nunca saiu dela). */
+  coluna_desde: string
 }
 
 export type GcSocialStatus = 'para_producao' | 'em_producao' | 'pronto'

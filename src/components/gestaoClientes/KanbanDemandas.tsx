@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDown, ArrowUp, CalendarClock, Loader2, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, CalendarClock, Clock, Loader2, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
@@ -10,6 +10,7 @@ import { AvatarCliente } from '@/components/gestaoClientes/AvatarCliente'
 import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import { gestaoClientes, type GcDemanda, type GcDemandaColuna } from '@/services/gestaoClientes'
 import { cn } from '@/lib/utils'
+import { diasDesde, tempoDesde, useMostrarTempo } from '@/lib/tempoNaColuna'
 
 const PRIORIDADES: { valor: GcDemanda['prioridade']; label: string; cor: string }[] = [
   { valor: 'baixa', label: 'Baixa', cor: 'bg-foreground/25' },
@@ -36,7 +37,7 @@ interface FormDemanda {
  * Dentro do cliente (`clienteId`) mostra só as demandas dele; sem `clienteId` é o quadro geral, com as de
  * todos os clientes e o nome do cliente em cada cartão.
  *
- * Arrastar o cartão muda a coluna. No celular não há arrastar com o dedo: cada cartão tem o seletor "Mover para".
+ * Arrastar o cartão muda a coluna, ou a ordem dentro da mesma coluna (a linha colorida mostra onde ele cai). No celular não há arrastar com o dedo: cada cartão tem o seletor "Mover para".
  */
 export function KanbanDemandas({
   clienteId,
@@ -57,6 +58,9 @@ export function KanbanDemandas({
   const [gerenciando, setGerenciando] = React.useState(false)
   const [arrastando, setArrastando] = React.useState<string | null>(null)
   const [sobre, setSobre] = React.useState<string | null>(null)
+  /** Onde o cartão arrastado vai cair: coluna + posição entre os cartões visíveis (sem contar o arrastado). */
+  const [ponto, setPonto] = React.useState<{ col: string; idx: number } | null>(null)
+  const [mostrarTempo, alternarTempo] = useMostrarTempo('demandas')
 
   const carregar = React.useCallback(async () => {
     try {
@@ -79,9 +83,31 @@ export function KanbanDemandas({
     visiveis.filter((d) => d.coluna_id === colunaId).sort((a, b) => a.ordem - b.ordem)
   const colunaConcluida = new Set(colunas.filter((c) => c.concluida).map((c) => c.id))
 
+  /** Posição no servidor (coluna inteira) equivalente à posição entre os cartões visíveis. */
+  const posicaoReal = (colunaId: string, idxVisivel: number, arrastadaId: string) => {
+    const todos = demandas
+      .filter((d) => d.coluna_id === colunaId && d.id !== arrastadaId)
+      .sort((a, b) => a.ordem - b.ordem)
+    const vis = doGrupo(colunaId).filter((d) => d.id !== arrastadaId)
+    if (idxVisivel < vis.length) return todos.findIndex((x) => x.id === vis[idxVisivel].id)
+    if (vis.length) return todos.findIndex((x) => x.id === vis[vis.length - 1].id) + 1
+    return todos.length
+  }
+
   const mover = async (demanda: GcDemanda, colunaId: string, posicao?: number) => {
     // Otimista: o cartão já muda de lugar; se o servidor recusar, recarrega.
-    setDemandas((lista) => lista.map((d) => (d.id === demanda.id ? { ...d, coluna_id: colunaId } : d)))
+    setDemandas((lista) => {
+      const outras = lista.filter((d) => d.coluna_id === colunaId && d.id !== demanda.id).sort((a, b) => a.ordem - b.ordem)
+      outras.splice(posicao ?? outras.length, 0, demanda)
+      const novaOrdem = new Map(outras.map((d, i) => [d.id, i]))
+      return lista.map((d) => {
+        if (d.id === demanda.id) {
+          const mudouDeColuna = d.coluna_id !== colunaId
+          return { ...d, coluna_id: colunaId, ordem: novaOrdem.get(d.id) ?? 0, coluna_desde: mudouDeColuna ? new Date().toISOString() : d.coluna_desde }
+        }
+        return novaOrdem.has(d.id) ? { ...d, ordem: novaOrdem.get(d.id)! } : d
+      })
+    })
     try {
       await gestaoClientes.moverDemanda(demanda.id, colunaId, posicao)
       await carregar()
@@ -188,6 +214,16 @@ export function KanbanDemandas({
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<Clock className="h-4 w-4" />}
+            onClick={alternarTempo}
+            className={cn(mostrarTempo && 'bg-accent/10 text-accent')}
+            title="Mostra há quanto tempo cada cartão está na coluna"
+          >
+            Tempo na coluna
+          </Button>
           <Button variant="ghost" size="sm" leftIcon={<Settings2 className="h-4 w-4" />} onClick={() => setGerenciando(true)}>
             Colunas
           </Button>
@@ -207,14 +243,24 @@ export function KanbanDemandas({
               onDragOver={(e) => {
                 e.preventDefault()
                 setSobre(col.id)
+                // Área vazia da coluna (abaixo dos cartões): cai no fim.
+                setPonto({ col: col.id, idx: cartoes.filter((x) => x.id !== arrastando).length })
               }}
               onDragLeave={() => setSobre((s) => (s === col.id ? null : s))}
               onDrop={(e) => {
                 e.preventDefault()
-                setSobre(null)
+                const alvo = ponto?.col === col.id ? ponto.idx : cartoes.filter((x) => x.id !== arrastando).length
                 const d = demandas.find((x) => x.id === arrastando)
+                setSobre(null)
+                setPonto(null)
                 setArrastando(null)
-                if (d && d.coluna_id !== col.id) void mover(d, col.id)
+                if (!d) return
+                const posicao = posicaoReal(col.id, alvo, d.id)
+                if (d.coluna_id === col.id) {
+                  const atual = demandas.filter((x) => x.coluna_id === col.id).sort((a, b) => a.ordem - b.ordem).findIndex((x) => x.id === d.id)
+                  if (atual === posicao) return
+                }
+                void mover(d, col.id, posicao)
               }}
               className={cn(
                 'flex max-h-[calc(100vh-14rem)] min-h-[12rem] w-[85vw] max-w-sm shrink-0 snap-center flex-col rounded-2xl border bg-elevate/[0.025] sm:w-72',
@@ -234,13 +280,29 @@ export function KanbanDemandas({
                     Solte uma demanda aqui
                   </p>
                 )}
-                {cartoes.map((d) => {
+                {cartoes.map((d, i) => {
+                  const linhaAntes =
+                    !!arrastando && arrastando !== d.id && ponto?.col === col.id &&
+                    ponto.idx === cartoes.slice(0, i).filter((x) => x.id !== arrastando).length
+                  const parado = diasDesde(d.coluna_desde)
                   const atrasada = d.prazo && d.prazo < hojeISO() && !colunaConcluida.has(d.coluna_id)
                   const prio = PRIORIDADES.find((p) => p.valor === d.prioridade)
                   return (
+                    <React.Fragment key={d.id}>
+                    {linhaAntes && <div className="-my-1 h-0.5 shrink-0 rounded-full bg-accent" />}
                     <article
-                      key={d.id}
                       draggable
+                      onDragOver={(e) => {
+                        if (!arrastando) return
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setSobre(col.id)
+                        if (d.id === arrastando) return
+                        const r = e.currentTarget.getBoundingClientRect()
+                        const depois = e.clientY > r.top + r.height / 2
+                        const base = cartoes.filter((x) => x.id !== arrastando)
+                        setPonto({ col: col.id, idx: base.findIndex((x) => x.id === d.id) + (depois ? 1 : 0) })
+                      }}
                       onDragStart={(e) => {
                         setArrastando(d.id)
                         e.dataTransfer.effectAllowed = 'move'
@@ -248,6 +310,7 @@ export function KanbanDemandas({
                       onDragEnd={() => {
                         setArrastando(null)
                         setSobre(null)
+                        setPonto(null)
                       }}
                       className={cn(
                         'group cursor-grab rounded-xl border border-line bg-surface p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing',
@@ -288,6 +351,14 @@ export function KanbanDemandas({
                           </span>
                         )}
                         {d.responsavel_nome && <span className="truncate">· {d.responsavel_nome}</span>}
+                        {mostrarTempo && (
+                          <span
+                            className={cn('flex items-center gap-1', parado >= 7 && !colunaConcluida.has(d.coluna_id) && 'font-medium text-warning')}
+                            title={`Na coluna "${col.nome}" desde ${new Date(d.coluna_desde).toLocaleString('pt-BR')}`}
+                          >
+                            <Clock className="h-3 w-3" /> {tempoDesde(d.coluna_desde)}
+                          </span>
+                        )}
                       </div>
                       {/* Sem arrastar no celular: este seletor é o jeito de mover. */}
                       <select
@@ -303,8 +374,12 @@ export function KanbanDemandas({
                         ))}
                       </select>
                     </article>
+                    </React.Fragment>
                   )
                 })}
+                {!!arrastando && ponto?.col === col.id && ponto.idx >= cartoes.filter((x) => x.id !== arrastando).length && cartoes.some((x) => x.id !== arrastando) && (
+                  <div className="-my-1 h-0.5 shrink-0 rounded-full bg-accent" />
+                )}
                 <button
                   type="button"
                   onClick={() => abrirNova(col.id)}

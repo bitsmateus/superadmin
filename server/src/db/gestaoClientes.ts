@@ -474,6 +474,7 @@ const TABELAS = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  `ALTER TABLE gc_demandas ADD COLUMN IF NOT EXISTS coluna_desde TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS gc_demandas_cliente_idx ON gc_demandas (gc_cliente_id)`,
   `CREATE INDEX IF NOT EXISTS gc_demandas_coluna_idx ON gc_demandas (coluna_id, ordem)`,
   // ---------------------------------------------------------------- social media (designer / editores)

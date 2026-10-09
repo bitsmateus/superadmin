@@ -334,7 +334,7 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
         Página
       </ToolbarButton>
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-line bg-card p-1.5 shadow-xl">
+        <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-line bg-card p-1.5 shadow-xl max-sm:left-auto max-sm:right-0">
           <button
             type="button"
             onClick={openDuplicate}
@@ -522,7 +522,7 @@ function BulkActionButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex flex-col items-center gap-0.5 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors',
+        'flex flex-col items-center gap-0.5 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors max-sm:px-2',
         danger ? 'text-foreground/50 hover:bg-danger/10 hover:text-danger' : 'text-foreground/50 hover:bg-elevate/[0.08] hover:text-foreground',
       )}
     >
@@ -725,12 +725,13 @@ function BulkActionBar({
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-16 z-40 flex justify-center px-4">
-      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-line bg-card px-2 py-1.5 shadow-xl">
+    // No celular só o número fica (sem "Nomes selecionados"), pra barra caber nos 390px.
+    <div className="pointer-events-none fixed inset-x-0 bottom-16 z-40 flex justify-center px-4 max-sm:px-2">
+      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-line bg-card px-2 py-1.5 shadow-xl max-sm:gap-0">
         <span className="mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-white">
           {selectedRows.length}
         </span>
-        <span className="mr-1.5 whitespace-nowrap text-xs font-medium text-foreground/70">
+        <span className="mr-1.5 whitespace-nowrap text-xs font-medium text-foreground/70 max-sm:hidden">
           {selectedRows.length === 1 ? 'Nome selecionado' : 'Nomes selecionados'}
         </span>
         <div className="mx-1 h-6 w-px bg-line" />
@@ -739,7 +740,7 @@ function BulkActionBar({
         <div className="relative" ref={editRef}>
           <BulkActionButton icon={<Pencil className="h-4 w-4" />} label="Editar" onClick={() => setEditOpen((o) => !o)} />
           {editOpen && (
-            <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 shadow-xl">
+            <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 shadow-xl max-sm:left-auto max-sm:right-0 max-sm:translate-x-0">
               <BulkEditSubmenu onApply={applyBulkEdit} pageId={pageId} />
             </div>
           )}
@@ -747,7 +748,7 @@ function BulkActionBar({
         <div className="relative" ref={moveRef}>
           <BulkActionButton icon={<ArrowRightLeft className="h-4 w-4" />} label="Mover" onClick={() => setMoveOpen((o) => !o)} />
           {moveOpen && (
-            <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 shadow-xl">
+            <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 shadow-xl max-sm:left-auto max-sm:right-0 max-sm:translate-x-0">
               <MoveSubmenu allBoards={allBoards} allPages={allPages} onMove={moveTo} currentPageId={pageId} sdrLock={sdrLock} />
             </div>
           )}
@@ -886,6 +887,33 @@ function BoardGroup({
     }
   }
 
+  // Troca de etiqueta numa célula (lista ou cartão do celular) — mesma regra nos dois lugares.
+  const applyTagChange = (row: LeadRow, key: ColumnDef['key'], next: string) => {
+    if (key === 'status') {
+      // Move o lead pro quadro de MESMO NOME dentro da MESMA PÁGINA — nunca
+      // pra um quadro de outra página, mesmo que o nome bata (ex.: "Vendido"
+      // existe em várias páginas de SDR diferentes, e uma cópia arquivada
+      // pode ter um quadro com o mesmo nome; sem essa checagem de página o
+      // lead somia parar numa página arquivada e sumia da tela do SDR).
+      const target = allBoards.find(
+        (b) => b.id !== row.boardId && b.page === board.page && b.name.trim().toLowerCase() === next.trim().toLowerCase(),
+      )
+      applyFieldChange(row, target ? { status: next, boardId: target.id } : { status: next })
+    } else if (key === 'sdr') {
+      // Marcar o SDR aqui (só existe em abas sem dono, ex.: Novos Leads) já
+      // manda o lead pro quadro de MESMO NOME na aba daquele SDR — não faz
+      // sentido ficar em Novos Leads depois de atribuído.
+      const target = next
+        ? sdrPageBoards.get(next)?.find(
+            (b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase(),
+          )
+        : undefined
+      applyFieldChange(row, target ? { sdr: next, boardId: target.id } : { sdr: next })
+    } else {
+      applyFieldChange(row, { [key]: next })
+    }
+  }
+
   const startDrag = (e: React.DragEvent, id: string, label: string) => {
     // Arrastar uma linha que já está selecionada leva a seleção inteira junto.
     const ids = selectedIds.has(id) && selectedIds.size > 1 ? Array.from(selectedIds) : [id]
@@ -952,7 +980,7 @@ function BoardGroup({
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="grid h-5 w-5 shrink-0 place-items-center rounded text-foreground/40 transition-colors hover:bg-elevate/[0.05] hover:text-foreground/70"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded text-foreground/40 transition-colors hover:bg-elevate/[0.05] hover:text-foreground/70 max-sm:-ml-1.5 max-sm:h-8 max-sm:w-8"
           >
             <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open ? '' : '-rotate-90')} />
           </button>
@@ -964,7 +992,7 @@ function BoardGroup({
             value={board.color}
             onChange={(e) => leadBoardsService.updateBoard(board.id, { color: e.target.value })}
             title="Cor do quadro"
-            className="ml-auto h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+            className="ml-auto h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0 max-sm:h-7 max-sm:w-7"
           />
           <button
             type="button"
@@ -974,7 +1002,7 @@ function BoardGroup({
               }
             }}
             title="Excluir quadro"
-            className="grid h-5 w-5 shrink-0 place-items-center rounded text-foreground/40 transition-colors hover:bg-danger/10 hover:text-danger"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded text-foreground/40 transition-colors hover:bg-danger/10 hover:text-danger max-sm:-mr-1.5 max-sm:h-8 max-sm:w-8"
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -983,10 +1011,13 @@ function BoardGroup({
         {!open && <p className="ml-7 mt-0.5 text-[11px] text-foreground/40">{rows.length} Nome</p>}
       </div>
 
+      {/* Lista — no celular vira cartões (a planilha tem 15 colunas e não cabe numa tela
+       * estreita); do sm pra cima é a tabela de sempre. */}
       {open && (
+        <>
         <div
           ref={(el) => registerScrollEl(board.id, el)}
-          className="no-scrollbar overflow-x-auto"
+          className="no-scrollbar hidden overflow-x-auto sm:block"
           style={{ borderLeft: `4px solid ${board.color}`, WebkitOverflowScrolling: 'touch' }}
           onScroll={(e) => onTableScroll(e.currentTarget.scrollLeft, e.currentTarget)}
         >
@@ -1136,31 +1167,7 @@ function BoardGroup({
                           value={row[col.key as LeadRowField]}
                           required={col.required}
                           pageId={board.page}
-                          onChange={(next) => {
-                            if (col.key === 'status') {
-                              // Move o lead pro quadro de MESMO NOME dentro da MESMA PÁGINA — nunca
-                              // pra um quadro de outra página, mesmo que o nome bata (ex.: "Vendido"
-                              // existe em várias páginas de SDR diferentes, e uma cópia arquivada
-                              // pode ter um quadro com o mesmo nome; sem essa checagem de página o
-                              // lead somia parar numa página arquivada e sumia da tela do SDR).
-                              const target = allBoards.find(
-                                (b) => b.id !== row.boardId && b.page === board.page && b.name.trim().toLowerCase() === next.trim().toLowerCase(),
-                              )
-                              applyFieldChange(row, target ? { status: next, boardId: target.id } : { status: next })
-                            } else if (col.key === 'sdr') {
-                              // Marcar o SDR aqui (só existe em abas sem dono, ex.: Novos Leads) já
-                              // manda o lead pro quadro de MESMO NOME na aba daquele SDR — não faz
-                              // sentido ficar em Novos Leads depois de atribuído.
-                              const target = next
-                                ? sdrPageBoards.get(next)?.find(
-                                    (b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase(),
-                                  )
-                                : undefined
-                              applyFieldChange(row, target ? { sdr: next, boardId: target.id } : { sdr: next })
-                            } else {
-                              applyFieldChange(row, { [col.key]: next })
-                            }
-                          }}
+                          onChange={(next) => applyTagChange(row, col.key, next)}
                         />
                       ) : col.currency ? (
                         <CurrencyField
@@ -1236,8 +1243,185 @@ function BoardGroup({
             </tbody>
           </table>
         </div>
+
+        <div className="sm:hidden" style={{ borderLeft: `4px solid ${board.color}` }}>
+          {rows.length > 0 && (
+            <div className="flex items-center gap-3 border-b border-line px-3 py-2">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={() => onToggleAll(rows.map((r) => r.id), !allSelected)}
+                title="Selecionar todos"
+                className="h-5 w-5 rounded border-line accent-accent"
+              />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
+                {rows.length} nome{rows.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          )}
+          <ul className="divide-y divide-line/60">
+            {rows.map((row) => (
+              <LeadCard
+                key={row.id}
+                row={row}
+                cols={cols}
+                pageId={board.page}
+                selected={selectedIds.has(row.id)}
+                onToggle={() => onToggleRow(row.id)}
+                onOpenLead={() => onOpenLead(row.id)}
+                onTagChange={(key, next) => applyTagChange(row, key, next)}
+                onFieldChange={(patch) => applyFieldChange(row, patch)}
+                nomeRef={row.id === focusRowId ? (el) => {
+                  if (el) { el.focus(); onFocused() }
+                } : undefined}
+              />
+            ))}
+          </ul>
+          {rows.length > 0 && cols.some((c) => c.key === 'valorMrr') && (
+            <div className="grid grid-cols-2 gap-3 border-t border-line bg-elevate/[0.03] px-3 py-2.5 text-sm font-semibold text-foreground">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/45">Total MRR</p>
+                <p className="tabular-nums">{formatBRLCents(totalMrr)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/45">Total implementação</p>
+                <p className="tabular-nums">{formatBRLCents(totalImplementacao)}</p>
+              </div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => onCreateRow(board.id)}
+            className="flex h-11 w-full items-center gap-1.5 border-t border-line px-3 text-sm text-foreground/45 transition-colors hover:text-accent"
+          >
+            <Plus className="h-4 w-4" />
+            Adicionar nome
+          </button>
+        </div>
+        </>
       )}
     </div>
+  )
+}
+
+/** Campos do cartão do celular, na ordem em que aparecem (só os que o quadro tem como coluna). */
+const CARD_TAG_KEYS: LeadLabelField[] = ['status', 'diaContato', 'sdr']
+
+/** Mesmo lead da linha da planilha, em cartão — só no celular. Mostra o que o SDR mexe no dia a
+ * dia (nome, telefone, etiquetas, agendamento, retornar); o resto fica no "Abrir lead". */
+function LeadCard({
+  row, cols, pageId, selected, onToggle, onOpenLead, onTagChange, onFieldChange, nomeRef,
+}: {
+  row: LeadRow
+  cols: ColumnDef[]
+  pageId: string
+  selected: boolean
+  onToggle: () => void
+  onOpenLead: () => void
+  onTagChange: (key: ColumnDef['key'], next: string) => void
+  onFieldChange: (patch: Partial<LeadRow>) => void
+  nomeRef?: (el: HTMLInputElement | null) => void
+}) {
+  const colByKey = new Map(cols.map((c) => [c.key, c]))
+  const tagCols = CARD_TAG_KEYS.map((k) => colByKey.get(k)).filter((c): c is ColumnDef => !!c)
+  const agendamentoCol = colByKey.get('agendamento')
+  const telefone = row.telefone.trim()
+
+  return (
+    <li
+      title={row.vendaRevertida ? 'Venda revertida — o lead saiu de "Vendido"' : undefined}
+      className={cn('px-3 py-3', selected && 'bg-accent/10', row.vendaRevertida && 'bg-elevate/[0.03] text-foreground/40')}
+    >
+      <div className="flex items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          className="mt-1.5 h-5 w-5 shrink-0 rounded border-line accent-accent"
+        />
+        <div className="min-w-0 flex-1">
+          <EditableField
+            ref={nomeRef}
+            value={row.nome}
+            placeholder="Nome do lead"
+            onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
+            className={cn(
+              'h-8 bg-transparent text-sm font-medium text-foreground',
+              row.vendaRevertida && 'text-foreground/40 line-through decoration-foreground/30',
+            )}
+          />
+          <p className="truncate text-xs text-foreground/50">
+            {colByKey.has('telefone') && (
+              telefone ? (
+                <a href={`tel:${telefone.replace(/[^\d+]/g, '')}`} className="font-medium text-accent">{telefone}</a>
+              ) : (
+                <span className="text-danger">Sem telefone</span>
+              )
+            )}
+            {colByKey.has('empresa') && row.empresa && <> · {row.empresa}</>}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpenLead}
+          title="Abrir lead"
+          className={cn(
+            'relative grid h-9 w-9 shrink-0 place-items-center rounded-md transition-colors',
+            row.notesCount > 0 ? 'bg-accent/15 hover:bg-accent/25' : 'bg-elevate/[0.05] hover:bg-elevate/[0.08]',
+          )}
+        >
+          <MessageCircle className={cn('h-4 w-4', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-foreground/40')} />
+          {row.notesCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 grid h-4 min-w-[1rem] place-items-center rounded-full bg-accent px-0.5 text-[10px] font-semibold text-white ring-2 ring-white">
+              {row.notesCount > 9 ? '9+' : row.notesCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 items-start gap-x-2 gap-y-1.5 pl-[30px]">
+        {tagCols.map((col) => (
+          <div key={col.key} className="min-w-0">
+            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground/40">{col.label}</p>
+            <LeadLabelCell
+              field={col.key as LeadLabelField}
+              value={row[col.key as LeadRowField]}
+              required={col.required}
+              pageId={pageId}
+              onChange={(next) => onTagChange(col.key, next)}
+              className="min-h-[32px] rounded-md text-xs"
+            />
+          </div>
+        ))}
+        {agendamentoCol && (
+          <div className="min-w-0">
+            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground/40">Agendamento</p>
+            <AgendamentoField
+              value={row.agendamento}
+              onChange={(next) => leadBoardsService.updateRow(row.id, { agendamento: next })}
+              placeholder={agendamentoCol.required ? 'Obrigatório' : undefined}
+              className={cn(
+                'min-h-[32px] rounded-md px-2 py-1.5 text-xs text-foreground',
+                agendamentoCol.required && !row.agendamento
+                  ? 'bg-danger/10 ring-1 ring-inset ring-danger/30'
+                  : 'bg-elevate/[0.05]',
+              )}
+            />
+          </div>
+        )}
+        {colByKey.has('retornar') && (
+          <div className="min-w-0">
+            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground/40">Retornar</p>
+            <RetornarField
+              value={row.retornar}
+              retornado={row.retornado}
+              onChange={(patch) => onFieldChange(patch)}
+              className="min-h-[32px] rounded-md bg-elevate/[0.05] px-2 py-1.5 text-xs text-foreground"
+            />
+          </div>
+        )}
+      </div>
+    </li>
   )
 }
 
@@ -1523,13 +1707,14 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   {isAdmin && <PageActionsMenu pageId={page} pageName={title} boards={boards} />}
                 </>
               )}
-              <div className="relative">
+              {/* No celular a busca estica e ocupa a linha inteira (fica mais fácil de tocar). */}
+              <div className="relative max-sm:w-full">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Pesquisar"
-                  className="h-9 w-44 rounded-md border border-line bg-card pl-9 pr-2 text-sm text-foreground placeholder:text-foreground/40 focus:border-accent/60 focus:outline-none"
+                  className="h-9 w-44 max-sm:w-full rounded-md border border-line bg-card pl-9 pr-2 text-sm text-foreground placeholder:text-foreground/40 focus:border-accent/60 focus:outline-none"
                 />
               </div>
               <ToolbarButton
@@ -1650,8 +1835,9 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                 </div>
 
                 {/* Barra de rolagem horizontal única, flutuante — visível na tela toda,
-                    não precisa descer até o fim da página pra arrastar. */}
-                <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 sm:px-6 lg:px-8 lg:pl-[236px]">
+                    não precisa descer até o fim da página pra arrastar. No celular a planilha vira
+                    cartões, então ela some. */}
+                <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 sm:px-6 lg:px-8 lg:pl-[236px] max-sm:hidden">
                   <div
                     ref={scrollBarEl}
                     className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-line bg-card shadow-lg"

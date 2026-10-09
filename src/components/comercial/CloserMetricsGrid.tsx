@@ -12,7 +12,11 @@ interface GrupoDaLista { titulo: string; itens: ItemDaLista[] }
 /**
  * Passando o mouse (ou tocando, no celular) mostra QUAIS leads formam o número: o nome de cada uma e a etapa em que está hoje.
  */
-function ComLista({ grupos, children, className, onOpenLead }: { grupos: GrupoDaLista[]; children: React.ReactNode; className?: string; onOpenLead?: (id: string) => void }) {
+function ComLista({ grupos, children, className, onOpenLead, popClassName }: {
+  grupos: GrupoDaLista[]; children: React.ReactNode; className?: string; onOpenLead?: (id: string) => void
+  /** Alinhamento do balão no celular (grade de 2 colunas): centralizado ele sai pela borda. */
+  popClassName?: string
+}) {
   const [aberto, setAberto] = React.useState(false)
   return (
     <div
@@ -26,7 +30,7 @@ function ComLista({ grupos, children, className, onOpenLead }: { grupos: GrupoDa
     >
       {children}
       {aberto && (
-        <div className="absolute left-1/2 top-full z-30 mt-1 max-h-72 w-72 max-w-[85vw] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-card p-2 text-left shadow-xl">
+        <div className={cn('absolute left-1/2 top-full z-30 mt-1 max-h-72 w-72 max-w-[85vw] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-card p-2 text-left shadow-xl', popClassName)}>
           {grupos.map((g) => (
             <div key={g.titulo} className="mb-2 last:mb-0">
               <p className="px-1 pb-1 text-[11px] font-semibold text-foreground/70">
@@ -66,8 +70,13 @@ function ComLista({ grupos, children, className, onOpenLead }: { grupos: GrupoDa
 
 const pct = (n: number) => `${Math.round(n * 100)}%`
 
-function Anel({ icone, rotulo, cor, valor, detalhe, grupos, onOpenLead }: {
+// Celular (2 colunas): o balão encosta na borda do bloco em vez de centralizar — senão sai da tela.
+const POP_ESQUERDA = 'max-sm:left-0 max-sm:translate-x-0'
+const POP_DIREITA = 'max-sm:left-auto max-sm:right-0 max-sm:translate-x-0'
+
+function Anel({ icone, rotulo, cor, valor, detalhe, grupos, onOpenLead, popClassName }: {
   onOpenLead?: (id: string) => void
+  popClassName?: string
   grupos: GrupoDaLista[]
   icone: React.ReactNode
   rotulo: string
@@ -78,7 +87,7 @@ function Anel({ icone, rotulo, cor, valor, detalhe, grupos, onOpenLead }: {
 }) {
   const deg = Math.max(0, Math.min(1, valor)) * 360
   return (
-    <ComLista grupos={grupos} onOpenLead={onOpenLead} className="flex cursor-default flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3">
+    <ComLista grupos={grupos} onOpenLead={onOpenLead} popClassName={popClassName} className="flex cursor-default flex-col items-center gap-2 rounded-xl bg-elevate/[0.05] px-2 py-3">
       <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(${cor} ${deg}deg, #E5E7EB 0deg)` }}>
         <div className="grid h-[52px] w-[52px] place-items-center rounded-full bg-card text-sm font-bold" style={{ color: cor }}>
           {pct(valor)}
@@ -155,7 +164,7 @@ export function CloserMetricsGrid({ closer = 'Luis', onOpenLead }: {
         </div>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <ComLista grupos={[{ titulo: 'Reuniões agendadas', itens: lista.agendadas }]} onOpenLead={onOpenLead} className="flex cursor-default flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
+          <ComLista grupos={[{ titulo: 'Reuniões agendadas', itens: lista.agendadas }]} onOpenLead={onOpenLead} popClassName={POP_ESQUERDA} className="flex cursor-default flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
             <span className="text-3xl font-bold text-accent">{dados ? agendadas : '…'}</span>
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/80">
               <CalendarCheck className="h-3 w-3 text-accent" /> Reuniões agendadas
@@ -165,6 +174,7 @@ export function CloserMetricsGrid({ closer = 'Luis', onOpenLead }: {
           <Anel
             icone={<UserCheck className="h-3 w-3" />}
             rotulo="% de comparecimento"
+            popClassName={POP_DIREITA}
             cor="#06B6D4"
             valor={m.comparecimento}
             detalhe={`${compareceu} de ${comDesfecho}`}
@@ -174,6 +184,7 @@ export function CloserMetricsGrid({ closer = 'Luis', onOpenLead }: {
           <Anel
             icone={<TrendingUp className="h-3 w-3" />}
             rotulo="% de conversão"
+            popClassName={POP_ESQUERDA}
             cor="#22C55E"
             valor={m.conversao}
             detalhe={`${vendas} venda(s) de ${compareceu} realizadas`}

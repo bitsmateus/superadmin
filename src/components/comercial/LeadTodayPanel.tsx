@@ -18,10 +18,14 @@ export function TodayStatCard({
   card,
   boards,
   onOpenLead,
+  mobilePopRight,
 }: {
   card: StatCard
   boards: LeadBoard[]
   onOpenLead: (id: string) => void
+  /** No celular (2 colunas) o card da direita abre a lista alinhada pela direita — senão ela
+   * nasce pra fora da tela. */
+  mobilePopRight?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
@@ -50,12 +54,12 @@ export function TodayStatCard({
         <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', card.tone)}>{card.icon}</span>
         <div className="min-w-0 flex-1">
           <p className="text-xl font-bold leading-none text-foreground">{card.matches.length}</p>
-          <p className="mt-1 truncate text-[11px] text-foreground/50">{card.label}</p>
+          <p className="mt-1 truncate text-[11px] text-foreground/50 max-sm:whitespace-normal max-sm:leading-tight">{card.label}</p>
         </div>
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-line bg-card p-1.5 shadow-xl">
+        <div className={cn('absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-line bg-card p-1.5 shadow-xl', mobilePopRight && 'max-sm:left-auto max-sm:right-0')}>
           <ul className="max-h-64 overflow-y-auto">
             {card.matches.map((r) => (
               <li key={r.id}>
@@ -136,8 +140,8 @@ export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps
 
   return (
     <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {cards.map((c) => (
-        <TodayStatCard key={c.key} card={c} boards={boards} onOpenLead={onOpenLead} />
+      {cards.map((c, i) => (
+        <TodayStatCard key={c.key} card={c} boards={boards} onOpenLead={onOpenLead} mobilePopRight={i % 2 === 1} />
       ))}
     </div>
   )

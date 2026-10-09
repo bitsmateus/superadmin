@@ -203,7 +203,34 @@ function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMet
         </span>
         {title}
       </div>
-      <div className="overflow-x-auto">
+      {/* Celular: um cartão por SDR com os 7 números em grade — a tabela (760px) não cabe. */}
+      <ul className="space-y-2 sm:hidden">
+        {bySdr.map((m) => (
+          <li key={m.sdr} className="rounded-xl border border-line/70 p-2.5">
+            <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-foreground/70">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
+              {m.sdr}
+            </p>
+            <div className="grid grid-cols-4 gap-1.5">
+              {([
+                ['Leads', m.total],
+                ['Agendadas', m.agendados],
+                ['% agend.', pct(m.pctAgendamento)],
+                ['No-show', m.noShow],
+                ['% comparec.', pct(m.pctComparecimento)],
+                ['Vendas', m.vendas],
+                ['% agend. p/ venda', pct(m.pctAgendamentoVenda)],
+              ] as const).map(([label, value]) => (
+                <div key={label} className="rounded-lg bg-elevate/[0.03] px-1 py-2 text-center">
+                  <p className="text-[10px] leading-tight text-foreground/45">{label}</p>
+                  <p className="mt-0.5 text-sm font-semibold text-foreground">{value}</p>
+                </div>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[760px] border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-line text-[11px] font-semibold text-foreground/50">

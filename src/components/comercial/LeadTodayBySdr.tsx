@@ -22,14 +22,20 @@ function CountCell({
   boards,
   onOpenLead,
   tone,
+  label,
+  popClassName,
 }: {
   matches: LeadRow[]
   boards: LeadBoard[]
   onOpenLead: (id: string) => void
   tone: string
+  /** Com rótulo vira um bloquinho (cartão do celular) em vez de célula da tabela. */
+  label?: string
+  /** Posição da lista de leads no cartão do celular (as colunas da ponta abrem pra dentro). */
+  popClassName?: string
 }) {
   const [open, setOpen] = React.useState(false)
-  const ref = React.useRef<HTMLTableCellElement>(null)
+  const ref = React.useRef<HTMLTableCellElement & HTMLDivElement>(null)
   useOutsideClose(ref, open, () => setOpen(false))
 
   const boardName = (boardId: string) => boards.find((b) => b.id === boardId)?.name ?? ''
@@ -41,8 +47,10 @@ function CountCell({
     setOpen((o) => !o)
   }
 
+  const Wrapper = label ? 'div' : 'td'
   return (
-    <td ref={ref} className="relative px-3 py-2.5 text-center">
+    <Wrapper ref={ref} className={label ? 'relative rounded-lg bg-elevate/[0.03] px-1 py-2 text-center' : 'relative px-3 py-2.5 text-center'}>
+      {label && <p className="mb-1 text-[10px] leading-tight text-foreground/45">{label}</p>}
       <button
         type="button"
         onClick={handleClick}
@@ -56,7 +64,7 @@ function CountCell({
       </button>
 
       {open && (
-        <div className="absolute left-1/2 top-full z-20 mt-1 w-64 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 text-left shadow-xl">
+        <div className={cn('absolute top-full z-20 mt-1 w-64 rounded-lg border border-line bg-card p-1.5 text-left shadow-xl', popClassName ?? 'left-1/2 -translate-x-1/2')}>
           <ul className="max-h-56 overflow-y-auto">
             {matches.map((r) => (
               <li key={r.id}>
@@ -74,7 +82,7 @@ function CountCell({
           </ul>
         </div>
       )}
-    </td>
+    </Wrapper>
   )
 }
 
@@ -132,7 +140,25 @@ export function LeadTodayBySdr({ rows, boards, onOpenLead }: LeadTodayBySdrProps
       {bySdr.length === 0 ? (
         <p className="py-4 text-center text-xs text-foreground/40">Sem dados pra mostrar.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* Celular: um cartão por SDR com os 4 números lado a lado — a tabela (640px) não cabe. */}
+        <ul className="space-y-2 sm:hidden">
+          {bySdr.map((m) => (
+            <li key={m.sdr} className="rounded-xl border border-line/70 p-2.5">
+              <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-foreground/70">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
+                {nomeComFuncao(m.sdr)}
+              </p>
+              <div className="grid grid-cols-4 gap-1.5">
+                <CountCell label="Não atualizado" popClassName="left-0" matches={m.naoAtualizado} boards={boards} onOpenLead={onOpenLead} tone="text-warning bg-warning/10" />
+                <CountCell label="Atrasados" popClassName="left-0" matches={m.atrasado} boards={boards} onOpenLead={onOpenLead} tone="text-danger bg-danger/10" />
+                <CountCell label="Reuniões hoje" popClassName="right-0" matches={m.reuniaoHoje} boards={boards} onOpenLead={onOpenLead} tone="text-accent bg-accent/10" />
+                <CountCell label="Propostas hoje" popClassName="right-0" matches={m.propostaHoje} boards={boards} onOpenLead={onOpenLead} tone="text-success bg-success/10" />
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full min-w-[640px] border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-line text-[11px] font-semibold text-foreground/50">
@@ -161,6 +187,7 @@ export function LeadTodayBySdr({ rows, boards, onOpenLead }: LeadTodayBySdrProps
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   )

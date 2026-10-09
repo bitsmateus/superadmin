@@ -226,13 +226,13 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
 
       {/* ---------------- metas ---------------- */}
       <div className="rounded-2xl bg-card p-4 shadow-sm">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground max-sm:flex-wrap">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
             <Target className="h-4 w-4" />
           </span>
           Metas de {rotuloMes(monthId)}
           {metaReceitaCents > 0 && (
-            <span className="ml-auto text-xs font-normal text-foreground/45">
+            <span className="ml-auto text-xs font-normal text-foreground/45 max-sm:-mt-1.5 max-sm:ml-9 max-sm:basis-full">
               {money(dados.entrouCents)} de {money(metaReceitaCents)}
               {dados.entrouCents < metaReceitaCents
                 ? ` — faltam ${money(metaReceitaCents - dados.entrouCents)}`

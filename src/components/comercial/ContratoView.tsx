@@ -481,14 +481,16 @@ export function ContratoView({ pageId }: { pageId: string }) {
         subtitle={`${contracts.length} contrato(s) registrado(s)`}
       />
 
-      <div className="px-1 pb-8">
+      <div className="px-1 pb-8 max-sm:px-4 max-sm:pt-3">
         {!loaded ? (
           <div className="grid min-h-[30vh] place-items-center text-sm text-foreground/50">
             <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</span>
           </div>
         ) : (
           <>
-            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {/* No celular os 3 cards ficam lado a lado, compactos (sem a descrição) — empilhados
+                eles ocupavam a tela inteira antes da lista. */}
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3 max-sm:grid-cols-3 max-sm:gap-2">
               <StageTabCard
                 active={tab === 'boas-vindas'}
                 onClick={() => changeTab('boas-vindas')}
@@ -606,7 +608,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
             <div className="rounded-2xl bg-elevate/[0.03] p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-foreground">Dados do contrato</span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 max-sm:flex-wrap">
                   <Button
                     size="sm"
                     variant="secondary"
@@ -684,7 +686,46 @@ function ContractsList({
 }) {
   return (
     <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
-      <div className="overflow-x-auto">
+      {/* Celular: cartões em vez da tabela (560px não cabe). */}
+      <ul className="divide-y divide-line/60 sm:hidden">
+        {contracts.length === 0 && (
+          <li className="px-4 py-10 text-center text-sm text-foreground/40">{emptyText}</li>
+        )}
+        {contracts.map((c) => (
+          <li key={c.id} onClick={() => onOpen(c)} className="flex cursor-pointer items-center gap-2.5 px-4 py-3">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
+              {initials(contractLabel(c))}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-accent">{contractLabel(c)}</p>
+              <p className="truncate text-[11px] text-foreground/50">{c.campos['CNPJ'] || 'Sem CNPJ'}</p>
+              <p className="text-[11px] leading-snug text-foreground/50">
+                Criado em {formatDateShort(c.createdAt)}
+                {showSignedAt && <> · assinado em {c.signedAt ? formatDateShort(c.signedAt) : '—'}</>}
+              </p>
+            </div>
+            {onAdvance && (
+              <button
+                type="button"
+                title="Marcar como assinado"
+                onClick={(e) => { e.stopPropagation(); onAdvance(c) }}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success transition-colors hover:bg-success/20"
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              title="Excluir contrato"
+              onClick={(e) => { e.stopPropagation(); onArchive(c) }}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger transition-colors hover:bg-danger/20"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[560px]">
           <thead>
             <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
@@ -795,16 +836,16 @@ function StageTabCard({
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-2xl border bg-card p-4 text-left shadow-sm transition-all',
+        'rounded-2xl border bg-card p-4 text-left shadow-sm transition-all max-sm:p-2.5',
         active ? cn('ring-1', activeRing[tone]) : 'border-line hover:border-elevate/20 hover:shadow-md',
       )}
     >
       <div className="flex items-center justify-between">
-        <span className={cn('grid h-8 w-8 place-items-center rounded-lg ring-1', tones[tone])}>{icon}</span>
-        <span className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">{count}</span>
+        <span className={cn('grid h-8 w-8 place-items-center rounded-lg ring-1 max-sm:h-7 max-sm:w-7', tones[tone])}>{icon}</span>
+        <span className="text-2xl font-semibold tracking-tight tabular-nums text-foreground max-sm:text-xl">{count}</span>
       </div>
-      <p className="mt-2.5 text-sm font-semibold text-foreground">{label}</p>
-      <p className="text-[11px] text-foreground/45">{description}</p>
+      <p className="mt-2.5 text-sm font-semibold text-foreground max-sm:mt-2 max-sm:text-xs max-sm:leading-tight">{label}</p>
+      <p className="text-[11px] text-foreground/45 max-sm:hidden">{description}</p>
     </button>
   )
 }
@@ -831,7 +872,61 @@ function PendingClientsList({
 }) {
   return (
     <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
-      <div className="overflow-x-auto">
+      {/* Celular: cartões em vez da tabela (560px não cabe). */}
+      <ul className="divide-y divide-line/60 sm:hidden">
+        {clients.length === 0 && (
+          <li className="px-4 py-10 text-center text-sm text-foreground/40">{emptyText}</li>
+        )}
+        {clients.map((c) => (
+          <li key={c.id} onClick={() => onOpen(c)} className="cursor-pointer px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
+                {initials(c.company || c.name)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-accent">{c.company || c.name}</p>
+                <p className="truncate text-[11px] text-foreground/50">
+                  {c.fichaCadastro?.cnpj ? formatCnpj(c.fichaCadastro.cnpj) : 'Sem CNPJ'} · entrada {formatDateShort(c.createdAt)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 pl-[42px]">
+              <span className="mr-auto text-sm"><StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} /></span>
+              {onRegress && (
+                <button
+                  type="button"
+                  title="Voltar etapa"
+                  onClick={(e) => { e.stopPropagation(); onRegress(c) }}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-elevate/[0.08] text-foreground/50 transition-colors hover:bg-elevate/[0.14] hover:text-foreground"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {onAdvance && (
+                <button
+                  type="button"
+                  title="Avançar etapa"
+                  onClick={(e) => { e.stopPropagation(); onAdvance(c) }}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success transition-colors hover:bg-success/20"
+                >
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {onArchive && (
+                <button
+                  type="button"
+                  title="Arquivar cliente"
+                  onClick={(e) => { e.stopPropagation(); onArchive(c) }}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger transition-colors hover:bg-danger/20"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[560px]">
           <thead>
             <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">

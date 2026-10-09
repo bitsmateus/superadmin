@@ -161,7 +161,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex items-center gap-2 max-sm:flex-wrap">
         <span className="text-xs font-medium text-foreground/50">Agrupar por</span>
         <div className="inline-flex overflow-hidden rounded-lg border border-line">
           {GROUP_OPTIONS.map((o) => (
@@ -364,7 +364,7 @@ function KanbanCard({
           type="button"
           onClick={(e) => { e.stopPropagation(); onOpenLead(row.id) }}
           title="Atualizações"
-          className="relative grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-elevate/[0.08]"
+          className="relative grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-elevate/[0.08] max-sm:h-8 max-sm:w-8"
         >
           <MessageCircle className={cn('h-3.5 w-3.5', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-foreground/30')} />
           {row.notesCount > 0 && (
@@ -378,7 +378,7 @@ function KanbanCard({
             type="button"
             onClick={(e) => { e.stopPropagation(); onArchive(row) }}
             title={archived ? 'Desarquivar' : 'Arquivar'}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/30 hover:bg-elevate/[0.08] hover:text-foreground/70"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/30 hover:bg-elevate/[0.08] hover:text-foreground/70 max-sm:h-8 max-sm:w-8"
           >
             {archived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
           </button>

@@ -86,17 +86,10 @@ export function ContratoView({ pageId }: { pageId: string }) {
   // Mostra o mês passado junto do atual de cara — sem isso só aparecia o mês corrente e a pessoa
   // precisava clicar em "Adicionar mês" toda vez que quisesse conferir o mês anterior.
   const lastMonthId = React.useMemo(() => addMonthsToId(currentMonthId(), -1), [])
-  const boasVindasFilter = useMonthFilter([lastMonthId])
-  const pendingFilter = useMonthFilter([lastMonthId])
+  // Só "Contratos assinados" filtra por mês: é histórico. "Boas-vindas" e "Pendente de assinatura" são FILAS —
+  // o que está parado nelas precisa aparecer inteiro, seja de que mês for. Com o filtro, o cartão dizia 9
+  // pendentes e a lista mostrava 4: os outros 5 eram de agosto e ficavam escondidos (justo os mais atrasados).
   const signedFilter = useMonthFilter([lastMonthId])
-  const boasVindasInRange = React.useMemo(
-    () => boasVindasClients.filter((c) => withinBounds(c.fichaCadastro?.submittedAt ?? c.createdAt, boasVindasFilter.bounds)),
-    [boasVindasClients, boasVindasFilter.bounds],
-  )
-  const pendingContractsInRange = React.useMemo(
-    () => pendingContracts.filter((c) => withinBounds(c.createdAt, pendingFilter.bounds)),
-    [pendingContracts, pendingFilter.bounds],
-  )
   const signedContractsInRange = React.useMemo(
     () => signedContracts.filter((c) => withinBounds(c.signedAt ?? c.createdAt, signedFilter.bounds)),
     [signedContracts, signedFilter.bounds],
@@ -119,7 +112,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
   const changeTab = (next: Tab) => { setTab(next); setSelectedId(null) }
 
-  const listForTab = tab === 'assinados' ? signedContractsInRange : tab === 'pendentes-contrato' ? pendingContractsInRange : []
+  const listForTab = tab === 'assinados' ? signedContractsInRange : tab === 'pendentes-contrato' ? pendingContracts : []
   // Cai pra lista completa quando o contrato aberto está fora do período filtrado — é o caso de
   // quem chegou por link direto (?contrato=<id>, vindo da aba Vendas): abrir por id sempre funciona.
   const selected =
@@ -520,8 +513,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
             {tab === 'boas-vindas' && (
               <>
-                <MonthFilterBar filter={boasVindasFilter} />
-                <PendingClientsList clients={boasVindasInRange} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={createContractFromDrawer} onRegress={regressStage} emptyText="Nenhum cliente em Boas-vindas nesse período." />
+                <PendingClientsList clients={boasVindasClients} onOpen={(c) => setOpenClientId(c.id)} onArchive={canDelete ? archiveClient : undefined} onAdvance={createContractFromDrawer} onRegress={regressStage} emptyText="Nenhum cliente em Boas-vindas." />
               </>
             )}
 
@@ -566,14 +558,20 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
             {(tab === 'pendentes-contrato' || tab === 'assinados') && (
               <>
-                <MonthFilterBar filter={tab === 'assinados' ? signedFilter : pendingFilter} />
+                {tab === 'assinados' ? (
+                  <MonthFilterBar filter={signedFilter} />
+                ) : (
+                  <p className="mb-3 text-xs text-foreground/50">
+                    Todos os contratos que ainda esperam assinatura, de qualquer mês — os mais antigos estão no fim da lista.
+                  </p>
+                )}
                 <ContractsList
                   contracts={listForTab}
                   showSignedAt={tab === 'assinados'}
                   onOpen={(c) => setSelectedId(c.id)}
                   onAdvance={tab === 'pendentes-contrato' ? (c) => setContractStatus(c, 'assinado') : undefined}
                   onArchive={removeContract}
-                  emptyText={tab === 'assinados' ? 'Nenhum contrato assinado nesse período.' : 'Nenhum contrato pendente de assinatura nesse período.'}
+                  emptyText={tab === 'assinados' ? 'Nenhum contrato assinado nesse período.' : 'Nenhum contrato pendente de assinatura.'}
                 />
               </>
             )}

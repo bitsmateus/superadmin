@@ -305,9 +305,9 @@ export function VendasView({ pageId }: { pageId: string }) {
         }
       />
 
-      <div className="px-1 pb-8">
+      <div className="px-1 pb-8 max-sm:px-3 max-sm:pt-3">
         {/* Resumo do período — o que importa de cara, antes de entrar na lista linha a linha. */}
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <SummaryCard
             icon={<ShoppingBag className="h-4 w-4" />}
             label="Vendas no período"
@@ -485,8 +485,57 @@ export function VendasView({ pageId }: { pageId: string }) {
           </div>
         )}
 
-        {/* Lista */}
-        <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
+        {/* Lista — no celular vira cartões (a tabela tem 11 colunas e não cabe numa tela estreita);
+         * do sm pra cima é a tabela de sempre. */}
+        <div className="overflow-hidden rounded-2xl bg-card shadow-sm sm:hidden">
+          <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              disabled={noPeriodo.length === 0}
+              title="Selecionar todos"
+              className="h-5 w-5 rounded border-line accent-accent"
+            />
+            <span className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
+              {noPeriodo.length} venda{noPeriodo.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          {noPeriodo.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-foreground/40">
+              {onlyPending ? 'Nenhuma venda pendente de pagamento neste período.' : 'Nenhuma venda neste período.'}
+            </p>
+          ) : (
+            <ul className="divide-y divide-line/60">
+              {noPeriodo.map((r) => (
+                <VendaCard
+                  key={r.id}
+                  row={r}
+                  contrato={contratoPorVenda.get(r.id) ?? null}
+                  ficha={fichas[r.id]}
+                  onAbrirCliente={setFichaClientId}
+                  selected={selectedIds.has(r.id)}
+                  onToggleSelect={() => toggleSelect(r.id)}
+                  onOpenLead={() => setOpenLeadId(r.vendaOrigemId || r.id)}
+                />
+              ))}
+            </ul>
+          )}
+          {noPeriodo.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 border-t-2 border-line bg-elevate/[0.03] px-4 py-3 text-sm font-semibold">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-foreground/45">Total MRR</p>
+                <p className="tabular-nums text-success">{formatBRLCents(totalMrr)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-foreground/45">Total implementação</p>
+                <p className="tabular-nums text-success">{formatBRLCents(totalImpl)}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="hidden overflow-hidden rounded-2xl bg-card shadow-sm sm:block">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[880px]">
               <thead>
@@ -568,7 +617,38 @@ export function VendasView({ pageId }: { pageId: string }) {
           <div className="border-b border-line px-4 py-3 text-xs font-semibold uppercase tracking-wide text-foreground/50">
             Resumo por SDR
           </div>
-          <div className="overflow-x-auto">
+          <ul className="divide-y divide-line/60 sm:hidden">
+            {resumoPorSdr.map((r) => (
+              <li key={r.nome} className="px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/10 text-[10px] font-semibold text-accent">
+                    {initials(r.nome)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{r.nome}</span>
+                  <span className="text-xs tabular-nums text-foreground/50">
+                    {r.vendas} venda{r.vendas === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs tabular-nums text-foreground/70">
+                  <span>MRR <strong className="font-semibold text-foreground">{formatBRLCents(r.mrr)}</strong></span>
+                  <span>Impl. <strong className="font-semibold text-foreground">{formatBRLCents(r.impl)}</strong></span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-elevate/[0.08]">
+                  <div
+                    className="h-full rounded-full bg-accent"
+                    style={{ width: `${Math.max(2, ((r.mrr + r.impl) / maxSdrTotal) * 100)}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+            <li className="flex items-center justify-between gap-3 bg-elevate/[0.03] px-4 py-3 text-sm font-semibold">
+              <span>Equipe · {validas.length}</span>
+              <span className="text-right text-xs tabular-nums text-success">
+                {formatBRLCents(totalMrr)} · {formatBRLCents(totalImpl)}
+              </span>
+            </li>
+          </ul>
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
@@ -675,12 +755,12 @@ function SummaryCard({
     warning: 'bg-warning/10 text-warning ring-warning/20',
   }
   return (
-    <div className="rounded-2xl border border-line bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wider text-foreground/45">{label}</span>
+    <div className="rounded-2xl border border-line bg-card p-4 shadow-sm max-sm:p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs uppercase tracking-wider text-foreground/45 max-sm:text-[10px] max-sm:leading-tight">{label}</span>
         <span className={cn('grid h-7 w-7 place-items-center rounded-lg ring-1', tones[tone])}>{icon}</span>
       </div>
-      <div className="mt-3 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{value}</div>
+      <div className="mt-3 text-2xl font-semibold tracking-tight tabular-nums text-foreground max-sm:text-lg">{value}</div>
     </div>
   )
 }
@@ -943,39 +1023,7 @@ function VendaRow({
         </button>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => {
-            const proximo = !row.contratoAssinado
-            leadBoardsService.updateRow(row.id, { contratoAssinado: proximo })
-            // O servidor também marca os lançamentos de comissão e o contrato dessa venda; estas
-            // duas chamadas só antecipam na tela, pra nada parecer que ficou pra trás.
-            commissionsService.marcarContratoDaVenda(row.id, proximo)
-            if (contrato) void contractsService.updateContract(contrato.id, { status: proximo ? 'assinado' : 'pendente' })
-          }}
-          title={row.contratoAssinado ? 'Assinado — clique pra marcar como pendente' : 'Pendente — clique pra marcar como assinado'}
-          className={cn(
-            'rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors lg:px-2 lg:py-0.5',
-            row.contratoAssinado ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning hover:bg-warning/15',
-          )}
-        >
-          {row.contratoAssinado ? 'Assinado' : 'Pendente'}
-        </button>
-        {contrato ? (
-          <Link
-            to={`/financeiro/contrato?contrato=${contrato.id}`}
-            title={contrato.assinado ? 'Abrir o contrato (assinado)' : 'Abrir o contrato (ainda não assinado lá)'}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/35 hover:bg-accent/10 hover:text-accent"
-          >
-            <FileText className="h-3.5 w-3.5" />
-          </Link>
-        ) : (
-          <span title="Nenhum contrato gerado na aba Contrato pra essa venda" className="text-[10px] text-foreground/25">
-            sem doc
-          </span>
-        )}
-        </div>
+        <ContratoControl row={row} contrato={contrato} />
       </td>
       <td className="px-4 py-3">
         <FichaCell ficha={ficha} onAbrirCliente={onAbrirCliente} />
@@ -1007,6 +1055,231 @@ function VendaRow({
       </td>
       <ExcluirVendaModal open={excluirOpen} onClose={() => setExcluirOpen(false)} row={row} />
     </tr>
+  )
+}
+
+/** Botão Assinado/Pendente do contrato + atalho pro documento gerado (tabela e cartão do celular). */
+function ContratoControl({ row, contrato }: { row: LeadRow; contrato: { id: string; assinado: boolean } | null }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => {
+          const proximo = !row.contratoAssinado
+          leadBoardsService.updateRow(row.id, { contratoAssinado: proximo })
+          // O servidor também marca os lançamentos de comissão e o contrato dessa venda; estas
+          // duas chamadas só antecipam na tela, pra nada parecer que ficou pra trás.
+          commissionsService.marcarContratoDaVenda(row.id, proximo)
+          if (contrato) void contractsService.updateContract(contrato.id, { status: proximo ? 'assinado' : 'pendente' })
+        }}
+        title={row.contratoAssinado ? 'Assinado — clique pra marcar como pendente' : 'Pendente — clique pra marcar como assinado'}
+        className={cn(
+          'rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors lg:px-2 lg:py-0.5',
+          row.contratoAssinado ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning hover:bg-warning/15',
+        )}
+      >
+        {row.contratoAssinado ? 'Assinado' : 'Pendente'}
+      </button>
+      {contrato ? (
+        <Link
+          to={`/financeiro/contrato?contrato=${contrato.id}`}
+          title={contrato.assinado ? 'Abrir o contrato (assinado)' : 'Abrir o contrato (ainda não assinado lá)'}
+          className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/35 hover:bg-accent/10 hover:text-accent"
+        >
+          <FileText className="h-3.5 w-3.5" />
+        </Link>
+      ) : (
+        <span title="Nenhum contrato gerado na aba Contrato pra essa venda" className="text-[10px] text-foreground/25">
+          sem doc
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** Mesma venda da VendaRow, em cartão — só no celular, onde a tabela de 11 colunas não cabe. */
+function VendaCard({
+  row,
+  contrato,
+  ficha,
+  selected,
+  onToggleSelect,
+  onOpenLead,
+  onAbrirCliente,
+}: {
+  row: LeadRow
+  contrato: { id: string; assinado: boolean } | null
+  ficha: { status: string; clientId: string | null } | undefined
+  selected: boolean
+  onToggleSelect: () => void
+  onOpenLead: () => void
+  onAbrirCliente: (clientId: string) => void
+}) {
+  const [excluirOpen, setExcluirOpen] = React.useState(false)
+  const [obs, setObs] = React.useState(row.observacoes)
+  const obsFocused = React.useRef(false)
+  const saveObsDebounced = useDebouncedCallback(
+    (next: string) => leadBoardsService.updateRow(row.id, { observacoes: next }),
+    600,
+  )
+  React.useEffect(() => {
+    if (!obsFocused.current) setObs(row.observacoes)
+  }, [row.observacoes])
+
+  return (
+    <li className={cn('px-4 py-3', selected && 'bg-accent/5', row.vendaRevertida && 'text-foreground/40')}>
+      <div className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          className="mt-1 h-5 w-5 shrink-0 rounded border-line accent-accent"
+        />
+        <button
+          type="button"
+          onClick={onOpenLead}
+          title="Ver dados do lead"
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+        >
+          <span
+            className={cn(
+              'grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent',
+              row.vendaRevertida && 'bg-elevate/[0.06] text-foreground/40',
+            )}
+          >
+            {initials(row.nome)}
+          </span>
+          <span className="min-w-0">
+            <span
+              className={cn(
+                'block truncate text-sm font-medium text-foreground',
+                row.vendaRevertida && 'text-foreground/40 line-through decoration-foreground/30',
+              )}
+            >
+              {row.nome || 'Sem nome'}
+            </span>
+            <span className="block text-[11px] text-foreground/45">
+              SDR {row.sdr || '—'}
+              {row.fechamento && <> · {row.fechamento.slice(0, 10).split('-').reverse().join('/')}</>}
+              {row.vendaRevertida && <> · revertida</>}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setExcluirOpen(true)}
+          title="Excluir venda"
+          className="-mr-2 -mt-1 grid h-9 w-9 shrink-0 place-items-center rounded text-foreground/30 hover:bg-danger/10 hover:text-danger"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <select
+          value={row.closer}
+          onChange={(e) => leadBoardsService.updateRow(row.id, { closer: e.target.value })}
+          title="Quem fechou a venda"
+          className={cn(
+            'h-8 rounded-full border-0 px-2 text-xs font-medium outline-none',
+            row.closer ? 'bg-accent/10 text-accent' : 'bg-elevate/[0.06] text-foreground/40',
+          )}
+        >
+          <option value="">fechou: não informado</option>
+          {QUEM_FECHA.map((n) => <option key={n} value={n}>fechou: {n}</option>)}
+        </select>
+        <button
+          type="button"
+          onClick={() => leadBoardsService.updateRow(row.id, { veioDoFunil: !row.veioDoFunil })}
+          className={cn(
+            'rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors',
+            row.veioDoFunil ? 'bg-accent/10 text-accent' : 'bg-elevate/[0.06] text-foreground/40',
+          )}
+        >
+          {row.veioDoFunil ? 'Funil' : 'Avulsa'}
+        </button>
+        <span className="inline-flex items-center gap-1 text-[11px] text-foreground/40">
+          Contrato <ContratoControl row={row} contrato={contrato} />
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px] text-foreground/40">
+          Ficha <FichaCell ficha={ficha} onAbrirCliente={onAbrirCliente} />
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <PendenteValueBox
+          label="MRR"
+          value={row.valorMrr}
+          onSave={(next) => leadBoardsService.updateRow(row.id, { valorMrr: next })}
+          pendente={row.mrrPendente}
+          onTogglePendente={() => leadBoardsService.updateRow(row.id, { mrrPendente: !row.mrrPendente })}
+          strikethrough={row.vendaRevertida}
+        />
+        <PendenteValueBox
+          label="Implementação"
+          value={row.valorImplementacao}
+          onSave={(next) => leadBoardsService.updateRow(row.id, { valorImplementacao: next })}
+          pendente={row.implPendente}
+          onTogglePendente={() => leadBoardsService.updateRow(row.id, { implPendente: !row.implPendente })}
+          strikethrough={row.vendaRevertida}
+        />
+      </div>
+
+      <input
+        value={obs}
+        placeholder="Observações (ex.: paga metade/metade...)"
+        onFocus={() => { obsFocused.current = true }}
+        onChange={(e) => { setObs(e.target.value); saveObsDebounced(e.target.value) }}
+        onBlur={() => {
+          obsFocused.current = false
+          if (obs !== row.observacoes) leadBoardsService.updateRow(row.id, { observacoes: obs })
+        }}
+        className="mt-2 h-10 w-full rounded-lg bg-elevate/[0.03] px-3 text-sm text-foreground/70 outline-none focus:bg-card focus:ring-1 focus:ring-accent/30"
+      />
+      <ExcluirVendaModal open={excluirOpen} onClose={() => setExcluirOpen(false)} row={row} />
+    </li>
+  )
+}
+
+/** Versão em caixa do PendenteValueCell (cartão do celular): amarelo = pagamento pendente. */
+function PendenteValueBox({
+  label,
+  value,
+  onSave,
+  pendente,
+  onTogglePendente,
+  strikethrough,
+}: {
+  label: string
+  value: string
+  onSave: (next: string) => void
+  pendente: boolean
+  onTogglePendente: () => void
+  strikethrough?: boolean
+}) {
+  return (
+    <div className={cn('rounded-lg px-2 py-1.5 ring-1 ring-line', pendente && 'bg-warning/35 ring-warning/40')}>
+      <button
+        type="button"
+        onClick={onTogglePendente}
+        title={pendente ? 'Pendente de pagamento — toque para marcar como pago' : 'Pago — toque para marcar como pendente'}
+        className="flex w-full items-center gap-1.5 text-left text-[11px] font-medium text-foreground/55"
+      >
+        <span
+          className={cn(
+            'h-3 w-3 shrink-0 rounded-full ring-1 ring-inset',
+            pendente ? 'bg-amber-400 ring-amber-500' : 'bg-transparent ring-foreground/30',
+          )}
+        />
+        <span className="truncate">{label}</span>
+        <span className="ml-auto shrink-0">{pendente ? 'pendente' : 'pago'}</span>
+      </button>
+      <CurrencyField
+        value={value}
+        onSave={onSave}
+        className={cn('mt-0.5 h-8 w-full bg-transparent text-sm font-semibold tabular-nums outline-none', strikethrough && 'line-through')}
+      />
+    </div>
   )
 }
 

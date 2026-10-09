@@ -50,7 +50,9 @@ export function Layout() {
 
       <main
         className={cn(
-          'transition-[padding] duration-200 ease-out',
+          // overflow-x-clip só no celular: se alguma tela ainda tiver algo mais largo que a tela, ele
+          // fica cortado em vez de alargar a página (o iOS encolhe tudo pra caber, aí nada é legível).
+          'transition-[padding] duration-200 ease-out max-sm:overflow-x-clip',
           open ? 'lg:pl-[220px]' : 'pl-0',
         )}
       >

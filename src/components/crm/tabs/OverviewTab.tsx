@@ -41,6 +41,7 @@ import { copyToClipboard } from '@/lib/clipboard'
 import { buildPendingMessage, computeReadiness } from '@/constants/readiness'
 import { asText, cn, formatDate, initials, normalizeWhatsappNumber } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
+import { pareceHtml, sanitizeHtml, stripHtml } from '@/lib/richText'
 import type { Client, ClientAccess } from '@/types/client'
 import {
   API_CONFIG_STEPS,
@@ -311,7 +312,8 @@ export function OverviewTab({ client }: { client: Client }) {
                                 title="Editar nota"
                                 onClick={() => {
                                   setEditingNoteId(n.id)
-                                  setEditingNoteText(n.text)
+                                  // Nota que veio do CRM está em HTML: na caixa de edição entra só o texto, com as quebras de linha.
+                                  setEditingNoteText(pareceHtml(n.text) ? stripHtml(n.text) : n.text)
                                 }}
                                 className="ml-1 grid h-5 w-5 place-items-center rounded text-foreground/35 hover:text-accent transition-colors"
                               >
@@ -369,6 +371,13 @@ export function OverviewTab({ client }: { client: Client }) {
                             </button>
                           </div>
                         </div>
+                      ) : pareceHtml(n.text) ? (
+                        // Atualização copiada do CRM: mostra com a mesma formatação de lá (linhas, negrito, listas),
+                        // do mesmo jeito que o card do lead mostra — nunca as tags cruas.
+                        <div
+                          className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground/85 [&_a]:text-accent [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(n.text) }}
+                        />
                       ) : (
                         <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">
                           {asText(n.text)}

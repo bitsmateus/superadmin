@@ -20,6 +20,7 @@ import { useNpsForClient } from '@/hooks/useTickets'
 import { ticketsService } from '@/services/tickets'
 import { cn } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
+import { pareceHtml, stripHtml } from '@/lib/richText'
 import type { Client, Payment } from '@/types/client'
 import type { Ticket } from '@/types/ticket'
 
@@ -52,7 +53,8 @@ export function HistoryTab({ client }: { client: Client }) {
         kind: 'note',
         at: n.createdAt,
         title: n.author || 'Nota',
-        description: n.text,
+        // Nota copiada do CRM vem em HTML: na linha do tempo entra só o texto.
+        description: pareceHtml(n.text) ? stripHtml(n.text) : n.text,
         internal: n.internal,
       })
     }

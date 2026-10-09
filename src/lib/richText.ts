@@ -28,6 +28,17 @@ export function stripHtml(html: string): string {
   return out.replace(/\n{3,}/g, '\n\n').trim()
 }
 
+/**
+ * O texto veio do editor de Atualizações do CRM (HTML: cada linha um <div>, quebra com <br>, negrito…)?
+ * As "Mensagens registradas" do Suporte guardam dois tipos de texto na mesma lista: o que o Suporte digita
+ * (texto puro) e as Atualizações copiadas do CRM quando o contrato é assinado (HTML). Quem mostra precisa saber
+ * qual é qual — tratar o HTML como texto puro é o que fazia aparecer "<div><br></div>" na tela.
+ * Só conta tag que o editor realmente produz, pra um "<" digitado numa nota comum não virar HTML.
+ */
+export function pareceHtml(texto: string | null | undefined): boolean {
+  return /<\/?(div|br|p|span|b|strong|i|em|u|s|strike|ul|ol|li|a)\b[^>]*>/i.test(texto ?? '')
+}
+
 const ALLOWED_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DIV', 'SPAN', 'BR', 'P', 'A', 'UL', 'OL', 'LI'])
 
 /** Sanitização mínima antes de renderizar HTML salvo (dangerouslySetInnerHTML): tira tag fora

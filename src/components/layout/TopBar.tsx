@@ -66,7 +66,9 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs
        * precisar) — lado a lado elas empurravam a página pra fora da tela e o navegador encolhia
        * tudo pra caber. Do sm pra cima continua igual: título à esquerda, ações à direita. */}
       <div className="flex min-h-14 items-center justify-between gap-3 py-1.5 pl-16 pr-4 max-sm:flex-wrap max-sm:gap-y-2 max-sm:py-2 sm:gap-4 lg:px-8">
-        <div className="min-w-0 flex-1">
+        {/* min-h-11 no celular: a linha do título ocupa a altura do botão flutuante do menu, pra a
+         * linha das ações começar abaixo dele em vez de passar por baixo. */}
+        <div className="min-w-0 flex-1 max-sm:flex max-sm:min-h-11 max-sm:flex-col max-sm:justify-center">
           {/* Migalhas só do sm pra cima: no celular o cabeçalho é fixo no topo e cada linha a mais
            * come a tela; pra navegar já tem o menu. */}
           <nav className="hidden items-center gap-1 text-xs text-foreground/40 sm:flex">

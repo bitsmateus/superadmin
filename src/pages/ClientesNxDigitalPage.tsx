@@ -606,12 +606,13 @@ export function ClientesNxDigitalPage() {
                 ))}
               </div>
             )}
-            <label className="flex items-center gap-1.5 text-xs text-foreground/50">
+            {/* No celular os dois seletores esticam pra completar a linha, em vez de sobrar buraco do lado. */}
+            <label className="flex items-center gap-1.5 text-xs text-foreground/50 max-sm:min-w-[10rem] max-sm:flex-1">
               <select
                 value={semReuniao}
                 onChange={(e) => setSemReuniao(e.target.value as GcReuniaoTipo | '')}
                 aria-label="Filtrar por reunião do mês"
-                className="h-9 rounded-lg border border-line bg-transparent px-2 text-sm text-foreground outline-none focus:border-accent/60"
+                className="h-9 rounded-lg border border-line bg-transparent px-2 text-sm text-foreground outline-none focus:border-accent/60 max-sm:w-full max-sm:min-w-0"
               >
                 <option value="">Reuniões: todas</option>
                 {TIPOS_REUNIAO.map((t) => (
@@ -621,12 +622,12 @@ export function ClientesNxDigitalPage() {
                 ))}
               </select>
             </label>
-            <label className="flex items-center gap-1.5 text-xs text-foreground/50">
+            <label className="flex items-center gap-1.5 text-xs text-foreground/50 max-sm:min-w-[10rem] max-sm:flex-1">
               <ArrowUpDown className="h-3.5 w-3.5" />
               <select
                 value={ordem}
                 onChange={(e) => setOrdem(e.target.value as Ordem)}
-                className="h-9 rounded-lg border border-line bg-transparent px-2 text-sm text-foreground outline-none focus:border-accent/60"
+                className="h-9 rounded-lg border border-line bg-transparent px-2 text-sm text-foreground outline-none focus:border-accent/60 max-sm:w-full max-sm:min-w-0"
               >
                 {ORDENS.map((o) => (
                   <option key={o.valor} value={o.valor}>

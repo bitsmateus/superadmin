@@ -131,7 +131,7 @@ export function FinanceiroContasPagarPage() {
         subtitle="Financeiro"
         rightSlot={
           <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={() => setCatalogOpen(true)} leftIcon={<Settings2 className="h-4 w-4" />}>
+            <Button variant="secondary" onClick={() => setCatalogOpen(true)} leftIcon={<Settings2 className="h-4 w-4" />} className="max-sm:h-8 max-sm:px-3 max-sm:text-xs">
               Itens fixos
             </Button>
             {groupsInMonth.length > 0 && catalog.length > 0 && (
@@ -147,12 +147,13 @@ export function FinanceiroContasPagarPage() {
                 }}
                 leftIcon={<Repeat className="h-4 w-4" />}
                 title="Traz pro mês os itens do catálogo de fixos que ainda não estão lançados"
+                className="max-sm:h-8 max-sm:px-3 max-sm:text-xs"
               >
                 Trazer fixos
               </Button>
             )}
             {tab !== 'comissoes' && (
-              <Button onClick={() => setNewGroupOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
+              <Button onClick={() => setNewGroupOpen(true)} leftIcon={<Plus className="h-4 w-4" />} className="max-sm:h-8 max-sm:px-3 max-sm:text-xs">
                 Novo grupo
               </Button>
             )}
@@ -364,7 +365,7 @@ function OverviewCard({
 
 function TabNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
-    <div className="flex flex-wrap gap-1 overflow-x-auto no-scrollbar border-b border-line">
+    <div className="flex flex-wrap gap-1 overflow-x-auto no-scrollbar border-b border-line max-sm:flex-nowrap">
       {TABS.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
@@ -494,8 +495,40 @@ function GroupCard({
         </div>
       )}
 
+      {/* No celular cada item vira um cartão (a tabela tem 10 colunas e não cabe numa tela estreita);
+       * do sm pra cima é a tabela de sempre. As células editáveis são as mesmas nos dois. */}
       {open && (
-        <div className="overflow-x-auto no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="sm:hidden">
+          {sorted.length === 0 ? (
+            <p className="px-4 py-6 text-center text-xs text-foreground/40">
+              {categoria ? `Nenhum item ${CATEGORIA_LABEL[categoria].toLowerCase()} nesse grupo.` : 'Nenhum item nesse grupo.'}
+            </p>
+          ) : (
+            <ul className="divide-y divide-line/60">
+              {sorted.map((e) => <EntryCard key={e.id} entry={e} />)}
+            </ul>
+          )}
+          {sorted.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 border-t border-line bg-elevate/[0.02] px-4 py-2.5 text-sm font-semibold">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/45">Previsto</p>
+                <p className="tabular-nums text-foreground">{formatBRLCents(totals.previsto)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/45">Comissão</p>
+                <p className="tabular-nums text-foreground">{formatBRLCents(totals.comissao)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/45">Real</p>
+                <p className="tabular-nums text-foreground">{formatBRLCents(totals.real)}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {open && (
+        <div className="overflow-x-auto no-scrollbar max-sm:hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
@@ -613,11 +646,11 @@ function GroupMonthField({ group }: { group: PayableGroup }) {
       onClick={(e) => e.stopPropagation()}
       className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-elevate/[0.06] py-0.5 pl-0.5 pr-1.5 text-xs font-medium text-foreground/60"
     >
-      <button type="button" onClick={() => step(-1)} title="Mês anterior" className="grid h-5 w-5 place-items-center rounded-full hover:bg-elevate/[0.1] hover:text-foreground">
+      <button type="button" onClick={() => step(-1)} title="Mês anterior" className="grid h-5 w-5 place-items-center rounded-full hover:bg-elevate/[0.1] hover:text-foreground max-sm:h-7 max-sm:w-7">
         <ChevronLeft className="h-3 w-3" />
       </button>
       {monthLabelPt(month)}
-      <button type="button" onClick={() => step(1)} title="Próximo mês" className="grid h-5 w-5 place-items-center rounded-full hover:bg-elevate/[0.1] hover:text-foreground">
+      <button type="button" onClick={() => step(1)} title="Próximo mês" className="grid h-5 w-5 place-items-center rounded-full hover:bg-elevate/[0.1] hover:text-foreground max-sm:h-7 max-sm:w-7">
         <ChevronRight className="h-3 w-3" />
       </button>
     </span>
@@ -669,6 +702,44 @@ function EntryRow({ entry }: { entry: PayableEntry }) {
         </button>
       </td>
     </tr>
+  )
+}
+
+/** O mesmo item da EntryRow, empilhado pra caber no celular: nome em cima, os três valores lado a
+ * lado, e status/data/anexos/notas embaixo — cada célula continua editável do mesmo jeito. */
+function EntryCard({ entry }: { entry: PayableEntry }) {
+  const rotulo = 'mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-foreground/40'
+  return (
+    <li className="space-y-2.5 px-4 py-3 text-sm">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1"><ElementoCell entry={entry} /></div>
+        <button
+          type="button"
+          onClick={() => { if (window.confirm(`Excluir "${entry.elemento || 'este item'}"?`)) void payablesService.deleteEntry(entry.id) }}
+          title="Excluir item"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded text-foreground/30 hover:bg-danger/10 hover:text-danger"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="grid grid-cols-3 gap-2 [&_button]:min-h-8 [&_button]:max-w-full [&_input]:w-full">
+        <div><span className={rotulo}>Previsto</span><MoneyCell entry={entry} field="previstoCents" /></div>
+        <div><span className={rotulo}>Comissão</span><MoneyCell entry={entry} field="comissaoCents" /></div>
+        <div><span className={rotulo}>Real</span><MoneyCell entry={entry} field="realCents" /></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusCell entry={entry} />
+        <div className="min-w-0 flex-1"><DateCell entry={entry} /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="min-w-0"><span className={rotulo}>Boleto</span><ArquivoCell entry={entry} tipo="boleto" /></div>
+        <div className="min-w-0"><span className={rotulo}>Comprovante</span><ArquivoCell entry={entry} tipo="comprovante" /></div>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-foreground/40">Notas</span>
+        <div className="min-w-0 flex-1"><NotasCell entry={entry} /></div>
+      </div>
+    </li>
   )
 }
 
@@ -983,7 +1054,31 @@ function CommissionRoleCard({ title, entries }: { title: string; entries: Commis
           {formatBRLCents(total)}
         </span>
       </div>
-      <div className="overflow-x-auto no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
+      {/* No celular, um cartão por comissão; do sm pra cima, a tabela. */}
+      <ul className="divide-y divide-line/60 sm:hidden">
+        {entries.map((e) => (
+          <li key={e.id} className="flex items-center gap-3 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">{e.nome || '—'}</p>
+              <p className="truncate text-xs text-foreground/50">{e.person} · {e.typeLabel}</p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <span className="text-sm font-semibold tabular-nums text-foreground">{formatBRLCents(e.amountCents)}</span>
+              <button
+                type="button"
+                onClick={() => void commissionsService.setEntryStatus(e.id, e.status === 'pago' ? 'pendente' : 'pago')}
+                className={cn(
+                  'rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                  e.status === 'pago' ? 'bg-success/10 text-success hover:bg-success/15' : 'bg-warning/10 text-warning hover:bg-warning/15',
+                )}
+              >
+                {e.status === 'pago' ? 'Pago' : 'Pendente'}
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="overflow-x-auto no-scrollbar max-sm:hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
         <table className="w-full min-w-[560px] text-left text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
@@ -1278,7 +1373,8 @@ function CatalogItemRow({ item }: { item: PayableFixedCatalogItem }) {
   const [nome, setNome] = React.useState(item.nome)
 
   return (
-    <div className={cn('flex items-center gap-2 px-3 py-2', !item.ativo && 'opacity-40')}>
+    // No celular o nome ganha a linha inteira (do lado do valor e dos botões sobrava ~100px pra ele).
+    <div className={cn('flex items-center gap-2 px-3 py-2 max-sm:flex-wrap', !item.ativo && 'opacity-40')}>
       {editing ? (
         <input
           autoFocus
@@ -1286,13 +1382,13 @@ function CatalogItemRow({ item }: { item: PayableFixedCatalogItem }) {
           onChange={(e) => setNome(e.target.value)}
           onBlur={() => { setEditing(false); if (nome.trim() && nome !== item.nome) void payablesService.updateCatalogItem(item.id, { nome: nome.trim() }) }}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-          className="h-8 min-w-0 flex-1 rounded-md border border-accent/40 bg-surface px-2 text-sm text-foreground outline-none"
+          className="h-8 min-w-0 flex-1 rounded-md border border-accent/40 bg-surface px-2 text-sm text-foreground outline-none max-sm:basis-full"
         />
       ) : (
         <button
           type="button"
           onClick={() => { setNome(item.nome); setEditing(true) }}
-          className="min-w-0 flex-1 truncate rounded px-1 py-0.5 text-left text-sm font-medium text-foreground hover:bg-elevate/[0.06]"
+          className="min-w-0 flex-1 truncate rounded px-1 py-0.5 text-left text-sm font-medium text-foreground hover:bg-elevate/[0.06] max-sm:basis-full"
         >
           {item.nome}
         </button>

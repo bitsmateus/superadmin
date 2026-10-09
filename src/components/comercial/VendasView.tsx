@@ -756,7 +756,7 @@ function SummaryCard({
   }
   return (
     <div className="rounded-2xl border border-line bg-card p-4 shadow-sm max-sm:p-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between max-sm:gap-2">
         <span className="text-xs uppercase tracking-wider text-foreground/45 max-sm:text-[10px] max-sm:leading-tight">{label}</span>
         <span className={cn('grid h-7 w-7 place-items-center rounded-lg ring-1', tones[tone])}>{icon}</span>
       </div>

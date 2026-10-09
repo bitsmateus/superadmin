@@ -254,6 +254,27 @@ export function FinanceiroClientesGeralPage() {
     toast.success(`Vinculado ao Asaas — ${formatBRLCents(valor.valorCents)}`)
   }
 
+  // Mesmo texto na tabela (desktop) e nos cartões (celular).
+  const listaVazia = escondidosPeloFiltro > 0 ? (
+    <>
+      <span>
+        {escondidosPeloFiltro === 1
+          ? 'Achei 1 cliente com essa busca, mas ele está fora dos filtros atuais'
+          : `Achei ${escondidosPeloFiltro} clientes com essa busca, mas estão fora dos filtros atuais`}
+        {status === 'ativos' ? ' (cancelado, e a lista está em "Só ativos").' : '.'}
+      </span>
+      <button
+        type="button"
+        onClick={() => { setStatus('todos'); setVerSemEmpresa(false) }}
+        className="ml-2 font-medium text-accent hover:underline"
+      >
+        Mostrar assim mesmo
+      </button>
+    </>
+  ) : semEmpresa.length > 0 && !verSemEmpresa
+    ? 'Nenhum cliente nesta empresa ainda — use o aviso acima pra classificar quem está sem.'
+    : 'Nenhum cliente com esses filtros.'
+
   return (
     <>
       <TopBar
@@ -264,7 +285,7 @@ export function FinanceiroClientesGeralPage() {
 
       <div className="px-4 pb-10 lg:px-6">
         {/* Mês — manda nos números de cancelamento e na aba de baixo */}
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-4 flex items-center gap-2 max-sm:flex-wrap">
           <button
             type="button"
             onClick={() => setMes((m) => addMonthsToId(m, -1))}
@@ -273,7 +294,7 @@ export function FinanceiroClientesGeralPage() {
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="min-w-[150px] text-center text-sm font-semibold text-foreground">{monthLabelPt(mes)}</span>
+          <span className="min-w-[150px] text-center text-sm font-semibold text-foreground max-sm:min-w-[84px]">{monthLabelPt(mes)}</span>
           <button
             type="button"
             onClick={() => setMes((m) => addMonthsToId(m, 1))}
@@ -293,7 +314,7 @@ export function FinanceiroClientesGeralPage() {
           )}
 
           {asaasIndisponivel && !carregandoAsaas && (
-            <span className="ml-auto text-xs text-foreground/40" title="Configure a chave em Configurações → Asaas pra ver a coluna 'Valor no Asaas'.">
+            <span className="ml-auto text-xs text-foreground/40 max-sm:order-last max-sm:ml-0 max-sm:basis-full" title="Configure a chave em Configurações → Asaas pra ver a coluna 'Valor no Asaas'.">
               Coluna "Valor no Asaas" indisponível — Asaas não configurado
             </span>
           )}
@@ -304,7 +325,7 @@ export function FinanceiroClientesGeralPage() {
             onClick={sincronizarAsaas}
             disabled={sincronizando}
             title="Lê o Asaas agora: cobrança nova vira cliente, cobrança removida vira cancelamento"
-            className={asaasIndisponivel && !carregandoAsaas ? '' : 'ml-auto'}
+            className={cn('max-sm:ml-auto max-sm:shrink-0 max-sm:whitespace-nowrap', asaasIndisponivel && !carregandoAsaas ? '' : 'ml-auto')}
           >
             {sincronizando
               ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -329,22 +350,24 @@ export function FinanceiroClientesGeralPage() {
           <Card icon={<TrendingDown className="h-4 w-4" />} label="MRR perdido no mês"
             value={formatBRLCents(mrrPerdido)}
             hint={multasDoMes ? `+ ${formatBRLCents(multasDoMes)} de multa` : 'mensalidade que saiu'}
-            tone={mrrPerdido ? 'danger' : undefined} />
+            tone={mrrPerdido ? 'danger' : undefined} className="max-sm:col-span-2" />
         </div>
 
         {/* Abas */}
-        <div className="mt-5 flex flex-wrap items-center gap-1 border-b border-line">
+        <div className="no-scrollbar mt-5 flex flex-wrap items-center gap-1 border-b border-line max-sm:flex-nowrap max-sm:overflow-x-auto">
           {UNIDADES.map((u) => (
             <AbaBotao
               key={u.valor}
               ativa={aba === u.valor}
               onClick={() => { setAba(u.valor); setVerSemEmpresa(false) }}
             >
-              {u.label} ({clients.filter((c) => jaEhCliente(c) && c.unidade === u.valor).length})
+              <span className="max-sm:hidden">{u.label} ({clients.filter((c) => jaEhCliente(c) && c.unidade === u.valor).length})</span>
+              <span className="sm:hidden">{`${UNIDADE_CURTA[u.valor].toUpperCase()} (${clients.filter((c) => jaEhCliente(c) && c.unidade === u.valor).length})`}</span>
             </AbaBotao>
           ))}
           <AbaBotao ativa={aba === 'cancelamentos'} onClick={() => setAba('cancelamentos')}>
-            CANCELAMENTOS GERAL ({cancelamentosDoMes.length})
+            <span className="max-sm:hidden">CANCELAMENTOS GERAL ({cancelamentosDoMes.length})</span>
+            <span className="sm:hidden">{`CANCELAMENTOS (${cancelamentosDoMes.length})`}</span>
           </AbaBotao>
         </div>
 
@@ -425,7 +448,54 @@ export function FinanceiroClientesGeralPage() {
               )}
             </div>
 
-            <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-sm">
+            {/* No celular a lista vira cartões (a tabela tem 9 colunas); do sm pra cima é a tabela. */}
+            <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-sm sm:hidden">
+              {lista.length === 0 ? (
+                <p className="px-4 py-10 text-center text-sm text-foreground/40">{listaVazia}</p>
+              ) : (
+                <ul className="divide-y divide-line/60">
+                  {lista.map((c) => (
+                    <CartaoCliente
+                      key={c.id}
+                      cliente={c}
+                      sugestao={sugestoes[c.id]}
+                      valorAsaas={valoresAsaas[c.id]}
+                      carregandoAsaas={carregandoAsaas}
+                      onAbrir={() => setDrawerId(c.id)}
+                      onCancelar={() => setCancelando(c)}
+                      onAplicarSugestao={() => aplicarSugestao(c)}
+                      onVincularAsaas={(valor) => vincularAsaas(c, valor)}
+                    />
+                  ))}
+                </ul>
+              )}
+              {lista.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 border-t-2 border-line bg-elevate/[0.03] px-4 py-3 text-sm font-semibold">
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/45">Total ({lista.length})</p>
+                    <p className="tabular-nums text-success">
+                      {formatBRLCents(lista.reduce((a, c) => a + centsDoCliente(c.monthlyValue), 0))}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/45">No Asaas</p>
+                    <p className="tabular-nums text-foreground/60">
+                      {asaasIndisponivel
+                        ? '—'
+                        : formatBRLCents(lista.reduce((a, c) => a + (valoresAsaas[c.id]?.valorCents ?? 0), 0))}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/45">Implementação</p>
+                    <p className="tabular-nums text-success">
+                      {formatBRLCents(lista.reduce((a, c) => a + centsDoCliente(c.implementationValue), 0))}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-sm max-sm:hidden">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[1120px]">
                   <thead>
@@ -447,25 +517,7 @@ export function FinanceiroClientesGeralPage() {
                     {lista.length === 0 && (
                       <tr>
                         <td colSpan={9} className="px-4 py-10 text-center text-sm text-foreground/40">
-                          {escondidosPeloFiltro > 0 ? (
-                            <>
-                              <span>
-                                {escondidosPeloFiltro === 1
-                                  ? 'Achei 1 cliente com essa busca, mas ele está fora dos filtros atuais'
-                                  : `Achei ${escondidosPeloFiltro} clientes com essa busca, mas estão fora dos filtros atuais`}
-                                {status === 'ativos' ? ' (cancelado, e a lista está em "Só ativos").' : '.'}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => { setStatus('todos'); setVerSemEmpresa(false) }}
-                                className="ml-2 font-medium text-accent hover:underline"
-                              >
-                                Mostrar assim mesmo
-                              </button>
-                            </>
-                          ) : semEmpresa.length > 0 && !verSemEmpresa
-                            ? 'Nenhum cliente nesta empresa ainda — use o aviso acima pra classificar quem está sem.'
-                            : 'Nenhum cliente com esses filtros.'}
+                          {listaVazia}
                         </td>
                       </tr>
                     )}
@@ -529,7 +581,7 @@ function AbaBotao({ ativa, onClick, children }: { ativa: boolean; onClick: () =>
       type="button"
       onClick={onClick}
       className={cn(
-        'border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+        'border-b-2 px-4 py-2.5 text-sm font-medium transition-colors max-sm:shrink-0 max-sm:whitespace-nowrap max-sm:px-3',
         ativa ? 'border-accent text-foreground' : 'border-transparent text-foreground/50 hover:text-foreground/80',
       )}
     >
@@ -538,14 +590,15 @@ function AbaBotao({ ativa, onClick, children }: { ativa: boolean; onClick: () =>
   )
 }
 
-function Card({ icon, label, value, hint, tone }: {
-  icon: React.ReactNode; label: string; value: string; hint?: string; tone?: 'success' | 'danger'
+function Card({ icon, label, value, hint, tone, className }: {
+  icon: React.ReactNode; label: string; value: string; hint?: string; tone?: 'success' | 'danger'; className?: string
 }) {
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground/45">
+    <div className={cn('rounded-2xl bg-card p-4 shadow-sm max-sm:p-3', className)}>
+      {/* No celular o rótulo quebra em duas linhas em vez de cortar ("Cancelados em Out/2026"). */}
+      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground/45 max-sm:items-start max-sm:text-[10px] max-sm:leading-tight">
         <span className="text-foreground/35">{icon}</span>
-        <span className="truncate">{label}</span>
+        <span className="truncate max-sm:whitespace-normal">{label}</span>
       </div>
       <p className={cn(
         'mt-2 text-xl font-semibold tabular-nums',
@@ -656,6 +709,112 @@ function LinhaCliente({ cliente, sugestao, valorAsaas, carregandoAsaas, onAbrir,
         )}
       </td>
     </tr>
+  )
+}
+
+/** O mesmo cliente da LinhaCliente, em cartão pro celular: quem é em cima, os três valores lado a
+ * lado (editáveis do mesmo jeito) e, embaixo, a empresa do grupo e o botão de cancelar. */
+function CartaoCliente({ cliente, sugestao, valorAsaas, carregandoAsaas, onAbrir, onCancelar, onAplicarSugestao, onVincularAsaas }: {
+  cliente: Client
+  sugestao: Sugestao | undefined
+  valorAsaas: ValorAsaas | undefined
+  carregandoAsaas: boolean
+  onAbrir: () => void
+  onCancelar: () => void
+  onAplicarSugestao: () => void
+  onVincularAsaas: (valor: ValorAsaas) => void
+}) {
+  const cancelado = cliente.stage === 'churned'
+  const semMrr = (cliente.monthlyValue ?? 0) === 0
+  const podeSugerir = semMrr && !!sugestao?.mrrCents
+  const rotulo = 'mb-0.5 block text-right text-[10px] font-medium uppercase tracking-wide text-foreground/40'
+
+  return (
+    <li className="space-y-2.5 px-4 py-3">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={onAbrir}
+            className={cn('text-left text-sm font-medium hover:text-accent hover:underline', cancelado ? 'text-foreground/50' : 'text-foreground')}
+            title="Abrir o cadastro do cliente"
+          >
+            {cliente.name || '—'}
+          </button>
+          <p className="truncate text-xs text-foreground/60">
+            {cliente.company || '—'}
+            {cliente.cnpj && <span className="tabular-nums text-foreground/35"> · {formatarCnpj(cliente.cnpj)}</span>}
+          </p>
+          {cliente.phone && <p className="text-xs tabular-nums text-foreground/45">{cliente.phone}</p>}
+        </div>
+        <span className={cn(
+          'inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium',
+          cancelado ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success',
+        )}>
+          {cancelado ? 'Cancelado' : 'Ativo'}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 [&_button]:min-h-8">
+        <div className="min-w-0">
+          <span className={rotulo}>Mensalidade</span>
+          <CelulaValor
+            cents={centsDoCliente(cliente.monthlyValue)}
+            onSalvar={(cents) => void db.updateClient(cliente.id, { monthlyValue: cents ? cents / 100 : undefined })}
+          />
+          {podeSugerir && (
+            <button
+              type="button"
+              onClick={onAplicarSugestao}
+              title={`A venda desse cliente está registrada com ${formatBRLCents(sugestao!.mrrCents)} (ligação por ${sugestao!.origem})`}
+              className="block w-full text-right text-[11px] text-accent hover:underline"
+            >
+              usar {formatBRLCents(sugestao!.mrrCents)} da venda
+            </button>
+          )}
+        </div>
+        <div className="min-w-0">
+          <span className={rotulo}>No Asaas</span>
+          <CelulaValorAsaas
+            valor={valorAsaas}
+            mensalidadeCents={centsDoCliente(cliente.monthlyValue)}
+            carregando={carregandoAsaas}
+            onVincular={onVincularAsaas}
+          />
+        </div>
+        <div className="min-w-0">
+          <span className={rotulo}>Implementação</span>
+          <CelulaValor
+            cents={centsDoCliente(cliente.implementationValue)}
+            onSalvar={(cents) => void db.updateClient(cliente.id, { implementationValue: cents ? cents / 100 : undefined })}
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <select
+          value={cliente.unidade ?? ''}
+          onChange={(e) => void db.updateClient(cliente.id, { unidade: (e.target.value || undefined) as Client['unidade'] })}
+          title="Empresa do grupo"
+          className={cn(
+            'h-8 min-w-0 flex-1 rounded-md bg-elevate/[0.05] px-2 text-sm outline-none',
+            cliente.unidade ? 'text-foreground' : 'text-danger',
+          )}
+        >
+          <option value="">— definir empresa —</option>
+          {UNIDADES.map((u) => <option key={u.valor} value={u.valor}>{UNIDADE_CURTA[u.valor]}</option>)}
+        </select>
+        {!cancelado && (
+          <button
+            type="button"
+            onClick={onCancelar}
+            title="Registrar cancelamento desse cliente"
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+          >
+            <UserMinus className="h-3.5 w-3.5" />
+            Cancelar
+          </button>
+        )}
+      </div>
+    </li>
   )
 }
 
@@ -774,7 +933,94 @@ function ListaCancelamentos({ itens, mes, todos, onAbrirCliente }: {
 
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_280px]">
-      <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
+      {/* No celular, um cartão por cancelamento; do sm pra cima, a tabela. */}
+      <div className="overflow-hidden rounded-2xl bg-card shadow-sm sm:hidden">
+        {itens.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-foreground/40">Nenhum cancelamento em {monthLabelPt(mes)}.</p>
+        ) : (
+          <ul className="divide-y divide-line/60">
+            {itens.map((c) => (
+              <li key={c.id} className="space-y-2 px-4 py-3">
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => onAbrirCliente(c.clientId)}
+                      className="text-left text-sm font-medium text-foreground hover:text-accent hover:underline"
+                    >
+                      {c.clientName || c.clientCompany || '—'}
+                    </button>
+                    {c.reactivatedAt && (
+                      <span className="ml-2 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
+                        reativado
+                      </span>
+                    )}
+                    <p className="text-xs text-foreground/50">
+                      <span className="tabular-nums">{c.canceledAt.split('-').reverse().join('/')}</span>
+                      {' · '}{c.motivo || '—'}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={cn('text-sm font-medium tabular-nums', c.reactivatedAt ? 'text-foreground/35 line-through' : 'text-danger')}>
+                      {formatBRLCents(c.mrrCents)}
+                    </p>
+                    {c.multaCents > 0 && (
+                      <p className="text-[11px] tabular-nums text-success">+ {formatBRLCents(c.multaCents)} multa</p>
+                    )}
+                  </div>
+                </div>
+                <ObservacaoCell cancelamento={c} />
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void clientCancellationsService.atualizar(c.id, { asaasRemovido: !c.asaasRemovido })}
+                    title={c.asaasRemovido ? 'Cobrança já cancelada no Asaas — clique pra desmarcar' : 'Ainda sendo cobrado no Asaas — clique quando der baixa'}
+                    className={cn(
+                      'rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors',
+                      c.asaasRemovido ? 'bg-success/10 text-success' : 'bg-warning/15 text-warning hover:bg-warning/25',
+                    )}
+                  >
+                    Asaas: {c.asaasRemovido ? 'baixado' : 'pendente'}
+                  </button>
+                  <span className="flex-1" />
+                  {!c.reactivatedAt && (
+                    <button
+                      type="button"
+                      onClick={() => void clientCancellationsService.reativar(c.id)}
+                      title="Cliente voltou — volta pra ativo (o cancelamento continua no histórico deste mês)"
+                      className="grid h-8 w-8 place-items-center rounded-lg text-foreground/40 hover:bg-success/10 hover:text-success"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!window.confirm('Excluir esse registro de cancelamento? O cliente volta a ficar ativo.')) return
+                      void clientCancellationsService.excluir(c.id)
+                    }}
+                    title="Registrei errado — apaga o cancelamento"
+                    className="grid h-8 w-8 place-items-center rounded-lg text-foreground/40 hover:bg-danger/10 hover:text-danger"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {itens.length > 0 && (
+          <div className="flex items-center justify-between gap-3 border-t-2 border-line bg-elevate/[0.03] px-4 py-3 text-sm font-semibold">
+            <span>Total</span>
+            <span className="text-right tabular-nums">
+              <span className="text-danger">{formatBRLCents(itens.filter((c) => !c.reactivatedAt).reduce((a, c) => a + c.mrrCents, 0))}</span>
+              <span className="ml-2 text-xs text-success">+ {formatBRLCents(itens.reduce((a, c) => a + c.multaCents, 0))} multa</span>
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-2xl bg-card shadow-sm max-sm:hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px]">
             <thead>

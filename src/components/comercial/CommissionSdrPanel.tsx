@@ -144,7 +144,29 @@ export function CommissionSdrSection({
             Só o que está com contrato Assinado entra no pagamento — Pendente é só referência.
           </p>
         </div>
-        <div className="overflow-x-auto">
+        {/* No celular, uma linha por pessoa com os quatro valores em 2×2; do sm pra cima, a tabela. */}
+        <ul className="divide-y divide-line/60 sm:hidden">
+          {pessoasDoTotal.map((name) => {
+            const t = totalsByPerson.get(name) ?? { sdr: 0, closer: 0, assinado: 0, pendente: 0 }
+            return (
+              <li key={name} className="px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/10 text-[10px] font-semibold text-accent">
+                    {initials(name)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{name}</span>
+                  <span className="text-sm font-semibold tabular-nums text-success">{formatBRLCents(t.assinado)}</span>
+                </div>
+                <div className="mt-1.5 grid grid-cols-3 gap-2 text-[11px] tabular-nums text-foreground/55">
+                  <span>SDR <strong className="font-medium text-foreground/80">{formatBRLCents(t.sdr)}</strong></span>
+                  <span>Closer <strong className="font-medium text-foreground/80">{formatBRLCents(t.closer)}</strong></span>
+                  <span className="text-right">Pend. <strong className="font-medium text-warning">{formatBRLCents(t.pendente)}</strong></span>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+        <div className="overflow-x-auto max-sm:hidden">
           <table className="w-full min-w-[620px]">
             <thead>
               <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
@@ -216,10 +238,66 @@ function EntriesTable({
         </div>
         <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatBRLCents(total)}</span>
       </div>
+      {/* No celular cada lançamento vira um cartão (a tabela tem 8 colunas); do sm pra cima, a
+       * tabela. As células editáveis são as mesmas nos dois. */}
+      {entries.length > 0 && (
+        <ul className="divide-y divide-line/60 sm:hidden">
+          {entries.map((e) => {
+            const paid = e.status === 'pago'
+            const incomplete = !e.typeId || e.amountCents <= 0
+            return (
+              <li key={e.id} className={cn('space-y-2 px-4 py-3 text-sm', incomplete && 'bg-warning/[0.04]')}>
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1"><NomeCell entry={e} onOpenLead={onOpenLead} /></div>
+                  <div className="shrink-0 font-medium tabular-nums text-foreground [&_input]:w-24"><AmountCell entry={e} /></div>
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(e)}
+                    title="Excluir lançamento"
+                    className="-mr-2 -mt-1 grid h-8 w-8 shrink-0 place-items-center rounded text-foreground/30 hover:bg-danger/10 hover:text-danger"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <PersonCell entry={e} />
+                  <span className="text-foreground/25">·</span>
+                  <TypeCell entry={e} types={types} />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void commissionsService.updateEntry(e.id, { contratoAssinado: !e.contratoAssinado })}
+                    title={e.contratoAssinado ? 'Assinado — clique pra marcar como pendente' : 'Pendente — clique pra marcar como assinado'}
+                    className={cn(
+                      'rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors',
+                      e.contratoAssinado ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning hover:bg-warning/15',
+                    )}
+                  >
+                    Contrato {e.contratoAssinado ? 'assinado' : 'pendente'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onToggle(e)}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                      paid ? 'bg-success/15 text-success hover:bg-success/25' : 'bg-warning/20 text-warning hover:bg-warning/30',
+                    )}
+                  >
+                    {paid ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                    {paid ? 'Pago' : 'Pendente'}
+                  </button>
+                  <div className="min-w-0 flex-1 text-right text-xs"><ReferenceCell entry={e} /></div>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
       {entries.length === 0 ? (
         <p className="px-4 py-6 text-center text-xs text-foreground/40">Nenhum lançamento nesse período.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-sm:hidden">
           <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">

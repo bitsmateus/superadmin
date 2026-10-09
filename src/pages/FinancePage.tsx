@@ -223,7 +223,8 @@ export function FinancePage() {
               Custom
             </RangePill>
           </div>
-          <div className="flex flex-wrap items-end gap-2">
+          {/* No celular "De" e "Até" ficam lado a lado (cada um ocupava a linha inteira). */}
+          <div className="flex flex-wrap items-end gap-2 max-sm:grid max-sm:w-full max-sm:grid-cols-2">
             <Input
               label="De"
               type="date"
@@ -249,6 +250,7 @@ export function FinancePage() {
               variant="secondary"
               onClick={() => exportCsv(txInPeriod)}
               disabled={txInPeriod.length === 0}
+              className="max-sm:col-span-2"
             >
               Exportar CSV
             </Button>
@@ -256,7 +258,7 @@ export function FinancePage() {
         </div>
 
         {/* Cards */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 max-sm:grid-cols-2">
           <Metric
             icon={<Repeat className="h-4 w-4" />}
             tone="info"
@@ -360,7 +362,29 @@ export function FinancePage() {
               />
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* No celular, uma linha compacta por pagamento; do sm pra cima, a tabela. */}
+            <ul className="divide-y divide-line/80 sm:hidden">
+              {txInPeriod.map(({ payment, client }) => (
+                <li key={payment.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm text-foreground">{client.company || client.name}</div>
+                    <div className="truncate text-[11px] text-foreground/45">
+                      {formatDateShort(payment.paidAt)}
+                      {payment.method ? ` · ${METHOD_LABEL[payment.method]}` : ''}
+                      {payment.reference ? ` · ${payment.reference}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="text-sm tabular-nums text-foreground">{brl(payment.value)}</span>
+                    <Badge tone={payment.type === 'implementation' ? 'info' : payment.type === 'monthly' ? 'success' : 'neutral'}>
+                      {TYPE_LABEL[payment.type]}
+                    </Badge>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="overflow-x-auto max-sm:hidden">
               <div className="min-w-[680px]">
                 <Table>
                   <THead>
@@ -401,6 +425,7 @@ export function FinancePage() {
                 </Table>
               </div>
             </div>
+            </>
           )}
           {txInPeriod.length > 0 && (
             <div className="border-t border-line px-4 py-2.5 flex items-center justify-end gap-4 text-sm">
@@ -437,16 +462,16 @@ function Metric({
     neutral: 'bg-elevate/[0.04] text-foreground/55 ring-elevate/10',
   }
   return (
-    <div className="rounded-xl border border-line bg-card p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wider text-foreground/45">
+    <div className="rounded-xl border border-line bg-card p-4 max-sm:p-3">
+      <div className="flex items-center justify-between max-sm:items-start max-sm:gap-2">
+        <span className="text-xs uppercase tracking-wider text-foreground/45 max-sm:text-[10px] max-sm:leading-tight">
           {label}
         </span>
-        <span className={`grid h-7 w-7 place-items-center rounded-lg ring-1 ${tones[tone]}`}>
+        <span className={`grid h-7 w-7 place-items-center rounded-lg ring-1 max-sm:shrink-0 ${tones[tone]}`}>
           {icon}
         </span>
       </div>
-      <div className="mt-3 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+      <div className="mt-3 text-2xl font-semibold tracking-tight text-foreground tabular-nums max-sm:text-lg">
         {value}
       </div>
       {hint && (
@@ -470,7 +495,7 @@ function RangePill({
       type="button"
       onClick={onClick}
       className={
-        'rounded-md px-2.5 py-1 text-xs font-medium transition-colors ' +
+        'rounded-md px-2.5 py-1 text-xs font-medium transition-colors max-sm:py-2 ' +
         (active
           ? 'bg-elevate/[0.08] text-foreground ring-1 ring-line'
           : 'text-foreground/55 hover:bg-elevate/[0.04] hover:text-foreground')
@@ -506,8 +531,16 @@ function MonthlyChart({
 
   const gridLines = 4
 
+  // No celular o gráfico rola de lado (encolher 12 barras pra 360px deixava o texto ilegível) —
+  // começa no fim, nos meses mais recentes, que é o que se quer ver primeiro.
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (el && window.matchMedia('(max-width: 639px)').matches) el.scrollLeft = el.scrollWidth
+  }, [])
+
   return (
-    <div className="w-full overflow-x-auto">
+    <div ref={scrollRef} className="w-full overflow-x-auto">
       <svg
         viewBox={`0 0 ${w} ${h}`}
         className="w-full min-w-[640px]"

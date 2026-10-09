@@ -502,7 +502,8 @@ export function AgendaPage() {
                                 )}
                               </div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1.5">
+                            {/* No celular os botões quebram em duas linhas em vez de vazar pra fora do cartão. */}
+                            <div className="flex shrink-0 items-center gap-1.5 max-sm:w-full max-sm:flex-wrap">
                               {e.meetLink && (
                                 <>
                                   <Button
@@ -593,8 +594,10 @@ function MonthGrid({
 }) {
   const MAX = 3
   return (
+    // No celular a grade cabe na tela (sem rolar de lado): célula mais baixa e o chip só com a hora —
+    // o nome aparece ao tocar, na janela da reunião.
     <div className="overflow-x-auto">
-      <div className="min-w-[720px] overflow-hidden rounded-xl border border-line bg-card">
+      <div className="min-w-[720px] overflow-hidden rounded-xl border border-line bg-card max-sm:min-w-0">
         <div className="grid grid-cols-7 border-b border-line bg-elevate/[0.03]">
           {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((d) => (
             <div key={d} className="px-2 py-2 text-center text-xs font-medium text-foreground/50">{d}</div>
@@ -610,7 +613,7 @@ function MonthGrid({
                 key={day.toISOString()}
                 {...dnd(day)}
                 className={cn(
-                  'group min-h-[112px] border-b border-r border-line/60 p-1.5 transition-colors',
+                  'group min-h-[112px] border-b border-r border-line/60 p-1.5 transition-colors max-sm:min-h-[72px] max-sm:p-1',
                   foraDoMes && 'bg-elevate/[0.025]',
                   diaAlvo === day.toDateString() && 'bg-accent/10 ring-2 ring-inset ring-accent/50',
                 )}
@@ -643,11 +646,11 @@ function MonthGrid({
                         {...dragEvento(e)}
                         onClick={() => onOpen(e)}
                         title={`${fmtHour(e.start)} · ${tipoBadge(e)} · ${asText(e.clienteNome, e.title)}${e.responsavel ? ` · ${e.responsavel}` : ''}`}
-                        className="flex w-full items-center gap-1 truncate rounded border-l-[4px] px-1.5 py-0.5 text-left text-[11px] text-foreground hover:brightness-95"
+                        className="flex w-full items-center gap-1 truncate rounded border-l-[4px] px-1.5 py-0.5 text-left text-[11px] text-foreground hover:brightness-95 max-sm:border-l-[3px] max-sm:px-0.5 max-sm:py-1 max-sm:text-[10px]"
                         style={{ borderLeftColor: cor, backgroundColor: `${cor}33` }}
                       >
                         <span className="shrink-0 font-semibold tabular-nums">{fmtHour(e.start)}</span>
-                        <span className="truncate">{asText(e.clienteNome, e.title)}</span>
+                        <span className="truncate max-sm:hidden">{asText(e.clienteNome, e.title)}</span>
                       </button>
                     )
                   })}

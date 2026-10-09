@@ -213,7 +213,8 @@ export function KanbanDemandas({
             />
           )}
         </div>
-        <div className="flex items-center gap-2">
+        {/* No celular os três botões cabem numa linha só, sem quebrar o texto em duas. */}
+        <div className="flex items-center gap-2 max-sm:gap-1 [&>button]:max-sm:whitespace-nowrap [&>button]:max-sm:px-2">
           <Button
             variant="ghost"
             size="sm"

@@ -198,10 +198,9 @@ export function PainelMensalPage() {
     // o campo Agendamento está vazio (SDR não preencheu a data), cai no critério antigo (data em
     // que o status virou "Reunião agendada") — sem isso, todo lead sem essa data marcada sumia de
     // "até hoje" mesmo já tendo tido a reunião de verdade, o que fica pior do que o bug original.
-    // Só lead com SDR/closer atribuído, como nas Métricas por SDR (lead sem responsável de vendas não entra no funil).
     const monthCohort = comercialRows.filter((r) => {
       const d = diaLocal(r.createdAt)
-      return !!r.sdr && d >= from && d <= to
+      return d >= from && d <= to
     })
     const agendadosTotal = monthCohort.filter((r) => milestoneById.get(r.id)?.everAgendada)
     const agendadosAteHoje = agendadosTotal.filter((r) => {

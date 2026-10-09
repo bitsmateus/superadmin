@@ -96,6 +96,8 @@ export interface LeadRow {
    * venda_origem_id sozinho não dá conta disso: na prática quase toda venda é registrada à mão
    * pelo botão "Registrar venda" mesmo vindo do funil, então o vínculo automático fica vazio. */
   veioDoFunil: boolean
+  /** Id do lead no Meta Ads — só existe em lead que chegou pelo formulário do anúncio. */
+  metaLeadId?: string | null
   /** Marca manual (só a pessoa liga/desliga, na aba Vendas) se o contrato dessa venda já foi
    * assinado ou ainda está pendente — mesmo padrão de veioDoFunil, sem data nem checklist. */
   contratoAssinado: boolean
@@ -120,7 +122,7 @@ export type LeadRowField = Exclude<
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
   | 'lastNotePreview' | 'lastNoteAt'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
-  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId' | 'closer'
+  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId' | 'closer' | 'metaLeadId'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */

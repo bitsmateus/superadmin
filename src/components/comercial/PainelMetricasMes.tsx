@@ -63,12 +63,17 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
 
   const dados = React.useMemo(() => {
     const { from, to } = limitesDoMes(monthId)
-    // Só entra lead com SDR/closer atribuído (hoje Arthur e Luis): é o que as Métricas por SDR somam. Lead de
-    // projetos/demandas sem responsável de vendas não é do funil comercial e inflava o total.
+    // A leva do mês = leads de verdade criados no período. Ficam de fora as linhas do quadro VENDAS: são o
+    // REGISTRO da venda (a cópia do lead que virou cliente, ou uma venda avulsa), não um lead novo — contá-las
+    // somava duas vezes quem vendeu e punha venda de indicação como "lead". Lead sem SDR marcado ENTRA: é lead
+    // que o tráfego gerou do mesmo jeito.
+    const quadrosDeVenda = new Set(boards.filter((b) => b.isVendas).map((b) => b.id))
     const leva = rows.filter((r) => {
       const d = diaLocal(r.createdAt)
-      return !!r.sdr && d >= from && d <= to
+      return !quadrosDeVenda.has(r.boardId) && d >= from && d <= to
     })
+    // Quantos vieram do formulário do Meta Ads — é o número que tem que bater com o Gerenciador de Anúncios.
+    const doMeta = leva.filter((r) => !!r.metaLeadId).length
     const agendados = leva.filter((r) => milestoneById.get(r.id)?.everAgendada)
     const compareceram = agendados.filter((r) => milestoneById.get(r.id)?.everCompareceu)
     const noShow = agendados.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_NO_SHOW)
@@ -109,7 +114,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
     }
 
     return {
-      leva, agendados, compareceram, noShow, vendasFunil, vendasDoMes,
+      leva, doMeta, agendados, compareceram, noShow, vendasFunil, vendasDoMes,
       mrrCents, implCents, entrouCents, investimentoCents, extrasCents, custoTotalCents,
       leadsGerados, permanencia, vendas, comDesfecho, porSdr,
       cplCents: leadsGerados > 0 ? custoTotalCents / leadsGerados : 0,
@@ -294,6 +299,10 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
           <p className="mt-3 border-t border-line/60 pt-2 text-[11px] text-foreground/45">
             De cada 100 leads, {Math.round((dados.leadsGerados > 0 ? dados.vendasFunil.length / dados.leadsGerados : 0) * 100)} viram
             venda pelo funil. Os {dados.noShow.length} no-shows ficam fora das reuniões realizadas.
+          </p>
+          <p className="mt-1 text-[11px] text-foreground/45">
+            No CRM, {dados.leva.length} leads criados neste mês: <strong className="font-semibold text-foreground/65">{dados.doMeta} vieram do Meta Ads</strong>{' '}
+            (é o número que bate com o Gerenciador de Anúncios) e {dados.leva.length - dados.doMeta} foram cadastrados à mão.
           </p>
         </div>
 

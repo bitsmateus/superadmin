@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
+import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { findMatchingClientId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 import { syncScheduledMeeting, localDateTimeToISO } from '../lib/calendarSync.js';
 
@@ -1098,6 +1099,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           b.observacoes ?? '', b.veio_do_funil ?? false,
         ]
       );
+      // Criada sem SDR numa aba que é de um SDR: já sai marcada (a coluna SDR não aparece lá pra escolher).
+      if (!(leadRow as { sdr?: string }).sdr) {
+        const sdrDaAba = await preencherSdrDaAba(id).catch(() => null);
+        if (sdrDaAba) (leadRow as { sdr?: string }).sdr = sdrDaAba;
+      }
       void getActorName(sub).then((actorName) => logLeadEvent(id, 'created', null, null, actorName));
       // Venda avulsa registrada direto na aba Vendas (botão "Registrar venda") — mesma comissão em
       // branco que uma venda vinda do funil já ganha sozinha.
@@ -1223,6 +1229,13 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         params
       );
       if (!leadRow) return reply.status(404).send({ message: 'Linha não encontrada' });
+
+      // Lead sem SDR numa aba que é de um SDR (chegou pelo Meta, foi movida de "Novos Leads"…): qualquer
+      // edição já marca o SDR da aba, em vez de esperar o servidor reiniciar.
+      if (!(leadRow as { sdr?: string }).sdr) {
+        const sdrDaAba = await preencherSdrDaAba(req.params.id).catch(() => null);
+        if (sdrDaAba) (leadRow as { sdr?: string }).sdr = sdrDaAba;
+      }
 
       if ('agendamento' in patch) {
         void syncLeadAgendamentoCalendar(leadRow as unknown as LeadAgendamentoRow).catch((err) =>

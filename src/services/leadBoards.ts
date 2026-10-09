@@ -57,6 +57,7 @@ type LeadRowRow = {
   closer?: string
   last_note_preview?: string
   last_note_at?: string | null
+  meta_lead_id?: string | null
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
@@ -69,6 +70,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     valorMrr: r.valor_mrr, valorImplementacao: r.valor_implementacao, notesCount: r.notes_count ?? 0,
     fechamento: r.fechamento ?? '',
     vendaOrigemId: r.venda_origem_id ?? null,
+    metaLeadId: r.meta_lead_id ?? null,
     vendaRevertida: r.venda_revertida ?? false,
     position: r.position, createdAt: r.created_at, updatedAt: r.updated_at, deletedAt: r.deleted_at ?? null,
     deleteReason: r.delete_reason ?? null,

@@ -6,6 +6,7 @@ import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
 import { propagarContratoAssinado } from '../lib/contractSignal.js';
 import { restrictedBoardFilter } from './leadBoards.js';
 import { sendPushToUsers } from '../lib/webPush.js';
+import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 
 /**
  * Webhook do Autentique — o contrato é gerado aqui, mas enviado pra assinatura fora do sistema (a
@@ -281,6 +282,12 @@ export async function webhookRoutes(app: FastifyInstance) {
       await query(
         `INSERT INTO lead_events (lead_row_id, type, from_value, to_value, actor_name) VALUES ($1,$2,$3,$4,$5)`,
         [leadRow.id, 'created', null, null, 'Meta Ads (n8n)']
+      );
+
+      // O lead do Meta nasce sem SDR. Se o quadro de destino é da aba de um SDR (CRM ARTHUR), ele já entra
+      // com o SDR marcado — sem isso ficava fora das Métricas por SDR e do funil até o servidor reiniciar.
+      await preencherSdrDaAba(leadRow.id).catch((err) =>
+        app.log.error({ err, leadId }, '[meta-leads] falha ao marcar o SDR da aba')
       );
 
       // Push notification (PWA) pra quem tem acesso ao quadro — em background, não atrasa nem

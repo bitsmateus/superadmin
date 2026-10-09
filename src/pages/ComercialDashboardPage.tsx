@@ -94,6 +94,13 @@ export function ComercialDashboardPage() {
     })
   }, [pageRows, sdrFilter, from, to])
 
+  // O "total de leads" de cada SDR não conta as linhas do quadro Vendas: elas são o registro da venda (cópia do
+  // lead que fechou), não um lead novo — somá-las dava mais leads do que o SDR realmente recebeu.
+  const leadRowsDoPeriodo = React.useMemo(() => {
+    const quadrosDeVenda = new Set(boards.filter((b) => b.isVendas).map((b) => b.id))
+    return rows.filter((r) => !quadrosDeVenda.has(r.boardId))
+  }, [rows, boards])
+
   // Sem filtro de data — Agendadas/No-show/Vendas do SdrSummaryPanel usam a DATA DO PRÓPRIO
   // EVENTO (não a de criação do lead) pra decidir o que entra no período selecionado.
   const sdrScopedRows = React.useMemo(
@@ -170,7 +177,7 @@ export function ComercialDashboardPage() {
 
             <LeadTodayPanel rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
             <LeadTodayBySdr rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
-            <SdrSummaryPanel rows={rows} allRows={sdrScopedRows} from={from} to={to} boards={boards} onOpenLead={setOpenLeadId} />
+            <SdrSummaryPanel rows={leadRowsDoPeriodo} allRows={sdrScopedRows} from={from} to={to} boards={boards} onOpenLead={setOpenLeadId} />
           </>
         )}
       </div>

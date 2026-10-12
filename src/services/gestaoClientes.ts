@@ -399,7 +399,24 @@ export type GcClienteEntrada = Partial<{
   estrategia_usada: string
   /** Só no cadastro: as etapas até o Go-live nascem "concluídas antes do módulo". */
   ja_em_andamento: boolean
+  /** A ficha de cadastro (lead que fechou) vinculada a este cliente. */
+  cliente_externo_id: string | null
 }>
+
+/** Lead que já preencheu a ficha de cadastro — pra vincular ao cliente e preencher o cadastro sozinho. */
+export interface GcFichaParaVincular {
+  id: string
+  empresa: string
+  contato: string
+  whatsapp: string
+  email: string
+  cnpj: string
+  cidade: string
+  endereco: string
+  enviada_em: string | null
+  /** Nome do cliente de tráfego que já usa esta ficha, se houver. */
+  vinculado_a: string | null
+}
 
 export type GcServicoEntrada = Partial<{
   tipo: GcTipoServico
@@ -712,6 +729,8 @@ export const gestaoClientes = {
     api.get<GcClienteLista[]>(`/api/gc/clientes${periodo ? `?periodo=${encodeURIComponent(periodo)}` : ''}`),
   detalhe: (id: string) => api.get<GcClienteDetalhe>(`/api/gc/clientes/${id}`),
   criar: (dados: GcClienteEntrada) => api.post<GcClienteLista>('/api/gc/clientes', dados),
+  fichasParaVincular: (busca: string) =>
+    api.get<GcFichaParaVincular[]>(`/api/gc/fichas?busca=${encodeURIComponent(busca)}`),
   atualizar: (id: string, dados: GcClienteEntrada) =>
     api.patch<GcClienteLista>(`/api/gc/clientes/${id}`, dados),
   excluir: (id: string) => api.delete(`/api/gc/clientes/${id}`),

@@ -27,7 +27,7 @@ import {
 const CAMPOS_CLIENTE = [
   'nome_empresa', 'nome_contato', 'whatsapp_contato', 'email_contato', 'cnpj', 'cidade',
   'segmento', 'logo_url', 'responsavel_id', 'status', 'prioridade', 'fora_dos_totais',
-  'data_inicio', 'observacoes_gerais', 'estrategia_usada', 'falta_acompanhar',
+  'data_inicio', 'observacoes_gerais', 'estrategia_usada', 'falta_acompanhar', 'cliente_externo_id',
 ] as const;
 
 const CAMPOS_SERVICO = [
@@ -401,6 +401,60 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   };
 
   // ------------------------------------------------------------------ modelos
+  // GET /api/gc/fichas?busca= — leads que já preencheram a FICHA DE CADASTRO (tabela clients), pra vincular
+  // ao cliente de tráfego e preencher o cadastro sozinho. Só LEITURA da tabela clients: nada é gravado lá.
+  // O vínculo fica em gc_clientes.cliente_externo_id.
+  app.get<{ Querystring: { busca?: string } }>('/api/gc/fichas', autenticado, async (req) => {
+    const busca = String(req.query.busca ?? '').trim();
+    const digitos = busca.replace(/\D/g, '');
+    const params: unknown[] = [];
+    let filtro = '';
+    if (busca) {
+      params.push(`%${busca}%`);
+      const cond = [`c.name ILIKE $1`, `c.company ILIKE $1`];
+      if (digitos.length >= 4) {
+        params.push(`%${digitos}%`);
+        cond.push(`regexp_replace(COALESCE(c.phone, ''), '\\D', '', 'g') LIKE $2`);
+        cond.push(`regexp_replace(COALESCE(c.ficha_cadastro->>'cnpj', c.cnpj, ''), '\\D', '', 'g') LIKE $2`);
+      }
+      filtro = `AND (${cond.join(' OR ')})`;
+    }
+    const linhas = await query<{
+      id: string; name: string | null; company: string | null; phone: string | null; email: string | null;
+      cnpj: string | null; ficha: Record<string, unknown> | null; vinculado: string | null;
+    }>(
+      `SELECT c.id, c.name, c.company, c.phone, c.email, c.cnpj, c.ficha_cadastro AS ficha,
+              (SELECT g.nome_empresa FROM gc_clientes g WHERE g.cliente_externo_id = c.id LIMIT 1) AS vinculado
+       FROM clients c
+       WHERE c.ficha_cadastro IS NOT NULL AND c.archived_at IS NULL ${filtro}
+       ORDER BY (c.ficha_cadastro->>'submittedAt') DESC NULLS LAST, c.created_at DESC
+       LIMIT 40`,
+      params
+    );
+    const texto = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+    return linhas.map((l) => {
+      const f = l.ficha ?? {};
+      const empresa = texto(l.company) || texto(l.name);
+      const contato = texto(l.name) && texto(l.name) !== empresa ? texto(l.name) : '';
+      const endereco = texto(f.address);
+      // "Rua X, 468, Navegantes, Santa Catarina" → a cidade é o penúltimo pedaço quando o endereço vem completo.
+      const partes = endereco.split(',').map((p) => p.trim()).filter(Boolean);
+      const cidade = partes.length >= 3 ? partes[partes.length - 2] : '';
+      return {
+        id: l.id,
+        empresa,
+        contato,
+        whatsapp: texto(l.phone) || texto(f.nfNumber),
+        email: texto(l.email) || texto(f.nfEmail),
+        cnpj: texto(f.cnpj) || texto(l.cnpj),
+        cidade,
+        endereco,
+        enviada_em: texto(f.submittedAt) || null,
+        vinculado_a: l.vinculado,
+      };
+    });
+  });
+
   // GET /api/gc/modelos — jornada padrão e estratégias prontas, pra montar os seletores da tela.
   app.get<{ Querystring: { todos?: string } }>('/api/gc/modelos', autenticado, async (req) => {
     // Os seletores só oferecem modelo ATIVO; a tela de gestão pede "todos" pra poder reativar.

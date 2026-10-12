@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Link2, Loader2, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -8,7 +9,7 @@ import { CampoData } from '@/components/gestaoClientes/CampoData'
 import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import {
   PRIORIDADES, gestaoClientes,
-  type GcClienteEntrada, type GcClienteLista, type GcStatusCliente,
+  type GcClienteEntrada, type GcClienteLista, type GcFichaParaVincular, type GcStatusCliente,
 } from '@/services/gestaoClientes'
 
 /** Data vinda do banco ('2026-10-05T00:00:00.000Z' ou '2026-10-05') no formato que o campo usa. */
@@ -21,6 +22,122 @@ const STATUS: { valor: GcStatusCliente; label: string }[] = [
   { valor: 'pausado', label: 'Pausado' },
   { valor: 'encerrado', label: 'Encerrado' },
 ]
+
+/** Formata o CNPJ (só dígitos → 00.000.000/0000-00); o que não for CNPJ volta como veio. */
+function formatarCnpj(v: string): string {
+  const d = v.replace(/\D/g, '')
+  return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : v
+}
+
+const dataBr = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '')
+
+/**
+ * "Vincular lead": busca quem já preencheu a ficha de cadastro e, ao escolher, preenche empresa, contato,
+ * WhatsApp, e-mail, CNPJ e cidade. Segmento, responsável, status, prioridade e início continuam à mão.
+ */
+function VincularLead({
+  vinculada,
+  onEscolher,
+  onDesvincular,
+}: {
+  vinculada: GcFichaParaVincular | null
+  onEscolher: (f: GcFichaParaVincular) => void
+  onDesvincular: () => void
+}) {
+  const [busca, setBusca] = React.useState('')
+  const [lista, setLista] = React.useState<GcFichaParaVincular[] | null>(null)
+  const [aberto, setAberto] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!aberto) return
+    let vivo = true
+    const t = setTimeout(() => {
+      gestaoClientes
+        .fichasParaVincular(busca)
+        .then((r) => vivo && setLista(r))
+        .catch(() => vivo && setLista([]))
+    }, 250)
+    return () => {
+      vivo = false
+      clearTimeout(t)
+    }
+  }, [busca, aberto])
+
+  if (vinculada) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-success/30 bg-success/[0.06] px-3 py-2.5">
+        <span className="flex min-w-0 items-center gap-2 text-sm">
+          <Link2 className="h-4 w-4 shrink-0 text-success" />
+          <span className="min-w-0">
+            <span className="block truncate font-medium text-foreground">Vinculado: {vinculada.empresa}</span>
+            <span className="block text-xs text-foreground/55">
+              Dados puxados da ficha de cadastro{vinculada.enviada_em ? ` de ${dataBr(vinculada.enviada_em)}` : ''}. Confira e complete o resto abaixo.
+            </span>
+          </span>
+        </span>
+        <Button variant="ghost" size="sm" leftIcon={<X className="h-3.5 w-3.5" />} onClick={onDesvincular}>
+          Desvincular
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-accent/25 bg-accent/[0.03] p-3">
+      <p className="text-sm font-medium text-foreground">Vincular lead</p>
+      <p className="mb-2 text-xs text-foreground/55">
+        Escolha o lead que fechou: os dados da ficha de cadastro preenchem o formulário sozinhos.
+      </p>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40" />
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          onFocus={() => setAberto(true)}
+          placeholder="Buscar por empresa, nome, telefone ou CNPJ…"
+          className="h-10 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm text-foreground outline-none focus:border-accent"
+        />
+      </div>
+      {aberto && (
+        <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-line bg-surface">
+          {lista === null ? (
+            <p className="flex items-center gap-2 px-3 py-3 text-xs text-foreground/50">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando…
+            </p>
+          ) : lista.length === 0 ? (
+            <p className="px-3 py-3 text-xs text-foreground/50">Nenhuma ficha de cadastro encontrada.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {lista.map((f) => (
+                <li key={f.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onEscolher(f)
+                      setAberto(false)
+                    }}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-accent/[0.06]"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-foreground">{f.empresa || 'Sem nome'}</span>
+                      <span className="block truncate text-xs text-foreground/50">
+                        {[f.contato, f.whatsapp, f.cnpj ? formatarCnpj(f.cnpj) : '', f.cidade].filter(Boolean).join(' · ') || '—'}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right text-[11px] text-foreground/45">
+                      {f.enviada_em ? `ficha ${dataBr(f.enviada_em)}` : ''}
+                      {f.vinculado_a && <span className="block text-warning">já vinculado</span>}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /**
  * Cadastro do cliente de tráfego — mesmo formulário pra criar e pra editar.
@@ -43,6 +160,7 @@ export function ModalCliente({
   const { data: perfis } = useTeamProfiles()
   const [salvando, setSalvando] = React.useState(false)
   const [form, setForm] = React.useState<GcClienteEntrada>({})
+  const [ficha, setFicha] = React.useState<GcFichaParaVincular | null>(null)
 
   // Reabrir o modal com outro cliente tem que trocar o conteúdo do formulário — sem isso ele
   // continuaria mostrando quem foi aberto na primeira vez.
@@ -62,8 +180,32 @@ export function ModalCliente({
       fora_dos_totais: cliente?.fora_dos_totais ?? false,
       data_inicio: soData(cliente?.data_inicio),
       observacoes_gerais: cliente?.observacoes_gerais ?? '',
+      ja_em_andamento: false,
     })
+    setFicha(null)
   }, [aberto, cliente])
+
+  // Lead escolhido: os dados da ficha de cadastro entram no formulário. O que a ficha não traz fica como estava.
+  const vincular = (f: GcFichaParaVincular) => {
+    if (f.vinculado_a && !window.confirm(`Essa ficha já está vinculada ao cliente "${f.vinculado_a}". Vincular mesmo assim?`)) return
+    setFicha(f)
+    setForm((atual) => ({
+      ...atual,
+      cliente_externo_id: f.id,
+      nome_empresa: f.empresa || atual.nome_empresa,
+      nome_contato: f.contato || atual.nome_contato,
+      whatsapp_contato: f.whatsapp || atual.whatsapp_contato,
+      email_contato: f.email || atual.email_contato,
+      cnpj: f.cnpj ? formatarCnpj(f.cnpj) : atual.cnpj,
+      cidade: f.cidade || atual.cidade,
+      observacoes_gerais:
+        !atual.observacoes_gerais?.trim() && f.endereco ? `Endereço: ${f.endereco}` : atual.observacoes_gerais,
+    }))
+  }
+  const desvincular = () => {
+    setFicha(null)
+    setForm((atual) => ({ ...atual, cliente_externo_id: null }))
+  }
 
   const mudar = (campo: keyof GcClienteEntrada) => (valor: string) =>
     setForm((f) => ({ ...f, [campo]: valor }))
@@ -122,6 +264,11 @@ export function ModalCliente({
       }
     >
       <div className="grid gap-3 sm:grid-cols-2">
+        {!cliente && (
+          <div className="sm:col-span-2">
+            <VincularLead vinculada={ficha} onEscolher={vincular} onDesvincular={desvincular} />
+          </div>
+        )}
         <div className="sm:col-span-2">
           <Input
             label="Empresa *"
@@ -188,39 +335,52 @@ export function ModalCliente({
           value={form.data_inicio ?? null}
           onChange={(v) => setForm((f) => ({ ...f, data_inicio: v }))}
         />
-        <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-line px-3 py-2.5 sm:col-span-2">
-          <input
-            type="checkbox"
-            checked={form.fora_dos_totais ?? false}
-            onChange={(e) => setForm((f) => ({ ...f, fora_dos_totais: e.target.checked }))}
-            className="mt-0.5 h-4 w-4 rounded border-line"
-          />
-          <span>
-            <span className="block text-sm font-medium text-foreground">
-              Cliente de teste ou arquivado
-            </span>
-            <span className="block text-xs text-foreground/55">
-              Continua na lista, mas não entra em nenhum total (investimento, leads, clientes em
-              risco). Use pra cadastros de teste e pra cliente que você quer guardar sem contar.
-            </span>
-          </span>
-        </label>
         {!cliente && (
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-line px-3 py-2.5 sm:col-span-2">
-            <input
-              type="checkbox"
-              checked={form.ja_em_andamento ?? false}
-              onChange={(e) => setForm((f) => ({ ...f, ja_em_andamento: e.target.checked }))}
-              className="mt-0.5 h-4 w-4 rounded border-line"
-            />
-            <span>
-              <span className="block text-sm font-medium text-foreground">Cliente já em andamento</span>
-              <span className="block text-xs text-foreground/55">
-                Ele já passou pela implantação antes do módulo: as etapas até o Go-live ficam como "concluídas antes do
-                módulo", sem data. As etapas depois do Go-live seguem normais.
-              </span>
-            </span>
-          </label>
+          <div className="sm:col-span-2">
+            <span className="mb-1.5 block text-xs font-medium text-foreground/70">Esse cliente é…</span>
+            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de cliente">
+              {[
+                {
+                  valor: false,
+                  titulo: 'Cliente novo',
+                  ajuda: 'Começa agora: a jornada nasce do zero, a partir do fechamento.',
+                },
+                {
+                  valor: true,
+                  titulo: 'Cliente já em andamento',
+                  ajuda: 'Já passou pela implantação antes do módulo: as etapas até o Go-live ficam como concluídas.',
+                },
+              ].map((o) => {
+                const marcado = (form.ja_em_andamento ?? false) === o.valor
+                return (
+                  <button
+                    key={o.titulo}
+                    type="button"
+                    role="radio"
+                    aria-checked={marcado}
+                    onClick={() => setForm((f) => ({ ...f, ja_em_andamento: o.valor }))}
+                    className={
+                      'flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ' +
+                      (marcado ? 'border-accent/60 bg-accent/[0.06]' : 'border-line hover:border-accent/30')
+                    }
+                  >
+                    <span
+                      className={
+                        'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border ' +
+                        (marcado ? 'border-accent' : 'border-line')
+                      }
+                    >
+                      {marcado && <span className="h-2 w-2 rounded-full bg-accent" />}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-medium text-foreground">{o.titulo}</span>
+                      <span className="block text-xs text-foreground/55">{o.ajuda}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         )}
         <div className="sm:col-span-2">
           <Textarea

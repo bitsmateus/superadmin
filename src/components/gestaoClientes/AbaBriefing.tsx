@@ -367,22 +367,6 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
             dica="ID da conta, e-mail com acesso…"
           />
           <ItemDoChecklist
-            pergunta="Google Analytics"
-            valor={r.analytics}
-            obs={r.analytics_obs}
-            onValor={(v) => setR({ ...r, analytics: v })}
-            onObs={(v) => setR({ ...r, analytics_obs: v })}
-            dica="ID da propriedade, e-mail com acesso…"
-          />
-          <ItemDoChecklist
-            pergunta="Google Tag Manager"
-            valor={r.tag_manager}
-            obs={r.tag_manager_obs}
-            onValor={(v) => setR({ ...r, tag_manager: v })}
-            onObs={(v) => setR({ ...r, tag_manager_obs: v })}
-            dica="ID do contêiner (GTM-…), e-mail com acesso…"
-          />
-          <ItemDoChecklist
             pergunta="Google Meu Negócio"
             valor={r.meu_negocio}
             obs={r.meu_negocio_obs}

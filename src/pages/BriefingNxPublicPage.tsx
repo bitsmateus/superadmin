@@ -53,8 +53,6 @@ function tituloDaEtapa(e: Etapa): string {
 const CHECKLIST: { chave: string; obs: string; pergunta: string; dica: string }[] = [
   { chave: 'pagamento_anuncios', obs: 'pagamento_obs', pergunta: 'Você tem uma forma de pagamento válida na conta de anúncios?', dica: 'Ex.: cartão final 1234, boleto, pix…' },
   { chave: 'google_ads', obs: 'google_ads_obs', pergunta: 'Você tem conta no Google Ads?', dica: 'ID da conta ou e-mail de acesso' },
-  { chave: 'analytics', obs: 'analytics_obs', pergunta: 'Você tem Google Analytics?', dica: 'ID da propriedade ou e-mail de acesso' },
-  { chave: 'tag_manager', obs: 'tag_manager_obs', pergunta: 'Você tem Google Tag Manager?', dica: 'ID do contêiner (GTM-…) ou e-mail de acesso' },
   { chave: 'meu_negocio', obs: 'meu_negocio_obs', pergunta: 'Sua empresa está no Google Meu Negócio?', dica: 'Link do perfil ou e-mail de acesso' },
 ]
 

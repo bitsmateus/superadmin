@@ -78,8 +78,9 @@ function Campo({ rotulo, ajuda, children }: { rotulo: string; ajuda?: string; ch
   )
 }
 
+// text-base (16px) no celular: com fonte menor que isso o iPhone dá zoom na tela ao tocar no campo.
 const CLASSE_INPUT =
-  'h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#2F5BFF] focus:ring-2 focus:ring-[#2F5BFF]/20'
+  'h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base sm:text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#2F5BFF] focus:ring-2 focus:ring-[#2F5BFF]/20'
 
 function Texto({ value, onChange, placeholder, inputMode }: { value: string; onChange: (v: string) => void; placeholder?: string; inputMode?: 'tel' | 'email' | 'url' }) {
   return <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} inputMode={inputMode} className={CLASSE_INPUT} />
@@ -94,17 +95,18 @@ function Senha({ value, onChange, temSalva }: { value: string; onChange: (v: str
         autoComplete="new-password"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={temSalva ? 'Já enviada — deixe em branco pra manter' : ''}
+        placeholder={temSalva ? '•••••••• já enviada' : ''}
         className={CLASSE_INPUT + ' pr-11'}
       />
       <button
         type="button"
         onClick={() => setVisivel((v) => !v)}
-        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 hover:text-slate-700"
+        className="absolute right-2 top-[22px] -translate-y-1/2 rounded-md p-1.5 text-slate-400 hover:text-slate-700"
         aria-label={visivel ? 'Esconder a senha' : 'Mostrar a senha'}
       >
         {visivel ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </button>
+      {temSalva && <span className="mt-1 block text-xs text-slate-500">Deixe em branco pra manter a senha que você já enviou.</span>}
     </span>
   )
 }
@@ -494,7 +496,7 @@ export function BriefingNxPublicPage() {
                     rows={3}
                     placeholder="Sua resposta"
                     aria-label={`Resposta da pergunta ${i + 1}`}
-                    className="mt-2 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#2F5BFF] focus:ring-2 focus:ring-[#2F5BFF]/20"
+                    className="mt-2 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-base text-slate-800 sm:text-sm outline-none placeholder:text-slate-400 focus:border-[#2F5BFF] focus:ring-2 focus:ring-[#2F5BFF]/20"
                   />
                   <button
                     type="button"
@@ -602,7 +604,7 @@ export function BriefingNxPublicPage() {
       </main>
 
       {/* rodapé fixo com a navegação */}
-      <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 px-4 pt-3 backdrop-blur" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 sm:px-2">
           <button
             type="button"

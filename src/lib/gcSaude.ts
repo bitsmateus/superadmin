@@ -1,10 +1,5 @@
 import type { GcClienteLista, GcMeta } from '@/services/gestaoClientes'
 import { comDerivadas, formatarPorChave, metricaLabel, variacaoDaMetrica } from '@/lib/gcMetricas'
-import {
-  CHAVES_PLANO, HORIZONTES_PLANO, avaliarMesContraRota, lembreteVencido, rotaProjetada, temPlanejamento,
-  type ChavePlano,
-} from '@/lib/gcPlanejamento'
-import { planoDaLista } from '@/lib/gcPlanoAdaptadores'
 
 /**
  * Semáforo de saúde do cliente (módulo "Clientes NX Digital").
@@ -376,119 +371,8 @@ export function avaliarSaude(c: GcClienteLista): Saude {
     }
   }
 
-  // ---------------------------------------------------------------- metas
-  // "Metas combinadas" considera DUAS fontes: as metas de sempre (por prazo) e o planejamento do
-  // cliente (a rota mês a mês do ponto A até as metas de 6 e 12 meses).
-  //
-  // As metas de 6 e 12 meses das métricas do planejamento moram na MESMA tabela de metas, então
-  // quando há planejamento elas são avaliadas pela rota e saem da avaliação por prazo — senão a
-  // mesma meta seria cobrada duas vezes, por duas réguas diferentes.
-  // CPL e ROAS de 6 e 12 meses são CALCULADOS no planejamento: uma meta gravada com essas chaves é resto
-  // de versão antiga e não vale — como no resto da tela, deixa de existir.
-  const eCalculada = (m: GcMeta) =>
-    (m.horizonte === '6_meses' || m.horizonte === '12_meses') && (m.chave_metrica === 'cpl' || m.chave_metrica === 'roas')
-  const metasAtivas = (c.metas ?? []).filter((m) => m.status === 'ativa' && !eCalculada(m))
-  const planoDoCliente = planoDaLista(c)
-  // O plano só entra se a rota consegue ser traçada pra alguma métrica (há ponto de partida e data).
-  // Um plano sem rota — metas soltas, sem ponto A — não tem o que comparar, e fingir que tem calaria
-  // a avaliação por prazo das mesmas metas.
-  const comPlano =
-    temPlanejamento(planoDoCliente) && CHAVES_PLANO.some((k) => rotaProjetada(planoDoCliente, k.chave).length > 0)
-      ? planoDoCliente
-      : null
-  // Só sai da avaliação por prazo a meta que a rota CONSEGUE avaliar (há ponto de partida e data pra
-  // traçá-la). Sem isso, uma meta de 6 meses sem ponto A ficaria sem avaliação nenhuma: nem pela rota,
-  // que não existe, nem pelo prazo, de onde a tiramos.
-  const coberta = (m: GcMeta) =>
-    comPlano !== null &&
-    HORIZONTES_PLANO.some((h) => h.valor === m.horizonte) &&
-    CHAVES_PLANO.some((k) => k.chave === m.chave_metrica) &&
-    rotaProjetada(comPlano, m.chave_metrica as ChavePlano).length > 0
-  const metasPorPrazo = metasAtivas.filter((m) => !coberta(m))
-
-  if (metasAtivas.length > 0) {
-    // Quantos pontos o progresso está atrás de onde deveria estar hoje pelo prazo. Meta não anda em
-    // linha reta, então 20 pontos de folga viram só atenção; 40 já é meta muito abaixo e vira risco.
-    const atrasoDaMeta = (m: GcMeta): number | null => {
-      const progresso = progressoDaMeta(m, mes[m.chave_metrica])
-      const decorrido = tempoDecorrido(m)
-      if (progresso === null || decorrido === null) return null
-      return decorrido * 100 - progresso
-    }
-    const foraDoRitmo = metasPorPrazo.filter((m) => (atrasoDaMeta(m) ?? 0) > 20)
-    const muitoAbaixo = metasPorPrazo.filter((m) => (atrasoDaMeta(m) ?? 0) > 40)
-
-    // O planejamento: realizado do mês contra o projetado da rota. Mesmas réguas das metas por prazo
-    // (20% pra atenção, 40% pra risco), só que olhando só o desvio RUIM pra métrica.
-    const rota = comPlano ? avaliarMesContraRota(comPlano, mes, c.periodo_referencia ?? '') : []
-    const ruins = rota.filter((r) => r.boa === false)
-    const rotaRisco = ruins.filter((r) => Math.abs(r.desvioPct) > 40)
-    const rotaAtencao = ruins.filter((r) => Math.abs(r.desvioPct) > 20)
-
-    const partes: string[] = []
-    if (comPlano) {
-      if (!comPlano.dataDiagnostico) {
-        partes.push('Planejamento: lance o primeiro mês em Métricas pra ver a rota')
-      } else if (rota.length === 0) {
-        partes.push('Planejamento: nada do mês pra comparar com a rota (sem lançamento, ou mês fora da rota)')
-      } else if (ruins.length === 0) {
-        partes.push(
-          'Planejamento: no caminho (' +
-            rota.map((r) => `${r.label.toLowerCase()} ${r.desvioPct > 0 ? '+' : ''}${r.desvioPct.toFixed(0)}%`).join(', ') + ')',
-        )
-      } else {
-        partes.push(
-          'Planejamento: ' +
-            ruins
-              .sort((a, b) => Math.abs(b.desvioPct) - Math.abs(a.desvioPct))
-              .slice(0, 3)
-              .map((r) => `${r.label.toLowerCase()} ${Math.abs(r.desvioPct).toFixed(0)}% ${r.desvioPct > 0 ? 'acima' : 'abaixo'} do projetado`)
-              .join(', '),
-        )
-      }
-    }
-    if (metasPorPrazo.length > 0) {
-      partes.push(
-        foraDoRitmo.length > 0
-          ? `${foraDoRitmo.length} de ${metasPorPrazo.length} meta(s) fora do ritmo (${foraDoRitmo
-              .map((m) => metricaLabel(m.chave_metrica))
-              .join(', ')})${muitoAbaixo.length > 0 ? ' — muito abaixo do esperado' : ''}`
-          : `${metasPorPrazo.length} meta(s) no ritmo`,
-      )
-    }
-
-    const algumaAvaliada = rota.length > 0 || metasPorPrazo.length > 0
-    sinais.push({
-      chave: 'metas',
-      titulo: 'Metas combinadas',
-      estado:
-        muitoAbaixo.length > 0 || rotaRisco.length > 0
-          ? 'risco'
-          : foraDoRitmo.length > 0 || rotaAtencao.length > 0
-            ? 'atencao'
-            : algumaAvaliada
-              ? 'otimo'
-              : 'neutro',
-      detalhe: partes.join(' · '),
-    })
-  } else {
-    // Sem metas, o planejamento está "A definir": estado NEUTRO, que não pesa no semáforo nem no risco de
-    // churn — o cliente pode simplesmente ainda não ter trazido os números. Só vira atenção quando o
-    // lembrete de "completar em" que a própria equipe marcou já venceu.
-    const vencido = lembreteVencido({
-      aguardando: c.planejamento?.aguardando_cliente,
-      lembrarEm: c.planejamento?.lembrar_em,
-    })
-    sinais.push({
-      chave: 'metas',
-      titulo: 'Metas combinadas',
-      estado: vencido ? 'atencao' : 'neutro',
-      rotulo: vencido ? undefined : 'A definir',
-      detalhe: vencido
-        ? `Planejamento aguardando o cliente: o lembrete de ${String(c.planejamento?.lembrar_em).slice(0, 10).split('-').reverse().join('/')} venceu`
-        : 'Preencha quando o cliente tiver esses números.',
-    })
-  }
+  // (O sinal "Metas combinadas" saiu junto com o planejamento em formulário: o planejamento agora é um texto
+  // livre, e não há mais meta numérica pra comparar com o mês.)
 
   // ---------------------------------------------------------------- relação
   const diasRelatorio = c.ultimo_relatorio

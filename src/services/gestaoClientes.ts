@@ -189,6 +189,15 @@ export interface GcBriefingPublico {
   enviado_em: string | null
 }
 
+/** O planejamento em texto: o que foi escrito, os itens do checklist já marcados e se vai pro link do cliente. */
+export interface GcPlanoTexto {
+  texto: string
+  marcados: string[]
+  no_portal: boolean
+  atualizado_em: string | null
+  autor: string | null
+}
+
 export interface GcBriefingLink {
   token: string | null
   /** Quando o cliente clicou em "Enviar briefing" pela última vez. */
@@ -301,6 +310,9 @@ export interface GcClienteLista {
   primeiro_mes_metricas: string | null
   /** Ponto A do planejamento. Null = o cliente não tem linha de planejamento. */
   planejamento: {
+    /** O planejamento em texto já foi escrito? E quantos itens do checklist estão marcados. */
+    plano_escrito?: boolean
+    plano_marcados?: number
     curva: 'linear' | 'composta'
     data_diagnostico: string | null
     leads: number | null
@@ -805,6 +817,9 @@ export const gestaoClientes = {
   roteiro: (clienteId: string) => api.get<{ meses: { mes: number; texto: string }[] }>(`/api/gc/clientes/${clienteId}/roteiro`),
   salvarRoteiro: (clienteId: string, meses: { mes: number; texto: string }[]) =>
     api.put<{ meses: { mes: number; texto: string }[] }>(`/api/gc/clientes/${clienteId}/roteiro`, { meses }),
+  planoTexto: (clienteId: string) => api.get<GcPlanoTexto>(`/api/gc/clientes/${clienteId}/plano-texto`),
+  salvarPlanoTexto: (clienteId: string, dados: { texto: string; marcados: string[]; no_portal: boolean }) =>
+    api.put<GcPlanoTexto>(`/api/gc/clientes/${clienteId}/plano-texto`, dados),
   planejamento: (clienteId: string) =>
     api.get<GcPlanejamentoApi>(`/api/gc/clientes/${clienteId}/planejamento`),
   salvarPlanejamento: (clienteId: string, dados: GcPlanejamentoEntrada) =>
@@ -920,8 +935,10 @@ export const gestaoClientes = {
       relatorios: (Pick<GcRelatorio, 'id' | 'periodo_inicio' | 'periodo_fim' | 'publicado_em'> & {
         snapshot: GcSnapshot
       })[]
-      /** Null = a equipe não ligou o bloco "Nossa jornada" pra esse cliente. */
+      /** Não é mais enviado (o planejamento antigo saiu do portal). */
       jornada: GcJornadaPortal | null
+      /** O texto da aba Planejamento, só quando a equipe marcou "mostrar no link do cliente". */
+      planejamento_texto?: string | null
     }>(`/api/public/cliente/${encodeURIComponent(token)}`),
 
   registrar: (

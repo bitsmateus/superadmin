@@ -6,7 +6,6 @@ import {
 } from 'lucide-react'
 import { gestaoClientes, HORIZONTES, type GcSnapshot } from '@/services/gestaoClientes'
 import { formatarMetrica, mesAtual } from '@/lib/gcMetricas'
-import { JornadaPortal } from '@/components/gestaoClientes/JornadaPortal'
 import logoNx from '@/assets/logo-nx.jpg'
 import { cn } from '@/lib/utils'
 
@@ -525,7 +524,7 @@ export function PortalClientePage() {
             atual={atual}
             anterior={anterior}
             outros={outros}
-            temPlano={!!dados.jornada}
+            temPlano={!!dados.planejamento_texto}
             onAbrir={setVista}
           />
         ) : (
@@ -538,7 +537,12 @@ export function PortalClientePage() {
               <ArrowLeft className="h-4 w-4" /> Voltar ao início
             </button>
 
-            {vista.tipo === 'plano' && dados.jornada && <JornadaPortal jornada={dados.jornada} />}
+            {vista.tipo === 'plano' && dados.planejamento_texto && (
+              <section className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-7">
+                <h2 className="mb-3 text-lg font-semibold text-foreground">Planejamento</h2>
+                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/85">{dados.planejamento_texto}</p>
+              </section>
+            )}
 
             {vista.tipo === 'mes' && (() => {
               const r = dados.relatorios.find((x) => x.id === vista.id)

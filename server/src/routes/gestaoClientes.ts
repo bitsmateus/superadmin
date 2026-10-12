@@ -313,7 +313,9 @@ const SQL_CLIENTES = `
         'mes1_investimento', pl.mes1_investimento, 'mes1_vendas', pl.mes1_vendas,
         'mes1_faturamento', pl.mes1_faturamento, 'cpl_medio', pl.cpl_medio,
         'aguardando_cliente', pl.aguardando_cliente,
-        'lembrar_em', to_char(pl.lembrar_em, 'YYYY-MM-DD'))
+        'lembrar_em', to_char(pl.lembrar_em, 'YYYY-MM-DD'),
+        'plano_escrito', (btrim(pl.texto_plano) <> ''),
+        'plano_marcados', jsonb_array_length(pl.checklist_plano))
       FROM gc_planejamento pl WHERE pl.gc_cliente_id = c.id) AS planejamento,
     ${pivotMetricas('$1')} AS metricas_mes,
     ${pivotMetricas('$2')} AS metricas_mes_anterior,
@@ -1538,23 +1540,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
                 c.nome_empresa, i.ordem
        LIMIT 1000`
     );
-    // O lembrete do planejamento "aguardando o cliente" aparece aqui sem ser um item gravado: ele existe
-    // enquanto o planejamento estiver nesse estado e com data. Preencher o ponto A (ou desmarcar o
-    // "aguardando") o faz sumir sozinho, sem item órfão pra alguém ter de concluir à mão.
-    const lembretes = await query<Record<string, unknown>>(
-      `SELECT 'plan-' || c.id AS id, 'Completar planejamento — ' || c.nome_empresa AS titulo,
-         to_char(pl.lembrar_em, 'YYYY-MM-DD') AS prazo, 0 AS ordem,
-         c.id AS cliente_id, c.nome_empresa AS cliente_nome,
-         'planejamento' AS origem, 'Planejamento' AS origem_nome,
-         c.responsavel_id, pr.name AS responsavel_nome,
-         (pl.lembrar_em < ${HOJE}) AS atrasado
-       FROM gc_planejamento pl
-       JOIN gc_clientes c ON c.id = pl.gc_cliente_id
-       LEFT JOIN profiles pr ON pr.id = c.responsavel_id
-       WHERE pl.aguardando_cliente AND pl.lembrar_em IS NOT NULL
-         AND c.status = 'ativo' AND NOT c.fora_dos_totais`
-    );
-    return [...itens, ...lembretes].sort((a, b) => {
+    // (O lembrete "completar planejamento" saiu junto com o planejamento em formulário.)
+    return [...itens].sort((a, b) => {
       if (a.atrasado !== b.atrasado) return a.atrasado ? -1 : 1;
       if (a.prazo !== b.prazo) return a.prazo === null ? 1 : b.prazo === null ? -1 : String(a.prazo).localeCompare(String(b.prazo));
       return String(a.cliente_nome).localeCompare(String(b.cliente_nome));
@@ -2513,6 +2500,56 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
+  // ------------------------------------------------------------------ planejamento em texto
+  // A aba Planejamento é um texto só, com um checklist ao lado do que precisa estar escrito. O planejamento
+  // antigo (ponto A, metas, funil, roteiro) continua guardado nas colunas de sempre, mas não é mais editado.
+  const ITENS_DO_PLANO = ['situacao', 'mes1', 'meta6', 'meta12', 'numeros', 'objetivo6', 'objetivo12', 'roteiro', 'resultado'];
+
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/plano-texto', autenticado, async (req) => {
+    const p = await queryOne<{ texto_plano: string; checklist_plano: unknown; plano_no_portal: boolean; texto_atualizado_em: string | null; autor: string | null }>(
+      `SELECT pl.texto_plano, pl.checklist_plano, pl.plano_no_portal, pl.texto_atualizado_em, pr.name AS autor
+       FROM gc_planejamento pl LEFT JOIN profiles pr ON pr.id = pl.atualizado_por
+       WHERE pl.gc_cliente_id = $1`,
+      [req.params.id]
+    );
+    const marcados = Array.isArray(p?.checklist_plano) ? (p!.checklist_plano as unknown[]).filter((x) => ITENS_DO_PLANO.includes(String(x))) : [];
+    return {
+      texto: p?.texto_plano ?? '',
+      marcados,
+      no_portal: Boolean(p?.plano_no_portal),
+      atualizado_em: p?.texto_atualizado_em ?? null,
+      autor: p?.texto_atualizado_em ? p?.autor ?? null : null,
+    };
+  });
+
+  app.put<{ Params: { id: string }; Body: { texto?: string; marcados?: unknown; no_portal?: boolean } }>(
+    '/api/gc/clientes/:id/plano-texto',
+    autenticado,
+    async (req) => {
+      const { sub } = req.user as { sub: string };
+      const texto = String(req.body?.texto ?? '').slice(0, 60000);
+      const marcados = Array.isArray(req.body?.marcados)
+        ? ITENS_DO_PLANO.filter((k) => (req.body!.marcados as unknown[]).includes(k))
+        : [];
+      const noPortal = Boolean(req.body?.no_portal);
+      const antes = await queryOne<{ texto_plano: string }>('SELECT texto_plano FROM gc_planejamento WHERE gc_cliente_id = $1', [req.params.id]);
+      await query(
+        `INSERT INTO gc_planejamento (gc_cliente_id, texto_plano, checklist_plano, plano_no_portal, texto_atualizado_em, atualizado_por)
+         VALUES ($1, $2, $3::jsonb, $4, NOW(), $5)
+         ON CONFLICT (gc_cliente_id) DO UPDATE SET
+           texto_plano = EXCLUDED.texto_plano, checklist_plano = EXCLUDED.checklist_plano,
+           plano_no_portal = EXCLUDED.plano_no_portal, texto_atualizado_em = NOW(),
+           atualizado_por = EXCLUDED.atualizado_por, updated_at = NOW()`,
+        [req.params.id, texto, JSON.stringify(marcados), noPortal, sub]
+      );
+      if ((antes?.texto_plano ?? '') !== texto) {
+        await registrarEvento(req.params.id, 'Planejamento atualizado', `${marcados.length} de ${ITENS_DO_PLANO.length} itens do checklist marcados`, sub);
+      }
+      const autor = await queryOne<{ name: string }>('SELECT name FROM profiles WHERE id = $1', [sub]);
+      return { texto, marcados, no_portal: noPortal, atualizado_em: new Date().toISOString(), autor: autor?.name ?? null };
+    }
+  );
+
   // ------------------------------------------------------------------ relatórios
   // GET /api/gc/clientes/:id/relatorios — lista sem o snapshot (que é grande e só interessa quando
   // o relatório é aberto).
@@ -2863,7 +2900,14 @@ export async function gestaoClientesPublicRoutes(app: FastifyInstance) {
       [link.gc_cliente_id]
     );
 
-    return { cliente, relatorios, jornada: await jornadaDoPortal(link.gc_cliente_id, { ignorarToggle: true, mostrarTudo: true }) };
+    // O planejamento do portal agora é o TEXTO da aba Planejamento, e só aparece se a equipe marcou
+    // "mostrar no link do cliente". Os campos do planejamento antigo não vão mais pro portal.
+    const plano = await queryOne<{ texto_plano: string; plano_no_portal: boolean }>(
+      'SELECT texto_plano, plano_no_portal FROM gc_planejamento WHERE gc_cliente_id = $1',
+      [link.gc_cliente_id]
+    );
+    const planejamentoTexto = plano?.plano_no_portal && plano.texto_plano.trim() ? plano.texto_plano : null;
+    return { cliente, relatorios, jornada: null, planejamento_texto: planejamentoTexto };
   });
 
   // GET /api/public/cliente/:token/relatorio/:id/pdf — o mesmo PDF do painel, pro cliente baixar.

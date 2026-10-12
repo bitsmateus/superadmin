@@ -1,11 +1,10 @@
 import * as React from 'react'
-import { ArrowRight, Pin, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, Pin, Plus, Route, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
-import { ResumoPlanejamento } from '@/components/gestaoClientes/ResumoPlanejamento'
 import { mesAtual, mesPorExtenso } from '@/lib/gcMetricas'
 import { LogoDoCliente } from '@/components/gestaoClientes/LogoDoCliente'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
@@ -369,7 +368,24 @@ export function AbaVisaoGeral({
       <div className="space-y-4">
         <QuadroDeAvisos detalhe={detalhe} onVerNotas={onVerNotas} />
 
-        <ResumoPlanejamento cliente={cliente} onAbrir={() => onIr?.('planejamento')} />
+        <section className="rounded-xl border border-line p-4">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Route className="h-4 w-4 text-accent" /> Planejamento
+            </h2>
+            <span className="text-xs tabular-nums text-foreground/50">
+              {Number(cliente.planejamento?.plano_marcados ?? 0)} de 9 itens do checklist
+            </span>
+          </div>
+          <p className="text-sm text-foreground/55">
+            {cliente.planejamento?.plano_escrito
+              ? 'O planejamento do cliente está escrito. Abra pra ler ou atualizar.'
+              : 'Ainda não foi escrito. Use o checklist da aba pra não esquecer nada.'}
+          </p>
+          <Button className="mt-2" size="sm" variant="secondary" rightIcon={<ArrowRight className="h-3.5 w-3.5" />} onClick={() => onIr?.('planejamento')}>
+            Abrir o planejamento
+          </Button>
+        </section>
 
         <section className="rounded-xl border border-line p-4">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Onde o cliente está</h2>

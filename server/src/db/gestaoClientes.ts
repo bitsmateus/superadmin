@@ -519,6 +519,11 @@ const TABELAS = [
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS tag_manager_obs TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS meu_negocio TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS meu_negocio_obs TEXT NOT NULL DEFAULT ''`,
+  // Planejamento em TEXTO: um lugar só pra escrever, com o checklist do que precisa estar ali.
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS texto_plano TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS checklist_plano JSONB NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS plano_no_portal BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS texto_atualizado_em TIMESTAMPTZ`,
   // Briefing preenchido pelo cliente: o link público (token), quando ele enviou, e a marca nos arquivos dele.
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS link_token TEXT`,
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS enviado_em TIMESTAMPTZ`,

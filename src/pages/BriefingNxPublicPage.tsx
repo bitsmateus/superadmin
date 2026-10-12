@@ -423,7 +423,7 @@ export function BriefingNxPublicPage() {
                 <p className="mb-3 text-sm font-semibold text-slate-800">CRM ou sistema de vendas</p>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <Campo rotulo="Qual CRM você usa?" ajuda="Se não usa nenhum, escreva “não uso”.">
-                    <Texto value={campos.crm ?? ''} onChange={(v) => mudar('crm', v)} placeholder="Ex.: RD Station, Kommo, planilha…" />
+                    <Texto value={campos.crm ?? ''} onChange={(v) => mudar('crm', v)} />
                   </Campo>
                   <Campo rotulo="E-mail de acesso">
                     <Texto value={campos.crm_email ?? ''} onChange={(v) => mudar('crm_email', v)} placeholder="login@empresa.com" inputMode="email" />

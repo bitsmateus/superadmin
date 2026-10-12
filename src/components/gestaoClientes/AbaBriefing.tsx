@@ -306,7 +306,7 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
 
         <p className="mb-1.5 mt-5 text-xs font-medium uppercase tracking-wide text-foreground/45">CRM utilizado</p>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Input label="CRM" value={r.crm} onChange={(e) => setR({ ...r, crm: e.target.value })} placeholder="Ex.: RD Station, Kommo, Bitrix…" />
+          <Input label="CRM" value={r.crm} onChange={(e) => setR({ ...r, crm: e.target.value })} />
           <Input label="E-mail do CRM" value={r.crm_email} onChange={(e) => setR({ ...r, crm_email: e.target.value })} placeholder="login@empresa.com" inputMode="email" />
           <CampoSenha rotulo="Senha do CRM" valor={r.crm_senha} onChange={(v) => setR({ ...r, crm_senha: v })} />
         </div>

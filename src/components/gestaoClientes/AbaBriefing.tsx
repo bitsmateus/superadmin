@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
-import { Copy, ExternalLink, Eye, EyeOff, KeyRound, Loader2, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Link2, Eye, EyeOff, KeyRound, Loader2, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
@@ -9,7 +9,7 @@ import { ArquivosDoCliente } from '@/components/gestaoClientes/ArquivosDoCliente
 import { LogoDoCliente } from '@/components/gestaoClientes/LogoDoCliente'
 import { BRIEFING_MODELO, comModeloDoBriefing } from '@/lib/gcBriefingModelo'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
-import { gestaoClientes, type GcBriefing, type GcClienteLista } from '@/services/gestaoClientes'
+import { gestaoClientes, type GcBriefing, type GcBriefingLink, type GcClienteLista } from '@/services/gestaoClientes'
 
 type Rascunho = GcBriefing
 
@@ -104,6 +104,109 @@ function CampoSenha({ rotulo, valor, onChange }: { rotulo: string; valor: string
   )
 }
 
+/**
+ * O link público do briefing: o cliente abre, preenche em etapas e envia. Aqui a equipe gera, copia, abre e
+ * revoga o link, e vê quando o cliente enviou.
+ */
+function LinkDoBriefing({ clienteId, onRecarregar }: { clienteId: string; onRecarregar: () => void }) {
+  const [link, setLink] = React.useState<GcBriefingLink | null>(null)
+  const [ocupado, setOcupado] = React.useState(false)
+
+  React.useEffect(() => {
+    gestaoClientes.briefingLink(clienteId).then(setLink).catch(() => setLink({ token: null, enviado_em: null }))
+  }, [clienteId])
+
+  const agir = async (fn: () => Promise<GcBriefingLink | void>, ok: string) => {
+    setOcupado(true)
+    try {
+      const r = await fn()
+      setLink(r ?? (await gestaoClientes.briefingLink(clienteId)))
+      toast.success(ok)
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  const endereco = link?.token ? `${window.location.origin}/briefing-nx/${link.token}` : ''
+
+  return (
+    <section className="rounded-2xl border border-accent/25 bg-accent/[0.03] p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Link2 className="h-4 w-4 text-accent" /> Link pro cliente preencher
+          </h2>
+          <p className="text-xs text-foreground/55">
+            O cliente abre o link, preenche o briefing em etapas (empresa, acessos, contas, as 27 perguntas e materiais) e envia. As respostas caem aqui.
+          </p>
+        </div>
+        {link?.enviado_em ? (
+          <span className="rounded-full border border-success/40 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+            Cliente enviou em {new Date(link.enviado_em).toLocaleDateString('pt-BR')}
+          </span>
+        ) : link?.token ? (
+          <span className="rounded-full border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning">Aguardando o cliente</span>
+        ) : null}
+      </div>
+
+      {link === null ? (
+        <p className="mt-3 flex items-center gap-2 text-xs text-foreground/50"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando…</p>
+      ) : link.token ? (
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-lg border border-line bg-surface px-3 py-2 text-xs text-foreground/80">{endereco}</code>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<Copy className="h-3.5 w-3.5" />}
+              onClick={() => {
+                void navigator.clipboard.writeText(endereco)
+                toast.success('Link copiado')
+              }}
+            >
+              Copiar
+            </Button>
+            <Button variant="ghost" size="sm" leftIcon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => window.open(endereco, '_blank')}>
+              Abrir
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" size="sm" onClick={onRecarregar}>
+              Recarregar respostas
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={ocupado}
+              onClick={() => {
+                if (window.confirm('Gerar um link novo? O link atual para de funcionar.')) void agir(() => gestaoClientes.gerarBriefingLink(clienteId, true), 'Link novo gerado')
+              }}
+            >
+              Gerar link novo
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={ocupado}
+              onClick={() => {
+                if (window.confirm('Revogar o link? O cliente não consegue mais abrir nem preencher.')) void agir(() => gestaoClientes.revogarBriefingLink(clienteId), 'Link revogado')
+              }}
+            >
+              Revogar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button className="mt-3" size="sm" loading={ocupado} leftIcon={<Link2 className="h-4 w-4" />} onClick={() => void agir(() => gestaoClientes.gerarBriefingLink(clienteId), 'Link gerado')}>
+          Gerar link do briefing
+        </Button>
+      )}
+    </section>
+  )
+}
+
 export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onMudou: () => Promise<void> | void }) {
   const [gravado, setGravado] = React.useState<GcBriefing | null>(null)
   const [r, setR] = React.useState<Rascunho | null>(null)
@@ -116,12 +219,17 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
     setR(comModelo)
   }, [])
 
+  const carregar = React.useCallback(
+    () =>
+      gestaoClientes
+        .briefing(cliente.id)
+        .then(aplicar)
+        .catch((err: Error) => toast.error('Falha ao carregar o briefing: ' + err.message)),
+    [cliente.id, aplicar],
+  )
   React.useEffect(() => {
-    gestaoClientes
-      .briefing(cliente.id)
-      .then(aplicar)
-      .catch((err: Error) => toast.error('Falha ao carregar o briefing: ' + err.message))
-  }, [cliente.id, aplicar])
+    void carregar()
+  }, [carregar])
 
   const limpo = (x: Rascunho) =>
     JSON.stringify({
@@ -158,6 +266,17 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
 
   return (
     <div className="space-y-4">
+      <LinkDoBriefing
+        clienteId={cliente.id}
+        onRecarregar={() => {
+          if (sujo && !window.confirm('Há alterações não salvas nesta tela. Recarregar descarta essas alterações. Continuar?')) return
+          void carregar().then(() => {
+            void onMudou()
+            toast.success('Respostas atualizadas')
+          })
+        }}
+      />
+
       {/* ------------------------------------------------------------ dados do cliente */}
       <section className="rounded-2xl border border-line p-4 sm:p-5">
         <h2 className="mb-3 text-sm font-semibold text-foreground">Dados do cliente</h2>

@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js';
 import { clientRoutes } from './routes/clients.js';
 import { clientCancellationRoutes } from './routes/clientCancellations.js';
 import { gestaoClientesRoutes, gestaoClientesPublicRoutes } from './routes/gestaoClientes.js';
+import { gcBriefingPublicoRoutes } from './routes/gcBriefingPublico.js';
 import { asaasRoutes } from './routes/asaas.js';
 import { relatorioComercialRoutes } from './routes/relatorioComercial.js';
 import { trafegoRoutes } from './routes/trafego.js';
@@ -128,6 +129,7 @@ async function main() {
   await app.register(clientCancellationRoutes);
   await app.register(gestaoClientesRoutes);
   await app.register(gestaoClientesPublicRoutes);
+  await app.register(gcBriefingPublicoRoutes);
   await app.register(asaasRoutes);
   await app.register(relatorioComercialRoutes);
   await app.register(trafegoRoutes);

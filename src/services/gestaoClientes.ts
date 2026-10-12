@@ -178,7 +178,26 @@ export interface GcSocialProducao {
   created_at: string
 }
 
+/** O que o link público do briefing entrega pro cliente. As senhas nunca vêm: só "já tem uma salva". */
+export interface GcBriefingPublico {
+  cliente: { nome_empresa: string; logo_url: string | null }
+  campos: Record<string, string>
+  tem_senha: Record<string, boolean>
+  perguntas: { pergunta: string; resposta: string }[]
+  link_materiais: string
+  arquivos: { id: string; titulo: string; tipo: string | null; tamanho: number | null }[]
+  enviado_em: string | null
+}
+
+export interface GcBriefingLink {
+  token: string | null
+  /** Quando o cliente clicou em "Enviar briefing" pela última vez. */
+  enviado_em: string | null
+}
+
 export interface GcBriefing {
+  /** Instante da última gravação. Vai de volta no salvar pra não passar por cima do que o cliente preencheu. */
+  versao?: string | null
   site: string
   /** O WhatsApp que recebe os leads das campanhas. */
   whatsapp_leads: string
@@ -918,6 +937,26 @@ export const gestaoClientes = {
   // Briefing do cliente
   briefing: (clienteId: string) => api.get<GcBriefing>(`/api/gc/clientes/${clienteId}/briefing`),
   salvarBriefing: (clienteId: string, dados: GcBriefing) => api.put<GcBriefing>(`/api/gc/clientes/${clienteId}/briefing`, dados),
+
+  briefingLink: (clienteId: string) => api.get<GcBriefingLink>(`/api/gc/clientes/${clienteId}/briefing/link`),
+  gerarBriefingLink: (clienteId: string, novo = false) =>
+    api.post<GcBriefingLink>(`/api/gc/clientes/${clienteId}/briefing/link`, { novo }),
+  revogarBriefingLink: (clienteId: string) => api.delete(`/api/gc/clientes/${clienteId}/briefing/link`),
+
+  // Briefing público (sem login): o cliente preenche pelo link
+  briefingPublico: (token: string) => api.get<GcBriefingPublico>(`/api/public/briefing-nx/${encodeURIComponent(token)}`),
+  salvarBriefingPublico: (
+    token: string,
+    dados: { campos?: Record<string, string>; perguntas?: { pergunta: string; resposta: string }[]; link_materiais?: string },
+  ) => api.put<{ ok: boolean }>(`/api/public/briefing-nx/${encodeURIComponent(token)}`, dados),
+  enviarBriefingPublico: (token: string) =>
+    api.post<{ ok: boolean }>(`/api/public/briefing-nx/${encodeURIComponent(token)}/enviar`, {}),
+  enviarArquivoBriefing: (token: string, anexo: { id: string; name: string; type: string; size: number; dataUrl: string }) =>
+    api.post<GcBriefingPublico['arquivos'][number]>(`/api/public/briefing-nx/${encodeURIComponent(token)}/arquivo`, { anexo }),
+  enviarLogoBriefing: (token: string, anexo: { id: string; name: string; type: string; size: number; dataUrl: string }) =>
+    api.post<{ ok: boolean; logo_url: string }>(`/api/public/briefing-nx/${encodeURIComponent(token)}/arquivo`, { anexo, logo: true }),
+  excluirArquivoBriefing: (token: string, id: string) =>
+    api.delete(`/api/public/briefing-nx/${encodeURIComponent(token)}/arquivo/${id}`),
 
   // Social media
   socialResumo: () => api.get<GcSocialResumo[]>('/api/gc/social/resumo'),

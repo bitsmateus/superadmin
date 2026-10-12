@@ -2423,24 +2423,40 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       .filter((x) => campos.some((c) => x[c].trim() !== ''));
   };
 
+  /** A "versão" do briefing: o instante da última gravação, com os microssegundos (o Date do JS os perderia). */
+  const VERSAO_BRIEFING = `to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS.US')`;
   const CAMPOS_BRIEFING = ['site', 'whatsapp_leads', 'instagram', 'instagram_senha', 'facebook', 'facebook_senha', 'crm', 'crm_email', 'crm_senha',
     'pagamento_anuncios', 'pagamento_obs', 'google_ads', 'google_ads_obs', 'analytics', 'analytics_obs', 'tag_manager', 'tag_manager_obs', 'meu_negocio', 'meu_negocio_obs'] as const;
 
   app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/briefing', autenticado, async (req) => {
     const b = await queryOne<Record<string, unknown>>(
-      `SELECT ${CAMPOS_BRIEFING.join(', ')}, extras, perguntas FROM gc_briefing WHERE gc_cliente_id = $1`,
+      `SELECT ${CAMPOS_BRIEFING.join(', ')}, extras, perguntas, ${VERSAO_BRIEFING} AS versao FROM gc_briefing WHERE gc_cliente_id = $1`,
       [req.params.id]
     );
     return {
       ...Object.fromEntries(CAMPOS_BRIEFING.map((c) => [c, String(b?.[c] ?? '')])),
       extras: limparLista<{ rotulo: string; valor: string }>(b?.extras, ['rotulo', 'valor'], 40),
       perguntas: limparLista<{ pergunta: string; resposta: string }>(b?.perguntas, ['pergunta', 'resposta'], 200),
+      versao: (b?.versao as string | undefined) ?? null,
     };
   });
 
-  app.put<{ Params: { id: string }; Body: Record<string, unknown> }>('/api/gc/clientes/:id/briefing', autenticado, async (req) => {
+  app.put<{ Params: { id: string }; Body: Record<string, unknown> }>('/api/gc/clientes/:id/briefing', autenticado, async (req, reply) => {
     const { sub } = req.user as { sub: string };
     const b = req.body ?? {};
+    // O cliente também grava neste briefing (pelo link público). Se ele mexeu depois que esta tela foi aberta,
+    // salvar por cima apagaria as respostas dele: a tela manda a versão que leu e o servidor recusa se mudou.
+    if (typeof b.versao === 'string') {
+      const atual = await queryOne<{ versao: string }>(
+        `SELECT ${VERSAO_BRIEFING} AS versao FROM gc_briefing WHERE gc_cliente_id = $1`,
+        [req.params.id]
+      );
+      if (atual && atual.versao !== b.versao) {
+        return reply.status(409).send({
+          message: 'O briefing foi alterado depois que você abriu esta tela (provavelmente pelo cliente, no link). Recarregue pra ver as respostas antes de salvar.',
+        });
+      }
+    }
     const campos = Object.fromEntries(CAMPOS_BRIEFING.map((c) => [c, String(b[c] ?? '').trim().slice(0, 500)]));
     const extras = limparLista<{ rotulo: string; valor: string }>(b.extras, ['rotulo', 'valor'], 40);
     const perguntas = limparLista<{ pergunta: string; resposta: string }>(b.perguntas, ['pergunta', 'resposta'], 200);
@@ -2455,7 +2471,46 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
          extras = EXCLUDED.extras, perguntas = EXCLUDED.perguntas, atualizado_por = EXCLUDED.atualizado_por, updated_at = NOW()`,
       [req.params.id, ...CAMPOS_BRIEFING.map((c) => campos[c]), JSON.stringify(extras), JSON.stringify(perguntas), sub]
     );
-    return { ...campos, extras, perguntas };
+    const depois = await queryOne<{ versao: string }>(
+      `SELECT ${VERSAO_BRIEFING} AS versao FROM gc_briefing WHERE gc_cliente_id = $1`,
+      [req.params.id]
+    );
+    return { ...campos, extras, perguntas, versao: depois?.versao ?? null };
+  });
+
+  // O link público do briefing (o cliente preenche sozinho — ver routes/gcBriefingPublico.ts).
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/briefing/link', autenticado, async (req) => {
+    const b = await queryOne<{ link_token: string | null; enviado_em: string | null }>(
+      'SELECT link_token, enviado_em FROM gc_briefing WHERE gc_cliente_id = $1',
+      [req.params.id]
+    );
+    return { token: b?.link_token ?? null, enviado_em: b?.enviado_em ?? null };
+  });
+
+  // Gera o link (ou devolve o que já existe). { novo: true } troca o token: o link antigo para de funcionar.
+  app.post<{ Params: { id: string }; Body: { novo?: boolean } }>(
+    '/api/gc/clientes/:id/briefing/link',
+    autenticado,
+    async (req) => {
+      const { sub } = req.user as { sub: string };
+      const token = crypto.randomBytes(24).toString('base64url');
+      const b = await queryOne<{ link_token: string; enviado_em: string | null }>(
+        `INSERT INTO gc_briefing (gc_cliente_id, link_token, atualizado_por) VALUES ($1, $2, $3)
+         ON CONFLICT (gc_cliente_id) DO UPDATE SET
+           link_token = CASE WHEN $4::boolean THEN EXCLUDED.link_token ELSE COALESCE(gc_briefing.link_token, EXCLUDED.link_token) END
+         RETURNING link_token, enviado_em`,
+        [req.params.id, token, sub, req.body?.novo === true]
+      );
+      await registrarEvento(req.params.id, 'Link do briefing gerado', 'O cliente pode preencher o briefing pelo link público.', sub);
+      return { token: b!.link_token, enviado_em: b!.enviado_em };
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/gc/clientes/:id/briefing/link', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    await query('UPDATE gc_briefing SET link_token = NULL WHERE gc_cliente_id = $1', [req.params.id]);
+    await registrarEvento(req.params.id, 'Link do briefing revogado', '', sub);
+    return reply.status(204).send();
   });
 
   // ------------------------------------------------------------------ relatórios

@@ -135,6 +135,9 @@ const RelatorioPublicoPage = React.lazy(() =>
 const PortalClientePage = React.lazy(() =>
   import('./pages/PortalClientePage').then((m) => ({ default: m.PortalClientePage })),
 )
+const BriefingNxPublicPage = React.lazy(() =>
+  import('./pages/BriefingNxPublicPage').then((m) => ({ default: m.BriefingNxPublicPage })),
+)
 const FichaPublicPage = React.lazy(() =>
   import('./pages/FichaPublicPage').then((m) => ({ default: m.FichaPublicPage })),
 )
@@ -172,6 +175,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/briefing/:token" element={<BriefingPublicPage />} />
+        <Route path="/briefing-nx/:token" element={<BriefingNxPublicPage />} />
         <Route path="/template/:token" element={<TemplateRequestPublicPage />} />
         <Route path="/laundry/:token" element={<LaundryPortalPage />} />
         <Route path="/mercadonunes" element={<MercadoNunesPage />} />

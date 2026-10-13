@@ -954,6 +954,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     Params: { id: string };
     Body: {
       tipo?: string; reuniao_tipo?: string | null; titulo?: string; descricao?: string; fixado?: boolean;
+      no_portal?: boolean;
       anexos?: { id: string; name: string; type: string; size: number; dataUrl: string }[];
     };
   }>('/api/gc/clientes/:id/historico', autenticado, async (req, reply) => {
@@ -970,11 +971,11 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ message: 'Escreva algo ou anexe um print' });
     }
     const criado = await queryOne(
-      `INSERT INTO gc_historico (gc_cliente_id, tipo, reuniao_tipo, titulo, descricao, autor_id, fixado, anexos)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO gc_historico (gc_cliente_id, tipo, reuniao_tipo, titulo, descricao, autor_id, fixado, anexos, no_portal)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         req.params.id, tipo ?? 'nota', reuniaoTipo, titulo ?? '', descricao ?? '', sub, fixado ?? false,
-        JSON.stringify(anexos ?? []),
+        JSON.stringify(anexos ?? []), req.body?.no_portal === true,
       ]
     );
     await sincronizarRotinaAutomatica(req.params.id);
@@ -994,8 +995,9 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       }
       // JSONB precisa chegar como texto JSON; mandar o array cru viraria "{...}" do Postgres.
       if (corpo.anexos !== undefined) corpo.anexos = JSON.stringify(corpo.anexos);
+      if (corpo.no_portal !== undefined) corpo.no_portal = corpo.no_portal === true;
       const { sets, params } = montarUpdate(
-        ['tipo', 'reuniao_tipo', 'titulo', 'descricao', 'fixado', 'anexos'],
+        ['tipo', 'reuniao_tipo', 'titulo', 'descricao', 'fixado', 'anexos', 'no_portal'],
         corpo
       );
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
@@ -2907,7 +2909,7 @@ export async function gestaoClientesPublicRoutes(app: FastifyInstance) {
       [link.gc_cliente_id]
     );
     const planejamentoTexto = plano?.plano_no_portal && plano.texto_plano.trim() ? plano.texto_plano : null;
-    // O cliente também relê o BRIEFING que respondeu. Vai só o que ele mesmo preencheu no link público:
+    // O cliente também relê o BRIEFING. Vai só o que é dele (o mesmo que o link público de preenchimento mostra):
     // dados da empresa, contas e as perguntas. Senhas e "outras informações" da equipe nunca saem daqui.
     const b = await queryOne<Record<string, unknown>>(
       `SELECT site, whatsapp_leads, instagram, facebook, crm,
@@ -2917,9 +2919,10 @@ export async function gestaoClientesPublicRoutes(app: FastifyInstance) {
       [link.gc_cliente_id]
     );
     const txt = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+    // Vão TODAS as perguntas guardadas, com ou sem resposta: o portal mostra o briefing inteiro.
     const perguntasDoCliente = (Array.isArray(b?.perguntas) ? (b!.perguntas as Record<string, unknown>[]) : [])
       .map((x) => ({ pergunta: txt(x?.pergunta), resposta: txt(x?.resposta) }))
-      .filter((x) => x.pergunta && x.resposta);
+      .filter((x) => x.pergunta);
     const dadosDoBriefing = {
       site: txt(b?.site), whatsapp_leads: txt(b?.whatsapp_leads), instagram: txt(b?.instagram),
       facebook: txt(b?.facebook), crm: txt(b?.crm),
@@ -2928,13 +2931,60 @@ export async function gestaoClientesPublicRoutes(app: FastifyInstance) {
       { chave: 'pagamento_anuncios', valor: txt(b?.pagamento_anuncios), obs: txt(b?.pagamento_obs) },
       { chave: 'google_ads', valor: txt(b?.google_ads), obs: txt(b?.google_ads_obs) },
       { chave: 'meu_negocio', valor: txt(b?.meu_negocio), obs: txt(b?.meu_negocio_obs) },
-    ].filter((x) => x.valor || x.obs);
-    const temBriefing = perguntasDoCliente.length > 0 || contasDoBriefing.length > 0 || Object.values(dadosDoBriefing).some(Boolean);
-    const briefing = temBriefing
-      ? { dados: dadosDoBriefing, contas: contasDoBriefing, perguntas: perguntasDoCliente, enviado_em: b?.enviado_em ?? null }
-      : null;
-    return { cliente, relatorios, jornada: null, planejamento_texto: planejamentoTexto, briefing };
+    ];
+    const briefing = { dados: dadosDoBriefing, contas: contasDoBriefing, perguntas: perguntasDoCliente, enviado_em: b?.enviado_em ?? null };
+
+    // NOTAS E HISTÓRICO: só o que a equipe marcou "compartilhar no portal do cliente". Evento do sistema nunca
+    // sai, nem o subtipo da reunião (Retenção etc. é controle interno). Do anexo vai só nome/tipo/tamanho —
+    // o arquivo é servido pela rota de anexo logo abaixo.
+    const notas = await query<{ id: string; tipo: string; descricao: string; created_at: string; autor: string | null; anexos: unknown }>(
+      `SELECT h.id, h.tipo, h.descricao, h.created_at, pr.name AS autor,
+              COALESCE((SELECT jsonb_agg(jsonb_build_object('id', a->>'id', 'name', a->>'name', 'type', a->>'type', 'size', a->'size'))
+                        FROM jsonb_array_elements(CASE WHEN jsonb_typeof(h.anexos) = 'array' THEN h.anexos ELSE '[]'::jsonb END) a),
+                       '[]'::jsonb) AS anexos
+       FROM gc_historico h LEFT JOIN profiles pr ON pr.id = h.autor_id
+       WHERE h.gc_cliente_id = $1 AND h.no_portal AND h.tipo <> 'evento_sistema'
+       ORDER BY h.created_at DESC`,
+      [link.gc_cliente_id]
+    );
+    return { cliente, relatorios, jornada: null, planejamento_texto: planejamentoTexto, briefing, notas };
   });
+
+  // GET /api/public/cliente/:token/nota/:nota/anexo/:anexo — o arquivo de uma nota COMPARTILHADA no portal.
+  // A lista de notas leva só nome/tipo/tamanho; o conteúdo sai por aqui, e só se a nota estiver marcada.
+  const IMAGENS_NA_TELA = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+  app.get<{ Params: { token: string; nota: string; anexo: string } }>(
+    '/api/public/cliente/:token/nota/:nota/anexo/:anexo',
+    async (req, reply) => {
+      const naoAchei = () => reply.status(404).send({ message: 'Arquivo não encontrado' });
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.nota)) return naoAchei();
+      const r = await queryOne<{ anexo: { name?: string; dataUrl?: string } | null }>(
+        `SELECT (SELECT a FROM jsonb_array_elements(h.anexos) a WHERE a->>'id' = $3 LIMIT 1) AS anexo
+         FROM gc_historico h
+         JOIN gc_links_publicos l ON l.gc_cliente_id = h.gc_cliente_id AND l.ativo
+         WHERE h.id = $1 AND l.token = $2 AND (l.expira_em IS NULL OR l.expira_em > NOW())
+           AND h.no_portal AND h.tipo <> 'evento_sistema' AND jsonb_typeof(h.anexos) = 'array'`,
+        [req.params.nota, req.params.token, req.params.anexo]
+      );
+      const dataUrl = String(r?.anexo?.dataUrl ?? '');
+      const virgula = dataUrl.indexOf(',');
+      if (!dataUrl.startsWith('data:') || virgula < 0) return naoAchei();
+      const cabecalho = dataUrl.slice(5, virgula).toLowerCase();
+      const tipo = cabecalho.split(';')[0].trim();
+      const corpo = cabecalho.includes(';base64')
+        ? Buffer.from(dataUrl.slice(virgula + 1), 'base64')
+        : Buffer.from(decodeURIComponent(dataUrl.slice(virgula + 1)), 'utf8');
+      // Só imagem comum abre na tela. O resto (inclusive SVG e HTML) sempre BAIXA, pra nada rodar no navegador.
+      const naTela = IMAGENS_NA_TELA.includes(tipo);
+      const nome = String(r?.anexo?.name || 'arquivo').replace(/[^\w.\- ]+/g, '_').slice(0, 120) || 'arquivo';
+      return reply
+        .header('Content-Type', naTela ? tipo : 'application/octet-stream')
+        .header('X-Content-Type-Options', 'nosniff')
+        .header('Content-Disposition', `${naTela ? 'inline' : 'attachment'}; filename="${nome}"`)
+        .header('Cache-Control', 'private, max-age=3600')
+        .send(corpo);
+    }
+  );
 
   // GET /api/public/cliente/:token/relatorio/:id/pdf — o mesmo PDF do painel, pro cliente baixar.
   app.get<{ Params: { token: string; id: string } }>(

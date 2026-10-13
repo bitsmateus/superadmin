@@ -1,12 +1,12 @@
 import * as React from 'react'
 import { useParams } from 'react-router-dom'
 import {
-  ArrowLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock, FileDown, FileText, Flag, History, Info, Loader2,
-  ShoppingBag, TrendingUp, Wallet,
+  BarChart3, CircleDollarSign, ClipboardList, Clock, FileDown, Flag, Info, Loader2, MessageSquare, Phone,
+  ShoppingBag, SlidersHorizontal, StickyNote, TrendingUp, Users, Wallet,
 } from 'lucide-react'
 import { gestaoClientes, HORIZONTES, type GcSnapshot } from '@/services/gestaoClientes'
-import { formatarMetrica, mesAtual } from '@/lib/gcMetricas'
-import { BRIEFING_MODELO } from '@/lib/gcBriefingModelo'
+import { formatarMetrica, mesAtual, mesPorExtenso } from '@/lib/gcMetricas'
+import { BRIEFING_MODELO, comModeloDoBriefing } from '@/lib/gcBriefingModelo'
 import logoNx from '@/assets/logo-nx.jpg'
 import { cn } from '@/lib/utils'
 
@@ -312,60 +312,101 @@ const ROTULO_DA_CONTA: Record<string, string> = {
 }
 const RESPOSTA_DA_CONTA: Record<string, string> = { sim: 'Sim', nao: 'Não', nao_sei: 'Não sei' }
 
-/** As respostas que o próprio cliente deu no briefing — só leitura. Senhas nunca chegam aqui. */
-function BriefingDoCliente({ briefing }: { briefing: NonNullable<Portal['briefing']> }) {
+/** O que aparece numa aba que ainda não tem conteúdo: o cliente entende que é "ainda não", e não um erro. */
+function Vazio({ icone: Icone, titulo, texto }: { icone: React.ComponentType<{ className?: string }>; titulo: string; texto: string }) {
+  return (
+    <section className="rounded-3xl border border-line bg-surface px-5 py-10 text-center shadow-sm sm:px-7">
+      <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent/12 text-accent">
+        <Icone className="h-6 w-6" />
+      </span>
+      <h2 className="mt-3 text-base font-semibold text-foreground">{titulo}</h2>
+      <p className="mx-auto mt-1 max-w-md text-sm text-foreground/55">{texto}</p>
+    </section>
+  )
+}
+
+/**
+ * O briefing INTEIRO, só leitura: os dados da empresa, as contas e todas as perguntas do modelo — respondidas
+ * ou não. Senhas nunca chegam aqui.
+ */
+function BriefingDoCliente({ briefing }: { briefing: Portal['briefing'] }) {
+  const d = briefing?.dados
   const dados = [
-    { rotulo: 'Site', valor: briefing.dados.site },
-    { rotulo: 'WhatsApp que recebe os leads', valor: briefing.dados.whatsapp_leads },
-    { rotulo: 'Instagram', valor: briefing.dados.instagram },
-    { rotulo: 'Facebook', valor: briefing.dados.facebook },
-    { rotulo: 'CRM utilizado', valor: briefing.dados.crm },
-  ].filter((d) => d.valor)
-  // Agrupa as perguntas pelos blocos do modelo; o que não for do modelo vai em "Outras perguntas".
+    { rotulo: 'Site', valor: d?.site ?? '' },
+    { rotulo: 'WhatsApp que recebe os leads', valor: d?.whatsapp_leads ?? '' },
+    { rotulo: 'Instagram', valor: d?.instagram ?? '' },
+    { rotulo: 'Facebook', valor: d?.facebook ?? '' },
+    { rotulo: 'CRM utilizado', valor: d?.crm ?? '' },
+  ]
+  const contas = Object.keys(ROTULO_DA_CONTA).map((chave) => {
+    const c = briefing?.contas.find((x) => x.chave === chave)
+    return { chave, valor: c?.valor ?? '', obs: c?.obs ?? '' }
+  })
+  // As perguntas do modelo aparecem sempre, na ordem dele; o que foi acrescentado depois vai em "Outras perguntas".
+  const perguntas = comModeloDoBriefing(briefing?.perguntas ?? [])
   const blocoDe = new Map(BRIEFING_MODELO.map((p) => [p.pergunta, p.bloco.replace(/^Bloco\s+\d+\s+—\s+/, '')]))
-  const grupos = new Map<string, { pergunta: string; resposta: string }[]>()
-  for (const p of briefing.perguntas) {
+  const grupos = new Map<string, { n: number; pergunta: string; resposta: string }[]>()
+  perguntas.forEach((p, i) => {
     const bloco = blocoDe.get(p.pergunta) ?? 'Outras perguntas'
-    grupos.set(bloco, [...(grupos.get(bloco) ?? []), p])
-  }
+    grupos.set(bloco, [...(grupos.get(bloco) ?? []), { n: i + 1, ...p }])
+  })
+  const respondidas = perguntas.filter((p) => p.resposta.trim()).length
+  const semResposta = <span className="italic text-foreground/40">Ainda não respondido</span>
+
   return (
     <section className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-7">
-      <h2 className="text-lg font-semibold text-foreground">Briefing</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className="text-lg font-semibold text-foreground">Briefing</h2>
+        <span className="text-xs tabular-nums text-foreground/50">
+          {respondidas} de {perguntas.length} perguntas respondidas
+        </span>
+      </div>
       <p className="mb-4 text-xs text-foreground/50">
-        As respostas que você nos enviou{briefing.enviado_em ? ` em ${new Date(briefing.enviado_em).toLocaleDateString('pt-BR')}` : ''}. Precisa corrigir algo? Fale com a equipe da NX.
+        {briefing?.enviado_em ? `Enviado em ${new Date(briefing.enviado_em).toLocaleDateString('pt-BR')}. ` : ''}
+        Precisa corrigir ou completar algo? Fale com a equipe da NX.
       </p>
-      {dados.length > 0 && (
-        <Secao titulo="Sua empresa" className="mt-0">
-          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-            {dados.map((d) => (
-              <div key={d.rotulo}>
-                <dt className="text-[11px] uppercase tracking-wide text-foreground/45">{d.rotulo}</dt>
-                <dd className="break-words text-sm text-foreground/85">{d.valor}</dd>
-              </div>
-            ))}
-          </dl>
-        </Secao>
-      )}
-      {briefing.contas.length > 0 && (
-        <Secao titulo="Contas e pagamento">
-          <ul className="space-y-1.5">
-            {briefing.contas.map((c) => (
-              <li key={c.chave} className="text-sm text-foreground/85">
-                <span className="text-foreground/60">{ROTULO_DA_CONTA[c.chave] ?? c.chave}:</span>{' '}
-                <strong className="font-medium">{RESPOSTA_DA_CONTA[c.valor] ?? '—'}</strong>
-                {c.obs && <span className="text-foreground/60"> · {c.obs}</span>}
-              </li>
-            ))}
-          </ul>
-        </Secao>
-      )}
-      {Array.from(grupos.entries()).map(([bloco, perguntas]) => (
+
+      <Secao titulo="Sua empresa" className="mt-0">
+        <dl className="grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
+          {dados.map((x) => (
+            <div key={x.rotulo}>
+              <dt className="text-[11px] uppercase tracking-wide text-foreground/45">{x.rotulo}</dt>
+              <dd className="break-words text-sm text-foreground/85">{x.valor || semResposta}</dd>
+            </div>
+          ))}
+        </dl>
+      </Secao>
+
+      <Secao titulo="Contas e pagamento">
+        <ul className="space-y-1.5">
+          {contas.map((c) => (
+            <li key={c.chave} className="text-sm text-foreground/85">
+              <span className="text-foreground/60">{ROTULO_DA_CONTA[c.chave]}:</span>{' '}
+              {c.valor || c.obs ? (
+                <>
+                  {RESPOSTA_DA_CONTA[c.valor] && <strong className="font-medium">{RESPOSTA_DA_CONTA[c.valor]}</strong>}
+                  {c.obs && <span className="text-foreground/60">{RESPOSTA_DA_CONTA[c.valor] ? ' · ' : ''}{c.obs}</span>}
+                </>
+              ) : (
+                semResposta
+              )}
+            </li>
+          ))}
+        </ul>
+      </Secao>
+
+      {Array.from(grupos.entries()).map(([bloco, doBloco]) => (
         <Secao key={bloco} titulo={bloco}>
-          <ol className="space-y-3">
-            {perguntas.map((p) => (
-              <li key={p.pergunta}>
-                <p className="text-sm font-medium text-foreground">{p.pergunta}</p>
-                <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-foreground/75">{p.resposta}</p>
+          <ol className="space-y-3.5">
+            {doBloco.map((p) => (
+              <li key={p.n} className="flex gap-2.5">
+                <span className="mt-0.5 grid h-5 min-w-5 shrink-0 place-items-center rounded-md bg-elevate/[0.06] px-1 text-[11px] font-semibold tabular-nums text-foreground/55">
+                  {p.n}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">{p.pergunta}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-foreground/75">{p.resposta.trim() || semResposta}</p>
+                </div>
               </li>
             ))}
           </ol>
@@ -375,132 +416,178 @@ function BriefingDoCliente({ briefing }: { briefing: NonNullable<Portal['briefin
   )
 }
 
-/**
- * PORTAL DO CLIENTE — /cliente/:token, sem login.
- *
- * Mostra só os relatórios PUBLICADOS, lidos da foto que foi congelada na publicação. A primeira
- * coisa que aparece é o que o cliente quer saber: quanto investiu, quantas vendas saíram e quanto
- * voltou de receita. O desenho segue o do PDF do relatório (mesma ordem, mesmas seções).
- *
- * O cliente não vê jornada interna, custo, margem, semáforo nem o histórico do time: o que chega
- * aqui é o que a NX escolheu publicar. Em todo o painel fica claro QUANDO foi a última atualização e
- * que a equipe pode estar fazendo coisas que ainda não entraram aqui.
- */
-type Vista = { tipo: 'inicio' } | { tipo: 'plano' } | { tipo: 'briefing' } | { tipo: 'mes'; id: string }
 type RelPortal = Portal['relatorios'][number]
+type NotaPortal = NonNullable<Portal['notas']>[number]
 
-function mesAnterior(mes: string): string {
-  const [a, m] = mes.split('-').map(Number)
-  const d = new Date(a, m - 2, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
+const rotuloDoRelatorio = (r: RelPortal) => r.snapshot?.periodo?.rotulo ?? mesPorExtenso(String(r.periodo_inicio).slice(0, 7))
 
-function CartaoDeAcesso({
-  titulo, subtitulo, icone: Icone, onClick, desabilitado,
-}: {
-  titulo: string
-  subtitulo: string
-  icone: React.ComponentType<{ className?: string }>
-  onClick?: () => void
-  desabilitado?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      disabled={desabilitado}
-      onClick={onClick}
-      className="flex w-full items-center gap-4 rounded-3xl border border-line bg-surface p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0"
-    >
-      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-accent/12 text-accent">
-        <Icone className="h-6 w-6" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-base font-semibold text-foreground">{titulo}</span>
-        <span className="block text-sm text-foreground/55">{subtitulo}</span>
-      </span>
-      {!desabilitado && <ChevronRight className="h-5 w-5 shrink-0 text-foreground/35" />}
-    </button>
-  )
-}
+/** MÉTRICAS E RELATÓRIOS: o cliente escolhe o mês e lê o relatório publicado daquele mês. */
+function AbaRelatorios({ relatorios, baixar }: { relatorios: RelPortal[]; baixar: (id: string, rotulo: string) => Promise<void> }) {
+  const [aberto, setAberto] = React.useState<string | null>(relatorios[0]?.id ?? null)
+  const mesCorrente = mesAtual()
+  const mesDe = (r: RelPortal) => String(r.periodo_inicio).slice(0, 7)
+  const temDoMes = relatorios.some((r) => mesDe(r) === mesCorrente)
+  const r = relatorios.find((x) => x.id === aberto) ?? relatorios[0]
 
-/** A primeira tela do portal: mês atual, mês anterior (se houver) e o planejamento. */
-function TelaInicial({
-  atual, anterior, outros, temPlano, temBriefing, onAbrir,
-}: {
-  atual: RelPortal | null
-  anterior: RelPortal | null
-  outros: RelPortal[]
-  temPlano: boolean
-  temBriefing: boolean
-  onAbrir: (v: Vista) => void
-}) {
-  const rotulo = (r: RelPortal) => r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7)
+  if (!r) {
+    return (
+      <Vazio
+        icone={BarChart3}
+        titulo="Ainda não há relatório publicado"
+        texto="O primeiro relatório aparece aqui assim que o mês fechar e a equipe da NX publicar os números."
+      />
+    )
+  }
   return (
     <div className="space-y-3">
-      <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70">O que você quer ver?</h2>
-      <CartaoDeAcesso
-        titulo="Relatório do mês atual"
-        subtitulo={atual ? rotulo(atual) : 'Ainda não publicado — sai assim que o mês fechar.'}
-        icone={FileText}
-        desabilitado={!atual}
-        onClick={atual ? () => onAbrir({ tipo: 'mes', id: atual.id }) : undefined}
+      <div className="rounded-2xl border border-line bg-surface p-3 shadow-sm">
+        <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/50">Escolha o mês</p>
+        <div className="flex flex-wrap gap-1.5">
+          {relatorios.map((x) => (
+            <button
+              key={x.id}
+              type="button"
+              onClick={() => setAberto(x.id)}
+              aria-pressed={x.id === r.id}
+              className={cn(
+                'rounded-xl border px-3 py-1.5 text-sm transition-colors',
+                x.id === r.id
+                  ? 'border-accent bg-accent font-semibold text-white'
+                  : 'border-line text-foreground/65 hover:border-accent/40 hover:text-foreground',
+              )}
+            >
+              {rotuloDoRelatorio(x)}
+              {mesDe(x) === mesCorrente && <span className="ml-1.5 text-xs font-normal opacity-75">· mês atual</span>}
+            </button>
+          ))}
+        </div>
+        {!temDoMes && (
+          <p className="mt-2 px-1 text-xs text-foreground/50">
+            O relatório de {mesPorExtenso(mesCorrente).toLowerCase()} ainda não foi publicado — sai assim que o mês fechar.
+          </p>
+        )}
+      </div>
+      <Relatorio
+        key={r.id}
+        snapshot={r.snapshot}
+        publicadoEm={r.publicado_em ?? r.snapshot?.publicado_em ?? null}
+        baixar={() => baixar(r.id, rotuloDoRelatorio(r))}
       />
-      {anterior && (
-        <CartaoDeAcesso
-          titulo="Relatório do mês anterior"
-          subtitulo={rotulo(anterior)}
-          icone={History}
-          onClick={() => onAbrir({ tipo: 'mes', id: anterior.id })}
-        />
-      )}
-      {temPlano && (
-        <CartaoDeAcesso
-          titulo="Planejamento"
-          subtitulo="De onde partimos, onde queremos chegar e como estamos indo."
-          icone={Flag}
-          onClick={() => onAbrir({ tipo: 'plano' })}
-        />
-      )}
-      {temBriefing && (
-        <CartaoDeAcesso
-          titulo="Briefing"
-          subtitulo="As respostas que você nos enviou sobre a sua empresa."
-          icone={ClipboardList}
-          onClick={() => onAbrir({ tipo: 'briefing' })}
-        />
-      )}
-      {outros.length > 0 && (
-        <details className="group rounded-3xl border border-line bg-surface shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-sm font-semibold text-foreground">
-            Outros meses
-            <span className="text-xs font-normal text-foreground/45">{outros.length}</span>
-          </summary>
-          <ul className="border-t border-line">
-            {outros.map((r) => (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  onClick={() => onAbrir({ tipo: 'mes', id: r.id })}
-                  className="flex w-full items-center justify-between px-5 py-3 text-left text-sm text-foreground/80 hover:text-accent"
-                >
-                  {rotulo(r)} <ChevronRight className="h-4 w-4 text-foreground/35" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
     </div>
   )
 }
 
+/** Como cada tipo de registro aparece pro cliente. O subtipo interno da reunião não vem pra cá. */
+const TIPO_DA_NOTA: Record<string, { rotulo: string; icone: React.ComponentType<{ className?: string }>; cor: string }> = {
+  nota: { rotulo: 'Atualização', icone: StickyNote, cor: 'bg-elevate/[0.06] text-foreground/60' },
+  reuniao: { rotulo: 'Reunião', icone: Users, cor: 'bg-accent/12 text-accent' },
+  ligacao: { rotulo: 'Ligação', icone: Phone, cor: 'bg-success/12 text-success' },
+  reclamacao: { rotulo: 'Solicitação', icone: MessageSquare, cor: 'bg-warning/15 text-warning' },
+  ajuste: { rotulo: 'Ajuste', icone: SlidersHorizontal, cor: 'bg-warning/15 text-warning' },
+}
+
+/** NOTAS E HISTÓRICO: só o que a equipe marcou pra compartilhar, do mais novo pro mais antigo. */
+function NotasDoCliente({ notas, token }: { notas: NotaPortal[]; token: string }) {
+  if (notas.length === 0) {
+    return (
+      <Vazio
+        icone={MessageSquare}
+        titulo="Nada compartilhado ainda"
+        texto="Reuniões, ajustes e atualizações que a equipe da NX compartilhar com você ficam guardados aqui."
+      />
+    )
+  }
+  const base = import.meta.env.VITE_API_URL ?? ''
+  const urlDoAnexo = (nota: string, anexo: string) =>
+    `${base}/api/public/cliente/${encodeURIComponent(token)}/nota/${nota}/anexo/${encodeURIComponent(anexo)}`
+  return (
+    <section className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-7">
+      <h2 className="text-lg font-semibold text-foreground">Notas e histórico</h2>
+      <p className="mb-4 text-xs text-foreground/50">O que a equipe da NX registrou e compartilhou com você, do mais recente pro mais antigo.</p>
+      <ol className="space-y-3">
+        {notas.map((n) => {
+          const tipo = TIPO_DA_NOTA[n.tipo] ?? TIPO_DA_NOTA.nota
+          const imagens = n.anexos.filter((a) => a.type?.startsWith('image/') && a.type !== 'image/svg+xml')
+          const arquivos = n.anexos.filter((a) => !imagens.includes(a))
+          return (
+            <li key={n.id} className="flex gap-3 rounded-2xl border border-line p-3.5">
+              <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', tipo.cor)}>
+                <tipo.icone className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="text-sm font-semibold text-foreground">{tipo.rotulo}</span>
+                  <span className="text-xs text-foreground/50">
+                    {dataEHora(n.created_at)} · {n.autor ?? 'Equipe NX'}
+                  </span>
+                </div>
+                {n.descricao && <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/85">{n.descricao}</p>}
+                {imagens.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {imagens.map((a) => (
+                      <a
+                        key={a.id}
+                        href={urlDoAnexo(n.id, a.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={a.name}
+                        className="overflow-hidden rounded-lg border border-line transition-colors hover:border-accent/50"
+                      >
+                        <img src={urlDoAnexo(n.id, a.id)} alt={a.name} loading="lazy" className="h-24 w-36 object-cover" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {arquivos.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {arquivos.map((a) => (
+                      <a
+                        key={a.id}
+                        href={urlDoAnexo(n.id, a.id)}
+                        className="flex max-w-full items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs text-foreground/70 transition-colors hover:border-accent/50 hover:text-foreground"
+                      >
+                        <FileDown className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{a.name}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </section>
+  )
+}
+
+type AbaPortal = 'plano' | 'briefing' | 'relatorios' | 'notas'
+
+const ABAS_DO_PORTAL: { id: AbaPortal; label: string; icone: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'plano', label: 'Planejamento', icone: Flag },
+  { id: 'briefing', label: 'Briefing', icone: ClipboardList },
+  { id: 'relatorios', label: 'Métricas e relatórios', icone: BarChart3 },
+  { id: 'notas', label: 'Notas e histórico', icone: MessageSquare },
+]
+
+/**
+ * PORTAL DO CLIENTE — /cliente/:token, sem login.
+ *
+ * Quatro abas, na mesma ordem da ficha interna: Planejamento, Briefing, Métricas e relatórios, Notas e
+ * histórico. O cliente só vê o que a NX escolheu mostrar: o texto do planejamento (se marcado pra aparecer),
+ * o briefing sem as senhas, os relatórios PUBLICADOS (lidos da foto congelada na publicação) e as notas que a
+ * equipe marcou "compartilhar no portal do cliente".
+ *
+ * Nada de custo, margem, semáforo nem registro interno. Em todo o painel fica claro QUANDO foi a última
+ * atualização e que a equipe pode estar fazendo coisas que ainda não entraram aqui.
+ */
 export function PortalClientePage() {
   const { token = '' } = useParams<{ token: string }>()
   const [dados, setDados] = React.useState<Portal | null>(null)
   const [erro, setErro] = React.useState('')
   const [carregando, setCarregando] = React.useState(true)
-  // Tela inicial: o cliente escolhe o que quer ver. 'mes' = id do relatório aberto.
-  const [vista, setVista] = React.useState<Vista>({ tipo: 'inicio' })
+  // Null = o cliente ainda não escolheu: abre a primeira aba que já tem conteúdo.
+  const [aba, setAba] = React.useState<AbaPortal | null>(null)
 
   React.useEffect(() => {
     gestaoClientes
@@ -546,21 +633,32 @@ export function PortalClientePage() {
     )
   }
 
-  // A última atualização é a publicação mais recente: é o que a equipe fechou e liberou pra cá.
-  const publicacoes = dados.relatorios
-    .map((r) => r.publicado_em ?? r.snapshot?.publicado_em ?? null)
+  const notas = dados.notas ?? []
+  // A última atualização é o que a equipe liberou por último pra cá: relatório publicado ou nota compartilhada.
+  const momentos = [
+    ...dados.relatorios.map((r) => r.publicado_em ?? r.snapshot?.publicado_em ?? null),
+    ...notas.map((n) => n.created_at),
+  ]
     .filter((x): x is string => !!x)
-    .sort()
-  const ultima = publicacoes.length ? publicacoes[publicacoes.length - 1] : null
-  const ultimaTexto = ultima ? dataEHora(ultima) : null
-  // Do mais novo pro mais velho: o último é o que abre inteiro, os outros ficam recolhidos.
+    .map((x) => new Date(x).getTime())
+    .filter((x) => !Number.isNaN(x))
+  const ultimaTexto = momentos.length ? dataEHora(new Date(Math.max(...momentos)).toISOString()) : null
+  // Do mais novo pro mais velho.
   const ordenados = [...dados.relatorios].sort((a, b) => String(b.periodo_inicio).localeCompare(String(a.periodo_inicio)))
-  const mesDe = (r: { periodo_inicio: string }) => String(r.periodo_inicio).slice(0, 7)
-  const mesCorrente = mesAtual()
-  const atual = ordenados.find((r) => mesDe(r) === mesCorrente) ?? null
-  const anterior = ordenados.find((r) => mesDe(r) === mesAnterior(mesCorrente)) ?? null
-  const outros = ordenados.filter((r) => r !== atual && r !== anterior)
   const infoDoCliente = dados.relatorios[0]?.snapshot?.cliente
+
+  const temBriefing =
+    !!dados.briefing &&
+    (dados.briefing.perguntas.some((p) => p.resposta.trim()) ||
+      dados.briefing.contas.some((c) => c.valor || c.obs) ||
+      Object.values(dados.briefing.dados).some(Boolean))
+  const temConteudo: Record<AbaPortal, boolean> = {
+    plano: !!dados.planejamento_texto,
+    briefing: temBriefing,
+    relatorios: ordenados.length > 0,
+    notas: notas.length > 0,
+  }
+  const abaAberta: AbaPortal = aba ?? ABAS_DO_PORTAL.find((a) => temConteudo[a.id])?.id ?? 'plano'
 
   return (
     <div
@@ -569,21 +667,21 @@ export function PortalClientePage() {
     >
       <div className="mx-auto max-w-4xl space-y-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
+          <div className="flex min-w-0 items-center gap-3.5">
             {dados.cliente.logo_url ? (
-              <img src={dados.cliente.logo_url} alt="" className="h-14 w-14 rounded-2xl border border-line object-cover shadow-sm" />
+              <img src={dados.cliente.logo_url} alt="" className="h-14 w-14 shrink-0 rounded-2xl border border-line object-cover shadow-sm" />
             ) : (
-              <span className="grid h-14 w-14 place-items-center rounded-2xl border border-line bg-surface text-base font-bold text-foreground/70 shadow-sm">
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-line bg-surface text-base font-bold text-foreground/70 shadow-sm">
                 {dados.cliente.nome_empresa.slice(0, 2).toUpperCase()}
               </span>
             )}
-            <div>
+            <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/80">
                 <img src={logoNx} alt="" className="h-4 w-4 rounded" /> Grupo NX Digital
               </p>
-              <h1 className="text-2xl font-bold tracking-tight text-white">{dados.cliente.nome_empresa}</h1>
+              <h1 className="break-words text-2xl font-bold tracking-tight text-white">{dados.cliente.nome_empresa}</h1>
               <p className="text-xs text-white/60">
-                {[dados.cliente.segmento, infoDoCliente?.cidade].filter(Boolean).join(' · ') || 'Relatórios de performance'}
+                {[dados.cliente.segmento, infoDoCliente?.cidade].filter(Boolean).join(' · ') || 'Portal do cliente'}
               </p>
             </div>
           </div>
@@ -599,47 +697,48 @@ export function PortalClientePage() {
 
         <AvisoDeAtualizacao quando={ultimaTexto} />
 
-        {vista.tipo === 'inicio' ? (
-          <TelaInicial
-            atual={atual}
-            anterior={anterior}
-            outros={outros}
-            temPlano={!!dados.planejamento_texto}
-            temBriefing={!!dados.briefing}
-            onAbrir={setVista}
-          />
-        ) : (
-          <>
+        <nav
+          role="tablist"
+          aria-label="O que você quer ver"
+          className="grid grid-cols-2 gap-1.5 rounded-2xl border border-line bg-surface p-1.5 shadow-sm sm:grid-cols-4"
+        >
+          {ABAS_DO_PORTAL.map((a) => (
             <button
+              key={a.id}
               type="button"
-              onClick={() => setVista({ tipo: 'inicio' })}
-              className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3.5 py-2 text-sm font-medium text-foreground/80 shadow-sm transition-colors hover:border-accent/40"
+              role="tab"
+              aria-selected={abaAberta === a.id}
+              onClick={() => setAba(a.id)}
+              className={cn(
+                'flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2.5 text-center text-[13px] font-medium leading-tight sm:flex-row sm:gap-2 sm:text-sm',
+                abaAberta === a.id ? 'bg-accent text-white shadow-sm' : 'text-foreground/60 hover:bg-elevate/[0.05] hover:text-foreground',
+              )}
             >
-              <ArrowLeft className="h-4 w-4" /> Voltar ao início
+              <a.icone className="h-4 w-4 shrink-0" />
+              {a.label}
             </button>
+          ))}
+        </nav>
 
-            {vista.tipo === 'briefing' && dados.briefing && <BriefingDoCliente briefing={dados.briefing} />}
+        {abaAberta === 'plano' &&
+          (dados.planejamento_texto ? (
+            <section className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-7">
+              <h2 className="mb-3 text-lg font-semibold text-foreground">Planejamento</h2>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/85">{dados.planejamento_texto}</p>
+            </section>
+          ) : (
+            <Vazio
+              icone={Flag}
+              titulo="O planejamento ainda não foi publicado"
+              texto="Assim que a equipe da NX concluir o seu planejamento, ele aparece aqui."
+            />
+          ))}
 
-            {vista.tipo === 'plano' && dados.planejamento_texto && (
-              <section className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-7">
-                <h2 className="mb-3 text-lg font-semibold text-foreground">Planejamento</h2>
-                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/85">{dados.planejamento_texto}</p>
-              </section>
-            )}
+        {abaAberta === 'briefing' && <BriefingDoCliente briefing={dados.briefing} />}
 
-            {vista.tipo === 'mes' && (() => {
-              const r = dados.relatorios.find((x) => x.id === vista.id)
-              if (!r) return null
-              return (
-                <Relatorio
-                  snapshot={r.snapshot}
-                  publicadoEm={r.publicado_em ?? r.snapshot?.publicado_em ?? null}
-                  baixar={() => baixarPdf(r.id, r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7))}
-                />
-              )
-            })()}
-          </>
-        )}
+        {abaAberta === 'relatorios' && <AbaRelatorios relatorios={ordenados} baixar={baixarPdf} />}
+
+        {abaAberta === 'notas' && <NotasDoCliente notas={notas} token={token} />}
 
         <footer className="space-y-1 pb-6 pt-2 text-center text-xs text-white/60">
           <p>Grupo NX Digital · este link é pessoal, não compartilhe.</p>

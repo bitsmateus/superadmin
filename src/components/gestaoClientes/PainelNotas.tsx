@@ -1,7 +1,7 @@
 import * as React from 'react'
 import {
   AlertTriangle, Clock, FileText, Image as ImageIcon, MessageSquare, Paperclip, Pencil, Phone, Pin, PinOff, RefreshCcw, Send,
-  SlidersHorizontal, StickyNote, Trash2, Users, X,
+  Share2, SlidersHorizontal, StickyNote, Trash2, Users, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { RotinaMensal } from '@/components/gestaoClientes/RotinaMensal'
@@ -238,7 +238,7 @@ function CartaoDeNota({
           <Icone className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5', !editando && 'pr-[7.5rem] sm:pr-0')}>
             {r.fixado && <Pin className="h-3.5 w-3.5 text-accent" />}
             <span className="text-sm font-semibold text-foreground">{r.autor_nome ?? 'Equipe'}</span>
             <Badge tone={TOM[r.tipo] ?? 'neutral'}>{rotuloReuniao(r)}</Badge>
@@ -248,6 +248,14 @@ function CartaoDeNota({
             {editada && (
               <span className="text-xs italic text-foreground/35" title={`Editada em ${dataCompleta(r.updated_at!)}`}>
                 · editada
+              </span>
+            )}
+            {r.no_portal && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
+                title="O cliente vê esta nota (texto e anexos) no link dele"
+              >
+                <Share2 className="h-3 w-3" /> No portal do cliente
               </span>
             )}
           </div>
@@ -325,9 +333,26 @@ function CartaoDeNota({
           )}
         </div>
         {!editando && (
-          <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+          <div className="absolute right-2 top-2.5 flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity sm:static sm:opacity-0 sm:group-hover:opacity-100">
             <button type="button" onClick={abrirEdicao} className="rounded-md p-1.5 text-foreground/35 hover:bg-elevate/[0.06] hover:text-accent" aria-label="Editar nota" title="Editar">
               <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void agir(async () => {
+                  await gestaoClientes.atualizarRegistro(r.id, { no_portal: !r.no_portal })
+                  toast.success(r.no_portal ? 'Saiu do portal do cliente' : 'Compartilhada no portal do cliente')
+                })
+              }
+              className={cn(
+                'rounded-md p-1.5 hover:bg-elevate/[0.06]',
+                r.no_portal ? 'text-success hover:text-danger' : 'text-foreground/35 hover:text-success',
+              )}
+              aria-label={r.no_portal ? 'Tirar do portal do cliente' : 'Compartilhar no portal do cliente'}
+              title={r.no_portal ? 'Tirar do portal do cliente' : 'Compartilhar no portal do cliente'}
+            >
+              <Share2 className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -364,7 +389,8 @@ type Aba = 'atualizacoes' | 'rotina' | 'arquivos' | 'linha'
  *
  * ATUALIZAÇÕES é onde se escreve e onde fica o que a equipe escreveu. Ctrl+V cola print direto —
  * é como o pessoal manda prova de campanha, de conversa, de painel. Nota fixada sobe pro topo e
- * aparece também na Visão geral.
+ * aparece também na Visão geral. Toda nota nasce INTERNA; só a que for marcada "compartilhar no portal
+ * do cliente" aparece no link dele.
  *
  * ARQUIVOS junta os anexos de todas as notas num lugar só: procurar o print do mês passado
  * rolando a conversa inteira não é procurar, é sorte.
@@ -392,6 +418,7 @@ export function PainelNotas({
   const [texto, setTexto] = React.useState('')
   const [pendentes, setPendentes] = React.useState<GcAnexo[]>([])
   const [fixar, setFixar] = React.useState(false)
+  const [compartilhar, setCompartilhar] = React.useState(false)
   const [salvando, setSalvando] = React.useState(false)
   const [ampliado, setAmpliado] = React.useState<GcAnexo | null>(null)
   const inputArquivo = React.useRef<HTMLInputElement>(null)
@@ -411,11 +438,13 @@ export function PainelNotas({
         reuniao_tipo: tipo === 'reuniao' ? reuniaoTipo : undefined,
         descricao: texto.trim(),
         fixado: fixar,
+        no_portal: compartilhar,
         anexos: pendentes,
       })
       setTexto('')
       setPendentes([])
       setFixar(false)
+      setCompartilhar(false)
       await onMudou()
     } catch (err) {
       toast.error('Falha ao registrar: ' + (err as Error).message)
@@ -584,6 +613,21 @@ export function PainelNotas({
                 >
                   <Pin className="h-3.5 w-3.5" />
                   {fixar ? 'será fixada no topo' : 'fixar no topo'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompartilhar((c) => !c)}
+                  aria-pressed={compartilhar}
+                  title="Ligado, o cliente vê esta nota (texto e anexos) no link dele. Desligado, fica só pra equipe."
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
+                    compartilhar
+                      ? 'border-success/40 bg-success/10 text-success'
+                      : 'border-line text-foreground/55 hover:text-foreground',
+                  )}
+                >
+                  <Share2 className="h-3.5 w-3.5" />
+                  {compartilhar ? 'vai aparecer no portal do cliente' : 'compartilhar no portal do cliente'}
                 </button>
               </div>
               <Button

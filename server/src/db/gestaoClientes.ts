@@ -438,12 +438,15 @@ const TABELAS = [
   // de depender de um bucket que não existe aqui.
   `ALTER TABLE gc_historico ADD COLUMN IF NOT EXISTS anexos JSONB NOT NULL DEFAULT '[]'`,
   // Subtipo da reunião (só quando tipo = 'reuniao'): serve pra metrificar o atendimento — quantos
-  // alinhamentos cada cliente teve, quem teve call de retenção. É dado INTERNO: o portal do cliente
-  // lê só o snapshot do relatório, nunca o histórico.
+  // alinhamentos cada cliente teve, quem teve call de retenção. É dado INTERNO: mesmo quando a nota é
+  // compartilhada no portal do cliente, o subtipo não vai junto.
   `ALTER TABLE gc_historico ADD COLUMN IF NOT EXISTS reuniao_tipo TEXT
      CHECK (reuniao_tipo IS NULL OR reuniao_tipo IN ('alinhamento','entrega','ia','retencao'))`,
   // Reuniões que já existiam eram todas "Registrar alinhamento".
   `UPDATE gc_historico SET reuniao_tipo = 'alinhamento' WHERE tipo = 'reuniao' AND reuniao_tipo IS NULL`,
+  // "Compartilhar no portal do cliente": a nota nasce INTERNA (false). Só o que a equipe marcar aparece na aba
+  // "Notas e histórico" do portal — e o subtipo da reunião continua não saindo daqui.
+  `ALTER TABLE gc_historico ADD COLUMN IF NOT EXISTS no_portal BOOLEAN NOT NULL DEFAULT false`,
 
   // Índices de leitura das telas
   `CREATE INDEX IF NOT EXISTS gc_servicos_cliente_idx ON gc_servicos (gc_cliente_id)`,

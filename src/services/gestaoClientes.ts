@@ -243,6 +243,8 @@ export interface GcRegistroHistorico {
   autor_id: string | null
   autor_nome: string | null
   fixado: boolean
+  /** Marcada pra aparecer na aba "Notas e histórico" do portal do cliente. Nasce desligada. */
+  no_portal?: boolean
   anexos: GcAnexo[]
   created_at: string
   updated_at?: string
@@ -939,22 +941,31 @@ export const gestaoClientes = {
       jornada: GcJornadaPortal | null
       /** O texto da aba Planejamento, só quando a equipe marcou "mostrar no link do cliente". */
       planejamento_texto?: string | null
-      /** O briefing que o cliente respondeu (sem senhas). Null = ainda não há nada preenchido. */
+      /** O briefing do cliente (sem senhas): todas as perguntas guardadas, respondidas ou não. */
       briefing?: {
         dados: { site: string; whatsapp_leads: string; instagram: string; facebook: string; crm: string }
         contas: { chave: string; valor: string; obs: string }[]
         perguntas: { pergunta: string; resposta: string }[]
         enviado_em: string | null
       } | null
+      /** As notas que a equipe marcou "compartilhar no portal do cliente". Do anexo vem só a ficha; o arquivo tem rota própria. */
+      notas?: {
+        id: string
+        tipo: string
+        descricao: string
+        created_at: string
+        autor: string | null
+        anexos: { id: string; name: string; type: string; size: number }[]
+      }[]
     }>(`/api/public/cliente/${encodeURIComponent(token)}`),
 
   registrar: (
     clienteId: string,
     dados: {
-      tipo?: GcTipoHistorico; reuniao_tipo?: GcReuniaoTipo; titulo?: string; descricao: string; fixado?: boolean; anexos?: GcAnexo[]
+      tipo?: GcTipoHistorico; reuniao_tipo?: GcReuniaoTipo; titulo?: string; descricao: string; fixado?: boolean; no_portal?: boolean; anexos?: GcAnexo[]
     },
   ) => api.post<GcRegistroHistorico>(`/api/gc/clientes/${clienteId}/historico`, dados),
-  atualizarRegistro: (id: string, dados: Partial<{ tipo: GcTipoHistorico; reuniao_tipo: GcReuniaoTipo | null; titulo: string; descricao: string; fixado: boolean; anexos: GcAnexo[] }>) =>
+  atualizarRegistro: (id: string, dados: Partial<{ tipo: GcTipoHistorico; reuniao_tipo: GcReuniaoTipo | null; titulo: string; descricao: string; fixado: boolean; no_portal: boolean; anexos: GcAnexo[] }>) =>
     api.patch<GcRegistroHistorico>(`/api/gc/historico/${id}`, dados),
   excluirRegistro: (id: string) => api.delete(`/api/gc/historico/${id}`),
 

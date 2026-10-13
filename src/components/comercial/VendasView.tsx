@@ -23,7 +23,7 @@ import { contractsService } from '@/services/contracts'
 import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt } from '@/hooks/useMonthFilter'
 import { leadBoardsService } from '@/services/leadBoards'
 import { commissionsService, type CommissionEntry, type CommissionType } from '@/services/commissions'
-import { formatBRLCents, parseBRLCents } from '@/lib/currency'
+import { formatBRLCents, parseBRLCents, prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
 import { cn, initials } from '@/lib/utils'
 import type { LeadRow } from '@/types/leadBoard'
 
@@ -858,13 +858,19 @@ function ObservacoesCell({ value, onSave }: { value: string; onSave: (next: stri
 
 /** Opção do seletor pra venda que não paga comissão de SDR (fica registrada, valendo zero). */
 const SEM_COMISSAO = 'Sem comissão'
+/** Comissão com valor digitado na hora, fora da tabela de tipos (acordo caso a caso). */
+const PERSONALIZADO = 'Personalizado'
 
 /**
  * Comissão do SDR dessa venda. Nasce como "Venda sistema" (o servidor lança junto com a venda) e se troca
- * aqui: escolher um tipo grava o tipo e o valor dele na hora. Fechamento do closer não entra — esse o
- * sistema calcula sozinho pela faixa de volume.
+ * aqui: escolher um tipo grava o tipo e o valor dele na hora, e "Personalizado" abre um campo pra digitar
+ * o valor daquela venda. Fechamento do closer não entra — esse o sistema calcula sozinho pela faixa de volume.
  */
 function ComissaoSdrCell({ entry, tipos }: { entry: CommissionEntry | null; tipos: CommissionType[] }) {
+  // Valor que está sendo digitado em "Personalizado" (null = seletor normal). Só dígitos e vírgula enquanto
+  // edita, como nos outros campos de valor: digitar "80" tem que virar R$ 80,00, não 80 centavos.
+  const [digitando, setDigitando] = React.useState<string | null>(null)
+
   if (!entry) {
     return (
       <span title="Venda sem SDR informado: não há comissão de SDR lançada" className="text-xs text-foreground/25">
@@ -880,12 +886,47 @@ function ComissaoSdrCell({ entry, tipos }: { entry: CommissionEntry | null; tipo
   const valor = padrao ? entry.typeId! : semComissao ? '__sem' : '__atual'
   const aDefinir = !padrao && !semComissao && entry.amountCents <= 0
 
+  if (digitando !== null) {
+    const salvar = () => {
+      const cents = parseBRLCents(digitando ? prettifyCurrencyRaw(digitando) : '')
+      setDigitando(null)
+      // Vazio ou zero = desistiu: fica como estava (pra zerar existe o "Sem comissão").
+      if (cents > 0 && (cents !== entry.amountCents || entry.typeLabel !== PERSONALIZADO)) {
+        void commissionsService.updateEntry(entry.id, { typeId: null, typeLabel: PERSONALIZADO, amountCents: cents })
+      }
+    }
+    return (
+      <div className="flex items-center gap-1">
+        <span className="text-[11px] text-foreground/45">R$</span>
+        <input
+          autoFocus
+          inputMode="decimal"
+          value={digitando}
+          placeholder="0,00"
+          aria-label={`Valor personalizado da comissão de ${entry.person}`}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => setDigitando(sanitizeCurrencyRaw(e.target.value))}
+          onBlur={salvar}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            if (e.key === 'Escape') setDigitando(null)
+          }}
+          className="h-7 w-24 rounded-md border border-accent/40 bg-surface px-2 text-right text-xs text-foreground outline-none"
+        />
+      </div>
+    )
+  }
+
   return (
     <select
       value={valor}
       onChange={(e) => {
         const v = e.target.value
         if (v === '__atual') return
+        if (v === '__custom') {
+          setDigitando(entry.amountCents > 0 ? sanitizeCurrencyRaw(formatBRLCents(entry.amountCents)) : '')
+          return
+        }
         if (v === '__sem') {
           void commissionsService.updateEntry(entry.id, { typeId: null, typeLabel: SEM_COMISSAO, amountCents: 0 })
           return
@@ -909,6 +950,7 @@ function ComissaoSdrCell({ entry, tipos }: { entry: CommissionEntry | null; tipo
           {x.label} · {formatBRLCents(x.rateCents ?? 0)}
         </option>
       ))}
+      <option value="__custom">{PERSONALIZADO}…</option>
       <option value="__sem">{SEM_COMISSAO}</option>
     </select>
   )

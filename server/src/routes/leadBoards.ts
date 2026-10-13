@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
+import { allowedPageIds } from './leadPages.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { findMatchingClientId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
@@ -950,12 +951,15 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { sub, role } = req.user as { sub: string; role: string };
-      const allowed = await restrictedBoardFilter(sub, role);
-      if (allowed !== null) return reply.status(403).send({ message: 'Acesso negado' });
-
       const b = req.body;
       const id = (b.id as string) || uuidv4();
       const page = (b.page as string) || 'novos_leads';
+      // Usuário com acesso restrito pode criar quadros (colunas) nas abas que ele acessa — o acesso
+      // aos quadros é herdado da aba, então o quadro novo já nasce visível pra ele.
+      const abasPermitidas = await allowedPageIds(sub, role);
+      if (abasPermitidas !== null && !abasPermitidas.includes(page)) {
+        return reply.status(403).send({ message: 'Acesso negado' });
+      }
       let position = b.position as number | undefined;
       if (position === undefined) {
         const [row] = await query<{ max: number | null }>(

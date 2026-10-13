@@ -2552,6 +2552,61 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     }
   );
 
+  // ------------------------------------------------------------------ arquivos do cliente (planejamento / informações)
+  const AREAS_DE_ARQUIVO = ['planejamento', 'informacoes'];
+  const MAX_ARQUIVO_BYTES = 10 * 1024 * 1024;
+
+  app.get<{ Params: { id: string }; Querystring: { area?: string } }>('/api/gc/clientes/:id/arquivos', autenticado, async (req, reply) => {
+    const area = String(req.query.area ?? '');
+    if (!AREAS_DE_ARQUIVO.includes(area)) return reply.status(400).send({ message: 'área inválida' });
+    return query(
+      `SELECT a.id, a.area, a.nome, a.tipo, a.tamanho, a.created_at, p.name AS autor
+       FROM gc_arquivos a LEFT JOIN profiles p ON p.id = a.autor_id
+       WHERE a.gc_cliente_id = $1 AND a.area = $2 ORDER BY a.created_at DESC`,
+      [req.params.id, area]
+    );
+  });
+
+  app.post<{ Params: { id: string }; Body: { area?: string; nome?: string; tipo?: string; dataUrl?: string } }>(
+    '/api/gc/clientes/:id/arquivos',
+    autenticado,
+    async (req, reply) => {
+      const { sub } = req.user as { sub: string };
+      const area = String(req.body?.area ?? '');
+      const dataUrl = String(req.body?.dataUrl ?? '');
+      const nome = String(req.body?.nome ?? '').trim().slice(0, 200) || 'arquivo';
+      if (!AREAS_DE_ARQUIVO.includes(area)) return reply.status(400).send({ message: 'área inválida' });
+      if (!dataUrl.startsWith('data:') || dataUrl.indexOf(',') < 0) return reply.status(400).send({ message: 'arquivo inválido' });
+      const base64 = dataUrl.slice(0, dataUrl.indexOf(',')).toLowerCase().includes(';base64');
+      const tamanho = base64 ? Math.floor(((dataUrl.length - dataUrl.indexOf(',') - 1) * 3) / 4) : dataUrl.length - dataUrl.indexOf(',') - 1;
+      if (tamanho > MAX_ARQUIVO_BYTES) return reply.status(413).send({ message: 'O arquivo passa de 10MB' });
+      const cliente = await queryOne('SELECT 1 FROM gc_clientes WHERE id = $1', [req.params.id]);
+      if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      const tipo = String(req.body?.tipo ?? '').slice(0, 120);
+      const criado = await queryOne(
+        `INSERT INTO gc_arquivos (gc_cliente_id, area, nome, tipo, tamanho, data_url, autor_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, area, nome, tipo, tamanho, created_at`,
+        [req.params.id, area, nome, tipo, tamanho, dataUrl, sub]
+      );
+      const autor = await queryOne<{ name: string }>('SELECT name FROM profiles WHERE id = $1', [sub]);
+      return reply.status(201).send({ ...(criado as object), autor: autor?.name ?? null });
+    }
+  );
+
+  app.get<{ Params: { id: string } }>('/api/gc/arquivos/:id', autenticado, async (req, reply) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) return reply.status(404).send({ message: 'Arquivo não encontrado' });
+    const a = await queryOne('SELECT id, nome, tipo, data_url AS "dataUrl" FROM gc_arquivos WHERE id = $1', [req.params.id]);
+    if (!a) return reply.status(404).send({ message: 'Arquivo não encontrado' });
+    return a;
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/gc/arquivos/:id', autenticado, async (req, reply) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) return reply.status(404).send({ message: 'Arquivo não encontrado' });
+    const apagado = await queryOne('DELETE FROM gc_arquivos WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!apagado) return reply.status(404).send({ message: 'Arquivo não encontrado' });
+    return reply.status(204).send();
+  });
+
   // ------------------------------------------------------------------ relatórios
   // GET /api/gc/clientes/:id/relatorios — lista sem o snapshot (que é grande e só interessa quando
   // o relatório é aberto).

@@ -1,3 +1,4 @@
+import { AnexosDaArea } from '@/components/gestaoClientes/AnexosDaArea'
 import * as React from 'react'
 import { ArrowRight, Pin, Plus, Route, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -363,6 +364,7 @@ export function AbaVisaoGeral({
               Salvar
             </Button>
           </div>
+          <AnexosDaArea clienteId={cliente.id} area="informacoes" titulo="Arquivos do cliente" />
         </section>
       </div>
 

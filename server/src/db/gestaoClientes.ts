@@ -531,6 +531,20 @@ const TABELAS = [
   // quem já salvou fica com a escolha que fez.
   `ALTER TABLE gc_planejamento ALTER COLUMN plano_no_portal SET DEFAULT true`,
   `UPDATE gc_planejamento SET plano_no_portal = true WHERE texto_atualizado_em IS NULL AND plano_no_portal = false`,
+  // Arquivos que a equipe anexa ao cliente, por área da ficha ('planejamento' ou 'informacoes'). Ficam no banco
+  // (data URL), como os anexos das notas. A lista não carrega o conteúdo; ele vem por /api/gc/arquivos/:id.
+  `CREATE TABLE IF NOT EXISTS gc_arquivos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    area TEXT NOT NULL CHECK (area IN ('planejamento','informacoes')),
+    nome TEXT NOT NULL,
+    tipo TEXT NOT NULL DEFAULT '',
+    tamanho INTEGER NOT NULL DEFAULT 0,
+    data_url TEXT NOT NULL,
+    autor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_arquivos_cliente_idx ON gc_arquivos (gc_cliente_id, area, created_at DESC)`,
   // Briefing preenchido pelo cliente: o link público (token), quando ele enviou, e a marca nos arquivos dele.
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS link_token TEXT`,
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS enviado_em TIMESTAMPTZ`,

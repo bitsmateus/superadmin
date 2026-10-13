@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
+import { AnexosDaArea } from '@/components/gestaoClientes/AnexosDaArea'
 import { gestaoClientes, type GcBriefing, type GcPlanejamentoApi, type GcPlanoTexto } from '@/services/gestaoClientes'
 import { formatarMetrica } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
@@ -338,6 +339,7 @@ export function AbaPlanejamento({
             placeholder={'Cole aqui o planejamento que a IA montou (ou escreva à mão).\n\nUse o checklist ao lado como guia. Onde não houver a informação, escreva “Não tem”.'}
             className="min-h-[60vh] w-full resize-y rounded-xl border border-line bg-surface px-3.5 py-3 text-base leading-relaxed text-foreground outline-none placeholder:text-foreground/30 focus:border-accent focus:ring-2 focus:ring-accent/15 sm:text-sm"
           />
+          <AnexosDaArea clienteId={clienteId} area="planejamento" titulo="Arquivos do planejamento" />
           <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-line px-3 py-2.5">
             <input
               type="checkbox"

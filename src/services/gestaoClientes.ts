@@ -198,6 +198,17 @@ export interface GcPlanoTexto {
   autor: string | null
 }
 
+/** Um arquivo anexado ao cliente (planejamento ou informações). O conteúdo só vem ao abrir/baixar. */
+export interface GcArquivo {
+  id: string
+  area: 'planejamento' | 'informacoes'
+  nome: string
+  tipo: string
+  tamanho: number
+  created_at: string
+  autor: string | null
+}
+
 export interface GcBriefingLink {
   token: string | null
   /** Quando o cliente clicou em "Enviar briefing" pela última vez. */
@@ -819,6 +830,12 @@ export const gestaoClientes = {
   roteiro: (clienteId: string) => api.get<{ meses: { mes: number; texto: string }[] }>(`/api/gc/clientes/${clienteId}/roteiro`),
   salvarRoteiro: (clienteId: string, meses: { mes: number; texto: string }[]) =>
     api.put<{ meses: { mes: number; texto: string }[] }>(`/api/gc/clientes/${clienteId}/roteiro`, { meses }),
+  arquivos: (clienteId: string, area: GcArquivo['area']) =>
+    api.get<GcArquivo[]>(`/api/gc/clientes/${clienteId}/arquivos?area=${area}`),
+  anexarArquivo: (clienteId: string, dados: { area: GcArquivo['area']; nome: string; tipo: string; dataUrl: string }) =>
+    api.post<GcArquivo>(`/api/gc/clientes/${clienteId}/arquivos`, dados),
+  conteudoDoArquivo: (id: string) => api.get<{ id: string; nome: string; tipo: string; dataUrl: string }>(`/api/gc/arquivos/${id}`),
+  excluirArquivo: (id: string) => api.delete(`/api/gc/arquivos/${id}`),
   planoTexto: (clienteId: string) => api.get<GcPlanoTexto>(`/api/gc/clientes/${clienteId}/plano-texto`),
   salvarPlanoTexto: (clienteId: string, dados: { texto: string; marcados: string[]; no_portal: boolean }) =>
     api.put<GcPlanoTexto>(`/api/gc/clientes/${clienteId}/plano-texto`, dados),

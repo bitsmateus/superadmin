@@ -60,11 +60,13 @@ export interface LeadKanbanBoardProps {
   onOpenLead: (id: string) => void
   /** Aba travada num SDR (CRM Luis/Arthur): o lead criado aqui já nasce com ele, como na lista. */
   sdrLock?: string
+  /** CRM de demanda (Ian e Mateus): a data de Retornar/Finalizar aparece ao lado do nome do card. */
+  modoDemanda?: boolean
 }
 
 /** Visão alternativa em quadro — mesmos leads da lista, agrupados por Status ou Dia de
  * contato (à escolha) em vez de por quadro. Arrastar um card muda o campo agrupado. */
-export function LeadKanbanBoard({ rows, allBoards, onOpenLead, sdrLock }: LeadKanbanBoardProps) {
+export function LeadKanbanBoard({ rows, allBoards, onOpenLead, sdrLock, modoDemanda }: LeadKanbanBoardProps) {
   const [groupField, setGroupField] = React.useState<GroupField>(() => {
     try {
       return window.localStorage.getItem(GROUP_STORAGE_KEY) === 'diaContato' ? 'diaContato' : 'status'
@@ -228,12 +230,13 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead, sdrLock }: LeadKa
               tagPageId={pageId}
               onArchive={withArchive ? (row) => moveToColumn(row, col.archive ? (doneLabel ?? '') : ARCHIVE_STATUS) : undefined}
               onCreate={col.archive ? undefined : (nome) => criarNaColuna(col, nome)}
+              modoDemanda={modoDemanda}
             />
           ))}
         </div>
         {createPortal(
           <DragOverlay>
-            {activeRow && <KanbanCard row={activeRow} overlay onOpenLead={() => {}} showTag tagPageId={pageId} />}
+            {activeRow && <KanbanCard row={activeRow} overlay onOpenLead={() => {}} showTag tagPageId={pageId} modoDemanda={modoDemanda} />}
           </DragOverlay>,
           document.body,
         )}
@@ -273,6 +276,7 @@ function KanbanColumn({
   tagPageId,
   onArchive,
   onCreate,
+  modoDemanda,
 }: {
   col: Column
   rows: LeadRow[]
@@ -284,6 +288,7 @@ function KanbanColumn({
   onArchive?: (row: LeadRow) => void
   /** Cria um card novo nesta coluna (sem isso, a coluna não mostra o "+ Adicionar"). */
   onCreate?: (nome: string) => void
+  modoDemanda?: boolean
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col-${col.key}`, data: { column: col.key } })
   const totalMrr = React.useMemo(() => rows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0), [rows])
@@ -331,6 +336,7 @@ function KanbanColumn({
             tagPageId={tagPageId}
             archived={col.archive}
             onArchive={onArchive}
+            modoDemanda={modoDemanda}
           />
         ))}
         {rows.length === 0 && <p className="px-1 py-3 text-center text-[11px] text-foreground/40">Nenhum lead</p>}
@@ -405,6 +411,7 @@ function KanbanCard({
   tagPageId,
   archived,
   onArchive,
+  modoDemanda,
 }: {
   row: LeadRow
   overlay?: boolean
@@ -414,6 +421,7 @@ function KanbanCard({
   tagPageId?: string
   archived?: boolean
   onArchive?: (row: LeadRow) => void
+  modoDemanda?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: row.id,
@@ -438,7 +446,18 @@ function KanbanCard({
       )}
     >
       <div className="flex items-start gap-1.5">
-        <div className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{row.nome || 'Sem nome'}</div>
+        <div className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
+          {row.nome || 'Sem nome'}
+          {modoDemanda && row.retornar && (
+            <span
+              className="ml-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded bg-elevate/[0.06] px-1.5 py-0.5 align-middle text-[11px] font-medium text-foreground/60"
+              title="Retornar/Finalizar"
+            >
+              <Calendar className="h-3 w-3" />
+              {fmtShortDay(row.retornar)}
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onOpenLead(row.id) }}
@@ -490,7 +509,7 @@ function KanbanCard({
           {row.lastNotePreview}
         </p>
       )}
-      {row.retornar && (
+      {row.retornar && !modoDemanda && (
         <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-elevate/[0.05] px-1.5 py-0.5 text-[11px] text-foreground/50">
           <Calendar className="h-3 w-3" />
           {fmtShortDay(row.retornar)} (Retornar)

@@ -350,7 +350,7 @@ function LeadDetailModalInner({
                 className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
               />
             </FieldRow>
-            <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Retornar">
+            <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label={modoSimples ? 'Retornar/Finalizar' : 'Retornar'}>
               <RetornarField
                 value={row.retornar}
                 retornado={row.retornado}

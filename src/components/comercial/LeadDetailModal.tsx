@@ -69,6 +69,9 @@ export interface LeadDetailModalProps {
   /** Mostra o botão "Ver contrato" no cabeçalho. Só a aba Vendas liga isso: é lá que contrato é
    * assunto — no CRM o lead ainda nem chegou nessa etapa. */
   mostrarContrato?: boolean
+  /** Ficha enxuta, pros CRMs de demanda (Ian e Mateus): sem tipo, dia de contato, ligação, SDR, dor, nº de
+   * atendentes nem valores; telefone opcional; sem os botões "Ficha de cadastro" e "Acessar planos". */
+  modoSimples?: boolean
 }
 
 type FichaStatus = {
@@ -153,7 +156,7 @@ function FichaCadastroButton({ ficha, onOpenClient }: { ficha: FichaStatus | nul
 
 /** Casca do modal: guarda o cadastro do cliente aberto pelo botão "Ficha de cadastro", que abre
  * por cima da lead (fora do portal dela, pra não herdar a animação/camada do modal). */
-export function LeadDetailModal({ leadRowId, onClose, mostrarContrato }: LeadDetailModalProps) {
+export function LeadDetailModal({ leadRowId, onClose, mostrarContrato, modoSimples }: LeadDetailModalProps) {
   const [fichaClientId, setFichaClientId] = React.useState<string | null>(null)
   React.useEffect(() => { if (!leadRowId) setFichaClientId(null) }, [leadRowId])
 
@@ -165,6 +168,7 @@ export function LeadDetailModal({ leadRowId, onClose, mostrarContrato }: LeadDet
         onOpenFichaClient={setFichaClientId}
         fichaDrawerOpen={!!fichaClientId}
         mostrarContrato={mostrarContrato}
+        modoSimples={modoSimples}
       />
       <ClientDrawer clientId={fichaClientId} onClose={() => setFichaClientId(null)} />
     </>
@@ -172,7 +176,7 @@ export function LeadDetailModal({ leadRowId, onClose, mostrarContrato }: LeadDet
 }
 
 function LeadDetailModalInner({
-  leadRowId, onClose, onOpenFichaClient, fichaDrawerOpen, mostrarContrato,
+  leadRowId, onClose, onOpenFichaClient, fichaDrawerOpen, mostrarContrato, modoSimples,
 }: LeadDetailModalProps & { onOpenFichaClient: (id: string) => void; fichaDrawerOpen: boolean }) {
   const row = useLeadRow(leadRowId)
   const boards = useLeadBoards()
@@ -205,14 +209,14 @@ function LeadDetailModalInner({
 
   const [ficha, setFicha] = React.useState<FichaStatus | null>(null)
   React.useEffect(() => {
-    if (!leadRowId) return
+    if (!leadRowId || modoSimples) return
     let cancelled = false
     setFicha(null)
     api.get<FichaStatus>(`/api/lead-rows/${leadRowId}/ficha-status`)
       .then((res) => { if (!cancelled) setFicha(res) })
       .catch(() => { if (!cancelled) setFicha({ status: 'erro', clientId: null }) })
     return () => { cancelled = true }
-  }, [leadRowId])
+  }, [leadRowId, modoSimples])
 
   if (!leadRowId || !row) return null
 
@@ -237,19 +241,21 @@ function LeadDetailModalInner({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <FichaCadastroButton ficha={ficha} onOpenClient={onOpenFichaClient} />
+            {!modoSimples && <FichaCadastroButton ficha={ficha} onOpenClient={onOpenFichaClient} />}
             {mostrarContrato && (
               <VerContratoButton contratoId={contratoDaVenda?.id ?? null} assinado={!!contratoDaVenda?.assinado} />
             )}
-            <a
-              href="https://gruponxdigital.com/planos"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20 focus-ring"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Acessar planos
-            </a>
+            {!modoSimples && (
+              <a
+                href="https://gruponxdigital.com/planos"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20 focus-ring"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Acessar planos
+              </a>
+            )}
             {!mostrarContrato && (
               <button
                 type="button"
@@ -297,18 +303,22 @@ function LeadDetailModalInner({
             <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Empresa">
               <BoxedField value={row.empresa} onSave={(v) => leadBoardsService.updateRow(row.id, { empresa: v })} />
             </FieldRow>
-            <FieldRow icon={<Phone className="h-3.5 w-3.5" />} label="Telefone" required>
-              <BoxedField value={row.telefone} onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })} required />
+            <FieldRow icon={<Phone className="h-3.5 w-3.5" />} label="Telefone" required={!modoSimples}>
+              <BoxedField value={row.telefone} onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })} required={!modoSimples} />
             </FieldRow>
-            <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Tipo">
-              <LeadLabelCell field="tipo" value={row.tipo} onChange={(v) => leadBoardsService.updateRow(row.id, { tipo: v })} pageId={board?.page} />
-            </FieldRow>
-            <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Dia de contato" required>
-              <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} required pageId={board?.page} />
-            </FieldRow>
-            <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Ligação">
-              <LeadLabelCell field="ligacao" value={row.ligacao} onChange={(v) => leadBoardsService.updateRow(row.id, { ligacao: v })} pageId={board?.page} />
-            </FieldRow>
+            {!modoSimples && (
+              <>
+                <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Tipo">
+                  <LeadLabelCell field="tipo" value={row.tipo} onChange={(v) => leadBoardsService.updateRow(row.id, { tipo: v })} pageId={board?.page} />
+                </FieldRow>
+                <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Dia de contato" required>
+                  <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} required pageId={board?.page} />
+                </FieldRow>
+                <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Ligação">
+                  <LeadLabelCell field="ligacao" value={row.ligacao} onChange={(v) => leadBoardsService.updateRow(row.id, { ligacao: v })} pageId={board?.page} />
+                </FieldRow>
+              </>
+            )}
             <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Status" required>
               <LeadLabelCell
                 field="status"
@@ -328,9 +338,11 @@ function LeadDetailModalInner({
                 pageId={board?.page}
               />
             </FieldRow>
-            <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="SDR">
-              <LeadLabelCell field="sdr" value={row.sdr} onChange={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />
-            </FieldRow>
+            {!modoSimples && (
+              <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="SDR">
+                <LeadLabelCell field="sdr" value={row.sdr} onChange={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />
+              </FieldRow>
+            )}
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Agendamento">
               <AgendamentoField
                 value={row.agendamento}
@@ -346,18 +358,22 @@ function LeadDetailModalInner({
                 className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
               />
             </FieldRow>
-            <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Dor do cliente">
-              <BoxedField value={row.dorCliente} onSave={(v) => leadBoardsService.updateRow(row.id, { dorCliente: v })} />
-            </FieldRow>
-            <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Nº atendentes">
-              <BoxedField value={row.numeroAtendentes} onSave={(v) => leadBoardsService.updateRow(row.id, { numeroAtendentes: v })} />
-            </FieldRow>
-            <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor MRR">
-              <BoxedCurrencyField value={row.valorMrr} onSave={(v) => leadBoardsService.updateRow(row.id, { valorMrr: v })} />
-            </FieldRow>
-            <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor Implementação">
-              <BoxedCurrencyField value={row.valorImplementacao} onSave={(v) => leadBoardsService.updateRow(row.id, { valorImplementacao: v })} />
-            </FieldRow>
+            {!modoSimples && (
+              <>
+                <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Dor do cliente">
+                  <BoxedField value={row.dorCliente} onSave={(v) => leadBoardsService.updateRow(row.id, { dorCliente: v })} />
+                </FieldRow>
+                <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Nº atendentes">
+                  <BoxedField value={row.numeroAtendentes} onSave={(v) => leadBoardsService.updateRow(row.id, { numeroAtendentes: v })} />
+                </FieldRow>
+                <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor MRR">
+                  <BoxedCurrencyField value={row.valorMrr} onSave={(v) => leadBoardsService.updateRow(row.id, { valorMrr: v })} />
+                </FieldRow>
+                <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor Implementação">
+                  <BoxedCurrencyField value={row.valorImplementacao} onSave={(v) => leadBoardsService.updateRow(row.id, { valorImplementacao: v })} />
+                </FieldRow>
+              </>
+            )}
             <FieldRow icon={<Clock className="h-3.5 w-3.5" />} label="Log de criação">
               <div className="rounded-md bg-elevate/[0.03] px-2 py-1.5 text-xs text-foreground/40">
                 {formatDateTimeShort(row.createdAt)}

@@ -1690,7 +1690,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
         </React.Suspense>
       )}
       <LeadTrashModal open={trashModalOpen} onClose={() => setTrashModalOpen(false)} boards={boards} />
-      <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
+      <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} modoSimples={hideIanMateusCols} />
       <PageActivityLogModal
         open={logOpen}
         onClose={() => setLogOpen(false)}

@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
+import { organizarDemandas } from '../lib/demandasAi.js';
 
 /**
  * Abas do Comercial (Novos Leads, CRM NX Luis, CRM NX Arthur, e as que um admin criar/duplicar
@@ -126,7 +127,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
   );
 
   // PATCH /api/lead-pages/:id — admin only, renomear/reordenar/marcar como bloco de notas
-  app.patch<{ Params: { id: string }; Body: { name?: string; position?: number; isNotas?: boolean } }>(
+  app.patch<{ Params: { id: string }; Body: { name?: string; position?: number; isNotas?: boolean; responsavel?: string } }>(
     '/api/lead-pages/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -139,6 +140,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
       if (req.body.name !== undefined) { sets.push(`name = $${i++}`); params.push(req.body.name.trim()); }
       if (req.body.position !== undefined) { sets.push(`position = $${i++}`); params.push(req.body.position); }
       if (req.body.isNotas !== undefined) { sets.push(`is_notas = $${i++}`); params.push(req.body.isNotas); }
+      if (req.body.responsavel !== undefined) { sets.push(`responsavel = $${i++}`); params.push(String(req.body.responsavel).trim()); }
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
 
       params.push(req.params.id);
@@ -238,6 +240,29 @@ export async function leadPageRoutes(app: FastifyInstance) {
       const [page] = await query('UPDATE lead_pages SET archived_at = NULL WHERE id = $1 RETURNING *', [req.params.id]);
       if (!page) return reply.status(404).send({ message: 'Aba não encontrada' });
       return page;
+    }
+  );
+
+  // POST /api/lead-pages/:id/organizar — a IA (Anthropic) agrupa as demandas abertas da aba por
+  // horário/urgência, levando em conta a agenda da pessoa vinculada. Só lê: não muda nenhuma demanda.
+  app.post<{ Params: { id: string } }>(
+    '/api/lead-pages/:id/organizar',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      if (!(await hasComercialAccess(sub, role))) return reply.status(403).send({ message: 'Acesso negado' });
+      const allowed = await allowedPageIds(sub, role);
+      if (allowed !== null && !allowed.includes(req.params.id)) return reply.status(403).send({ message: 'Acesso negado' });
+      const page = await queryOne<{ id: string; name: string; responsavel: string }>(
+        'SELECT id, name, responsavel FROM lead_pages WHERE id = $1 AND archived_at IS NULL',
+        [req.params.id]
+      );
+      if (!page) return reply.status(404).send({ message: 'Aba não encontrada' });
+      try {
+        return await organizarDemandas(page);
+      } catch (err) {
+        return reply.status(502).send({ message: String((err as Error).message ?? err).slice(0, 300) });
+      }
     }
   );
 }

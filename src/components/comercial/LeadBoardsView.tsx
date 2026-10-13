@@ -37,6 +37,7 @@ import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { PageActivityLogModal } from '@/components/comercial/PageActivityLogModal'
+import { DemandaTopo } from '@/components/comercial/DemandaTopo'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
@@ -1295,7 +1296,8 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const allPages = useLeadPages()
   const currentPage = allPages.find((p) => p.id === page)
   const title = currentPage?.name ?? '...'
-  const subtitle = 'Comercial · quadros de captação de leads'
+  const isDemandas = currentPage?.section === 'demandas'
+  const subtitle = isDemandas ? 'Demandas · quadros do cliente' : 'Comercial · quadros de captação de leads'
   const sdrLabelsForLock = useLeadLabels('sdr')
   const sdrLock = React.useMemo(() => sdrLockForPageName(title, sdrLabelsForLock), [title, sdrLabelsForLock])
   const hideIanMateusCols = React.useMemo(() => isIanMateusPage(title) || isIanMateusPage(page), [title, page])
@@ -1498,9 +1500,12 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
         titleClassName="text-[30px] font-medium font-['Roboto']"
         breadcrumbs={[
           { label: 'Grupo NX Digital', to: '/' },
-          { label: 'Comercial', to: '/comercial' },
+          isDemandas ? { label: 'Demandas', to: '/demandas' } : { label: 'Comercial', to: '/comercial' },
           { label: title },
         ]}
+        rightSlot={isDemandas ? (
+          <DemandaTopo pageId={page} pageName={title} responsavel={currentPage?.responsavel ?? ''} isAdmin={isAdmin} />
+        ) : undefined}
       />
 
       <div className="flex min-h-screen flex-col bg-card px-4 py-4 sm:px-6 sm:py-6 lg:px-8">

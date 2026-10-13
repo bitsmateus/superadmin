@@ -23,6 +23,8 @@ export interface LeadPage {
    * básica) em vez do quadro genérico de captação de leads. */
   isNotas: boolean
   section: LeadPageSection
+  /** Pessoa vinculada à aba (Demandas): nome||email, igual ao responsável dos eventos da agenda. */
+  responsavel: string
 }
 
 export interface LeadBoard {

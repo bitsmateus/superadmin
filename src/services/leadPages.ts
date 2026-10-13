@@ -4,12 +4,12 @@ import type { LeadPage, LeadPageSection } from '@/types/leadBoard'
 
 type PageRow = {
   id: string; name: string; position: number; archived_at: string | null; created_at: string
-  is_notas: boolean; section?: LeadPageSection
+  is_notas: boolean; section?: LeadPageSection; responsavel?: string | null
 }
 function rowToPage(r: PageRow): LeadPage {
   return {
     id: r.id, name: r.name, position: r.position, archivedAt: r.archived_at, isNotas: r.is_notas,
-    section: r.section ?? 'comercial',
+    section: r.section ?? 'comercial', responsavel: r.responsavel ?? '',
   }
 }
 
@@ -92,6 +92,15 @@ export const leadPagesService = {
       await reloadPages()
     } catch (err) {
       toast.error('Falha ao atualizar a aba: ' + (err as Error).message)
+    }
+  },
+
+  async setResponsavel(id: string, responsavel: string): Promise<void> {
+    try {
+      await api.patch(`/api/lead-pages/${id}`, { responsavel })
+      await reloadPages()
+    } catch (err) {
+      toast.error('Falha ao vincular a pessoa: ' + (err as Error).message)
     }
   },
 

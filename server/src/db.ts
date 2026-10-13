@@ -1682,6 +1682,9 @@ END $$`);
   // Menu "Demandas": mesma estrutura de lead_pages/lead_boards do Comercial, só num menu lateral
   // separado — section discrimina qual dos dois mostra a aba (ver leadPages.ts/Sidebar.tsx).
   await pool.query(`ALTER TABLE lead_pages ADD COLUMN IF NOT EXISTS section TEXT NOT NULL DEFAULT 'comercial'`);
+  // Pessoa dona da aba de Demandas (nome||email, o mesmo valor de `responsavel` dos eventos da
+  // agenda) — o cabeçalho mostra os compromissos dela e a IA organiza as demandas em cima deles.
+  await pool.query(`ALTER TABLE lead_pages ADD COLUMN IF NOT EXISTS responsavel TEXT NOT NULL DEFAULT ''`);
 
   console.log('[db] migrations applied');
 }

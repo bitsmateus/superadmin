@@ -334,7 +334,9 @@ CREATE TABLE IF NOT EXISTS lead_pages (
   -- Qual menu lateral mostra essa aba — 'comercial' (padrão, todas as abas de sempre) ou
   -- 'demandas' (pipes por cliente, menu próprio — ver Sidebar.tsx/ComercialPage.tsx). Mesma
   -- estrutura de quadros/kanban/etiquetas por trás dos dois, só o lugar no menu muda.
-  section TEXT NOT NULL DEFAULT 'comercial'
+  section TEXT NOT NULL DEFAULT 'comercial',
+  -- Pessoa dona da aba de Demandas (nome||email, igual ao responsavel dos eventos da agenda).
+  responsavel TEXT NOT NULL DEFAULT ''
 );
 
 INSERT INTO lead_pages (id, name, position) VALUES

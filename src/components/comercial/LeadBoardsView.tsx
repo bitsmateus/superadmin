@@ -261,6 +261,8 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
   const [duplicateName, setDuplicateName] = React.useState('')
   const [duplicateBoardIds, setDuplicateBoardIds] = React.useState<Set<string>>(new Set())
   const [duplicateSection, setDuplicateSection] = React.useState<LeadPageSection>('comercial')
+  const [renameOpen, setRenameOpen] = React.useState(false)
+  const [renameValue, setRenameValue] = React.useState('')
   const ref = React.useRef<HTMLDivElement>(null)
   useOutsideClose(ref, open, () => setOpen(false))
 
@@ -300,6 +302,13 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
     }
   }
 
+  const confirmRename = async () => {
+    const name = renameValue.trim()
+    if (!name) return
+    if (name !== pageName) await leadPagesService.rename(pageId, name)
+    setRenameOpen(false)
+  }
+
   const archive = async () => {
     if (!window.confirm(`Arquivar "${pageName}"? Os quadros e leads continuam salvos — dá pra restaurar depois.`)) return
     setBusy(true)
@@ -307,7 +316,7 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
       await leadPagesService.archive(pageId)
       toast.success(`"${pageName}" arquivada.`)
       setOpen(false)
-      navigate('/comercial')
+      navigate(currentSection === 'demandas' ? '/demandas' : '/comercial')
     } catch (err) {
       toast.error('Falha ao arquivar: ' + (err as Error).message)
     } finally {
@@ -338,6 +347,14 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
         <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-line bg-card p-1.5 shadow-xl">
           <button
             type="button"
+            onClick={() => { setRenameValue(pageName); setRenameOpen(true); setOpen(false) }}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Renomear aba
+          </button>
+          <button
+            type="button"
             onClick={openDuplicate}
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
           >
@@ -364,6 +381,20 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
           </button>
         </div>
       )}
+
+      <Modal open={renameOpen} onClose={() => setRenameOpen(false)} title="Renomear aba" size="sm">
+        <Input
+          label="Nome da aba"
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          autoFocus
+          onKeyDown={(e) => { if (e.key === 'Enter') void confirmRename() }}
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setRenameOpen(false)}>Cancelar</Button>
+          <Button onClick={() => void confirmRename()} disabled={!renameValue.trim()}>Salvar</Button>
+        </div>
+      </Modal>
 
       <Modal open={duplicateOpen} onClose={() => setDuplicateOpen(false)} title="Duplicar aba" size="sm">
         <Input

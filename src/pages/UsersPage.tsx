@@ -436,6 +436,7 @@ interface PageLite {
   id: string
   name: string
   is_financeiro: boolean
+  section?: 'comercial' | 'demandas'
 }
 
 /** Bloco "marcar todos" + lista de abas de uma área (Comercial ou Financeiro) — cada aba marcada
@@ -681,7 +682,15 @@ function EditUserModal({
                 <PageAccessGroup
                   label={MENU_ACCESS_GROUP_LABEL.comercial}
                   emptyText="Nenhuma aba do Comercial cadastrada ainda."
-                  pages={pages.filter((p) => !p.is_financeiro)}
+                  pages={pages.filter((p) => !p.is_financeiro && p.section !== 'demandas')}
+                  pageIds={pageIds}
+                  setPageIds={setPageIds}
+                  togglePageId={togglePageId}
+                />
+                <PageAccessGroup
+                  label="Demandas"
+                  emptyText="Nenhuma aba de Demandas cadastrada ainda."
+                  pages={pages.filter((p) => !p.is_financeiro && p.section === 'demandas')}
                   pageIds={pageIds}
                   setPageIds={setPageIds}
                   togglePageId={togglePageId}

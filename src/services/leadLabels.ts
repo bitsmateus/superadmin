@@ -44,6 +44,9 @@ function ensureRealtime() {
   })
 }
 
+/** true depois que as etiquetas chegaram do servidor — telas que montam colunas a partir delas esperam por isto. */
+export function isLeadLabelsLoaded(): boolean { return loaded }
+
 export const leadLabelsService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
 

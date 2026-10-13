@@ -14,7 +14,7 @@ import {
 import { Archive, ArchiveRestore, Calendar, ChevronDown, ChevronUp, MessageCircle, Plus, Settings2 } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
-import { leadLabelsService } from '@/services/leadLabels'
+import { isLeadLabelsLoaded, leadLabelsService } from '@/services/leadLabels'
 import { LeadLabelCell, ManageLabelsModal } from '@/components/comercial/LeadLabelCell'
 import { cn } from '@/lib/utils'
 import { formatBRLCompact, parseBRLCents } from '@/lib/currency'
@@ -66,7 +66,16 @@ export interface LeadKanbanBoardProps {
 
 /** Visão alternativa em quadro — mesmos leads da lista, agrupados por Status ou Dia de
  * contato (à escolha) em vez de por quadro. Arrastar um card muda o campo agrupado. */
-export function LeadKanbanBoard({ rows, allBoards, onOpenLead, sdrLock, modoDemanda }: LeadKanbanBoardProps) {
+/** Espera as etiquetas (as colunas do Kanban) chegarem antes de desenhar: sem isso, nos primeiros instantes só
+ * existia a coluna "Sem status" com TODOS os cards, e as colunas de verdade apareciam depois (o "pulo"). */
+export function LeadKanbanBoard(props: LeadKanbanBoardProps) {
+  React.useEffect(() => { void leadLabelsService.ensureLoaded() }, [])
+  const carregado = React.useSyncExternalStore(leadLabelsService.subscribe, isLeadLabelsLoaded, isLeadLabelsLoaded)
+  if (!carregado) return <div className="min-h-[40vh]" aria-busy="true" />
+  return <LeadKanbanBoardPronto {...props} />
+}
+
+function LeadKanbanBoardPronto({ rows, allBoards, onOpenLead, sdrLock, modoDemanda }: LeadKanbanBoardProps) {
   const [groupFieldEscolhido, setGroupField] = React.useState<GroupField>(() => {
     try {
       return window.localStorage.getItem(GROUP_STORAGE_KEY) === 'diaContato' ? 'diaContato' : 'status'

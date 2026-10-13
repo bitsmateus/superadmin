@@ -346,7 +346,8 @@ export function AbaVisaoGeral({
           <h2 className="mb-1 mt-4 text-sm font-semibold text-foreground">Informações do cliente</h2>
           <p className="mb-2 text-xs text-foreground/50">Registre aqui o que foi combinado ao fechar, valores, particularidades — o que o time precisa saber.</p>
           <Textarea
-            rows={5}
+            rows={18}
+            className="min-h-[60vh] resize-y leading-relaxed"
             value={info}
             onChange={(e) => setInfo(e.target.value)}
             placeholder="Ex.: Fechei com ele dia 07/10: plano de tráfego Meta + Google, entrada paga, quer começar com R$ 3.000 de verba…"

@@ -13,12 +13,10 @@ import {
   Columns3,
   Contact,
   Copy,
-  FileBarChart,
   FileSearch,
   Megaphone,
   FileText,
   BarChart3,
-  HeartCrack,
   LayoutDashboard,
   Lightbulb,
   LifeBuoy,
@@ -38,7 +36,6 @@ import {
   Settings,
   ShieldCheck,
   ShoppingBag,
-  Star,
   Sun,
   Trash2,
   Trophy,
@@ -349,9 +346,6 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const suporte = withDuplicates(
     [
       ...suporteItems,
-      ...(seeFinancials ? [{ to: '/nps', label: 'NPS', icon: Star }] : []),
-      ...(seeFinancials ? [{ to: '/risco-churn', label: 'Risco de Churn', icon: HeartCrack }] : []),
-      ...(seeFinancials ? [{ to: '/relatorios', label: 'Relatórios', icon: FileBarChart }] : []),
     ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to)),
     duplicatesByKey,
   )

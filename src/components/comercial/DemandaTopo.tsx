@@ -1,12 +1,12 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarDays, Clock, Loader2, Plus, Sparkles, UserRound } from 'lucide-react'
+import { CalendarDays, Clock, Loader2, Plus, Sparkles, UserRound, Video } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { useAgendaEvents } from '@/hooks/useAgenda'
+import { useAgendaEvents, useDeleteMeeting } from '@/hooks/useAgenda'
 import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
-import { MeetingModal, tipoTravado } from '@/pages/AgendaPage'
+import { MeetingModal, buildInviteMessage, tipoTravado } from '@/pages/AgendaPage'
 import { useAuth } from '@/hooks/useAuth'
 import { resolveArea } from '@/services/supabase'
 import { leadPagesService } from '@/services/leadPages'
@@ -64,7 +64,9 @@ export function DemandaTopo({
 /** Chip com os compromissos de hoje da pessoa ("Sem compromisso" se não houver) e, ao clicar, os próximos 7 dias. */
 function AgendaDaPessoa({ responsavel }: { responsavel: string }) {
   const [open, setOpen] = React.useState(false)
-  const [novaOpen, setNovaOpen] = React.useState(false)
+  // Reunião aberta no formulário: event null = nova, senão detalhes/edição da reunião clicada.
+  const [modal, setModal] = React.useState<{ open: boolean; event: CalendarEvent | null }>({ open: false, event: null })
+  const deleteMeeting = useDeleteMeeting()
   const { profile } = useAuth()
   const ref = React.useRef<HTMLDivElement>(null)
   useOutsideClose(ref, open, () => setOpen(false))
@@ -115,7 +117,7 @@ function AgendaDaPessoa({ responsavel }: { responsavel: string }) {
             <p className="text-xs font-semibold text-foreground/60">Agenda de {responsavel}</p>
             <button
               type="button"
-              onClick={() => { setOpen(false); setNovaOpen(true) }}
+              onClick={() => { setOpen(false); setModal({ open: true, event: null }) }}
               className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:opacity-90"
             >
               <Plus className="h-3.5 w-3.5" />Nova reunião
@@ -126,10 +128,29 @@ function AgendaDaPessoa({ responsavel }: { responsavel: string }) {
           ) : (
             <div className="max-h-72 space-y-1.5 overflow-y-auto">
               {[...hoje, ...proximos].map((e) => (
-                <div key={e.id} className="rounded-md border border-line px-2.5 py-1.5 text-sm">
+                <div
+                  key={e.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => { setOpen(false); setModal({ open: true, event: e }) }}
+                  onKeyDown={(ev) => { if (ev.key === 'Enter') { setOpen(false); setModal({ open: true, event: e }) } }}
+                  className="cursor-pointer rounded-md border border-line px-2.5 py-1.5 text-sm hover:border-accent/50 hover:bg-accent/5"
+                  title="Abrir detalhes da reunião"
+                >
                   <div className="flex items-center gap-1.5 text-xs text-foreground/50">
                     <Clock className="h-3 w-3" />
                     {diaChave(e.start) === chaveHoje ? 'Hoje' : diaRotulo(e.start)} · {hora(e.start)}–{hora(e.end)}
+                    {e.meetLink && (
+                      <a
+                        href={e.meetLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(ev) => ev.stopPropagation()}
+                        className="ml-auto inline-flex items-center gap-1 rounded bg-accent/10 px-1.5 py-0.5 text-accent hover:bg-accent/20"
+                      >
+                        <Video className="h-3 w-3" />Entrar
+                      </a>
+                    )}
                   </div>
                   <div className="truncate text-foreground">{e.clienteNome ?? e.title}</div>
                 </div>
@@ -140,15 +161,23 @@ function AgendaDaPessoa({ responsavel }: { responsavel: string }) {
         </div>
       )}
       <MeetingModal
-        open={novaOpen}
-        event={null}
-        defaultDate={chaveHoje}
+        open={modal.open}
+        event={modal.event}
+        defaultDate={modal.event ? diaChave(modal.event.start) : chaveHoje}
         defaultResponsavel={responsavel}
         travado={tipoTravado(resolveArea(profile?.area))}
-        onClose={() => setNovaOpen(false)}
-        onCopyLink={() => {}}
-        onCopyMessage={() => {}}
-        onCancelMeeting={() => {}}
+        onClose={() => setModal((m) => ({ ...m, open: false }))}
+        onCopyLink={(link) => { navigator.clipboard.writeText(link).catch(() => {}); toast.success('Link copiado') }}
+        onCopyMessage={(e) => { navigator.clipboard.writeText(buildInviteMessage(e)).catch(() => {}); toast.success('Mensagem copiada') }}
+        onCancelMeeting={(e) => {
+          if (!window.confirm(`Cancelar a reunião "${e.clienteNome ?? e.title}"?
+
+Isso exclui o evento da agenda do Google.`)) return
+          deleteMeeting.mutate(e.id, {
+            onSuccess: () => { toast.success('Reunião cancelada'); setModal((m) => ({ ...m, open: false })) },
+            onError: (err) => toast.error('Falha ao cancelar: ' + (err instanceof Error ? err.message : 'erro')),
+          })
+        }}
       />
     </div>
   )

@@ -81,7 +81,7 @@ function lerFiltroSalvo(storageKey: string | null): AgendaFiltro {
 
 /** Mensagem pronta de convite — cola o essencial (quem, quando, link) pra mandar no WhatsApp sem
  * reescrever nada toda vez. */
-function buildInviteMessage(e: CalendarEvent): string {
+export function buildInviteMessage(e: CalendarEvent): string {
   const dia = new Date(e.start).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' })
   const quem = asText(e.clienteNome, e.title)
   const linha = [

@@ -1685,6 +1685,14 @@ END $$`);
   // Pessoa dona da aba de Demandas (nome||email, o mesmo valor de `responsavel` dos eventos da
   // agenda) — o cabeçalho mostra os compromissos dela e a IA organiza as demandas em cima deles.
   await pool.query(`ALTER TABLE lead_pages ADD COLUMN IF NOT EXISTS responsavel TEXT NOT NULL DEFAULT ''`);
+  // Último plano da IA (Organizar demandas) de cada aba — gerado todo dia às 08h ou à mão.
+  await pool.query(`CREATE TABLE IF NOT EXISTS lead_page_plans (
+  page_id TEXT PRIMARY KEY REFERENCES lead_pages(id) ON DELETE CASCADE,
+  dia DATE NOT NULL,
+  origem TEXT NOT NULL DEFAULT 'auto',
+  plano JSONB NOT NULL,
+  gerado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`);
 
   console.log('[db] migrations applied');
 }

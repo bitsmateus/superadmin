@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
-import { organizarDemandas } from '../lib/demandasAi.js';
+import { gerarESalvarPlano, planoSalvo } from '../lib/demandasAi.js';
 
 /**
  * Abas do Comercial (Novos Leads, CRM NX Luis, CRM NX Arthur, e as que um admin criar/duplicar
@@ -243,6 +243,19 @@ export async function leadPageRoutes(app: FastifyInstance) {
     }
   );
 
+  // GET /api/lead-pages/:id/organizar — o último plano salvo (gerado às 08h ou à mão); { plano: null } se nunca gerou.
+  app.get<{ Params: { id: string } }>(
+    '/api/lead-pages/:id/organizar',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      if (!(await hasComercialAccess(sub, role))) return reply.status(403).send({ message: 'Acesso negado' });
+      const allowed = await allowedPageIds(sub, role);
+      if (allowed !== null && !allowed.includes(req.params.id)) return reply.status(403).send({ message: 'Acesso negado' });
+      return { plano: await planoSalvo(req.params.id) };
+    }
+  );
+
   // POST /api/lead-pages/:id/organizar — a IA (Anthropic) agrupa as demandas abertas da aba por
   // horário/urgência, levando em conta a agenda da pessoa vinculada. Só lê: não muda nenhuma demanda.
   app.post<{ Params: { id: string } }>(
@@ -259,7 +272,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
       );
       if (!page) return reply.status(404).send({ message: 'Aba não encontrada' });
       try {
-        return await organizarDemandas(page);
+        return await gerarESalvarPlano(page, 'manual');
       } catch (err) {
         return reply.status(502).send({ message: String((err as Error).message ?? err).slice(0, 300) });
       }

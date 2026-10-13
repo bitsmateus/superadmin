@@ -1,11 +1,14 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarDays, Clock, Loader2, Sparkles, UserRound } from 'lucide-react'
+import { CalendarDays, Clock, Loader2, Plus, Sparkles, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useAgendaEvents } from '@/hooks/useAgenda'
 import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
+import { MeetingModal, tipoTravado } from '@/pages/AgendaPage'
+import { useAuth } from '@/hooks/useAuth'
+import { resolveArea } from '@/services/supabase'
 import { leadPagesService } from '@/services/leadPages'
 import { api } from '@/services/api'
 import { cn } from '@/lib/utils'
@@ -61,6 +64,8 @@ export function DemandaTopo({
 /** Chip com os compromissos de hoje da pessoa ("Sem compromisso" se não houver) e, ao clicar, os próximos 7 dias. */
 function AgendaDaPessoa({ responsavel }: { responsavel: string }) {
   const [open, setOpen] = React.useState(false)
+  const [novaOpen, setNovaOpen] = React.useState(false)
+  const { profile } = useAuth()
   const ref = React.useRef<HTMLDivElement>(null)
   useOutsideClose(ref, open, () => setOpen(false))
 
@@ -106,7 +111,16 @@ function AgendaDaPessoa({ responsavel }: { responsavel: string }) {
       </button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-80 max-w-[90vw] rounded-lg border border-line bg-card p-3 shadow-xl">
-          <p className="mb-2 text-xs font-semibold text-foreground/60">Agenda de {responsavel}</p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-foreground/60">Agenda de {responsavel}</p>
+            <button
+              type="button"
+              onClick={() => { setOpen(false); setNovaOpen(true) }}
+              className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:opacity-90"
+            >
+              <Plus className="h-3.5 w-3.5" />Nova reunião
+            </button>
+          </div>
           {!meus.length ? (
             <p className="py-2 text-sm text-foreground/50">Sem compromisso nos próximos 7 dias.</p>
           ) : (
@@ -125,6 +139,17 @@ function AgendaDaPessoa({ responsavel }: { responsavel: string }) {
           {hoje.length === 0 && meus.length > 0 && <p className="mt-2 text-xs text-foreground/50">Sem compromisso hoje.</p>}
         </div>
       )}
+      <MeetingModal
+        open={novaOpen}
+        event={null}
+        defaultDate={chaveHoje}
+        defaultResponsavel={responsavel}
+        travado={tipoTravado(resolveArea(profile?.area))}
+        onClose={() => setNovaOpen(false)}
+        onCopyLink={() => {}}
+        onCopyMessage={() => {}}
+        onCancelMeeting={() => {}}
+      />
     </div>
   )
 }
@@ -136,6 +161,7 @@ interface Plano {
   responsavel: string
   totalDemandas: number
   compromissos: number
+  origem?: 'auto' | 'manual'
 }
 
 /** Pop-up que pede à IA (Anthropic, no servidor) a organização das demandas abertas por horário/urgência. */
@@ -161,11 +187,21 @@ function OrganizarIaModal({
     }
   }
 
-  // Abre já gerando na primeira vez, pra não precisar de um segundo clique.
+  // Ao abrir mostra o plano salvo (gerado automaticamente às 08h ou na última vez que alguém gerou);
+  // só gera na hora se a aba ainda não tem nenhum.
   React.useEffect(() => {
-    if (open && !plano && !loading && !erro) void gerar()
+    if (!open || plano || loading || erro) return
+    let vivo = true
+    setLoading(true)
+    api.get<{ plano: Plano | null }>(`/api/lead-pages/${encodeURIComponent(pageId)}/organizar`)
+      .then((r) => {
+        if (!vivo) return
+        if (r.plano) { setPlano(r.plano); setLoading(false) } else void gerar()
+      })
+      .catch((err: Error) => { if (vivo) { setErro(err.message || 'Falha ao carregar.'); setLoading(false) } })
+    return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, pageId])
 
   return (
     <Modal
@@ -178,19 +214,22 @@ function OrganizarIaModal({
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Fechar</Button>
           <Button onClick={() => void gerar()} disabled={loading} leftIcon={loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}>
-            {plano ? 'Gerar de novo' : 'Gerar'}
+            {plano ? 'Gerar novamente' : 'Gerar'}
           </Button>
         </div>
       }
     >
       {loading ? (
         <div className="grid min-h-[200px] place-items-center text-sm text-foreground/50">
-          <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />A IA está organizando as demandas…</span>
+          <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Carregando a organização das demandas…</span>
         </div>
       ) : erro ? (
         <p className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">{erro}</p>
       ) : plano ? (
         <div className="space-y-4">
+          <p className="text-xs font-medium text-foreground/50">
+            {plano.origem === "manual" ? "Gerado manualmente" : "Gerado automaticamente"} em {new Date(plano.geradoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: TZ })}
+          </p>
           {plano.resumo && <p className="text-sm text-foreground/80">{plano.resumo}</p>}
           <p className="text-xs text-foreground/50">
             {plano.totalDemandas} demanda(s) aberta(s) · {plano.compromissos === 0 ? 'sem compromisso' : `${plano.compromissos} compromisso(s)`} na agenda nos próximos 7 dias

@@ -53,7 +53,7 @@ function corDoColaborador(nome: string | null | undefined): string {
 
 /** Separação Comercial/Suporte é por profile.area — ninguém escolhe à toa quem vê o quê. 'ambos'
  * (padrão de admin/supervisor) é quem pode alternar livremente entre os dois e ver todos juntos. */
-function tipoTravado(area: ReturnType<typeof resolveArea>): MeetingType | null {
+export function tipoTravado(area: ReturnType<typeof resolveArea>): MeetingType | null {
   if (area === 'comercial') return 'comercial'
   if (area === 'entrega') return 'suporte'
   return null
@@ -691,10 +691,11 @@ function SetupPendingPanel() {
 }
 
 /** Mesmo modal pra criar e pra ver/editar: com `event` abre as informações da reunião já editáveis. */
-function MeetingModal({
+export function MeetingModal({
   open,
   event,
   defaultDate,
+  defaultResponsavel = '',
   travado,
   onClose,
   onCopyLink,
@@ -705,6 +706,8 @@ function MeetingModal({
   /** Reunião aberta pra ver/editar. null = nova reunião. */
   event: CalendarEvent | null
   defaultDate: string
+  /** Responsável já preenchido ao criar uma reunião nova (ex.: a pessoa vinculada à aba de Demandas). */
+  defaultResponsavel?: string
   /** Área travada pelo profile.area de quem está criando (ver tipoTravado) — null = sem trava,
    * pode escolher o tipo livremente. Evita criar uma reunião que depois nem ela mesma verá. */
   travado: MeetingType | null
@@ -749,7 +752,7 @@ function MeetingModal({
       setSubtipo('')
       setClienteNome('')
       setClienteId(null)
-      setResponsavel('')
+      setResponsavel(defaultResponsavel)
       setDate(defaultDate)
       setDuration(60)
       setSelectedStart(null)
@@ -757,7 +760,7 @@ function MeetingModal({
       setObs('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, event, defaultDate, travado])
+  }, [open, event, defaultDate, defaultResponsavel, travado])
 
   const slotsQuery = useAgendaSlots(open ? date : null, duration)
 

@@ -21,6 +21,7 @@ export interface PlanoDemandas {
   responsavel: string;
   totalDemandas: number;
   compromissos: number;
+  origem?: 'auto' | 'manual';
 }
 
 const SISTEMA = `Você organiza o dia de trabalho de uma pessoa de uma agência de marketing/automação (Grupo NX Digital).
@@ -156,4 +157,42 @@ export async function organizarDemandas(page: { id: string; name: string; respon
     resumo: str(obj.resumo, 600), grupos, geradoEm: new Date().toISOString(),
     responsavel: page.responsavel, totalDemandas: abertas.length, compromissos: agenda.length,
   };
+}
+
+const TZ = 'America/Sao_Paulo';
+export const diaSp = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: TZ });
+
+/** Último plano salvo da aba (null = nunca gerado). */
+export async function planoSalvo(pageId: string): Promise<PlanoDemandas | null> {
+  const [r] = await query<{ plano: PlanoDemandas; origem: 'auto' | 'manual' }>(
+    'SELECT plano, origem FROM lead_page_plans WHERE page_id = $1', [pageId]);
+  return r ? { ...r.plano, origem: r.origem } : null;
+}
+
+/** Gera com a IA e guarda como o plano atual da aba (substitui o anterior). */
+export async function gerarESalvarPlano(
+  page: { id: string; name: string; responsavel: string }, origem: 'auto' | 'manual',
+): Promise<PlanoDemandas> {
+  const plano = await organizarDemandas(page);
+  await query(
+    `INSERT INTO lead_page_plans (page_id, dia, origem, plano, gerado_em) VALUES ($1, $2::date, $3, $4::jsonb, NOW())
+     ON CONFLICT (page_id) DO UPDATE SET dia = EXCLUDED.dia, origem = EXCLUDED.origem, plano = EXCLUDED.plano, gerado_em = NOW()`,
+    [page.id, diaSp(), origem, JSON.stringify(plano)]);
+  return { ...plano, origem };
+}
+
+/** Rotina das 08h: um plano por aba de Demandas ainda sem plano do dia. Erro em uma aba não trava as outras. */
+export async function gerarPlanosDoDia(): Promise<number> {
+  const hoje = diaSp();
+  const paginas = await query<{ id: string; name: string; responsavel: string }>(
+    `SELECT p.id, p.name, p.responsavel FROM lead_pages p
+     WHERE p.section = 'demandas' AND p.archived_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM lead_page_plans l WHERE l.page_id = p.id AND l.dia = $1::date)
+     ORDER BY p.position`, [hoje]);
+  let feitos = 0;
+  for (const p of paginas) {
+    try { await gerarESalvarPlano(p, 'auto'); feitos += 1; }
+    catch (err) { console.error('[demandas-ia] aba', p.id, (err as Error).message); }
+  }
+  return feitos;
 }

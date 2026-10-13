@@ -339,6 +339,15 @@ CREATE TABLE IF NOT EXISTS lead_pages (
   responsavel TEXT NOT NULL DEFAULT ''
 );
 
+-- Último plano da IA (Organizar demandas) de cada aba de Demandas.
+CREATE TABLE IF NOT EXISTS lead_page_plans (
+  page_id TEXT PRIMARY KEY REFERENCES lead_pages(id) ON DELETE CASCADE,
+  dia DATE NOT NULL,
+  origem TEXT NOT NULL DEFAULT 'auto',
+  plano JSONB NOT NULL,
+  gerado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 INSERT INTO lead_pages (id, name, position) VALUES
   ('novos_leads', 'Novos Leads', 0),
   ('crm_luis', 'CRM NX Luis', 1),

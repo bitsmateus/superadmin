@@ -19,12 +19,16 @@ const ABAS = [
 ] as const
 type AbaId = (typeof ABAS)[number]['id']
 
-const PERIODOS = [
-  { dias: 7, label: '7 dias' },
-  { dias: 14, label: '14 dias' },
-  { dias: 30, label: '30 dias' },
-  { dias: 90, label: '90 dias' },
-] as const
+/** Um número = últimos N dias até hoje. 'mes' = do dia 1 do mês corrente até hoje. */
+type Periodo = number | 'mes'
+
+const PERIODOS: { id: Periodo; label: string }[] = [
+  { id: 7, label: '7 dias' },
+  { id: 14, label: '14 dias' },
+  { id: 30, label: '30 dias' },
+  { id: 90, label: '90 dias' },
+  { id: 'mes', label: 'Mês atual' },
+]
 
 const PAPEIS: { id: FiltroPapel; label: string }[] = [
   { id: 'todos', label: 'Todos' },
@@ -56,13 +60,13 @@ function Pilula({ ativo, onClick, children }: { ativo: boolean; onClick: () => v
 /** Aba Tráfego (admin/supervisor): gasto do Meta cruzado com o funil do CRM. */
 export function TrafegoPage() {
   const [aba, setAba] = React.useState<AbaId>('geral')
-  const [dias, setDias] = React.useState<number>(30)
+  const [periodo, setPeriodo] = React.useState<Periodo>(30)
   const [papel, setPapel] = React.useState<FiltroPapel>('todos')
   const [versao, setVersao] = React.useState(0)
   const [sincronizando, setSincronizando] = React.useState(false)
 
-  const de = dataSp(dias - 1)
   const ate = dataSp(0)
+  const de = periodo === 'mes' ? `${ate.slice(0, 8)}01` : dataSp(periodo - 1)
   const usaPapel = aba === 'campanhas' || aba === 'criativos'
 
   const sincronizar = async () => {
@@ -98,7 +102,7 @@ export function TrafegoPage() {
               </div>
             )}
             <div className="flex items-center gap-1">
-              {PERIODOS.map((p) => <Pilula key={p.dias} ativo={dias === p.dias} onClick={() => setDias(p.dias)}>{p.label}</Pilula>)}
+              {PERIODOS.map((p) => <Pilula key={p.id} ativo={periodo === p.id} onClick={() => setPeriodo(p.id)}>{p.label}</Pilula>)}
             </div>
             <button
               type="button"

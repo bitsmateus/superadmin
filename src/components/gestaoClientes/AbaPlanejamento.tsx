@@ -1,10 +1,10 @@
 import * as React from 'react'
-import { Check, ClipboardList, Eye, History, Loader2, Plus } from 'lucide-react'
+import { Check, ChevronDown, ClipboardList, Copy, Eye, History, Loader2, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
-import { gestaoClientes, type GcPlanejamentoApi, type GcPlanoTexto } from '@/services/gestaoClientes'
+import { gestaoClientes, type GcBriefing, type GcPlanejamentoApi, type GcPlanoTexto } from '@/services/gestaoClientes'
 import { formatarMetrica } from '@/lib/gcMetricas'
 import { cn } from '@/lib/utils'
 
@@ -95,15 +95,139 @@ function textoDoPlanoAntigo(p: GcPlanejamentoApi, roteiro: { mes: number; texto:
 }
 
 /**
+ * O prompt pronto pra colar numa IA (ChatGPT, Claude…): pede o planejamento com os mesmos títulos do checklist,
+ * manda escrever "Não tem" onde faltar informação e leva junto o briefing do cliente.
+ * As SENHAS do briefing nunca entram aqui — só site, redes, CRM, contas e as respostas das perguntas.
+ */
+function montarPrompt(cliente: { nome_empresa?: string | null; segmento?: string | null } | undefined, b: GcBriefing | null): string {
+  const linhas: string[] = [
+    'Você é gestor de tráfego pago da agência NX Digital. Monte o PLANEJAMENTO do cliente abaixo.',
+    '',
+    'Escreva em texto simples (sem tabelas e sem asteriscos), com estes títulos EM MAIÚSCULAS, nesta ordem:',
+    ...ITENS.map((i, n) => `${n + 1}. ${i.titulo.toUpperCase()} — ${i.ajuda}`),
+    '',
+    'Regras:',
+    '- Use só as informações que estão abaixo. Não invente números.',
+    '- Quando a informação não existir, escreva "Não tem" naquele ponto — não deixe em branco e não chute.',
+    '- Em "O que vamos trabalhar em cada mês", liste pelo menos os 6 primeiros meses (Mês 1, Mês 2…).',
+    '- Em "Está dando certo?", se ainda não começou, escreva "Ainda não iniciado" e diga o que vai ser acompanhado.',
+    '- Seja direto, com frases curtas.',
+    '',
+    '=== DADOS DO CLIENTE ===',
+    `Empresa: ${cliente?.nome_empresa?.trim() || 'Não tem'}`,
+    `Segmento: ${cliente?.segmento?.trim() || 'Não tem'}`,
+  ]
+  if (b) {
+    const simNao: Record<string, string> = { sim: 'Sim', nao: 'Não', nao_sei: 'Não sabe' }
+    const dado = (rotulo: string, valor: string) => linhas.push(`${rotulo}: ${valor.trim() || 'Não tem'}`)
+    dado('Site', b.site)
+    dado('WhatsApp que recebe os leads', b.whatsapp_leads)
+    dado('Instagram', b.instagram)
+    dado('Facebook', b.facebook)
+    dado('CRM utilizado', b.crm)
+    const conta = (rotulo: string, valor: string, obs: string) =>
+      linhas.push(`${rotulo}: ${simNao[valor] ?? 'Não informado'}${obs.trim() ? ` (${obs.trim()})` : ''}`)
+    conta('Forma de pagamento válida na conta de anúncios', b.pagamento_anuncios, b.pagamento_obs)
+    conta('Google Ads', b.google_ads, b.google_ads_obs)
+    conta('Google Meu Negócio', b.meu_negocio, b.meu_negocio_obs)
+    for (const e of b.extras) if (e.rotulo.trim() || e.valor.trim()) dado(e.rotulo.trim() || 'Outra informação', e.valor)
+
+    const respondidas = b.perguntas.filter((x) => x.pergunta.trim())
+    if (respondidas.length) {
+      linhas.push('', '=== BRIEFING (perguntas e respostas do cliente) ===')
+      respondidas.forEach((x, n) => linhas.push(`${n + 1}. ${x.pergunta}`, `R: ${x.resposta.trim() || 'Não tem'}`))
+    }
+  } else {
+    linhas.push('', '(O briefing deste cliente ainda não foi preenchido: cole aqui o que você souber sobre ele.)')
+  }
+  linhas.push('', '=== O QUE EU SEI A MAIS (escreva aqui antes de enviar) ===', '')
+  return linhas.join('\n')
+}
+
+/** O passo "faça com a IA": o que fazer, o botão que copia o prompt e, se quiser conferir, o prompt inteiro. */
+function FacaComIa({ clienteId, cliente }: { clienteId: string; cliente?: { nome_empresa?: string | null; segmento?: string | null } }) {
+  const [briefing, setBriefing] = React.useState<GcBriefing | null>(null)
+  const [aberto, setAberto] = React.useState(false)
+
+  React.useEffect(() => {
+    let vivo = true
+    gestaoClientes
+      .briefing(clienteId)
+      .then((b) => vivo && setBriefing(b))
+      .catch(() => undefined)
+    return () => {
+      vivo = false
+    }
+  }, [clienteId])
+
+  // Só conta como "preenchido" se houver alguma resposta ou dado — senão o prompt avisa que falta o briefing.
+  const temBriefing =
+    !!briefing && (briefing.perguntas.some((x) => x.resposta.trim()) || [briefing.site, briefing.instagram, briefing.crm, briefing.whatsapp_leads].some((v) => v.trim()))
+  const prompt = montarPrompt(cliente, temBriefing ? briefing : null)
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt)
+      toast.success('Prompt copiado — cole na IA')
+    } catch {
+      setAberto(true)
+      toast.error('Não consegui copiar sozinho: selecione o texto abaixo e copie.')
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-accent/25 bg-accent/[0.04] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Sparkles className="h-4 w-4 text-accent" /> Faça com a IA
+          </h2>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-xs leading-relaxed text-foreground/65">
+            <li>Clique em <strong className="text-foreground/85">Copiar o prompt</strong>: ele já leva o checklist ao lado e o briefing deste cliente.</li>
+            <li>Cole numa IA (ChatGPT, Claude…), acrescente o que você souber a mais e envie.</li>
+            <li>Cole a resposta no campo abaixo e confira. O que a IA não tiver como saber, ela escreve <strong className="text-foreground/85">“Não tem”</strong> — complete ou deixe assim.</li>
+          </ol>
+          {!temBriefing && (
+            <p className="mt-1.5 text-xs text-warning">O briefing deste cliente ainda está em branco: o prompt vai só com o nome e o segmento. Preencha o briefing antes, ou escreva os dados à mão no prompt.</p>
+          )}
+        </div>
+        <Button size="sm" leftIcon={<Copy className="h-4 w-4" />} onClick={() => void copiar()}>
+          Copiar o prompt
+        </Button>
+      </div>
+      <button
+        type="button"
+        onClick={() => setAberto((a) => !a)}
+        aria-expanded={aberto}
+        className="mt-2 flex items-center gap-1 text-xs text-foreground/50 hover:text-foreground"
+      >
+        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !aberto && '-rotate-90')} />
+        {aberto ? 'esconder o prompt' : 'ver o prompt'}
+      </button>
+      {aberto && (
+        <textarea
+          readOnly
+          value={prompt}
+          onFocus={(e) => e.target.select()}
+          className="mt-2 h-56 w-full resize-y rounded-xl border border-line bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-foreground/75 outline-none"
+        />
+      )}
+    </section>
+  )
+}
+
+/**
  * Aba "Planejamento": UM lugar pra escrever o planejamento do cliente e, ao lado, o checklist do que precisa
  * estar ali (situação de hoje, mês 1, metas de 6 e 12 meses, números, objetivos, o roteiro mês a mês e o
  * acompanhamento). O checklist é só um guia: marca-se à mão o que já foi escrito.
  */
 export function AbaPlanejamento({
   clienteId,
+  cliente,
   onMudou,
 }: {
   clienteId: string
+  /** Nome e segmento, que entram no prompt do "Faça com a IA". */
   cliente?: { nome_empresa?: string | null; segmento?: string | null }
   /** Depois de salvar, o detalhe do cliente recarrega (o histórico ganha o evento novo). */
   onMudou?: () => Promise<void> | void
@@ -193,6 +317,8 @@ export function AbaPlanejamento({
         </div>
       )}
 
+      <FacaComIa clienteId={clienteId} cliente={cliente} />
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ------------------------------------------------------------ o texto */}
         <section className="rounded-2xl border border-line p-4 sm:p-5">
@@ -209,7 +335,7 @@ export function AbaPlanejamento({
             ref={area}
             value={r.texto}
             onChange={(e) => setR({ ...r, texto: e.target.value })}
-            placeholder={'Escreva aqui o planejamento do cliente.\n\nUse o checklist ao lado como guia: clique em “inserir” pra colocar o título de cada item no texto.'}
+            placeholder={'Cole aqui o planejamento que a IA montou (ou escreva à mão).\n\nUse o checklist ao lado como guia. Onde não houver a informação, escreva “Não tem”.'}
             className="min-h-[60vh] w-full resize-y rounded-xl border border-line bg-surface px-3.5 py-3 text-base leading-relaxed text-foreground outline-none placeholder:text-foreground/30 focus:border-accent focus:ring-2 focus:ring-accent/15 sm:text-sm"
           />
           <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-line px-3 py-2.5">

@@ -31,25 +31,33 @@ async function syncLeadAgendamentoCalendar(lead: LeadAgendamentoRow) {
   }
 }
 
+/** O tipo com que toda comissão de SDR nasce. Dá pra trocar depois, na coluna "Comissão" da aba Vendas. */
+const SDR_TIPO_PADRAO = 'Venda sistema';
+
 /**
- * Toda venda nova (funil ou avulsa) já cria sozinha a linha correspondente em Gestão Interna >
- * Comissão SDR — só com Nome e Pessoa (o SDR) preenchidos. Tipo, Valor, Referência e Contrato
- * ficam em branco/manual de propósito (a pessoa que registra a comissão escolhe isso à mão,
- * inclusive porque uma venda vira comissão de "Venda sistema" ou "Venda tráfego" dependendo de
- * um critério que não dá pra inferir sozinho aqui). Nunca lança: efeito colateral de criar a
+ * Toda venda nova (funil ou avulsa) já cria sozinha a comissão do SDR dela, e ela já NASCE VALENDO: entra
+ * como "Venda sistema", com o valor que estiver configurado nesse tipo. Quem precisa de outro tipo (ex.:
+ * "Venda tráfego") troca na própria linha da venda, na coluna "Comissão" — não existe mais uma tabela à
+ * parte pra preencher tipo e valor de cada lançamento. Se o tipo padrão não existir (apagado/arquivado),
+ * cai no comportamento antigo: lançamento "(a definir)" zerado. Nunca lança: é efeito colateral de criar a
  * venda, não pode derrubar isso se der erro.
  */
 async function createCommissionStub(nome: string, sdr: string, month: string, vendaLeadId: string | null = null) {
   try {
     if (!sdr?.trim()) return;
+    const padrao = await queryOne<{ id: string; label: string; rate_cents: number | null }>(
+      `SELECT id, label, rate_cents FROM commission_types
+       WHERE role = 'sdr' AND label = $1 AND kind = 'fixed' AND NOT archived LIMIT 1`,
+      [SDR_TIPO_PADRAO]
+    );
     await query(
       `INSERT INTO commission_entries
         (nome, person, role, type_id, type_label, reference, base_value_cents, amount_cents, month, status, contrato_assinado, venda_lead_id)
-       VALUES ($1,$2,'sdr',NULL,'(a definir)','',NULL,0,$3,'pendente',false,$4)`,
-      [nome, sdr, month, vendaLeadId]
+       VALUES ($1,$2,'sdr',$3,$4,'',NULL,$5,$6,'pendente',false,$7)`,
+      [nome, sdr, padrao?.id ?? null, padrao?.label ?? '(a definir)', padrao?.rate_cents ?? 0, month, vendaLeadId]
     );
   } catch (err) {
-    console.error('[commissions] falha ao criar comissão em branco pra venda', nome, err);
+    console.error('[commissions] falha ao criar a comissão do SDR pra venda', nome, err);
   }
 }
 

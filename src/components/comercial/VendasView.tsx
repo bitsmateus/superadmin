@@ -12,7 +12,7 @@ import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { api } from '@/services/api'
 import {
-  CommissionSdrSection, CommissionTypesButton, CommissionTypesModal,
+  CLOSER_TYPE_LABEL, CommissionSdrSection, CommissionTypesButton, CommissionTypesModal,
   RegisterCommissionButton, RegisterCommissionModal,
 } from '@/components/comercial/CommissionSdrPanel'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
@@ -22,7 +22,7 @@ import { useContracts } from '@/hooks/useContracts'
 import { contractsService } from '@/services/contracts'
 import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt } from '@/hooks/useMonthFilter'
 import { leadBoardsService } from '@/services/leadBoards'
-import { commissionsService } from '@/services/commissions'
+import { commissionsService, type CommissionEntry, type CommissionType } from '@/services/commissions'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { cn, initials } from '@/lib/utils'
 import type { LeadRow } from '@/types/leadBoard'
@@ -101,14 +101,29 @@ export function VendasView({ pageId }: { pageId: string }) {
   // Recorte por pessoa: vale pra lista, pros cards de resumo, pras pendências e pras comissões —
   // é "me mostre só o Arthur", não só um filtro da tabela.
   const [sdrFiltro, setSdrFiltro] = React.useState('')
-  const [comissaoIncompleta, setComissaoIncompleta] = React.useState(false)
   const [commissionRegisterOpen, setCommissionRegisterOpen] = React.useState(false)
   const [commissionTypesOpen, setCommissionTypesOpen] = React.useState(false)
 
-  // Comissão SDR — unificada aqui (era a tela separada "Gestão Interna"): mesmo período de Vendas,
+  // Comissões — unificadas aqui (era a tela separada "Gestão Interna"): mesmo período de Vendas,
   // pra não ter dois seletores de data mostrando praticamente a mesma coisa em telas diferentes.
   const commissionTypes = useCommissionTypes()
   const commissionEntries = useCommissionEntries()
+  // A comissão de SDR de cada venda (uma por venda) e os tipos que podem ser escolhidos na linha dela.
+  // Valor fixo só: tipo em % precisa de uma base que a linha da venda não informa.
+  const comissaoSdrPorVenda = React.useMemo(() => {
+    const mapa = new Map<string, CommissionEntry>()
+    for (const e of commissionEntries) {
+      if (!e.vendaLeadId || e.typeLabel === CLOSER_TYPE_LABEL || mapa.has(e.vendaLeadId)) continue
+      mapa.set(e.vendaLeadId, e)
+    }
+    return mapa
+  }, [commissionEntries])
+  const tiposDeSdr = React.useMemo(
+    () => commissionTypes
+      .filter((x) => x.role === 'sdr' && !x.archived && x.kind === 'fixed' && x.label !== CLOSER_TYPE_LABEL)
+      .sort((a, b) => a.position - b.position),
+    [commissionTypes],
+  )
   const contratos = useContracts()
 
   // Estado da ficha de cadastro de cada venda, em uma consulta só (ver ficha-status-lote): a lista
@@ -204,11 +219,10 @@ export function VendasView({ pageId }: { pageId: string }) {
       contrato: base.filter((r) => !r.contratoAssinado).length,
       cobranca: base.filter((r) => r.mrrPendente || r.implPendente).length,
       semComissao: base.filter((r) => !vendasComComissao.has(r.id)).length,
-      comissaoIncompleta: commissionsInPeriod.filter((c) => !c.typeId || c.amountCents <= 0).length,
       semContrato: base.filter((r) => !contratoPorVenda.has(r.id)).length,
       semFicha: base.filter((r) => fichas[r.id]?.status !== 'preenchida').length,
     }
-  }, [doPeriodo, vendasComComissao, commissionsInPeriod, contratoPorVenda, fichas])
+  }, [doPeriodo, vendasComComissao, contratoPorVenda, fichas])
 
   // Revertida continua visível (o histórico importa) mas fora da conta.
   const validas = React.useMemo(() => noPeriodo.filter((r) => !r.vendaRevertida), [noPeriodo])
@@ -252,12 +266,13 @@ export function VendasView({ pageId }: { pageId: string }) {
   // cai num "Outros" só se tiver de fato alguma venda.
   const resumoPorSdr = React.useMemo(() => {
     const nomes = ['Arthur', 'Luis', 'Ian', 'Mateus', 'Jean', 'Joao']
-    const buckets = new Map<string, { vendas: number; mrr: number; impl: number }>()
-    for (const nome of nomes) buckets.set(nome, { vendas: 0, mrr: 0, impl: 0 })
+    const buckets = new Map<string, { vendas: number; assinadas: number; mrr: number; impl: number }>()
+    for (const nome of nomes) buckets.set(nome, { vendas: 0, assinadas: 0, mrr: 0, impl: 0 })
     for (const r of validas) {
       const nome = nomes.includes(r.sdr) ? r.sdr : (r.sdr || 'Outros')
-      const b = buckets.get(nome) ?? { vendas: 0, mrr: 0, impl: 0 }
+      const b = buckets.get(nome) ?? { vendas: 0, assinadas: 0, mrr: 0, impl: 0 }
       b.vendas += 1
+      if (r.contratoAssinado) b.assinadas += 1
       b.mrr += parseBRLCents(r.valorMrr)
       b.impl += parseBRLCents(r.valorImplementacao)
       buckets.set(nome, b)
@@ -427,16 +442,10 @@ export function VendasView({ pageId }: { pageId: string }) {
             active={foco === 'sem_comissao'}
             onClick={() => setFoco((f) => (f === 'sem_comissao' ? 'nenhum' : 'sem_comissao'))}
           />
-          <PendenciaChip
-            label="comissão a completar"
-            count={pendencias.comissaoIncompleta}
-            active={comissaoIncompleta}
-            onClick={() => setComissaoIncompleta((v) => !v)}
-          />
-          {(foco !== 'nenhum' || onlyPending || comissaoIncompleta) && (
+          {(foco !== 'nenhum' || onlyPending) && (
             <button
               type="button"
-              onClick={() => { setFoco('nenhum'); setOnlyPending(false); setComissaoIncompleta(false) }}
+              onClick={() => { setFoco('nenhum'); setOnlyPending(false) }}
               className="ml-auto text-xs font-medium text-accent hover:underline"
             >
               Limpar filtros
@@ -488,7 +497,7 @@ export function VendasView({ pageId }: { pageId: string }) {
         {/* Lista */}
         <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px]">
+            <table className="w-full min-w-[1020px]">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                   <th className="w-10 px-4 py-3">
@@ -504,6 +513,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <th className="px-4 py-3">Nome</th>
                   <th className="w-28 px-4 py-3">SDR</th>
                   <th className="w-32 px-4 py-3">Fechou</th>
+                  <th className="w-40 px-4 py-3">Comissão</th>
                   <th className="w-24 px-4 py-3">Funil</th>
                   <th className="w-28 px-4 py-3">Contrato</th>
                   <th className="w-24 px-4 py-3">Ficha</th>
@@ -516,7 +526,7 @@ export function VendasView({ pageId }: { pageId: string }) {
               <tbody>
                 {noPeriodo.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="px-4 py-10 text-center text-sm text-foreground/40">
+                    <td colSpan={12} className="px-4 py-10 text-center text-sm text-foreground/40">
                       {onlyPending ? 'Nenhuma venda pendente de pagamento neste período.' : 'Nenhuma venda neste período.'}
                     </td>
                   </tr>
@@ -526,6 +536,8 @@ export function VendasView({ pageId }: { pageId: string }) {
                     key={r.id}
                     row={r}
                     contrato={contratoPorVenda.get(r.id) ?? null}
+                    comissao={comissaoSdrPorVenda.get(r.id) ?? null}
+                    tiposDeSdr={tiposDeSdr}
                     ficha={fichas[r.id]}
                     onAbrirCliente={setFichaClientId}
                     selected={selectedIds.has(r.id)}
@@ -543,6 +555,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                   <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                     <td />
                     <td className="px-4 py-3">Total</td>
+                    <td />
                     <td />
                     <td />
                     <td />
@@ -569,11 +582,12 @@ export function VendasView({ pageId }: { pageId: string }) {
             Resumo por SDR
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px]">
+            <table className="w-full min-w-[720px]">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
                   <th className="px-4 py-3">SDR</th>
-                  <th className="w-28 px-4 py-3 text-right">Vendas</th>
+                  <th className="w-32 whitespace-nowrap px-4 py-3 text-right">Vendas total</th>
+                  <th className="w-40 whitespace-nowrap px-4 py-3 text-right" title="Vendas com o contrato marcado como Assinado">Vendas assinadas</th>
                   <th className="w-40 whitespace-nowrap px-4 py-3 text-right">MRR (R$)</th>
                   <th className="w-48 whitespace-nowrap px-4 py-3 text-right">Implementação (R$)</th>
                   <th className="w-40 px-4 py-3">Participação</th>
@@ -591,6 +605,9 @@ export function VendasView({ pageId }: { pageId: string }) {
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums">{r.vendas}</td>
+                    <td className={cn('px-4 py-2.5 text-right text-sm tabular-nums', r.assinadas > 0 ? 'text-success' : 'text-foreground/40')}>
+                      {r.assinadas}
+                    </td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums">{formatBRLCents(r.mrr)}</td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums">{formatBRLCents(r.impl)}</td>
                     <td className="px-4 py-2.5">
@@ -612,6 +629,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                 <tr className="border-t-2 border-line bg-elevate/[0.03] text-sm font-semibold text-foreground">
                   <td className="px-4 py-3">Equipe</td>
                   <td className="px-4 py-3 text-right tabular-nums">{validas.length}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-success">{validas.filter((r) => r.contratoAssinado).length}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-success">{formatBRLCents(totalMrr)}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-success">{formatBRLCents(totalImpl)}</td>
                   <td />
@@ -625,7 +643,6 @@ export function VendasView({ pageId }: { pageId: string }) {
           entries={commissionsInPeriod}
           types={commissionTypes}
           periodLabel={periodLabel}
-          somenteIncompletos={comissaoIncompleta}
           // Mesmo destino do clique no nome lá em cima: o lead ORIGINAL do CRM (é onde moram as
           // Atualizações); a linha da venda é só uma cópia e não tem histórico.
           onOpenLead={(vendaLeadId) => {
@@ -839,9 +856,69 @@ function ObservacoesCell({ value, onSave }: { value: string; onSave: (next: stri
   )
 }
 
+/** Opção do seletor pra venda que não paga comissão de SDR (fica registrada, valendo zero). */
+const SEM_COMISSAO = 'Sem comissão'
+
+/**
+ * Comissão do SDR dessa venda. Nasce como "Venda sistema" (o servidor lança junto com a venda) e se troca
+ * aqui: escolher um tipo grava o tipo e o valor dele na hora. Fechamento do closer não entra — esse o
+ * sistema calcula sozinho pela faixa de volume.
+ */
+function ComissaoSdrCell({ entry, tipos }: { entry: CommissionEntry | null; tipos: CommissionType[] }) {
+  if (!entry) {
+    return (
+      <span title="Venda sem SDR informado: não há comissão de SDR lançada" className="text-xs text-foreground/25">
+        —
+      </span>
+    )
+  }
+  const doTipo = tipos.find((x) => x.id === entry.typeId)
+  const semComissao = !entry.typeId && entry.typeLabel === SEM_COMISSAO
+  // "Do jeito que está": lançamento antigo sem tipo, tipo arquivado ou valor ajustado à mão — aparece como
+  // está em vez de fingir que é um dos tipos da lista.
+  const padrao = !!doTipo && (doTipo.rateCents ?? 0) === entry.amountCents
+  const valor = padrao ? entry.typeId! : semComissao ? '__sem' : '__atual'
+  const aDefinir = !padrao && !semComissao && entry.amountCents <= 0
+
+  return (
+    <select
+      value={valor}
+      onChange={(e) => {
+        const v = e.target.value
+        if (v === '__atual') return
+        if (v === '__sem') {
+          void commissionsService.updateEntry(entry.id, { typeId: null, typeLabel: SEM_COMISSAO, amountCents: 0 })
+          return
+        }
+        const tipo = tipos.find((x) => x.id === v)
+        if (tipo) void commissionsService.updateEntry(entry.id, { typeId: tipo.id, typeLabel: tipo.label, amountCents: tipo.rateCents ?? 0 })
+      }}
+      title={`Comissão de ${entry.person} nessa venda: ${formatBRLCents(entry.amountCents)}. Troque o tipo aqui.`}
+      className={cn(
+        'h-7 max-w-[170px] rounded-full border-0 px-2 text-[11px] font-medium outline-none',
+        aDefinir ? 'bg-warning/15 text-warning' : semComissao ? 'bg-elevate/[0.06] text-foreground/40' : 'bg-accent/10 text-accent',
+      )}
+    >
+      {valor === '__atual' && (
+        <option value="__atual">
+          {aDefinir ? 'a definir' : `${entry.typeLabel} · ${formatBRLCents(entry.amountCents)}`}
+        </option>
+      )}
+      {tipos.map((x) => (
+        <option key={x.id} value={x.id}>
+          {x.label} · {formatBRLCents(x.rateCents ?? 0)}
+        </option>
+      ))}
+      <option value="__sem">{SEM_COMISSAO}</option>
+    </select>
+  )
+}
+
 function VendaRow({
   row,
   contrato,
+  comissao,
+  tiposDeSdr,
   ficha,
   selected,
   onToggleSelect,
@@ -851,6 +928,9 @@ function VendaRow({
   row: LeadRow
   /** Contrato gerado pra essa venda na aba Contrato (null = ainda não existe). */
   contrato: { id: string; assinado: boolean } | null
+  /** Comissão de SDR lançada pra essa venda (null = venda sem SDR, nada lançado). */
+  comissao: CommissionEntry | null
+  tiposDeSdr: CommissionType[]
   /** Estado da ficha de cadastro do cliente dessa venda. */
   ficha: { status: string; clientId: string | null } | undefined
   selected: boolean
@@ -928,6 +1008,9 @@ function VendaRow({
           <option value="">não informado</option>
           {QUEM_FECHA.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
+      </td>
+      <td className="px-4 py-3">
+        <ComissaoSdrCell entry={comissao} tipos={tiposDeSdr} />
       </td>
       <td className="px-4 py-3">
         <button

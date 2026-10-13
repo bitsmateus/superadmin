@@ -18,11 +18,11 @@ import { monthLabelPt } from '@/hooks/useMonthFilter'
 import { cn, initials } from '@/lib/utils'
 
 /**
- * Comissão SDR — nasceu como a tela separada "Gestão Interna" e foi unificada dentro de Vendas
- * (mesmo período, mesma tela) porque as duas mostravam basicamente a mesma informação em lugares
- * diferentes. 100% registro manual, de propósito: cada venda/entrega/indicação vira um lançamento
- * escolhido de um cardápio de tipos configurável, via "Registrar comissão". Não lê nem escreve em
- * lead_rows/clients/contracts.
+ * Comissões — nasceu como a tela separada "Gestão Interna" e foi unificada dentro de Vendas (mesmo
+ * período, mesma tela). A comissão do SDR nasce junto com a venda, já valendo, e o tipo se troca na
+ * coluna "Comissão" da lista de vendas — por isso não há mais a tabela "Comissão SDR" aqui. Ficam o
+ * fechamento do closer (calculado sozinho), o que foi lançado à mão em "Registrar comissão" e o total
+ * por pessoa.
  */
 
 const ROLE_LABEL: Record<CommissionRole, string> = { sdr: 'SDR', suporte: 'Suporte' }
@@ -55,26 +55,22 @@ export function RegisterCommissionButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-/** Comissão SDR (tabela dos lançamentos) + Total por pessoa — `entries` já vem filtrada pro
+/** Fechamentos do closer, lançamentos feitos à mão e Total por pessoa — `entries` já vem filtrada pro
  * período que a tela host estiver mostrando (mesmo período da lista de Vendas). */
 export function CommissionSdrSection({
-  entries, types, periodLabel, somenteIncompletos = false, onOpenLead,
+  entries, types, periodLabel, onOpenLead,
 }: {
   entries: CommissionEntry[]
   types: CommissionType[]
   periodLabel: string
-  /** Ligado pelo painel de pendências: mostra só o que falta preencher (sem tipo ou sem valor). */
-  somenteIncompletos?: boolean
   /** Abre os dados da lead a partir do lançamento (recebe a linha da venda ligada a ele). */
   onOpenLead?: (vendaLeadId: string) => void
 }) {
-  const incompleto = (e: CommissionEntry) => !e.typeId || e.amountCents <= 0
-  const visiveis = React.useMemo(
-    () => (somenteIncompletos ? entries.filter(incompleto) : entries),
-    [entries, somenteIncompletos],
-  )
-  const bySdr = React.useMemo(
-    () => visiveis.filter((e) => e.role === 'sdr' && e.typeLabel !== CLOSER_TYPE_LABEL),
+  const visiveis = entries
+  // Só o que foi registrado à mão ("Registrar comissão") precisa de lista: é o único lançamento que não
+  // tem uma venda por trás pra ser ajustado na linha dela. Sem nenhum, a tabela nem aparece.
+  const manuais = React.useMemo(
+    () => visiveis.filter((e) => !e.vendaLeadId && e.typeLabel !== CLOSER_TYPE_LABEL),
     [visiveis],
   )
   // Fechamentos ficam separados POR PESSOA: a faixa de volume é individual, então cada closer tem
@@ -123,7 +119,16 @@ export function CommissionSdrSection({
 
   return (
     <div className="mt-4 space-y-4">
-      <EntriesTable title="Comissão SDR" entries={bySdr} onToggle={toggleStatus} types={types} onOpenLead={onOpenLead} />
+      {manuais.length > 0 && (
+        <EntriesTable
+          title="Comissões lançadas à mão"
+          entries={manuais}
+          onToggle={toggleStatus}
+          types={types}
+          onOpenLead={onOpenLead}
+          hint="O que foi registrado em “Registrar comissão”, sem uma venda da lista por trás."
+        />
+      )}
 
       {closerPorPessoa.map(([pessoa, lista]) => (
         <EntriesTable
@@ -182,8 +187,8 @@ export function CommissionSdrSection({
       </div>
 
       <p className="text-[11px] text-foreground/40">
-        Registro manual — cada venda/entrega/indicação é lançada aqui escolhendo um dos tipos
-        configurados em "Registrar comissão".
+        A comissão do SDR nasce junto com a venda e o tipo se troca na coluna “Comissão” da lista de
+        vendas. O fechamento do closer é calculado sozinho.
       </p>
     </div>
   )

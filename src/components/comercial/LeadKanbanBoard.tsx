@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Archive, ArchiveRestore, Calendar, ChevronDown, ChevronUp, MessageCircle, Settings2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Calendar, ChevronDown, ChevronUp, MessageCircle, Plus, Settings2 } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
@@ -58,11 +58,13 @@ export interface LeadKanbanBoardProps {
   rows: LeadRow[]
   allBoards: LeadBoard[]
   onOpenLead: (id: string) => void
+  /** Aba travada num SDR (CRM Luis/Arthur): o lead criado aqui já nasce com ele, como na lista. */
+  sdrLock?: string
 }
 
 /** Visão alternativa em quadro — mesmos leads da lista, agrupados por Status ou Dia de
  * contato (à escolha) em vez de por quadro. Arrastar um card muda o campo agrupado. */
-export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoardProps) {
+export function LeadKanbanBoard({ rows, allBoards, onOpenLead, sdrLock }: LeadKanbanBoardProps) {
   const [groupField, setGroupField] = React.useState<GroupField>(() => {
     try {
       return window.localStorage.getItem(GROUP_STORAGE_KEY) === 'diaContato' ? 'diaContato' : 'status'
@@ -159,6 +161,21 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
     }
   }
 
+  // Cria o lead direto na coluna, já com o nome e o valor do agrupamento (status ou dia de contato). No
+  // agrupamento por Status ele cai no quadro de mesmo nome da coluna — igual a arrastar um card pra ela —
+  // e, sem quadro com esse nome, no primeiro quadro da aba.
+  const criarNaColuna = (col: Column, nome: string) => {
+    const quadro =
+      (groupField === 'status' && allBoards.find((b) => b.name.trim().toLowerCase() === col.key.trim().toLowerCase())) ||
+      allBoards[0]
+    if (!quadro) return
+    leadBoardsService.createRow(quadro.id, {
+      nome,
+      [groupField]: col.key,
+      ...(sdrLock ? { sdr: sdrLock } : {}),
+    })
+  }
+
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
@@ -210,6 +227,7 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead }: LeadKanbanBoard
               showTag
               tagPageId={pageId}
               onArchive={withArchive ? (row) => moveToColumn(row, col.archive ? (doneLabel ?? '') : ARCHIVE_STATUS) : undefined}
+              onCreate={col.archive ? undefined : (nome) => criarNaColuna(col, nome)}
             />
           ))}
         </div>
@@ -254,6 +272,7 @@ function KanbanColumn({
   showTag,
   tagPageId,
   onArchive,
+  onCreate,
 }: {
   col: Column
   rows: LeadRow[]
@@ -263,6 +282,8 @@ function KanbanColumn({
   showTag: boolean
   tagPageId?: string
   onArchive?: (row: LeadRow) => void
+  /** Cria um card novo nesta coluna (sem isso, a coluna não mostra o "+ Adicionar"). */
+  onCreate?: (nome: string) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col-${col.key}`, data: { column: col.key } })
   const totalMrr = React.useMemo(() => rows.reduce((sum, r) => sum + parseBRLCents(r.valorMrr), 0), [rows])
@@ -313,6 +334,64 @@ function KanbanColumn({
           />
         ))}
         {rows.length === 0 && <p className="px-1 py-3 text-center text-[11px] text-foreground/40">Nenhum lead</p>}
+        {onCreate && <AddCard onCreate={onCreate} />}
+      </div>
+    </div>
+  )
+}
+
+/** "+ Adicionar" no pé da coluna: digita o nome, Enter cria o card e o campo continua aberto pro próximo. */
+function AddCard({ onCreate }: { onCreate: (nome: string) => void }) {
+  const [aberto, setAberto] = React.useState(false)
+  const [nome, setNome] = React.useState('')
+
+  const criar = () => {
+    const limpo = nome.trim()
+    if (!limpo) return
+    onCreate(limpo)
+    setNome('')
+  }
+  const fechar = () => { setAberto(false); setNome('') }
+
+  if (!aberto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAberto(true)}
+        className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-foreground/45 transition-colors hover:bg-elevate/[0.06] hover:text-foreground/75"
+      >
+        <Plus className="h-3.5 w-3.5" /> Adicionar
+      </button>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-accent/40 bg-card p-2 shadow-sm">
+      <input
+        autoFocus
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); criar() }
+          if (e.key === 'Escape') fechar()
+        }}
+        onBlur={() => { if (!nome.trim()) fechar() }}
+        placeholder="Nome do cliente ou demanda"
+        aria-label="Nome do novo card"
+        className="h-8 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-foreground/35"
+      />
+      <div className="mt-1.5 flex items-center justify-end gap-1.5">
+        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={fechar} className="rounded px-2 py-1 text-xs text-foreground/50 hover:text-foreground">
+          Fechar
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={criar}
+          disabled={!nome.trim()}
+          className="rounded bg-accent px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40"
+        >
+          Adicionar
+        </button>
       </div>
     </div>
   )

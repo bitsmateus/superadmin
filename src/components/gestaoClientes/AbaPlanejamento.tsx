@@ -21,7 +21,7 @@ const ITENS: { chave: string; titulo: string; ajuda: string }[] = [
   { chave: 'resultado', titulo: 'Está dando certo?', ajuda: 'O acompanhamento: o que está funcionando, o que não está e o que muda.' },
 ]
 
-const VAZIO: GcPlanoTexto = { texto: '', marcados: [], no_portal: false, atualizado_em: null, autor: null }
+const VAZIO: GcPlanoTexto = { texto: '', marcados: [], no_portal: true, atualizado_em: null, autor: null }
 
 const reais = (n: number | null | undefined) => (n === null || n === undefined ? null : formatarMetrica(n, 'reais'))
 const inteiro = (n: number | null | undefined) => (n === null || n === undefined ? null : formatarMetrica(n, 'inteiro'))
@@ -350,7 +350,7 @@ export function AbaPlanejamento({
                 <Eye className="h-3.5 w-3.5 text-accent" /> Mostrar este planejamento no link do cliente
               </span>
               <span className="block text-xs text-foreground/55">
-                Desligado, só a equipe vê. Ligado, o cliente lê o texto inteiro, do jeito que está escrito — confira antes se não há nada interno.
+                Ligado, o cliente lê o texto inteiro no link dele, do jeito que está escrito — confira se não há nada interno. Desmarque pra deixar só pra equipe.
               </span>
             </span>
           </label>

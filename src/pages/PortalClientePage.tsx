@@ -1,11 +1,12 @@
 import * as React from 'react'
 import { useParams } from 'react-router-dom'
 import {
-  ArrowLeft, ChevronRight, CircleDollarSign, Clock, FileDown, FileText, Flag, History, Info, Loader2,
+  ArrowLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock, FileDown, FileText, Flag, History, Info, Loader2,
   ShoppingBag, TrendingUp, Wallet,
 } from 'lucide-react'
 import { gestaoClientes, HORIZONTES, type GcSnapshot } from '@/services/gestaoClientes'
 import { formatarMetrica, mesAtual } from '@/lib/gcMetricas'
+import { BRIEFING_MODELO } from '@/lib/gcBriefingModelo'
 import logoNx from '@/assets/logo-nx.jpg'
 import { cn } from '@/lib/utils'
 
@@ -304,6 +305,76 @@ function AvisoDeAtualizacao({ quando }: { quando: string | null }) {
   )
 }
 
+const ROTULO_DA_CONTA: Record<string, string> = {
+  pagamento_anuncios: 'Forma de pagamento válida na conta de anúncios',
+  google_ads: 'Google Ads',
+  meu_negocio: 'Google Meu Negócio',
+}
+const RESPOSTA_DA_CONTA: Record<string, string> = { sim: 'Sim', nao: 'Não', nao_sei: 'Não sei' }
+
+/** As respostas que o próprio cliente deu no briefing — só leitura. Senhas nunca chegam aqui. */
+function BriefingDoCliente({ briefing }: { briefing: NonNullable<Portal['briefing']> }) {
+  const dados = [
+    { rotulo: 'Site', valor: briefing.dados.site },
+    { rotulo: 'WhatsApp que recebe os leads', valor: briefing.dados.whatsapp_leads },
+    { rotulo: 'Instagram', valor: briefing.dados.instagram },
+    { rotulo: 'Facebook', valor: briefing.dados.facebook },
+    { rotulo: 'CRM utilizado', valor: briefing.dados.crm },
+  ].filter((d) => d.valor)
+  // Agrupa as perguntas pelos blocos do modelo; o que não for do modelo vai em "Outras perguntas".
+  const blocoDe = new Map(BRIEFING_MODELO.map((p) => [p.pergunta, p.bloco.replace(/^Bloco\s+\d+\s+—\s+/, '')]))
+  const grupos = new Map<string, { pergunta: string; resposta: string }[]>()
+  for (const p of briefing.perguntas) {
+    const bloco = blocoDe.get(p.pergunta) ?? 'Outras perguntas'
+    grupos.set(bloco, [...(grupos.get(bloco) ?? []), p])
+  }
+  return (
+    <section className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-7">
+      <h2 className="text-lg font-semibold text-foreground">Briefing</h2>
+      <p className="mb-4 text-xs text-foreground/50">
+        As respostas que você nos enviou{briefing.enviado_em ? ` em ${new Date(briefing.enviado_em).toLocaleDateString('pt-BR')}` : ''}. Precisa corrigir algo? Fale com a equipe da NX.
+      </p>
+      {dados.length > 0 && (
+        <Secao titulo="Sua empresa" className="mt-0">
+          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+            {dados.map((d) => (
+              <div key={d.rotulo}>
+                <dt className="text-[11px] uppercase tracking-wide text-foreground/45">{d.rotulo}</dt>
+                <dd className="break-words text-sm text-foreground/85">{d.valor}</dd>
+              </div>
+            ))}
+          </dl>
+        </Secao>
+      )}
+      {briefing.contas.length > 0 && (
+        <Secao titulo="Contas e pagamento">
+          <ul className="space-y-1.5">
+            {briefing.contas.map((c) => (
+              <li key={c.chave} className="text-sm text-foreground/85">
+                <span className="text-foreground/60">{ROTULO_DA_CONTA[c.chave] ?? c.chave}:</span>{' '}
+                <strong className="font-medium">{RESPOSTA_DA_CONTA[c.valor] ?? '—'}</strong>
+                {c.obs && <span className="text-foreground/60"> · {c.obs}</span>}
+              </li>
+            ))}
+          </ul>
+        </Secao>
+      )}
+      {Array.from(grupos.entries()).map(([bloco, perguntas]) => (
+        <Secao key={bloco} titulo={bloco}>
+          <ol className="space-y-3">
+            {perguntas.map((p) => (
+              <li key={p.pergunta}>
+                <p className="text-sm font-medium text-foreground">{p.pergunta}</p>
+                <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-foreground/75">{p.resposta}</p>
+              </li>
+            ))}
+          </ol>
+        </Secao>
+      ))}
+    </section>
+  )
+}
+
 /**
  * PORTAL DO CLIENTE — /cliente/:token, sem login.
  *
@@ -315,7 +386,7 @@ function AvisoDeAtualizacao({ quando }: { quando: string | null }) {
  * aqui é o que a NX escolheu publicar. Em todo o painel fica claro QUANDO foi a última atualização e
  * que a equipe pode estar fazendo coisas que ainda não entraram aqui.
  */
-type Vista = { tipo: 'inicio' } | { tipo: 'plano' } | { tipo: 'mes'; id: string }
+type Vista = { tipo: 'inicio' } | { tipo: 'plano' } | { tipo: 'briefing' } | { tipo: 'mes'; id: string }
 type RelPortal = Portal['relatorios'][number]
 
 function mesAnterior(mes: string): string {
@@ -354,12 +425,13 @@ function CartaoDeAcesso({
 
 /** A primeira tela do portal: mês atual, mês anterior (se houver) e o planejamento. */
 function TelaInicial({
-  atual, anterior, outros, temPlano, onAbrir,
+  atual, anterior, outros, temPlano, temBriefing, onAbrir,
 }: {
   atual: RelPortal | null
   anterior: RelPortal | null
   outros: RelPortal[]
   temPlano: boolean
+  temBriefing: boolean
   onAbrir: (v: Vista) => void
 }) {
   const rotulo = (r: RelPortal) => r.snapshot?.periodo?.rotulo ?? String(r.periodo_inicio).slice(0, 7)
@@ -387,6 +459,14 @@ function TelaInicial({
           subtitulo="De onde partimos, onde queremos chegar e como estamos indo."
           icone={Flag}
           onClick={() => onAbrir({ tipo: 'plano' })}
+        />
+      )}
+      {temBriefing && (
+        <CartaoDeAcesso
+          titulo="Briefing"
+          subtitulo="As respostas que você nos enviou sobre a sua empresa."
+          icone={ClipboardList}
+          onClick={() => onAbrir({ tipo: 'briefing' })}
         />
       )}
       {outros.length > 0 && (
@@ -420,7 +500,7 @@ export function PortalClientePage() {
   const [erro, setErro] = React.useState('')
   const [carregando, setCarregando] = React.useState(true)
   // Tela inicial: o cliente escolhe o que quer ver. 'mes' = id do relatório aberto.
-  const [vista, setVista] = React.useState<{ tipo: 'inicio' } | { tipo: 'plano' } | { tipo: 'mes'; id: string }>({ tipo: 'inicio' })
+  const [vista, setVista] = React.useState<Vista>({ tipo: 'inicio' })
 
   React.useEffect(() => {
     gestaoClientes
@@ -525,6 +605,7 @@ export function PortalClientePage() {
             anterior={anterior}
             outros={outros}
             temPlano={!!dados.planejamento_texto}
+            temBriefing={!!dados.briefing}
             onAbrir={setVista}
           />
         ) : (
@@ -536,6 +617,8 @@ export function PortalClientePage() {
             >
               <ArrowLeft className="h-4 w-4" /> Voltar ao início
             </button>
+
+            {vista.tipo === 'briefing' && dados.briefing && <BriefingDoCliente briefing={dados.briefing} />}
 
             {vista.tipo === 'plano' && dados.planejamento_texto && (
               <section className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-7">

@@ -2516,7 +2516,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return {
       texto: p?.texto_plano ?? '',
       marcados,
-      no_portal: Boolean(p?.plano_no_portal),
+      no_portal: p ? Boolean(p.plano_no_portal) : true,
       atualizado_em: p?.texto_atualizado_em ?? null,
       autor: p?.texto_atualizado_em ? p?.autor ?? null : null,
     };
@@ -2907,7 +2907,33 @@ export async function gestaoClientesPublicRoutes(app: FastifyInstance) {
       [link.gc_cliente_id]
     );
     const planejamentoTexto = plano?.plano_no_portal && plano.texto_plano.trim() ? plano.texto_plano : null;
-    return { cliente, relatorios, jornada: null, planejamento_texto: planejamentoTexto };
+    // O cliente também relê o BRIEFING que respondeu. Vai só o que ele mesmo preencheu no link público:
+    // dados da empresa, contas e as perguntas. Senhas e "outras informações" da equipe nunca saem daqui.
+    const b = await queryOne<Record<string, unknown>>(
+      `SELECT site, whatsapp_leads, instagram, facebook, crm,
+              pagamento_anuncios, pagamento_obs, google_ads, google_ads_obs, meu_negocio, meu_negocio_obs,
+              perguntas, enviado_em
+       FROM gc_briefing WHERE gc_cliente_id = $1`,
+      [link.gc_cliente_id]
+    );
+    const txt = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+    const perguntasDoCliente = (Array.isArray(b?.perguntas) ? (b!.perguntas as Record<string, unknown>[]) : [])
+      .map((x) => ({ pergunta: txt(x?.pergunta), resposta: txt(x?.resposta) }))
+      .filter((x) => x.pergunta && x.resposta);
+    const dadosDoBriefing = {
+      site: txt(b?.site), whatsapp_leads: txt(b?.whatsapp_leads), instagram: txt(b?.instagram),
+      facebook: txt(b?.facebook), crm: txt(b?.crm),
+    };
+    const contasDoBriefing = [
+      { chave: 'pagamento_anuncios', valor: txt(b?.pagamento_anuncios), obs: txt(b?.pagamento_obs) },
+      { chave: 'google_ads', valor: txt(b?.google_ads), obs: txt(b?.google_ads_obs) },
+      { chave: 'meu_negocio', valor: txt(b?.meu_negocio), obs: txt(b?.meu_negocio_obs) },
+    ].filter((x) => x.valor || x.obs);
+    const temBriefing = perguntasDoCliente.length > 0 || contasDoBriefing.length > 0 || Object.values(dadosDoBriefing).some(Boolean);
+    const briefing = temBriefing
+      ? { dados: dadosDoBriefing, contas: contasDoBriefing, perguntas: perguntasDoCliente, enviado_em: b?.enviado_em ?? null }
+      : null;
+    return { cliente, relatorios, jornada: null, planejamento_texto: planejamentoTexto, briefing };
   });
 
   // GET /api/public/cliente/:token/relatorio/:id/pdf — o mesmo PDF do painel, pro cliente baixar.

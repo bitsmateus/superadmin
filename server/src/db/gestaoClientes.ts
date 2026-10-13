@@ -524,6 +524,10 @@ const TABELAS = [
   `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS checklist_plano JSONB NOT NULL DEFAULT '[]'`,
   `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS plano_no_portal BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE gc_planejamento ADD COLUMN IF NOT EXISTS texto_atualizado_em TIMESTAMPTZ`,
+  // "Mostrar no link do cliente" nasce LIGADO. Quem ainda não salvou o texto (nunca escolheu) passa a ligado;
+  // quem já salvou fica com a escolha que fez.
+  `ALTER TABLE gc_planejamento ALTER COLUMN plano_no_portal SET DEFAULT true`,
+  `UPDATE gc_planejamento SET plano_no_portal = true WHERE texto_atualizado_em IS NULL AND plano_no_portal = false`,
   // Briefing preenchido pelo cliente: o link público (token), quando ele enviou, e a marca nos arquivos dele.
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS link_token TEXT`,
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS enviado_em TIMESTAMPTZ`,

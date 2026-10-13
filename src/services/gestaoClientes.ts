@@ -939,6 +939,13 @@ export const gestaoClientes = {
       jornada: GcJornadaPortal | null
       /** O texto da aba Planejamento, só quando a equipe marcou "mostrar no link do cliente". */
       planejamento_texto?: string | null
+      /** O briefing que o cliente respondeu (sem senhas). Null = ainda não há nada preenchido. */
+      briefing?: {
+        dados: { site: string; whatsapp_leads: string; instagram: string; facebook: string; crm: string }
+        contas: { chave: string; valor: string; obs: string }[]
+        perguntas: { pergunta: string; resposta: string }[]
+        enviado_em: string | null
+      } | null
     }>(`/api/public/cliente/${encodeURIComponent(token)}`),
 
   registrar: (

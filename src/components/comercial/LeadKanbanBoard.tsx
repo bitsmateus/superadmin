@@ -60,23 +60,27 @@ export interface LeadKanbanBoardProps {
   onOpenLead: (id: string) => void
   /** Aba travada num SDR (CRM Luis/Arthur): o lead criado aqui já nasce com ele, como na lista. */
   sdrLock?: string
-  /** CRM de demanda (Ian e Mateus): a data de Retornar/Finalizar aparece ao lado do nome do card. */
+  /** CRM de demanda (Ian e Mateus): a data de Finalizar aparece ao lado do nome do card. */
   modoDemanda?: boolean
 }
 
 /** Visão alternativa em quadro — mesmos leads da lista, agrupados por Status ou Dia de
  * contato (à escolha) em vez de por quadro. Arrastar um card muda o campo agrupado. */
 export function LeadKanbanBoard({ rows, allBoards, onOpenLead, sdrLock, modoDemanda }: LeadKanbanBoardProps) {
-  const [groupField, setGroupField] = React.useState<GroupField>(() => {
+  const [groupFieldEscolhido, setGroupField] = React.useState<GroupField>(() => {
     try {
       return window.localStorage.getItem(GROUP_STORAGE_KEY) === 'diaContato' ? 'diaContato' : 'status'
     } catch {
       return 'status'
     }
   })
+  // Nos CRMs de demanda o agrupamento é sempre por Status (não há "Dia de contato" ali) e a escolha guardada
+  // das outras abas não se aplica.
+  const groupField: GroupField = modoDemanda ? 'status' : groupFieldEscolhido
   React.useEffect(() => {
+    if (modoDemanda) return
     try { window.localStorage.setItem(GROUP_STORAGE_KEY, groupField) } catch { /* ignore */ }
-  }, [groupField])
+  }, [groupField, modoDemanda])
 
   React.useEffect(() => { void leadLabelsService.ensureLoaded() }, [])
   // allBoards já vem filtrado pra UMA aba só (LeadBoardsView) — dá pra tirar a aba dali direto.
@@ -181,8 +185,8 @@ export function LeadKanbanBoard({ rows, allBoards, onOpenLead, sdrLock, modoDema
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <span className="text-xs font-medium text-foreground/50">Agrupar por</span>
-        <div className="inline-flex overflow-hidden rounded-lg border border-line">
+        {!modoDemanda && <span className="text-xs font-medium text-foreground/50">Agrupar por</span>}
+        <div className={cn('inline-flex overflow-hidden rounded-lg border border-line', modoDemanda && 'hidden')}>
           {GROUP_OPTIONS.map((o) => (
             <button
               key={o.value}
@@ -451,7 +455,7 @@ function KanbanCard({
           {modoDemanda && row.retornar && (
             <span
               className="ml-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded bg-elevate/[0.06] px-1.5 py-0.5 align-middle text-[11px] font-medium text-foreground/60"
-              title="Retornar/Finalizar"
+              title="Finalizar"
             >
               <Calendar className="h-3 w-3" />
               {fmtShortDay(row.retornar)}

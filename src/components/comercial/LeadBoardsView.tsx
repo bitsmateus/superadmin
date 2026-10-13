@@ -834,7 +834,9 @@ function BoardGroup({
   }
   // No CRM do Luis Closer a coluna que se chama SDR nos outros CRMs aparece como Closer.
   const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name).map((c) =>
-    board.page === 'crm-luis-closer' && c.key === 'sdr' ? { ...c, label: 'Closer' } : c,
+    board.page === 'crm-luis-closer' && c.key === 'sdr' ? { ...c, label: 'Closer' }
+      : hideIanMateusCols && c.key === 'retornar' ? { ...c, label: 'Finalizar' }
+      : c,
   )
   const tableWidth = CHECKBOX_COL_WIDTH
     + cols.reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
@@ -1296,7 +1298,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const subtitle = 'Comercial · quadros de captação de leads'
   const sdrLabelsForLock = useLeadLabels('sdr')
   const sdrLock = React.useMemo(() => sdrLockForPageName(title, sdrLabelsForLock), [title, sdrLabelsForLock])
-  const hideIanMateusCols = React.useMemo(() => isIanMateusPage(title), [title])
+  const hideIanMateusCols = React.useMemo(() => isIanMateusPage(title) || isIanMateusPage(page), [title, page])
 
   const booted = useLeadBoardsBooted()
   const allBoards = useLeadBoards()

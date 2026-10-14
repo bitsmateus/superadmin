@@ -1,3 +1,4 @@
+import { enviarBoasVindasLead } from '../lib/leadWelcome.js';
 import { nichoDoFormulario } from '../lib/trafegoNicho.js';
 import { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
@@ -283,6 +284,10 @@ export async function webhookRoutes(app: FastifyInstance) {
         `INSERT INTO lead_events (lead_row_id, type, from_value, to_value, actor_name) VALUES ($1,$2,$3,$4,$5)`,
         [leadRow.id, 'created', null, null, 'Meta Ads (n8n)']
       );
+
+      // Boas-vindas por WhatsApp (template) assim que o lead cai — em background, não atrasa nem
+      // derruba a resposta pro n8n. O resultado aparece na linha do tempo do lead.
+      void enviarBoasVindasLead(leadRow.id);
 
       // O lead do Meta nasce sem SDR. Se o quadro de destino é da aba de um SDR (CRM ARTHUR), ele já entra
       // com o SDR marcado — sem isso ficava fora das Métricas por SDR e do funil até o servidor reiniciar.

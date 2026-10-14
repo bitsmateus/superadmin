@@ -1390,3 +1390,7 @@ CREATE TRIGGER notify_mercadonunes_layouts AFTER INSERT OR UPDATE OR DELETE ON m
 --   VALUES ('seu@email.com', 'Seu Nome', 'admin', crypt('sua_senha', gen_salt('bf')));
 -- OU use a API: POST /api/users com um script de seed.
 -- =====================================================================
+
+-- Template de boas-vindas enviado por WhatsApp quando o lead do tráfego cai (lib/leadWelcome.ts).
+ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS boas_vindas_enviada_em TIMESTAMPTZ;
+ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS boas_vindas_erro TEXT;

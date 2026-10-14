@@ -21,6 +21,7 @@ import {
   Paperclip,
   Pencil,
   Phone,
+  Send,
   Sparkles,
   Trash2,
   Type,
@@ -485,6 +486,18 @@ export function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescri
         to: e.toValue === 'true'
           ? { label: 'Marcado como retornado', color: '#15803D' }
           : { label: 'Desmarcado como retornado', color: '#9CA3AF' },
+      }
+    case 'template_sent':
+      return {
+        icon: <Send className="h-3.5 w-3.5" />,
+        text: 'Mensagem enviada no WhatsApp',
+        to: { label: e.toValue || 'template', color: '#15803D' },
+      }
+    case 'template_failed':
+      return {
+        icon: <Send className="h-3.5 w-3.5" />,
+        text: 'Falha ao enviar mensagem',
+        to: { label: e.toValue || 'erro', color: '#DC2626' },
       }
     default:
       return { icon: <Sparkles className="h-3.5 w-3.5" />, text: 'Atualização' }

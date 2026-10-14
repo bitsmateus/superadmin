@@ -17,6 +17,9 @@ export async function sendNxTemplate(
   templateName: string,
   language: string,
   bodyParams: string[],
+  // true (padrão) fecha o ticket logo após o envio (disparo em massa); false deixa a conversa aberta
+  // na central — usado quando o lead pode responder e alguém precisa ver.
+  isClosed = true,
 ): Promise<void> {
   // Sempre /templateBody: o atalho /template exige sessão ativa e falha com
   // ERR_API_REQUIRES_SESSION (mesmo problema já contornado em officialApi.ts).
@@ -34,7 +37,7 @@ export async function sendNxTemplate(
     },
   };
 
-  const payload = { number: to, isClosed: true, templateData };
+  const payload = { number: to, isClosed, templateData };
 
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 20000);

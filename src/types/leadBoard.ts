@@ -100,6 +100,10 @@ export interface LeadRow {
   veioDoFunil: boolean
   /** Id do lead no Meta Ads — só existe em lead que chegou pelo formulário do anúncio. */
   metaLeadId?: string | null
+  /** Quando o template de boas-vindas (WhatsApp) saiu pro lead do tráfego; null = não enviado. */
+  boasVindasEnviadaEm?: string | null
+  /** Motivo da falha do último envio de boas-vindas, se houve. */
+  boasVindasErro?: string | null
   /** Marca manual (só a pessoa liga/desliga, na aba Vendas) se o contrato dessa venda já foi
    * assinado ou ainda está pendente — mesmo padrão de veioDoFunil, sem data nem checklist. */
   contratoAssinado: boolean
@@ -125,6 +129,7 @@ export type LeadRowField = Exclude<
   | 'lastNotePreview' | 'lastNoteAt'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
   | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId' | 'closer' | 'metaLeadId'
+  | 'boasVindasEnviadaEm' | 'boasVindasErro'
 >
 
 /** Arquivo anexado a uma atualização (imagem/PDF), guardado como data URL. */
@@ -148,7 +153,7 @@ export interface LeadNote {
 }
 
 /** Tipo de evento gravado automaticamente na linha do tempo do lead. */
-export type LeadEventType = 'created' | 'status' | 'dia_contato' | 'sdr' | 'board' | 'retornado'
+export type LeadEventType = 'created' | 'status' | 'dia_contato' | 'sdr' | 'board' | 'retornado' | 'template_sent' | 'template_failed'
 
 /** Entrada da linha do tempo automática — gravada pelo backend a cada mudança relevante. */
 export interface LeadEvent {

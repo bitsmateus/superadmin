@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Archive, ArchiveRestore, Calendar, ChevronDown, ChevronUp, MessageCircle, Plus, Settings2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Calendar, ChevronDown, ChevronUp, MessageCircle, Plus, Send, Settings2 } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { isLeadLabelsLoaded, leadLabelsService } from '@/services/leadLabels'
@@ -521,6 +521,18 @@ function KanbanCard({
         <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-foreground/45">
           {row.lastNotePreview}
         </p>
+      )}
+      {(row.boasVindasEnviadaEm || row.boasVindasErro) && (
+        <div
+          title={row.boasVindasErro ?? `Template enviado em ${new Date(row.boasVindasEnviadaEm!).toLocaleString('pt-BR')}`}
+          className={cn(
+            'mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium',
+            row.boasVindasEnviadaEm ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-500'
+          )}
+        >
+          <Send className="h-3 w-3" />
+          {row.boasVindasEnviadaEm ? 'Mensagem enviada' : 'Falha no envio'}
+        </div>
       )}
       {row.retornar && !modoDemanda && (
         <div className="mt-1.5 inline-flex items-center gap-1 rounded bg-elevate/[0.05] px-1.5 py-0.5 text-[11px] text-foreground/50">

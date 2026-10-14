@@ -991,6 +991,10 @@ END $$`);
   // origem_campanha/qualificacao guardam campos já tratados do formulário pra aparecerem na UI;
   // lead_raw guarda o payload bruto inteiro (histórico/auditoria caso precise investigar depois).
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS meta_lead_id TEXT`);
+  // Template de boas-vindas enviado por WhatsApp assim que o lead do tráfego cai (ver
+  // lib/leadWelcome.ts). enviada_em também serve de trava: só quem consegue gravar ele envia.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS boas_vindas_enviada_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS boas_vindas_erro TEXT`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_meta_lead_id_uniq
     ON lead_rows(meta_lead_id) WHERE meta_lead_id IS NOT NULL`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS origem_campanha TEXT NOT NULL DEFAULT ''`);

@@ -4,6 +4,7 @@ import { query, queryOne } from '../db.js';
 import { allowedPageIds } from './leadPages.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
+import { enviarBoasVindasLead } from '../lib/leadWelcome.js';
 import { findMatchingClientId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 import { syncScheduledMeeting, localDateTimeToISO } from '../lib/calendarSync.js';
 
@@ -1058,6 +1059,55 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   });
 
   // POST /api/lead-rows
+  // POST /api/lead-rows/simular-trafego — botão "Simular lead" de Novos Leads: cria um lead de teste
+  // no quadro de entrada (como o webhook do Meta faria) e dispara a boas-vindas de verdade, pra
+  // conferir o fluxo todo pelo painel. Espera o envio terminar pra devolver o resultado na hora.
+  app.post<{ Body: { nome?: string; telefone?: string } }>(
+    '/api/lead-rows/simular-trafego',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role, name } = req.user as { sub: string; role: string; name?: string };
+      const nome = (req.body?.nome ?? '').trim();
+      const telefone = (req.body?.telefone ?? '').trim();
+      if (!nome || !telefone) return reply.status(400).send({ message: 'Informe nome e telefone.' });
+
+      const board = await queryOne<{ id: string }>(
+        `SELECT lb.id FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page
+         WHERE lb.page = 'novos_leads' AND lp.archived_at IS NULL ORDER BY lb.position ASC LIMIT 1`
+      );
+      if (!board) return reply.status(500).send({ message: 'Quadro de Novos Leads não encontrado.' });
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null && !allowed.includes(board.id)) {
+        return reply.status(403).send({ message: 'Acesso negado' });
+      }
+
+      const [{ max }] = await query<{ max: number | null }>(
+        'SELECT MAX(position) as max FROM lead_rows WHERE board_id = $1',
+        [board.id]
+      );
+      const [lead] = await query<{ id: string }>(
+        `INSERT INTO lead_rows (board_id, nome, telefone, position, origem_campanha)
+         VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+        [board.id, nome, telefone, (max ?? -1) + 1, 'Simulação (teste)']
+      );
+      await query(
+        `INSERT INTO lead_events (lead_row_id, type, from_value, to_value, actor_name) VALUES ($1,$2,$3,$4,$5)`,
+        [lead.id, 'created', null, null, name || 'Simulação']
+      );
+
+      await enviarBoasVindasLead(lead.id);
+      const res = await queryOne<{ boas_vindas_enviada_em: string | null; boas_vindas_erro: string | null }>(
+        'SELECT boas_vindas_enviada_em, boas_vindas_erro FROM lead_rows WHERE id = $1',
+        [lead.id]
+      );
+      return reply.status(201).send({
+        id: lead.id,
+        enviada: !!res?.boas_vindas_enviada_em,
+        erro: res?.boas_vindas_erro ?? (res?.boas_vindas_enviada_em ? null : 'Envio desligado: faltam LEAD_WELCOME_NX_API_ID/TOKEN no servidor.'),
+      });
+    }
+  );
+
   app.post<{ Body: Record<string, unknown> }>(
     '/api/lead-rows',
     { onRequest: [app.authenticate] },

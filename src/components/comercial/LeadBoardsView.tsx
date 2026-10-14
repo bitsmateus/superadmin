@@ -25,6 +25,7 @@ import {
   Search,
   StickyNote,
   Trash2,
+  Send,
   Upload,
   UserRound,
   X,
@@ -36,6 +37,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
+import { SimularLeadModal } from '@/components/comercial/SimularLeadModal'
 import { PageActivityLogModal } from '@/components/comercial/PageActivityLogModal'
 import { DemandaTopo } from '@/components/comercial/DemandaTopo'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
@@ -1357,6 +1359,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const [filterRules, setFilterRules] = React.useState<FilterRule[]>([])
   const [filtersOpen, setFiltersOpen] = React.useState(false)
   const [logOpen, setLogOpen] = React.useState(false)
+  const [simularOpen, setSimularOpen] = React.useState(false)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [importModalOpen, setImportModalOpen] = React.useState(false)
   const [trashModalOpen, setTrashModalOpen] = React.useState(false)
@@ -1619,6 +1622,15 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               >
                 Log
               </ToolbarButton>
+              {page === 'novos_leads' && (
+                <ToolbarButton
+                  icon={<Send className="h-3.5 w-3.5" />}
+                  onClick={() => setSimularOpen(true)}
+                  title="Criar um lead de teste e enviar a mensagem de boas-vindas"
+                >
+                  Simular lead
+                </ToolbarButton>
+              )}
             </div>
 
             {boards.length === 0 ? (
@@ -1729,6 +1741,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
       )}
       <LeadTrashModal open={trashModalOpen} onClose={() => setTrashModalOpen(false)} boards={boards} />
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} modoSimples={hideIanMateusCols} />
+      <SimularLeadModal open={simularOpen} onClose={() => setSimularOpen(false)} onCreated={() => {}} />
       <PageActivityLogModal
         open={logOpen}
         onClose={() => setLogOpen(false)}

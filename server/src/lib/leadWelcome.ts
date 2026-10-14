@@ -92,9 +92,10 @@ export async function enviarBoasVindasLead(
     if (!claimed) return;
 
     try {
+      // isClosed=true: o atendimento fecha assim que o template sai (se o lead responder, abre outro).
       // WhatsApp recusa parâmetro vazio — sem nome cadastrado cai num cumprimento neutro.
       const params = override?.params ?? [primeiroNome(lead.nome) || 'aí', sender];
-      await sendNxTemplate({ baseUrl, apiId, apiToken }, phone, template, language, params, false);
+      await sendNxTemplate({ baseUrl, apiId, apiToken }, phone, template, language, params, true);
       await registrar(leadRowId, 'template_sent', template);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Falha ao enviar.';

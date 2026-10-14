@@ -4,7 +4,7 @@ import { query, queryOne } from '../db.js';
 import { allowedPageIds } from './leadPages.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
-import { enviarBoasVindasLead } from '../lib/leadWelcome.js';
+import { enviarBoasVindasLead, listarTemplatesAprovados } from '../lib/leadWelcome.js';
 import { findMatchingClientId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 import { syncScheduledMeeting, localDateTimeToISO } from '../lib/calendarSync.js';
 
@@ -1062,7 +1062,21 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   // POST /api/lead-rows/simular-trafego — botão "Simular lead" de Novos Leads: cria um lead de teste
   // no quadro de entrada (como o webhook do Meta faria) e dispara a boas-vindas de verdade, pra
   // conferir o fluxo todo pelo painel. Espera o envio terminar pra devolver o resultado na hora.
-  app.post<{ Body: { nome?: string; telefone?: string } }>(
+  app.get(
+    '/api/lead-rows/simular-trafego/templates',
+    { onRequest: [app.authenticate] },
+    async () => {
+      try {
+        return { templates: await listarTemplatesAprovados() };
+      } catch (err) {
+        // Sem lista o painel deixa digitar o nome do template — não é erro pro usuário.
+        console.error('[lead-welcome] falha ao listar templates', err);
+        return { templates: [] };
+      }
+    }
+  );
+
+  app.post<{ Body: { nome?: string; telefone?: string; template?: string; language?: string; params?: string[] } }>(
     '/api/lead-rows/simular-trafego',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -1070,6 +1084,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const nome = (req.body?.nome ?? '').trim();
       const telefone = (req.body?.telefone ?? '').trim();
       if (!nome || !telefone) return reply.status(400).send({ message: 'Informe nome e telefone.' });
+      const params = Array.isArray(req.body?.params) ? req.body.params.map((x) => String(x ?? '').trim()) : undefined;
+      if (params?.some((x) => !x)) return reply.status(400).send({ message: 'Preencha todas as variáveis do template.' });
 
       const board = await queryOne<{ id: string }>(
         `SELECT lb.id FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page
@@ -1095,7 +1111,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         [lead.id, 'created', null, null, name || 'Simulação']
       );
 
-      await enviarBoasVindasLead(lead.id);
+      await enviarBoasVindasLead(lead.id, { template: req.body?.template, language: req.body?.language, params });
       const res = await queryOne<{ boas_vindas_enviada_em: string | null; boas_vindas_erro: string | null }>(
         'SELECT boas_vindas_enviada_em, boas_vindas_erro FROM lead_rows WHERE id = $1',
         [lead.id]

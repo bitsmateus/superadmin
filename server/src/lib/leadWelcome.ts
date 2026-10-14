@@ -1,6 +1,35 @@
 import { query, queryOne } from '../db.js';
 import { sendNxTemplate } from './nxTemplateSend.js';
 import { normalizePhone } from './spreadsheet.js';
+import { bodyVariables, listTemplates } from './metaGraph.js';
+import { resolveWabaAccesses } from './wabaAccess.js';
+
+export interface TemplateOpcao {
+  name: string;
+  language: string;
+  bodyText: string;
+  variableCount: number;
+}
+
+/** Templates APROVADOS do número da boas-vindas, pro seletor do "Simular lead". Acha o cliente
+ *  cadastrado com o mesmo ApiID e lista os templates na Meta; [] se não achar (aí o painel cai
+ *  pra digitar o nome do template à mão). */
+export async function listarTemplatesAprovados(): Promise<TemplateOpcao[]> {
+  const apiId = process.env.LEAD_WELCOME_NX_API_ID?.trim();
+  if (!apiId) return [];
+  const client = await queryOne<{ id: string }>('SELECT id FROM clients WHERE tenant_api_id = $1 LIMIT 1', [apiId]);
+  if (!client) return [];
+  const accesses = await resolveWabaAccesses(client.id);
+  const out: TemplateOpcao[] = [];
+  for (const access of accesses) {
+    for (const t of await listTemplates(access)) {
+      if ((t.status || '').toUpperCase() !== 'APPROVED') continue;
+      const bodyText = (t.components || []).find((c) => (c.type || '').toUpperCase() === 'BODY')?.text || '';
+      out.push({ name: t.name, language: t.language || 'pt_BR', bodyText, variableCount: bodyVariables(bodyText).length });
+    }
+  }
+  return out;
+}
 
 /** Primeiro nome com a inicial maiúscula ("maria da silva" -> "Maria"). Vazio se não houver nome. */
 export function primeiroNome(nome: string | null | undefined): string {
@@ -22,7 +51,11 @@ async function registrar(leadRowId: string, type: 'template_sent' | 'template_fa
  * (template_sent / template_failed) e pras colunas boas_vindas_* (selo no card). Nunca lança:
  * quem chama dispara em background e o webhook não pode falhar por causa do WhatsApp.
  */
-export async function enviarBoasVindasLead(leadRowId: string): Promise<void> {
+export async function enviarBoasVindasLead(
+  leadRowId: string,
+  /** Só o "Simular lead" usa: troca template/idioma/variáveis do envio. */
+  override?: { template?: string; language?: string; params?: string[] },
+): Promise<void> {
   const apiId = process.env.LEAD_WELCOME_NX_API_ID?.trim();
   const apiToken = process.env.LEAD_WELCOME_NX_TOKEN?.trim();
   if (!apiId || !apiToken) {
@@ -30,8 +63,8 @@ export async function enviarBoasVindasLead(leadRowId: string): Promise<void> {
     return;
   }
   const baseUrl = (process.env.LEAD_WELCOME_NX_BASE_URL?.trim() || 'https://webapi.nxsystems.com.br').replace(/\/$/, '');
-  const template = process.env.LEAD_WELCOME_TEMPLATE?.trim() || 'primeiro_dia';
-  const language = process.env.LEAD_WELCOME_LANGUAGE?.trim() || 'en';
+  const template = override?.template?.trim() || process.env.LEAD_WELCOME_TEMPLATE?.trim() || 'primeiro_dia';
+  const language = override?.language?.trim() || process.env.LEAD_WELCOME_LANGUAGE?.trim() || 'en';
   const sender = process.env.LEAD_WELCOME_SENDER?.trim() || 'Arthur';
 
   try {
@@ -60,7 +93,7 @@ export async function enviarBoasVindasLead(leadRowId: string): Promise<void> {
 
     try {
       // WhatsApp recusa parâmetro vazio — sem nome cadastrado cai num cumprimento neutro.
-      const params = [primeiroNome(lead.nome) || 'aí', sender];
+      const params = override?.params ?? [primeiroNome(lead.nome) || 'aí', sender];
       await sendNxTemplate({ baseUrl, apiId, apiToken }, phone, template, language, params, false);
       await registrar(leadRowId, 'template_sent', template);
     } catch (err) {

@@ -699,7 +699,8 @@ END; $$`);
       ('followup', 'D1',  '#22C55E', 0), ('followup', 'D3',  '#84CC16', 1), ('followup', 'D5',  '#EAB308', 2),
       ('followup', 'D7',  '#F97316', 3), ('followup', 'D14', '#EF4444', 4), ('followup', 'D21', '#8B5CF6', 5),
       ('disparo',  'D7',  '#22C55E', 0), ('disparo',  'D14', '#84CC16', 1), ('disparo',  'D30', '#EAB308', 2),
-      ('disparo',  'D45', '#F97316', 3), ('disparo',  'D60', '#EF4444', 4), ('disparo',  'D90', '#8B5CF6', 5)
+      ('disparo',  'D45', '#F97316', 3), ('disparo',  'D60', '#EF4444', 4), ('disparo',  'D90', '#8B5CF6', 5),
+      ('disparo',  'ENCERRADO', '#000000', 6)
     ) AS v(field, name, color, position)
     WHERE lp.archived_at IS NULL
       AND lp.name ~* '(arthur|lu[ií]s)' AND lp.name !~* 'closer'

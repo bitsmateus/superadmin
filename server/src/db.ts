@@ -29,6 +29,22 @@ export async function queryOne<T = Record<string, unknown>>(
   return rows[0] ?? null;
 }
 
+/**
+ * Roda uma query numa transação curta com `app.actor` definido (SET LOCAL via set_config) — é de lá
+ * que o trigger de lead_board_history lê "quem moveu". Fora disso o trigger grava 'Sistema'.
+ */
+export async function queryAsActor<T = Record<string, unknown>>(
+  actor: string,
+  sql: string,
+  params?: unknown[]
+): Promise<T[]> {
+  return withTransaction(async (client) => {
+    await client.query(`SELECT set_config('app.actor', $1, true)`, [actor]);
+    const { rows } = await client.query(sql, params);
+    return rows as T[];
+  });
+}
+
 export async function withTransaction<T>(
   fn: (client: PoolClient) => Promise<T>
 ): Promise<T> {
@@ -481,6 +497,64 @@ END $$`);
         FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
     END IF;
   END $$`);
+  // ── Histórico de coluna + campos de automação (réguas de WhatsApp via n8n) ──────────────────
+  // entrou_coluna_em: quando o card entrou na coluna ATUAL. Cards antigos ficam NULL (sem backfill
+  // de propósito — não dá pra saber); só passa a valer a partir da próxima troca.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS entrou_coluna_em TIMESTAMPTZ`);
+  // Régua automática (n8n): separada das colunas 'followup'/'disparo' (cadência manual do time).
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS regua TEXT NOT NULL DEFAULT ''
+    CHECK (regua IN ('', 'disparo', 'proposta'))`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS regua_etapa TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS regua_ultimo_envio_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS regua_status TEXT NOT NULL DEFAULT ''
+    CHECK (regua_status IN ('', 'ativa', 'respondeu', 'encerrada', 'optout'))`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS optout BOOLEAN NOT NULL DEFAULT false`);
+  // Uma linha por entrada/troca de coluna. Os NOMES das colunas ficam gravados junto (renomear ou
+  // apagar um quadro não pode apagar o histórico). from_board_* NULL = entrada (card criado).
+  await pool.query(`CREATE TABLE IF NOT EXISTS lead_board_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_row_id UUID NOT NULL REFERENCES lead_rows(id) ON DELETE CASCADE,
+    from_board_id UUID,
+    from_board_name TEXT,
+    to_board_id UUID NOT NULL,
+    to_board_name TEXT NOT NULL DEFAULT '',
+    moved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    moved_by TEXT NOT NULL DEFAULT 'Sistema'
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_board_history_lead_idx ON lead_board_history(lead_row_id, moved_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_board_history_to_idx ON lead_board_history(to_board_id, moved_at DESC)`);
+  // Trigger no banco (e não na rota) porque a coluna muda por vários caminhos: tela, importação,
+  // espelho do closer, API de integração. 'app.actor' vem de queryAsActor; sem ele, 'Sistema'.
+  await pool.query(`CREATE OR REPLACE FUNCTION lead_rows_set_entrou_coluna() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.entrou_coluna_em := COALESCE(NEW.entrou_coluna_em, NOW());
+  ELSIF NEW.board_id IS DISTINCT FROM OLD.board_id THEN
+    NEW.entrou_coluna_em := NOW();
+  END IF;
+  RETURN NEW;
+END; $$`);
+  await pool.query(`CREATE OR REPLACE FUNCTION lead_rows_record_board_history() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  ator TEXT := COALESCE(NULLIF(current_setting('app.actor', true), ''), 'Sistema');
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO lead_board_history (lead_row_id, from_board_id, from_board_name, to_board_id, to_board_name, moved_at, moved_by)
+    VALUES (NEW.id, NULL, NULL, NEW.board_id, COALESCE((SELECT name FROM lead_boards WHERE id = NEW.board_id), ''), NOW(), ator);
+  ELSIF NEW.board_id IS DISTINCT FROM OLD.board_id THEN
+    INSERT INTO lead_board_history (lead_row_id, from_board_id, from_board_name, to_board_id, to_board_name, moved_at, moved_by)
+    VALUES (NEW.id, OLD.board_id, (SELECT name FROM lead_boards WHERE id = OLD.board_id), NEW.board_id,
+            COALESCE((SELECT name FROM lead_boards WHERE id = NEW.board_id), ''), NOW(), ator);
+  END IF;
+  RETURN NEW;
+END; $$`);
+  await pool.query(`DROP TRIGGER IF EXISTS lead_rows_entrou_coluna ON lead_rows`);
+  await pool.query(`CREATE TRIGGER lead_rows_entrou_coluna BEFORE INSERT OR UPDATE OF board_id ON lead_rows
+    FOR EACH ROW EXECUTE FUNCTION lead_rows_set_entrou_coluna()`);
+  await pool.query(`DROP TRIGGER IF EXISTS lead_rows_board_history ON lead_rows`);
+  await pool.query(`CREATE TRIGGER lead_rows_board_history AFTER INSERT OR UPDATE OF board_id ON lead_rows
+    FOR EACH ROW EXECUTE FUNCTION lead_rows_record_board_history()`);
+
   // Bloco de anotações/atualizações por lead (painel lateral, estilo Monday).
   await pool.query(`CREATE TABLE IF NOT EXISTS lead_notes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

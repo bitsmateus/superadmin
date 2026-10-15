@@ -487,6 +487,19 @@ export function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescri
           ? { label: 'Marcado como retornado', color: '#15803D' }
           : { label: 'Desmarcado como retornado', color: '#9CA3AF' },
       }
+    case 'tipo':
+    case 'ligacao':
+    case 'followup':
+    case 'disparo': {
+      // Colunas de etiqueta trocadas pela automação (API de integração). Sem mapa de cores próprio: etiqueta neutra.
+      const nome = { tipo: 'Tipo', ligacao: 'Lig.', followup: 'Follow-up', disparo: 'Disparo' }[e.type]
+      return {
+        icon: <Circle className="h-3.5 w-3.5" />,
+        text: e.fromValue ? nome : `${nome} definido como`,
+        from: chip(e.fromValue, {}),
+        to: chip(e.toValue, {}),
+      }
+    }
     case 'template_sent':
       return {
         icon: <Send className="h-3.5 w-3.5" />,

@@ -157,7 +157,9 @@ export interface LeadNote {
 }
 
 /** Tipo de evento gravado automaticamente na linha do tempo do lead. */
-export type LeadEventType = 'created' | 'status' | 'dia_contato' | 'sdr' | 'board' | 'retornado' | 'template_sent' | 'template_failed'
+export type LeadEventType =
+  | 'created' | 'status' | 'dia_contato' | 'sdr' | 'board' | 'retornado' | 'template_sent' | 'template_failed'
+  | 'tipo' | 'ligacao' | 'followup' | 'disparo'
 
 /** Entrada da linha do tempo automática — gravada pelo backend a cada mudança relevante. */
 export interface LeadEvent {

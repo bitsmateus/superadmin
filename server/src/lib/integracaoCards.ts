@@ -115,6 +115,7 @@ export interface PatchValidado {
   campos: Record<string, unknown>; // coluna em lead_rows -> valor
   coluna?: string; // nome da coluna de destino
   boardId?: string; // id da coluna de destino
+  etiquetas?: unknown; // pedido bruto {"Disparo":"D7"}; resolvido na rota contra as etiquetas da aba
   erro?: string;
 }
 
@@ -159,6 +160,11 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
         if (!d) return { ...out, erro: '"regua_ultimo_envio_em" deve ser uma data ISO válida.' };
         out.campos[chave] = d.toISOString();
       }
+    } else if (chave === 'etiquetas') {
+      if (!valor || typeof valor !== 'object' || Array.isArray(valor)) {
+        return { ...out, erro: '"etiquetas" deve ser um objeto, ex.: {"Disparo":"D7"}.' };
+      }
+      out.etiquetas = valor;
     } else if (chave === 'optout') {
       const v = parseBool(valor);
       if (v === null) return { ...out, erro: '"optout" deve ser true/false (ou "sim"/"não").' };
@@ -171,7 +177,7 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
   if (out.coluna && out.boardId) return { ...out, erro: 'Envie "coluna" OU "board_id", não os dois.' };
   // Marcar opt-out sem dizer o status da régua encerra a régua: ninguém pode continuar recebendo.
   if (out.campos.optout === true && !('regua_status' in out.campos)) out.campos.regua_status = 'optout';
-  if (!Object.keys(out.campos).length && !out.coluna && !out.boardId) return { ...out, erro: 'Nada para atualizar.' };
+  if (!Object.keys(out.campos).length && !out.coluna && !out.boardId && !out.etiquetas) return { ...out, erro: 'Nada para atualizar.' };
   return out;
 }
 
@@ -179,4 +185,72 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
 export function textoParaHtml(texto: string): string {
   const esc = texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return `<p>${esc.replace(/\r?\n/g, '<br>')}</p>`;
+}
+
+// ── Colunas de etiqueta ─────────────────────────────────────────────────────
+
+/** As colunas "de etiqueta" do quadro (as de bolinha colorida), com o nome como aparece na tela, o
+ * `field` em lead_labels e a coluna em lead_rows. Cada aba tem seu próprio conjunto de etiquetas por
+ * field (SDR é global). */
+export const COLUNAS_ETIQUETA = [
+  { nome: 'Tipo', field: 'tipo', coluna: 'tipo' },
+  { nome: 'Dia de contato', field: 'dia_contato', coluna: 'dia_contato' },
+  { nome: 'Lig.', field: 'ligacao', coluna: 'ligacao' },
+  { nome: 'Status', field: 'status', coluna: 'status' },
+  { nome: 'Follow-up', field: 'followup', coluna: 'followup' },
+  { nome: 'Disparo', field: 'disparo', coluna: 'disparo' },
+  { nome: 'SDR', field: 'sdr', coluna: 'sdr' },
+] as const;
+
+/** Etiquetas cadastradas na aba, por field. Campo sem nenhuma etiqueta na aba = coluna não existe lá. */
+export type OpcoesEtiqueta = Record<string, string[]>;
+
+/** { "<coluna>": "<etiqueta atual ou ''>" } com as colunas de etiqueta que a aba do card tem. */
+export function montarEtiquetas(valores: Record<string, string | null | undefined>, opcoes: OpcoesEtiqueta): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const c of COLUNAS_ETIQUETA) {
+    if (opcoes[c.field]?.length) out[c.nome] = valores[c.coluna] ?? '';
+  }
+  return out;
+}
+
+export interface EtiquetasResolvidas {
+  campos: Record<string, string>; // coluna em lead_rows -> nome EXATO da etiqueta ('' = limpar)
+  erro?: string;
+  validas?: Record<string, string[]>; // coluna -> etiquetas válidas (vai junto do 400)
+}
+
+/**
+ * Valida {"Disparo":"D7"} contra as etiquetas que já existem na aba. Coluna e etiqueta são comparadas
+ * sem diferenciar maiúscula/acento/pontuação; a coluna vale pelo nome da tela ("Follow-up") ou pelo
+ * field ("followup"). Nunca cria etiqueta: inexistente é erro e devolve a lista das válidas. '' ou
+ * null limpa a coluna.
+ */
+export function resolverEtiquetas(pedido: unknown, opcoes: OpcoesEtiqueta): EtiquetasResolvidas {
+  const disponiveis = COLUNAS_ETIQUETA.filter((c) => opcoes[c.field]?.length);
+  const validas: Record<string, string[]> = {};
+  for (const c of disponiveis) validas[c.nome] = opcoes[c.field];
+  const campos: Record<string, string> = {};
+  if (!pedido || typeof pedido !== 'object' || Array.isArray(pedido)) {
+    return { campos, validas, erro: '"etiquetas" deve ser um objeto, ex.: {"Disparo":"D7"}.' };
+  }
+  for (const [chave, valor] of Object.entries(pedido as Record<string, unknown>)) {
+    const alvo = normalizaNome(chave);
+    const col = disponiveis.find((c) => normalizaNome(c.nome) === alvo || normalizaNome(c.field) === alvo);
+    if (!alvo || !col) {
+      return { campos, validas, erro: `Coluna de etiqueta "${chave}" não existe neste quadro. Válidas: ${disponiveis.map((c) => c.nome).join(', ') || '(nenhuma)'}.` };
+    }
+    if (col.coluna in campos) return { campos, validas, erro: `Coluna "${col.nome}" aparece mais de uma vez em "etiquetas".` };
+    if (valor === null || valor === '') {
+      campos[col.coluna] = '';
+      continue;
+    }
+    if (typeof valor !== 'string') return { campos, validas, erro: `Etiqueta de "${col.nome}" deve ser texto.` };
+    const achada = opcoes[col.field].find((n) => normalizaNome(n) === normalizaNome(valor));
+    if (!achada) {
+      return { campos, validas, erro: `Etiqueta "${valor}" não existe na coluna "${col.nome}". Válidas: ${opcoes[col.field].join(', ')}.` };
+    }
+    campos[col.coluna] = achada;
+  }
+  return { campos, validas };
 }

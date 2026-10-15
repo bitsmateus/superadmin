@@ -43,7 +43,7 @@ Achar por telefone (com/sem 55, com/sem o 9):
 curl -H "x-api-key: $KEY" "$API/api/integracao/cards/telefone/11987654321"
 ```
 
-Atualizar (qualquer subconjunto de: `coluna` | `board_id`, `status`, `agendamento`, `retornar`, `dor_cliente` (ou `dor`), `numero_atendentes` (ou `atendentes`), `valor_mrr` (`mrr`), `valor_implementacao` (`implementacao`), `sdr`, `regua` (`disparo`|`proposta`|`""`), `regua_etapa`, `regua_ultimo_envio_em`, `regua_status` (`ativa`|`respondeu`|`encerrada`|`optout`), `optout`):
+Atualizar (qualquer subconjunto de: `etiquetas`, `coluna` | `board_id`, `status`, `agendamento`, `retornar`, `dor_cliente` (ou `dor`), `numero_atendentes` (ou `atendentes`), `valor_mrr` (`mrr`), `valor_implementacao` (`implementacao`), `sdr`, `regua` (`disparo`|`proposta`|`""`), `regua_etapa`, `regua_ultimo_envio_em`, `regua_status` (`ativa`|`respondeu`|`encerrada`|`optout`), `optout`):
 ```bash
 # régua enviada
 curl -X PATCH -H "x-api-key: $KEY" -H "content-type: application/json" \
@@ -63,6 +63,23 @@ Anotação no log do card (texto puro; `autor` opcional, padrão "Automação"):
 ```bash
 curl -X POST -H "x-api-key: $KEY" -H "content-type: application/json" \
   "$API/api/integracao/cards/$ID/log" -d '{"texto":"Luiza: enviou template D7"}'
+```
+
+### Colunas de etiqueta (`etiquetas`)
+
+Toda resposta de card (listagem, por telefone e PATCH) traz `etiquetas`: `{ "<coluna como aparece no quadro>": "<etiqueta atual ou ''>" }`, com as colunas de etiqueta que a **aba** do card tem: `Tipo`, `Dia de contato`, `Lig.`, `Status`, `Follow-up`, `Disparo`, `SDR` (só aparece a coluna que tem etiquetas cadastradas naquela aba; cada aba tem as suas, `SDR` é global).
+
+No PATCH, `"etiquetas": {"Disparo": "D7", "Follow-up": "D3"}`:
+- coluna e etiqueta comparadas sem diferenciar maiúscula/acento/pontuação (`"disparo"`, `"follow up"` e `"d7"` valem); a coluna vale pelo nome da tela ou pelo nome interno (`followup`, `dia_contato`, `ligacao`);
+- só aceita etiqueta que **já existe** naquela coluna (nunca cria); `""`/`null` limpa;
+- coluna ou etiqueta inexistente -> `400` com a mensagem e `etiquetas_validas` (todas as colunas e suas etiquetas);
+- as etiquetas valem para a aba do card **depois** do PATCH (se o mesmo PATCH move o card para outro quadro, vale a aba de destino);
+- `Status` e `SDR` também têm campo próprio (`status`, `sdr`): mandar os dois no mesmo PATCH dá `400`;
+- cada troca grava um evento na linha do tempo do card (autor "Automação"): `status`, `dia_contato`, `sdr`, `tipo`, `ligacao`, `followup`, `disparo`. (A tela só registra os três primeiros; os demais passam a aparecer na linha do tempo com o deploy do front.)
+
+```bash
+curl -X PATCH -H "x-api-key: $KEY" -H "content-type: application/json" \
+  "$API/api/integracao/cards/$ID" -d '{"etiquetas":{"Disparo":"D7"}}'
 ```
 
 Erros: `401` chave errada/ausente · `503` chave não configurada no servidor · `400` corpo/campo inválido · `403` coluna de Vendas/Contrato · `404` card/coluna/telefone não encontrado · `409` nome de coluna ambíguo (use `board_id`).

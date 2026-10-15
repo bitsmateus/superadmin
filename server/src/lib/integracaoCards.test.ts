@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  chaveValida, colunasQueCasam, mesmoTelefone, parseDataIntegracao, telefoneComDdi, textoParaHtml, validarPatchIntegracao,
+  chaveValida, colunasQueCasam, mesmoTelefone, montarEtiquetas, resolverEtiquetas, parseDataIntegracao, telefoneComDdi, textoParaHtml, validarPatchIntegracao,
 } from './integracaoCards.js';
 
 test('telefoneComDdi: só dígitos e com 55', () => {
@@ -73,4 +73,45 @@ test('validarPatchIntegracao', () => {
 
 test('textoParaHtml escapa HTML', () => {
   assert.equal(textoParaHtml('Luiza: <b>D7</b>\nok'), '<p>Luiza: &lt;b&gt;D7&lt;/b&gt;<br>ok</p>');
+});
+
+const opcoes = {
+  disparo: ['D7', 'D14', 'D30', 'D45', 'D60', 'D90', 'ENCERRADO'],
+  followup: ['D1', 'D3', 'D5', 'D7', 'D14', 'D21'],
+  status: ['Primeiro contato', 'Vendido'],
+  tipo: ['Lead'],
+};
+
+test('montarEtiquetas: só colunas com etiqueta na aba, vazio vira ""', () => {
+  assert.deepEqual(montarEtiquetas({ disparo: 'D7', followup: '', status: 'Vendido', tipo: null }, opcoes), {
+    Tipo: '', Status: 'Vendido', 'Follow-up': '', Disparo: 'D7',
+  });
+  assert.deepEqual(montarEtiquetas({ disparo: 'D7' }, {}), {});
+});
+
+test('resolverEtiquetas: ignora caixa/acento, aceita nome da tela ou field, nunca cria', () => {
+  const r = resolverEtiquetas({ disparo: 'encerrado', 'FOLLOW UP': 'd3' }, opcoes);
+  assert.equal(r.erro, undefined);
+  assert.deepEqual(r.campos, { disparo: 'ENCERRADO', followup: 'D3' });
+  assert.deepEqual(resolverEtiquetas({ Disparo: '' }, opcoes).campos, { disparo: '' });
+  assert.deepEqual(resolverEtiquetas({ Disparo: null }, opcoes).campos, { disparo: '' });
+});
+
+test('resolverEtiquetas: coluna ou etiqueta inexistente -> erro com as válidas', () => {
+  const a = resolverEtiquetas({ Disparo: 'D8' }, opcoes);
+  assert.match(a.erro!, /D8.*Disparo.*D7, D14/);
+  assert.deepEqual(a.validas?.Disparo, opcoes.disparo);
+  const b = resolverEtiquetas({ Inexistente: 'D7' }, opcoes);
+  assert.match(b.erro!, /Inexistente.*Válidas: .*Disparo/);
+  assert.ok(resolverEtiquetas({ Disparo: 7 }, opcoes).erro);
+  assert.ok(resolverEtiquetas({ Disparo: 'D7', disparo: 'D14' }, opcoes).erro); // duplicada
+  assert.ok(resolverEtiquetas({ SDR: 'x' }, opcoes).erro); // aba sem etiquetas de SDR
+  assert.ok(resolverEtiquetas('D7', opcoes).erro);
+});
+
+test('validarPatchIntegracao aceita "etiquetas"', () => {
+  const v = validarPatchIntegracao({ etiquetas: { Disparo: 'D7' } });
+  assert.equal(v.erro, undefined);
+  assert.deepEqual(v.etiquetas, { Disparo: 'D7' });
+  assert.ok(validarPatchIntegracao({ etiquetas: 'D7' }).erro);
 });

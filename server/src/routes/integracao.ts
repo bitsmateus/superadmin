@@ -4,8 +4,8 @@ import {
   idCanonicoDasNotas, logLeadEvent, sincronizarContagemNotas, statusDoQuadro, syncEspelhoReuniaoAgendada,
 } from './leadBoards.js';
 import {
-  chaveTelefone, chaveValida, colunasQueCasam, mesmoTelefone, parseDataIntegracao, telefoneComDdi,
-  textoParaHtml, validarPatchIntegracao,
+  chaveTelefone, chaveValida, colunasQueCasam, mesmoTelefone, montarEtiquetas, parseDataIntegracao,
+  resolverEtiquetas, telefoneComDdi, textoParaHtml, validarPatchIntegracao, type OpcoesEtiqueta,
 } from '../lib/integracaoCards.js';
 
 /**
@@ -19,24 +19,51 @@ import {
  */
 
 const ATOR = 'automação';
+/** Campos que viram evento na linha do tempo do card (type = nome da coluna). status/dia_contato/sdr já
+ * eram rastreados pela tela; tipo/ligacao/followup/disparo entram aqui pra a troca de etiqueta ficar visível. */
+const CAMPOS_NA_LINHA_DO_TEMPO = ['status', 'dia_contato', 'sdr', 'tipo', 'ligacao', 'followup', 'disparo'] as const;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface CardRow {
   id: string; nome: string; empresa: string; telefone: string; status: string; sdr: string;
   dor_cliente: string; numero_atendentes: string; entrou_coluna_em: string | null;
   regua: string; regua_etapa: string; regua_ultimo_envio_em: string | null; regua_status: string; optout: boolean;
+  tipo: string; dia_contato: string; ligacao: string; followup: string; disparo: string;
   coluna_id: string; coluna: string; quadro_id: string; quadro: string;
 }
 
 const SELECT_CARD = `
   SELECT r.id, r.nome, r.empresa, r.telefone, r.status, r.sdr, r.dor_cliente, r.numero_atendentes,
          r.entrou_coluna_em, r.regua, r.regua_etapa, r.regua_ultimo_envio_em, r.regua_status, r.optout,
+         r.tipo, r.dia_contato, r.ligacao, r.followup, r.disparo,
          lb.id AS coluna_id, lb.name AS coluna, lp.id AS quadro_id, lp.name AS quadro
   FROM lead_rows r
   JOIN lead_boards lb ON lb.id = r.board_id
   JOIN lead_pages lp ON lp.id = lb.page`;
 
-function cardParaApi(r: CardRow) {
+/** Etiquetas cadastradas por aba: devolve uma função page -> (field -> nomes, na ordem da tela). SDR é
+ * global (page_id nulo) e vale em todas as abas. */
+type OpcoesPorAba = (page: string) => OpcoesEtiqueta;
+
+async function carregarOpcoesEtiqueta(): Promise<OpcoesPorAba> {
+  const rows = await query<{ field: string; name: string; page_id: string | null }>(
+    'SELECT field, name, page_id FROM lead_labels ORDER BY position, created_at'
+  );
+  const globais: OpcoesEtiqueta = {};
+  const porAba = new Map<string, OpcoesEtiqueta>();
+  for (const l of rows) {
+    if (l.page_id === null) (globais[l.field] ??= []).push(l.name);
+    else {
+      const o = porAba.get(l.page_id) ?? {};
+      (o[l.field] ??= []).push(l.name);
+      porAba.set(l.page_id, o);
+    }
+  }
+  return (page) => ({ ...globais, ...(porAba.get(page) ?? {}) });
+}
+
+function cardParaApi(r: CardRow, opcoes: OpcoesPorAba) {
   return {
     id: r.id,
     quadro: r.quadro,
@@ -57,6 +84,7 @@ function cardParaApi(r: CardRow) {
     sdr: r.sdr,
     dor_cliente: r.dor_cliente,
     numero_atendentes: r.numero_atendentes,
+    etiquetas: montarEtiquetas(r as unknown as Record<string, string>, opcoes(r.quadro_id)),
   };
 }
 
@@ -125,7 +153,8 @@ export async function integracaoRoutes(app: FastifyInstance) {
          LIMIT $3`,
         [ids, depois ? depois.toISOString() : null, limite]
       );
-      return rows.map(cardParaApi);
+      const opcoes = await carregarOpcoesEtiqueta();
+      return rows.map((r) => cardParaApi(r, opcoes));
     }
   );
 
@@ -147,7 +176,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
         return copia(a) - copia(b) || (b.entrou_coluna_em ?? '').localeCompare(a.entrou_coluna_em ?? '');
       });
     if (!achados.length) return reply.status(404).send({ message: 'Nenhum card com esse telefone.' });
-    return { ...cardParaApi(achados[0]), total_encontrados: achados.length, outros_ids: achados.slice(1).map((c) => c.id) };
+    return { ...cardParaApi(achados[0], await carregarOpcoesEtiqueta()), total_encontrados: achados.length, outros_ids: achados.slice(1).map((c) => c.id) };
   });
 
   // PATCH /api/integracao/cards/:id
@@ -158,9 +187,11 @@ export async function integracaoRoutes(app: FastifyInstance) {
     if (v.erro) return reply.status(400).send({ message: v.erro });
 
     const atual = await queryOne<{
-      board_id: string; page: string; status: string; venda_origem_id: string | null; board_is_vendas: boolean;
+      board_id: string; page: string; venda_origem_id: string | null; board_is_vendas: boolean;
+      status: string; sdr: string; tipo: string; dia_contato: string; ligacao: string; followup: string; disparo: string;
     }>(
-      `SELECT r.board_id, lb.page, r.status, r.venda_origem_id, lb.is_vendas AS board_is_vendas
+      `SELECT r.board_id, lb.page, r.status, r.sdr, r.tipo, r.dia_contato, r.ligacao, r.followup, r.disparo,
+              r.venda_origem_id, lb.is_vendas AS board_is_vendas
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
        WHERE r.id = $1 AND r.deleted_at IS NULL`,
       [id]
@@ -169,6 +200,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
 
     // Resolve a coluna de destino. Por nome, só dentro do quadro do próprio card; por board_id, qualquer uma.
     let destino: string | null = null;
+    let paginaFinal = atual.page; // aba cujas etiquetas valem (muda se o card for pra outro quadro)
     if (v.coluna || v.boardId) {
       if (atual.venda_origem_id || atual.board_is_vendas) {
         return reply.status(400).send({ message: 'Esse card é uma venda: a API não move cards da aba Vendas.' });
@@ -185,12 +217,13 @@ export async function integracaoRoutes(app: FastifyInstance) {
         if (ids.length > 1) return reply.status(409).send({ message: `Nome de coluna ambíguo ("${v.coluna}"); use board_id.` });
         destino = ids[0];
       }
-      const alvo = await queryOne<{ name: string; is_vendas: boolean; is_contrato: boolean; archived_at: string | null }>(
-        `SELECT lb.name, lb.is_vendas, lb.is_contrato, lp.archived_at FROM lead_boards lb
+      const alvo = await queryOne<{ name: string; page: string; is_vendas: boolean; is_contrato: boolean; archived_at: string | null }>(
+        `SELECT lb.name, lb.page, lb.is_vendas, lb.is_contrato, lp.archived_at FROM lead_boards lb
          JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1`,
         [destino]
       );
       if (!alvo) return reply.status(404).send({ message: 'Coluna de destino não existe.' });
+      paginaFinal = alvo.page;
       if (alvo.archived_at) return reply.status(400).send({ message: 'A coluna de destino está num quadro arquivado.' });
       if (alvo.is_vendas || alvo.is_contrato) {
         return reply.status(403).send({ message: 'A API não move cards para colunas de Vendas/Contrato (venda e comissão não são pela API).' });
@@ -199,6 +232,17 @@ export async function integracaoRoutes(app: FastifyInstance) {
     const moveu = destino !== null && destino !== atual.board_id;
 
     const campos: Record<string, unknown> = { ...v.campos };
+    // Etiquetas por nome ({"Disparo":"D7"}): só aceita as que já existem na aba — nunca cria. Status e SDR
+    // também são colunas de etiqueta, mas têm campo próprio no PATCH; pedir os dois é ambíguo.
+    const opcoes = await carregarOpcoesEtiqueta();
+    if (v.etiquetas !== undefined) {
+      const r = resolverEtiquetas(v.etiquetas, opcoes(paginaFinal));
+      if (r.erro) return reply.status(400).send({ message: r.erro, etiquetas_validas: r.validas });
+      for (const [coluna, valor] of Object.entries(r.campos)) {
+        if (coluna in campos) return reply.status(400).send({ message: `"${coluna}" veio em "etiquetas" e também como campo próprio; envie só um.` });
+        campos[coluna] = valor;
+      }
+    }
     if (moveu) {
       const [{ max }] = await query<{ max: number | null }>('SELECT MAX(position) AS max FROM lead_rows WHERE board_id = $1', [destino]);
       campos.board_id = destino;
@@ -212,7 +256,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
     const chaves = Object.keys(campos);
     if (!chaves.length) {
       const semMudanca = await buscarCard(id);
-      return semMudanca ? cardParaApi(semMudanca) : reply.status(404).send({ message: 'Card não encontrado.' });
+      return semMudanca ? cardParaApi(semMudanca, opcoes) : reply.status(404).send({ message: 'Card não encontrado.' });
     }
 
     // Os nomes das colunas vêm da lista fixa do validador (nunca do cliente) — seguro interpolar.
@@ -220,20 +264,24 @@ export async function integracaoRoutes(app: FastifyInstance) {
     const params = [...chaves.map((k) => campos[k]), id];
     await queryAsActor(ATOR, `UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
 
-    // Linha do tempo do card (mesma da tela). Só coluna e status: o resto não é rastreado lá.
+    // Linha do tempo do card (a mesma da tela): coluna, status, SDR, dia de contato e as colunas de etiqueta.
     const depois = await buscarCard(id);
     if (!depois) return reply.status(404).send({ message: 'Card não encontrado.' });
     if (moveu) {
       const antes = await queryOne<{ name: string }>('SELECT name FROM lead_boards WHERE id = $1', [atual.board_id]);
       await logLeadEvent(id, 'board', antes?.name ?? null, depois.coluna, 'Automação').catch(() => undefined);
     }
-    if ('status' in campos && String(campos.status) !== (atual.status ?? '')) {
-      await logLeadEvent(id, 'status', atual.status || null, String(campos.status) || null, 'Automação').catch(() => undefined);
+    for (const tipo of CAMPOS_NA_LINHA_DO_TEMPO) {
+      if (!(tipo in campos)) continue;
+      const de = String(atual[tipo] ?? '');
+      const para = String(campos[tipo] ?? '');
+      if (de === para) continue;
+      await logLeadEvent(id, tipo, de || null, para || null, 'Automação').catch(() => undefined);
     }
     // Espelho do closer: igual à tela, quando a coluna ou o status mudou.
     if (moveu || 'status' in campos) await espelharSeReuniaoAgendada(id);
 
-    return cardParaApi(depois);
+    return cardParaApi(depois, opcoes);
   });
 
   // POST /api/integracao/cards/:id/log  { "texto": "Luiza: enviou template D7", "autor": "Luiza" (opcional) }

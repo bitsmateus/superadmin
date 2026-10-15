@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne, queryAsActor } from '../db.js';
 import { allowedPageIds } from './leadPages.js';
-import { podeVerMetricasDoCloser, podeVerVendasOuComissoes } from '../lib/acessoMenu.js';
+import { ehAdmin, podeVerMetricasDoCloser } from '../lib/acessoMenu.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { enviarBoasVindasLead, listarTemplatesAprovados } from '../lib/leadWelcome.js';
@@ -209,12 +209,8 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
  * board ids. Só faz consulta extra pro papel 'suporte' ("Usuário") — admin/supervisor saem com null.
  */
 export async function restrictedBoardFilter(userId: string, role: string): Promise<string[] | null> {
-  if (role !== 'suporte') return null;
-  const profile = await queryOne<{ restrict_access: boolean }>(
-    'SELECT restrict_access FROM profiles WHERE id = $1',
-    [userId]
-  );
-  if (!profile?.restrict_access) return null;
+  // Só administrador vê todos os quadros. Qualquer outro perfil: só as abas marcadas, e nunca Vendas/Contrato.
+  if (role === 'admin') return null;
 
   const menuRows = await query<{ menu_key: string }>(
     'SELECT menu_key FROM user_menu_access WHERE user_id = $1',
@@ -231,7 +227,7 @@ export async function restrictedBoardFilter(userId: string, role: string): Promi
   if (!pageAccess.length) return []; // nenhuma aba marcada ainda = não vê nenhum quadro
 
   const boards = await query<{ id: string }>(
-    'SELECT id FROM lead_boards WHERE page = ANY($1)',
+    'SELECT id FROM lead_boards WHERE page = ANY($1) AND NOT is_vendas AND NOT is_contrato',
     [pageAccess.map((r) => r.page_id)]
   );
   return boards.map((r) => r.id);
@@ -804,8 +800,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   // confirmado no contrato primeiro, casamento por telefone/nome depois, sempre exigindo um único
   // candidato.
   app.get('/api/lead-rows/ficha-status-lote', { onRequest: [app.authenticate] }, async (req) => {
-    const eu = req.user as { sub: string; role?: string };
-    if (!(await podeVerVendasOuComissoes(eu.sub, eu.role))) return {};
+    if (!ehAdmin((req.user as { role?: string }).role)) return {};
     const vendas = await query<{ id: string; nome: string; empresa: string; telefone: string; venda_origem_id: string | null }>(
       `SELECT r.id, r.nome, r.empresa, r.telefone, r.venda_origem_id
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id

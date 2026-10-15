@@ -1,3 +1,4 @@
+import { ehAdmin } from '../lib/acessoMenu.js';
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { restrictedBoardFilter } from './leadBoards.js';
@@ -13,6 +14,17 @@ import { findMatchingLeadRowId } from '../lib/leadMatch.js';
  */
 
 export async function contractRoutes(app: FastifyInstance) {
+  // Financeiro: SÓ administrador (preHandler: roda depois do authenticate de cada rota).
+  app.addHook('preHandler', async (req, reply) => {
+    const u = req.user as { sub?: string; role?: string } | undefined;
+    if (!u?.sub) return;
+    if (ehAdmin(u.role)) return;
+    // A ficha do lead e a aba CRM do cliente pedem a lista pra todo mundo: pra quem não é admin ela vem vazia
+    // (sem erro na tela). Qualquer outra coisa (abrir, criar, editar, PDF) é recusada.
+    const caminho = (req.url ?? '').split('?')[0];
+    if (req.method === 'GET' && (caminho === '/api/contracts' || caminho === '/api/contract-templates')) return reply.send([]);
+    return reply.status(403).send({ message: 'Contratos são só do administrador' });
+  });
   // ---------- Modelos ----------
 
   app.get('/api/contract-templates', { onRequest: [app.authenticate] }, async () => {

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
-import { temMarcaDeMenu } from '../lib/acessoMenu.js';
+import { ehAdmin } from '../lib/acessoMenu.js';
 import { findMatchingLeadRowId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 import { sendMail } from '../lib/mailer.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
@@ -295,8 +295,7 @@ export async function clientRoutes(app: FastifyInstance) {
   // primeiro, telefone depois, nome por último — e sempre exigindo UM único candidato, pra nunca
   // sugerir o valor da venda de outra pessoa.
   app.get('/api/clients/valores-sugeridos', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const eu = req.user as { sub: string; role?: string };
-    if (!(await temMarcaDeMenu(eu.sub, eu.role, 'financeiro_clientes_geral'))) return reply.status(403).send({ message: 'Sem acesso a Clientes Geral' });
+    if (!ehAdmin((req.user as { role?: string }).role)) return reply.status(403).send({ message: 'Só do administrador' });
     const vendas = await query<{
       id: string; nome: string; empresa: string; telefone: string; valor_mrr: string; valor_implementacao: string;
     }>(

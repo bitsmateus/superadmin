@@ -351,12 +351,8 @@ function mesesDeReferencia(periodo?: string): [string, string] {
  * leria os clientes de tráfego mesmo sem ver o item no menu.
  */
 async function podeUsarModulo(userId: string, role: string): Promise<boolean> {
+  // Só administrador entra sem marca; os demais precisam de uma aba do NX DIGITAL marcada.
   if (role === 'admin') return true;
-  const perfil = await queryOne<{ restrict_access: boolean }>(
-    'SELECT restrict_access FROM profiles WHERE id = $1',
-    [userId]
-  );
-  if (!perfil?.restrict_access) return true;
   const chave = await queryOne(
     `SELECT 1 FROM user_menu_access WHERE user_id = $1 AND menu_key LIKE 'nxdigital%'`,
     [userId]

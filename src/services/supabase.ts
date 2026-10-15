@@ -42,8 +42,9 @@ export function resolveArea(area: TeamArea | null | undefined): TeamArea {
   return area === 'comercial' || area === 'entrega' ? area : 'ambos'
 }
 
+/** Dinheiro da empresa (Financeiro, Comando, Tráfego, valores): SÓ administrador. Nenhum outro perfil vê, nem marcado. */
 export function canSeeFinancials(role: UserRole | null | undefined): boolean {
-  return role === 'admin' || role === 'supervisor'
+  return role === 'admin'
 }
 
 export function canDeleteClient(role: UserRole | null | undefined): boolean {

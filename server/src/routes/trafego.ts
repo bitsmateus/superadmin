@@ -22,7 +22,8 @@ const PAPEIS = ['', 'escala', 'teste'];
 
 async function soGestao(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const role = (req.user as { role?: string }).role;
-  if (role !== 'admin' && role !== 'supervisor') reply.status(403).send({ message: 'Acesso negado' });
+  // Gasto da empresa: só administrador.
+  if (role !== 'admin') reply.status(403).send({ message: 'Acesso negado' });
 }
 
 /** Período da requisição: padrão = últimos 30 dias até hoje (inclusive), em datas de São Paulo. */

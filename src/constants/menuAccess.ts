@@ -56,11 +56,9 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   { key: 'nxdigital_clientes', label: 'Clientes', path: '/clientesnxdigital/clientes', group: 'nxdigital' },
   { key: 'nxdigital_demandas', label: 'Kanban demandas', path: '/clientesnxdigital/demandas', group: 'nxdigital' },
   { key: 'nxdigital_socialmedia', label: 'Social media', path: '/clientesnxdigital/socialmedia', group: 'nxdigital' },
-  // Telas que não são abas (Vendas e Contrato são abas, marcadas na seção Financeiro). Cada uma tem marca própria:
-  // sem ela, quem é restrito não vê no menu, não abre pelo link e a API recusa.
+  // Tela que não é aba: marca própria. (O Financeiro inteiro — Vendas, Contrato, Contas a Pagar, Clientes Geral —
+  // NÃO está aqui de propósito: é só de administrador e não dá pra liberar pra ninguém.)
   { key: 'comercial_dashboard', label: 'Dashboard Comercial', path: '/comercial-dashboard', group: 'outros', fixo: true },
-  { key: 'financeiro_contas_pagar', label: 'Contas a Pagar (Financeiro)', path: '/financeiro/contas-a-pagar', group: 'outros', fixo: true },
-  { key: 'financeiro_clientes_geral', label: 'Clientes Geral (Financeiro)', path: '/financeiro/clientes-geral', group: 'outros', fixo: true },
 ]
 
 /** As chaves das abas do NX DIGITAL. */

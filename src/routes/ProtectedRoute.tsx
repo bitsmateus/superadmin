@@ -28,7 +28,7 @@ const casa = (path: string, base: string) => path === base || path.startsWith(ba
  * aqui não abre, mesmo digitando o endereço. 'carregando' = ainda falta saber quais abas a pessoa tem.
  */
 function liberadoParaRestrito(path: string, c: Contexto): boolean | 'carregando' {
-  // Telas com marca (Suporte, NX Digital, Agenda, Dashboard Comercial, Contas a Pagar, Clientes Geral)
+  // Telas com marca (Suporte, NX Digital, Agenda, Dashboard Comercial)
   if (path === '/') return c.allowed.has('dashboard')
   const item = MENU_ACCESS_ITEMS
     .filter((i) => i.path !== '/' && casa(path, i.path))
@@ -41,15 +41,15 @@ function liberadoParaRestrito(path: string, c: Contexto): boolean | 'carregando'
   if (aba) {
     if (aba[2] && ABAS_QUE_SO_REDIRECIONAM.has(aba[2])) return true
     if (!c.pagesBooted) return 'carregando'
-    return aba[2] ? c.pages.some((p) => p.id === aba[2]) : c.pages.length > 0
+    // Aba de Financeiro (Vendas/Contrato) não abre por aqui também, mesmo que tenha sido marcada no passado.
+    const financeiras = new Set(c.boards.filter((b) => b.isVendas || b.isContrato).map((b) => b.page))
+    if (!c.boardsBooted) return 'carregando'
+    const abas = c.pages.filter((p) => !financeiras.has(p.id))
+    return aba[2] ? abas.some((p) => p.id === aba[2]) : abas.length > 0
   }
 
-  // Vendas e Contrato: abas do Financeiro, valem se o quadro delas chegou pra pessoa
-  if (path === '/financeiro/gestao-interna') return true
-  if (casa(path, '/financeiro/vendas') || casa(path, '/financeiro/contrato')) {
-    if (!c.boardsBooted) return 'carregando'
-    return casa(path, '/financeiro/vendas') ? c.boards.some((b) => b.isVendas) : c.boards.some((b) => b.isContrato)
-  }
+  // Financeiro inteiro (Vendas, Contrato, Contas a Pagar, Clientes Geral, painel financeiro): só administrador.
+  if (casa(path, '/financeiro')) return false
 
   // Cópia de uma tela do Suporte: vale a marca da tela de origem
   const visao = path.match(/^\/visao\/([^/]+)/)
@@ -68,7 +68,8 @@ function liberadoParaRestrito(path: string, c: Contexto): boolean | 'carregando'
 function primeiroLiberado(c: Contexto): string | null {
   const item = MENU_ACCESS_ITEMS.find((i) => (i.key === 'agenda' ? acessoAAgenda(c.allowed) : c.allowed.has(i.key)))
   if (item) return item.path
-  const aba = c.pages[0]
+  const financeiras = new Set(c.boards.filter((b) => b.isVendas || b.isContrato).map((b) => b.page))
+  const aba = c.pages.find((p) => !financeiras.has(p.id))
   if (aba) return `/${aba.section === 'demandas' ? 'demandas' : 'comercial'}/${aba.id}`
   return null
 }
@@ -106,8 +107,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Admin e quem não é restrito veem tudo (as telas de admin/gestão têm trava própria por papel).
-  if ((session.restrictAccess || session.role === 'suporte') && session.role !== 'admin') {
+  // Só administrador vê tudo. Qualquer outro perfil abre apenas o que foi marcado em Permissões.
+  if (session.role !== 'admin') {
     const ctx: Contexto = {
       allowed: new Set(session.menuAccess ?? []),
       pages, pagesBooted, boards, boardsBooted, supportPages, supportBooted,

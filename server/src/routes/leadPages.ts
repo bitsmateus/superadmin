@@ -40,12 +40,7 @@ async function uniquePageId(name: string): Promise<string> {
 /** true se o usuário tem acesso ao Comercial como um todo — granularidade fina fica por ABA
  * (user_page_access, ver allowedPageIds abaixo). */
 async function hasComercialAccess(userId: string, role: string): Promise<boolean> {
-  if (role !== 'suporte') return true;
-  const profile = await queryOne<{ restrict_access: boolean }>(
-    'SELECT restrict_access FROM profiles WHERE id = $1',
-    [userId]
-  );
-  if (!profile?.restrict_access) return true;
+  if (role === 'admin') return true;
   const menuRows = await query<{ menu_key: string }>(
     'SELECT menu_key FROM user_menu_access WHERE user_id = $1',
     [userId]
@@ -60,14 +55,12 @@ async function hasComercialAccess(userId: string, role: string): Promise<boolean
  * ou usuário sem restrict_access) · [] = nenhuma aba marcada = não vê nenhuma (a pessoa que
  * gerencia Equipe precisa marcar manualmente o que cada um vê, sem abas marcadas por padrão). */
 export async function allowedPageIds(userId: string, role: string): Promise<string[] | null> {
-  if (role !== 'suporte') return null;
-  const profile = await queryOne<{ restrict_access: boolean }>(
-    'SELECT restrict_access FROM profiles WHERE id = $1',
-    [userId]
-  );
-  if (!profile?.restrict_access) return null;
+  // Só administrador vê todas as abas. Os demais: as marcadas, menos as do Financeiro (Vendas/Contrato).
+  if (role === 'admin') return null;
   const rows = await query<{ page_id: string }>(
-    'SELECT page_id FROM user_page_access WHERE user_id = $1',
+    `SELECT a.page_id FROM user_page_access a
+     WHERE a.user_id = $1
+       AND NOT EXISTS (SELECT 1 FROM lead_boards b WHERE b.page = a.page_id AND (b.is_vendas OR b.is_contrato))`,
     [userId]
   );
   if (!rows.length) return [];

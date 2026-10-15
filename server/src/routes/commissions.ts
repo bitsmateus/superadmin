@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { CLOSER_TYPE_LABEL, recalcularComissaoCloser } from './leadBoards.js';
-import { podeVerVendasOuComissoes } from '../lib/acessoMenu.js';
+import { ehAdmin } from '../lib/acessoMenu.js';
 
 /**
  * Comissões (aba "Gestão Interna", em Financeiro) — feature isolada: só lê contagens de
@@ -10,11 +10,11 @@ import { podeVerVendasOuComissoes } from '../lib/acessoMenu.js';
  * (venda/entrega/indicação), com status pago/pendente.
  */
 export async function commissionRoutes(app: FastifyInstance) {
-  // Comissão é dado de Vendas/Financeiro: só quem tem a aba Vendas ou Contas a Pagar liberada.
+  // Financeiro: SÓ administrador (preHandler: roda depois do authenticate de cada rota).
   app.addHook('preHandler', async (req, reply) => {
     const u = req.user as { sub?: string; role?: string } | undefined;
     if (!u?.sub) return;
-    if (!(await podeVerVendasOuComissoes(u.sub, u.role))) return reply.status(403).send({ message: 'Sem acesso às comissões' });
+    if (!ehAdmin(u.role)) return reply.status(403).send({ message: 'Comissões são só do administrador' });
   });
 
   // ---------- Tipos ----------

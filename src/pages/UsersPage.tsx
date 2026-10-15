@@ -589,7 +589,8 @@ function EditUserModal({
         else menuKeysToSave.delete('comercial')
         await Promise.all([
           api.put(`/api/users/${profile.id}/menu-access`, { menuKeys: Array.from(menuKeysToSave) }),
-          api.put(`/api/users/${profile.id}/page-access`, { pageIds: Array.from(pageIds) }),
+          // Aba do Financeiro nunca vai junto, mesmo que tenha ficado marcada de antes.
+          api.put(`/api/users/${profile.id}/page-access`, { pageIds: Array.from(pageIds).filter((id) => !pages.find((p) => p.id === id)?.is_financeiro) }),
         ])
       }
       toast.success('Usuário atualizado')
@@ -679,14 +680,7 @@ function EditUserModal({
                   setPageIds={setPageIds}
                   togglePageId={togglePageId}
                 />
-                <PageAccessGroup
-                  label="Financeiro"
-                  emptyText="Nenhuma aba do Financeiro cadastrada ainda."
-                  pages={pages.filter((p) => p.is_financeiro)}
-                  pageIds={pageIds}
-                  setPageIds={setPageIds}
-                  togglePageId={togglePageId}
-                />
+                {/* Financeiro não aparece aqui: é só de administrador e não se libera pra ninguém. */}
 
                 {(['suporte', 'nxdigital', 'outros'] as const).map((grupo) => {
                   const groupItems = MENU_ACCESS_ITEMS.filter((item) => item.group === grupo)

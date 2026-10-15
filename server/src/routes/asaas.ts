@@ -1,3 +1,4 @@
+import { temMarcaDeMenu } from '../lib/acessoMenu.js';
 import { FastifyInstance } from 'fastify';
 import { queryOne } from '../db.js';
 import { sincronizarAsaas, buscarValoresAsaas } from '../jobs/asaasSync.js';
@@ -26,6 +27,8 @@ export async function asaasRoutes(app: FastifyInstance) {
     '/api/asaas/sync',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
+      const eu = req.user as { sub: string; role?: string };
+      if (!(await temMarcaDeMenu(eu.sub, eu.role, 'financeiro_clientes_geral'))) return reply.status(403).send({ message: 'Sem acesso a Clientes Geral' });
       try {
         const resultado = await sincronizarAsaas({ dryRun: req.query?.dryRun === '1' });
         if (!resultado) return reply.status(400).send({ message: 'Asaas não configurado (falta a chave de API em Configurações).' });
@@ -38,7 +41,9 @@ export async function asaasRoutes(app: FastifyInstance) {
 
   // GET /api/asaas/valores — valor da assinatura no Asaas por cliente, pra Clientes Geral mostrar
   // do lado do valor preenchido à mão. Só leitura: não cria vínculo nem grava nada em `clients`.
-  app.get('/api/asaas/valores', { onRequest: [app.authenticate] }, async (_req, reply) => {
+  app.get('/api/asaas/valores', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const u = req.user as { sub: string; role?: string };
+    if (!(await temMarcaDeMenu(u.sub, u.role, 'financeiro_clientes_geral'))) return reply.status(403).send({ message: 'Sem acesso a Clientes Geral' });
     try {
       const valores = await buscarValoresAsaas();
       if (!valores) return reply.status(400).send({ message: 'Asaas não configurado (falta a chave de API em Configurações).' });

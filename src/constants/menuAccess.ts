@@ -8,7 +8,7 @@
  * outro dentro de Comercial — a separação entre o que cada área vê não é por essa allowlist, é
  * automática por profile.area dentro da própria AgendaPage (ver resolveArea/useAgenda*).
  */
-export type MenuAccessGroup = 'comercial' | 'suporte' | 'nxdigital'
+export type MenuAccessGroup = 'comercial' | 'suporte' | 'nxdigital' | 'outros'
 
 export interface MenuAccessItem {
   key: string
@@ -26,6 +26,7 @@ export const MENU_ACCESS_GROUP_LABEL: Record<MenuAccessGroup, string> = {
   comercial: 'Comercial',
   suporte: 'Suporte',
   nxdigital: 'NX DIGITAL',
+  outros: 'Outras telas',
 }
 
 // O Comercial NÃO tem um item aqui — cada aba (Novos Leads, CRM NX Luis, CRM NX Arthur, Vendas,
@@ -55,14 +56,19 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   { key: 'nxdigital_clientes', label: 'Clientes', path: '/clientesnxdigital/clientes', group: 'nxdigital' },
   { key: 'nxdigital_demandas', label: 'Kanban demandas', path: '/clientesnxdigital/demandas', group: 'nxdigital' },
   { key: 'nxdigital_socialmedia', label: 'Social media', path: '/clientesnxdigital/socialmedia', group: 'nxdigital' },
+  // Telas que não são abas (Vendas e Contrato são abas, marcadas na seção Financeiro). Cada uma tem marca própria:
+  // sem ela, quem é restrito não vê no menu, não abre pelo link e a API recusa.
+  { key: 'comercial_dashboard', label: 'Dashboard Comercial', path: '/comercial-dashboard', group: 'outros', fixo: true },
+  { key: 'financeiro_contas_pagar', label: 'Contas a Pagar (Financeiro)', path: '/financeiro/contas-a-pagar', group: 'outros', fixo: true },
+  { key: 'financeiro_clientes_geral', label: 'Clientes Geral (Financeiro)', path: '/financeiro/clientes-geral', group: 'outros', fixo: true },
 ]
 
 /** As chaves das abas do NX DIGITAL. */
 export const CHAVES_NX_DIGITAL = ['nxdigital_clientes', 'nxdigital_demandas', 'nxdigital_socialmedia'] as const
 
-/** A pessoa restrita pode abrir a Agenda? Com a marca "Agenda" ou com o Comercial liberado. */
+/** A pessoa restrita pode abrir a Agenda? Só com a marca "Agenda" — ter uma aba do Comercial não basta. */
 export function acessoAAgenda(allowed: Set<string>): boolean {
-  return allowed.has('agenda') || allowed.has('comercial')
+  return allowed.has('agenda')
 }
 
 export const MENU_KEY_BY_PATH: Record<string, string> = Object.fromEntries(

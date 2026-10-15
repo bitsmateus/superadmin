@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
+import { temMarcaDeMenu } from '../lib/acessoMenu.js';
 
 const MONTH_NAMES_FULL = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -19,6 +20,15 @@ function monthFullLabel(id: string): string {
  * com uma rota própria pra buscar um item completo.
  */
 export async function payablesRoutes(app: FastifyInstance) {
+  // Contas a Pagar só pra quem tem a marca em Permissões (preHandler: roda depois do authenticate de cada rota).
+  app.addHook('preHandler', async (req, reply) => {
+    const u = req.user as { sub?: string; role?: string } | undefined;
+    if (!u?.sub) return;
+    if (!(await temMarcaDeMenu(u.sub, u.role, 'financeiro_contas_pagar'))) {
+      return reply.status(403).send({ message: 'Sem acesso a Contas a Pagar' });
+    }
+  });
+
   // ---------- Grupos ----------
 
   app.get('/api/payables-groups', { onRequest: [app.authenticate] }, async () => {

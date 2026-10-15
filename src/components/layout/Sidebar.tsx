@@ -286,7 +286,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
 
   // Usuário com acesso restrito só enxerga os itens liberados em Permissões (Equipe).
   // Itens fora dessa lista (admin-only, financeiro) já têm gate próprio por papel.
-  const menuAllowed = profile?.restrictAccess ? new Set(profile.menuAccess ?? []) : null
+  // Usuário (suporte) só enxerga o que foi marcado — mesmo que o cadastro antigo dissesse "acesso total".
+  const menuAllowed = profile?.restrictAccess || profile?.role === 'suporte' ? new Set(profile?.menuAccess ?? []) : null
   const canSee = React.useCallback(
     (to: string) => {
       if (menuAllowed === null) return true
@@ -296,6 +297,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       if (to === '/agenda') return acessoAAgenda(menuAllowed)
       // O grupo NX DIGITAL aparece se QUALQUER aba dele está liberada; cada aba, pela chave dela.
       if (to === '/clientesnxdigital') return [...menuAllowed].some((k) => k.startsWith('nxdigital_'))
+      if (to === '/comercial-dashboard') return menuAllowed.has('comercial_dashboard')
+      if (to === '/financeiro/contas-a-pagar') return menuAllowed.has('financeiro_contas_pagar')
+      if (to === '/financeiro/clientes-geral') return menuAllowed.has('financeiro_clientes_geral')
       const key = MENU_KEY_BY_PATH[to]
       return key ? menuAllowed.has(key) : true
     },
@@ -366,10 +370,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   // pra onde a pessoa quiser dentro do grupo, em vez de ficar preso no topo. A Agenda é a MESMA
   // agenda que aparece em Suporte (mesma rota /agenda) — só um segundo atalho até ela; quem abre
   // por aqui enxerga só as reuniões "comercial" (ver separação por área dentro de AgendaPage).
+  // Cada atalho só entra com a marca dele: o Dashboard Comercial e a Agenda não vêm "de brinde" com as abas.
   const comercialItems = visibleComercialItems.length
     ? [
-        { to: '/comercial-dashboard', label: 'Dashboard Comercial', icon: LayoutDashboard },
-        { to: '/agenda', label: 'Agenda', icon: CalendarDays },
+        ...(canSee('/comercial-dashboard') ? [{ to: '/comercial-dashboard', label: 'Dashboard Comercial', icon: LayoutDashboard }] : []),
+        ...(canSee('/agenda') ? [{ to: '/agenda', label: 'Agenda', icon: CalendarDays }] : []),
         ...visibleComercialItems,
       ]
     : []
@@ -384,14 +389,14 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     : []
   const hasVendasBoard = leadBoards.some((b) => b.isVendas)
   const hasContratoBoard = leadBoards.some((b) => b.isContrato)
-  const visibleFinanceiroItems = canSee('/comercial')
-    ? [
-        ...(hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
-        ...(hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),
-        { to: '/financeiro/contas-a-pagar', label: 'Contas a Pagar', icon: Wallet },
-        { to: '/financeiro/clientes-geral', label: 'CLIENTES GERAL', icon: Users },
-      ]
-    : []
+  // Vendas e Contrato seguem as abas do Comercial liberadas (o quadro só chega pra quem tem a aba). Contas a
+  // Pagar e Clientes Geral têm marca própria em Permissões: antes apareciam pra qualquer um com Comercial.
+  const visibleFinanceiroItems = [
+    ...(canSee('/comercial') && hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
+    ...(canSee('/comercial') && hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),
+    ...(canSee('/financeiro/contas-a-pagar') ? [{ to: '/financeiro/contas-a-pagar', label: 'Contas a Pagar', icon: Wallet }] : []),
+    ...(canSee('/financeiro/clientes-geral') ? [{ to: '/financeiro/clientes-geral', label: 'CLIENTES GERAL', icon: Users }] : []),
+  ]
   // Cada grupo já sai na ordem que ESSA pessoa montou arrastando (ver useMenuArrastavel).
   const suporteOrdenado = ordenar('suporte', suporte)
   const comercialOrdenado = ordenar('comercial', comercialItems)

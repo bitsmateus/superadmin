@@ -101,7 +101,8 @@ export async function authRoutes(app: FastifyInstance) {
         `INSERT INTO profiles (email, name, role, area, restrict_access, password_hash)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, email, name, role, area, restrict_access AS "restrictAccess", created_at`,
-        [email.trim().toLowerCase(), name, role || 'suporte', area || 'ambos', restrictAccess ?? false, hash]
+        // Perfil Usuário (suporte) nasce e fica SEMPRE restrito: só vê o que o admin marcar em Permissões.
+        [email.trim().toLowerCase(), name, role || 'suporte', area || 'ambos', (role || 'suporte') === 'suporte' ? true : (restrictAccess ?? false), hash]
       );
       return reply.status(201).send(created);
     }
@@ -173,6 +174,11 @@ export async function authRoutes(app: FastifyInstance) {
                    sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", created_at`,
         params
       );
+      // Usuário (suporte) não tem "acesso total": qualquer edição o mantém restrito ao que estiver marcado.
+      if (updated && (updated as { role?: string }).role === 'suporte' && !(updated as { restrictAccess?: boolean }).restrictAccess) {
+        await query('UPDATE profiles SET restrict_access = true WHERE id = $1', [id]);
+        (updated as { restrictAccess?: boolean }).restrictAccess = true;
+      }
       if (!updated) return reply.status(404).send({ message: 'Usuário não encontrado' });
       return updated;
     }

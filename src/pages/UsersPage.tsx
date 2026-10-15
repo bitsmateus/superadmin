@@ -348,11 +348,7 @@ function ProfileRow({
       </TD>
       <TD>
         {profile.role === 'suporte' ? (
-          profile.restrictAccess ? (
-            <Badge tone="warning">Restrito</Badge>
-          ) : (
-            <Badge tone="neutral">Acesso total</Badge>
-          )
+          <Badge tone="warning">Só o que for marcado</Badge>
         ) : (
           <span className="text-xs text-foreground/35">Acesso total</span>
         )}
@@ -530,7 +526,8 @@ function EditUserModal({
     setEmail(profile.email)
     setPassword('')
     setRole(profile.role)
-    setRestricted(!!profile.restrictAccess)
+    // Usuário (suporte) é sempre restrito: não existe mais "acesso total" pra esse perfil.
+    setRestricted(true)
     setLoadingPerms(true)
     Promise.all([
       api.get<PageLite[]>('/api/lead-pages'),
@@ -539,7 +536,8 @@ function EditUserModal({
     ])
       .then(([allPages, menu, pageAccess]) => {
         setPages(allPages)
-        setMenuKeys(new Set(menu.length ? menu : MENU_ACCESS_ITEMS.map((i) => i.key)))
+        // Nada vem marcado de brinde: usuário sem marcação não vê nada até o admin liberar.
+        setMenuKeys(new Set(menu))
         setPageIds(new Set(pageAccess))
       })
       .catch((err) => toast.error('Falha ao carregar permissões: ' + (err instanceof Error ? err.message : 'Erro')))
@@ -579,11 +577,11 @@ function EditUserModal({
         name: name.trim(),
         email: email.trim(),
         role,
-        restrictAccess: role === 'suporte' ? restricted : false,
+        restrictAccess: role === 'suporte',
       }
       if (password.trim()) patch.password = password
       await api.patch(`/api/users/${profile.id}`, patch)
-      if (role === 'suporte' && restricted) {
+      if (role === 'suporte') {
         // "comercial" não tem checkbox próprio — fica ligado sozinho quando pelo menos uma aba
         // está marcada abaixo, e desliga quando nenhuma está (sem abas marcadas = sem Comercial).
         const menuKeysToSave = new Set(menuKeys)
@@ -647,25 +645,11 @@ function EditUserModal({
           </div>
         </div>
 
-        {role === 'suporte' && (
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-foreground/70">Usuário restrito</label>
-            <Select
-              value={restricted ? 'on' : 'off'}
-              onChange={(e) => setRestricted(e.target.value === 'on')}
-              options={[
-                { value: 'off', label: 'Desabilitado — acesso total' },
-                { value: 'on', label: 'Habilitado — só o que for marcado abaixo' },
-              ]}
-              className="w-full sm:max-w-xs"
-            />
-          </div>
-        )}
-
         {role === 'suporte' && restricted && (
+          // Sem marcação, a pessoa não vê NADA: cada tela e cada aba precisa ser liberada aqui.
           <div className="rounded-lg border border-line bg-elevate/[0.015] p-3">
             <div className="mb-2 text-xs font-medium text-foreground/70">
-              Permissões de menu — exatamente o que esse usuário vai ver
+              Permissões de menu — exatamente o que esse usuário vai ver (o que não estiver marcado ele não vê nem abre pelo link)
             </div>
             {loadingPerms ? (
               <div className="flex items-center gap-2 py-3 text-xs text-foreground/50">
@@ -704,7 +688,7 @@ function EditUserModal({
                   togglePageId={togglePageId}
                 />
 
-                {(['suporte', 'nxdigital'] as const).map((grupo) => {
+                {(['suporte', 'nxdigital', 'outros'] as const).map((grupo) => {
                   const groupItems = MENU_ACCESS_ITEMS.filter((item) => item.group === grupo)
                   const allChecked = groupItems.every((item) => menuKeys.has(item.key))
                   const toggleGroup = () => {

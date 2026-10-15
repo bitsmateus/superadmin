@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne, queryAsActor } from '../db.js';
 import { allowedPageIds } from './leadPages.js';
+import { podeVerMetricasDoCloser, podeVerVendasOuComissoes } from '../lib/acessoMenu.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { enviarBoasVindasLead, listarTemplatesAprovados } from '../lib/leadWelcome.js';
@@ -802,7 +803,9 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   // tela lenta. Resolve em memória (poucas centenas de clientes) com a mesma regra: vínculo
   // confirmado no contrato primeiro, casamento por telefone/nome depois, sempre exigindo um único
   // candidato.
-  app.get('/api/lead-rows/ficha-status-lote', { onRequest: [app.authenticate] }, async () => {
+  app.get('/api/lead-rows/ficha-status-lote', { onRequest: [app.authenticate] }, async (req) => {
+    const eu = req.user as { sub: string; role?: string };
+    if (!(await podeVerVendasOuComissoes(eu.sub, eu.role))) return {};
     const vendas = await query<{ id: string; nome: string; empresa: string; telefone: string; venda_origem_id: string | null }>(
       `SELECT r.id, r.nome, r.empresa, r.telefone, r.venda_origem_id
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
@@ -1631,7 +1634,9 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { from?: string; to?: string } }>(
     '/api/closer-metrics',
     { onRequest: [app.authenticate] },
-    async (req) => {
+    async (req, reply) => {
+      const eu = req.user as { sub: string; role?: string };
+      if (!(await podeVerMetricasDoCloser(eu.sub, eu.role))) return reply.status(403).send({ message: 'Sem acesso' });
       const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from ?? '') ? req.query.from! : '1970-01-01';
       const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to ?? '') ? req.query.to! : '2999-12-31';
       const foiAgendada = `(

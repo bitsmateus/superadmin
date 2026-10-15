@@ -690,6 +690,8 @@ END; $$`);
     WHERE page_id IS NULL AND field <> 'sdr' AND EXISTS (SELECT 1 FROM lead_pages)`);
 
   await pool.query(`ALTER TABLE lead_pages ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  // Perfil Usuário (suporte) é sempre restrito: só vê as telas e abas que o admin marcar em Permissões.
+  await pool.query(`UPDATE profiles SET restrict_access = true WHERE role = 'suporte' AND NOT restrict_access`);
   // Etiquetas de cadência das abas CRM do Arthur e do Luis (não o Closer): semeia só se a aba ainda não tem
   // nenhuma daquele campo — assim quem renomear/apagar uma etiqueta não a vê voltar a cada reinício.
   await pool.query(`INSERT INTO lead_labels (field, name, color, position, page_id)

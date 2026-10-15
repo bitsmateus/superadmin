@@ -1,13 +1,18 @@
 import { FastifyInstance } from 'fastify';
+import { podeVerFinanceiro } from '../lib/financeiro.js';
 import { queryOne, query } from '../db.js';
 import { sendSupportGroupMessage, sendWhatsAppToNumber } from '../lib/supportGroup.js';
 import { createEvolutionInstance } from '../lib/evolution.js';
 import { sendMail } from '../lib/mailer.js';
 
-export async function settingsRoutes(app: FastifyInstance) {
-  // GET /api/settings — token dos servers é mascarado (nunca vai pro front).
-  app.get('/api/settings', { onRequest: [app.authenticate] }, async () => {
-    const row = await queryOne<Record<string, unknown>>('SELECT * FROM settings WHERE id = true');
+/**
+ * Configurações como podem sair do servidor: tokens e senhas NUNCA saem (o front só sabe se estão
+ * configurados). A chave do Asaas só vai pra Ian e Mateus (financeiro) — pra mais ninguém, nem admin.
+ * Usada pela rota GET /api/settings e pelos avisos em tempo real (ver sse.ts).
+ */
+export function mascararSettings(original: Record<string, unknown> | null | undefined, financeiro: boolean): Record<string, unknown> {
+  if (!original) return {};
+  const row: Record<string, unknown> = { ...original };
     if (row && Array.isArray(row.servers)) {
       row.servers = (row.servers as Array<Record<string, unknown>>).map((s) => ({
         ...s,
@@ -45,7 +50,20 @@ export async function settingsRoutes(app: FastifyInstance) {
       row.autentique_api_token = '';
       row.autentique_api_token_set = Boolean(autentiqueToken);
     }
-    return row ?? {};
+    if (!financeiro) {
+      const asaas = row.asaas_api_key;
+      row.asaas_api_key = '';
+      row.asaas_api_key_set = Boolean(asaas);
+    }
+  return row;
+}
+
+export async function settingsRoutes(app: FastifyInstance) {
+  // GET /api/settings — token dos servers é mascarado (nunca vai pro front).
+  app.get('/api/settings', { onRequest: [app.authenticate] }, async (req) => {
+    const row = await queryOne<Record<string, unknown>>('SELECT * FROM settings WHERE id = true');
+    const u = req.user as { sub?: string; role?: string };
+    return mascararSettings(row, podeVerFinanceiro(u.sub, u.role));
   });
 
   // PUT /api/settings — admin only

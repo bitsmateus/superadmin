@@ -1,9 +1,15 @@
 import { FastifyReply } from 'fastify';
+import {
+  TABELAS_DO_FINANCEIRO, ehQuadroDoFinanceiro, limparClienteParaQuemNaoEFinanceiro, podeVerFinanceiro,
+} from './lib/financeiro.js';
+import { mascararSettings } from './routes/settings.js';
 
 interface SseClient {
   id: string;
   userId: string;
   role: string;
+  /** Ian ou Mateus: recebe também o que é do Financeiro. */
+  financeiro: boolean;
   reply: FastifyReply;
 }
 
@@ -14,7 +20,7 @@ const clients = new Map<string, SseClient>();
 const onlineCounts = new Map<string, number>();
 
 export function addSseClient(id: string, userId: string, role: string, reply: FastifyReply) {
-  clients.set(id, { id, userId, role, reply });
+  clients.set(id, { id, userId, role, financeiro: podeVerFinanceiro(userId, role), reply });
   const wasOffline = (onlineCounts.get(userId) ?? 0) === 0;
   onlineCounts.set(userId, (onlineCounts.get(userId) ?? 0) + 1);
   if (wasOffline) broadcast('presence', 'online', { user_id: userId });
@@ -39,9 +45,38 @@ export function getOnlineUserIds(): string[] {
   return Array.from(onlineCounts.keys());
 }
 
+/**
+ * O que um aviso do banco pode levar pra quem não é do Financeiro (e o que NUNCA sai pra ninguém).
+ * null = esse aviso não vai pra essa pessoa.
+ */
+function dadosPara(financeiro: boolean, table: string, data: Record<string, unknown>): Record<string, unknown> | null {
+  // Segredos: nunca, pra ninguém.
+  if (table === 'profiles') {
+    const { password_hash: _senha, ...resto } = data;
+    return resto;
+  }
+  if (table === 'settings') return mascararSettings(data, financeiro);
+  if (financeiro) return data;
+  // Financeiro: só Ian e Mateus.
+  if (TABELAS_DO_FINANCEIRO.has(table)) return null;
+  if (table === 'lead_rows' && ehQuadroDoFinanceiro(data.board_id)) return null;
+  if (table === 'clients') return limparClienteParaQuemNaoEFinanceiro(data);
+  return data;
+}
+
 export function broadcast(table: string, type: string, data: Record<string, unknown>) {
-  const payload = `data: ${JSON.stringify({ table, type, data })}\n\n`;
+  // Calcula as duas versões uma vez só (quem é do Financeiro e quem não é).
+  const versoes = new Map<boolean, string | null>()
+  const payloadDe = (financeiro: boolean) => {
+    if (!versoes.has(financeiro)) {
+      const d = dadosPara(financeiro, table, data);
+      versoes.set(financeiro, d ? `data: ${JSON.stringify({ table, type, data: d })}\n\n` : null);
+    }
+    return versoes.get(financeiro)!;
+  };
   for (const client of clients.values()) {
+    const payload = payloadDe(client.financeiro);
+    if (!payload) continue;
     try {
       client.reply.raw.write(payload);
     } catch {

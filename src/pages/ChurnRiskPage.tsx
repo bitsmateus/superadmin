@@ -89,7 +89,7 @@ export function ChurnRiskPage() {
   const report = useChurnRiskReport(reportOpen)
 
   if (authLoading) return null
-  if (!canSeeFinancials(profile?.role)) return <Navigate to="/" replace />
+  if (!canSeeFinancials(profile)) return <Navigate to="/" replace />
 
   const items = data ?? []
   const comSinal = items.filter((i) => i.hasSignal)

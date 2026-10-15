@@ -1,8 +1,14 @@
 import { query, queryOne } from '../db.js';
 import { restrictedBoardFilter } from '../routes/leadBoards.js';
 
-/** Financeiro (Vendas, Contrato, Contas a Pagar, Clientes Geral, comissões, Asaas): SÓ administrador. */
-export function ehAdmin(role: string | undefined): boolean {
+import { podeVerFinanceiro } from './financeiro.js';
+
+/** Financeiro (Vendas, Contrato, Contas a Pagar, Clientes Geral, comissões, Asaas): SÓ Ian e Mateus (ver financeiro.ts). */
+export function ehDoFinanceiro(userId: string | undefined, role: string | undefined): boolean {
+  return podeVerFinanceiro(userId, role);
+}
+
+function ehAdmin(role: string | undefined): boolean {
   return role === 'admin';
 }
 

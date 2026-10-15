@@ -1,4 +1,4 @@
-import { ehAdmin } from '../lib/acessoMenu.js';
+import { ehDoFinanceiro } from '../lib/acessoMenu.js';
 import { FastifyInstance } from 'fastify';
 import { queryOne } from '../db.js';
 import { sincronizarAsaas, buscarValoresAsaas } from '../jobs/asaasSync.js';
@@ -9,7 +9,8 @@ import { sincronizarAsaas, buscarValoresAsaas } from '../jobs/asaasSync.js';
  */
 export async function asaasRoutes(app: FastifyInstance) {
   // GET /api/asaas/status — se está configurado e quando foi a última leitura.
-  app.get('/api/asaas/status', { onRequest: [app.authenticate] }, async () => {
+  app.get('/api/asaas/status', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!ehDoFinanceiro((req.user as { sub?: string }).sub, (req.user as { role?: string }).role)) return reply.status(403).send({ message: 'Só do financeiro' });
     const row = await queryOne<{ tem_chave: boolean; asaas_environment: string | null; asaas_last_sync_at: string | null }>(
       `SELECT (COALESCE(asaas_api_key, '') <> '') AS tem_chave, asaas_environment, asaas_last_sync_at
        FROM settings WHERE id = true`
@@ -27,7 +28,7 @@ export async function asaasRoutes(app: FastifyInstance) {
     '/api/asaas/sync',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      if (!ehAdmin((req.user as { role?: string }).role)) return reply.status(403).send({ message: 'Só do administrador' });
+      if (!ehDoFinanceiro((req.user as { sub?: string }).sub, (req.user as { role?: string }).role)) return reply.status(403).send({ message: 'Só do financeiro' });
       try {
         const resultado = await sincronizarAsaas({ dryRun: req.query?.dryRun === '1' });
         if (!resultado) return reply.status(400).send({ message: 'Asaas não configurado (falta a chave de API em Configurações).' });
@@ -41,7 +42,7 @@ export async function asaasRoutes(app: FastifyInstance) {
   // GET /api/asaas/valores — valor da assinatura no Asaas por cliente, pra Clientes Geral mostrar
   // do lado do valor preenchido à mão. Só leitura: não cria vínculo nem grava nada em `clients`.
   app.get('/api/asaas/valores', { onRequest: [app.authenticate] }, async (req, reply) => {
-    if (!ehAdmin((req.user as { role?: string }).role)) return reply.status(403).send({ message: 'Só do administrador' });
+    if (!ehDoFinanceiro((req.user as { sub?: string }).sub, (req.user as { role?: string }).role)) return reply.status(403).send({ message: 'Só do financeiro' });
     try {
       const valores = await buscarValoresAsaas();
       if (!valores) return reply.status(400).send({ message: 'Asaas não configurado (falta a chave de API em Configurações).' });

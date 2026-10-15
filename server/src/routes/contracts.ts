@@ -1,4 +1,4 @@
-import { ehAdmin } from '../lib/acessoMenu.js';
+import { ehDoFinanceiro } from '../lib/acessoMenu.js';
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { restrictedBoardFilter } from './leadBoards.js';
@@ -18,7 +18,7 @@ export async function contractRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (req, reply) => {
     const u = req.user as { sub?: string; role?: string } | undefined;
     if (!u?.sub) return;
-    if (ehAdmin(u.role)) return;
+    if (ehDoFinanceiro(u.sub, u.role)) return;
     // A ficha do lead e a aba CRM do cliente pedem a lista pra todo mundo: pra quem não é admin ela vem vazia
     // (sem erro na tela). Qualquer outra coisa (abrir, criar, editar, PDF) é recusada.
     const caminho = (req.url ?? '').split('?')[0];

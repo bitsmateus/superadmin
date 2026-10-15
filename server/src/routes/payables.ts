@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
-import { ehAdmin } from '../lib/acessoMenu.js';
+import { ehDoFinanceiro } from '../lib/acessoMenu.js';
 
 const MONTH_NAMES_FULL = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -24,7 +24,7 @@ export async function payablesRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (req, reply) => {
     const u = req.user as { sub?: string; role?: string } | undefined;
     if (!u?.sub) return;
-    if (!ehAdmin(u.role)) return reply.status(403).send({ message: 'Contas a Pagar é só do administrador' });
+    if (!ehDoFinanceiro(u.sub, u.role)) return reply.status(403).send({ message: 'Contas a Pagar é só do administrador' });
   });
 
   // ---------- Grupos ----------

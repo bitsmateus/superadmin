@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { podeVerFinanceiro } from '../lib/financeiro.js';
 import { query, queryOne } from '../db.js';
 import {
   dataSp, rankingTrafego, tempoPrimeiroContato, totaisTrafego, type LinhaTrafego, type NivelTrafego,
@@ -21,9 +22,9 @@ const NIVEIS = ['campanha', 'conjunto', 'anuncio'] as const;
 const PAPEIS = ['', 'escala', 'teste'];
 
 async function soGestao(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const role = (req.user as { role?: string }).role;
-  // Gasto da empresa: só administrador.
-  if (role !== 'admin') reply.status(403).send({ message: 'Acesso negado' });
+  const u = req.user as { sub?: string; role?: string };
+  // Gasto da empresa: só Ian e Mateus.
+  if (!podeVerFinanceiro(u.sub, u.role)) reply.status(403).send({ message: 'Acesso negado' });
 }
 
 /** Período da requisição: padrão = últimos 30 dias até hoje (inclusive), em datas de São Paulo. */

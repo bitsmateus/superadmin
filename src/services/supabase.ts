@@ -20,6 +20,8 @@ export interface Profile {
   restrictAccess?: boolean
   /** Só vem preenchido quando restrictAccess=true — chaves de src/constants/menuAccess.ts. */
   menuAccess?: string[]
+  /** Pode ver o Financeiro (só Ian e Mateus) — calculado no servidor. */
+  financeiro?: boolean
   /** Preferência de tema salva na conta (não no navegador) — null/undefined = nunca escolheu,
    * usa o que já estava aplicado localmente. */
   theme?: 'light' | 'dark' | null
@@ -42,9 +44,10 @@ export function resolveArea(area: TeamArea | null | undefined): TeamArea {
   return area === 'comercial' || area === 'entrega' ? area : 'ambos'
 }
 
-/** Dinheiro da empresa (Financeiro, Comando, Tráfego, valores): SÓ administrador. Nenhum outro perfil vê, nem marcado. */
-export function canSeeFinancials(role: UserRole | null | undefined): boolean {
-  return role === 'admin'
+/** Dinheiro da empresa (Financeiro, Comando, Tráfego, valores): só Ian e Mateus. Quem diz é o servidor (campo
+ * `financeiro` do perfil); a API recusa de qualquer jeito pra mais ninguém. */
+export function canSeeFinancials(profile: { role?: UserRole | null; financeiro?: boolean } | null | undefined): boolean {
+  return profile?.role === 'admin' && profile?.financeiro === true
 }
 
 export function canDeleteClient(role: UserRole | null | undefined): boolean {

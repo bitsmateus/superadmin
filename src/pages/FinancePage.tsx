@@ -137,7 +137,7 @@ export function FinancePage() {
       </div>
     )
   }
-  if (!canSeeFinancials(profile?.role)) {
+  if (!canSeeFinancials(profile)) {
     return <Navigate to="/" replace />
   }
   if (!isBooted()) {

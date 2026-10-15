@@ -56,7 +56,7 @@ function playBeep() {
 
 export function useTicketNotifications(): void {
   const { profile } = useAuth()
-  const canSee = canSeeFinancials(profile?.role) || profile?.role === 'suporte'
+  const canSee = canSeeFinancials(profile) || profile?.role === 'suporte'
 
   React.useEffect(() => {
     if (!canSee) return

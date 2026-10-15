@@ -2,7 +2,8 @@ import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne, queryAsActor } from '../db.js';
 import { allowedPageIds } from './leadPages.js';
-import { ehAdmin, podeVerMetricasDoCloser } from '../lib/acessoMenu.js';
+import { ehDoFinanceiro, podeVerMetricasDoCloser } from '../lib/acessoMenu.js';
+import { podeVerFinanceiro } from '../lib/financeiro.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { enviarBoasVindasLead, listarTemplatesAprovados } from '../lib/leadWelcome.js';
@@ -209,8 +210,13 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
  * board ids. Só faz consulta extra pro papel 'suporte' ("Usuário") — admin/supervisor saem com null.
  */
 export async function restrictedBoardFilter(userId: string, role: string): Promise<string[] | null> {
-  // Só administrador vê todos os quadros. Qualquer outro perfil: só as abas marcadas, e nunca Vendas/Contrato.
-  if (role === 'admin') return null;
+  // Ian e Mateus veem todos os quadros. Outro admin: todos menos Vendas/Contrato. Os demais: só as abas
+  // marcadas, e nunca Vendas/Contrato.
+  if (podeVerFinanceiro(userId, role)) return null;
+  if (role === 'admin') {
+    const todos = await query<{ id: string }>('SELECT id FROM lead_boards WHERE NOT is_vendas AND NOT is_contrato');
+    return todos.map((r) => r.id);
+  }
 
   const menuRows = await query<{ menu_key: string }>(
     'SELECT menu_key FROM user_menu_access WHERE user_id = $1',
@@ -800,7 +806,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
   // confirmado no contrato primeiro, casamento por telefone/nome depois, sempre exigindo um único
   // candidato.
   app.get('/api/lead-rows/ficha-status-lote', { onRequest: [app.authenticate] }, async (req) => {
-    if (!ehAdmin((req.user as { role?: string }).role)) return {};
+    if (!ehDoFinanceiro((req.user as { sub?: string }).sub, (req.user as { role?: string }).role)) return {};
     const vendas = await query<{ id: string; nome: string; empresa: string; telefone: string; venda_origem_id: string | null }>(
       `SELECT r.id, r.nome, r.empresa, r.telefone, r.venda_origem_id
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id

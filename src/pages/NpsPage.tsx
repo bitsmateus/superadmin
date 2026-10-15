@@ -80,7 +80,7 @@ export function NpsPage() {
   )
 
   if (loading) return null
-  if (!canSeeFinancials(profile?.role)) return <Navigate to="/" replace />
+  if (!canSeeFinancials(profile)) return <Navigate to="/" replace />
 
   const { promoters, detractors, neutrals, total, nps, avgScore } = stats
 

@@ -54,7 +54,7 @@ export function ClientsPage() {
   const clients = useClients()
   const { data: allTenants } = useAllTenants()
   const { profile } = useAuth()
-  const seeFinancials = canSeeFinancials(profile?.role)
+  const seeFinancials = canSeeFinancials(profile)
   const canDelete = canDeleteClient(profile?.role)
 
   const onArchive = (id: string, label: string) => {

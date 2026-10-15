@@ -1,3 +1,4 @@
+import { podeVerFinanceiro } from '../lib/financeiro.js';
 import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import { query, queryOne } from '../db.js';
@@ -26,10 +27,13 @@ interface Profile {
 
 /** Anexa a allowlist de itens de menu do próprio usuário — só relevante quando ele está restrito;
  * é isso que o front usa (Sidebar/rotas) pra saber exatamente o que essa sessão pode enxergar. */
-async function attachMenuAccess<T extends { id: string; restrictAccess: boolean }>(profile: T): Promise<T & { menuAccess?: string[] }> {
-  if (!profile.restrictAccess) return profile;
+async function attachMenuAccess<T extends { id: string; restrictAccess: boolean; role?: string }>(profile: T): Promise<T & { menuAccess?: string[]; financeiro: boolean }> {
+  // "financeiro" diz ao front se mostra o Financeiro. Quem decide é o servidor (lib/financeiro.ts), e a API
+  // recusa de qualquer jeito pra quem não é Ian ou Mateus.
+  const financeiro = podeVerFinanceiro(profile.id, profile.role);
+  if (!profile.restrictAccess) return { ...profile, financeiro };
   const rows = await query<{ menu_key: string }>('SELECT menu_key FROM user_menu_access WHERE user_id = $1', [profile.id]);
-  return { ...profile, menuAccess: rows.map((r) => r.menu_key) };
+  return { ...profile, menuAccess: rows.map((r) => r.menu_key), financeiro };
 }
 
 export async function authRoutes(app: FastifyInstance) {

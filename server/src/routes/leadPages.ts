@@ -1,3 +1,4 @@
+import { podeVerFinanceiro } from '../lib/financeiro.js';
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { gerarESalvarPlano, planoSalvo } from '../lib/demandasAi.js';
@@ -55,8 +56,15 @@ async function hasComercialAccess(userId: string, role: string): Promise<boolean
  * ou usuário sem restrict_access) · [] = nenhuma aba marcada = não vê nenhuma (a pessoa que
  * gerencia Equipe precisa marcar manualmente o que cada um vê, sem abas marcadas por padrão). */
 export async function allowedPageIds(userId: string, role: string): Promise<string[] | null> {
-  // Só administrador vê todas as abas. Os demais: as marcadas, menos as do Financeiro (Vendas/Contrato).
-  if (role === 'admin') return null;
+  // Ian e Mateus veem todas as abas. Outro admin: todas menos as do Financeiro. Os demais: as marcadas, menos
+  // as do Financeiro (Vendas/Contrato).
+  if (podeVerFinanceiro(userId, role)) return null;
+  if (role === 'admin') {
+    const todas = await query<{ id: string }>(
+      `SELECT p.id FROM lead_pages p WHERE NOT EXISTS (SELECT 1 FROM lead_boards b WHERE b.page = p.id AND (b.is_vendas OR b.is_contrato))`
+    );
+    return todas.map((r) => r.id);
+  }
   const rows = await query<{ page_id: string }>(
     `SELECT a.page_id FROM user_page_access a
      WHERE a.user_id = $1

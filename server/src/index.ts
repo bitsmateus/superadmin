@@ -1,3 +1,4 @@
+import { recarregarQuadrosDoFinanceiro } from './lib/financeiro.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
@@ -171,7 +172,10 @@ async function main() {
 
   app.get('/health', async () => ({ status: 'ok' }));
 
+  // Quadros de Vendas/Contrato (os leads deles não vão em tempo real pra quem não é do Financeiro).
+  await recarregarQuadrosDoFinanceiro();
   onDbChange((table, type, data) => {
+    if (table === 'lead_boards') void recarregarQuadrosDoFinanceiro();
     broadcast(table, type, data);
   });
 

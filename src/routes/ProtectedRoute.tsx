@@ -5,6 +5,7 @@ import { useLeadBoards, useLeadBoardsBooted } from '@/hooks/useLeadBoards'
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
 import { useSupportPages, useSupportPagesBooted } from '@/hooks/useSupportPages'
 import { MENU_ACCESS_ITEMS, acessoAAgenda } from '@/constants/menuAccess'
+import { canSeeFinancials } from '@/services/supabase'
 import type { LeadBoard, LeadPage } from '@/types/leadBoard'
 import type { SupportPage } from '@/services/supportPages'
 
@@ -106,6 +107,12 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       />
     )
   }
+
+  // Financeiro (e o que é dinheiro da empresa): só Ian e Mateus — vale até pra outro administrador.
+  const caminho = location.pathname
+  const ehTelaDoFinanceiro = caminho === '/financeiro' || caminho.startsWith('/financeiro/') || caminho === '/comando'
+    || caminho === '/trafego' || caminho.startsWith('/trafego/')
+  if (ehTelaDoFinanceiro && !canSeeFinancials(session)) return <Navigate to="/" replace />
 
   // Só administrador vê tudo. Qualquer outro perfil abre apenas o que foi marcado em Permissões.
   if (session.role !== 'admin') {

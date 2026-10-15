@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { CLOSER_TYPE_LABEL, recalcularComissaoCloser } from './leadBoards.js';
-import { ehAdmin } from '../lib/acessoMenu.js';
+import { ehDoFinanceiro } from '../lib/acessoMenu.js';
 
 /**
  * Comissões (aba "Gestão Interna", em Financeiro) — feature isolada: só lê contagens de
@@ -14,7 +14,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (req, reply) => {
     const u = req.user as { sub?: string; role?: string } | undefined;
     if (!u?.sub) return;
-    if (!ehAdmin(u.role)) return reply.status(403).send({ message: 'Comissões são só do administrador' });
+    if (!ehDoFinanceiro(u.sub, u.role)) return reply.status(403).send({ message: 'Comissões são só do administrador' });
   });
 
   // ---------- Tipos ----------

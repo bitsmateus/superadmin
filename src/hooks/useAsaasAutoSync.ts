@@ -16,7 +16,7 @@ import { canSeeFinancials } from '@/services/supabase'
  */
 export function useAsaasAutoSync(): void {
   const { profile } = useAuth()
-  const canSee = canSeeFinancials(profile?.role)
+  const canSee = canSeeFinancials(profile)
 
   React.useEffect(() => {
     if (!canSee) return

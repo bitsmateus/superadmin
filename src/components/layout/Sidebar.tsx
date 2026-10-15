@@ -281,7 +281,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   }
 
   const isAdmin = canManageUsers(profile?.role)
-  const seeFinancials = canSeeFinancials(profile?.role)
+  const seeFinancials = canSeeFinancials(profile)
   const myTasks = useMyOpenTaskCount(profile?.id)
 
   // Usuário com acesso restrito só enxerga os itens liberados em Permissões (Equipe).
@@ -389,8 +389,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     : []
   const hasVendasBoard = leadBoards.some((b) => b.isVendas)
   const hasContratoBoard = leadBoards.some((b) => b.isContrato)
-  // Financeiro (Vendas, Contrato, Contas a Pagar, Clientes Geral): SÓ administrador — não existe marcação que libere.
-  const visibleFinanceiroItems = isAdmin
+  // Financeiro (Vendas, Contrato, Contas a Pagar, Clientes Geral): SÓ Ian e Mateus — não existe marcação que libere.
+  const visibleFinanceiroItems = seeFinancials
     ? [
         ...(hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
         ...(hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),

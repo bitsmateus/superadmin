@@ -31,7 +31,7 @@ export function CommandCenterPage() {
   const navigate = useNavigate()
 
   if (authLoading) return null
-  if (!canSeeFinancials(profile?.role)) return <Navigate to="/" replace />
+  if (!canSeeFinancials(profile)) return <Navigate to="/" replace />
 
   const today = new Date()
   const greeting =

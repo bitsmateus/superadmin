@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne } from '../db.js';
-import { ehAdmin } from '../lib/acessoMenu.js';
+import { ehDoFinanceiro } from '../lib/acessoMenu.js';
+import { limparClienteParaQuemNaoEFinanceiro, podeVerFinanceiro } from '../lib/financeiro.js';
 import { findMatchingLeadRowId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 import { sendMail } from '../lib/mailer.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
@@ -59,10 +60,13 @@ export async function clientRoutes(app: FastifyInstance) {
     '/api/clients',
     { onRequest: [app.authenticate] },
     async (req) => {
-      const rows = await query('SELECT * FROM clients ORDER BY created_at DESC');
-      if (req.query.full) return rows;
-      for (const r of rows as Record<string, unknown>[]) delete r.contract_file;
-      return rows;
+      const rows = await query<Record<string, unknown>>('SELECT * FROM clients ORDER BY created_at DESC');
+      // Valores e dados de cobrança só pra Ian e Mateus; o resto da ficha segue igual pra todo mundo.
+      const u = req.user as { sub?: string; role?: string };
+      const lista = podeVerFinanceiro(u.sub, u.role) ? rows : rows.map(limparClienteParaQuemNaoEFinanceiro);
+      if (req.query.full) return lista;
+      for (const r of lista) delete r.contract_file;
+      return lista;
     }
   );
 
@@ -71,9 +75,10 @@ export async function clientRoutes(app: FastifyInstance) {
     '/api/clients/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const row = await queryOne('SELECT * FROM clients WHERE id = $1', [req.params.id]);
+      const row = await queryOne<Record<string, unknown>>('SELECT * FROM clients WHERE id = $1', [req.params.id]);
       if (!row) return reply.status(404).send({ message: 'Cliente não encontrado' });
-      return row;
+      const u = req.user as { sub?: string; role?: string };
+      return podeVerFinanceiro(u.sub, u.role) ? row : limparClienteParaQuemNaoEFinanceiro(row);
     }
   );
 
@@ -244,8 +249,8 @@ export async function clientRoutes(app: FastifyInstance) {
       const { sub, role } = req.user as { sub: string; role: string };
       const patch = req.body;
 
-      // Guard: suporte cannot touch finance/contract fields
-      if (role === 'suporte') {
+      // Guard: só Ian e Mateus mexem em valores/cobrança/contrato do cliente.
+      if (!podeVerFinanceiro(sub, role)) {
         const restricted = FINANCE_COLS.filter((col) => col in patch);
         if (restricted.length > 0) {
           return reply.status(403).send({
@@ -281,7 +286,7 @@ export async function clientRoutes(app: FastifyInstance) {
         await syncDeliveryMeetingCalendar(updated, sub).catch((err) => console.error('[calendarSync] clients (entrega):', err));
       }
 
-      return updated;
+      return podeVerFinanceiro(sub, role) ? updated : limparClienteParaQuemNaoEFinanceiro(updated as unknown as Record<string, unknown>);
     }
   );
 
@@ -295,7 +300,7 @@ export async function clientRoutes(app: FastifyInstance) {
   // primeiro, telefone depois, nome por último — e sempre exigindo UM único candidato, pra nunca
   // sugerir o valor da venda de outra pessoa.
   app.get('/api/clients/valores-sugeridos', { onRequest: [app.authenticate] }, async (req, reply) => {
-    if (!ehAdmin((req.user as { role?: string }).role)) return reply.status(403).send({ message: 'Só do administrador' });
+    if (!ehDoFinanceiro((req.user as { sub?: string }).sub, (req.user as { role?: string }).role)) return reply.status(403).send({ message: 'Só do financeiro' });
     const vendas = await query<{
       id: string; nome: string; empresa: string; telefone: string; valor_mrr: string; valor_implementacao: string;
     }>(

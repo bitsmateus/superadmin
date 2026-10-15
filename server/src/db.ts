@@ -575,8 +575,12 @@ END $$`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_labels_field_idx ON lead_labels(field)`);
   // "Tipo", "SDR" e "Ligação" também viraram etiqueta colorida — amplia o CHECK pra bancos já existentes.
   await pool.query(`ALTER TABLE lead_labels DROP CONSTRAINT IF EXISTS lead_labels_field_check`);
-  await pool.query(`ALTER TABLE lead_labels ADD CONSTRAINT lead_labels_field_check CHECK (field IN ('tipo', 'dia_contato', 'status', 'sdr', 'ligacao', 'etiqueta'))`);
+  await pool.query(`ALTER TABLE lead_labels ADD CONSTRAINT lead_labels_field_check CHECK (field IN ('tipo', 'dia_contato', 'status', 'sdr', 'ligacao', 'etiqueta', 'followup', 'disparo'))`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS etiqueta TEXT NOT NULL DEFAULT ''`);
+  // Cadência de retorno: duas colunas que só aparecem nos quadros "Follow-up Propostas" e "Disparo em massa" dos
+  // CRMs normais do Arthur e do Luis (a tela decide onde mostrar). Guardam a etiqueta D1, D3… escolhida.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS followup TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS disparo TEXT NOT NULL DEFAULT ''`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_lead_labels ON lead_labels;
@@ -610,6 +614,22 @@ END $$`);
     WHERE ll.page_id IS NULL AND ll.field <> 'sdr'`);
   await pool.query(`DELETE FROM lead_labels
     WHERE page_id IS NULL AND field <> 'sdr' AND EXISTS (SELECT 1 FROM lead_pages)`);
+
+  await pool.query(`ALTER TABLE lead_pages ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  // Etiquetas de cadência das abas CRM do Arthur e do Luis (não o Closer): semeia só se a aba ainda não tem
+  // nenhuma daquele campo — assim quem renomear/apagar uma etiqueta não a vê voltar a cada reinício.
+  await pool.query(`INSERT INTO lead_labels (field, name, color, position, page_id)
+    SELECT v.field, v.name, v.color, v.position, lp.id
+    FROM lead_pages lp
+    CROSS JOIN (VALUES
+      ('followup', 'D1',  '#22C55E', 0), ('followup', 'D3',  '#84CC16', 1), ('followup', 'D5',  '#EAB308', 2),
+      ('followup', 'D7',  '#F97316', 3), ('followup', 'D14', '#EF4444', 4), ('followup', 'D21', '#8B5CF6', 5),
+      ('disparo',  'D7',  '#22C55E', 0), ('disparo',  'D14', '#84CC16', 1), ('disparo',  'D30', '#EAB308', 2),
+      ('disparo',  'D45', '#F97316', 3), ('disparo',  'D60', '#EF4444', 4), ('disparo',  'D90', '#8B5CF6', 5)
+    ) AS v(field, name, color, position)
+    WHERE lp.archived_at IS NULL
+      AND lp.name ~* '(arthur|lu[ií]s)' AND lp.name !~* 'closer'
+      AND NOT EXISTS (SELECT 1 FROM lead_labels ll WHERE ll.field = v.field AND ll.page_id = lp.id)`);
 
   // Lead novo já nasce com Lig. = '0' (ver leadBoardsService.createRow) — isso só vale a partir
   // de agora, então preenche com '0' quem ficou pra trás com o campo em branco. Efetivamente

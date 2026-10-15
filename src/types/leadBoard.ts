@@ -48,6 +48,10 @@ export interface LeadRow {
   tipo: string
   /** Etiqueta colorida do card (urgente/médio/baixo...), por aba — separada do Tipo. */
   etiqueta: string
+  /** Cadência do quadro "Follow-up Propostas" (D1, D3, D5…) — só nos CRMs normais do Arthur e do Luis. */
+  followup: string
+  /** Cadência do quadro "Disparo em massa" (D7, D14, D30…) — mesmos CRMs. */
+  disparo: string
   /** Nicho REAL do lead (resposta do formulário do Meta ou marcado à mão) — aba Tráfego compara com o mirado. */
   nicho: string
   /** Motivo (lista fechada) de o lead ter sido desqualificado — vazio = lead válido. */
@@ -167,7 +171,7 @@ export interface LeadEvent {
 }
 
 /** Campos que usam etiqueta colorida selecionável (estilo Monday) em vez de texto livre. */
-export type LeadLabelField = 'tipo' | 'diaContato' | 'status' | 'sdr' | 'ligacao' | 'etiqueta'
+export type LeadLabelField = 'tipo' | 'diaContato' | 'status' | 'sdr' | 'ligacao' | 'etiqueta' | 'followup' | 'disparo'
 
 export interface LeadLabel {
   id: string

@@ -16,6 +16,8 @@ const FIELD_TITLES: Record<LeadLabelField, string> = {
   sdr: 'SDR',
   ligacao: 'Ligação',
   etiqueta: 'Etiqueta',
+  followup: 'Follow-up',
+  disparo: 'Disparo',
 }
 
 export interface LeadLabelCellProps {

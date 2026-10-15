@@ -100,6 +100,8 @@ const COLUMNS: ColumnDef[] = [
   { key: 'diaContato', label: 'Dia de contato', width: 140, tag: true, required: true },
   { key: 'ligacao', label: 'Lig.', width: 46, tag: true, widthLocked: true },
   { key: 'status', label: 'Status', width: 170, tag: true, required: true },
+  { key: 'followup', label: 'Follow-up', width: 120, tag: true },
+  { key: 'disparo', label: 'Disparo', width: 120, tag: true },
   { key: 'agendamento', label: 'Agendamento', type: 'date', width: 150, align: 'center' },
   { key: 'retornar', label: 'Retornar', type: 'datetime-local', width: 190 },
   { key: 'sdr', label: 'SDR', width: 100, tag: true },
@@ -152,10 +154,18 @@ function columnsForSdrLock(
   isVendas = false,
   hideIanMateusCols = false,
   boardName = '',
+  crmArthurLuis = false,
 ): ColumnDef[] {
   if (isVendas) return COLUMNS.filter((c) => VENDAS_COLUMN_KEYS.has(c.key))
+  // Cadência (D1, D3… / D7, D14…): uma coluna ao lado do Status, só em "Follow-up Propostas" e em "Disparo em
+  // massa" e só nos CRMs normais do Arthur e do Luis. Nos demais quadros e abas ela nem existe.
+  const nomeQuadro = boardName.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const mostraFollowup = crmArthurLuis && nomeQuadro.includes('followup') && nomeQuadro.includes('proposta')
+  const mostraDisparo = crmArthurLuis && nomeQuadro.startsWith('disparoemmassa')
   // "Fechamento" só existe no contexto de venda — fora dele seria uma coluna vazia em todo lead.
-  const base = COLUMNS.filter((c) => c.key !== 'fechamento')
+  const base = COLUMNS.filter(
+    (c) => c.key !== 'fechamento' && (c.key !== 'followup' || mostraFollowup) && (c.key !== 'disparo' || mostraDisparo),
+  )
   const withoutSdr = sdrLock ? base.filter((c) => c.key !== 'sdr') : base
   const visible = hideIanMateusCols ? withoutSdr.filter((c) => !IAN_MATEUS_HIDDEN_COLUMN_KEYS.has(c.key)) : withoutSdr
   // Agendamento só é obrigatório dentro do quadro "Reunião agendada" — nos outros quadros o
@@ -847,6 +857,8 @@ interface BoardGroupProps {
   sdrLock: string | undefined
   sdrPageBoards: Map<string, LeadBoard[]>
   hideIanMateusCols: boolean
+  /** Aba CRM do Arthur ou do Luis (não o Closer): é onde existem as colunas de cadência. */
+  crmArthurLuis: boolean
 }
 
 function BoardGroup({
@@ -854,7 +866,7 @@ function BoardGroup({
   onTableScroll,
   selectedIds, onToggleRow, onToggleAll,
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
-  columnWidths, onResizeColumn, sdrLock, sdrPageBoards, hideIanMateusCols,
+  columnWidths, onResizeColumn, sdrLock, sdrPageBoards, hideIanMateusCols, crmArthurLuis,
 }: BoardGroupProps) {
   // Quadro nasce fechado — só mostra os leads quando a pessoa abre de propósito. Exceto em "Novos
   // Leads": ali entra já aberto, sem precisar clicar, pedido específico dessa aba.
@@ -867,7 +879,7 @@ function BoardGroup({
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
   }
   // No CRM do Luis Closer a coluna que se chama SDR nos outros CRMs aparece como Closer.
-  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name).map((c) =>
+  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name, crmArthurLuis).map((c) =>
     board.page === 'crm-luis-closer' && c.key === 'sdr' ? { ...c, label: 'Closer' }
       : hideIanMateusCols && c.key === 'retornar' ? { ...c, label: 'Finalizar' }
       : c,
@@ -1334,6 +1346,12 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const sdrLabelsForLock = useLeadLabels('sdr')
   const sdrLock = React.useMemo(() => sdrLockForPageName(title, sdrLabelsForLock), [title, sdrLabelsForLock])
   const hideIanMateusCols = React.useMemo(() => isIanMateusPage(title) || isIanMateusPage(page), [title, page])
+  // CRM do Arthur ou do Luis "normais" (o Closer tem outra rotina): é onde ficam as colunas de cadência. Casa também
+  // pelo id da aba, que já existe antes de o nome carregar.
+  const crmArthurLuis = React.useMemo(() => {
+    const ehDeles = (s: string) => /(arthur|lu[ií]s)/i.test(s)
+    return (ehDeles(title) || ehDeles(page)) && !/closer/i.test(title) && !/closer/i.test(page)
+  }, [title, page])
 
   const booted = useLeadBoardsBooted()
   const allBoards = useLeadBoards()
@@ -1378,11 +1396,12 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
     })
   }, [page])
 
-  const tableWidth = React.useMemo(
-    () => CHECKBOX_COL_WIDTH
-      + columnsForSdrLock(sdrLock, false, hideIanMateusCols).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0),
-    [columnWidths, sdrLock, hideIanMateusCols],
-  )
+  // A barra de rolagem fixa vale pra todos os quadros: usa a largura do mais largo (os de cadência têm uma coluna a mais).
+  const tableWidth = React.useMemo(() => {
+    const larguraDe = (nome: string) =>
+      columnsForSdrLock(sdrLock, false, hideIanMateusCols, nome, crmArthurLuis).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
+    return CHECKBOX_COL_WIDTH + Math.max(larguraDe(''), ...boards.map((b) => larguraDe(b.name)))
+  }, [columnWidths, sdrLock, hideIanMateusCols, crmArthurLuis, boards])
 
   // Arrastar um lead perto da borda de cima/baixo da tela rola a página sozinha — sem isso, pra
   // mover um lead pra um quadro fora da área visível era preciso soltar, rolar manualmente e
@@ -1679,6 +1698,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                       sdrLock={sdrLock}
                       sdrPageBoards={sdrPageBoards}
                       hideIanMateusCols={hideIanMateusCols}
+                      crmArthurLuis={crmArthurLuis}
                     />
                   ))}
                   <button

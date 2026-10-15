@@ -23,6 +23,7 @@ import { channelsRoutes } from './routes/channels.js';
 import { automationRoutes } from './routes/automation.js';
 import { chatbotFlowRoutes } from './routes/chatbotFlow.js';
 import { leadBoardRoutes } from './routes/leadBoards.js';
+import { integracaoRoutes } from './routes/integracao.js';
 import { leadPageRoutes } from './routes/leadPages.js';
 import { commercialMonthRoutes } from './routes/commercialMonths.js';
 import { contractRoutes } from './routes/contracts.js';
@@ -145,6 +146,7 @@ async function main() {
   await app.register(automationRoutes);
   await app.register(chatbotFlowRoutes);
   await app.register(leadBoardRoutes);
+  await app.register(integracaoRoutes);
   await app.register(leadPageRoutes);
   await app.register(commercialMonthRoutes);
   await app.register(contractRoutes);

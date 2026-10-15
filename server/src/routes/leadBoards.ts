@@ -1,11 +1,12 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
-import { query, queryOne } from '../db.js';
+import { query, queryOne, queryAsActor } from '../db.js';
 import { allowedPageIds } from './leadPages.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { enviarBoasVindasLead, listarTemplatesAprovados } from '../lib/leadWelcome.js';
 import { findMatchingClientId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
+import { normalizaNome } from '../lib/normalizaNome.js';
 import { syncScheduledMeeting, localDateTimeToISO } from '../lib/calendarSync.js';
 
 /** Preencher o Agendamento de um lead (Comercial) agendado/reagendado por aqui já cria/atualiza o
@@ -245,7 +246,7 @@ async function getActorName(userId: string | null | undefined): Promise<string> 
 }
 
 /** Grava um evento na linha do tempo automática do lead (ver aba "Linha do tempo" no modal). */
-async function logLeadEvent(
+export async function logLeadEvent(
   leadRowId: string,
   type: string,
   fromValue: string | null,
@@ -446,13 +447,6 @@ const ESPELHO_STATUS = [
   'Vendido',
 ];
 
-/** Sem acento, sem pontuação, minúsculo — pra comparar nome de quadro com nome de status mesmo
- * escritos diferente em cada CRM ("Follow-up Propostas" acha "FOLLOW UP PROPOSTAS (APÓS 3
- * TENTATIVAS)"). */
-function normalizaNome(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
 /** Quadro equivalente ao status dentro da página do parceiro — senão a etiqueta muda mas a lead
  * fica parada no grupo errado. Sem equivalente (o CRM do closer não tem "Vendido" nem "Reunião
  * não comparecida"), devolve null: muda só a etiqueta e a lead fica onde está. */
@@ -485,7 +479,7 @@ async function etiquetaDeStatus(page: string, status: string): Promise<string | 
  * lead dizendo duas coisas diferentes. Devolve o nome exato da etiqueta (respeita como ela está
  * escrita na aba); quadro sem etiqueta equivalente (ex.: "SÓ LIGAÇÃO", "Projetos") devolve null e o
  * Status fica como está — melhor manter do que inventar uma etiqueta que não existe. */
-async function statusDoQuadro(boardId: string): Promise<string | null> {
+export async function statusDoQuadro(boardId: string): Promise<string | null> {
   const board = await queryOne<{ name: string; page: string }>(
     'SELECT name, page FROM lead_boards WHERE id = $1',
     [boardId]
@@ -545,7 +539,7 @@ async function etiquetaEquivalente(page: string, status: string, corOrigem: stri
 
 /** Cria a cópia no CRM do closer, se ainda não existir. Nunca lança: roda em background depois da
  * edição, e falhar aqui não pode derrubar o que o usuário acabou de fazer. */
-async function syncEspelhoReuniaoAgendada(leadRowId: string) {
+export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
   try {
     const lead = await queryOne<{
       status: string; espelho_origem_id: string | null; page: string; board_name: string;
@@ -765,7 +759,7 @@ async function propagarVenda(origemId: string, patch: Record<string, unknown>) {
 
 /** As Atualizações são compartilhadas: a cópia não tem histórico próprio, lê e escreve no da lead
  * original. É o que faz Arthur e Luis conversarem no mesmo lugar. */
-async function idCanonicoDasNotas(leadRowId: string): Promise<string> {
+export async function idCanonicoDasNotas(leadRowId: string): Promise<string> {
   const row = await queryOne<{ espelho_origem_id: string | null }>(
     'SELECT espelho_origem_id FROM lead_rows WHERE id = $1',
     [leadRowId]
@@ -783,7 +777,7 @@ function previewTextoNota(html: string): string {
 /** O gatilho do banco conta as notas só na linha dona do histórico — aqui o número (e a prévia da
  * última nota, pro card do Kanban) é refletido na cópia também, pra não aparecer zerado/vazio pro
  * closer. */
-async function sincronizarContagemNotas(canonicalId: string) {
+export async function sincronizarContagemNotas(canonicalId: string) {
   try {
     const ultima = await queryOne<{ content: string; created_at: string }>(
       'SELECT content, created_at FROM lead_notes WHERE lead_row_id = $1 ORDER BY created_at DESC LIMIT 1',
@@ -1157,7 +1151,9 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         );
         position = (row?.max ?? -1) + 1;
       }
-      const [leadRow] = await query(
+      // Quem criou entra no histórico de coluna (lead_board_history) via trigger — ver db.ts.
+      const [leadRow] = await queryAsActor(
+        await getActorName(sub),
         `INSERT INTO lead_rows (
           id, board_id, nome, tipo, empresa, telefone, dia_contato, ligacao, status,
           agendamento, retornar, responsavel, sdr, numero,
@@ -1302,10 +1298,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         : null;
 
       params.push(req.params.id);
-      const [leadRow] = await query(
-        `UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
-        params
-      );
+      // Troca de coluna grava o histórico (lead_board_history) por trigger; o "quem moveu" vai pela
+      // sessão. Sem board_id no patch não precisa da transação extra.
+      const [leadRow] = 'board_id' in patch
+        ? await queryAsActor(await getActorName(sub), `UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params)
+        : await query(`UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params);
       if (!leadRow) return reply.status(404).send({ message: 'Linha não encontrada' });
 
       // Lead sem SDR numa aba que é de um SDR (chegou pelo Meta, foi movida de "Novos Leads"…): qualquer

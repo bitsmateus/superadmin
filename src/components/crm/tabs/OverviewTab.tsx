@@ -845,10 +845,23 @@ function TenantLinkSection({ client }: { client: Client }) {
             }
           />
         </div>
+        <div className="sm:col-span-2">
+          <InlineField
+            label="Token da Meta (WhatsApp oficial)"
+            value={client.metaToken ?? ''}
+            placeholder="Cole o token do Business Manager (começa com EAA)"
+            onSave={(v) =>
+              db.updateClient(client.id, { metaToken: v.trim() || undefined }) &&
+              db.addLog(client.id, 'Token da Meta atualizado')
+            }
+          />
+        </div>
       </div>
       <p className="mt-2 text-[11px] text-foreground/45">
         Necessário para listar os canais e reconciliar o status. Clientes antigos podem não ter o
-        token — cole aqui o <strong>API Token do tenant</strong> para vincular.
+        token — cole aqui o <strong>API Token do tenant</strong> para vincular. O{' '}
+        <strong>Token da Meta</strong> só é preciso no WhatsApp oficial, pra listar os templates
+        aprovados (link de campanhas, criação de template): a NX não devolve mais esse token.
       </p>
       </>
       )}

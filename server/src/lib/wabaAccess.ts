@@ -150,6 +150,9 @@ export async function diagnosticarWaba(clientId: string): Promise<{ acessos: Wab
   const nx = await resolveNxCredentials(clientId);
   if (!nx) return falhou('o cliente está sem servidor, API ID ou token da NX no cadastro');
   const { baseUrl: base, apiId, apiToken } = nx;
+  // Token da Meta colado no cadastro do cliente: a NX (Z-PRO v4, 29/09/2026) parou de devolver o bmToken.
+  const cadastro = await queryOne<{ meta_token: string | null }>('SELECT meta_token FROM clients WHERE id = $1', [clientId]);
+  const tokenDoCadastro = cadastro?.meta_token?.trim() || '';
 
   const headers = { Accept: 'application/json', Authorization: `Bearer ${apiToken}` };
 
@@ -171,6 +174,9 @@ export async function diagnosticarWaba(clientId: string): Promise<{ acessos: Wab
         'POST',
         { id: ch.id }
       ).catch((err: unknown) => ({ ok: false, status: 0, body: err instanceof Error ? err.message : String(err) }));
+      if (!detailRes.ok && tokenDoCadastro && ch.wabaId) {
+        return { wabaId: ch.wabaId, token: tokenDoCadastro, version: '21.0', label: nome };
+      }
       if (!detailRes.ok) {
         problemas.push(`canal ${nome}: a NX recusou o detalhe (${resumo(detailRes)})`);
         return null;
@@ -188,10 +194,13 @@ export async function diagnosticarWaba(clientId: string): Promise<{ acessos: Wab
         ).catch(() => null);
         if (porNumero?.ok) bmToken = acharTokenDaMeta(((porNumero.body as { data?: unknown })?.data ?? null) as Record<string, unknown> | null);
       }
+      if (!bmToken) bmToken = tokenDoCadastro;
       const wabaId = detail?.wabaId || ch.wabaId || '';
       if (!bmToken || !wabaId) {
         problemas.push(
-          `canal ${nome}: a NX não devolveu ${!bmToken ? 'o token da Meta (bmToken)' : 'o WABA ID'} — campos que vieram: ${camposDoDetalhe(detail as Record<string, unknown> | null)}`
+          !bmToken
+            ? `canal ${nome}: a NX não devolve mais o token da Meta — cole o token do Business Manager do cliente em CRM › Visão geral › "Token da Meta (WhatsApp oficial)"`
+            : `canal ${nome}: a NX não devolveu o WABA ID — campos que vieram: ${camposDoDetalhe(detail as Record<string, unknown> | null)}`
         );
         return null;
       }

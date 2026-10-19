@@ -109,6 +109,9 @@ export async function runMigrations() {
   await criarEstruturaGestaoClientes(pool);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tenant_api_token TEXT`);
+  // Token da Meta (Graph) do WhatsApp oficial do cliente: a NX parou de devolvê-lo (Z-PRO v4), e sem ele não
+  // dá pra listar os templates aprovados. Colado à mão no cadastro (ver lib/wabaAccess.ts).
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS meta_token TEXT`);
   // Espaço de Suporte: tarefas/pendências/reuniões/anotações.
   await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS kind TEXT`);
   await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS status TEXT`);

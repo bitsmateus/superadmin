@@ -307,6 +307,8 @@ export interface Client {
   tenantApiId?: string
   /** Token da API criada dentro do tenant — autentica chamadas /v2/api/external. */
   tenantApiToken?: string
+  /** Token da Meta (Graph) do WhatsApp oficial — pra listar templates aprovados, já que a NX não devolve mais. */
+  metaToken?: string
   tenantName?: string
   supportEmail?: string
   supportPassword?: string

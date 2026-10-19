@@ -52,6 +52,7 @@ type ClientRow = {
   tenant_server_id: string | null
   tenant_api_id: string | null
   tenant_api_token: string | null
+  meta_token: string | null
   tenant_name: string | null
   ficha_cadastro: Client['fichaCadastro'] | null
   briefing_number: string | null
@@ -124,6 +125,7 @@ function rowToClient(r: ClientRow): Client {
     tenantServerId: r.tenant_server_id ?? undefined,
     tenantApiId: r.tenant_api_id ?? undefined,
     tenantApiToken: r.tenant_api_token ?? undefined,
+    metaToken: r.meta_token ?? undefined,
     tenantName: r.tenant_name ?? undefined,
     fichaCadastro: r.ficha_cadastro ?? undefined,
     briefingNumber: r.briefing_number ?? undefined,
@@ -194,6 +196,7 @@ function patchToRow(patch: Partial<Client>): Record<string, unknown> {
   if ('tenantServerId' in patch) out.tenant_server_id = patch.tenantServerId ?? null
   if ('tenantApiId' in patch) out.tenant_api_id = patch.tenantApiId ?? null
   if ('tenantApiToken' in patch) out.tenant_api_token = patch.tenantApiToken ?? null
+  if ('metaToken' in patch) out.meta_token = patch.metaToken ?? null
   if ('tenantName' in patch) out.tenant_name = patch.tenantName ?? null
   if ('fichaCadastro' in patch) out.ficha_cadastro = patch.fichaCadastro ?? null
   if ('briefingNumber' in patch) out.briefing_number = patch.briefingNumber ?? null

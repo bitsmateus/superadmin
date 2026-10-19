@@ -82,7 +82,8 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="max-h-[calc(100dvh-11rem)] overflow-y-auto px-4 py-4 sm:max-h-[70vh] sm:px-6 sm:py-5">{children}</div>
+        {/* overflow-wrap:anywhere: link/e-mail/token sem espaço quebra linha em vez de passar da borda no celular. */}
+        <div className="max-h-[calc(100dvh-11rem)] overflow-y-auto px-4 py-4 [overflow-wrap:anywhere] sm:max-h-[70vh] sm:px-6 sm:py-5">{children}</div>
         {footer && (
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-elevate/[0.02] px-4 py-3 sm:px-6">
             {footer}

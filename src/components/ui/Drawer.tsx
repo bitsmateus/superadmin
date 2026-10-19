@@ -81,9 +81,10 @@ export function Drawer({
             </div>
           </div>
         )}
-        {/* overflow-x-hidden: um texto sem quebra lá dentro não pode fazer a gaveta inteira deslizar de lado
-            no celular (as tabelas e listas largas continuam com a própria rolagem lateral). */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">{children}</div>
+        {/* overflow-wrap:anywhere (herdado por tudo lá dentro): link, e-mail, token ou ID sem espaço quebra linha
+            em vez de passar da borda. overflow-x-hidden: se ainda assim algo vazar, a gaveta inteira não desliza
+            de lado no celular (tabelas e listas largas continuam com a própria rolagem lateral). */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere]">{children}</div>
       </aside>
     </div>,
     document.body,

@@ -61,6 +61,38 @@ export async function resolveNxCredentials(clientId: string): Promise<NxCredenti
   return { baseUrl, apiId: client.tenant_api_id, apiToken: client.tenant_api_token };
 }
 
+/**
+ * Acha o token da Meta (Graph) no detalhe do canal da NX. Era sempre `bmToken`, mas em out/2026 a NX parou de
+ * devolvê-lo nesse campo — então procura também outros nomes prováveis, inclusive um nível abaixo (ex.:
+ * `data.waba.accessToken`). Token da Meta é longo e costuma começar com "EAA"; o `tokenAPI` da NX (que é o
+ * Phone Number ID, curto e numérico) fica de fora pelo tamanho.
+ */
+function acharTokenDaMeta(detail: Record<string, unknown> | null): string {
+  if (!detail) return '';
+  const nomeDeToken = /^(bm_?token|access_?token|graph_?token|meta_?token|waba_?token|system_?user_?token|fb_?token|facebook_?token|token)$/i;
+  const candidatos: string[] = [];
+  const olhar = (obj: Record<string, unknown>, fundo: number) => {
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'string' && v.length >= 50 && (nomeDeToken.test(k) || v.startsWith('EAA'))) candidatos.push(v);
+      else if (fundo > 0 && v && typeof v === 'object' && !Array.isArray(v)) olhar(v as Record<string, unknown>, fundo - 1);
+    }
+  };
+  if (typeof detail.bmToken === 'string' && detail.bmToken) return detail.bmToken;
+  olhar(detail, 1);
+  return candidatos.find((c) => c.startsWith('EAA')) ?? candidatos[0] ?? '';
+}
+
+/** Só os NOMES dos campos do detalhe (nunca os valores) — pra ver no erro o que a NX passou a devolver. */
+function camposDoDetalhe(detail: Record<string, unknown> | null): string {
+  if (!detail) return '(detalhe vazio)';
+  const nomes: string[] = [];
+  for (const [k, v] of Object.entries(detail)) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) nomes.push(...Object.keys(v as object).map((sub) => `${k}.${sub}`));
+    else nomes.push(k);
+  }
+  return nomes.slice(0, 40).join(', ') || '(nenhum campo)';
+}
+
 async function fetchJson(url: string, headers: Record<string, string>, method = 'GET', body?: unknown) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 15000);
@@ -144,10 +176,12 @@ export async function diagnosticarWaba(clientId: string): Promise<{ acessos: Wab
         return null;
       }
       const detail = ((detailRes.body as { data?: unknown })?.data ?? null) as NxChannelDetail | null;
-      const bmToken = detail?.bmToken || '';
+      const bmToken = acharTokenDaMeta(detail as Record<string, unknown> | null);
       const wabaId = detail?.wabaId || ch.wabaId || '';
       if (!bmToken || !wabaId) {
-        problemas.push(`canal ${nome}: a NX não devolveu ${!bmToken ? 'o token da Meta (bmToken)' : 'o WABA ID'}`);
+        problemas.push(
+          `canal ${nome}: a NX não devolveu ${!bmToken ? 'o token da Meta (bmToken)' : 'o WABA ID'} — campos que vieram: ${camposDoDetalhe(detail as Record<string, unknown> | null)}`
+        );
         return null;
       }
       return {

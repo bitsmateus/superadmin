@@ -287,7 +287,9 @@ export async function webhookRoutes(app: FastifyInstance) {
 
       // Boas-vindas por WhatsApp (template) assim que o lead cai — em background, não atrasa nem
       // derruba a resposta pro n8n. O resultado aparece na linha do tempo do lead.
-      void enviarBoasVindasLead(leadRow.id);
+      // DESLIGADA a pedido (out/2026): o lead do anúncio não recebe mais a mensagem de marketing. Pra religar,
+      // LEAD_WELCOME_AUTO=1 no ambiente do servidor. O "Simular lead" do painel continua enviando.
+      if (process.env.LEAD_WELCOME_AUTO === '1') void enviarBoasVindasLead(leadRow.id);
 
       // O lead do Meta nasce sem SDR. Se o quadro de destino é da aba de um SDR (CRM ARTHUR), ele já entra
       // com o SDR marcado — sem isso ficava fora das Métricas por SDR e do funil até o servidor reiniciar.

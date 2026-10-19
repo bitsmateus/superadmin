@@ -81,7 +81,9 @@ export function Drawer({
             </div>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto">{children}</div>
+        {/* overflow-x-hidden: um texto sem quebra lá dentro não pode fazer a gaveta inteira deslizar de lado
+            no celular (as tabelas e listas largas continuam com a própria rolagem lateral). */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">{children}</div>
       </aside>
     </div>,
     document.body,

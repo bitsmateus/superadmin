@@ -144,6 +144,7 @@ export function PipelinePage() {
   // carga de entrega é o caso de uso principal da fila de configuração.
   const [filterComercial, setFilterComercial] = React.useState(useSupportViewText('filterComercial'))
   const [filterEntrega, setFilterEntrega] = React.useState(useSupportViewText('filterEntrega'))
+  const filtrando = Boolean(search.trim() || filterComercial || filterEntrega)
   /** Confirmação de estouro do limite de configurações simultâneas. */
   const [wipConfirm, setWipConfirm] = React.useState<{
     client: Client
@@ -534,11 +535,19 @@ export function PipelinePage() {
 
         {view === 'list' ? (
           <div className="space-y-3">
-            {SUPPORT_VISIBLE_STAGES.map((stage) => (
+            {/* Com busca/filtro, só as etapas com resultado aparecem (e já abertas): antes as vazias continuavam
+                na tela e, no celular, era preciso rolar um bocado até achar o cliente — que ainda podia estar
+                numa etapa recolhida (Entregas recentes, Ativo). */}
+            {filtrando && SUPPORT_VISIBLE_STAGES.every((st) => byStage[st].length === 0) && (
+              <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-sm text-foreground/45">
+                Nenhum cliente encontrado.
+              </p>
+            )}
+            {SUPPORT_VISIBLE_STAGES.filter((stage) => !filtrando || byStage[stage].length > 0).map((stage) => (
               <ListGroup
-                key={stage}
+                key={filtrando ? `${stage}:busca` : stage}
                 stage={stage}
-                defaultOpen={stage !== 'delivered' && stage !== 'active' && stage !== 'churned'}
+                defaultOpen={filtrando || (stage !== 'delivered' && stage !== 'active' && stage !== 'churned')}
                 clients={byStage[stage]}
                 groups={groupsFor(stage)}
                 onRowClick={(id) => setOpenClientId(id)}
@@ -786,7 +795,24 @@ function ListGroup({
                     {g.emptyText ?? 'Nenhum cliente.'}
                   </p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <>
+                  {/* Celular: um cartão por cliente, com tudo à vista. A tabela (abaixo) pedia rolagem de lado
+                      dentro de cada etapa e só mostrava Cliente/Empresa na tela. */}
+                  <ul className="divide-y divide-line/60 md:hidden">
+                    {g.clients.map((c, idx) => (
+                      <ClientCard
+                        key={c.id}
+                        client={c}
+                        position={g.numbered ? idx + 1 : undefined}
+                        onRowClick={onRowClick}
+                        onAdvance={onAdvance}
+                        onRegress={onRegress}
+                        onStartSetup={onStartSetup}
+                        onPauseSetup={onPauseSetup}
+                      />
+                    ))}
+                  </ul>
+                  <div className="hidden overflow-x-auto md:block">
                     <table className="w-full min-w-[860px] text-sm lg:min-w-0">
                       <thead>
                         <tr className="border-b border-line text-[11px] uppercase tracking-wider text-foreground/40">
@@ -819,6 +845,7 @@ function ListGroup({
                       </tbody>
                     </table>
                   </div>
+                  </>
                 )}
               </div>
             ))
@@ -829,15 +856,7 @@ function ListGroup({
   )
 }
 
-function ClientRow({
-  client: c,
-  position,
-  onRowClick,
-  onAdvance,
-  onRegress,
-  onStartSetup,
-  onPauseSetup,
-}: {
+type RowProps = {
   client: Client
   position?: number
   onRowClick: (id: string) => void
@@ -845,23 +864,27 @@ function ClientRow({
   onRegress: (c: Client) => void
   onStartSetup: (c: Client) => void
   onPauseSetup: (c: Client) => void
-}) {
-  const alerts = computeAlerts(c)
-  const next = NEXT_STAGE[c.stage]
-  const prev = PREV_STAGE[c.stage]
+}
+
+/** O que a linha (computador) e o cartão (celular) do cliente mostram — calculado uma vez só. */
+function useRowInfo(c: Client) {
   // Pendências só interessam da etapa de briefing até a configuração — depois
   // disso o cliente já está rodando e a cobrança perde sentido.
   const showReadiness =
     c.stage === 'briefing' || c.stage === 'setup_start' || c.stage === 'setup'
-  const readiness = showReadiness ? computeReadiness(c) : null
-  const doing = isDoingNow(c)
+  return {
+    alerts: computeAlerts(c),
+    next: NEXT_STAGE[c.stage],
+    prev: PREV_STAGE[c.stage],
+    readiness: showReadiness ? computeReadiness(c) : null,
+    doing: isDoingNow(c),
+  }
+}
 
+/** Avatar (ou posição na fila), nome, responsáveis e etapa. */
+function ClientIdentity({ client: c, position }: { client: Client; position?: number }) {
+  const { doing } = useRowInfo(c)
   return (
-    <tr
-      onClick={() => onRowClick(c.id)}
-      className="cursor-pointer border-b border-line/60 transition-colors hover:bg-elevate/[0.03] last:border-b-0"
-    >
-      <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
           {position != null ? (
             <div
@@ -900,8 +923,14 @@ function ClientRow({
             </div>
           </div>
         </div>
-      </td>
-      <td className="px-4 py-3 text-foreground/70">
+  )
+}
+
+/** Empresa + o que está travando/andando (sub-status do briefing, pendências, checklist, entrega marcada). */
+function ClientCompanyInfo({ client: c }: { client: Client }) {
+  const { readiness } = useRowInfo(c)
+  return (
+    <>
         <div>{asText(c.company, '—')}</div>
         {c.stage === 'briefing' && (
           <BriefingSubStatus briefingStatus={c.briefingStatus} />
@@ -931,20 +960,14 @@ function ClientRow({
             {formatDateTimeShort(c.deliveryDate)}
           </div>
         )}
-      </td>
-      <td className="px-4 py-3 text-foreground/55">
-        {formatDateShort(c.createdAt)}
-      </td>
-      <td className="px-4 py-3">
-        <StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} />
-      </td>
-      <td className="px-4 py-3 text-foreground/55">
-        <span className="inline-flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          {timeAgo(c.stageUpdatedAt ?? c.createdAt)}
-        </span>
-      </td>
-      <td className="px-4 py-3">
+    </>
+  )
+}
+
+function ClientAlerts({ client: c }: { client: Client }) {
+  const { alerts } = useRowInfo(c)
+  return (
+    <>
         {alerts.length === 0 ? (
           <span className="text-xs text-foreground/30">—</span>
         ) : (
@@ -965,8 +988,14 @@ function ClientRow({
             ))}
           </div>
         )}
-      </td>
-      <td className="px-4 py-3 text-right">
+    </>
+  )
+}
+
+/** Puxar/pausar a configuração, voltar e avançar etapa. */
+function ClientRowActions({ client: c, onAdvance, onRegress, onStartSetup, onPauseSetup }: Omit<RowProps, 'onRowClick' | 'position'>) {
+  const { next, prev, readiness, doing } = useRowInfo(c)
+  return (
         <div className="inline-flex items-center gap-1">
           {/* Fila: puxar para "fazendo agora". Bloqueado não puxa. */}
           {c.stage === 'setup_start' && (
@@ -1038,11 +1067,66 @@ function ClientRow({
             <ArrowDownCircle className="h-4 w-4" />
           </button>
         </div>
+  )
+}
+
+function ClientRow({ client: c, position, onRowClick, ...acoes }: RowProps) {
+  return (
+    <tr
+      onClick={() => onRowClick(c.id)}
+      className="cursor-pointer border-b border-line/60 transition-colors hover:bg-elevate/[0.03] last:border-b-0"
+    >
+      <td className="px-4 py-3">
+        <ClientIdentity client={c} position={position} />
+      </td>
+      <td className="px-4 py-3 text-foreground/70">
+        <ClientCompanyInfo client={c} />
+      </td>
+      <td className="px-4 py-3 text-foreground/55">
+        {formatDateShort(c.createdAt)}
+      </td>
+      <td className="px-4 py-3">
+        <StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} />
+      </td>
+      <td className="px-4 py-3 text-foreground/55">
+        <span className="inline-flex items-center gap-1">
+          <Clock className="h-3 w-3" />
+          {timeAgo(c.stageUpdatedAt ?? c.createdAt)}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <ClientAlerts client={c} />
+      </td>
+      <td className="px-4 py-3 text-right">
+        <ClientRowActions client={c} {...acoes} />
       </td>
     </tr>
   )
 }
 
+/** Celular: o mesmo conteúdo da linha da tabela, empilhado num cartão. */
+function ClientCard({ client: c, position, onRowClick, ...acoes }: RowProps) {
+  return (
+    <li onClick={() => onRowClick(c.id)} className="cursor-pointer px-4 py-3 active:bg-elevate/[0.04]">
+      <ClientIdentity client={c} position={position} />
+      <div className="mt-2 pl-[38px] text-sm text-foreground/70">
+        <ClientCompanyInfo client={c} />
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 pl-[38px]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground/55">
+          <StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} />
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {timeAgo(c.stageUpdatedAt ?? c.createdAt)}
+          </span>
+          <span>Entrada {formatDateShort(c.createdAt)}</span>
+          {computeAlerts(c).length > 0 && <ClientAlerts client={c} />}
+        </div>
+        <ClientRowActions client={c} {...acoes} />
+      </div>
+    </li>
+  )
+}
 
 /**
  * Mostra há quantos dias o cliente está na etapa atual, com cor de acordo com

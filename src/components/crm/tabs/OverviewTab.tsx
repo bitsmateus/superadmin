@@ -1285,7 +1285,7 @@ function InlineField({
   }
 
   return (
-    <div>
+    <div className="min-w-0">
       <FieldLabel>{label}</FieldLabel>
       {editing ? (
         <div className="mt-1">
@@ -1312,7 +1312,9 @@ function InlineField({
             'hover:border-line hover:bg-elevate/[0.02]',
           )}
         >
-          <span className={value ? 'text-foreground/90' : 'text-foreground/40'}>
+          {/* overflow-wrap:anywhere: token/ID sem espaço (API Token, Token da Meta) quebra linha em vez de
+              empurrar a ficha inteira pra fora da tela no celular. */}
+          <span className={cn('min-w-0 [overflow-wrap:anywhere]', value ? 'text-foreground/90' : 'text-foreground/40')}>
             {value || placeholder || '—'}
           </span>
           <Pencil className="h-3 w-3 shrink-0 text-foreground/30 transition-opacity sm:opacity-0 sm:group-hover:opacity-100" />

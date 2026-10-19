@@ -209,7 +209,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
         open
         onClose={onClose}
         header={
-          <div className="space-y-3">
+          <div className="space-y-2.5 sm:space-y-3">
             <div className="flex items-start gap-3">
               <div
                 className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold ring-1"
@@ -238,7 +238,9 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            {/* No celular os botões ficam numa linha só, com rótulos curtos: o cabeçalho é fixo e,
+                com os nomes inteiros, quebrava em duas linhas e comia quase metade da tela. */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <div className="relative" ref={stageMenuRef}>
                 <Button
                   size="sm"
@@ -246,7 +248,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                   onClick={() => setStageMenu((s) => !s)}
                   rightIcon={<ChevronDown className="h-3.5 w-3.5" />}
                 >
-                  Avançar etapa
+                  <span>Avançar<span className="hidden sm:inline"> etapa</span></span>
                 </Button>
                 {stageMenu && (
                   <div className="absolute left-0 z-10 mt-1 w-64 rounded-lg border border-line bg-card shadow-xl animate-fade-in lg:w-80">
@@ -297,8 +299,9 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                   onClick={regress}
                   leftIcon={<ChevronLeft className="h-3.5 w-3.5" />}
                   title={`Voltar para ${STAGE_COLORS[PREV_STAGE[client.stage]!].label}`}
+                  aria-label="Voltar etapa"
                 >
-                  Voltar etapa
+                  <span className="hidden sm:inline">Voltar etapa</span>
                 </Button>
               )}
               <Button
@@ -307,7 +310,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                 onClick={accessSystem}
                 leftIcon={<ExternalLink className="h-3.5 w-3.5" />}
               >
-                Acessar sistema
+                <span>Acessar<span className="hidden sm:inline"> sistema</span></span>
               </Button>
               {extraHeaderAction}
               {(canToggleTenant || canDelete) && (

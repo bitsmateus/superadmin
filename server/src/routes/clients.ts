@@ -53,7 +53,50 @@ function centavosDeTexto(raw: string | null | undefined): number {
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_ANEXO_NOTA_BYTES = 10 * 1024 * 1024;
+
 export async function clientRoutes(app: FastifyInstance) {
+  // ── Anexos das "Mensagens registradas" (ver client_note_files em db.ts) ──
+  // POST guarda o arquivo e devolve só a ficha (sem o conteúdo), que o front põe dentro da nota.
+  app.post<{ Params: { id: string }; Body: { name?: string; type?: string; dataUrl?: string } }>(
+    '/api/clients/:id/note-files',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub } = req.user as { sub: string };
+      if (!UUID_RE.test(req.params.id)) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      const dataUrl = String(req.body?.dataUrl ?? '');
+      const virgula = dataUrl.indexOf(',');
+      if (!dataUrl.startsWith('data:') || virgula < 0) return reply.status(400).send({ message: 'Arquivo inválido' });
+      const base64 = dataUrl.slice(0, virgula).toLowerCase().includes(';base64');
+      const size = base64 ? Math.floor(((dataUrl.length - virgula - 1) * 3) / 4) : dataUrl.length - virgula - 1;
+      if (size > MAX_ANEXO_NOTA_BYTES) return reply.status(413).send({ message: 'O arquivo passa de 10MB' });
+      const cliente = await queryOne('SELECT 1 FROM clients WHERE id = $1', [req.params.id]);
+      if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      const name = String(req.body?.name ?? '').trim().slice(0, 200) || 'arquivo';
+      const type = String(req.body?.type ?? '').slice(0, 120);
+      const criado = await queryOne(
+        `INSERT INTO client_note_files (client_id, name, type, size, data_url, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, type, size`,
+        [req.params.id, name, type, size, dataUrl, sub]
+      );
+      return reply.status(201).send(criado);
+    }
+  );
+
+  app.get<{ Params: { id: string } }>('/api/client-note-files/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!UUID_RE.test(req.params.id)) return reply.status(404).send({ message: 'Arquivo não encontrado' });
+    const a = await queryOne('SELECT id, name, type, data_url AS "dataUrl" FROM client_note_files WHERE id = $1', [req.params.id]);
+    if (!a) return reply.status(404).send({ message: 'Arquivo não encontrado' });
+    return a;
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/client-note-files/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!UUID_RE.test(req.params.id)) return reply.status(404).send({ message: 'Arquivo não encontrado' });
+    await query('DELETE FROM client_note_files WHERE id = $1', [req.params.id]);
+    return reply.status(204).send();
+  });
+
   // GET /api/clients — lista. Por padrão remove contract_file (base64 pesado)
   // pra aliviar o payload do boot; ?full=1 traz tudo (usado pelo backup).
   app.get<{ Querystring: { full?: string } }>(

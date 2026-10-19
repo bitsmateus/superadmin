@@ -15,6 +15,7 @@ import {
   Mail,
   MessageSquare,
   Monitor,
+  Paperclip,
   Pencil,
   Phone,
   PlusCircle,
@@ -25,6 +26,7 @@ import {
   StickyNote,
   Trash2,
   UserCircle2,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Section, FieldLabel } from '../ClientDrawer'
@@ -42,7 +44,7 @@ import { buildPendingMessage, computeReadiness } from '@/constants/readiness'
 import { asText, cn, formatDate, initials, normalizeWhatsappNumber } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
 import { pareceHtml, sanitizeHtml, stripHtml } from '@/lib/richText'
-import type { Client, ClientAccess } from '@/types/client'
+import type { Client, ClientAccess, NoteAttachment } from '@/types/client'
 import {
   API_CONFIG_STEPS,
   IA_CONFIG_STEPS,
@@ -72,19 +74,57 @@ export function OverviewTab({ client }: { client: Client }) {
   const [noteInternal, setNoteInternal] = React.useState(false)
   const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null)
   const [editingNoteText, setEditingNoteText] = React.useState('')
+  // Arquivos escolhidos pra próxima mensagem (ainda não enviados), cada um com a descrição que a pessoa escrever.
+  const [pendingFiles, setPendingFiles] = React.useState<PendingNoteFile[]>([])
+  const [sendingNote, setSendingNote] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
-  const addNote = () => {
+  const pickFiles = async (files: File[]) => {
+    const next: PendingNoteFile[] = []
+    for (const file of files) {
+      if (file.size > MAX_NOTE_FILE_BYTES) {
+        toast.error(`"${file.name}" passa de 10MB`)
+        continue
+      }
+      next.push({ key: crypto.randomUUID(), file, description: '' })
+    }
+    setPendingFiles((prev) => [...prev, ...next])
+  }
+
+  const addNote = async () => {
     const trimmed = noteText.trim()
-    if (!trimmed) return
+    if (!trimmed && pendingFiles.length === 0) return
     if (!user) {
       toast.error('Defina seu nome em Configurações antes de registrar notas.')
       return
     }
-    db.addNote(client.id, trimmed, user, noteInternal)
-    db.addLog(client.id, noteInternal ? 'Nota interna registrada' : 'Nota registrada')
-    setNoteText('')
-    setNoteInternal(false)
-    toast.success('Nota registrada')
+    setSendingNote(true)
+    try {
+      const attachments: NoteAttachment[] = []
+      for (const p of pendingFiles) {
+        const dataUrl = await lerComoDataUrl(p.file)
+        const ficha = await db.uploadNoteFile(client.id, {
+          name: p.file.name || (p.file.type.startsWith('image/') ? 'print.png' : 'arquivo'),
+          type: p.file.type,
+          dataUrl,
+        })
+        attachments.push({ ...ficha, description: p.description.trim() || undefined })
+      }
+      db.addNote(client.id, trimmed, user, noteInternal, attachments)
+      db.addLog(
+        client.id,
+        (noteInternal ? 'Nota interna registrada' : 'Nota registrada') +
+          (attachments.length ? ` com ${attachments.length} anexo${attachments.length === 1 ? '' : 's'}` : ''),
+      )
+      setNoteText('')
+      setNoteInternal(false)
+      setPendingFiles([])
+      toast.success('Nota registrada')
+    } catch (err) {
+      toast.error('Falha ao anexar: ' + (err as Error).message)
+    } finally {
+      setSendingNote(false)
+    }
   }
 
   // Radio: selecting a platform deselects the others
@@ -245,11 +285,58 @@ export function OverviewTab({ client }: { client: Client }) {
             <textarea
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
+              onPaste={(e) => {
+                // Print colado (Ctrl+V) vira anexo, igual ao bloco de atualizações do lead.
+                const files = Array.from(e.clipboardData.files)
+                if (files.length) {
+                  e.preventDefault()
+                  void pickFiles(files)
+                }
+              }}
               placeholder="Registre aqui mensagens trocadas, observações ou qualquer informação relevante…"
               className="min-h-[80px] flex-1 resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
             />
           </div>
+          {pendingFiles.length > 0 && (
+            <ul className="space-y-2">
+              {pendingFiles.map((p) => (
+                <li key={p.key} className="rounded-lg border border-line bg-surface p-2.5">
+                  <div className="flex items-center gap-2 text-sm">
+                    <FileText className="h-4 w-4 shrink-0 text-accent" />
+                    <span className="min-w-0 flex-1 truncate text-foreground/85" title={p.file.name}>{p.file.name}</span>
+                    <span className="shrink-0 text-[11px] text-foreground/40">{tamanhoLegivel(p.file.size)}</span>
+                    <button
+                      type="button"
+                      title="Tirar este arquivo"
+                      onClick={() => setPendingFiles((prev) => prev.filter((x) => x.key !== p.key))}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded text-foreground/40 hover:text-danger sm:h-6 sm:w-6"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <input
+                    value={p.description}
+                    onChange={(e) =>
+                      setPendingFiles((prev) => prev.map((x) => (x.key === p.key ? { ...x, description: e.target.value } : x)))
+                    }
+                    placeholder="Descrição do arquivo (opcional)"
+                    className="mt-2 h-9 w-full rounded-md border border-line bg-card px-2.5 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                void pickFiles(Array.from(e.target.files ?? []))
+                e.target.value = ''
+              }}
+            />
             <label className="inline-flex items-center gap-2 text-xs text-foreground/65 cursor-pointer">
               <input
                 type="checkbox"
@@ -260,14 +347,25 @@ export function OverviewTab({ client }: { client: Client }) {
               <StickyNote className="h-3.5 w-3.5" />
               Nota interna (só o time vê)
             </label>
-            <Button
-              size="sm"
-              onClick={addNote}
-              disabled={!noteText.trim()}
-              leftIcon={<MessageSquare className="h-3.5 w-3.5" />}
-            >
-              {noteInternal ? 'Registrar nota interna' : 'Registrar mensagem'}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => fileInputRef.current?.click()}
+                leftIcon={<Paperclip className="h-3.5 w-3.5" />}
+              >
+                Anexar arquivo
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void addNote()}
+                loading={sendingNote}
+                disabled={!noteText.trim() && pendingFiles.length === 0}
+                leftIcon={<MessageSquare className="h-3.5 w-3.5" />}
+              >
+                {noteInternal ? 'Registrar nota interna' : 'Registrar mensagem'}
+              </Button>
+            </div>
           </div>
 
           {(client.notes ?? []).length === 0 ? (
@@ -378,10 +476,17 @@ export function OverviewTab({ client }: { client: Client }) {
                           className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground/85 [&_a]:text-accent [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
                           dangerouslySetInnerHTML={{ __html: sanitizeHtml(n.text) }}
                         />
-                      ) : (
+                      ) : n.text.trim() ? (
                         <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">
                           {asText(n.text)}
                         </p>
+                      ) : null}
+                      {(n.attachments ?? []).length > 0 && (
+                        <ul className="mt-2 space-y-1.5">
+                          {n.attachments!.map((a) => (
+                            <NoteAttachmentItem key={a.id} attachment={a} />
+                          ))}
+                        </ul>
                       )}
                     </div>
                   </div>
@@ -1401,5 +1506,93 @@ function CopyEditField({
         </div>
       )}
     </div>
+  )
+}
+
+// ─── Anexos das mensagens registradas ───────────────────────────────────────
+
+const MAX_NOTE_FILE_BYTES = 10 * 1024 * 1024
+
+interface PendingNoteFile {
+  key: string
+  file: File
+  description: string
+}
+
+function lerComoDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error ?? new Error('Não deu pra ler o arquivo'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function tamanhoLegivel(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`
+}
+
+/** Um anexo de mensagem: nome, descrição e tamanho. Clicar busca o conteúdo no servidor: imagem abre numa
+ * janela aqui mesmo (abrir aba nova depois de esperar o download é bloqueado no iPhone); o resto é baixado. */
+function NoteAttachmentItem({ attachment: a }: { attachment: NoteAttachment }) {
+  const [abrindo, setAbrindo] = React.useState(false)
+  const [preview, setPreview] = React.useState<string | null>(null)
+  const ehImagem = a.type.startsWith('image/')
+
+  const baixar = (dataUrl: string) => {
+    const link = document.createElement('a')
+    link.href = dataUrl
+    link.download = a.name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const abrir = async () => {
+    setAbrindo(true)
+    try {
+      const { dataUrl } = await db.noteFileContent(a.id)
+      if (ehImagem) setPreview(dataUrl)
+      else baixar(dataUrl)
+    } catch (err) {
+      toast.error('Não deu pra abrir o arquivo: ' + (err as Error).message)
+    } finally {
+      setAbrindo(false)
+    }
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => void abrir()}
+        disabled={abrindo}
+        title={ehImagem ? 'Ver imagem' : 'Baixar'}
+        className="flex w-full items-start gap-2 rounded-md border border-line bg-surface px-2.5 py-2 text-left transition-colors hover:border-accent/40 disabled:opacity-60"
+      >
+        <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-foreground/85">{a.name}</span>
+          {a.description && <span className="block text-xs text-foreground/60">{a.description}</span>}
+        </span>
+        <span className="shrink-0 text-[11px] text-foreground/40">{abrindo ? 'abrindo…' : tamanhoLegivel(a.size)}</span>
+      </button>
+      <Modal
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        size="2xl"
+        title={a.name}
+        description={a.description}
+        footer={
+          <Button size="sm" variant="secondary" onClick={() => preview && baixar(preview)}>
+            Baixar
+          </Button>
+        }
+      >
+        {preview && <img src={preview} alt={a.description || a.name} className="mx-auto max-h-[70vh] w-auto rounded-lg" />}
+      </Modal>
+    </li>
   )
 }

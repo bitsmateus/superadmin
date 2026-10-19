@@ -54,7 +54,10 @@ export function HistoryTab({ client }: { client: Client }) {
         at: n.createdAt,
         title: n.author || 'Nota',
         // Nota copiada do CRM vem em HTML: na linha do tempo entra só o texto.
-        description: pareceHtml(n.text) ? stripHtml(n.text) : n.text,
+        description: [
+          pareceHtml(n.text) ? stripHtml(n.text) : n.text,
+          (n.attachments ?? []).length ? `Anexos: ${n.attachments!.map((x) => x.name).join(', ')}` : '',
+        ].filter((t) => t.trim()).join('\n'),
         internal: n.internal,
       })
     }

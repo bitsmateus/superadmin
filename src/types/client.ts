@@ -11,6 +11,16 @@ export type PipelineStage =
   | 'active'
   | 'churned'
 
+/** Arquivo anexado a uma mensagem registrada. Só a ficha: o conteúdo fica no servidor (client_note_files). */
+export interface NoteAttachment {
+  id: string
+  name: string
+  type: string
+  size: number
+  /** O que é o arquivo (opcional), escrito por quem anexou. */
+  description?: string
+}
+
 export interface NoteEntry {
   id: string
   text: string
@@ -18,6 +28,7 @@ export interface NoteEntry {
   createdAt: string
   /** Quando true, nota só é visível pra time interno (não aparece em portais públicos). */
   internal?: boolean
+  attachments?: NoteAttachment[]
 }
 
 export interface LogEntry {

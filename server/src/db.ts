@@ -112,6 +112,20 @@ export async function runMigrations() {
   // Token da Meta (Graph) do WhatsApp oficial do cliente: a NX parou de devolvê-lo (Z-PRO v4), e sem ele não
   // dá pra listar os templates aprovados. Colado à mão no cadastro (ver lib/wabaAccess.ts).
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS meta_token TEXT`);
+  // Arquivos anexados às "Mensagens registradas" do cliente (CRM › Visão geral). Ficam fora de clients.notes
+  // de propósito: a lista de clientes é carregada inteira por todo mundo, e base64 ali deixaria tudo pesado.
+  // A nota guarda só id/nome/tipo/tamanho/descrição; o conteúdo vem por GET /api/client-note-files/:id.
+  await pool.query(`CREATE TABLE IF NOT EXISTS client_note_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT '',
+    size INTEGER NOT NULL DEFAULT 0,
+    data_url TEXT NOT NULL,
+    created_by UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS client_note_files_client_idx ON client_note_files (client_id)`);
   // Espaço de Suporte: tarefas/pendências/reuniões/anotações.
   await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS kind TEXT`);
   await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS status TEXT`);

@@ -25,7 +25,8 @@ export function Drawer({
   React.useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      // Com uma janela aberta por cima (ex.: pré-visualização de anexo), o Esc fecha só ela, não a gaveta.
+      if (e.key === 'Escape' && document.querySelectorAll('[aria-modal="true"]').length <= 1) onClose()
     }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'

@@ -13,6 +13,7 @@ import type {
   Client,
   LogEntry,
   NoteEntry,
+  NoteAttachment,
   PipelineStage,
 } from '@/types/client'
 
@@ -705,10 +706,13 @@ export const db = {
     return entry
   },
 
-  addNote(clientId: string, text: string, author: string, internal = false): NoteEntry | undefined {
+  addNote(clientId: string, text: string, author: string, internal = false, attachments?: NoteAttachment[]): NoteEntry | undefined {
     const client = db.getClient(clientId)
     if (!client) return undefined
-    const note: NoteEntry = { id: uuid(), text, author: author || 'Anônimo', createdAt: new Date().toISOString(), internal: internal || undefined }
+    const note: NoteEntry = {
+      id: uuid(), text, author: author || 'Anônimo', createdAt: new Date().toISOString(), internal: internal || undefined,
+      attachments: attachments?.length ? attachments : undefined,
+    }
     db.updateClient(clientId, { notes: [note, ...(client.notes ?? [])] })
     return note
   },
@@ -725,8 +729,21 @@ export const db = {
   deleteNote(clientId: string, noteId: string): void {
     const client = db.getClient(clientId)
     if (!client) return
+    const removida = (client.notes ?? []).find((n) => n.id === noteId)
     const notes = (client.notes ?? []).filter((n) => n.id !== noteId)
     db.updateClient(clientId, { notes })
+    // Os arquivos da nota apagada não servem pra mais nada: some com eles do servidor também.
+    for (const a of removida?.attachments ?? []) void api.delete(`/api/client-note-files/${a.id}`).catch(() => undefined)
+  },
+
+  /** Sobe um arquivo pra anexar numa mensagem registrada e devolve a ficha dele (sem o conteúdo). */
+  async uploadNoteFile(clientId: string, file: { name: string; type: string; dataUrl: string }): Promise<NoteAttachment> {
+    return api.post<NoteAttachment>(`/api/clients/${clientId}/note-files`, file)
+  },
+
+  /** Conteúdo (data URL) de um anexo de mensagem registrada. */
+  async noteFileContent(fileId: string): Promise<{ id: string; name: string; type: string; dataUrl: string }> {
+    return api.get(`/api/client-note-files/${fileId}`)
   },
 
   getSettings(): AppSettings { return settingsCache },

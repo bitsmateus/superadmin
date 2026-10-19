@@ -176,7 +176,18 @@ export async function diagnosticarWaba(clientId: string): Promise<{ acessos: Wab
         return null;
       }
       const detail = ((detailRes.body as { data?: unknown })?.data ?? null) as NxChannelDetail | null;
-      const bmToken = acharTokenDaMeta(detail as Record<string, unknown> | null);
+      let bmToken = acharTokenDaMeta(detail as Record<string, unknown> | null);
+      // Sem token no showChannelById (a NX passou pro Z-PRO v4 em 29/09/2026): tenta o showChannel, que busca
+      // o mesmo canal pelo número.
+      if (!bmToken && ch.number) {
+        const porNumero = await fetchJson(
+          `${base}/v2/api/external/${encodeURIComponent(apiId)}/showChannel`,
+          { ...headers, 'Content-Type': 'application/json' },
+          'POST',
+          { number: ch.number }
+        ).catch(() => null);
+        if (porNumero?.ok) bmToken = acharTokenDaMeta(((porNumero.body as { data?: unknown })?.data ?? null) as Record<string, unknown> | null);
+      }
       const wabaId = detail?.wabaId || ch.wabaId || '';
       if (!bmToken || !wabaId) {
         problemas.push(

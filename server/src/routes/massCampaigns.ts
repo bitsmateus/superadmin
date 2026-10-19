@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { query, queryOne } from '../db.js';
-import { resolveWabaAccesses } from '../lib/wabaAccess.js';
+import { diagnosticarWaba } from '../lib/wabaAccess.js';
 import { listTemplates, bodyVariables } from '../lib/metaGraph.js';
 import { parseSpreadsheet, normalizePhone } from '../lib/spreadsheet.js';
 
@@ -135,9 +135,9 @@ export async function massCampaignRoutes(app: FastifyInstance) {
     const client = await resolveClientByToken(req.params.token);
     if (!client) return reply.status(404).send({ message: 'Link inválido.' });
 
-    const accesses = await resolveWabaAccesses(client.id);
+    const { acessos: accesses, motivo } = await diagnosticarWaba(client.id);
     if (!accesses.length) {
-      return reply.status(400).send({ message: 'Não encontramos um WhatsApp oficial conectado pra esse cliente.' });
+      return reply.status(400).send({ message: `Não encontramos um WhatsApp oficial conectado pra esse cliente: ${motivo}.` });
     }
     const access = accesses[0];
     try {
@@ -161,7 +161,9 @@ export async function massCampaignRoutes(app: FastifyInstance) {
         });
       return { numberLabel: access.label, templates };
     } catch (err) {
-      return reply.status(502).send({ message: err instanceof Error ? err.message : 'Falha ao consultar a Meta.' });
+      const msg = err instanceof Error ? err.message : 'Falha ao consultar a Meta.';
+      console.warn(`[waba] cliente ${client.id}: a Meta recusou listar os templates do número ${access.label} (${msg})`);
+      return reply.status(502).send({ message: `A Meta recusou listar os templates do número ${access.label}: ${msg}` });
     }
   });
 

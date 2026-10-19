@@ -94,31 +94,62 @@ async function fetchJson(url: string, headers: Record<string, string>, method = 
  * configurado (ou credenciais do tenant ausentes).
  */
 export async function resolveWabaAccesses(clientId: string): Promise<WabaOption[]> {
+  return (await diagnosticarWaba(clientId)).acessos;
+}
+
+/** Trecho curto da resposta da NX pro motivo/log (sem despejar o corpo inteiro). */
+function resumo(res: { status: number; body: unknown }): string {
+  const b = res.body as { error?: unknown; message?: unknown } | string | undefined;
+  const txt = typeof b === 'string' ? b : String((b && (b.error ?? b.message)) ?? '');
+  return `HTTP ${res.status}${txt ? ` — ${txt.slice(0, 120)}` : ''}`;
+}
+
+/**
+ * Igual a `resolveWabaAccesses`, mas quando não acha nenhum número diz EM QUE PASSO parou (antes tudo virava
+ * "não encontramos um WhatsApp oficial", e não dava pra saber se era cadastro, NX ou Meta). O motivo também
+ * vai pro log do servidor.
+ */
+export async function diagnosticarWaba(clientId: string): Promise<{ acessos: WabaOption[]; motivo: string | null }> {
+  const falhou = (motivo: string) => {
+    console.warn(`[waba] cliente ${clientId}: ${motivo}`);
+    return { acessos: [] as WabaOption[], motivo };
+  };
+
   const nx = await resolveNxCredentials(clientId);
-  if (!nx) return [];
+  if (!nx) return falhou('o cliente está sem servidor, API ID ou token da NX no cadastro');
   const { baseUrl: base, apiId, apiToken } = nx;
 
   const headers = { Accept: 'application/json', Authorization: `Bearer ${apiToken}` };
 
-  const listRes = await fetchJson(`${base}/v2/api/external/${encodeURIComponent(apiId)}/listChannels`, headers);
-  if (!listRes.ok) return [];
+  const listRes = await fetchJson(`${base}/v2/api/external/${encodeURIComponent(apiId)}/listChannels`, headers).catch(
+    (err: unknown) => ({ ok: false, status: 0, body: err instanceof Error ? err.message : String(err) })
+  );
+  if (!listRes.ok) return falhou(`a NX recusou listar os canais (${resumo(listRes)})`);
   const list = ((listRes.body as { data?: unknown })?.data ?? []) as NxChannel[];
   const wabaChannels = list.filter((c) => (c.type || '').toLowerCase() === 'waba' && c.wabaId);
-  if (!wabaChannels.length) return [];
+  if (!wabaChannels.length) return falhou(`a NX não tem canal do WhatsApp oficial (WABA) nesse tenant (${list.length} canal(is) de outro tipo)`);
 
+  const problemas: string[] = [];
   const resolved = await Promise.all(
     wabaChannels.map(async (ch): Promise<WabaOption | null> => {
+      const nome = ch.name?.trim() || ch.number?.trim() || String(ch.id);
       const detailRes = await fetchJson(
         `${base}/v2/api/external/${encodeURIComponent(apiId)}/showChannelById`,
         { ...headers, 'Content-Type': 'application/json' },
         'POST',
         { id: ch.id }
-      );
-      if (!detailRes.ok) return null;
+      ).catch((err: unknown) => ({ ok: false, status: 0, body: err instanceof Error ? err.message : String(err) }));
+      if (!detailRes.ok) {
+        problemas.push(`canal ${nome}: a NX recusou o detalhe (${resumo(detailRes)})`);
+        return null;
+      }
       const detail = ((detailRes.body as { data?: unknown })?.data ?? null) as NxChannelDetail | null;
       const bmToken = detail?.bmToken || '';
       const wabaId = detail?.wabaId || ch.wabaId || '';
-      if (!bmToken || !wabaId) return null;
+      if (!bmToken || !wabaId) {
+        problemas.push(`canal ${nome}: a NX não devolveu ${!bmToken ? 'o token da Meta (bmToken)' : 'o WABA ID'}`);
+        return null;
+      }
       return {
         wabaId,
         token: bmToken,
@@ -127,7 +158,9 @@ export async function resolveWabaAccesses(clientId: string): Promise<WabaOption[
       };
     })
   );
-  return resolved.filter((r): r is WabaOption => r !== null);
+  const acessos = resolved.filter((r): r is WabaOption => r !== null);
+  if (!acessos.length) return falhou(problemas.join('; '));
+  return { acessos, motivo: null };
 }
 
 /** Resolve o acesso de UM número específico (pra "verificar status" de um alvo já criado). */

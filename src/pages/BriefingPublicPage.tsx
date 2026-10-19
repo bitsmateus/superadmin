@@ -1928,7 +1928,7 @@ export function BriefingPublicPage() {
                         <div className="space-y-3">
                           {state.chatbotMenus.map((m, i) => (
                             <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                              <div className="mb-3 flex items-start justify-between gap-3">
+                              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                                 <div>
                                   <p className="text-sm font-semibold text-slate-800">
                                     {i === 0 ? 'Menu principal' : `Submenu ${i}`}
@@ -2143,7 +2143,7 @@ export function BriefingPublicPage() {
                     <span className="mb-1.5 block text-xs font-medium text-slate-600">
                       A IA pode informar os preços dos serviços?
                     </span>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                       {[{ v: true, l: 'Sim, pode informar' }, { v: false, l: 'Não, enviar para atendente' }].map(({ v, l }) => (
                         <label key={String(v)} className="inline-flex items-center gap-1.5 cursor-pointer text-sm">
                           <input
@@ -2563,7 +2563,7 @@ export function BriefingPublicPage() {
           cima do que estiver na tela ao rolar — inclusive o card branco da seção — então
           não pode depender do gradiente da página aparecer "por trás" pra ter contraste. */}
       <footer className="fixed inset-x-0 bottom-0 z-30 bg-[#1E1B6B]/95 shadow-[0_-4px_16px_rgba(0,0,0,0.15)] backdrop-blur">
-        <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
+        <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
           <div className="flex flex-col">
             <span className="text-xs uppercase tracking-wider text-white/50">Briefing</span>
             <span className="text-sm font-medium text-white">
@@ -2581,7 +2581,7 @@ export function BriefingPublicPage() {
               <button
                 type="button"
                 onClick={prev}
-                className="rounded-lg border border-white/30 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-sm backdrop-blur-sm hover:bg-white/20"
+                className="flex-1 rounded-lg border sm:flex-none border-white/30 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-sm backdrop-blur-sm hover:bg-white/20"
               >
                 Voltar
               </button>
@@ -2590,7 +2590,7 @@ export function BriefingPublicPage() {
               type="button"
               onClick={next}
               disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2 text-sm font-semibold text-[#1E1B6B] shadow-lg hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-white px-5 py-2 text-sm font-semibold text-[#1E1B6B] sm:flex-none shadow-lg hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {section === totalSections - 1 ? (
                 <>
@@ -2774,7 +2774,7 @@ function SummaryRow({ label, value }: { label: string; value?: string }) {
   return (
     <div className="grid grid-cols-3 gap-3 border-b border-slate-100 py-2 text-xs last:border-b-0">
       <span className="col-span-1 font-medium text-slate-500">{label}</span>
-      <span className="col-span-2 whitespace-pre-wrap text-slate-700">{value}</span>
+      <span className="col-span-2 whitespace-pre-wrap break-words text-slate-700">{value}</span>
     </div>
   )
 }
@@ -2809,7 +2809,7 @@ function ExampleMenuButton({
         Usar exemplo
       </button>
       {open && (
-        <div className="absolute right-0 top-9 z-20 w-60 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+        <div className="absolute left-0 top-9 z-20 w-60 max-w-[calc(100vw-2rem)] rounded-lg sm:left-auto sm:right-0 border border-slate-200 bg-white py-1 shadow-lg">
           <button
             type="button"
             onClick={() => { onPick('generic'); setOpen(false) }}
@@ -2861,7 +2861,7 @@ function InfoPopover({ title, children }: { title: string; children: React.React
         Saiba mais aqui
       </button>
       {open && (
-        <div className="absolute left-0 top-7 z-50 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl text-xs text-slate-700 space-y-3">
+        <div className="absolute left-0 top-7 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl text-xs text-slate-700 space-y-3">
           <p className="font-semibold text-slate-900 text-sm">{title}</p>
           {children}
         </div>
@@ -2979,11 +2979,11 @@ function BriefingHeader({ companyName }: { companyName: string }) {
  * dados viram a base de todo o atendimento configurado depois. */
 function BriefingWelcomePage({ onStart }: { onStart: () => void }) {
   return (
-    <div className="min-h-screen w-full px-4 py-10" style={{ background: BRIEFING_GRADIENT }}>
+    <div className="min-h-screen w-full px-4 py-6 sm:py-10" style={{ background: BRIEFING_GRADIENT }}>
       <div className="mx-auto max-w-2xl">
-        <div className="rounded-2xl bg-white p-8 shadow-xl">
+        <div className="rounded-2xl bg-white p-6 shadow-xl sm:p-8">
           <img src={logoNx} alt="Grupo NX Digital" className="mb-4 h-14 w-14 rounded-2xl object-cover shadow-sm" />
-          <h1 className="text-3xl font-bold text-slate-800">Boas-vindas ao seu Briefing</h1>
+          <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">Boas-vindas ao seu Briefing</h1>
           <p className="mt-4 text-sm font-semibold text-slate-700">
             Esse formulário leva, em média, de 5 a 15 minutos para ser preenchido. 🕐
           </p>
@@ -3000,7 +3000,7 @@ function BriefingWelcomePage({ onStart }: { onStart: () => void }) {
           <button
             type="button"
             onClick={onStart}
-            className="mt-6 rounded-lg bg-[#2F5BFF] px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8]"
+            className="mt-6 w-full rounded-lg bg-[#2F5BFF] px-5 py-2.5 sm:w-auto text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8]"
           >
             Iniciar briefing
           </button>
@@ -3016,7 +3016,7 @@ function BriefingErrorPage() {
       className="grid min-h-screen place-items-center p-6 text-center"
       style={{ background: BRIEFING_GRADIENT }}
     >
-      <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-xl bg-rose-50 text-rose-500">
           <Trash2 className="h-6 w-6" />
         </div>
@@ -3034,7 +3034,7 @@ function BriefingSuccessPage() {
   return (
     <div className="min-h-screen w-full px-4 py-10" style={{ background: BRIEFING_GRADIENT }}>
       <div className="mx-auto max-w-2xl">
-        <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
+        <div className="rounded-2xl bg-white p-6 text-center shadow-xl sm:p-10">
           <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-green-100 text-3xl">
             ✅
           </div>
@@ -3060,7 +3060,7 @@ function SectionBlock({
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
       <header className="mb-5 flex items-center gap-3">
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#4F8EF7]/10 text-[#4F8EF7]">
           {icon}

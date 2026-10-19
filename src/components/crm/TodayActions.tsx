@@ -104,11 +104,11 @@ export function TodayActions() {
   return (
     <section className="rounded-2xl border border-line bg-card">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
             <ListTodo className="h-3.5 w-3.5" />
           </span>
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-medium text-foreground">Minhas tarefas</h3>
             <p className="text-[11px] text-foreground/45">
               O que precisa de atenção, por ordem de urgência
@@ -119,7 +119,7 @@ export function TodayActions() {
           </Badge>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
             Todos
           </FilterChip>

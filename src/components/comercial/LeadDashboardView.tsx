@@ -317,7 +317,7 @@ export function SdrMetricsGrid({ rows, boards, onOpenLead, title }: { rows: Lead
     return (
       <div className="space-y-4">
         <MonthFilterBar filter={monthFilter} />
-        <div className="rounded-2xl bg-card p-8 shadow-sm">
+        <div className="rounded-2xl bg-card p-6 shadow-sm sm:p-8">
           <p className="text-center text-xs text-foreground/40">Sem dados nesse período.</p>
         </div>
       </div>

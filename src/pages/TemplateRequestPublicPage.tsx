@@ -197,18 +197,18 @@ export function TemplateRequestPublicPage() {
 
   return (
     <div
-      className="min-h-screen w-full px-4 py-10"
+      className="min-h-screen w-full px-4 py-6 sm:py-10"
       style={{ background: 'linear-gradient(135deg, #1E1B6B 0%, #2B2FB5 55%, #2F5BFF 100%)' }}
     >
       <div className="mx-auto max-w-2xl">
         {step === 'loading' && (
-          <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
+          <div className="rounded-2xl bg-white p-6 text-center shadow-xl sm:p-10">
             <p className="text-sm text-slate-500">Carregando…</p>
           </div>
         )}
 
         {step === 'invalid' && (
-          <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
+          <div className="rounded-2xl bg-white p-6 text-center shadow-xl sm:p-10">
             <h1 className="text-2xl font-bold text-slate-800">Link inválido</h1>
             <p className="mt-3 text-sm text-slate-500">
               Esse link não existe mais ou expirou. Fale com a NX Digital pra gerar um novo.
@@ -217,7 +217,7 @@ export function TemplateRequestPublicPage() {
         )}
 
         {step === 'no-numbers' && (
-          <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
+          <div className="rounded-2xl bg-white p-6 text-center shadow-xl sm:p-10">
             <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-amber-100 text-3xl">📵</div>
             <h1 className="text-2xl font-bold text-slate-800">Não encontramos seu WhatsApp oficial</h1>
             <p className="mt-3 text-sm text-slate-500">
@@ -228,8 +228,8 @@ export function TemplateRequestPublicPage() {
         )}
 
         {step === 'welcome' && (
-          <div className="rounded-2xl bg-white p-8 shadow-xl">
-            <h1 className="text-3xl font-bold text-slate-800">Vamos criar seu modelo de mensagem</h1>
+          <div className="rounded-2xl bg-white p-6 shadow-xl sm:p-8">
+            <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">Vamos criar seu modelo de mensagem</h1>
             <p className="mt-4 text-sm leading-relaxed text-slate-500">
               Olá{data?.clientName ? `, ${data.clientName}` : ''}! Pra mandar mensagens automáticas no WhatsApp (ex.: confirmação
               de pedido, aviso de entrega), o WhatsApp exige um modelo aprovado antes.
@@ -240,7 +240,7 @@ export function TemplateRequestPublicPage() {
             <button
               type="button"
               onClick={() => setStep('form')}
-              className="mt-6 rounded-lg bg-[#2F5BFF] px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8]"
+              className="mt-6 w-full rounded-lg bg-[#2F5BFF] px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8] sm:w-auto"
             >
               Começar
             </button>
@@ -248,7 +248,7 @@ export function TemplateRequestPublicPage() {
         )}
 
         {step === 'form' && (
-          <div className="rounded-2xl bg-white p-8 shadow-xl">
+          <div className="rounded-2xl bg-white p-6 shadow-xl sm:p-8">
             <h1 className="mb-6 text-2xl font-bold text-slate-800">Modelo de mensagem</h1>
 
             <div className="space-y-5">
@@ -292,7 +292,7 @@ export function TemplateRequestPublicPage() {
                   rows={4}
                   maxLength={1024}
                   placeholder="Olá! Seu pedido foi confirmado e chega em breve."
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-base text-slate-800 outline-none sm:text-sm focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
                 />
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <button
@@ -330,7 +330,7 @@ export function TemplateRequestPublicPage() {
                         value={examples[pos] ?? ''}
                         onChange={(e) => setExamples((ex) => ({ ...ex, [pos]: e.target.value }))}
                         placeholder="Ex.: Maria"
-                        className="h-9 flex-1 rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+                        className="h-9 flex-1 rounded-md border border-slate-300 px-2.5 text-base text-slate-800 outline-none sm:text-sm focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
                       />
                     </label>
                   ))}
@@ -387,7 +387,7 @@ export function TemplateRequestPublicPage() {
                 type="button"
                 onClick={submit}
                 disabled={submitting}
-                className="rounded-lg bg-[#2F5BFF] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#2348d8] disabled:opacity-60"
+                className="w-full rounded-lg bg-[#2F5BFF] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#2348d8] disabled:opacity-60 sm:w-auto"
               >
                 {submitting ? 'Enviando…' : 'Enviar'}
               </button>
@@ -396,7 +396,7 @@ export function TemplateRequestPublicPage() {
         )}
 
         {step === 'done' && (
-          <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
+          <div className="rounded-2xl bg-white p-6 text-center shadow-xl sm:p-10">
             <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-green-100 text-3xl">✅</div>
             <h1 className="text-2xl font-bold text-slate-800">Modelo enviado!</h1>
             <p className="mt-3 text-sm text-slate-500">
@@ -407,7 +407,7 @@ export function TemplateRequestPublicPage() {
             <button
               type="button"
               onClick={criarOutro}
-              className="mt-6 rounded-lg bg-[#2F5BFF] px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8]"
+              className="mt-6 w-full rounded-lg bg-[#2F5BFF] px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8] sm:w-auto"
             >
               Criar outro modelo
             </button>
@@ -439,7 +439,7 @@ function WhatsAppPreview({
       <div className="max-w-[92%] overflow-hidden rounded-lg rounded-tl-none bg-white shadow-sm">
         <div className="px-3 pb-1.5 pt-2">
           {header.trim() && <p className="mb-1 text-[14.5px] font-bold leading-snug text-slate-900">{header}</p>}
-          <p className="whitespace-pre-wrap text-[14.5px] leading-snug text-slate-900">{body || '—'}</p>
+          <p className="whitespace-pre-wrap break-words text-[14.5px] leading-snug text-slate-900">{body || '—'}</p>
           {footer.trim() && <p className="mt-1 text-[12.5px] leading-snug text-slate-500">{footer}</p>}
           <div className="mt-1 flex justify-end">
             <span className="text-[11px] text-slate-400">{now}</span>
@@ -505,7 +505,7 @@ function ButtonEditor({
             onChange={(e) => onChange({ text: e.target.value.slice(0, 25) })}
             placeholder={button.type === 'QUICK_REPLY' ? 'Ex.: Sim, quero' : 'Ex.: Ver pedido'}
             maxLength={25}
-            className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+            className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-base text-slate-800 outline-none sm:text-sm focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
           />
         )}
         {button.type === 'URL' && (
@@ -514,7 +514,7 @@ function ButtonEditor({
               value={button.urlBase ?? ''}
               onChange={(e) => onChange({ urlBase: e.target.value })}
               placeholder="https://seusite.com.br/pedido/"
-              className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+              className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-base text-slate-800 outline-none sm:text-sm focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
             />
             <label className="flex items-center gap-2 text-xs text-slate-600">
               <input type="checkbox" checked={Boolean(button.dynamic)} onChange={(e) => onChange({ dynamic: e.target.checked })} />
@@ -525,7 +525,7 @@ function ButtonEditor({
                 value={button.example ?? ''}
                 onChange={(e) => onChange({ example: e.target.value })}
                 placeholder="Exemplo do final do link, ex.: 12345"
-                className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+                className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-base text-slate-800 outline-none sm:text-sm focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
               />
             )}
           </>
@@ -536,7 +536,7 @@ function ButtonEditor({
             onChange={(e) => onChange({ example: e.target.value.slice(0, 15) })}
             placeholder="Código de exemplo, ex.: PROMO10"
             maxLength={15}
-            className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+            className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-base text-slate-800 outline-none sm:text-sm focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
           />
         )}
       </div>
@@ -581,7 +581,7 @@ function Text({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="h-11 w-full rounded-md border border-slate-300 px-3 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+      className="h-11 w-full rounded-md border border-slate-300 px-3 text-base text-slate-800 outline-none sm:text-sm focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
     />
   )
 }

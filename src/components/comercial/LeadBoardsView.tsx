@@ -566,7 +566,7 @@ function BulkActionButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex flex-col items-center gap-0.5 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors',
+        'flex flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[10px] font-medium transition-colors sm:px-2.5',
         danger ? 'text-foreground/50 hover:bg-danger/10 hover:text-danger' : 'text-foreground/50 hover:bg-elevate/[0.08] hover:text-foreground',
       )}
     >
@@ -774,7 +774,7 @@ function BulkActionBar({
         <span className="mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-white">
           {selectedRows.length}
         </span>
-        <span className="mr-1.5 whitespace-nowrap text-xs font-medium text-foreground/70">
+        <span className="mr-1.5 hidden whitespace-nowrap text-xs font-medium text-foreground/70 sm:inline">
           {selectedRows.length === 1 ? 'Nome selecionado' : 'Nomes selecionados'}
         </span>
         <div className="mx-1 h-6 w-px bg-line" />
@@ -1070,7 +1070,7 @@ function BoardGroup({
                           title={sortActive ? (sortBy.desc ? 'Ordenar crescente' : 'Ordenar decrescente') : 'Ordenar'}
                           className={cn(
                             'grid h-4 w-4 shrink-0 place-items-center rounded transition-opacity hover:bg-elevate/[0.05] hover:text-accent',
-                            sortActive ? 'text-accent opacity-100' : 'text-foreground/30 opacity-0 group-hover:opacity-100',
+                            sortActive ? 'text-accent opacity-100' : 'text-foreground/30 sm:opacity-0 sm:group-hover:opacity-100',
                           )}
                         >
                           <ArrowUpDown className={cn('h-3 w-3 transition-transform', sortActive && sortBy.desc && 'rotate-180')} />
@@ -1583,13 +1583,13 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   {isAdmin && <PageActionsMenu pageId={page} pageName={title} boards={boards} />}
                 </>
               )}
-              <div className="relative">
+              <div className="relative w-full sm:w-auto">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Pesquisar"
-                  className="h-9 w-44 rounded-md border border-line bg-card pl-9 pr-2 text-sm text-foreground placeholder:text-foreground/40 focus:border-accent/60 focus:outline-none"
+                  className="h-9 w-full rounded-md border border-line bg-card pl-9 pr-2 text-sm sm:w-44 text-foreground placeholder:text-foreground/40 focus:border-accent/60 focus:outline-none"
                 />
               </div>
               <ToolbarButton

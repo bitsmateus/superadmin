@@ -657,8 +657,8 @@ function ContextCard({
           {ticket.customerName ?? ticket.customerCompany ?? ticket.customerEmail}
         </div>
         <div className="mt-1 space-y-0.5 text-xs text-foreground/55">
-          <div className="inline-flex items-center gap-1.5">
-            <Mail className="h-3 w-3" /> {ticket.customerEmail}
+          <div className="inline-flex max-w-full items-center gap-1.5 break-all">
+            <Mail className="h-3 w-3 shrink-0" /> {ticket.customerEmail}
           </div>
           {ticket.customerPhone && (
             <div className="inline-flex items-center gap-1.5">

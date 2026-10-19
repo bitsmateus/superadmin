@@ -604,7 +604,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
             <div className="rounded-2xl bg-elevate/[0.03] p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-foreground">Dados do contrato</span>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
                     variant="secondary"
@@ -1173,7 +1173,7 @@ function ContractPdfField({
             {filename || 'contrato.pdf'}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <Button size="sm" variant="secondary" onClick={download} leftIcon={<Download className="h-3.5 w-3.5" />}>
             Baixar
           </Button>
@@ -1209,7 +1209,7 @@ function ContractPdfField({
       }}
       onClick={() => inputRef.current?.click()}
       className={cn(
-        'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 text-center transition-colors',
+        'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition-colors sm:p-8',
         dragOver ? 'border-accent bg-accent/5' : 'border-line hover:border-accent/40 hover:bg-elevate/[0.02]',
       )}
     >
@@ -1373,7 +1373,7 @@ function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose
         ref={bodyRef}
         contentEditable
         suppressContentEditableWarning
-        className="mx-auto max-h-[55vh] max-w-[800px] overflow-y-auto rounded-lg border border-line bg-card p-8 text-[12pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
+        className="mx-auto max-h-[55vh] max-w-[800px] overflow-y-auto rounded-lg border border-line bg-card p-4 text-[12pt] sm:p-8 leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
         style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
       />
     </Modal>

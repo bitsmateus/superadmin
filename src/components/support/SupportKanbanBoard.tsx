@@ -2,14 +2,13 @@ import * as React from 'react'
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
   useDraggable,
   useDroppable,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
+import { useKanbanSensors } from '@/hooks/useKanbanSensors'
+import { KanbanColunasNav } from '@/components/ui/KanbanColunasNav'
 import {
   Building2,
   Check,
@@ -71,9 +70,10 @@ export interface SupportKanbanBoardProps {
 export function SupportKanbanBoard({ tasks, clientOf, teamMap, onEdit }: SupportKanbanBoardProps) {
   const columns = useSupportColumns()
   const [dragging, setDragging] = React.useState<Reminder | null>(null)
+  const scrollRef = React.useRef<HTMLDivElement>(null)
 
-  // distance:6 evita que um clique em "editar"/"excluir" vire um arrasto.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  // Mouse arrasta com 6px; no toque é preciso segurar o cartão (deslizar rola as colunas).
+  const sensors = useKanbanSensors()
 
   const byColumn = React.useMemo(() => {
     const map = new Map<string, Reminder[]>()
@@ -107,8 +107,19 @@ export function SupportKanbanBoard({ tasks, clientOf, teamMap, onEdit }: Support
       onDragEnd={onDragEnd}
       onDragCancel={() => setDragging(null)}
     >
-      {/* Rolagem horizontal: o número de colunas é livre. */}
-      <div className="flex items-start gap-3 overflow-x-auto pb-2">
+      <KanbanColunasNav
+        scrollRef={scrollRef}
+        colunas={columns.map((c) => ({ key: c.key, label: c.name, color: c.color, count: byColumn.get(c.key)?.length ?? 0 }))}
+      />
+      {/* Rolagem horizontal: o número de colunas é livre. No celular cada coluna ocupa quase a tela e encaixa ao
+          deslizar (o encaixe sai durante o arrasto pra rolagem automática perto da borda funcionar). */}
+      <div
+        ref={scrollRef}
+        className={cn(
+          '-mx-4 flex items-stretch sm:items-start gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0',
+          !dragging && 'snap-x snap-mandatory sm:snap-none',
+        )}
+      >
         {columns.map((col, i) => {
           const all = byColumn.get(col.key) ?? []
           const shown = col.isDone ? all.slice(0, DONE_LIMIT) : all
@@ -214,8 +225,9 @@ function Column({
   return (
     <div
       ref={setNodeRef}
+      data-kanban-col={column.key}
       className={cn(
-        'flex w-[300px] shrink-0 flex-col rounded-xl border bg-card transition-colors',
+        'flex w-[85vw] max-w-[300px] shrink-0 snap-center flex-col rounded-xl border bg-card transition-colors sm:w-[300px]',
         isOver ? 'border-accent/50 bg-accent/[0.04]' : 'border-line',
       )}
     >
@@ -315,7 +327,8 @@ function Column({
       {/* Altura limitada a ~5 cartões — coluna com mais do que isso rola por dentro dela mesma,
           em vez de esticar a página inteira (era preciso descer quase até o fim da tela pra ver
           o fim de uma coluna longa, tipo "Feito"). */}
-      <ul className="min-h-[120px] max-h-[640px] flex-1 space-y-2 overflow-y-auto p-2 pr-1.5">
+      {/* No celular a coluna cresce (a página rola): rolagem dentro da coluna atrapalhava deslizar pro lado. */}
+      <ul className="min-h-[120px] flex-1 space-y-2 p-2 pr-1.5 sm:max-h-[640px] sm:overflow-y-auto">
         {count === 0 ? (
           <li
             className={cn(
@@ -422,7 +435,7 @@ function KanbanCard({
       // sem arrastar, chega aqui; um drag de verdade nunca aciona isso.
       onClick={overlay ? undefined : onEdit}
       className={cn(
-        'select-none rounded-xl border border-line/70 bg-card p-3 shadow-sm transition-all duration-150',
+        'touch-manipulation select-none rounded-xl border border-line/70 bg-card p-3 shadow-sm transition-all duration-150 [-webkit-touch-callout:none]',
         // O fantasma precisa de fundo opaco (bg-card) pra não deixar os cartões
         // de baixo aparecerem através dele — por isso os fundos são exclusivos.
         overlay

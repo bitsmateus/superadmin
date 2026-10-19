@@ -398,7 +398,7 @@ export function AgendaPage() {
               ))}
             </div>
           )}
-          <div className="w-52">
+          <div className="w-full sm:w-52">
             <Select
               value={filtro.responsavel}
               onChange={(e) => setFiltro({ ...filtro, responsavel: e.target.value })}
@@ -502,7 +502,7 @@ export function AgendaPage() {
                                 )}
                               </div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:flex-nowrap">
                               {e.meetLink && (
                                 <>
                                   <Button
@@ -628,7 +628,7 @@ function MonthGrid({
                     type="button"
                     title="Nova reunião neste dia"
                     onClick={() => onNew(day)}
-                    className="rounded p-0.5 text-foreground/30 opacity-0 hover:bg-elevate/[0.06] hover:text-foreground group-hover:opacity-100"
+                    className="rounded p-0.5 text-foreground/30 hover:bg-elevate/[0.06] hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
                   >
                     <PlusCircle className="h-3.5 w-3.5" />
                   </button>

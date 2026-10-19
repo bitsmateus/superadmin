@@ -113,8 +113,8 @@ export function SimularLeadModal({ open, onClose, onCreated }: SimularLeadModalP
         </label>
 
         {manual && (
-          <div className="grid grid-cols-[1fr_6rem_5rem] gap-2">
-            <label className="block text-xs text-foreground/50">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_6rem_5rem]">
+            <label className="col-span-2 block text-xs text-foreground/50 sm:col-span-1">
               Nome do template
               <input value={manualNome} onChange={(e) => setManualNome(e.target.value)} placeholder="retorno_proposta_2" className={input} />
             </label>

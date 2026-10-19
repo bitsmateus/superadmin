@@ -170,7 +170,7 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
     <div className="space-y-3">
       {/* Etapas + progresso */}
       <div className="rounded-xl border border-line bg-elevate/[0.02] p-3">
-        <div className="mb-2 flex items-center justify-between text-xs text-foreground/60">
+        <div className="mb-2 flex items-center justify-between gap-2 text-xs text-foreground/60">
           <span>{state.current ? `Etapa atual: ${state.steps.find((s) => s.key === state.current)?.label}` : 'Tudo concluído'}</span>
           <span>{state.percent}%</span>
         </div>
@@ -182,8 +182,9 @@ export function SetupPanel({ client, onGoTo, showAdvanced }: SetupPanelProps) {
                 key={k}
                 type="button"
                 onClick={() => setOpen(k)}
+                title={s.label}
                 className={cn(
-                  'flex-1 rounded-md px-1 py-1 text-center text-[10px] font-medium transition-colors',
+                  'min-w-0 flex-1 truncate rounded-md px-1 py-1 text-center text-[10px] font-medium transition-colors',
                   s.done
                     ? 'bg-success/15 text-success'
                     : k === state.current

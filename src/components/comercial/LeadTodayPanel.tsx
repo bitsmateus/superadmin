@@ -37,7 +37,7 @@ export function TodayStatCard({
   }
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="group/today relative">
       <button
         type="button"
         onClick={handleClick}
@@ -55,7 +55,8 @@ export function TodayStatCard({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-line bg-card p-1.5 shadow-xl">
+        // No celular (grade de 2 colunas) o card da direita abre a lista alinhada à direita, senão vaza da tela
+        <div className="absolute left-0 top-full z-20 mt-1 w-72 max-w-[calc(100vw-2rem)] group-even/today:left-auto group-even/today:right-0 sm:group-even/today:left-0 sm:group-even/today:right-auto rounded-lg border border-line bg-card p-1.5 shadow-xl">
           <ul className="max-h-64 overflow-y-auto">
             {card.matches.map((r) => (
               <li key={r.id}>

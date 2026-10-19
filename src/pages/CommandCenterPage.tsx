@@ -111,8 +111,8 @@ function TeamSummary({
   const top3 = perf.slice(0, 3)
 
   return (
-    <section className="rounded-xl border border-line bg-card p-5">
-      <header className="mb-3 flex items-center justify-between">
+    <section className="rounded-xl border border-line bg-card p-4 sm:p-5">
+      <header className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Equipe — Top 3</h2>
           <p className="text-xs text-foreground/55">Por conversões no mês</p>
@@ -184,8 +184,8 @@ function BillingQueue({ clients }: { clients: Client[] }) {
   const totalDue = overdue.reduce((s, o) => s + o.total, 0)
 
   return (
-    <section className="rounded-xl border border-line bg-card p-5">
-      <header className="mb-3 flex items-center justify-between">
+    <section className="rounded-xl border border-line bg-card p-4 sm:p-5">
+      <header className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Fila de cobrança</h2>
           <p className="text-xs text-foreground/55">

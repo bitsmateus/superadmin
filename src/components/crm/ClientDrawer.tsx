@@ -228,7 +228,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
                 <p className="truncate text-xs text-foreground/50">
                   {asText(client.company, '—')}
                 </p>
-                <div className="mt-1.5 flex items-center gap-2">
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   <StageBadge stage={client.stage} />
                   {user && (
                     <span className="text-[10px] uppercase tracking-wider text-foreground/40">
@@ -362,7 +362,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
           }))}
         />
 
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
           {tab === 'setup' && <SetupPanel client={client} onGoTo={goTo} showAdvanced />}
           {tab === 'folder' && (
@@ -501,7 +501,7 @@ export function Section({
   return (
     <section className={cn('rounded-xl border border-line bg-elevate/[0.02] p-4', className)}>
       {(title || action) && (
-        <header className="mb-3 flex items-center justify-between gap-2">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
           {title && (
             <h3 className="text-sm font-medium text-foreground">{title}</h3>
           )}

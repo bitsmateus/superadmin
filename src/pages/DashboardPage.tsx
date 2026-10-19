@@ -200,13 +200,13 @@ function MetricCard({
             : 'cursor-default',
         )}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <span className="text-xs uppercase tracking-wider text-foreground/45">
             {label}
           </span>
           <span
             className={cn(
-              'grid h-7 w-7 place-items-center rounded-lg ring-1',
+              'grid h-7 w-7 shrink-0 place-items-center rounded-lg ring-1',
               tones[tone],
             )}
           >
@@ -232,7 +232,7 @@ function MetricCard({
       {open && clients && (
         <div
           className={cn(
-            'absolute top-full z-20 mt-1 w-72 rounded-xl border border-line bg-card p-1.5 shadow-xl animate-fade-in sm:left-0 sm:right-auto',
+            'absolute top-full z-20 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-card p-1.5 shadow-xl animate-fade-in sm:left-0 sm:right-auto',
             align === 'right' ? 'right-0' : 'left-0',
           )}
         >

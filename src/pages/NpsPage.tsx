@@ -369,7 +369,7 @@ function Distribution({
 }) {
   const max = Math.max(1, ...distribution)
   return (
-    <div className="grid grid-cols-11 gap-1.5">
+    <div className="grid grid-cols-11 gap-1 sm:gap-1.5">
       {distribution.map((count, i) => {
         const heightPct = (count / max) * 100
         const tone = i <= 6 ? 'danger' : i <= 8 ? 'warning' : 'success'

@@ -1319,7 +1319,7 @@ function RegistrarVendaModal({
           placeholder="Cliente ou empresa"
           onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
         />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-foreground/70">Valor MRR</label>
             <CurrencyField
@@ -1337,7 +1337,7 @@ function RegistrarVendaModal({
             />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Select
             label="Quem fechou a venda"
             value={fechadoPor}

@@ -246,7 +246,7 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
             <Button variant="ghost" size="sm" onClick={() => setPeriodo((p) => somarMeses(p, -1))} aria-label="Mês anterior">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-[160px] text-center text-sm font-semibold text-foreground">
+            <span className="min-w-[130px] text-center text-sm font-semibold text-foreground sm:min-w-[160px]">
               {mesPorExtenso(periodo)}
             </span>
             <Button variant="ghost" size="sm" onClick={() => setPeriodo((p) => somarMeses(p, 1))} aria-label="Próximo mês">
@@ -512,7 +512,7 @@ export function AbaRelatorios({ detalhe }: { detalhe: GcClienteDetalhe }) {
                 <button
                   type="button"
                   onClick={() => void agir('excluir', () => gestaoClientes.excluirRelatorio(r.id))}
-                  className="text-foreground/25 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+                  className="text-foreground/25 transition-opacity hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
                   aria-label="Excluir relatório"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

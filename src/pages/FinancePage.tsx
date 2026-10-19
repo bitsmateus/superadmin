@@ -289,9 +289,9 @@ export function FinancePage() {
 
         {/* Gráfico 12 meses */}
         <div className="rounded-xl border border-line bg-card p-4">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-medium text-foreground">Últimos 12 meses</h3>
-            <div className="flex items-center gap-3 text-[11px] text-foreground/55">
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-foreground/55">
               <LegendDot color="rgba(99,102,241,0.85)" /> Mensalidades
               <LegendDot color="rgba(34,197,94,0.85)" /> Implementação
             </div>
@@ -323,7 +323,7 @@ export function FinancePage() {
                       {TYPE_LABEL[payment.type]} · venceu em {formatDateShort(payment.dueDate)}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-3">
                     <span className="tabular-nums text-sm text-foreground">
                       {brl(payment.value)}
                     </span>

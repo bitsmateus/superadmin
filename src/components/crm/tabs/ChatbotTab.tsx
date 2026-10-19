@@ -235,7 +235,7 @@ export function ChatbotTab({ client, onGenerated }: { client: Client; onGenerate
                         <input
                           value={o.label}
                           onChange={(e) => patchOption(i, oi, { label: e.target.value })}
-                          className="flex-1 rounded border border-line bg-card px-2 py-1 text-foreground/90 focus:border-accent/40 focus:outline-none"
+                          className="min-w-0 flex-1 rounded border border-line bg-card px-2 py-1 text-foreground/90 focus:border-accent/40 focus:outline-none"
                         />
                         {o.transferToQueue !== undefined ? (
                           <span className="flex shrink-0 items-center gap-1 text-foreground/40">

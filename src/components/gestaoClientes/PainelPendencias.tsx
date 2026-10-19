@@ -159,7 +159,7 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
   }
 
   const linha = (i: GcPendencia, mostrarCliente: boolean) => (
-    <li key={i.id} className="group flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
+    <li key={i.id} className="group flex items-center gap-2 border-b border-line px-3 py-2.5 last:border-b-0 sm:gap-3 sm:px-4">
       {i.origem === 'planejamento' ? (
         // O lembrete do planejamento não é um item que se conclui no clique: some quando o ponto A é
         // preenchido (ou o "aguardando o cliente" é desmarcado). O botão leva pro cliente.
@@ -199,7 +199,7 @@ export function PainelPendencias({ onAbrirCliente }: { onAbrirCliente: (id: stri
       <span className="hidden shrink-0 text-xs text-foreground/55 sm:block">
         {i.responsavel_nome ?? 'sem responsável'}
       </span>
-      <span className="w-24 shrink-0 text-right">
+      <span className="w-20 shrink-0 text-right sm:w-24">
         {i.atrasado ? (
           <Badge tone="danger">
             <AlertTriangle className="mr-1 h-3 w-3" />

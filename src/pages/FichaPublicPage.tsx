@@ -72,13 +72,13 @@ export function FichaPublicPage() {
 
   return (
     <div
-      className="min-h-screen w-full px-4 py-10"
+      className="min-h-screen w-full px-4 py-6 sm:py-10"
       style={{ background: 'linear-gradient(135deg, #1E1B6B 0%, #2B2FB5 55%, #2F5BFF 100%)' }}
     >
       <div className="mx-auto max-w-2xl">
         {step === 'welcome' && (
-          <div className="rounded-2xl bg-white p-8 shadow-xl">
-            <h1 className="text-3xl font-bold text-slate-800">Boas-vindas</h1>
+          <div className="rounded-2xl bg-white p-6 shadow-xl sm:p-8">
+            <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">Boas-vindas</h1>
             <p className="mt-4 text-sm font-semibold text-slate-700">
               Parabéns por dar esse passo rumo à evolução! 🚀
             </p>
@@ -94,7 +94,7 @@ export function FichaPublicPage() {
             <button
               type="button"
               onClick={() => setStep('form')}
-              className="mt-6 rounded-lg bg-[#2F5BFF] px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8]"
+              className="mt-6 w-full rounded-lg bg-[#2F5BFF] px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-[#2348d8] sm:w-auto"
             >
               Iniciar ficha
             </button>
@@ -102,7 +102,7 @@ export function FichaPublicPage() {
         )}
 
         {step === 'form' && (
-          <div className="rounded-2xl bg-white p-8 shadow-xl">
+          <div className="rounded-2xl bg-white p-6 shadow-xl sm:p-8">
             <h1 className="mb-6 text-2xl font-bold text-slate-800">Ficha de cadastro</h1>
             <div className="space-y-5">
               <Field label="Nome da empresa" required>
@@ -143,7 +143,7 @@ export function FichaPublicPage() {
                 type="button"
                 onClick={submit}
                 disabled={submitting}
-                className="rounded-lg bg-[#2F5BFF] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#2348d8] disabled:opacity-60"
+                className="w-full rounded-lg bg-[#2F5BFF] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#2348d8] disabled:opacity-60 sm:w-auto"
               >
                 {submitting ? 'Enviando…' : 'Enviar'}
               </button>
@@ -152,7 +152,7 @@ export function FichaPublicPage() {
         )}
 
         {step === 'done' && (
-          <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
+          <div className="rounded-2xl bg-white p-6 text-center shadow-xl sm:p-10">
             <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-green-100 text-3xl">
               ✅
             </div>
@@ -204,7 +204,7 @@ function Text({
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-11 w-full rounded-md border border-slate-300 px-3 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+      className="h-11 w-full rounded-md border border-slate-300 px-3 text-base text-slate-800 outline-none sm:text-sm focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
     />
   )
 }
@@ -222,7 +222,7 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
+      className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-800 outline-none sm:text-sm focus:border-[#2F5BFF] focus:ring-1 focus:ring-[#2F5BFF]"
     >
       <option value=""></option>
       {options.map((o) => (

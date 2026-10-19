@@ -220,7 +220,7 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
             <span className="text-[11px] text-foreground/35">·</span>
             <span className="text-[11px] text-foreground/45">{timeAgo(entry.at)}</span>
           </div>
-          <div className="mt-1 text-sm text-foreground">{entry.summary ?? '—'}</div>
+          <div className="mt-1 break-words text-sm text-foreground">{entry.summary ?? '—'}</div>
           <div className="mt-1 flex items-center gap-2 text-[11px] text-foreground/45">
             <div className="grid h-5 w-5 place-items-center rounded-full bg-elevate/[0.04] text-[9px] text-foreground/70 ring-1 ring-line">
               {initials(entry.actorName ?? entry.actorEmail ?? '?')}

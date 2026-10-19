@@ -227,14 +227,14 @@ export function TenantDetailPage() {
           <div className="grid h-12 w-12 place-items-center rounded-xl bg-accent/10 text-sm font-semibold text-accent ring-1 ring-accent/20">
             {initials(asText(tenant.name))}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-foreground">{asText(tenant.name, 'Tenant')}</h2>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="break-words text-lg font-semibold text-foreground">{asText(tenant.name, 'Tenant')}</h2>
               <Badge tone={active ? 'success' : 'danger'} dot>
                 {active ? 'Ativo' : 'Inativo'}
               </Badge>
             </div>
-            <p className="mt-0.5 text-xs text-foreground/45">
+            <p className="mt-0.5 break-all text-xs text-foreground/45">
               ID: <code className="text-foreground/70">{String(tenant.id)}</code>
               {tenant.created_at && (
                 <>

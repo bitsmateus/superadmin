@@ -264,7 +264,7 @@ export function FinanceiroClientesGeralPage() {
 
       <div className="px-4 pb-10 lg:px-6">
         {/* Mês — manda nos números de cancelamento e na aba de baixo */}
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setMes((m) => addMonthsToId(m, -1))}
@@ -273,7 +273,7 @@ export function FinanceiroClientesGeralPage() {
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="min-w-[150px] text-center text-sm font-semibold text-foreground">{monthLabelPt(mes)}</span>
+          <span className="min-w-[120px] text-center text-sm font-semibold text-foreground sm:min-w-[150px]">{monthLabelPt(mes)}</span>
           <button
             type="button"
             onClick={() => setMes((m) => addMonthsToId(m, 1))}
@@ -293,7 +293,7 @@ export function FinanceiroClientesGeralPage() {
           )}
 
           {asaasIndisponivel && !carregandoAsaas && (
-            <span className="ml-auto text-xs text-foreground/40" title="Configure a chave em Configurações → Asaas pra ver a coluna 'Valor no Asaas'.">
+            <span className="w-full text-xs text-foreground/40 sm:ml-auto sm:w-auto" title="Configure a chave em Configurações → Asaas pra ver a coluna 'Valor no Asaas'.">
               Coluna "Valor no Asaas" indisponível — Asaas não configurado
             </span>
           )}
@@ -333,7 +333,7 @@ export function FinanceiroClientesGeralPage() {
         </div>
 
         {/* Abas */}
-        <div className="mt-5 flex flex-wrap items-center gap-1 border-b border-line">
+        <div className="no-scrollbar mt-5 flex items-center gap-1 overflow-x-auto border-b border-line sm:flex-wrap sm:overflow-visible">
           {UNIDADES.map((u) => (
             <AbaBotao
               key={u.valor}
@@ -382,7 +382,7 @@ export function FinanceiroClientesGeralPage() {
         {aba !== 'cancelamentos' ? (
           <>
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 min-w-[220px]">
+              <div className="relative w-full flex-1 sm:w-auto sm:min-w-[220px]">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/30" />
                 <Input
                   value={busca}
@@ -529,7 +529,7 @@ function AbaBotao({ ativa, onClick, children }: { ativa: boolean; onClick: () =>
       type="button"
       onClick={onClick}
       className={cn(
-        'border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+        'shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
         ativa ? 'border-accent text-foreground' : 'border-transparent text-foreground/50 hover:text-foreground/80',
       )}
     >

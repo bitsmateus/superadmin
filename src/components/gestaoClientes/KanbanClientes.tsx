@@ -204,13 +204,15 @@ export function KanbanClientes({
     <div>
     <div
       ref={rolagem}
-      style={{ height: altura }}
+      // A altura fixa (colunas rolando por dentro) só vale do sm pra cima; no celular a página rola na
+      // vertical e o quadro só desliza de lado, uma coluna por vez.
+      style={{ '--altura-quadro': altura ? `${altura}px` : undefined } as React.CSSProperties}
       onDragOver={(e) => {
         ponteiroX.current = e.clientX
       }}
-      className="-mx-4 overflow-x-auto overflow-y-hidden px-4 pb-3 lg:-mx-6 lg:px-6"
+      className="-mx-4 snap-x snap-mandatory overflow-x-auto px-4 pb-3 sm:h-[var(--altura-quadro)] sm:snap-none sm:overflow-y-hidden lg:-mx-6 lg:px-6"
     >
-      <div className="flex h-full gap-3">
+      <div className="flex gap-3 sm:h-full">
         {todas.map((col, ordemDaColuna) => {
           const doGrupo = porColuna.get(col.id) ?? []
           const ativa = sobre === col.id && arrastando !== null
@@ -231,7 +233,7 @@ export function KanbanClientes({
                 if (cliente) onMover(cliente, col.id)
               }}
               className={cn(
-                'flex h-full w-[272px] shrink-0 flex-col rounded-2xl border bg-elevate/[0.025] transition-colors',
+                'flex w-[85vw] shrink-0 snap-center flex-col rounded-2xl border bg-elevate/[0.025] transition-colors sm:h-full sm:w-[272px]',
                 ativa ? 'border-accent/60 bg-accent/[0.06] ring-1 ring-accent/30' : 'border-line',
               )}
             >
@@ -247,7 +249,7 @@ export function KanbanClientes({
                 </span>
               </header>
 
-              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+              <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pb-2 sm:overflow-y-auto">
                 {doGrupo.length === 0 && (
                   <p className="px-1 py-4 text-center text-xs text-foreground/30">
                     {arrastando ? 'solte aqui' : 'nenhum cliente'}
@@ -350,11 +352,11 @@ export function KanbanSituacao({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <Button variant="ghost" size="sm" onClick={() => onPeriodo(somarMeses(periodo, -1))} aria-label="Mês anterior">
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="min-w-[160px] text-center text-sm font-semibold text-foreground">
+        <span className="min-w-[130px] text-center text-sm font-semibold text-foreground sm:min-w-[160px]">
           {mesPorExtenso(periodo)}
         </span>
         <Button variant="ghost" size="sm" onClick={() => onPeriodo(somarMeses(periodo, 1))} aria-label="Próximo mês">
@@ -365,15 +367,19 @@ export function KanbanSituacao({
         </span>
       </div>
 
-      <div ref={rolagemSit} style={{ height: alturaSit }} className="-mx-4 overflow-x-auto overflow-y-hidden px-4 pb-3 lg:-mx-6 lg:px-6">
-        <div className="flex h-full gap-3">
+      <div
+        ref={rolagemSit}
+        style={{ '--altura-quadro': alturaSit ? `${alturaSit}px` : undefined } as React.CSSProperties}
+        className="-mx-4 snap-x snap-mandatory overflow-x-auto px-4 pb-3 sm:h-[var(--altura-quadro)] sm:snap-none sm:overflow-y-hidden lg:-mx-6 lg:px-6"
+      >
+        <div className="flex gap-3 sm:h-full">
           {COLUNAS_SITUACAO.map((col) => {
             const doGrupo = porColuna.get(col.id) ?? []
             return (
               <section
                 key={col.id}
                 className={cn(
-                  'flex h-full w-[272px] shrink-0 flex-col rounded-2xl border border-t-[3px] border-line bg-elevate/[0.025]',
+                  'flex w-[85vw] shrink-0 snap-center flex-col rounded-2xl border border-t-[3px] border-line bg-elevate/[0.025] sm:h-full sm:w-[272px]',
                   col.tom,
                   carregando && 'opacity-60',
                 )}
@@ -396,7 +402,7 @@ export function KanbanSituacao({
                     </button>
                   )}
                 </header>
-                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+                <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pb-2 sm:overflow-y-auto">
                   {doGrupo.length === 0 && (
                     <p className="px-1 py-4 text-center text-xs text-foreground/30">nenhum cliente</p>
                   )}

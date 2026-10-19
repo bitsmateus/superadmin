@@ -222,15 +222,15 @@ function LeadDetailModalInner({
   if (!leadRowId || !row) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 animate-fade-in sm:p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-10 flex h-[min(88vh,820px)] w-[min(96vw,1100px)] flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-2xl animate-scale-in"
+        className="relative z-10 flex h-[calc(100dvh-1rem)] w-[min(96vw,1100px)] flex-col sm:h-[min(88vh,820px)] overflow-hidden rounded-2xl border border-line bg-card shadow-2xl animate-scale-in"
       >
-        <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
-          <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-3 sm:flex-nowrap sm:px-6 sm:py-4">
+          <div className="min-w-0 flex-1 basis-full sm:basis-auto">
             <EditableField
               value={row.nome}
               onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
@@ -282,8 +282,9 @@ function LeadDetailModalInner({
           </div>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-[320px] shrink-0 overflow-y-auto border-r border-line px-4 py-2">
+        {/* No celular empilha (campos em cima, atualizações embaixo) e a área inteira rola junto */}
+        <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+          <div className="w-full shrink-0 border-b border-line px-4 py-2 md:w-[320px] md:overflow-y-auto md:border-b-0 md:border-r">
             <FieldRow icon={<Circle className="h-3.5 w-3.5" style={{ color: board?.color }} fill={board?.color} />} label="Grupo">
               <select
                 value={row.boardId}
@@ -667,7 +668,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-none flex-col md:flex-1 md:overflow-hidden">
       <Tabs
         value={tab}
         onChange={setTab}
@@ -706,7 +707,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
                   ))}
                 </div>
               )}
-              <div className="mt-2 flex items-center justify-between">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1">
                   <div className="relative">
                     <button
@@ -799,7 +800,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
                                 {formatDateTimeShort(n.createdAt)}
                               </span>
                               {editingNoteId !== n.id && (
-                                <div className="hidden items-center gap-0.5 group-hover:flex">
+                                <div className="flex items-center gap-0.5 sm:hidden sm:group-hover:flex">
                                   <button
                                     type="button"
                                     title="Editar"
@@ -898,7 +899,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
           allAttachments.length === 0 ? (
             <p className="text-xs text-foreground/40">Nenhum arquivo anexado ainda.</p>
           ) : (
-            <div className={cn('grid grid-cols-3 gap-3')}>
+            <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3')}>
               {allAttachments.map(({ attachment: a, note: n }) => (
                 <button
                   key={a.id}
@@ -964,7 +965,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
 
       {preview && createPortal(
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-6 animate-fade-in"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 animate-fade-in sm:p-6"
           onClick={() => setPreview(null)}
         >
           <div

@@ -201,7 +201,7 @@ export function TaskUpdatesPane({ reminderId, columns }: { reminderId: string; c
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-medium text-foreground">{n.authorName}</span>
+                            <span className="min-w-0 truncate text-xs font-medium text-foreground">{n.authorName}</span>
                             <div className="flex items-center gap-1">
                               <span className="text-[10px] text-foreground/40" title={timeAgo(n.createdAt)}>
                                 {formatDateTimeShort(n.createdAt)}
@@ -309,7 +309,7 @@ export function TaskUpdatesPane({ reminderId, columns }: { reminderId: string; c
           allAttachments.length === 0 ? (
             <p className="text-xs text-foreground/40">Nenhum arquivo anexado ainda.</p>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {allAttachments.map(({ attachment: a, note: n }) => (
                 <button
                   key={a.id}
@@ -368,7 +368,7 @@ export function TaskUpdatesPane({ reminderId, columns }: { reminderId: string; c
 
       {preview && createPortal(
         <div
-          className={cn('fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-6 animate-fade-in')}
+          className={cn('fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 sm:p-6 animate-fade-in')}
           onClick={() => setPreview(null)}
         >
           <div className="flex max-h-full max-w-full flex-col items-center" onClick={(e) => e.stopPropagation()}>

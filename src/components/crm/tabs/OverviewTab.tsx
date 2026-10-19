@@ -197,7 +197,7 @@ export function OverviewTab({ client }: { client: Client }) {
           {/* Plataformas */}
           <div className="sm:col-span-2">
             <FieldLabel>Criado em</FieldLabel>
-            <div className="mt-1.5 flex items-center gap-2">
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
               {([
                 { flag: 'platformApp', label: 'App', icon: <Smartphone className="h-3 w-3" /> },
                 { flag: 'platformWeb', label: 'Web', icon: <Monitor className="h-3 w-3" /> },
@@ -249,7 +249,7 @@ export function OverviewTab({ client }: { client: Client }) {
               className="min-h-[80px] flex-1 resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
             />
           </div>
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="inline-flex items-center gap-2 text-xs text-foreground/65 cursor-pointer">
               <input
                 type="checkbox"
@@ -301,7 +301,7 @@ export function OverviewTab({ client }: { client: Client }) {
                             </span>
                           )}
                         </span>
-                        <div className="flex items-center gap-1">
+                        <div className="flex shrink-0 items-center gap-1">
                           <span className="text-[10px] text-foreground/40">
                             {timeAgo(n.createdAt)}
                           </span>
@@ -425,7 +425,7 @@ export function OverviewTab({ client }: { client: Client }) {
                     <span className="text-sm text-foreground/90">
                       {asText(log.action)}
                     </span>
-                    <span className="text-[10px] text-foreground/40">
+                    <span className="shrink-0 text-[10px] text-foreground/40">
                       {timeAgo(log.createdAt)}
                     </span>
                   </div>
@@ -943,14 +943,14 @@ function AccessRow({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-elevate/[0.03]"
+        className="group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-elevate/[0.03]"
       >
         {open ? (
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
         ) : (
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
         )}
-        <span className="flex-1 text-sm font-medium text-foreground">{access.name}</span>
+        <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{access.name}</span>
         {!hasDetails && (
           <span className="text-[11px] text-foreground/35">Sem informação</span>
         )}
@@ -960,7 +960,7 @@ function AccessRow({
             e.stopPropagation()
             onRemove()
           }}
-          className="rounded-md p-1 text-foreground/30 opacity-0 hover:bg-danger/10 hover:text-danger group-hover:opacity-100 transition-opacity"
+          className="rounded-md p-1 text-foreground/30 hover:bg-danger/10 hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
           aria-label="Remover acesso"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -1066,7 +1066,7 @@ function AccessDetailRow({
             className="group flex items-center gap-1 text-left text-sm text-foreground/85 hover:text-foreground transition-colors"
           >
             {display}
-            <Pencil className="h-3 w-3 shrink-0 text-foreground/25 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <Pencil className="h-3 w-3 shrink-0 text-foreground/25 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" />
           </button>
         )}
       </div>
@@ -1302,7 +1302,7 @@ function InlineField({
           <span className={value ? 'text-foreground/90' : 'text-foreground/40'}>
             {value || placeholder || '—'}
           </span>
-          <Pencil className="h-3 w-3 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100" />
+          <Pencil className="h-3 w-3 shrink-0 text-foreground/30 transition-opacity sm:opacity-0 sm:group-hover:opacity-100" />
         </button>
       )}
     </div>
@@ -1373,7 +1373,7 @@ function CopyEditField({
             <span className={cn('truncate', value ? 'text-foreground/90' : 'text-foreground/40')}>
               {value || placeholder || '—'}
             </span>
-            <Copy className="h-3 w-3 shrink-0 text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100" />
+            <Copy className="h-3 w-3 shrink-0 text-foreground/30 transition-opacity sm:opacity-0 sm:group-hover:opacity-100" />
           </button>
           <button
             type="button"

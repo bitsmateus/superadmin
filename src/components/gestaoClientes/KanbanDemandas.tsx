@@ -1,11 +1,25 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import {
+  DndContext,
+  DragOverlay,
+  pointerWithin,
+  rectIntersection,
+  useDraggable,
+  useDroppable,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragMoveEvent,
+} from '@dnd-kit/core'
 import { ArrowDown, ArrowUp, CalendarClock, Clock, Loader2, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
+import { KanbanColunasNav } from '@/components/ui/KanbanColunasNav'
+import { useKanbanSensors } from '@/hooks/useKanbanSensors'
 import { AvatarCliente } from '@/components/gestaoClientes/AvatarCliente'
 import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import { gestaoClientes, type GcDemanda, type GcDemandaColuna } from '@/services/gestaoClientes'
@@ -37,7 +51,9 @@ interface FormDemanda {
  * Dentro do cliente (`clienteId`) mostra só as demandas dele; sem `clienteId` é o quadro geral, com as de
  * todos os clientes e o nome do cliente em cada cartão.
  *
- * Arrastar o cartão muda a coluna, ou a ordem dentro da mesma coluna (a linha colorida mostra onde ele cai). No celular não há arrastar com o dedo: cada cartão tem o seletor "Mover para".
+ * Arrastar o cartão muda a coluna, ou a ordem dentro da mesma coluna (a linha colorida mostra onde ele cai). No celular é
+ * segurar o cartão um instante e arrastar (deslizar sem segurar rola as colunas); o seletor "Mover para" de cada cartão
+ * continua lá como atalho.
  */
 export function KanbanDemandas({
   clienteId,
@@ -57,10 +73,11 @@ export function KanbanDemandas({
   const [salvando, setSalvando] = React.useState(false)
   const [gerenciando, setGerenciando] = React.useState(false)
   const [arrastando, setArrastando] = React.useState<string | null>(null)
-  const [sobre, setSobre] = React.useState<string | null>(null)
   /** Onde o cartão arrastado vai cair: coluna + posição entre os cartões visíveis (sem contar o arrastado). */
   const [ponto, setPonto] = React.useState<{ col: string; idx: number } | null>(null)
   const [mostrarTempo, alternarTempo] = useMostrarTempo('demandas')
+  const sensors = useKanbanSensors()
+  const scrollRef = React.useRef<HTMLDivElement>(null)
 
   const carregar = React.useCallback(async () => {
     try {
@@ -115,6 +132,43 @@ export function KanbanDemandas({
       toast.error('Falha ao mover: ' + (err as Error).message)
       await carregar()
     }
+  }
+
+  const limparArrasto = () => {
+    setArrastando(null)
+    setPonto(null)
+  }
+
+  /** Atualiza onde o cartão vai cair: em cima de outro cartão, antes ou depois dele (pela metade da altura); na área
+   * vazia da coluna, no fim. */
+  const aoMover = ({ active, over, activatorEvent }: DragMoveEvent) => {
+    const alvo = over?.data.current as { col: string; cardId?: string } | undefined
+    const marcar = (novo: { col: string; idx: number } | null) =>
+      setPonto((p) => (p?.col === novo?.col && p?.idx === novo?.idx ? p : novo))
+    if (!alvo) return marcar(null)
+    const base = doGrupo(alvo.col).filter((x) => x.id !== active.id)
+    if (!alvo.cardId) return marcar({ col: alvo.col, idx: base.length })
+    if (alvo.cardId === active.id) return
+    // Usa a posição do dedo/mouse (não o centro do cartão arrastado, que fica deslocado de onde se segurou): o ponto
+    // onde se segurou, somado ao quanto o cartão andou — já contando a rolagem da tela/coluna durante o arrasto.
+    const inicio = 'touches' in activatorEvent ? (activatorEvent as TouchEvent).touches[0]?.clientY : (activatorEvent as MouseEvent).clientY
+    const { initial, translated } = active.rect.current
+    const y = translated && initial ? translated.top + ((inicio ?? initial.top) - initial.top) : null
+    const depois = y != null && !!over && y > over.rect.top + over.rect.height / 2
+    marcar({ col: alvo.col, idx: base.findIndex((x) => x.id === alvo.cardId) + (depois ? 1 : 0) })
+  }
+
+  const aoSoltar = ({ active }: DragEndEvent) => {
+    const alvo = ponto
+    limparArrasto()
+    const d = demandas.find((x) => x.id === active.id)
+    if (!d || !alvo) return
+    const posicao = posicaoReal(alvo.col, alvo.idx, d.id)
+    if (d.coluna_id === alvo.col) {
+      const atual = demandas.filter((x) => x.coluna_id === alvo.col).sort((a, b) => a.ordem - b.ordem).findIndex((x) => x.id === d.id)
+      if (atual === posicao) return
+    }
+    void mover(d, alvo.col, posicao)
   }
 
   const abrirNova = (colunaId?: string) =>
@@ -219,62 +273,49 @@ export function KanbanDemandas({
             size="sm"
             leftIcon={<Clock className="h-4 w-4" />}
             onClick={alternarTempo}
-            className={cn(mostrarTempo && 'bg-accent/10 text-accent')}
             title="Mostra há quanto tempo cada cartão está na coluna"
+            className={cn('whitespace-nowrap', mostrarTempo && 'bg-accent/10 text-accent')}
           >
-            Tempo na coluna
+            <span>Tempo<span className="hidden sm:inline"> na coluna</span></span>
           </Button>
           <Button variant="ghost" size="sm" leftIcon={<Settings2 className="h-4 w-4" />} onClick={() => setGerenciando(true)}>
             Colunas
           </Button>
-          <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => abrirNova()}>
+          <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => abrirNova()} className="whitespace-nowrap">
             Nova demanda
           </Button>
         </div>
       </div>
 
-      {/* Colunas: lado a lado no computador; no celular cada uma ocupa quase a tela e se desliza pro lado. */}
-      <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 sm:mx-0 sm:snap-none sm:px-0">
-        {colunas.map((col) => {
-          const cartoes = doGrupo(col.id)
-          return (
-            <section
-              key={col.id}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setSobre(col.id)
-                // Área vazia da coluna (abaixo dos cartões): cai no fim.
-                setPonto({ col: col.id, idx: cartoes.filter((x) => x.id !== arrastando).length })
-              }}
-              onDragLeave={() => setSobre((s) => (s === col.id ? null : s))}
-              onDrop={(e) => {
-                e.preventDefault()
-                const alvo = ponto?.col === col.id ? ponto.idx : cartoes.filter((x) => x.id !== arrastando).length
-                const d = demandas.find((x) => x.id === arrastando)
-                setSobre(null)
-                setPonto(null)
-                setArrastando(null)
-                if (!d) return
-                const posicao = posicaoReal(col.id, alvo, d.id)
-                if (d.coluna_id === col.id) {
-                  const atual = demandas.filter((x) => x.coluna_id === col.id).sort((a, b) => a.ordem - b.ordem).findIndex((x) => x.id === d.id)
-                  if (atual === posicao) return
-                }
-                void mover(d, col.id, posicao)
-              }}
-              className={cn(
-                'flex max-h-[calc(100vh-14rem)] min-h-[12rem] w-[85vw] max-w-sm shrink-0 snap-center flex-col rounded-2xl border bg-elevate/[0.025] sm:w-72',
-                sobre === col.id ? 'border-accent/60 bg-accent/[0.04]' : 'border-line',
-              )}
-            >
-              <header className="flex items-center justify-between gap-2 px-3.5 py-3">
-                <h3 className="truncate text-sm font-semibold text-foreground">
-                  {col.nome}
-                  {col.concluida && <span className="ml-1.5 text-[10px] font-normal uppercase text-success">concluída</span>}
-                </h3>
-                <span className="rounded-full bg-elevate/[0.06] px-2 text-xs tabular-nums text-foreground/55">{cartoes.length}</span>
-              </header>
-              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+      <KanbanColunasNav
+        scrollRef={scrollRef}
+        colunas={colunas.map((c) => ({ key: c.id, label: c.nome, count: doGrupo(c.id).length }))}
+      />
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={colisao}
+        onDragStart={({ active }) => setArrastando(String(active.id))}
+        onDragOver={aoMover}
+        onDragMove={aoMover}
+        onDragEnd={aoSoltar}
+        onDragCancel={limparArrasto}
+      >
+        {/* Colunas: lado a lado no computador; no celular cada uma ocupa quase a tela e se desliza pro lado (o encaixe
+            sai durante o arrasto pra rolagem automática perto da borda funcionar). No celular todas ficam com a altura da
+            mais alta: soltar no espaço vazio abaixo dos cartões ainda cai na coluna. */}
+        <div
+          ref={scrollRef}
+          className={cn(
+            '-mx-4 flex items-stretch sm:items-start gap-3 overflow-x-auto px-4 pb-3 sm:mx-0 sm:px-0',
+            !arrastando && 'snap-x snap-mandatory sm:snap-none',
+          )}
+        >
+          {colunas.map((col) => {
+            const cartoes = doGrupo(col.id)
+            const semArrastado = cartoes.filter((x) => x.id !== arrastando)
+            return (
+              <ColunaDemandas key={col.id} col={col} total={cartoes.length} destacada={ponto?.col === col.id}>
                 {cartoes.length === 0 && (
                   <p className="rounded-xl border border-dashed border-line px-3 py-6 text-center text-xs text-foreground/35">
                     Solte uma demanda aqui
@@ -284,114 +325,62 @@ export function KanbanDemandas({
                   const linhaAntes =
                     !!arrastando && arrastando !== d.id && ponto?.col === col.id &&
                     ponto.idx === cartoes.slice(0, i).filter((x) => x.id !== arrastando).length
-                  const parado = diasDesde(d.coluna_desde)
-                  const atrasada = d.prazo && d.prazo < hojeISO() && !colunaConcluida.has(d.coluna_id)
-                  const prio = PRIORIDADES.find((p) => p.valor === d.prioridade)
                   return (
                     <React.Fragment key={d.id}>
-                    {linhaAntes && <div className="-my-1 h-0.5 shrink-0 rounded-full bg-accent" />}
-                    <article
-                      draggable
-                      onDragOver={(e) => {
-                        if (!arrastando) return
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setSobre(col.id)
-                        if (d.id === arrastando) return
-                        const r = e.currentTarget.getBoundingClientRect()
-                        const depois = e.clientY > r.top + r.height / 2
-                        const base = cartoes.filter((x) => x.id !== arrastando)
-                        setPonto({ col: col.id, idx: base.findIndex((x) => x.id === d.id) + (depois ? 1 : 0) })
-                      }}
-                      onDragStart={(e) => {
-                        setArrastando(d.id)
-                        e.dataTransfer.effectAllowed = 'move'
-                      }}
-                      onDragEnd={() => {
-                        setArrastando(null)
-                        setSobre(null)
-                        setPonto(null)
-                      }}
-                      className={cn(
-                        'group cursor-grab rounded-xl border border-line bg-surface p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing',
-                        arrastando === d.id && 'opacity-40',
-                      )}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', prio?.cor)} title={`Prioridade ${prio?.label.toLowerCase()}`} />
-                        <button type="button" onClick={() => abrirEdicao(d)} className="min-w-0 flex-1 text-left">
-                          <p className={cn('text-sm font-medium text-foreground', colunaConcluida.has(d.coluna_id) && 'text-foreground/50 line-through')}>
-                            {d.titulo}
-                          </p>
-                          {d.descricao && <p className="mt-0.5 line-clamp-2 text-xs text-foreground/50">{d.descricao}</p>}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => abrirEdicao(d)}
-                          className="shrink-0 rounded-md p-1 text-foreground/30 hover:text-accent sm:opacity-0 sm:group-hover:opacity-100"
-                          aria-label="Editar demanda"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-foreground/50">
-                        {!clienteId && (
-                          <button
-                            type="button"
-                            onClick={() => navegar(`/clientesnxdigital/clientes/${d.gc_cliente_id}`)}
-                            className="flex items-center gap-1.5 rounded-full bg-elevate/[0.05] py-0.5 pl-0.5 pr-2 hover:text-accent"
-                          >
-                            <AvatarCliente nome={d.cliente_nome} logoUrl={d.cliente_logo} className="h-4 w-4 rounded-full text-[8px]" />
-                            <span className="max-w-[120px] truncate">{d.cliente_nome}</span>
-                          </button>
-                        )}
-                        {d.prazo && (
-                          <span className={cn('flex items-center gap-1', atrasada && 'font-medium text-danger')}>
-                            <CalendarClock className="h-3 w-3" /> {dataBr(d.prazo)}
-                          </span>
-                        )}
-                        {d.responsavel_nome && <span className="truncate">· {d.responsavel_nome}</span>}
-                        {mostrarTempo && (
-                          <span
-                            className={cn('flex items-center gap-1', parado >= 7 && !colunaConcluida.has(d.coluna_id) && 'font-medium text-warning')}
-                            title={`Na coluna "${col.nome}" desde ${new Date(d.coluna_desde).toLocaleString('pt-BR')}`}
-                          >
-                            <Clock className="h-3 w-3" /> {tempoDesde(d.coluna_desde)}
-                          </span>
-                        )}
-                      </div>
-                      {/* Sem arrastar no celular: este seletor é o jeito de mover. */}
-                      <select
-                        value={d.coluna_id}
-                        onChange={(e) => void mover(d, e.target.value)}
-                        aria-label="Mover para"
-                        className="mt-2 h-9 w-full rounded-lg border border-line bg-surface px-2 text-xs text-foreground/70 sm:hidden"
-                      >
-                        {colunas.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            Mover para: {c.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </article>
+                      {linhaAntes && <div className="-my-1 h-0.5 shrink-0 rounded-full bg-accent" />}
+                      <CartaoArrastavel id={d.id} col={col.id}>
+                        <CartaoDemanda
+                          d={d}
+                          colunas={colunas}
+                          nomeColuna={col.nome}
+                          concluida={colunaConcluida.has(d.coluna_id)}
+                          mostrarCliente={!clienteId}
+                          mostrarTempo={mostrarTempo}
+                          onEditar={() => abrirEdicao(d)}
+                          onAbrirCliente={() => navegar(`/clientesnxdigital/clientes/${d.gc_cliente_id}`)}
+                          onMover={(colunaId) => void mover(d, colunaId)}
+                        />
+                      </CartaoArrastavel>
                     </React.Fragment>
                   )
                 })}
-                {!!arrastando && ponto?.col === col.id && ponto.idx >= cartoes.filter((x) => x.id !== arrastando).length && cartoes.some((x) => x.id !== arrastando) && (
+                {!!arrastando && ponto?.col === col.id && ponto.idx >= semArrastado.length && semArrastado.length > 0 && (
                   <div className="-my-1 h-0.5 shrink-0 rounded-full bg-accent" />
                 )}
                 <button
                   type="button"
                   onClick={() => abrirNova(col.id)}
-                  className="flex items-center justify-center gap-1 rounded-xl py-2 text-xs text-foreground/40 transition-colors hover:bg-elevate/[0.04] hover:text-accent"
+                  className="flex items-center justify-center gap-1 rounded-xl py-2.5 text-xs text-foreground/40 transition-colors hover:bg-elevate/[0.04] hover:text-accent sm:py-2"
                 >
                   <Plus className="h-3.5 w-3.5" /> Adicionar
                 </button>
-              </div>
-            </section>
-          )
-        })}
-      </div>
+              </ColunaDemandas>
+            )
+          })}
+        </div>
+        {createPortal(
+          <DragOverlay>
+            {(() => {
+              const d = arrastando ? demandas.find((x) => x.id === arrastando) : undefined
+              if (!d) return null
+              return (
+                <div className="w-[85vw] max-w-sm rotate-2 sm:w-[17rem]">
+                  <CartaoDemanda
+                    d={d}
+                    colunas={colunas}
+                    nomeColuna={colunas.find((c) => c.id === d.coluna_id)?.nome ?? ''}
+                    concluida={colunaConcluida.has(d.coluna_id)}
+                    mostrarCliente={!clienteId}
+                    mostrarTempo={mostrarTempo}
+                    sobreposto
+                  />
+                </div>
+              )
+            })()}
+          </DragOverlay>,
+          document.body,
+        )}
+      </DndContext>
 
       {/* ------------------------------------------------------------ criar / editar */}
       <Modal
@@ -459,6 +448,144 @@ export function KanbanDemandas({
 
       <ModalColunas aberto={gerenciando} onFechar={() => setGerenciando(false)} colunas={colunas} onMudou={carregar} />
     </div>
+  )
+}
+
+/** Prefere o cartão sob o dedo/mouse (pra saber antes ou depois de quem cai); fora de cartão, a coluna. */
+const colisao: CollisionDetection = (args) => {
+  const sob = pointerWithin(args)
+  const cartao = sob.find((c) => String(c.id).startsWith('card:'))
+  if (cartao) return [cartao]
+  return sob.length ? sob : rectIntersection(args)
+}
+
+function ColunaDemandas({ col, total, destacada, children }: { col: GcDemandaColuna; total: number; destacada: boolean; children: React.ReactNode }) {
+  const { setNodeRef } = useDroppable({ id: `col:${col.id}`, data: { col: col.id } })
+  return (
+    <section
+      ref={setNodeRef}
+      data-kanban-col={col.id}
+      className={cn(
+        // No celular a coluna cresce com os cartões (a página rola pra baixo): rolagem vertical dentro de cada coluna
+        // atrapalhava o deslizar pro lado. No computador continua com altura máxima e rolagem própria.
+        'flex min-h-[12rem] w-[85vw] max-w-sm shrink-0 snap-center flex-col rounded-2xl border bg-elevate/[0.025] sm:max-h-[calc(100vh-14rem)] sm:w-72',
+        destacada ? 'border-accent/60 bg-accent/[0.04]' : 'border-line',
+      )}
+    >
+      <header className="flex items-center justify-between gap-2 px-3.5 py-3">
+        <h3 className="truncate text-sm font-semibold text-foreground">
+          {col.nome}
+          {col.concluida && <span className="ml-1.5 text-[10px] font-normal uppercase text-success">concluída</span>}
+        </h3>
+        <span className="rounded-full bg-elevate/[0.06] px-2 text-xs tabular-nums text-foreground/55">{total}</span>
+      </header>
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pb-2 sm:overflow-y-auto">{children}</div>
+    </section>
+  )
+}
+
+function CartaoArrastavel({ id, col, children }: { id: string; col: string; children: React.ReactNode }) {
+  const { setNodeRef: arrastavel, attributes, listeners, isDragging } = useDraggable({ id })
+  const { setNodeRef: alvo } = useDroppable({ id: `card:${id}`, data: { col, cardId: id } })
+  return (
+    <div
+      ref={(el) => { arrastavel(el); alvo(el) }}
+      {...attributes}
+      {...listeners}
+      // touch-manipulation + sem menu do iOS: segurar o cartão pra arrastar não abre lupa/menu.
+      className={cn('touch-manipulation outline-none [-webkit-touch-callout:none]', isDragging && 'opacity-40')}
+    >
+      {children}
+    </div>
+  )
+}
+
+function CartaoDemanda({
+  d, colunas, nomeColuna, concluida, mostrarCliente, mostrarTempo, sobreposto, onEditar, onAbrirCliente, onMover,
+}: {
+  d: GcDemanda
+  colunas: GcDemandaColuna[]
+  nomeColuna: string
+  concluida: boolean
+  mostrarCliente: boolean
+  mostrarTempo: boolean
+  /** A cópia que segue o dedo/mouse durante o arrasto. */
+  sobreposto?: boolean
+  onEditar?: () => void
+  onAbrirCliente?: () => void
+  onMover?: (colunaId: string) => void
+}) {
+  const parado = diasDesde(d.coluna_desde)
+  const atrasada = d.prazo && d.prazo < hojeISO() && !concluida
+  const prio = PRIORIDADES.find((p) => p.valor === d.prioridade)
+  return (
+    <article
+      className={cn(
+        'group cursor-grab select-none rounded-xl border border-line bg-surface p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing',
+        sobreposto && 'shadow-xl',
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', prio?.cor)} title={`Prioridade ${prio?.label.toLowerCase()}`} />
+        <button type="button" onClick={onEditar} className="min-w-0 flex-1 text-left">
+          <p className={cn('break-words text-sm font-medium text-foreground', concluida && 'text-foreground/50 line-through')}>
+            {d.titulo}
+          </p>
+          {d.descricao && <p className="mt-0.5 line-clamp-2 text-xs text-foreground/50">{d.descricao}</p>}
+        </button>
+        <button
+          type="button"
+          onClick={onEditar}
+          className="-m-1 shrink-0 rounded-md p-2 text-foreground/30 hover:text-accent sm:m-0 sm:p-1 sm:opacity-0 sm:group-hover:opacity-100"
+          aria-label="Editar demanda"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-foreground/50">
+        {mostrarCliente && (
+          <button
+            type="button"
+            onClick={onAbrirCliente}
+            className="flex items-center gap-1.5 rounded-full bg-elevate/[0.05] py-0.5 pl-0.5 pr-2 hover:text-accent"
+          >
+            <AvatarCliente nome={d.cliente_nome} logoUrl={d.cliente_logo} className="h-4 w-4 rounded-full text-[8px]" />
+            <span className="max-w-[120px] truncate">{d.cliente_nome}</span>
+          </button>
+        )}
+        {d.prazo && (
+          <span className={cn('flex items-center gap-1', atrasada && 'font-medium text-danger')}>
+            <CalendarClock className="h-3 w-3" /> {dataBr(d.prazo)}
+          </span>
+        )}
+        {d.responsavel_nome && <span className="truncate">· {d.responsavel_nome}</span>}
+        {mostrarTempo && (
+          <span
+            className={cn('flex items-center gap-1', parado >= 7 && !concluida && 'font-medium text-warning')}
+            title={`Na coluna "${nomeColuna}" desde ${new Date(d.coluna_desde).toLocaleString('pt-BR')}`}
+          >
+            <Clock className="h-3 w-3" /> {tempoDesde(d.coluna_desde)}
+          </span>
+        )}
+      </div>
+      {/* Atalho no celular pra mover sem arrastar. Tocar nele não começa o arrasto do cartão. */}
+      {!sobreposto && onMover && (
+        <select
+          value={d.coluna_id}
+          onChange={(e) => onMover(e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          aria-label="Mover para"
+          className="mt-2 h-9 w-full rounded-lg border border-line bg-surface px-2 text-xs text-foreground/70 sm:hidden"
+        >
+          {colunas.map((c) => (
+            <option key={c.id} value={c.id}>
+              Mover para: {c.nome}
+            </option>
+          ))}
+        </select>
+      )}
+    </article>
   )
 }
 

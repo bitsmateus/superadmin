@@ -20,9 +20,9 @@ export function CriativosTab({ de, ate, papel, versao }: { de: string; ate: stri
           {linhas.map((a) => (
             <article key={a.id} className="flex gap-3 rounded-xl border border-line bg-card p-3">
               {a.thumbnail ? (
-                <img src={a.thumbnail} alt="" loading="lazy" className="h-24 w-24 shrink-0 rounded-lg object-cover" />
+                <img src={a.thumbnail} alt="" loading="lazy" className="h-20 w-20 shrink-0 rounded-lg object-cover sm:h-24 sm:w-24" />
               ) : (
-                <div className="grid h-24 w-24 shrink-0 place-items-center rounded-lg bg-elevate/[0.05] text-foreground/25"><ImageIcon className="h-6 w-6" /></div>
+                <div className="grid h-20 w-20 shrink-0 place-items-center sm:h-24 sm:w-24 rounded-lg bg-elevate/[0.05] text-foreground/25"><ImageIcon className="h-6 w-6" /></div>
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-start gap-1.5">

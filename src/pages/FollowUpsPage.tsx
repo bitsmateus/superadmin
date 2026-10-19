@@ -94,8 +94,8 @@ export function FollowUpsPage() {
               return (
                 <li key={item.followUp.id} className="rounded-xl border border-danger/25 bg-danger/[0.03] p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">{empresa}</span>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="min-w-0 break-words text-sm font-semibold text-foreground">{empresa}</span>
                       <span className="rounded-full bg-danger/10 px-2 py-0.5 text-[11px] font-medium text-danger">
                         Dia {item.followUp.dayNumber}
                       </span>

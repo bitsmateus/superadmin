@@ -5,14 +5,13 @@ import { z } from 'zod'
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
   useDraggable,
   useDroppable,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
+import { useKanbanSensors } from '@/hooks/useKanbanSensors'
+import { KanbanColunasNav } from '@/components/ui/KanbanColunasNav'
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -1147,7 +1146,9 @@ function PipelineKanban({
   onPauseSetup: (c: Client) => void
 }) {
   const [dragging, setDragging] = React.useState<{ client: Client; fromStage: PipelineStage } | null>(null)
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  // Mouse arrasta com 6px; no toque é preciso segurar o cartão (deslizar rola as colunas).
+  const sensors = useKanbanSensors()
 
   const onDragEnd = (e: DragEndEvent) => {
     setDragging(null)
@@ -1168,8 +1169,17 @@ function PipelineKanban({
       onDragEnd={onDragEnd}
       onDragCancel={() => setDragging(null)}
     >
+      <KanbanColunasNav
+        scrollRef={scrollRef}
+        colunas={stages.map((s) => ({ key: s, label: STAGE_COLORS[s].label, color: STAGE_COLORS[s].dot, count: byStage[s].length }))}
+      />
+      {/* No celular cada coluna ocupa quase a tela e encaixa ao deslizar (sem encaixe durante o arrasto). */}
       <div
-        className="flex items-start gap-3 overflow-x-auto pb-2"
+        ref={scrollRef}
+        className={cn(
+          '-mx-4 flex items-stretch sm:items-start gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0',
+          !dragging && 'snap-x snap-mandatory sm:snap-none',
+        )}
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {stages.map((stage) => (
@@ -1229,8 +1239,9 @@ function PipelineKanbanColumn({
   return (
     <div
       ref={setNodeRef}
+      data-kanban-col={stage}
       className={cn(
-        'flex w-[300px] shrink-0 flex-col rounded-xl border bg-card transition-colors',
+        'flex w-[85vw] max-w-[300px] shrink-0 snap-center flex-col rounded-xl border bg-card transition-colors sm:w-[300px]',
         isOver ? 'border-accent/50 bg-accent/[0.04]' : 'border-line',
       )}
       style={{ borderLeft: `3px solid ${style.dot}` }}
@@ -1246,8 +1257,9 @@ function PipelineKanbanColumn({
           {clients.length}
         </span>
       </header>
-      {/* Altura limitada — coluna longa rola por dentro dela mesma, mesmo ajuste feito em Tarefas. */}
-      <ul className="min-h-[120px] max-h-[640px] flex-1 space-y-2 overflow-y-auto p-2 pr-1.5">
+      {/* Altura limitada — coluna longa rola por dentro dela mesma, mesmo ajuste feito em Tarefas. No celular a
+          coluna cresce (a página rola): rolagem dentro da coluna atrapalhava deslizar pro lado. */}
+      <ul className="min-h-[120px] flex-1 space-y-2 p-2 pr-1.5 sm:max-h-[640px] sm:overflow-y-auto">
         {clients.length === 0 ? (
           <li
             className={cn(
@@ -1316,7 +1328,7 @@ function PipelineKanbanCard({
       {...(overlay ? {} : attributes)}
       onClick={overlay ? undefined : () => onRowClick(c.id)}
       className={cn(
-        'select-none rounded-xl border border-line/70 bg-card p-3 shadow-sm transition-all duration-150',
+        'touch-manipulation select-none rounded-xl border border-line/70 bg-card p-3 shadow-sm transition-all duration-150 [-webkit-touch-callout:none]',
         overlay
           ? 'cursor-grabbing shadow-xl ring-1 ring-accent/40'
           : 'cursor-grab hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-md active:cursor-grabbing',

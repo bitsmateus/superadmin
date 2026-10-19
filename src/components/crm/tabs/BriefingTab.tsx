@@ -531,7 +531,7 @@ export function BriefingTab({ client, forceOpenSections }: { client: Client; for
             <input
               readOnly
               value={link}
-              className="flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-foreground/85"
+              className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-foreground/85"
               onFocus={(e) => e.currentTarget.select()}
             />
             <Button
@@ -1557,7 +1557,7 @@ export function AutomationView({ client }: { client: Client }) {
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium text-foreground">{t.name}</p>
-                            <p className="text-[10px] text-foreground/40">
+                            <p className="break-all text-[10px] text-foreground/40">
                               ID: {t.id}
                               {t.email ? ` · ${t.email}` : ''}
                             </p>
@@ -2676,7 +2676,7 @@ function Row({ k, v }: { k: string; v?: string | null }) {
       {k && (
         <span className="text-foreground/45 uppercase tracking-wider">{k}</span>
       )}
-      <span className={cn('whitespace-pre-wrap text-foreground/85', !k && 'col-span-2')}>
+      <span className={cn('min-w-0 whitespace-pre-wrap break-words text-foreground/85', !k && 'col-span-2')}>
         {asText(v)}
       </span>
     </div>

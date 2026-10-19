@@ -155,7 +155,7 @@ const PanelCard = React.memo(function PanelCard({
             'cursor-pointer select-none transition-colors hover:bg-elevate/[0.03]',
         )}
       >
-        <div className="flex items-start gap-2.5">
+        <div className="flex min-w-0 items-start gap-2.5">
           <span
             className={cn(
               'grid h-7 w-7 shrink-0 place-items-center rounded-lg ring-1',
@@ -164,7 +164,7 @@ const PanelCard = React.memo(function PanelCard({
           >
             {panel.icon}
           </span>
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-medium text-foreground">{panel.title}</h3>
             <p className="text-[11px] text-foreground/45">{panel.description}</p>
           </div>

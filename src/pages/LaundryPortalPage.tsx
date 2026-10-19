@@ -108,7 +108,7 @@ export function LaundryPortalPage() {
   return (
     <Shell wide>
       <PortalTabs current="list" onChange={setView} />
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Campanhas</h1>
           <p className="text-sm text-slate-500">Disparo em massa pelo WhatsApp — {clientName}</p>
@@ -140,8 +140,8 @@ export function LaundryPortalPage() {
           </button>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-2.5">Nome</th>
@@ -319,7 +319,7 @@ function ReportView({ token, campaignId, onBack }: { token: string; campaignId: 
         <StatCard label="Falhas" value={counts.failed} tone="text-red-600" />
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
+      <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
@@ -420,7 +420,7 @@ function ContactsView({ token }: { token: string }) {
           <h1 className="text-2xl font-bold text-slate-800">Contatos</h1>
           <p className="text-sm text-slate-500">{total} contato(s) salvos — reaproveitados em qualquer campanha nova.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setModal('import')}
@@ -536,7 +536,7 @@ function ContactsView({ token }: { token: string }) {
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-4 shadow-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-800">{title}</h2>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
@@ -1196,8 +1196,8 @@ function fileToDataUrl(file: File): Promise<string> {
 
 function Shell({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="min-h-screen w-full px-4 py-10" style={{ background: 'linear-gradient(135deg, #1E1B6B 0%, #2B2FB5 55%, #2F5BFF 100%)' }}>
-      <div className={`mx-auto ${wide ? 'max-w-4xl' : 'max-w-2xl'} rounded-2xl bg-white p-8 shadow-xl`}>{children}</div>
+    <div className="min-h-screen w-full px-3 py-6 sm:px-4 sm:py-10" style={{ background: 'linear-gradient(135deg, #1E1B6B 0%, #2B2FB5 55%, #2F5BFF 100%)' }}>
+      <div className={`mx-auto ${wide ? 'max-w-4xl' : 'max-w-2xl'} rounded-2xl bg-white p-4 shadow-xl sm:p-8`}>{children}</div>
     </div>
   )
 }

@@ -271,7 +271,7 @@ function OrganizarIaModal({
                 {g.itens.map((it) => (
                   <li key={it.id} className="rounded-md border border-line px-3 py-2 text-sm">
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-medium text-foreground">{it.titulo}</span>
+                      <span className="min-w-0 break-words font-medium text-foreground">{it.titulo}</span>
                       {it.horario && <span className="shrink-0 rounded bg-accent/10 px-1.5 py-0.5 text-xs text-foreground/70">{it.horario}</span>}
                     </div>
                     {it.motivo && <p className="mt-0.5 text-xs text-foreground/55">{it.motivo}</p>}

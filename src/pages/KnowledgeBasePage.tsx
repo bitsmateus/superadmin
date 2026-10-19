@@ -776,12 +776,12 @@ function TriageNode({
           )}
         </button>
         <div className="min-w-0 flex-1">
-          <div className="text-sm text-foreground font-medium">{step.question}</div>
+          <div className="break-words text-sm text-foreground font-medium">{step.question}</div>
           <ul className="mt-2 space-y-1">
             {step.options.map((opt, i) => (
               <li
                 key={i}
-                className="flex items-center gap-1.5 text-xs text-foreground/65"
+                className="flex flex-wrap items-center gap-1.5 text-xs text-foreground/65"
               >
                 <span className="text-foreground/40">→</span>
                 <span>{opt.label}</span>
@@ -802,14 +802,14 @@ function TriageNode({
           <button
             onClick={() => onAddChild(step.id)}
             title="Adicionar sub-pergunta"
-            className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+            className="rounded-md p-2.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => onEdit(step)}
             title="Editar"
-            className="rounded-md p-1.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground"
+            className="rounded-md p-2.5 text-foreground/55 hover:bg-elevate/[0.06] hover:text-foreground lg:p-1.5"
           >
             <Edit3 className="h-3.5 w-3.5" />
           </button>

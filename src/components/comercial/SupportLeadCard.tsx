@@ -81,7 +81,7 @@ function Field({ label, value, full }: { label: string; value: string; full?: bo
   return (
     <div className={full ? 'col-span-2 sm:col-span-3' : undefined}>
       <div className="text-[10px] text-foreground/40">{label}</div>
-      <div className="font-medium text-foreground">{value}</div>
+      <div className="break-words font-medium text-foreground">{value}</div>
     </div>
   )
 }

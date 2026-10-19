@@ -3,20 +3,19 @@ import { createPortal } from 'react-dom'
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
   useDraggable,
   useDroppable,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
+import { useKanbanSensors } from '@/hooks/useKanbanSensors'
 import { Archive, ArchiveRestore, Calendar, ChevronDown, ChevronUp, MessageCircle, Plus, Send, Settings2 } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadBoardsService } from '@/services/leadBoards'
 import { isLeadLabelsLoaded, leadLabelsService } from '@/services/leadLabels'
 import { LeadLabelCell, ManageLabelsModal } from '@/components/comercial/LeadLabelCell'
 import { cn } from '@/lib/utils'
+import { KanbanColunasNav } from '@/components/ui/KanbanColunasNav'
 import { formatBRLCompact, parseBRLCents } from '@/lib/currency'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
@@ -98,7 +97,8 @@ function LeadKanbanBoardPronto({ rows, allBoards, onOpenLead, sdrLock, modoDeman
 
   const [activeId, setActiveId] = React.useState<string | null>(null)
   const [manageOpen, setManageOpen] = React.useState(false)
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  // Mouse arrasta com 6px; no toque é preciso segurar o cartão (deslizar rola as colunas).
+  const sensors = useKanbanSensors()
 
   const withArchive = groupField === 'status'
   const columns = React.useMemo<Column[]>(() => {
@@ -220,10 +220,20 @@ function LeadKanbanBoardPronto({ rows, allBoards, onOpenLead, sdrLock, modoDeman
         </button>
       </div>
 
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <KanbanColunasNav
+        scrollRef={scrollRef}
+        colunas={columns.map((c) => ({ key: c.key, label: c.label, color: c.color, count: rowsByColumn.get(c.key)?.length ?? 0 }))}
+      />
+
+      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
+        {/* No celular cada coluna ocupa quase a tela e "encaixa" ao deslizar; o encaixe sai durante o
+            arrasto pra rolagem automática (cartão perto da borda) não brigar com ele. */}
         <div
           ref={scrollRef}
-          className="no-scrollbar flex items-start gap-3 overflow-x-auto pb-4"
+          className={cn(
+            'no-scrollbar -mx-4 flex items-stretch sm:items-start gap-3 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0',
+            !activeId && 'snap-x snap-mandatory sm:snap-none',
+          )}
           style={{ WebkitOverflowScrolling: 'touch' }}
           onScroll={(e) => {
             if (barRef.current && barRef.current.scrollLeft !== e.currentTarget.scrollLeft) {
@@ -259,7 +269,7 @@ function LeadKanbanBoardPronto({ rows, allBoards, onOpenLead, sdrLock, modoDeman
           precisar descer até o fim de colunas cheias de card só pra arrastar de lado. No celular,
           o toque direto nas colunas já rola sozinho (overflow-x-auto acima) — essa barra fica só
           como atalho visual pro mouse, sincronizada nos dois sentidos. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 px-4 sm:px-6 lg:px-8 lg:pl-[236px]">
+      <div className="pointer-events-none fixed inset-x-0 bottom-3 z-30 hidden px-4 sm:block sm:px-6 lg:px-8 lg:pl-[236px]">
         <div
           ref={barRef}
           className="pointer-events-auto overflow-x-auto overflow-y-hidden rounded-full border border-line bg-card shadow-lg"
@@ -312,8 +322,9 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
+      data-kanban-col={col.key}
       className={cn(
-        'w-64 shrink-0 overflow-hidden rounded-xl bg-elevate/[0.03] transition-colors',
+        'w-[85vw] max-w-xs shrink-0 snap-center overflow-hidden rounded-xl bg-elevate/[0.03] transition-colors sm:w-64',
         isOver && 'bg-accent/[0.06] ring-2 ring-accent/40',
       )}
     >
@@ -332,7 +343,7 @@ function KanbanColumn({
           type="button"
           onClick={onToggle}
           title={collapsed ? 'Mostrar cards' : 'Recolher cards'}
-          className="grid h-5 w-5 shrink-0 place-items-center rounded hover:bg-white/20"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded hover:bg-white/20 sm:h-5 sm:w-5"
         >
           {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
         </button>
@@ -453,7 +464,8 @@ function KanbanCard({
       {...(overlay ? {} : attributes)}
       onClick={() => { if (!overlay) onOpenLead(row.id) }}
       className={cn(
-        'cursor-grab select-none rounded-lg border border-line bg-card p-2.5 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing',
+        // touch-manipulation + sem menu do iOS: segurar o cartão pra arrastar não abre lupa/menu.
+        'cursor-grab touch-manipulation select-none rounded-lg border border-line bg-card p-2.5 shadow-sm transition-shadow [-webkit-touch-callout:none] hover:shadow-md active:cursor-grabbing',
         !overlay && isDragging && 'opacity-40',
         overlay && 'w-64 rotate-2 shadow-xl',
       )}
@@ -475,7 +487,7 @@ function KanbanCard({
           type="button"
           onClick={(e) => { e.stopPropagation(); onOpenLead(row.id) }}
           title="Atualizações"
-          className="relative grid h-6 w-6 shrink-0 place-items-center rounded hover:bg-elevate/[0.08]"
+          className="relative grid h-8 w-8 shrink-0 place-items-center rounded hover:bg-elevate/[0.08] sm:h-6 sm:w-6"
         >
           <MessageCircle className={cn('h-3.5 w-3.5', row.notesCount > 0 ? 'fill-accent text-accent' : 'text-foreground/30')} />
           {row.notesCount > 0 && (
@@ -489,7 +501,7 @@ function KanbanCard({
             type="button"
             onClick={(e) => { e.stopPropagation(); onArchive(row) }}
             title={archived ? 'Desarquivar' : 'Arquivar'}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/30 hover:bg-elevate/[0.08] hover:text-foreground/70"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded text-foreground/30 hover:bg-elevate/[0.08] hover:text-foreground/70 sm:h-6 sm:w-6"
           >
             {archived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
           </button>

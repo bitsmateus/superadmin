@@ -364,14 +364,14 @@ function OverviewCard({
 
 function TabNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
-    <div className="flex flex-wrap gap-1 overflow-x-auto no-scrollbar border-b border-line">
+    <div className="flex gap-1 overflow-x-auto no-scrollbar border-b border-line sm:flex-wrap">
       {TABS.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
           type="button"
           onClick={() => setTab(key)}
           className={cn(
-            'inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors',
+            'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors',
             tab === key ? 'border-accent text-accent' : 'border-transparent text-foreground/50 hover:text-foreground/80',
           )}
         >

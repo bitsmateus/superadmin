@@ -62,7 +62,7 @@ export function AbaEstrategias({
             <section key={e.id} className="rounded-xl border border-line p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h3 className="font-medium text-foreground">{e.nome}</h3>
+                  <h3 className="break-words font-medium text-foreground">{e.nome}</h3>
                   {e.objetivo && (
                     <p className="mt-0.5 text-sm text-foreground/60">{e.objetivo}</p>
                   )}
@@ -129,7 +129,7 @@ export function AbaEstrategias({
                     <button
                       type="button"
                       onClick={() => void agir(() => gestaoClientes.excluirItem(item.id))}
-                      className="shrink-0 text-foreground/25 opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+                      className="shrink-0 text-foreground/25 transition-opacity hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
                       aria-label="Excluir passo"
                     >
                       <Trash2 className="h-3.5 w-3.5" />

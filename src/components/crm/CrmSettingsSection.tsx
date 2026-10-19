@@ -120,7 +120,7 @@ function BackupBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <Download className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -201,7 +201,7 @@ function RestoreConfirmModal({
 }) {
   const [overwriteSettings, setOverwriteSettings] = React.useState(false)
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-xl border border-line bg-card p-5 shadow-xl">
         <header className="mb-3 flex items-center gap-2">
           <AlertCircle className="h-5 w-5 text-warning" />
@@ -260,7 +260,7 @@ function UserNameBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <UserCircle2 className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -350,7 +350,7 @@ function NotificationsBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <Bell className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -364,7 +364,7 @@ function NotificationsBlock() {
         </div>
       </header>
 
-      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
         {/* Local: som + browser notification */}
         <div className="space-y-2 rounded-lg border border-line bg-elevate/[0.02] p-3">
           <div className="text-[11px] uppercase tracking-wider text-foreground/45">
@@ -421,7 +421,7 @@ function NotificationsBlock() {
             onChange={(e) => setEdgeUrl(e.target.value)}
             hint="Deploy a função em supabase/functions/notify-ticket e cole a URL pública aqui. Veja README."
           />
-          <p className="rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-[11px] text-foreground/55">
+          <p className="break-words rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-[11px] text-foreground/55">
             <strong className="text-foreground/80">Pra ativar:</strong>{' '}
             (1) crie conta em resend.com e gere uma API key,{' '}
             (2) deploy a função: <code className="text-accent">supabase functions deploy notify-ticket --no-verify-jwt</code>,{' '}
@@ -482,7 +482,7 @@ function StageSlaBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <Timer className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -494,7 +494,7 @@ function StageSlaBlock() {
         </div>
       </header>
 
-      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {SLA_STAGES.map((st) => (
             <div key={st}>
@@ -545,7 +545,7 @@ function SetupQueueBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <ListChecks className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -558,7 +558,7 @@ function SetupQueueBlock() {
         </div>
       </header>
 
-      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
         <div className="max-w-[220px]">
           <Input
             label="Configurações simultâneas por pessoa"
@@ -606,7 +606,7 @@ function NpsBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <Star className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -618,7 +618,7 @@ function NpsBlock() {
         </div>
       </header>
 
-      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
         <label className="flex items-center gap-2 text-sm text-foreground/85 cursor-pointer">
           <input
             type="checkbox"
@@ -628,7 +628,7 @@ function NpsBlock() {
           />
           Criar pesquisa NPS automaticamente após entrega concluída
         </label>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="col-span-1">
             <Input
               label="Dias após entrega"
@@ -707,7 +707,7 @@ function AsaasBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <CreditCard className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -717,7 +717,7 @@ function AsaasBlock() {
           </p>
         </div>
       </header>
-      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="sm:col-span-2">
             <Input
@@ -765,7 +765,7 @@ function AsaasBlock() {
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               variant="secondary"
               size="sm"
@@ -850,7 +850,7 @@ function CredentialsBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <KeyRound className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -864,7 +864,7 @@ function CredentialsBlock() {
         </div>
       </header>
 
-      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
             label="Senha padrão (criação de tenant/usuários)"
@@ -972,7 +972,7 @@ function EvolutionBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <Smartphone className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -984,7 +984,7 @@ function EvolutionBlock() {
         </div>
       </header>
 
-      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
         <Input
           label="URL da Evolution"
           placeholder="https://evo.controlemaisia.com.br"
@@ -1090,7 +1090,7 @@ function SmtpBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <Mail className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -1102,7 +1102,7 @@ function SmtpBlock() {
         </div>
       </header>
 
-      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px]">
           <Input
             label="Host SMTP"
@@ -1211,7 +1211,7 @@ function UazapiBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <Smartphone className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -1223,7 +1223,7 @@ function UazapiBlock() {
         </div>
       </header>
 
-      <div className="space-y-3 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-3 rounded-xl border border-line bg-card p-4 sm:p-5">
         {rows.length === 0 && (
           <p className="text-xs text-foreground/45">Nenhum servidor UAZAPI cadastrado.</p>
         )}
@@ -1305,7 +1305,7 @@ function FollowUpBlock() {
   return (
     <section>
       <header className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent ring-1 ring-accent/20">
           <Bell className="h-3.5 w-3.5" />
         </span>
         <div>
@@ -1321,7 +1321,7 @@ function FollowUpBlock() {
         </div>
       </header>
 
-      <div className="space-y-4 rounded-xl border border-line bg-card p-5">
+      <div className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
         <label className="flex items-center gap-2 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2.5 text-sm text-foreground/85">
           <input
             type="checkbox"

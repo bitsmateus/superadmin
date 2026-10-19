@@ -18,7 +18,7 @@ export function LeadsModal({ alvo, onClose }: { alvo: Alvo | null; onClose: () =
       <Estado carregando={carregando} erro={erro}>
         {dados && dados.leads.length === 0 && <p className="py-6 text-center text-sm text-foreground/40">Nenhum lead.</p>}
         {dados && dados.leads.length > 0 && (
-          <div className="max-h-[60vh] overflow-y-auto">
+          <div className="max-h-[60vh] overflow-auto">
             <table className="w-full text-left text-sm">
               <thead className="text-xs text-foreground/50">
                 <tr><th className="py-1.5">Lead</th><th>Status</th><th>Quadro</th><th className="text-right">Entrou</th></tr>

@@ -526,7 +526,7 @@ function UnifiedRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <p className="inline-block rounded-md border border-line px-2 py-1 text-sm font-semibold leading-snug text-foreground/70">
+          <p className="inline-block min-w-0 break-words rounded-md border border-line px-2 py-1 text-sm font-semibold leading-snug text-foreground/70">
             {item.title}
           </p>
           <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
@@ -1184,7 +1184,7 @@ function GroupConfigModal({
             />
             Enviar resumo diário automático
           </label>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="text-xs text-foreground/55">Horário (0–23h, fuso de São Paulo):</span>
             <input
               type="number"

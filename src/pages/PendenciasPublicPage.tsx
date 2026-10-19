@@ -111,7 +111,7 @@ export function PendenciasPublicPage() {
   if (!token || !client) {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-50 px-4">
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8">
           <h1 className="text-lg font-semibold text-slate-900">Link inválido</h1>
           <p className="mt-2 text-sm text-slate-500">
             Confira o link com a nossa equipe — ele pode ter expirado.
@@ -136,7 +136,7 @@ export function PendenciasPublicPage() {
   if (pending.length === 0) {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-50 px-4">
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8">
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-50 text-emerald-600">
             <CheckCircle2 className="h-6 w-6" />
           </div>
@@ -270,7 +270,7 @@ export function PendenciasPublicPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
+      <main className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm text-amber-900">
             Faltam <strong>{pending.length}</strong>{' '}
@@ -561,7 +561,7 @@ function Field({
 }
 
 const inputCls =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F8EF7] focus:outline-none focus:ring-4 focus:ring-[#4F8EF7]/15'
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 sm:text-sm focus:border-[#4F8EF7] focus:outline-none focus:ring-4 focus:ring-[#4F8EF7]/15'
 
 function Input({
   value,

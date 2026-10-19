@@ -484,7 +484,7 @@ function RiskRow({ item, creating, onCreateTask, onOpenClient, onFlag, onResolve
               type="button"
               onClick={() => onOpenClient(item.client_id)}
               title="Abrir cliente"
-              className="grid h-6 w-6 place-items-center rounded text-accent transition-colors hover:bg-accent/10"
+              className="grid h-8 w-8 place-items-center rounded text-accent transition-colors hover:bg-accent/10 lg:h-6 lg:w-6"
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </button>

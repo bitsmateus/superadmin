@@ -46,14 +46,15 @@ export function Drawer({
       <aside
         role="dialog"
         aria-modal="true"
+        // No celular a gaveta ocupa a tela toda (92vw deixava uma faixa inútil de 8% e espremia o conteúdo).
         className={cn(
-          'absolute right-0 top-0 h-full overflow-hidden border-l border-line bg-card shadow-2xl',
+          'absolute right-0 top-0 h-full max-w-full overflow-hidden border-l border-line bg-card shadow-2xl max-sm:!w-full',
           'flex flex-col animate-slide-in-right',
         )}
         style={{ width }}
       >
         {(title || header) && (
-          <div className="border-b border-line px-6 py-4">
+          <div className="border-b border-line px-4 py-3 sm:px-6 sm:py-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 {header ?? (

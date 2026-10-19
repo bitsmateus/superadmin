@@ -260,7 +260,7 @@ function CustomQuestionsTab({ open }: { open: boolean }) {
           placeholder="Placeholder (opcional)"
           className="block w-full rounded-lg border border-line bg-card px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center gap-1.5 text-sm text-foreground/70">
             <input
               type="radio"

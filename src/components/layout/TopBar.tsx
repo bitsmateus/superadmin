@@ -62,8 +62,15 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs
 
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-bg/85 backdrop-blur-md">
-      <div className="flex min-h-14 items-center justify-between gap-3 py-1.5 pl-16 pr-4 sm:gap-4 lg:px-8">
-        <div className="min-w-0 flex-1">
+      {/* No celular, se as ações não couberem ao lado do título, descem pra uma segunda linha (antes vazavam da tela).
+          O compacto continua numa linha só: há páginas com abas grudadas logo abaixo dele (top-[57px]). */}
+      <div
+        className={cn(
+          'flex min-h-14 items-center justify-between gap-x-3 gap-y-1.5 py-1.5 pl-16 pr-4 sm:flex-nowrap sm:gap-4 lg:px-8',
+          !compacto && 'flex-wrap',
+        )}
+      >
+        <div className={cn('flex-1', compacto ? 'min-w-0' : 'min-w-[9rem] sm:min-w-0')}>
           <nav className={cn('items-center gap-1 text-xs text-foreground/40', compacto ? 'hidden sm:flex' : 'flex')}>
             {computedCrumbs.map((c, i) => (
               <span key={i} className="flex items-center gap-1">
@@ -86,7 +93,7 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs
             {subtitle && <span className={cn('text-xs text-foreground/40', compacto && 'hidden sm:inline')}>{subtitle}</span>}
           </div>
         </div>
-        {rightSlot && <div className="shrink-0">{rightSlot}</div>}
+        {rightSlot && <div className="max-w-full shrink-0">{rightSlot}</div>}
       </div>
     </header>
   )

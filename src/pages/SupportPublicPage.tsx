@@ -85,7 +85,7 @@ export function SupportPublicPage() {
     <div className="min-h-screen bg-bg text-foreground">
       <Header />
 
-      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
         {step === 'identify' && (
           <IdentifyStep
             initialSubStep={identifySubStep}
@@ -805,11 +805,11 @@ function KbResolutionCard({
         <div className="flex flex-col items-stretch gap-2 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm text-foreground/65">Isso resolveu sua dúvida?</span>
           <div className="flex gap-2">
-            <button onClick={onNotResolved} className={cn(btnSecondary, 'gap-1.5')}>
+            <button onClick={onNotResolved} className={cn(btnSecondary, 'flex-1 gap-1.5 sm:flex-none')}>
               <ThumbsDown className="h-3.5 w-3.5" />
               Não · abrir ticket
             </button>
-            <button onClick={onResolved} className={cn(btnPrimary, 'gap-1.5')}>
+            <button onClick={onResolved} className={cn(btnPrimary, 'flex-1 gap-1.5 sm:flex-none')}>
               <ThumbsUp className="h-3.5 w-3.5" />
               Sim, resolveu!
             </button>
@@ -955,9 +955,9 @@ function ComposeStep({
       <Card>
         <div className="flex items-center justify-between gap-3 text-xs">
           <div className="text-foreground/55">Identificação</div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-foreground/75">
-            <span className="inline-flex items-center gap-1">
-              <Mail className="h-3 w-3" /> {identity.email}
+          <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-foreground/75">
+            <span className="inline-flex min-w-0 items-center gap-1 break-all">
+              <Mail className="h-3 w-3 shrink-0" /> {identity.email}
             </span>
             {identity.company && (
               <span className="inline-flex items-center gap-1">
@@ -1001,7 +1001,7 @@ function CreatedStep({
       <div className="mt-4 w-full max-w-md rounded-lg border border-line bg-card px-3 py-2 text-xs text-foreground/75 break-all">
         {url}
       </div>
-      <div className="mt-5 flex gap-2">
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
         <button
           onClick={() => {
             navigator.clipboard?.writeText(url)
@@ -1135,7 +1135,7 @@ function TrackStep({
                 <div className="text-[10px] uppercase tracking-wider text-foreground/40">
                   Ticket #{ticket.number}
                 </div>
-                <h2 className="mt-1 text-base font-semibold text-foreground">
+                <h2 className="mt-1 break-words text-base font-semibold text-foreground">
                   {ticket.subject}
                 </h2>
                 <div className="mt-1 text-xs text-foreground/45 inline-flex items-center gap-1.5">
@@ -1182,7 +1182,7 @@ function TrackStep({
                           ? 'Você'
                           : m.authorName ?? 'Suporte NX'}
                       </div>
-                      <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
+                      <div className="whitespace-pre-wrap break-words leading-relaxed">{m.content}</div>
                       <div className="mt-1 text-[10px] opacity-50">
                         {new Date(m.createdAt).toLocaleString('pt-BR')}
                       </div>
@@ -1271,7 +1271,7 @@ function StepHeader({
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-line bg-card p-5">
+    <section className="rounded-xl border border-line bg-card p-4 sm:p-5">
       {children}
     </section>
   )
@@ -1339,10 +1339,10 @@ function toneCls(tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral'): s
 }
 
 const inputCls =
-  'h-10 w-full rounded-lg bg-surface px-3 text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors'
+  'h-10 w-full rounded-lg bg-surface px-3 text-base sm:text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors'
 
 const textareaCls =
-  'w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors resize-y'
+  'w-full rounded-lg bg-surface px-3 py-2 text-base sm:text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 transition-colors resize-y'
 
 const btnPrimary =
   'inline-flex items-center justify-center h-10 px-4 rounded-lg bg-accent text-white font-medium text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity'

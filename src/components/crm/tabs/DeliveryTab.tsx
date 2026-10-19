@@ -276,9 +276,9 @@ export function DeliveryTab({ client }: { client: Client }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-elevate/[0.02] px-4 py-3">
-        <div className="flex items-center gap-2">
-          <ListChecks className="h-4 w-4 text-accent" />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-elevate/[0.02] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ListChecks className="h-4 w-4 shrink-0 text-accent" />
           <span className="text-sm text-foreground/80">
             Checklist de criação da empresa
           </span>
@@ -286,7 +286,7 @@ export function DeliveryTab({ client }: { client: Client }) {
             {done}/{total} concluídos
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="h-1.5 w-32 overflow-hidden rounded-full bg-elevate/[0.06]">
             <div
               className="h-full bg-accent transition-all"
@@ -307,7 +307,7 @@ export function DeliveryTab({ client }: { client: Client }) {
           </span>
         }
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="secondary"

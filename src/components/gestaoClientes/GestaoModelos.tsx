@@ -219,7 +219,7 @@ function CartaoModelo({
                     {p.titulo}
                   </button>
                 )}
-                <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="flex shrink-0 items-center gap-0.5 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                   <button
                     type="button"
                     disabled={i === 0}
@@ -275,7 +275,7 @@ function CartaoModelo({
             </Button>
           </form>
 
-          <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
             <Button variant="ghost" size="sm" onClick={onEditar}>
               Editar nome e descrição
             </Button>

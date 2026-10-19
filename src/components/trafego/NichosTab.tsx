@@ -13,14 +13,14 @@ function MarcarNicho({ id, nome, onSaved }: { id: string; nome: string; onSaved:
     catch (e) { toast.error('Falha ao salvar: ' + (e as Error).message) }
   }
   return (
-    <li className="flex items-center gap-2 border-t border-line py-2 first:border-t-0">
-      <span className="min-w-0 flex-1 truncate text-sm text-foreground/80" title={nome}>{nome}</span>
+    <li className="flex flex-wrap items-center gap-2 border-t border-line py-2 first:border-t-0 sm:flex-nowrap">
+      <span className="min-w-0 basis-full truncate text-sm text-foreground/80 sm:flex-1 sm:basis-auto" title={nome}>{nome}</span>
       <input
         value={valor}
         onChange={(e) => setValor(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') void salvar() }}
         placeholder="Nicho (ex.: lavanderia)"
-        className="h-8 w-48 rounded-md border border-line bg-surface px-2 text-sm placeholder:text-foreground/30 focus:border-accent focus:outline-none"
+        className="h-8 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-sm placeholder:text-foreground/30 focus:border-accent focus:outline-none sm:w-48 sm:flex-none"
       />
       <button type="button" disabled={!valor.trim()} onClick={() => void salvar()}
         className="rounded-md px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-40">Marcar</button>
@@ -77,6 +77,7 @@ export function NichosTab({ de, ate, versao }: { de: string; ate: string; versao
           {(real.dados?.linhas ?? []).length === 0 ? (
             <Vazio>Sem leads do Meta no período.</Vazio>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="text-xs text-foreground/50">
                 <tr><th className="py-1.5">Campanha mira</th><th>Lead informou</th><th className="text-right">Leads</th></tr>
@@ -94,6 +95,7 @@ export function NichosTab({ de, ate, versao }: { de: string; ate: string; versao
                 })}
               </tbody>
             </table>
+            </div>
           )}
           <p className="mt-2 text-[11px] text-foreground/35">
             O nicho real vem da pergunta de segmento do formulário do Meta (ou do que o SDR marcar no card do lead). Verde = a campanha acertou o público.

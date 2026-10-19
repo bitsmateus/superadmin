@@ -396,7 +396,7 @@ export function CanaisPage() {
               />
               Só divergências
             </label>
-            <div className="w-44">
+            <div className="w-full sm:w-44">
               <Select
                 value={notifyFilter}
                 onChange={(e) => setNotifyFilter(e.target.value as 'all' | 'on' | 'off')}
@@ -407,7 +407,7 @@ export function CanaisPage() {
                 ]}
               />
             </div>
-            <div className="w-40">
+            <div className="w-full sm:w-40">
               <Select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as NxChannelStatus | 'all')}
@@ -420,7 +420,7 @@ export function CanaisPage() {
                 ]}
               />
             </div>
-            <div className="w-44">
+            <div className="w-full sm:w-44">
               <Select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
@@ -583,7 +583,7 @@ export function CanaisPage() {
                     {filteredOrphans.length} sem tenant atribuído
                   </span>
                   {selectedOrphans.size > 0 && (
-                    <div className="ml-auto flex items-center gap-2">
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
                       <span className="text-xs text-foreground/70">{selectedOrphans.size} selecionado(s)</span>
                       <Button
                         size="sm"

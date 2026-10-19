@@ -533,10 +533,10 @@ function Kpi({ titulo, valor, nota, tom, editavel, onEditar }: {
 
 function MiniNumero({ titulo, valor, tom }: { titulo: string; valor: string; tom?: 'bom' | 'ruim' }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-[10px] uppercase tracking-wider text-foreground/40">{titulo}</p>
       <p className={cn(
-        'text-sm font-semibold tabular-nums',
+        'text-xs font-semibold tabular-nums [overflow-wrap:anywhere] sm:text-sm',
         tom === 'bom' ? 'text-success' : tom === 'ruim' ? 'text-danger' : 'text-foreground',
       )}>
         {valor}

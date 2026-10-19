@@ -310,7 +310,7 @@ function ServerCard({
           : 'border-line',
       )}
     >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
         <div className="flex items-center gap-3">
           <div
             className={cn(
@@ -358,7 +358,7 @@ function ServerCard({
         </div>
       </header>
 
-      <div className="space-y-4 px-5 py-4">
+      <div className="space-y-4 px-4 py-4 sm:px-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Nome"

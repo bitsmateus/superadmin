@@ -127,7 +127,7 @@ export function NpsPublicPage() {
               rows={4}
               maxLength={2000}
               placeholder="Conta pra gente…"
-              className="mt-1.5 w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 resize-y"
+              className="mt-1.5 w-full rounded-lg bg-surface px-3 py-2 text-base sm:text-sm text-foreground border border-elevate/10 placeholder:text-foreground/30 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 resize-y"
             />
             <div className="mt-1 text-right text-[10px] text-foreground/30">
               {comment.length}/2000
@@ -138,7 +138,7 @@ export function NpsPublicPage() {
             <button
               onClick={submit}
               disabled={score === null || submitting}
-              className="inline-flex items-center justify-center h-10 px-5 rounded-lg bg-accent text-white font-medium text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+              className="inline-flex w-full sm:w-auto items-center justify-center h-10 px-5 rounded-lg bg-accent text-white font-medium text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
             >
               {submitting ? 'Enviando…' : 'Enviar resposta'}
             </button>
@@ -169,7 +169,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-2xl px-4 py-8">{children}</main>
+      <main className="mx-auto max-w-2xl px-4 py-6 sm:py-8">{children}</main>
     </div>
   )
 }
@@ -183,7 +183,8 @@ function ScoreSelector({
 }) {
   return (
     <div className="-mx-1 overflow-x-auto px-1 lg:mx-0 lg:overflow-visible lg:px-0">
-      <div className="grid min-w-[460px] grid-cols-11 gap-1.5 lg:min-w-0">
+      {/* No celular as notas quebram em duas linhas (0–5 / 6–10) em vez de rolar de lado. */}
+      <div className="grid grid-cols-6 gap-1.5 sm:min-w-[460px] sm:grid-cols-11 lg:min-w-0">
         {Array.from({ length: 11 }).map((_, i) => {
           const isSelected = value === i
           return (

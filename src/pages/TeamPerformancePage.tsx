@@ -101,16 +101,16 @@ export function TeamPerformancePage() {
 
         {/* Líder do mês */}
         {ready && leader && (
-          <div className="rounded-xl border border-success/30 bg-gradient-to-br from-success/10 to-transparent p-5">
-            <div className="flex items-center gap-4">
-              <div className="grid h-14 w-14 place-items-center rounded-full bg-success/20 text-success ring-2 ring-success/40">
+          <div className="rounded-xl border border-success/30 bg-gradient-to-br from-success/10 to-transparent p-4 sm:p-5">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-success/20 text-success ring-2 ring-success/40">
                 <Trophy className="h-6 w-6" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] uppercase tracking-wider text-success">
                   Líder do mês
                 </div>
-                <div className="text-lg font-semibold text-foreground">
+                <div className="truncate text-lg font-semibold text-foreground">
                   {leader.agentKey}
                 </div>
                 <div className="text-xs text-foreground/60">

@@ -97,11 +97,11 @@ export function TrafegoPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {usaPapel && (
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1">
                 {PAPEIS.map((p) => <Pilula key={p.id} ativo={papel === p.id} onClick={() => setPapel(p.id)}>{p.label}</Pilula>)}
               </div>
             )}
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               {PERIODOS.map((p) => <Pilula key={p.id} ativo={periodo === p.id} onClick={() => setPeriodo(p.id)}>{p.label}</Pilula>)}
             </div>
             <button

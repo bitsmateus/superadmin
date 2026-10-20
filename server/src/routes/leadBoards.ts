@@ -201,6 +201,39 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
 }
 
 /**
+ * Regra dos CRMs do Arthur e do Luis (inclui o Closer): o lead só MUDA pra "Reunião agendada" com data e horário
+ * do agendamento, e pra "Proposta enviada" com data e horário em "Retornar". Vale pra qualquer caminho que mude o
+ * status (lista, Kanban, ficha, mover de quadro). Quem já estava nesses status sem o dado não é afetado até mudar.
+ * Devolve o campo que falta (e a mensagem) ou null.
+ */
+async function faltaDadoDoStatus(
+  leadId: string, patch: Record<string, unknown>,
+): Promise<{ campo: 'agendamento' | 'retornar'; mensagem: string } | null> {
+  if (typeof patch.status !== 'string') return null;
+  const atual = await queryOne<{ status: string; agendamento: string; retornar: string; board_id: string }>(
+    'SELECT status, agendamento, retornar, board_id FROM lead_rows WHERE id = $1', [leadId]
+  );
+  if (!atual) return null;
+  const novo = normalizaNome(patch.status);
+  if (novo === normalizaNome(atual.status ?? '')) return null;
+  const campo = novo.includes('reuniaoagendada') ? 'agendamento' : novo.includes('propostaenviada') ? 'retornar' : null;
+  if (!campo) return null;
+  const aba = await queryOne<{ id: string; name: string }>(
+    'SELECT lp.id, lp.name FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1',
+    [typeof patch.board_id === 'string' ? patch.board_id : atual.board_id]
+  );
+  if (!aba || !(/(arthur|lu[ií]s)/i.test(aba.name) || /(arthur|luis)/i.test(aba.id))) return null;
+  const valor = String(campo in patch ? patch[campo] ?? '' : atual[campo] ?? '');
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(valor)) return null;
+  return {
+    campo,
+    mensagem: campo === 'agendamento'
+      ? 'Pra marcar como Reunião agendada, preencha o dia e o horário do agendamento.'
+      : 'Pra marcar como Proposta enviada, preencha o dia e o horário em "Retornar".',
+  };
+}
+
+/**
  * Resolve a allowlist de quadros de um usuário restrito. A permissão de menu é só "comercial"
  * (tudo ou nada — as abas viraram gerenciáveis, não dá mais pra restringir por aba individual
  * nessa camada); a granularidade fina é por ABA inteira (user_page_access) — ex.: um SDR só
@@ -1281,6 +1314,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         const etiqueta = await statusDoQuadro(patch.board_id);
         if (etiqueta) patch.status = etiqueta;
       }
+
+      // Reunião agendada / Proposta enviada nos CRMs do Arthur e do Luis: sem data e horário, não muda.
+      const falta = await faltaDadoDoStatus(req.params.id, patch);
+      if (falta) return reply.status(400).send({ message: falta.mensagem, exigir: falta.campo });
 
       const sets: string[] = [];
       const params: unknown[] = [];

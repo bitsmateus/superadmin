@@ -184,7 +184,7 @@ function LeadKanbanBoardPronto({ rows, allBoards, onOpenLead, sdrLock, modoDeman
       (groupField === 'status' && allBoards.find((b) => b.name.trim().toLowerCase() === col.key.trim().toLowerCase())) ||
       allBoards[0]
     if (!quadro) return
-    leadBoardsService.createRow(quadro.id, {
+    void leadBoardsService.createRowComRegra(quadro.id, {
       nome,
       [groupField]: col.key,
       ...(sdrLock ? { sdr: sdrLock } : {}),

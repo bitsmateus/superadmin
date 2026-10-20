@@ -1,6 +1,8 @@
 import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
 import type { LeadBoard, LeadBoardPage, LeadRow } from '@/types/leadBoard'
+import { leadPagesService } from '@/services/leadPages'
+import { abaComRegraDeStatus, campoExigidoPeloStatus, mesmoStatus, temDataEHora, type CampoExigido } from '@/lib/regraDoStatus'
 
 function uuid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -266,6 +268,30 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
   return { row, promise }
 }
 
+// ---------- Regra do status (Reunião agendada / Proposta enviada) ----------
+// Quem pede a data e o horário é o popup montado no Layout (PopupDadosDoStatus). Sem ele registrado, a mudança
+// segue e o servidor recusa se faltar o dado.
+export type PedidoDeDadoDoStatus = { nome: string; campo: CampoExigido; status: string; valorAtual: string }
+let pedirDadoDoStatus: ((p: PedidoDeDadoDoStatus) => Promise<string | null>) | null = null
+export function registrarPedidoDeDadoDoStatus(fn: (p: PedidoDeDadoDoStatus) => Promise<string | null>): () => void {
+  pedirDadoDoStatus = fn
+  return () => { if (pedirDadoDoStatus === fn) pedirDadoDoStatus = null }
+}
+
+/** Se essa mudança põe o lead em "Reunião agendada"/"Proposta enviada" num CRM do Arthur/Luis, o campo exigido. */
+function exigenciaDaMudanca(atual: Pick<LeadRow, 'boardId' | 'status'> | null, patch: Partial<LeadRow>): { campo: CampoExigido; status: string } | null {
+  const quadroDestino = boards.find((b) => b.id === (patch.boardId ?? atual?.boardId))
+  if (!quadroDestino) return null
+  const aba = leadPagesService.getAll().find((p) => p.id === quadroDestino.page)
+  if (!abaComRegraDeStatus(aba?.name ?? '', quadroDestino.page)) return null
+  // O status novo: o que veio no patch ou, ao trocar de quadro, o nome do quadro (o servidor alinha o status a ele).
+  const statusNovo = typeof patch.status === 'string' ? patch.status : patch.boardId ? quadroDestino.name : null
+  if (!statusNovo) return null
+  if (atual && mesmoStatus(atual.status, statusNovo)) return null
+  const campo = campoExigidoPeloStatus(statusNovo)
+  return campo ? { campo, status: statusNovo } : null
+}
+
 export const leadBoardsService = {
   subscribe(fn: () => void): () => void { subs.add(fn); return () => { subs.delete(fn) } },
 
@@ -353,6 +379,18 @@ export const leadBoardsService = {
     }
   },
 
+  /** Igual createRow, mas se o lead já nasce em "Reunião agendada"/"Proposta enviada" num CRM do Arthur/Luis,
+   * pede antes a data e o horário (sem confirmar, não cria). */
+  async createRowComRegra(boardId: string, initial: Partial<LeadRow>): Promise<LeadRow | null> {
+    const exig = exigenciaDaMudanca(null, { ...initial, boardId })
+    if (exig && pedirDadoDoStatus && !temDataEHora(initial[exig.campo] as string | undefined)) {
+      const valor = await pedirDadoDoStatus({ nome: initial.nome || 'Lead novo', campo: exig.campo, status: exig.status, valorAtual: '' })
+      if (!valor) return null
+      return leadBoardsService.createRow(boardId, { ...initial, [exig.campo]: valor })
+    }
+    return leadBoardsService.createRow(boardId, initial)
+  },
+
   createRow(boardId: string, initial?: Partial<LeadRow>): LeadRow {
     const { row, promise } = buildAndPostRow(boardId, initial)
     promise.catch((err) => toast.error('Falha ao criar lead: ' + (err as Error).message))
@@ -382,6 +420,14 @@ export const leadBoardsService = {
     const idx = rows.findIndex((r) => r.id === id)
     if (idx === -1) return
     const prev = rows[idx]
+    // Entrando em "Reunião agendada"/"Proposta enviada" (CRM do Arthur/Luis): antes pede a data e o horário no
+    // popup. Sem confirmar, o lead fica onde estava. Se o próprio patch já traz o dado, segue direto.
+    const exig = exigenciaDaMudanca(prev, patch)
+    if (exig && pedirDadoDoStatus && !temDataEHora(patch[exig.campo] as string | undefined)) {
+      void pedirDadoDoStatus({ nome: prev.nome || prev.empresa || 'Lead sem nome', campo: exig.campo, status: exig.status, valorAtual: prev[exig.campo] })
+        .then((valor) => { if (valor) leadBoardsService.updateRow(id, { ...patch, [exig.campo]: valor }) })
+      return
+    }
     const next = { ...prev, ...patch, updatedAt: new Date().toISOString() }
     const copy = rows.slice(); copy[idx] = next; rows = copy
     notify()

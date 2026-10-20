@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { useAsaasAutoSync } from '@/hooks/useAsaasAutoSync'
 import { useTicketNotifications } from '@/hooks/useTicketNotifications'
 import { usePushSubscription } from '@/hooks/usePushSubscription'
+import { PopupDadosDoStatus } from '@/components/comercial/PopupDadosDoStatus'
 
 const isDesktop = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -29,6 +30,8 @@ export function Layout() {
           aria-hidden
         />
       )}
+
+      <PopupDadosDoStatus />
 
       <Sidebar
         open={open}

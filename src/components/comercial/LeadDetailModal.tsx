@@ -299,6 +299,8 @@ function LeadDetailModalInner({
               leadRowId={row.id}
               nicho={row.nicho}
               motivoDesqualificacao={row.motivoDesqualificacao}
+              origem={row.origem}
+              mostrarSemAnuncio={!modoSimples}
               onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
             />
 

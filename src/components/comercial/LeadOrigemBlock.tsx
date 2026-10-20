@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils'
+import { MINIMO_OUTRO, ORIGENS_DO_LEAD, PREFIXO_OUTRO } from '@/lib/regraDoStatus'
 import * as React from 'react'
 import { ExternalLink, Megaphone } from 'lucide-react'
 import { api } from '@/services/api'
@@ -13,12 +15,51 @@ export interface LeadOrigemBlockProps {
   leadRowId: string
   nicho: string
   motivoDesqualificacao: string
-  onChange: (patch: { nicho?: string; motivoDesqualificacao?: string }) => void
+  /** De onde o lead veio (lead cadastrado à mão). Lead com anúncio ligado mostra o anúncio. */
+  origem: string
+  /** Lead sem anúncio ligado: mostra a escolha da origem, o nicho e o motivo. Desligado nos CRMs de demanda. */
+  mostrarSemAnuncio?: boolean
+  onChange: (patch: { nicho?: string; motivoDesqualificacao?: string; origem?: string }) => void
 }
 
-/** "Origem" do lead vindo do Meta Ads: campanha › conjunto › anúncio com miniatura, nicho real e motivo de
- * desqualificação. Não aparece pra lead que não veio do Meta. */
-export function LeadOrigemBlock({ leadRowId, nicho, motivoDesqualificacao, onChange }: LeadOrigemBlockProps) {
+/** Motivo da desqualificação: a lista, e em "Outro" um campo pra escrever (mínimo 5 letras), salvo como "Outro: …". */
+function MotivoComOutro({ valor, motivos, onChange }: { valor: string; motivos: string[]; onChange: (v: string) => void }) {
+  const ehOutro = valor.startsWith('Outro')
+  const [texto, setTexto] = React.useState(ehOutro ? valor.replace(/^Outro:?/, '').trim() : '')
+  React.useEffect(() => { setTexto(valor.startsWith('Outro') ? valor.replace(/^Outro:?/, '').trim() : '') }, [valor])
+  const lista = motivos.filter((m) => !m.startsWith('Outro:'))
+  const curto = ehOutro && texto.trim().length < MINIMO_OUTRO
+  return (
+    <div className="block text-[11px] text-foreground/40">
+      Motivo de desqualificação
+      <select
+        value={ehOutro ? 'Outro' : valor}
+        onChange={(e) => onChange(e.target.value === 'Outro' ? 'Outro' : e.target.value)}
+        className="mt-0.5 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
+      >
+        <option value="">— nenhum (lead válido) —</option>
+        {lista.map((m) => <option key={m} value={m}>{m}</option>)}
+      </select>
+      {ehOutro && (
+        <>
+          <textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            onBlur={() => { const v = texto.trim(); if (v.length >= MINIMO_OUTRO) onChange(`${PREFIXO_OUTRO}${v}`) }}
+            rows={2}
+            placeholder="Escreva o motivo (mínimo 5 letras)"
+            className={cn('mt-1 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none', curto && 'ring-1 ring-warning/50')}
+          />
+          {curto && <span className="text-[11px] text-warning">Escreva o motivo com pelo menos {MINIMO_OUTRO} letras.</span>}
+        </>
+      )}
+    </div>
+  )
+}
+
+/** "Origem" do lead. Veio do Meta Ads: campanha › conjunto › anúncio com miniatura, nicho real e motivo de
+ * desqualificação. Não veio (cadastro manual): escolha da origem (bio, site, indicação…), nicho e motivo. */
+export function LeadOrigemBlock({ leadRowId, nicho, motivoDesqualificacao, origem, mostrarSemAnuncio = false, onChange }: LeadOrigemBlockProps) {
   const [dados, setDados] = React.useState<{ origem: Origem | null; motivos: string[] } | null>(null)
 
   React.useEffect(() => {
@@ -30,11 +71,48 @@ export function LeadOrigemBlock({ leadRowId, nicho, motivoDesqualificacao, onCha
     return () => { vivo = false }
   }, [leadRowId])
 
-  if (!dados?.origem) return null
-  const { campanha, conjunto, anuncio } = dados.origem
+  if (!dados) return null
   // Motivo antigo que saiu da lista continua aparecendo no select em vez de sumir.
   const motivos = motivoDesqualificacao && !dados.motivos.includes(motivoDesqualificacao)
     ? [motivoDesqualificacao, ...dados.motivos] : dados.motivos
+
+  // Lead sem anúncio ligado (cadastrado à mão, link na bio, site, indicação…): escolhe a origem aqui.
+  if (!dados.origem) {
+    if (!mostrarSemAnuncio) return null
+    return (
+      <div className="my-2 rounded-lg border border-line bg-elevate/[0.03] p-2.5">
+        <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+          <Megaphone className="h-3.5 w-3.5 text-foreground/60" />
+          Origem
+        </div>
+        <label className="block text-[11px] text-foreground/40">
+          De onde o lead veio
+          <select
+            value={origem}
+            onChange={(e) => onChange({ origem: e.target.value })}
+            className="mt-0.5 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
+          >
+            <option value="">— não informado —</option>
+            {ORIGENS_DO_LEAD.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
+          </select>
+        </label>
+        <div className="mt-2 space-y-1.5 border-t border-line/60 pt-2">
+          <label className="block text-[11px] text-foreground/40">
+            Nicho do lead
+            <EditableField
+              value={nicho}
+              placeholder="Segmento da empresa"
+              onSave={(v) => onChange({ nicho: v.trim() })}
+              className="mt-0.5 rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
+            />
+          </label>
+          <MotivoComOutro valor={motivoDesqualificacao} motivos={motivos} onChange={(v) => onChange({ motivoDesqualificacao: v })} />
+        </div>
+      </div>
+    )
+  }
+
+  const { campanha, conjunto, anuncio } = dados.origem
 
   return (
     <div className="my-2 rounded-lg border border-line bg-elevate/[0.03] p-2.5">
@@ -71,17 +149,7 @@ export function LeadOrigemBlock({ leadRowId, nicho, motivoDesqualificacao, onCha
             className="mt-0.5 rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
           />
         </label>
-        <label className="block text-[11px] text-foreground/40">
-          Motivo de desqualificação
-          <select
-            value={motivoDesqualificacao}
-            onChange={(e) => onChange({ motivoDesqualificacao: e.target.value })}
-            className="mt-0.5 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
-          >
-            <option value="">— nenhum (lead válido) —</option>
-            {motivos.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </label>
+        <MotivoComOutro valor={motivoDesqualificacao} motivos={motivos} onChange={(v) => onChange({ motivoDesqualificacao: v })} />
       </div>
     </div>
   )

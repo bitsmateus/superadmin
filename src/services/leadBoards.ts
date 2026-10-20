@@ -2,7 +2,7 @@ import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
 import type { LeadBoard, LeadBoardPage, LeadRow } from '@/types/leadBoard'
 import { leadPagesService } from '@/services/leadPages'
-import { abaComRegraDeStatus, campoExigidoPeloStatus, mesmoStatus, temDataEHora, type CampoExigido } from '@/lib/regraDoStatus'
+import { abaComRegraDeStatus, campoExigidoPeloStatus, leadCobraMotivo, mesmoStatus, motivoValido, statusExigeMotivo, temDataEHora, type CampoExigido } from '@/lib/regraDoStatus'
 
 function uuid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -43,7 +43,7 @@ function boardToRow(patch: Partial<LeadBoard>): Record<string, unknown> {
 }
 
 type LeadRowRow = {
-  id: string; board_id: string; nome: string; tipo: string; etiqueta?: string; followup?: string; disparo?: string; nicho?: string; motivo_desqualificacao?: string; empresa: string; telefone: string
+  id: string; board_id: string; nome: string; tipo: string; etiqueta?: string; followup?: string; disparo?: string; origem?: string; nicho?: string; motivo_desqualificacao?: string; empresa: string; telefone: string
   dia_contato: string; ligacao: string; status: string; agendamento: string; retornar: string; retornado: boolean
   responsavel: string
   sdr: string; numero: string; dor_cliente: string; numero_atendentes: string; valor_mrr: string
@@ -65,7 +65,7 @@ type LeadRowRow = {
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
-    id: r.id, boardId: r.board_id, nome: r.nome, tipo: r.tipo, etiqueta: r.etiqueta ?? '', followup: r.followup ?? '', disparo: r.disparo ?? '', nicho: r.nicho ?? '', motivoDesqualificacao: r.motivo_desqualificacao ?? '', empresa: r.empresa,
+    id: r.id, boardId: r.board_id, nome: r.nome, tipo: r.tipo, etiqueta: r.etiqueta ?? '', followup: r.followup ?? '', disparo: r.disparo ?? '', origem: r.origem ?? '', nicho: r.nicho ?? '', motivoDesqualificacao: r.motivo_desqualificacao ?? '', empresa: r.empresa,
     telefone: r.telefone, diaContato: r.dia_contato, ligacao: r.ligacao, status: r.status,
     agendamento: r.agendamento ?? '', retornar: r.retornar,
     retornado: r.retornado ?? false,
@@ -98,6 +98,7 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('etiqueta' in patch) row.etiqueta = patch.etiqueta
   if ('followup' in patch) row.followup = patch.followup
   if ('disparo' in patch) row.disparo = patch.disparo
+  if ('origem' in patch) row.origem = patch.origem
   if ('nicho' in patch) row.nicho = patch.nicho
   if ('motivoDesqualificacao' in patch) row.motivo_desqualificacao = patch.motivoDesqualificacao
   if ('empresa' in patch) row.empresa = patch.empresa
@@ -245,7 +246,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
   const position = boardRows.length ? Math.max(...boardRows.map((r) => r.position)) + 1 : 0
   const now = new Date().toISOString()
   const row: LeadRow = {
-    id: uuid(), boardId, nome: '', tipo: '', etiqueta: '', followup: '', disparo: '', nicho: '', motivoDesqualificacao: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
+    id: uuid(), boardId, nome: '', tipo: '', etiqueta: '', followup: '', disparo: '', origem: '', nicho: '', motivoDesqualificacao: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
     status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
     dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
     fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, closer: '',
@@ -279,17 +280,30 @@ export function registrarPedidoDeDadoDoStatus(fn: (p: PedidoDeDadoDoStatus) => P
 }
 
 /** Se essa mudança põe o lead em "Reunião agendada"/"Proposta enviada" num CRM do Arthur/Luis, o campo exigido. */
-function exigenciaDaMudanca(atual: Pick<LeadRow, 'boardId' | 'status'> | null, patch: Partial<LeadRow>): { campo: CampoExigido; status: string } | null {
+function exigenciaDaMudanca(
+  atual: Pick<LeadRow, 'boardId' | 'status' | 'motivoDesqualificacao' | 'createdAt'> | null, patch: Partial<LeadRow>,
+): { campo: CampoExigido; status: string } | null {
   const quadroDestino = boards.find((b) => b.id === (patch.boardId ?? atual?.boardId))
   if (!quadroDestino) return null
-  const aba = leadPagesService.getAll().find((p) => p.id === quadroDestino.page)
-  if (!abaComRegraDeStatus(aba?.name ?? '', quadroDestino.page)) return null
   // O status novo: o que veio no patch ou, ao trocar de quadro, o nome do quadro (o servidor alinha o status a ele).
   const statusNovo = typeof patch.status === 'string' ? patch.status : patch.boardId ? quadroDestino.name : null
   if (!statusNovo) return null
   if (atual && mesmoStatus(atual.status, statusNovo)) return null
+  // Lead que entrou de outubro/2026 pra frente (anúncio ou manual) indo pra Disparo em massa / Perdidos /
+  // Desqualificado: precisa do motivo. Os mais antigos não são cobrados.
+  if (atual && leadCobraMotivo(atual.createdAt) && statusExigeMotivo(statusNovo)) {
+    const motivo = 'motivoDesqualificacao' in patch ? patch.motivoDesqualificacao : atual.motivoDesqualificacao
+    return motivoValido(motivo) ? null : { campo: 'motivoDesqualificacao', status: statusNovo }
+  }
+  const aba = leadPagesService.getAll().find((p) => p.id === quadroDestino.page)
+  if (!abaComRegraDeStatus(aba?.name ?? '', quadroDestino.page)) return null
   const campo = campoExigidoPeloStatus(statusNovo)
   return campo ? { campo, status: statusNovo } : null
+}
+
+/** O patch já traz o dado exigido, válido? */
+function patchTrazODado(patch: Partial<LeadRow>, campo: CampoExigido): boolean {
+  return campo === 'motivoDesqualificacao' ? motivoValido(patch.motivoDesqualificacao) : temDataEHora(patch[campo] as string | undefined)
 }
 
 export const leadBoardsService = {
@@ -383,7 +397,7 @@ export const leadBoardsService = {
    * pede antes a data e o horário (sem confirmar, não cria). */
   async createRowComRegra(boardId: string, initial: Partial<LeadRow>): Promise<LeadRow | null> {
     const exig = exigenciaDaMudanca(null, { ...initial, boardId })
-    if (exig && pedirDadoDoStatus && !temDataEHora(initial[exig.campo] as string | undefined)) {
+    if (exig && pedirDadoDoStatus && !patchTrazODado(initial, exig.campo)) {
       const valor = await pedirDadoDoStatus({ nome: initial.nome || 'Lead novo', campo: exig.campo, status: exig.status, valorAtual: '' })
       if (!valor) return null
       return leadBoardsService.createRow(boardId, { ...initial, [exig.campo]: valor })
@@ -423,7 +437,7 @@ export const leadBoardsService = {
     // Entrando em "Reunião agendada"/"Proposta enviada" (CRM do Arthur/Luis): antes pede a data e o horário no
     // popup. Sem confirmar, o lead fica onde estava. Se o próprio patch já traz o dado, segue direto.
     const exig = exigenciaDaMudanca(prev, patch)
-    if (exig && pedirDadoDoStatus && !temDataEHora(patch[exig.campo] as string | undefined)) {
+    if (exig && pedirDadoDoStatus && !patchTrazODado(patch, exig.campo)) {
       void pedirDadoDoStatus({ nome: prev.nome || prev.empresa || 'Lead sem nome', campo: exig.campo, status: exig.status, valorAtual: prev[exig.campo] })
         .then((valor) => { if (valor) leadBoardsService.updateRow(id, { ...patch, [exig.campo]: valor }) })
       return

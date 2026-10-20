@@ -208,14 +208,27 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
  */
 async function faltaDadoDoStatus(
   leadId: string, patch: Record<string, unknown>,
-): Promise<{ campo: 'agendamento' | 'retornar'; mensagem: string } | null> {
+): Promise<{ campo: 'agendamento' | 'retornar' | 'motivo_desqualificacao'; mensagem: string } | null> {
   if (typeof patch.status !== 'string') return null;
-  const atual = await queryOne<{ status: string; agendamento: string; retornar: string; board_id: string }>(
-    'SELECT status, agendamento, retornar, board_id FROM lead_rows WHERE id = $1', [leadId]
+  const atual = await queryOne<{ status: string; agendamento: string; retornar: string; board_id: string; motivo_desqualificacao: string; cobra_motivo: boolean }>(
+    `SELECT status, agendamento, retornar, board_id, motivo_desqualificacao,
+            (created_at >= TIMESTAMPTZ '2026-10-01 00:00:00-03') AS cobra_motivo
+     FROM lead_rows WHERE id = $1`, [leadId]
   );
   if (!atual) return null;
   const novo = normalizaNome(patch.status);
   if (novo === normalizaNome(atual.status ?? '')) return null;
+  // Lead que entrou de 01/10/2026 pra frente (anúncio ou manual) indo pra Disparo em massa / Perdidos /
+  // Desqualificado: motivo obrigatório (em qualquer aba). "Outro" só vale com o motivo escrito (mínimo 5 letras).
+  // Os mais antigos não são cobrados.
+  if (atual.cobra_motivo && (novo.includes('disparoemmassa') || novo.includes('perdido') || novo.includes('desqualificad'))) {
+    const motivo = String('motivo_desqualificacao' in patch ? patch.motivo_desqualificacao ?? '' : atual.motivo_desqualificacao ?? '').trim();
+    const valido = !!motivo && motivo !== 'Outro' && (!motivo.startsWith('Outro') || motivo.replace(/^Outro:?/, '').trim().length >= 5);
+    if (!valido) {
+      return { campo: 'motivo_desqualificacao', mensagem: 'Pra tirar esse lead do funil, escolha o motivo da desqualificação (em "Outro", escreva o motivo com pelo menos 5 letras).' };
+    }
+    return null;
+  }
   const campo = novo.includes('reuniaoagendada') ? 'agendamento' : novo.includes('propostaenviada') ? 'retornar' : null;
   if (!campo) return null;
   const aba = await queryOne<{ id: string; name: string }>(
@@ -464,7 +477,7 @@ const ESPELHO_PAGE_DESTINO = 'crm-luis-closer';
 const ESPELHO_CAMPOS = [
   'nome', 'tipo', 'empresa', 'telefone', 'dia_contato', 'ligacao', 'agendamento', 'retornar',
   'retornado', 'responsavel', 'sdr', 'numero', 'dor_cliente', 'numero_atendentes',
-  'valor_mrr', 'valor_implementacao', 'observacoes', 'fechamento',
+  'valor_mrr', 'valor_implementacao', 'observacoes', 'fechamento', 'origem',
 ];
 
 /** "Reunião agendada"/"REUNIÃO AGENDADA" — nome do quadro varia de CRM pra CRM. "Reunião não

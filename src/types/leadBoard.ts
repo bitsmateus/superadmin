@@ -52,6 +52,8 @@ export interface LeadRow {
   followup: string
   /** Cadência do quadro "Disparo em massa" (D7, D14, D30…) — mesmos CRMs. */
   disparo: string
+  /** De onde o lead veio (meta, bio, site, indicacao, outros). Vazio = não informado; lead com anúncio ligado é Meta. */
+  origem: string
   /** Nicho REAL do lead (resposta do formulário do Meta ou marcado à mão) — aba Tráfego compara com o mirado. */
   nicho: string
   /** Motivo (lista fechada) de o lead ter sido desqualificado — vazio = lead válido. */

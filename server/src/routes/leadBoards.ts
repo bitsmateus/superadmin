@@ -207,7 +207,7 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
  *  - Lead que entrou de 01/10/2026 pra frente indo pra Disparo em massa / Perdidos / Desqualificado (qualquer aba):
  *    motivo da desqualificação ("Outro" só com o motivo escrito, mínimo 5 letras).
  *  - CRMs do Arthur e do Luis (inclui o Closer):
- *      Reunião agendada → dia e horário do agendamento + origem;
+ *      Reunião agendada → dia e horário do agendamento + por onde foi agendado + origem;
  *      Proposta enviada → dia e horário em "Retornar" + valor MRR + valor de implementação;
  *      Vendido          → valor MRR + valor de implementação + origem.
  *    (Origem de lead que veio do anúncio já é Meta. Valor em R$ precisa ter sido digitado — R$ 0,00 conta.)
@@ -218,7 +218,7 @@ async function faltaDadoDoStatus(
 ): Promise<{ campos: string[]; mensagem: string } | null> {
   if (typeof patch.status !== 'string') return null;
   const atual = await queryOne<Record<string, unknown> & { status: string; board_id: string; cobra_motivo: boolean; do_anuncio: boolean }>(
-    `SELECT status, board_id, agendamento, retornar, origem, valor_mrr, valor_implementacao, motivo_desqualificacao,
+    `SELECT status, board_id, agendamento, agendado_por, retornar, origem, valor_mrr, valor_implementacao, motivo_desqualificacao,
             (meta_lead_id IS NOT NULL OR meta_campaign_id IS NOT NULL OR meta_ad_id IS NOT NULL) AS do_anuncio,
             (created_at >= TIMESTAMPTZ '2026-10-01 00:00:00-03') AS cobra_motivo
      FROM lead_rows WHERE id = $1`, [leadId]
@@ -242,7 +242,7 @@ async function faltaDadoDoStatus(
     };
   }
 
-  const exige = novo.includes('reuniaoagendada') ? { rotulo: 'Reunião agendada', campos: ['agendamento', 'origem'] }
+  const exige = novo.includes('reuniaoagendada') ? { rotulo: 'Reunião agendada', campos: ['agendamento', 'agendado_por', 'origem'] }
     : novo.includes('propostaenviada') ? { rotulo: 'Proposta enviada', campos: ['retornar', 'valor_mrr', 'valor_implementacao'] }
     : novo.startsWith('vendido') ? { rotulo: 'Vendido', campos: ['valor_mrr', 'valor_implementacao', 'origem'] }
     : null;
@@ -254,13 +254,14 @@ async function faltaDadoDoStatus(
   if (!aba || !(/(arthur|lu[ií]s)/i.test(aba.name) || /(arthur|luis)/i.test(aba.id))) return null;
 
   const NOMES: Record<string, string> = {
-    agendamento: 'dia e horário do agendamento', retornar: 'dia e horário em "Retornar"', origem: 'origem do lead',
+    agendamento: 'dia e horário do agendamento', agendado_por: 'por onde foi agendado', retornar: 'dia e horário em "Retornar"', origem: 'origem do lead',
     valor_mrr: 'valor MRR', valor_implementacao: 'valor de implementação',
   };
   const faltando = exige.campos.filter((c) => {
     const v = final(c);
     if (c === 'agendamento' || c === 'retornar') return !dataEHora(v);
     // Origem: uma da lista; "outros" só vale com o texto escrito (mínimo 5 letras). Lead do anúncio já é Meta.
+    if (c === 'agendado_por') return !v;
     if (c === 'origem') return !atual.do_anuncio && (!v || (/^outros/i.test(v) && v.replace(/^outros:?/i, '').trim().length < 5));
     return !/\d/.test(v);
   });
@@ -499,7 +500,7 @@ const ESPELHO_PAGE_DESTINO = 'crm-luis-closer';
 const ESPELHO_CAMPOS = [
   'nome', 'tipo', 'empresa', 'telefone', 'dia_contato', 'ligacao', 'agendamento', 'retornar',
   'retornado', 'responsavel', 'sdr', 'numero', 'dor_cliente', 'numero_atendentes',
-  'valor_mrr', 'valor_implementacao', 'observacoes', 'fechamento', 'origem',
+  'valor_mrr', 'valor_implementacao', 'observacoes', 'fechamento', 'origem', 'agendado_por',
 ];
 
 /** "Reunião agendada"/"REUNIÃO AGENDADA" — nome do quadro varia de CRM pra CRM. "Reunião não

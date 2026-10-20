@@ -1125,6 +1125,8 @@ END; $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS motivo_desqualificacao TEXT NOT NULL DEFAULT ''`);
   // De onde o lead veio: meta (anúncio), bio, site, indicacao, outros. Quem chegou pelo anúncio já é marcado meta.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS origem TEXT NOT NULL DEFAULT ''`);
+  // Por onde a reunião foi agendada (WhatsApp Business SDR, WhatsApp Comercial, Ligação, Social Selling, Outbound).
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS agendado_por TEXT NOT NULL DEFAULT ''`);
   await pool.query(`UPDATE lead_rows SET origem = 'meta' WHERE origem = '' AND (meta_lead_id IS NOT NULL OR meta_campaign_id IS NOT NULL OR meta_ad_id IS NOT NULL)`);
   // Nicho REAL do lead: a resposta da pergunta de segmento do formulário do Meta (cai em qualificacao).
   // Idempotente: só toca em lead ainda sem nicho cuja qualificação tem uma chave de segmento.

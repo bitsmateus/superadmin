@@ -21,6 +21,7 @@ import {
   Paperclip,
   Pencil,
   Phone,
+  PhoneCall,
   Send,
   Sparkles,
   Trash2,
@@ -47,6 +48,7 @@ import { useLeadEvents } from '@/hooks/useLeadEvents'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useTeam, teamMemberLabel, type TeamMember } from '@/hooks/useTeam'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
+import { CANAIS_DE_AGENDAMENTO } from '@/lib/regraDoStatus'
 import { leadBoardsService } from '@/services/leadBoards'
 import { LeadOrigemBlock } from '@/components/comercial/LeadOrigemBlock'
 import { leadNotesService } from '@/services/leadNotes'
@@ -354,6 +356,24 @@ function LeadDetailModalInner({
                 className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
               />
             </FieldRow>
+            {!modoSimples && (
+              <FieldRow icon={<PhoneCall className="h-3.5 w-3.5" />} label="Agendado por">
+                <select
+                  value={row.agendadoPor}
+                  onChange={(e) => leadBoardsService.updateRow(row.id, { agendadoPor: e.target.value })}
+                  className={cn(
+                    'w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm outline-none',
+                    row.agendadoPor ? 'text-foreground' : 'text-foreground/40',
+                  )}
+                >
+                  <option value="">Selecionar…</option>
+                  {!CANAIS_DE_AGENDAMENTO.includes(row.agendadoPor as (typeof CANAIS_DE_AGENDAMENTO)[number]) && row.agendadoPor && (
+                    <option value={row.agendadoPor}>{row.agendadoPor}</option>
+                  )}
+                  {CANAIS_DE_AGENDAMENTO.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </FieldRow>
+            )}
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label={modoSimples ? 'Finalizar' : 'Retornar'}>
               <RetornarField
                 value={row.retornar}

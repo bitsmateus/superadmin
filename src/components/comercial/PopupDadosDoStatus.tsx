@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { registrarPedidoDeDadoDoStatus, type PedidoDeDadoDoStatus, type RespostaDoPedido } from '@/services/leadBoards'
 import {
-  MINIMO_DETALHE_MOTIVO, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, campoOk,
+  CANAIS_DE_AGENDAMENTO, MINIMO_DETALHE_MOTIVO, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, campoOk,
   juntarMotivo, origemEhOutros, separarMotivo, textoDaOrigemOutros, type CampoDoPopup,
 } from '@/lib/regraDoStatus'
 import { prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
@@ -14,6 +14,7 @@ type Pedido = PedidoDeDadoDoStatus & { responder: (resposta: RespostaDoPedido | 
 
 const ROTULO: Record<CampoDoPopup, string> = {
   agendamento: 'Dia e horário da reunião',
+  agendadoPor: 'Agendado por onde?',
   retornar: 'Dia e horário do retorno',
   origem: 'De onde o lead veio?',
   valorMrr: 'Valor MRR',
@@ -127,6 +128,12 @@ export function PopupDadosDoStatus() {
                 <BellRing className="mt-px h-3.5 w-3.5 shrink-0" />
                 Não esqueça de enviar o link pro lead e colocar na agenda.
               </p>
+            )}
+            {c === 'agendadoPor' && (
+              <select value={texto[c] ?? ''} autoFocus={i === 0} onChange={(e) => setTexto((x) => ({ ...x, [c]: e.target.value }))} className={campoCls}>
+                <option value="">Escolha por onde foi agendado…</option>
+                {CANAIS_DE_AGENDAMENTO.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
             )}
             {c === 'origem' && (
               <>

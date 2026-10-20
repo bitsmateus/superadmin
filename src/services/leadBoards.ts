@@ -43,7 +43,7 @@ function boardToRow(patch: Partial<LeadBoard>): Record<string, unknown> {
 }
 
 type LeadRowRow = {
-  id: string; board_id: string; nome: string; tipo: string; etiqueta?: string; followup?: string; disparo?: string; origem?: string; nicho?: string; motivo_desqualificacao?: string; empresa: string; telefone: string
+  id: string; board_id: string; nome: string; tipo: string; etiqueta?: string; followup?: string; disparo?: string; origem?: string; agendado_por?: string; nicho?: string; motivo_desqualificacao?: string; empresa: string; telefone: string
   dia_contato: string; ligacao: string; status: string; agendamento: string; retornar: string; retornado: boolean
   responsavel: string
   sdr: string; numero: string; dor_cliente: string; numero_atendentes: string; valor_mrr: string
@@ -65,7 +65,7 @@ type LeadRowRow = {
 }
 function rowToLead(r: LeadRowRow): LeadRow {
   return {
-    id: r.id, boardId: r.board_id, nome: r.nome, tipo: r.tipo, etiqueta: r.etiqueta ?? '', followup: r.followup ?? '', disparo: r.disparo ?? '', origem: r.origem ?? '', nicho: r.nicho ?? '', motivoDesqualificacao: r.motivo_desqualificacao ?? '', empresa: r.empresa,
+    id: r.id, boardId: r.board_id, nome: r.nome, tipo: r.tipo, etiqueta: r.etiqueta ?? '', followup: r.followup ?? '', disparo: r.disparo ?? '', origem: r.origem ?? '', agendadoPor: r.agendado_por ?? '', nicho: r.nicho ?? '', motivoDesqualificacao: r.motivo_desqualificacao ?? '', empresa: r.empresa,
     telefone: r.telefone, diaContato: r.dia_contato, ligacao: r.ligacao, status: r.status,
     agendamento: r.agendamento ?? '', retornar: r.retornar,
     retornado: r.retornado ?? false,
@@ -99,6 +99,7 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('followup' in patch) row.followup = patch.followup
   if ('disparo' in patch) row.disparo = patch.disparo
   if ('origem' in patch) row.origem = patch.origem
+  if ('agendadoPor' in patch) row.agendado_por = patch.agendadoPor
   if ('nicho' in patch) row.nicho = patch.nicho
   if ('motivoDesqualificacao' in patch) row.motivo_desqualificacao = patch.motivoDesqualificacao
   if ('empresa' in patch) row.empresa = patch.empresa
@@ -246,7 +247,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
   const position = boardRows.length ? Math.max(...boardRows.map((r) => r.position)) + 1 : 0
   const now = new Date().toISOString()
   const row: LeadRow = {
-    id: uuid(), boardId, nome: '', tipo: '', etiqueta: '', followup: '', disparo: '', origem: '', nicho: '', motivoDesqualificacao: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
+    id: uuid(), boardId, nome: '', tipo: '', etiqueta: '', followup: '', disparo: '', origem: '', agendadoPor: '', nicho: '', motivoDesqualificacao: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
     status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
     dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
     fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, closer: '',
@@ -320,7 +321,7 @@ function exigenciaDaMudanca(atual: LeadParaRegra | null, patch: Partial<LeadRow>
 function valoresDoLead(l: Partial<LeadRow> | null): Partial<Record<CampoDoPopup, string>> {
   if (!l) return {}
   return {
-    agendamento: l.agendamento ?? '', retornar: l.retornar ?? '', origem: l.origem ?? '',
+    agendamento: l.agendamento ?? '', agendadoPor: l.agendadoPor ?? '', retornar: l.retornar ?? '', origem: l.origem ?? '',
     valorMrr: l.valorMrr ?? '', valorImplementacao: l.valorImplementacao ?? '', motivoDesqualificacao: l.motivoDesqualificacao ?? '',
   }
 }

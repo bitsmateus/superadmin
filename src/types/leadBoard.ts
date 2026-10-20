@@ -65,6 +65,8 @@ export interface LeadRow {
   status: string
   /** Dia em que o SDR agendou a reunião com o lead. */
   agendamento: string
+  /** Por onde a reunião foi agendada (WhatsApp Business SDR, WhatsApp Comercial, Ligação, Social Selling, Outbound). */
+  agendadoPor: string
   retornar: string
   retornado: boolean
   responsavel: string

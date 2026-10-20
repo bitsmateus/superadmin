@@ -96,7 +96,10 @@ export function temDataEHora(valor: string | null | undefined): boolean {
 }
 
 /** Campos que o popup sabe pedir. */
-export type CampoDoPopup = 'agendamento' | 'retornar' | 'origem' | 'valorMrr' | 'valorImplementacao' | 'motivoDesqualificacao'
+export type CampoDoPopup = 'agendamento' | 'agendadoPor' | 'retornar' | 'origem' | 'valorMrr' | 'valorImplementacao' | 'motivoDesqualificacao'
+
+/** Por onde a reunião foi agendada (campo "Agendado por" da ficha). */
+export const CANAIS_DE_AGENDAMENTO = ['WhatsApp Business SDR', 'WhatsApp Comercial', 'Ligação', 'Social Selling', 'Outbound'] as const
 
 /** O campo está preenchido do jeito que a regra pede? (Valor em R$: precisa ter sido digitado — R$ 0,00 conta.) */
 export function campoOk(campo: CampoDoPopup, valor: string | null | undefined): boolean {
@@ -114,7 +117,7 @@ export function campoOk(campo: CampoDoPopup, valor: string | null | undefined): 
  */
 export function exigenciasDoStatus(statusOuQuadro: string): { sempre: CampoDoPopup[]; seFaltar: CampoDoPopup[] } | null {
   const n = normaliza(statusOuQuadro)
-  if (n.includes('reuniaoagendada')) return { sempre: ['agendamento'], seFaltar: ['origem'] }
+  if (n.includes('reuniaoagendada')) return { sempre: ['agendamento', 'agendadoPor'], seFaltar: ['origem'] }
   if (n.includes('propostaenviada')) return { sempre: ['retornar'], seFaltar: ['valorMrr', 'valorImplementacao'] }
   if (n.startsWith('vendido')) return { sempre: [], seFaltar: ['valorMrr', 'valorImplementacao', 'origem'] }
   return null

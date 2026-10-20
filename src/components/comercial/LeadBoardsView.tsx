@@ -25,7 +25,6 @@ import {
   Search,
   StickyNote,
   Trash2,
-  Send,
   Upload,
   UserRound,
   X,
@@ -37,7 +36,6 @@ import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
-import { SimularLeadModal } from '@/components/comercial/SimularLeadModal'
 import { PageActivityLogModal } from '@/components/comercial/PageActivityLogModal'
 import { DemandaTopo } from '@/components/comercial/DemandaTopo'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
@@ -1377,7 +1375,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   const [filterRules, setFilterRules] = React.useState<FilterRule[]>([])
   const [filtersOpen, setFiltersOpen] = React.useState(false)
   const [logOpen, setLogOpen] = React.useState(false)
-  const [simularOpen, setSimularOpen] = React.useState(false)
   const [boardModalOpen, setBoardModalOpen] = React.useState(false)
   const [importModalOpen, setImportModalOpen] = React.useState(false)
   const [trashModalOpen, setTrashModalOpen] = React.useState(false)
@@ -1527,15 +1524,20 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   }, [boards, visibleRows, search])
 
   // Kanban/Dashboard é uma preferência do usuário/navegador, vale pras 3 telas do Comercial.
-  const [view, setView] = React.useState<'list' | 'kanban' | 'dashboard'>(() => {
+  const [viewEscolhida, setView] = React.useState<'list' | 'kanban' | 'dashboard'>(() => {
     try {
       const stored = window.localStorage.getItem('comercial_view_mode')
       return stored === 'kanban' || stored === 'dashboard' ? stored : 'list'
     } catch { return 'list' }
   })
   React.useEffect(() => {
-    try { window.localStorage.setItem('comercial_view_mode', view) } catch { /* ignore */ }
-  }, [view])
+    try { window.localStorage.setItem('comercial_view_mode', viewEscolhida) } catch { /* ignore */ }
+  }, [viewEscolhida])
+  // Novos Leads é só a porta de entrada: fica SEMPRE em lista, sem Kanban, Dashboard, filtro de SDR nem
+  // "Simular lead". A preferência de visão das outras abas continua guardada, só não vale aqui.
+  const soLista = page === 'novos_leads'
+  const view: 'list' | 'kanban' | 'dashboard' = soLista ? 'list' : viewEscolhida
+  React.useEffect(() => { if (soLista) setSdrFilter(null) }, [soLista])
   const VIEW_LABEL: Record<'list' | 'kanban' | 'dashboard', string> = {
     list: 'lista', kanban: 'Kanban', dashboard: sdrLock ? 'Minhas métricas' : 'Dashboard',
   }
@@ -1592,6 +1594,8 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   className="h-9 w-full rounded-md border border-line bg-card pl-9 pr-2 text-sm sm:w-44 text-foreground placeholder:text-foreground/40 focus:border-accent/60 focus:outline-none"
                 />
               </div>
+              {!soLista && (
+              <>
               <ToolbarButton
                 icon={<LayoutDashboard className="h-3.5 w-3.5" />}
                 onClick={() => changeView('dashboard')}
@@ -1627,6 +1631,8 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                 </button>
               </div>
               <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />
+              </>
+              )}
               <ToolbarButton
                 icon={<Filter className="h-3.5 w-3.5" />}
                 onClick={() => setFiltersOpen(true)}
@@ -1641,15 +1647,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               >
                 Log
               </ToolbarButton>
-              {page === 'novos_leads' && (
-                <ToolbarButton
-                  icon={<Send className="h-3.5 w-3.5" />}
-                  onClick={() => setSimularOpen(true)}
-                  title="Criar um lead de teste e enviar a mensagem de boas-vindas"
-                >
-                  Simular lead
-                </ToolbarButton>
-              )}
             </div>
 
             {boards.length === 0 ? (
@@ -1761,7 +1758,6 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
       )}
       <LeadTrashModal open={trashModalOpen} onClose={() => setTrashModalOpen(false)} boards={boards} />
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} modoSimples={hideIanMateusCols} />
-      <SimularLeadModal open={simularOpen} onClose={() => setSimularOpen(false)} onCreated={() => {}} />
       <PageActivityLogModal
         open={logOpen}
         onClose={() => setLogOpen(false)}

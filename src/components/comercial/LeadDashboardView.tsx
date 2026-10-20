@@ -7,6 +7,7 @@ import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
 import { ClickableStat } from '@/components/comercial/ClickableStat'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
+import { diaLocal } from '@/lib/diaLocal'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 /** Etiquetas de Status que "contam" pro funil do SDR — precisam bater com o texto exato
@@ -242,16 +243,166 @@ function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMet
   )
 }
 
+const DIAS_DA_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
+
+/**
+ * DIA A DIA — uma linha por dia do período, como numa planilha. Aqui cada coisa conta no dia em que ACONTECEU:
+ * o lead no dia em que entrou, o agendamento no dia em que a reunião foi marcada (o primeiro — reagendar não conta
+ * de novo), a falta e a venda no dia em que o lead virou "não compareceu" / "Vendido". Por isso a soma pode ser
+ * diferente da tabela de cima, que acompanha só a leva de leads que entrou no período.
+ */
+function MetricasPorDia({
+  rows, boards, onOpenLead, bounds, milestoneById,
+}: {
+  rows: LeadRow[]
+  boards: LeadBoard[]
+  onOpenLead: (id: string) => void
+  bounds: { from: string; to: string }
+  milestoneById: Map<string, { milestone: string | null; milestoneAt: string | null; firstAgendadaAt: string | null }>
+}) {
+  const hoje = diaLocal(new Date().toISOString())
+  const dias = React.useMemo(() => {
+    const fim = bounds.to && bounds.to < hoje ? bounds.to : hoje
+    const lista: string[] = []
+    if (!bounds.from) return lista
+    const [y, m, d] = bounds.from.split('-').map(Number)
+    for (let data = new Date(y, m - 1, d); lista.length < 400; data.setDate(data.getDate() + 1)) {
+      const iso = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`
+      if (iso > fim) break
+      lista.push(iso)
+    }
+    return lista
+  }, [bounds.from, bounds.to, hoje])
+
+  const porDia = React.useMemo(() => {
+    const mapa = new Map<string, { leads: LeadRow[]; agendados: LeadRow[]; noShow: LeadRow[]; vendas: LeadRow[] }>()
+    for (const dia of dias) mapa.set(dia, { leads: [], agendados: [], noShow: [], vendas: [] })
+    const no = (iso: string | null | undefined) => (iso ? mapa.get(diaLocal(iso)) : undefined)
+    for (const r of rows) {
+      no(r.createdAt)?.leads.push(r)
+      const info = milestoneById.get(r.id)
+      if (!info) continue
+      no(info.firstAgendadaAt)?.agendados.push(r)
+      if (info.milestone === MILESTONE_NO_SHOW) no(info.milestoneAt)?.noShow.push(r)
+      else if (info.milestone === MILESTONE_VENDIDO) no(info.milestoneAt)?.vendas.push(r)
+    }
+    return mapa
+  }, [rows, milestoneById, dias])
+
+  const total = React.useMemo(() => {
+    const t = { leads: 0, agendados: 0, noShow: 0, vendas: 0 }
+    for (const v of porDia.values()) {
+      t.leads += v.leads.length; t.agendados += v.agendados.length; t.noShow += v.noShow.length; t.vendas += v.vendas.length
+    }
+    return t
+  }, [porDia])
+
+  if (dias.length === 0) return null
+
+  const celula = (lista: LeadRow[], cor: string) =>
+    lista.length === 0 ? (
+      <span className="text-foreground/25">0</span>
+    ) : (
+      <ClickableStat matches={lista} boards={boards} onOpenLead={onOpenLead}>
+        {(onClick, ref) => (
+          <button
+            ref={ref}
+            type="button"
+            onClick={onClick}
+            title="Ver quem é"
+            className={cn('min-w-[2rem] rounded-md px-2 py-0.5 font-semibold tabular-nums transition-colors hover:bg-elevate/[0.08]', cor)}
+          >
+            {lista.length}
+          </button>
+        )}
+      </ClickableStat>
+    )
+
+  return (
+    <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
+      <div className="border-b border-line px-4 py-3">
+        <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Calendar className="h-4 w-4 text-accent" /> Dia a dia
+        </p>
+        <p className="mt-0.5 text-xs text-foreground/45">
+          Cada número conta no dia em que aconteceu (o lead no dia em que entrou, o agendamento no dia em que foi marcado, a
+          falta e a venda no dia do desfecho). Clique num número pra ver quem é.
+        </p>
+      </div>
+      <div className="max-h-[520px] overflow-auto">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead className="sticky top-0 z-10 bg-card">
+            <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+              <th className="px-4 py-2.5">Dia</th>
+              <th className="px-3 py-2.5 text-center">Leads que entraram</th>
+              <th className="px-3 py-2.5 text-center">Agendamentos</th>
+              <th className="px-3 py-2.5 text-center">Não compareceu</th>
+              <th className="px-3 py-2.5 text-center">Vendas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dias.map((dia) => {
+              const v = porDia.get(dia)!
+              const [y, m, d] = dia.split('-').map(Number)
+              const semana = DIAS_DA_SEMANA[new Date(y, m - 1, d).getDay()]
+              const fimDeSemana = semana === 'sáb' || semana === 'dom'
+              const vazio = v.leads.length + v.agendados.length + v.noShow.length + v.vendas.length === 0
+              return (
+                <tr
+                  key={dia}
+                  className={cn(
+                    'border-b border-line/60 last:border-0',
+                    dia === hoje ? 'bg-accent/[0.06]' : fimDeSemana && 'bg-elevate/[0.025]',
+                    vazio && 'text-foreground/40',
+                  )}
+                >
+                  <td className="whitespace-nowrap px-4 py-1.5 tabular-nums">
+                    <span className="font-medium text-foreground">{String(d).padStart(2, '0')}/{String(m).padStart(2, '0')}</span>
+                    <span className="ml-1.5 text-xs text-foreground/45">{semana}</span>
+                    {dia === hoje && <span className="ml-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">hoje</span>}
+                  </td>
+                  <td className="px-3 py-1.5 text-center">{celula(v.leads, 'text-foreground')}</td>
+                  <td className="px-3 py-1.5 text-center">{celula(v.agendados, 'text-accent')}</td>
+                  <td className="px-3 py-1.5 text-center">{celula(v.noShow, 'text-warning')}</td>
+                  <td className="px-3 py-1.5 text-center">{celula(v.vendas, 'text-success')}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot className="sticky bottom-0 bg-card">
+            <tr className="border-t-2 border-line text-sm font-semibold text-foreground">
+              <td className="px-4 py-2.5">Total do período</td>
+              <td className="px-3 py-2.5 text-center tabular-nums">{total.leads}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-accent">{total.agendados}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-warning">{total.noShow}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-success">{total.vendas}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 /** Métricas por SDR. "Reunião agendada" conta todo lead que JÁ passou por esse marco em algum
  * momento (mesmo se hoje já virou Vendido/No-show) — é o denominador do funil. "No-show" e
  * "Vendas" usam sempre o marco mais recente da linha do tempo de cada lead, não o status literal
  * atual, pra não contar duas vezes reagendamentos. */
-export function SdrMetricsGrid({ rows, boards, onOpenLead, title }: { rows: LeadRow[]; boards: LeadBoard[]; onOpenLead: (id: string) => void; title?: string }) {
+export function SdrMetricsGrid({
+  rows, boards, onOpenLead, title, mostrarPorDia = false,
+}: {
+  rows: LeadRow[]; boards: LeadBoard[]; onOpenLead: (id: string) => void; title?: string
+  /** CRM do SDR (Arthur/Luis): acrescenta a tabela "Dia a dia" embaixo. */
+  mostrarPorDia?: boolean
+}) {
   const milestones = useLeadMilestones()
   const sdrLabels = useLeadLabels('sdr')
   const milestoneById = React.useMemo(
     () => new Map(milestones.map((m) => [
-      m.id, { milestone: m.milestone, everAgendada: m.everAgendada, everCompareceu: m.everCompareceu },
+      m.id, {
+        milestone: m.milestone, everAgendada: m.everAgendada, everCompareceu: m.everCompareceu,
+        milestoneAt: m.milestoneAt, firstAgendadaAt: m.firstAgendadaAt,
+      },
     ])),
     [milestones],
   )
@@ -331,6 +482,9 @@ export function SdrMetricsGrid({ rows, boards, onOpenLead, title }: { rows: Lead
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {bySdr.map((m) => <SdrCard key={m.sdr} metrics={m} boards={boards} onOpenLead={onOpenLead} />)}
       </div>
+      {mostrarPorDia && (
+        <MetricasPorDia rows={rows} boards={boards} onOpenLead={onOpenLead} bounds={monthFilter.bounds} milestoneById={milestoneById} />
+      )}
     </div>
   )
 }
@@ -430,7 +584,7 @@ export function LeadDashboardView({ rows, boards, onOpenLead, sdrTabLabel = 'Das
       )}
 
       {(onlySdr || subView === 'sdr') ? (
-        <SdrMetricsGrid rows={rows} boards={boards} onOpenLead={onOpenLead} />
+        <SdrMetricsGrid rows={rows} boards={boards} onOpenLead={onOpenLead} mostrarPorDia={onlySdr} />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

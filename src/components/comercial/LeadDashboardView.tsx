@@ -284,8 +284,8 @@ function AgendamentosPorCanal({
   const { porCanal, porQuem, total, textosOutro } = React.useMemo(() => {
     const mapa = new Map<string, LeadRow[]>()
     for (const c of [...CANAIS_DE_AGENDAMENTO, NAO_INFORMADO]) mapa.set(c, [])
-    // Quem marcou: o autor da 1ª mudança pra "Reunião agendada". Por enquanto só os dois SDRs; o resto vai em "Outros".
-    const quem = new Map<string, LeadRow[]>([['SDR Arthur', []], ['SDR Luis', []]])
+    // Quem marcou: o autor da 1ª mudança pra "Reunião agendada". Os dois SDRs e a IA Luiza; o resto vai em "Outros".
+    const quem = new Map<string, LeadRow[]>([['SDR Arthur', []], ['SDR Luis', []], ['IA Luiza', []]])
     const textos: string[] = []
     let n = 0
     for (const r of rows) {
@@ -300,7 +300,7 @@ function AgendamentosPorCanal({
       if (canal === 'Outro') textos.push(`${textoDoAgendadoOutro(v) || v} (${r.nome || r.empresa || 'sem nome'})`)
       mapa.get(canal)!.push(r)
       const autor = milestoneById.get(r.id)?.firstAgendadaBy ?? ''
-      const pessoa = /arthur/i.test(autor) ? 'SDR Arthur' : /lu[ií]s/i.test(autor) ? 'SDR Luis' : autor ? 'Outros' : NAO_INFORMADO
+      const pessoa = /luiza/i.test(autor) ? 'IA Luiza' : /arthur/i.test(autor) ? 'SDR Arthur' : /lu[ií]s/i.test(autor) ? 'SDR Luis' : autor ? 'Outros' : NAO_INFORMADO
       quem.set(pessoa, [...(quem.get(pessoa) ?? []), r])
       n++
     }
@@ -397,8 +397,8 @@ function AgendamentosPorCanal({
         <p className="mb-2 mt-5 border-t border-line pt-3 text-xs font-semibold uppercase tracking-wide text-foreground/50">Por quem agendou</p>
         <ul className="space-y-1.5">
           {Array.from(porQuem.entries())
-            // Os dois SDRs sempre aparecem; "Outros" e "Não informado" só quando tiver alguém.
-            .filter(([p, l]) => p === 'SDR Arthur' || p === 'SDR Luis' || l.length > 0)
+            // Os dois SDRs e a IA Luiza sempre aparecem; "Outros" e "Não informado" só quando tiver alguém.
+            .filter(([p, l]) => p === 'SDR Arthur' || p === 'SDR Luis' || p === 'IA Luiza' || l.length > 0)
             .map(([pessoa, lista]) => {
               const n = lista.length
               const pct = total > 0 ? Math.round((n / total) * 100) : 0

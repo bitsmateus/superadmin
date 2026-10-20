@@ -1023,8 +1023,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const b = req.body;
       const id = (b.id as string) || uuidv4();
       const page = (b.page as string) || 'novos_leads';
-      // Usuário com acesso restrito pode criar quadros (colunas) nas abas que ele acessa — o acesso
-      // aos quadros é herdado da aba, então o quadro novo já nasce visível pra ele.
+      // Criar quadro (coluna) é só do admin — o usuário trabalha nos quadros que já existem no CRM dele.
+      if (role !== 'admin') return reply.status(403).send({ message: 'Só um admin pode criar quadro' });
       const abasPermitidas = await allowedPageIds(sub, role);
       if (abasPermitidas !== null && !abasPermitidas.includes(page)) {
         return reply.status(403).send({ message: 'Acesso negado' });

@@ -1496,7 +1496,11 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   }
 
   const handleCreateNome = () => {
-    if (!boards.length) { setBoardModalOpen(true); return }
+    if (!boards.length) {
+      if (isAdmin) setBoardModalOpen(true)
+      else toast.error('Esta aba ainda não tem quadro. Peça pra um admin criar.')
+      return
+    }
     handleCreateRow(boards[0].id)
   }
 
@@ -1666,8 +1670,8 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               <EmptyState
                 icon={<Rows3 className="h-5 w-5" />}
                 title="Nenhum quadro criado ainda"
-                description="Crie o primeiro quadro para começar a registrar leads."
-                action={<Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button>}
+                description={isAdmin ? 'Crie o primeiro quadro para começar a registrar leads.' : 'Peça pra um admin criar o primeiro quadro desta aba.'}
+                action={isAdmin ? <Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button> : undefined}
               />
             ) : view === 'dashboard' && page === 'crm-luis-closer' ? (
               <CloserMetricsGrid rows={visibleRows} boards={boards} onOpenLead={setOpenLeadId} />
@@ -1711,14 +1715,17 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                       crmArthurLuis={crmArthurLuis}
                     />
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => setBoardModalOpen(true)}
-                    className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-line text-xs font-medium text-foreground/40 transition-colors hover:border-accent/50 hover:bg-accent/[0.03] hover:text-accent"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Novo quadro
-                  </button>
+                  {/* Criar quadro é só do admin — o usuário trabalha nos quadros que já existem no CRM dele. */}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setBoardModalOpen(true)}
+                      className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-line text-xs font-medium text-foreground/40 transition-colors hover:border-accent/50 hover:bg-accent/[0.03] hover:text-accent"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Novo quadro
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setTrashModalOpen(true)}
@@ -1766,7 +1773,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
             </div>
           }
         >
-          <LeadImportModal open={importModalOpen} onClose={() => setImportModalOpen(false)} page={page} boards={boards} />
+          <LeadImportModal open={importModalOpen} onClose={() => setImportModalOpen(false)} page={page} boards={boards} podeCriarQuadro={isAdmin} />
         </React.Suspense>
       )}
       <LeadTrashModal open={trashModalOpen} onClose={() => setTrashModalOpen(false)} boards={boards} />

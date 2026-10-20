@@ -115,11 +115,13 @@ export interface LeadImportModalProps {
   onClose: () => void
   page: LeadBoardPage
   boards: LeadBoard[]
+  /** Só o admin pode criar um quadro novo na importação. */
+  podeCriarQuadro?: boolean
 }
 
 /** Importa leads de um CSV: sobe o arquivo, mapeia cada coluna pro campo certo do quadro
  * (com um chute automático pelo nome da coluna) e cria uma linha por linha do arquivo. */
-export function LeadImportModal({ open, onClose, page, boards }: LeadImportModalProps) {
+export function LeadImportModal({ open, onClose, page, boards, podeCriarQuadro = false }: LeadImportModalProps) {
   const [headers, setHeaders] = React.useState<string[]>([])
   const [dataRows, setDataRows] = React.useState<string[][]>([])
   const [mapping, setMapping] = React.useState<Record<number, ImportField | ''>>({})
@@ -137,9 +139,9 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
     setResult(null)
     setImporting(false)
     setDragOver(false)
-    setTargetBoardId(boards[0]?.id ?? NEW_BOARD)
+    setTargetBoardId(boards[0]?.id ?? (podeCriarQuadro ? NEW_BOARD : ''))
     setNewBoardName('')
-  }, [open, boards])
+  }, [open, boards, podeCriarQuadro])
 
   const handleFile = async (file: File) => {
     try {
@@ -166,6 +168,7 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
       if (!trimmed) { toast.error('Dê um nome pro quadro novo.'); return }
       boardId = leadBoardsService.createBoard(trimmed, '#4F8EF7', page).id
     }
+    if (!boardId) { toast.error('Escolha o quadro de destino.'); return }
 
     setImporting(true)
     let created = 0
@@ -270,7 +273,7 @@ export function LeadImportModal({ open, onClose, page, boards }: LeadImportModal
               onChange={(e) => setTargetBoardId(e.target.value)}
               options={[
                 ...boards.map((b) => ({ value: b.id, label: b.name })),
-                { value: NEW_BOARD, label: '+ Criar novo quadro' },
+                ...(podeCriarQuadro ? [{ value: NEW_BOARD, label: '+ Criar novo quadro' }] : []),
               ]}
             />
             {targetBoardId === NEW_BOARD && (

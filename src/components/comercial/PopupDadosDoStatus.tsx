@@ -4,10 +4,11 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { registrarPedidoDeDadoDoStatus, type PedidoDeDadoDoStatus, type RespostaDoPedido } from '@/services/leadBoards'
 import {
-  MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, PREFIXO_OUTRO, campoOk,
-  origemEhOutros, textoDaOrigemOutros, type CampoDoPopup,
+  MINIMO_DETALHE_MOTIVO, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, campoOk,
+  juntarMotivo, origemEhOutros, separarMotivo, textoDaOrigemOutros, type CampoDoPopup,
 } from '@/lib/regraDoStatus'
 import { prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
+import { cn } from '@/lib/utils'
 
 type Pedido = PedidoDeDadoDoStatus & { responder: (resposta: RespostaDoPedido | null) => void }
 
@@ -36,6 +37,8 @@ export function PopupDadosDoStatus() {
   const [texto, setTexto] = React.useState<Record<string, string>>({})
   const [outro, setOutro] = React.useState('')
   const [origemOutros, setOrigemOutros] = React.useState('')
+  // Só depois de tentar confirmar é que o aviso do detalhe curto aparece.
+  const [tentou, setTentou] = React.useState(false)
 
   React.useEffect(
     () => registrarPedidoDeDadoDoStatus((p) => new Promise<RespostaDoPedido | null>((responder) => setFila((f) => [...f, { ...p, responder }]))),
@@ -56,8 +59,9 @@ export function PopupDadosDoStatus() {
       } else if (c === 'valorMrr' || c === 'valorImplementacao') {
         tx[c] = v ? sanitizeCurrencyRaw(v) : ''
       } else if (c === 'motivoDesqualificacao') {
-        tx[c] = v.startsWith('Outro') ? 'Outro' : v
-        o = v.startsWith('Outro') ? v.replace(/^Outro:?/, '').trim() : ''
+        const { motivo, detalhe } = separarMotivo(v)
+        tx[c] = (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(motivo) ? motivo : ''
+        o = detalhe
       } else if (c === 'origem' && origemEhOutros(v)) {
         tx[c] = 'outros'
         oo = textoDaOrigemOutros(v)
@@ -65,7 +69,7 @@ export function PopupDadosDoStatus() {
         tx[c] = v
       }
     }
-    setData(d); setHora(h); setTexto(tx); setOutro(o); setOrigemOutros(oo)
+    setData(d); setHora(h); setTexto(tx); setOutro(o); setOrigemOutros(oo); setTentou(false)
   }, [atual])
 
   if (!atual) return null
@@ -73,17 +77,20 @@ export function PopupDadosDoStatus() {
   const valorFinal = (c: CampoDoPopup): string => {
     if (c === 'agendamento' || c === 'retornar') return data[c] && hora[c] ? `${data[c]}T${hora[c]}` : ''
     if (c === 'valorMrr' || c === 'valorImplementacao') return texto[c] ? prettifyCurrencyRaw(texto[c]) : ''
-    if (c === 'motivoDesqualificacao') return texto[c] === 'Outro' ? `${PREFIXO_OUTRO}${outro.trim()}` : (texto[c] ?? '')
+    if (c === 'motivoDesqualificacao') return juntarMotivo(texto[c] ?? '', outro)
     if (c === 'origem') return texto[c] === 'outros' ? `${PREFIXO_ORIGEM_OUTROS}${origemOutros.trim()}` : (texto[c] ?? '')
     return texto[c] ?? ''
   }
   const pronto = atual.campos.every((c) => campoOk(c, valorFinal(c)))
+  // O botão libera quando tudo foi escolhido — o tamanho do detalhe do motivo só é cobrado ao tentar confirmar.
+  const podeTentar = atual.campos.every((c) => (c === 'motivoDesqualificacao' ? !!texto[c] && !!outro.trim() : campoOk(c, valorFinal(c))))
+  const detalheCurto = atual.campos.includes('motivoDesqualificacao') && outro.trim().length < MINIMO_DETALHE_MOTIVO
   const fechar = (resposta: RespostaDoPedido | null) => {
     atual.responder(resposta)
     setFila((f) => f.slice(1))
   }
   const confirmar = () => {
-    if (!pronto) return
+    if (!pronto) { setTentou(true); return }
     fechar(Object.fromEntries(atual.campos.map((c) => [c, valorFinal(c)])) as RespostaDoPedido)
   }
 
@@ -97,7 +104,7 @@ export function PopupDadosDoStatus() {
       footer={
         <>
           <Button variant="ghost" onClick={() => fechar(null)}>Cancelar</Button>
-          <Button disabled={!pronto} onClick={confirmar}>Confirmar</Button>
+          <Button disabled={!podeTentar} onClick={confirmar}>Confirmar</Button>
         </>
       }
     >
@@ -161,17 +168,21 @@ export function PopupDadosDoStatus() {
                   <option value="">Escolha o motivo…</option>
                   {MOTIVOS_DESQUALIFICACAO.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
-                {texto[c] === 'Outro' && (
+                {!!texto[c] && (
                   <>
+                    <span className="mb-1 mt-2.5 block text-xs font-medium text-foreground/70">Detalhe a desqualificação *</span>
                     <textarea
                       value={outro}
                       onChange={(e) => setOutro(e.target.value)}
                       rows={3}
-                      placeholder={`Escreva o motivo (mínimo ${MINIMO_OUTRO} letras)`}
-                      className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+                      placeholder="Ex.: o cliente quer pagar menos de R$ 100 por mês"
+                      className={cn(
+                        'w-full rounded-lg border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent',
+                        tentou && detalheCurto ? 'border-warning' : 'border-line',
+                      )}
                     />
-                    {outro.trim().length > 0 && outro.trim().length < MINIMO_OUTRO && (
-                      <span className="mt-1 block text-xs text-warning">Faltam {MINIMO_OUTRO - outro.trim().length} letra(s).</span>
+                    {tentou && detalheCurto && (
+                      <span className="mt-1 block text-xs text-warning">Detalhe um pouco mais (mínimo de {MINIMO_DETALHE_MOTIVO} caracteres).</span>
                     )}
                   </>
                 )}

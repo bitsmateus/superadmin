@@ -1,3 +1,4 @@
+import { MINIMO_DETALHE_MOTIVO, MOTIVOS_DESQUALIFICACAO } from '../lib/trafegoNicho.js';
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne, queryAsActor } from '../db.js';
@@ -229,11 +230,15 @@ async function faltaDadoDoStatus(
   const dataEHora = (v: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v);
 
   if (atual.cobra_motivo && (novo.includes('disparoemmassa') || novo.includes('perdido') || novo.includes('desqualificad'))) {
+    // Motivo da lista + detalhe escrito (mínimo 10 caracteres), salvo como "<Motivo>: <detalhe>".
     const motivo = final('motivo_desqualificacao');
-    const valido = !!motivo && motivo !== 'Outro' && (!motivo.startsWith('Outro') || motivo.replace(/^Outro:?/, '').trim().length >= 5);
+    const i = motivo.indexOf(':');
+    const nome = (i >= 0 ? motivo.slice(0, i) : motivo).trim();
+    const detalhe = i >= 0 ? motivo.slice(i + 1).trim() : '';
+    const valido = (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(nome) && detalhe.length >= MINIMO_DETALHE_MOTIVO;
     return valido ? null : {
       campos: ['motivo_desqualificacao'],
-      mensagem: 'Pra tirar esse lead do funil, escolha o motivo da desqualificação (em "Outro", escreva o motivo com pelo menos 5 letras).',
+      mensagem: 'Pra tirar esse lead do funil, escolha o motivo da desqualificação e detalhe o porquê (mínimo de 10 caracteres).',
     };
   }
 

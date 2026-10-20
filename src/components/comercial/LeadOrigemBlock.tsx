@@ -1,5 +1,8 @@
 import { cn } from '@/lib/utils'
-import { MINIMO_OUTRO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, PREFIXO_OUTRO, origemEhOutros, textoDaOrigemOutros } from '@/lib/regraDoStatus'
+import {
+  MINIMO_DETALHE_MOTIVO, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS,
+  juntarMotivo, origemEhOutros, separarMotivo, textoDaOrigemOutros,
+} from '@/lib/regraDoStatus'
 import * as React from 'react'
 import { ExternalLink, Megaphone } from 'lucide-react'
 import { api } from '@/services/api'
@@ -22,35 +25,43 @@ export interface LeadOrigemBlockProps {
   onChange: (patch: { nicho?: string; motivoDesqualificacao?: string; origem?: string }) => void
 }
 
-/** Motivo da desqualificação: a lista, e em "Outro" um campo pra escrever (mínimo 5 letras), salvo como "Outro: …". */
-function MotivoComOutro({ valor, motivos, onChange }: { valor: string; motivos: string[]; onChange: (v: string) => void }) {
-  const ehOutro = valor.startsWith('Outro')
-  const [texto, setTexto] = React.useState(ehOutro ? valor.replace(/^Outro:?/, '').trim() : '')
-  React.useEffect(() => { setTexto(valor.startsWith('Outro') ? valor.replace(/^Outro:?/, '').trim() : '') }, [valor])
-  const lista = motivos.filter((m) => !m.startsWith('Outro:'))
-  const curto = ehOutro && texto.trim().length < MINIMO_OUTRO
+/** Motivo da desqualificação: escolhe da lista e detalha o porquê (salvo como "<Motivo>: <detalhe>"). O detalhe
+ * só é salvo com pelo menos 10 caracteres — o aviso aparece só depois de tentar sair do campo com menos. */
+function MotivoComOutro({ valor, onChange }: { valor: string; motivos?: string[]; onChange: (v: string) => void }) {
+  const salvo = separarMotivo(valor)
+  const [motivo, setMotivo] = React.useState(salvo.motivo)
+  const [detalhe, setDetalhe] = React.useState(salvo.detalhe)
+  const [tentou, setTentou] = React.useState(false)
+  React.useEffect(() => { const s = separarMotivo(valor); setMotivo(s.motivo); setDetalhe(s.detalhe); setTentou(false) }, [valor])
+  const naLista = (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(motivo)
+  const curto = detalhe.trim().length < MINIMO_DETALHE_MOTIVO
+  const salvar = (m: string, d: string) => {
+    if (!m) { onChange(''); return }
+    if (d.trim().length >= MINIMO_DETALHE_MOTIVO) onChange(juntarMotivo(m, d))
+  }
   return (
     <div className="block text-[11px] text-foreground/40">
       Motivo de desqualificação
       <select
-        value={ehOutro ? 'Outro' : valor}
-        onChange={(e) => onChange(e.target.value === 'Outro' ? 'Outro' : e.target.value)}
+        value={motivo}
+        onChange={(e) => { setMotivo(e.target.value); setTentou(false); salvar(e.target.value, detalhe) }}
         className="mt-0.5 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
       >
         <option value="">— nenhum (lead válido) —</option>
-        {lista.map((m) => <option key={m} value={m}>{m}</option>)}
+        {!naLista && motivo && <option value={motivo}>{motivo} (antigo)</option>}
+        {MOTIVOS_DESQUALIFICACAO.map((m) => <option key={m} value={m}>{m}</option>)}
       </select>
-      {ehOutro && (
+      {!!motivo && (
         <>
           <textarea
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            onBlur={() => { const v = texto.trim(); if (v.length >= MINIMO_OUTRO) onChange(`${PREFIXO_OUTRO}${v}`) }}
+            value={detalhe}
+            onChange={(e) => setDetalhe(e.target.value)}
+            onBlur={() => { setTentou(true); salvar(motivo, detalhe) }}
             rows={2}
-            placeholder="Escreva o motivo (mínimo 5 letras)"
-            className={cn('mt-1 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none', curto && 'ring-1 ring-warning/50')}
+            placeholder="Detalhe a desqualificação"
+            className={cn('mt-1 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none', tentou && curto && 'ring-1 ring-warning/50')}
           />
-          {curto && <span className="text-[11px] text-warning">Escreva o motivo com pelo menos {MINIMO_OUTRO} letras.</span>}
+          {tentou && curto && <span className="text-[11px] text-warning">Detalhe um pouco mais (mínimo de {MINIMO_DETALHE_MOTIVO} caracteres) pra salvar.</span>}
         </>
       )}
     </div>

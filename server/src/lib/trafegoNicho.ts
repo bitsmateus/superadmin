@@ -38,11 +38,14 @@ export function nichoDoFormulario(qualificacao: Record<string, unknown> | null |
 
 /** Lista fechada de motivos de desqualificação (o time pode ajustar aqui). */
 export const MOTIVOS_DESQUALIFICACAO = [
-  'Fora do perfil / segmento errado',
+  'Fora do perfil',
+  'Segmento errado',
   'Sem orçamento',
-  'Só curioso / sem interesse',
-  'Já tem solução',
-  'Não atende / telefone inválido',
-  'Concorrente / fornecedor',
-  'Outro',
+  'Sem interesse',
+  'Telefone inválido',
+  'Fechou com outro',
+  'Não é o momento',
+  'Outros',
 ] as const;
+/** Todo motivo vai com o detalhe escrito: "<Motivo>: <detalhe>", com pelo menos 10 caracteres de detalhe. */
+export const MINIMO_DETALHE_MOTIVO = 10;

@@ -76,7 +76,7 @@ export async function montarEntradaIa(): Promise<Record<string, unknown>> {
 
   // Só contagens: motivo de desqualificação e dores do formulário, sem vínculo com um lead específico.
   const motivos = await query<{ motivo: string; n: string }>(
-    `SELECT motivo_desqualificacao AS motivo, count(*) AS n FROM lead_rows
+    `SELECT btrim(split_part(motivo_desqualificacao, ':', 1)) AS motivo, count(*) AS n FROM lead_rows
      WHERE meta_ad_id IS NOT NULL AND deleted_at IS NULL AND COALESCE(motivo_desqualificacao,'') <> ''
        AND (created_at AT TIME ZONE 'America/Sao_Paulo')::date >= $1::date GROUP BY 1 ORDER BY 2 DESC LIMIT 10`, [d30]);
   const dores = await query<{ dor: string; n: string }>(

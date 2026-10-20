@@ -5,18 +5,33 @@
  */
 /** Mesma lista do servidor (server/src/lib/trafegoNicho.ts, MOTIVOS_DESQUALIFICACAO). */
 export const MOTIVOS_DESQUALIFICACAO = [
-  'Fora do perfil / segmento errado',
+  'Fora do perfil',
+  'Segmento errado',
   'Sem orçamento',
-  'Só curioso / sem interesse',
-  'Já tem solução',
-  'Não atende / telefone inválido',
-  'Concorrente / fornecedor',
-  'Outro',
+  'Sem interesse',
+  'Telefone inválido',
+  'Fechou com outro',
+  'Não é o momento',
+  'Outros',
 ] as const
 
-/** "Outro" é salvo junto com o que foi escrito: "Outro: <motivo>". */
-export const PREFIXO_OUTRO = 'Outro: '
+/** Todo motivo vai com um detalhe escrito, salvo como "<Motivo>: <detalhe>". */
+export const MINIMO_DETALHE_MOTIVO = 10
+/** Mínimo de letras da origem "Outros". */
 export const MINIMO_OUTRO = 5
+
+/** Separa o que está salvo em motivo + detalhe. Aceita o formato antigo ("Outro: …" ou só o motivo). */
+export function separarMotivo(valor: string | null | undefined): { motivo: string; detalhe: string } {
+  const v = (valor ?? '').trim()
+  if (!v) return { motivo: '', detalhe: '' }
+  const i = v.indexOf(':')
+  const motivo = (i >= 0 ? v.slice(0, i) : v).trim()
+  const detalhe = i >= 0 ? v.slice(i + 1).trim() : ''
+  return { motivo: motivo === 'Outro' ? 'Outros' : motivo, detalhe }
+}
+export function juntarMotivo(motivo: string, detalhe: string): string {
+  return motivo ? `${motivo}: ${detalhe.trim()}` : ''
+}
 
 /** A partir de quando o motivo é cobrado: leads que entraram de 01/10/2026 (horário de Brasília) em diante — do
  * anúncio ou cadastrados à mão. Os mais antigos não são cobrados. */
@@ -56,12 +71,10 @@ export function statusExigeMotivo(statusOuQuadro: string): boolean {
   return n.includes('disparoemmassa') || n.includes('perdido') || n.includes('desqualificad')
 }
 
-/** Motivo preenchido de verdade: um da lista, ou "Outro: " com pelo menos 5 letras escritas. */
+/** Motivo preenchido de verdade: um da lista E o detalhe escrito (mínimo 10 letras). */
 export function motivoValido(valor: string | null | undefined): boolean {
-  const v = (valor ?? '').trim()
-  if (!v || v === 'Outro') return false
-  if (v.startsWith('Outro')) return v.replace(/^Outro:?/, '').trim().length >= MINIMO_OUTRO
-  return true
+  const { motivo, detalhe } = separarMotivo(valor)
+  return (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(motivo) && detalhe.length >= MINIMO_DETALHE_MOTIVO
 }
 
 function normaliza(s: string): string {

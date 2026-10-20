@@ -3,8 +3,6 @@
  * data e horário do agendamento, e pra "Proposta enviada" é obrigatório ter data e horário em "Retornar". O
  * servidor aplica a mesma regra (ver faltaDadoDoStatus em server/src/routes/leadBoards.ts).
  */
-export type CampoExigido = 'agendamento' | 'retornar' | 'motivoDesqualificacao'
-
 /** Mesma lista do servidor (server/src/lib/trafegoNicho.ts, MOTIVOS_DESQUALIFICACAO). */
 export const MOTIVOS_DESQUALIFICACAO = [
   'Fora do perfil / segmento errado',
@@ -59,13 +57,6 @@ export function abaComRegraDeStatus(nomeDaAba: string, idDaAba = ''): boolean {
   return /(arthur|lu[ií]s)/i.test(nomeDaAba) || /(arthur|luis)/i.test(idDaAba)
 }
 
-/** O campo que o status (ou o nome do quadro) exige nos CRMs do Arthur/Luis, ou null. */
-export function campoExigidoPeloStatus(statusOuQuadro: string): 'agendamento' | 'retornar' | null {
-  const n = normaliza(statusOuQuadro)
-  if (n.includes('reuniaoagendada')) return 'agendamento'
-  if (n.includes('propostaenviada')) return 'retornar'
-  return null
-}
 
 export function mesmoStatus(a: string, b: string): boolean {
   return normaliza(a) === normaliza(b)
@@ -74,4 +65,28 @@ export function mesmoStatus(a: string, b: string): boolean {
 /** Data E horário preenchidos (formato salvo: AAAA-MM-DDTHH:MM). */
 export function temDataEHora(valor: string | null | undefined): boolean {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(valor ?? '')
+}
+
+/** Campos que o popup sabe pedir. */
+export type CampoDoPopup = 'agendamento' | 'retornar' | 'origem' | 'valorMrr' | 'valorImplementacao' | 'motivoDesqualificacao'
+
+/** O campo está preenchido do jeito que a regra pede? (Valor em R$: precisa ter sido digitado — R$ 0,00 conta.) */
+export function campoOk(campo: CampoDoPopup, valor: string | null | undefined): boolean {
+  const v = (valor ?? '').trim()
+  if (campo === 'agendamento' || campo === 'retornar') return temDataEHora(v)
+  if (campo === 'motivoDesqualificacao') return motivoValido(v)
+  if (campo === 'valorMrr' || campo === 'valorImplementacao') return /\d/.test(v)
+  return !!v
+}
+
+/**
+ * O que cada status exige nos CRMs do Arthur e do Luis. "sempre": é perguntado toda vez que o lead entra no status
+ * (vem preenchido se já houver). "seFaltar": só é perguntado se estiver vazio.
+ */
+export function exigenciasDoStatus(statusOuQuadro: string): { sempre: CampoDoPopup[]; seFaltar: CampoDoPopup[] } | null {
+  const n = normaliza(statusOuQuadro)
+  if (n.includes('reuniaoagendada')) return { sempre: ['agendamento'], seFaltar: ['origem'] }
+  if (n.includes('propostaenviada')) return { sempre: ['retornar'], seFaltar: ['valorMrr', 'valorImplementacao'] }
+  if (n.startsWith('vendido')) return { sempre: [], seFaltar: ['valorMrr', 'valorImplementacao', 'origem'] }
+  return null
 }

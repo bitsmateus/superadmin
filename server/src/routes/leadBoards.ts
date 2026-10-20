@@ -201,49 +201,65 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
 }
 
 /**
- * Regra dos CRMs do Arthur e do Luis (inclui o Closer): o lead só MUDA pra "Reunião agendada" com data e horário
- * do agendamento, e pra "Proposta enviada" com data e horário em "Retornar". Vale pra qualquer caminho que mude o
- * status (lista, Kanban, ficha, mover de quadro). Quem já estava nesses status sem o dado não é afetado até mudar.
- * Devolve o campo que falta (e a mensagem) ou null.
+ * Regra de status (mesma do front, em src/lib/regraDoStatus.ts). Vale pra qualquer caminho que mude o status
+ * (lista, Kanban, ficha, mover de quadro). Quem já estava no status sem o dado não é afetado até mudar de novo.
+ *  - Lead que entrou de 01/10/2026 pra frente indo pra Disparo em massa / Perdidos / Desqualificado (qualquer aba):
+ *    motivo da desqualificação ("Outro" só com o motivo escrito, mínimo 5 letras).
+ *  - CRMs do Arthur e do Luis (inclui o Closer):
+ *      Reunião agendada → dia e horário do agendamento + origem;
+ *      Proposta enviada → dia e horário em "Retornar" + valor MRR + valor de implementação;
+ *      Vendido          → valor MRR + valor de implementação + origem.
+ *    (Origem de lead que veio do anúncio já é Meta. Valor em R$ precisa ter sido digitado — R$ 0,00 conta.)
+ * Devolve o que falta (e a mensagem) ou null.
  */
 async function faltaDadoDoStatus(
   leadId: string, patch: Record<string, unknown>,
-): Promise<{ campo: 'agendamento' | 'retornar' | 'motivo_desqualificacao'; mensagem: string } | null> {
+): Promise<{ campos: string[]; mensagem: string } | null> {
   if (typeof patch.status !== 'string') return null;
-  const atual = await queryOne<{ status: string; agendamento: string; retornar: string; board_id: string; motivo_desqualificacao: string; cobra_motivo: boolean }>(
-    `SELECT status, agendamento, retornar, board_id, motivo_desqualificacao,
+  const atual = await queryOne<Record<string, unknown> & { status: string; board_id: string; cobra_motivo: boolean; do_anuncio: boolean }>(
+    `SELECT status, board_id, agendamento, retornar, origem, valor_mrr, valor_implementacao, motivo_desqualificacao,
+            (meta_lead_id IS NOT NULL OR meta_campaign_id IS NOT NULL OR meta_ad_id IS NOT NULL) AS do_anuncio,
             (created_at >= TIMESTAMPTZ '2026-10-01 00:00:00-03') AS cobra_motivo
      FROM lead_rows WHERE id = $1`, [leadId]
   );
   if (!atual) return null;
   const novo = normalizaNome(patch.status);
   if (novo === normalizaNome(atual.status ?? '')) return null;
-  // Lead que entrou de 01/10/2026 pra frente (anúncio ou manual) indo pra Disparo em massa / Perdidos /
-  // Desqualificado: motivo obrigatório (em qualquer aba). "Outro" só vale com o motivo escrito (mínimo 5 letras).
-  // Os mais antigos não são cobrados.
+  const final = (c: string) => String(c in patch ? patch[c] ?? '' : atual[c] ?? '').trim();
+  const dataEHora = (v: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v);
+
   if (atual.cobra_motivo && (novo.includes('disparoemmassa') || novo.includes('perdido') || novo.includes('desqualificad'))) {
-    const motivo = String('motivo_desqualificacao' in patch ? patch.motivo_desqualificacao ?? '' : atual.motivo_desqualificacao ?? '').trim();
+    const motivo = final('motivo_desqualificacao');
     const valido = !!motivo && motivo !== 'Outro' && (!motivo.startsWith('Outro') || motivo.replace(/^Outro:?/, '').trim().length >= 5);
-    if (!valido) {
-      return { campo: 'motivo_desqualificacao', mensagem: 'Pra tirar esse lead do funil, escolha o motivo da desqualificação (em "Outro", escreva o motivo com pelo menos 5 letras).' };
-    }
-    return null;
+    return valido ? null : {
+      campos: ['motivo_desqualificacao'],
+      mensagem: 'Pra tirar esse lead do funil, escolha o motivo da desqualificação (em "Outro", escreva o motivo com pelo menos 5 letras).',
+    };
   }
-  const campo = novo.includes('reuniaoagendada') ? 'agendamento' : novo.includes('propostaenviada') ? 'retornar' : null;
-  if (!campo) return null;
+
+  const exige = novo.includes('reuniaoagendada') ? { rotulo: 'Reunião agendada', campos: ['agendamento', 'origem'] }
+    : novo.includes('propostaenviada') ? { rotulo: 'Proposta enviada', campos: ['retornar', 'valor_mrr', 'valor_implementacao'] }
+    : novo.startsWith('vendido') ? { rotulo: 'Vendido', campos: ['valor_mrr', 'valor_implementacao', 'origem'] }
+    : null;
+  if (!exige) return null;
   const aba = await queryOne<{ id: string; name: string }>(
     'SELECT lp.id, lp.name FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1',
     [typeof patch.board_id === 'string' ? patch.board_id : atual.board_id]
   );
   if (!aba || !(/(arthur|lu[ií]s)/i.test(aba.name) || /(arthur|luis)/i.test(aba.id))) return null;
-  const valor = String(campo in patch ? patch[campo] ?? '' : atual[campo] ?? '');
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(valor)) return null;
-  return {
-    campo,
-    mensagem: campo === 'agendamento'
-      ? 'Pra marcar como Reunião agendada, preencha o dia e o horário do agendamento.'
-      : 'Pra marcar como Proposta enviada, preencha o dia e o horário em "Retornar".',
+
+  const NOMES: Record<string, string> = {
+    agendamento: 'dia e horário do agendamento', retornar: 'dia e horário em "Retornar"', origem: 'origem do lead',
+    valor_mrr: 'valor MRR', valor_implementacao: 'valor de implementação',
   };
+  const faltando = exige.campos.filter((c) => {
+    const v = final(c);
+    if (c === 'agendamento' || c === 'retornar') return !dataEHora(v);
+    if (c === 'origem') return !v && !atual.do_anuncio;
+    return !/\d/.test(v);
+  });
+  if (!faltando.length) return null;
+  return { campos: faltando, mensagem: `Pra marcar como ${exige.rotulo}, preencha: ${faltando.map((c) => NOMES[c]).join(', ')}.` };
 }
 
 /**
@@ -1330,7 +1346,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
 
       // Reunião agendada / Proposta enviada nos CRMs do Arthur e do Luis: sem data e horário, não muda.
       const falta = await faltaDadoDoStatus(req.params.id, patch);
-      if (falta) return reply.status(400).send({ message: falta.mensagem, exigir: falta.campo });
+      if (falta) return reply.status(400).send({ message: falta.mensagem, exigir: falta.campos });
 
       const sets: string[] = [];
       const params: unknown[] = [];

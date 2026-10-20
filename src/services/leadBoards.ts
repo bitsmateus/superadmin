@@ -2,7 +2,7 @@ import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
 import type { LeadBoard, LeadBoardPage, LeadRow } from '@/types/leadBoard'
 import { leadPagesService } from '@/services/leadPages'
-import { abaComRegraDeStatus, campoExigidoPeloStatus, leadCobraMotivo, mesmoStatus, motivoValido, statusExigeMotivo, temDataEHora, type CampoExigido } from '@/lib/regraDoStatus'
+import { abaComRegraDeStatus, campoOk, exigenciasDoStatus, leadCobraMotivo, mesmoStatus, motivoValido, statusExigeMotivo, type CampoDoPopup } from '@/lib/regraDoStatus'
 
 function uuid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -269,41 +269,60 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
   return { row, promise }
 }
 
-// ---------- Regra do status (Reunião agendada / Proposta enviada) ----------
-// Quem pede a data e o horário é o popup montado no Layout (PopupDadosDoStatus). Sem ele registrado, a mudança
-// segue e o servidor recusa se faltar o dado.
-export type PedidoDeDadoDoStatus = { nome: string; campo: CampoExigido; status: string; valorAtual: string }
-let pedirDadoDoStatus: ((p: PedidoDeDadoDoStatus) => Promise<string | null>) | null = null
-export function registrarPedidoDeDadoDoStatus(fn: (p: PedidoDeDadoDoStatus) => Promise<string | null>): () => void {
+// ---------- Regra do status ----------
+// Mudar o lead pra certos status exige campos preenchidos (ver exigenciasDoStatus e a regra do motivo). Quem pede é
+// o popup montado no Layout (PopupDadosDoStatus). Sem ele registrado, a mudança segue e o servidor recusa se faltar.
+export type PedidoDeDadoDoStatus = {
+  nome: string
+  status: string
+  /** Os campos que faltam (na ordem em que aparecem no popup). */
+  campos: CampoDoPopup[]
+  /** O que o lead já tem, pra vir preenchido. */
+  valores: Partial<Record<CampoDoPopup, string>>
+}
+/** O que o popup devolve: os campos preenchidos, ou null se cancelou. */
+export type RespostaDoPedido = Partial<Record<CampoDoPopup, string>>
+let pedirDadoDoStatus: ((p: PedidoDeDadoDoStatus) => Promise<RespostaDoPedido | null>) | null = null
+export function registrarPedidoDeDadoDoStatus(fn: (p: PedidoDeDadoDoStatus) => Promise<RespostaDoPedido | null>): () => void {
   pedirDadoDoStatus = fn
   return () => { if (pedirDadoDoStatus === fn) pedirDadoDoStatus = null }
 }
 
-/** Se essa mudança põe o lead em "Reunião agendada"/"Proposta enviada" num CRM do Arthur/Luis, o campo exigido. */
-function exigenciaDaMudanca(
-  atual: Pick<LeadRow, 'boardId' | 'status' | 'motivoDesqualificacao' | 'createdAt'> | null, patch: Partial<LeadRow>,
-): { campo: CampoExigido; status: string } | null {
+type LeadParaRegra = Pick<LeadRow, 'boardId' | 'status' | 'createdAt' | 'metaLeadId' | CampoDoPopup>
+
+/** Os campos que faltam pra essa mudança de status, ou null se pode seguir. */
+function exigenciaDaMudanca(atual: LeadParaRegra | null, patch: Partial<LeadRow>): { status: string; campos: CampoDoPopup[] } | null {
   const quadroDestino = boards.find((b) => b.id === (patch.boardId ?? atual?.boardId))
   if (!quadroDestino) return null
   // O status novo: o que veio no patch ou, ao trocar de quadro, o nome do quadro (o servidor alinha o status a ele).
   const statusNovo = typeof patch.status === 'string' ? patch.status : patch.boardId ? quadroDestino.name : null
   if (!statusNovo) return null
   if (atual && mesmoStatus(atual.status, statusNovo)) return null
+  const final = (c: CampoDoPopup) => (c in patch ? (patch[c] as string | undefined) : atual?.[c]) ?? ''
   // Lead que entrou de outubro/2026 pra frente (anúncio ou manual) indo pra Disparo em massa / Perdidos /
-  // Desqualificado: precisa do motivo. Os mais antigos não são cobrados.
+  // Desqualificado: precisa do motivo (em qualquer aba). Os mais antigos não são cobrados.
   if (atual && leadCobraMotivo(atual.createdAt) && statusExigeMotivo(statusNovo)) {
-    const motivo = 'motivoDesqualificacao' in patch ? patch.motivoDesqualificacao : atual.motivoDesqualificacao
-    return motivoValido(motivo) ? null : { campo: 'motivoDesqualificacao', status: statusNovo }
+    return motivoValido(final('motivoDesqualificacao')) ? null : { status: statusNovo, campos: ['motivoDesqualificacao'] }
   }
   const aba = leadPagesService.getAll().find((p) => p.id === quadroDestino.page)
   if (!abaComRegraDeStatus(aba?.name ?? '', quadroDestino.page)) return null
-  const campo = campoExigidoPeloStatus(statusNovo)
-  return campo ? { campo, status: statusNovo } : null
+  const regra = exigenciasDoStatus(statusNovo)
+  if (!regra) return null
+  const campos: CampoDoPopup[] = [
+    // "sempre": pergunta a não ser que a própria mudança já traga o dado.
+    ...regra.sempre.filter((c) => !campoOk(c, patch[c] as string | undefined)),
+    // "seFaltar": só se o lead não tem. Origem de lead do anúncio já é Meta.
+    ...regra.seFaltar.filter((c) => !(c === 'origem' && atual?.metaLeadId) && !campoOk(c, final(c))),
+  ]
+  return campos.length ? { status: statusNovo, campos } : null
 }
 
-/** O patch já traz o dado exigido, válido? */
-function patchTrazODado(patch: Partial<LeadRow>, campo: CampoExigido): boolean {
-  return campo === 'motivoDesqualificacao' ? motivoValido(patch.motivoDesqualificacao) : temDataEHora(patch[campo] as string | undefined)
+function valoresDoLead(l: Partial<LeadRow> | null): Partial<Record<CampoDoPopup, string>> {
+  if (!l) return {}
+  return {
+    agendamento: l.agendamento ?? '', retornar: l.retornar ?? '', origem: l.origem ?? '',
+    valorMrr: l.valorMrr ?? '', valorImplementacao: l.valorImplementacao ?? '', motivoDesqualificacao: l.motivoDesqualificacao ?? '',
+  }
 }
 
 export const leadBoardsService = {
@@ -397,10 +416,10 @@ export const leadBoardsService = {
    * pede antes a data e o horário (sem confirmar, não cria). */
   async createRowComRegra(boardId: string, initial: Partial<LeadRow>): Promise<LeadRow | null> {
     const exig = exigenciaDaMudanca(null, { ...initial, boardId })
-    if (exig && pedirDadoDoStatus && !patchTrazODado(initial, exig.campo)) {
-      const valor = await pedirDadoDoStatus({ nome: initial.nome || 'Lead novo', campo: exig.campo, status: exig.status, valorAtual: '' })
-      if (!valor) return null
-      return leadBoardsService.createRow(boardId, { ...initial, [exig.campo]: valor })
+    if (exig && pedirDadoDoStatus) {
+      const resposta = await pedirDadoDoStatus({ nome: initial.nome || 'Lead novo', status: exig.status, campos: exig.campos, valores: valoresDoLead(initial) })
+      if (!resposta) return null
+      return leadBoardsService.createRow(boardId, { ...initial, ...resposta })
     }
     return leadBoardsService.createRow(boardId, initial)
   },
@@ -437,9 +456,11 @@ export const leadBoardsService = {
     // Entrando em "Reunião agendada"/"Proposta enviada" (CRM do Arthur/Luis): antes pede a data e o horário no
     // popup. Sem confirmar, o lead fica onde estava. Se o próprio patch já traz o dado, segue direto.
     const exig = exigenciaDaMudanca(prev, patch)
-    if (exig && pedirDadoDoStatus && !patchTrazODado(patch, exig.campo)) {
-      void pedirDadoDoStatus({ nome: prev.nome || prev.empresa || 'Lead sem nome', campo: exig.campo, status: exig.status, valorAtual: prev[exig.campo] })
-        .then((valor) => { if (valor) leadBoardsService.updateRow(id, { ...patch, [exig.campo]: valor }) })
+    if (exig && pedirDadoDoStatus) {
+      void pedirDadoDoStatus({
+        nome: prev.nome || prev.empresa || 'Lead sem nome', status: exig.status, campos: exig.campos,
+        valores: { ...valoresDoLead(prev), ...valoresDoLead(patch as Partial<LeadRow>) },
+      }).then((resposta) => { if (resposta) leadBoardsService.updateRow(id, { ...patch, ...resposta }) })
       return
     }
     const next = { ...prev, ...patch, updatedAt: new Date().toISOString() }

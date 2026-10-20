@@ -261,8 +261,8 @@ export async function webhookRoutes(app: FastifyInstance) {
           board_id, nome, empresa, telefone, position,
           meta_lead_id, origem_campanha, qualificacao, lead_raw,
           dor_cliente, numero_atendentes, tipo,
-          meta_campaign_id, meta_adset_id, meta_ad_id, nicho
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+          meta_campaign_id, meta_adset_id, meta_ad_id, nicho, origem
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'meta')
         ON CONFLICT (meta_lead_id) WHERE meta_lead_id IS NOT NULL DO NOTHING
         RETURNING *`,
         [

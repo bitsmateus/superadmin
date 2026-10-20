@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { registrarPedidoDeDadoDoStatus, type PedidoDeDadoDoStatus, type RespostaDoPedido } from '@/services/leadBoards'
 import {
-  CANAIS_DE_AGENDAMENTO, MINIMO_DETALHE_MOTIVO, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, campoOk,
+  CANAIS_DE_AGENDAMENTO, MINIMO_DETALHE_MOTIVO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, textoDoAgendadoOutro, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, campoOk,
   juntarMotivo, origemEhOutros, separarMotivo, textoDaOrigemOutros, type CampoDoPopup,
 } from '@/lib/regraDoStatus'
 import { prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
@@ -38,6 +38,7 @@ export function PopupDadosDoStatus() {
   const [texto, setTexto] = React.useState<Record<string, string>>({})
   const [outro, setOutro] = React.useState('')
   const [origemOutros, setOrigemOutros] = React.useState('')
+  const [agendadoOutro, setAgendadoOutro] = React.useState('')
   // Só depois de tentar confirmar é que o aviso do detalhe curto aparece.
   const [tentou, setTentou] = React.useState(false)
 
@@ -51,6 +52,7 @@ export function PopupDadosDoStatus() {
     const d: Record<string, string> = {}, h: Record<string, string> = {}, tx: Record<string, string> = {}
     let o = ''
     let oo = ''
+    let ao = ''
     for (const c of atual.campos) {
       const v = atual.valores[c] ?? ''
       if (c === 'agendamento' || c === 'retornar') {
@@ -63,6 +65,9 @@ export function PopupDadosDoStatus() {
         const { motivo, detalhe } = separarMotivo(v)
         tx[c] = (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(motivo) ? motivo : ''
         o = detalhe
+      } else if (c === 'agendadoPor' && agendadoEhOutro(v)) {
+        tx[c] = 'Outro'
+        ao = textoDoAgendadoOutro(v)
       } else if (c === 'origem' && origemEhOutros(v)) {
         tx[c] = 'outros'
         oo = textoDaOrigemOutros(v)
@@ -70,7 +75,7 @@ export function PopupDadosDoStatus() {
         tx[c] = v
       }
     }
-    setData(d); setHora(h); setTexto(tx); setOutro(o); setOrigemOutros(oo); setTentou(false)
+    setData(d); setHora(h); setTexto(tx); setOutro(o); setOrigemOutros(oo); setAgendadoOutro(ao); setTentou(false)
   }, [atual])
 
   if (!atual) return null
@@ -79,6 +84,7 @@ export function PopupDadosDoStatus() {
     if (c === 'agendamento' || c === 'retornar') return data[c] && hora[c] ? `${data[c]}T${hora[c]}` : ''
     if (c === 'valorMrr' || c === 'valorImplementacao') return texto[c] ? prettifyCurrencyRaw(texto[c]) : ''
     if (c === 'motivoDesqualificacao') return juntarMotivo(texto[c] ?? '', outro)
+    if (c === 'agendadoPor') return texto[c] === 'Outro' ? `${PREFIXO_AGENDADO_OUTRO}${agendadoOutro.trim()}` : (texto[c] ?? '')
     if (c === 'origem') return texto[c] === 'outros' ? `${PREFIXO_ORIGEM_OUTROS}${origemOutros.trim()}` : (texto[c] ?? '')
     return texto[c] ?? ''
   }
@@ -130,10 +136,25 @@ export function PopupDadosDoStatus() {
               </p>
             )}
             {c === 'agendadoPor' && (
-              <select value={texto[c] ?? ''} autoFocus={i === 0} onChange={(e) => setTexto((x) => ({ ...x, [c]: e.target.value }))} className={campoCls}>
-                <option value="">Escolha por onde foi agendado…</option>
-                {CANAIS_DE_AGENDAMENTO.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
+              <>
+                <select value={texto[c] ?? ''} autoFocus={i === 0} onChange={(e) => setTexto((x) => ({ ...x, [c]: e.target.value }))} className={campoCls}>
+                  <option value="">Escolha por onde foi agendado…</option>
+                  {CANAIS_DE_AGENDAMENTO.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                {texto[c] === 'Outro' && (
+                  <>
+                    <input
+                      value={agendadoOutro}
+                      onChange={(e) => setAgendadoOutro(e.target.value)}
+                      placeholder={`Por onde foi agendado? (mínimo ${MINIMO_OUTRO} letras)`}
+                      className={`${campoCls} mt-2`}
+                    />
+                    {agendadoOutro.trim().length > 0 && agendadoOutro.trim().length < MINIMO_OUTRO && (
+                      <span className="mt-1 block text-xs text-warning">Faltam {MINIMO_OUTRO - agendadoOutro.trim().length} letra(s).</span>
+                    )}
+                  </>
+                )}
+              </>
             )}
             {c === 'origem' && (
               <>

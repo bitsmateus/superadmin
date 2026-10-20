@@ -48,7 +48,7 @@ import { useLeadEvents } from '@/hooks/useLeadEvents'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useTeam, teamMemberLabel, type TeamMember } from '@/hooks/useTeam'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
-import { CANAIS_DE_AGENDAMENTO } from '@/lib/regraDoStatus'
+import { CANAIS_DE_AGENDAMENTO, MINIMO_OUTRO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, textoDoAgendadoOutro } from '@/lib/regraDoStatus'
 import { leadBoardsService } from '@/services/leadBoards'
 import { LeadOrigemBlock } from '@/components/comercial/LeadOrigemBlock'
 import { leadNotesService } from '@/services/leadNotes'
@@ -358,20 +358,7 @@ function LeadDetailModalInner({
             </FieldRow>
             {!modoSimples && (
               <FieldRow icon={<PhoneCall className="h-3.5 w-3.5" />} label="Agendado por">
-                <select
-                  value={row.agendadoPor}
-                  onChange={(e) => leadBoardsService.updateRow(row.id, { agendadoPor: e.target.value })}
-                  className={cn(
-                    'w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm outline-none',
-                    row.agendadoPor ? 'text-foreground' : 'text-foreground/40',
-                  )}
-                >
-                  <option value="">Selecionar…</option>
-                  {!CANAIS_DE_AGENDAMENTO.includes(row.agendadoPor as (typeof CANAIS_DE_AGENDAMENTO)[number]) && row.agendadoPor && (
-                    <option value={row.agendadoPor}>{row.agendadoPor}</option>
-                  )}
-                  {CANAIS_DE_AGENDAMENTO.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <AgendadoPorField valor={row.agendadoPor} onChange={(v) => leadBoardsService.updateRow(row.id, { agendadoPor: v })} />
               </FieldRow>
             )}
             <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label={modoSimples ? 'Finalizar' : 'Retornar'}>
@@ -410,6 +397,37 @@ function LeadDetailModalInner({
       </div>
     </div>,
     document.body,
+  )
+}
+
+/** "Agendado por": a lista, e em "Outro" um campo pra escrever (mínimo 5 letras), salvo como "Outro: …". */
+function AgendadoPorField({ valor, onChange }: { valor: string; onChange: (v: string) => void }) {
+  const ehOutro = agendadoEhOutro(valor)
+  const [texto, setTexto] = React.useState(ehOutro ? textoDoAgendadoOutro(valor) : '')
+  React.useEffect(() => { setTexto(agendadoEhOutro(valor) ? textoDoAgendadoOutro(valor) : '') }, [valor])
+  const naLista = (CANAIS_DE_AGENDAMENTO as readonly string[]).includes(valor)
+  const curto = ehOutro && texto.trim().length < MINIMO_OUTRO
+  return (
+    <div>
+      <select
+        value={ehOutro ? 'Outro' : valor}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn('w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm outline-none', valor ? 'text-foreground' : 'text-foreground/40')}
+      >
+        <option value="">Selecionar…</option>
+        {!naLista && !ehOutro && valor && <option value={valor}>{valor}</option>}
+        {CANAIS_DE_AGENDAMENTO.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+      {ehOutro && (
+        <input
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onBlur={() => { const v = texto.trim(); if (v.length >= MINIMO_OUTRO) onChange(`${PREFIXO_AGENDADO_OUTRO}${v}`) }}
+          placeholder="Por onde? (mínimo 5 letras)"
+          className={cn('mt-1 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none', curto && 'ring-1 ring-warning/50')}
+        />
+      )}
+    </div>
   )
 }
 

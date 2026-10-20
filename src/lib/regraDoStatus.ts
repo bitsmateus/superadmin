@@ -99,7 +99,15 @@ export function temDataEHora(valor: string | null | undefined): boolean {
 export type CampoDoPopup = 'agendamento' | 'agendadoPor' | 'retornar' | 'origem' | 'valorMrr' | 'valorImplementacao' | 'motivoDesqualificacao'
 
 /** Por onde a reunião foi agendada (campo "Agendado por" da ficha). */
-export const CANAIS_DE_AGENDAMENTO = ['WhatsApp Business SDR', 'WhatsApp Comercial', 'Ligação', 'Social Selling', 'Outbound'] as const
+export const CANAIS_DE_AGENDAMENTO = ['WhatsApp Business SDR', 'WhatsApp Comercial', 'Ligação', 'Social Selling', 'Outbound', 'Outro'] as const
+/** "Outro" é salvo com o que foi escrito: "Outro: <por onde>". */
+export const PREFIXO_AGENDADO_OUTRO = 'Outro: '
+export function agendadoEhOutro(valor: string | null | undefined): boolean {
+  return /^outro\b/i.test((valor ?? '').trim())
+}
+export function textoDoAgendadoOutro(valor: string | null | undefined): string {
+  return (valor ?? '').trim().replace(/^outro:?/i, '').trim()
+}
 
 /** O campo está preenchido do jeito que a regra pede? (Valor em R$: precisa ter sido digitado — R$ 0,00 conta.) */
 export function campoOk(campo: CampoDoPopup, valor: string | null | undefined): boolean {
@@ -108,6 +116,7 @@ export function campoOk(campo: CampoDoPopup, valor: string | null | undefined): 
   if (campo === 'motivoDesqualificacao') return motivoValido(v)
   if (campo === 'valorMrr' || campo === 'valorImplementacao') return /\d/.test(v)
   if (campo === 'origem') return origemValida(v)
+  if (campo === 'agendadoPor') return !!v && (!agendadoEhOutro(v) || textoDoAgendadoOutro(v).length >= MINIMO_OUTRO)
   return !!v
 }
 

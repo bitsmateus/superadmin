@@ -261,7 +261,8 @@ async function faltaDadoDoStatus(
     const v = final(c);
     if (c === 'agendamento' || c === 'retornar') return !dataEHora(v);
     // Origem: uma da lista; "outros" só vale com o texto escrito (mínimo 5 letras). Lead do anúncio já é Meta.
-    if (c === 'agendado_por') return !v;
+    // "Outro" só vale com o texto escrito (mínimo 5 letras).
+    if (c === 'agendado_por') return !v || (/^outro\b/i.test(v) && v.replace(/^outro:?/i, '').trim().length < 5);
     if (c === 'origem') return !atual.do_anuncio && (!v || (/^outros/i.test(v) && v.replace(/^outros:?/i, '').trim().length < 5));
     return !/\d/.test(v);
   });

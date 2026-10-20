@@ -15,12 +15,14 @@ export interface AgendamentoDoDia {
 
 const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
-/** Mesmo critério do quadro "Por quem agendou" das métricas do SDR. */
+/** Mesmo critério do quadro "Por quem agendou" das métricas do SDR: conta pro SDR da lead, não pra quem clicou (o
+ * closer movendo a lead pro CRM dele não é agendamento dele). Sem SDR, vale quem mudou o status. */
 export function quemAgendou(a: AgendamentoDoDia): string {
-  if (/luiza/i.test(a.sdr) || /luiza/i.test(a.autor)) return 'IA Luiza';
-  if (/arthur/i.test(a.autor)) return 'SDR Arthur';
-  if (/lu[ií]s/i.test(a.autor)) return 'SDR Luis';
-  return a.autor.trim().split(/\s+/)[0] || 'Não informado';
+  const quem = a.sdr.trim() || a.autor.trim();
+  if (/luiza/i.test(quem)) return 'IA Luiza';
+  if (/arthur/i.test(quem)) return 'SDR Arthur';
+  if (/lu[ií]s/i.test(quem)) return 'SDR Luis';
+  return quem.split(/\s+/)[0] || 'Não informado';
 }
 
 /** "Outro: indicação" vira "Outro (indicação)"; vazio vira "Não informado". */

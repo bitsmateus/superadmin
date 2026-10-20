@@ -2,12 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canalDoAgendamento, montarResumoAgendamentos, quemAgendou } from './resumoAgendamentos.js';
 
-test('quemAgendou: SDR IA Luiza vence quem clicou; Arthur/Luis viram "SDR ..."', () => {
+test('quemAgendou: conta pro SDR da lead, não pra quem clicou', () => {
   assert.equal(quemAgendou({ autor: 'Arthur Faveri', sdr: 'IA Luiza', canal: '' }), 'IA Luiza');
   assert.equal(quemAgendou({ autor: 'Arthur Faveri', sdr: 'Arthur', canal: '' }), 'SDR Arthur');
   assert.equal(quemAgendou({ autor: 'Luis otavio', sdr: 'Luis', canal: '' }), 'SDR Luis');
-  assert.equal(quemAgendou({ autor: 'Ian Silvano', sdr: 'Arthur', canal: '' }), 'Ian');
-  assert.equal(quemAgendou({ autor: '', sdr: 'Arthur', canal: '' }), 'Não informado');
+  // closer (Luis) movendo lead do Arthur pro CRM dele: continua do Arthur
+  assert.equal(quemAgendou({ autor: 'Luis otavio', sdr: 'Arthur', canal: '' }), 'SDR Arthur');
+  // sem SDR: vale quem mudou o status
+  assert.equal(quemAgendou({ autor: 'Ian Silvano', sdr: '', canal: '' }), 'Ian');
+  assert.equal(quemAgendou({ autor: '', sdr: '', canal: '' }), 'Não informado');
 });
 
 test('canalDoAgendamento: Outro com texto e vazio', () => {

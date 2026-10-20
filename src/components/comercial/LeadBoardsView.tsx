@@ -1536,8 +1536,15 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   // Novos Leads é só a porta de entrada: fica SEMPRE em lista, sem Kanban, Dashboard, filtro de SDR nem
   // "Simular lead". A preferência de visão das outras abas continua guardada, só não vale aqui.
   const soLista = page === 'novos_leads'
-  const view: 'list' | 'kanban' | 'dashboard' = soLista ? 'list' : viewEscolhida
-  React.useEffect(() => { if (soLista) setSdrFilter(null) }, [soLista])
+  // CRM IAN: também só em lista (sem Kanban, sem a troca Lista/Kanban, sem SDR, Filtro nem os quadrinhos de
+  // status do dia). O Dashboard continua, e o próprio botão dele volta pra lista.
+  const listaIan = page === 'crm-ian'
+  const [dashboardIan, setDashboardIan] = React.useState(false)
+  const view: 'list' | 'kanban' | 'dashboard' = soLista ? 'list' : listaIan ? (dashboardIan ? 'dashboard' : 'list') : viewEscolhida
+  React.useEffect(() => {
+    if (soLista || listaIan) setSdrFilter(null)
+    if (listaIan) setFilterRules([])
+  }, [soLista, listaIan])
   const VIEW_LABEL: Record<'list' | 'kanban' | 'dashboard', string> = {
     list: 'lista', kanban: 'Kanban', dashboard: sdrLock ? 'Minhas métricas' : 'Dashboard',
   }
@@ -1598,12 +1605,13 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               <>
               <ToolbarButton
                 icon={<LayoutDashboard className="h-3.5 w-3.5" />}
-                onClick={() => changeView('dashboard')}
+                onClick={() => (listaIan ? setDashboardIan((v) => !v) : changeView('dashboard'))}
                 className={view === 'dashboard' ? 'bg-accent/10 text-accent' : undefined}
                 title="Ver resumo em relatório — só visualização"
               >
                 {sdrLock ? 'Minhas métricas' : 'Dashboard'}
               </ToolbarButton>
+              {!listaIan && (
               <div className="inline-flex overflow-hidden rounded-lg border border-line">
                 <button
                   type="button"
@@ -1630,16 +1638,21 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   Kanban
                 </button>
               </div>
-              <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />
+              )}
+              {!listaIan && (
+                <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />
+              )}
               </>
               )}
-              <ToolbarButton
-                icon={<Filter className="h-3.5 w-3.5" />}
-                onClick={() => setFiltersOpen(true)}
-                className={filterRules.length > 0 ? 'text-accent' : undefined}
-              >
-                {filterRules.length > 0 ? `Filtro (${filterRules.length})` : 'Filtro'}
-              </ToolbarButton>
+              {!listaIan && (
+                <ToolbarButton
+                  icon={<Filter className="h-3.5 w-3.5" />}
+                  onClick={() => setFiltersOpen(true)}
+                  className={filterRules.length > 0 ? 'text-accent' : undefined}
+                >
+                  {filterRules.length > 0 ? `Filtro (${filterRules.length})` : 'Filtro'}
+                </ToolbarButton>
+              )}
               <ToolbarButton
                 icon={<ScrollText className="h-3.5 w-3.5" />}
                 onClick={() => setLogOpen(true)}
@@ -1664,7 +1677,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} sdrLock={sdrLock ?? undefined} modoDemanda={hideIanMateusCols} />
             ) : (
               <>
-                <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} />
+                {!listaIan && <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} />}
                 <div className="flex-1">
                   {visibleBoards.map((board) => (
                     <BoardGroup

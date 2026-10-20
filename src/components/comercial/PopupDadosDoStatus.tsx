@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ClipboardCheck } from 'lucide-react'
+import { BellRing, ClipboardCheck } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { registrarPedidoDeDadoDoStatus, type PedidoDeDadoDoStatus, type RespostaDoPedido } from '@/services/leadBoards'
@@ -114,6 +114,12 @@ export function PopupDadosDoStatus() {
                 <input type="date" value={data[c] ?? ''} autoFocus={i === 0} onChange={(e) => setData((x) => ({ ...x, [c]: e.target.value }))} className={campoCls} aria-label={`${ROTULO[c]}: dia`} />
                 <input type="time" value={hora[c] ?? ''} onChange={(e) => setHora((x) => ({ ...x, [c]: e.target.value }))} className={campoCls} aria-label={`${ROTULO[c]}: horário`} />
               </div>
+            )}
+            {c === 'agendamento' && (
+              <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-warning/30 bg-warning/[0.08] px-3 py-2 text-xs font-medium text-warning">
+                <BellRing className="mt-px h-3.5 w-3.5 shrink-0" />
+                Não esqueça de enviar o link pro lead e colocar na agenda.
+              </p>
             )}
             {c === 'origem' && (
               <>

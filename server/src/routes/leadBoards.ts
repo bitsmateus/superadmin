@@ -1383,10 +1383,19 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         if (sdrDaAba) (leadRow as { sdr?: string }).sdr = sdrDaAba;
       }
 
+      // Agendamento vai sozinho pra agenda (Google) — MENOS nos CRMs do Arthur e do Luis (inclui o Closer): ali o SDR
+      // manda o link pro lead e põe na agenda à mão (o popup do agendamento lembra disso).
       if ('agendamento' in patch) {
-        void syncLeadAgendamentoCalendar(leadRow as unknown as LeadAgendamentoRow).catch((err) =>
-          console.error('[calendarSync] lead-rows (agendamento):', err),
+        const aba = await queryOne<{ id: string; name: string }>(
+          'SELECT lp.id, lp.name FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1',
+          [(leadRow as { board_id: string }).board_id]
         );
+        const agendaManual = !!aba && (/(arthur|lu[ií]s)/i.test(aba.name) || /(arthur|luis)/i.test(aba.id));
+        if (!agendaManual) {
+          void syncLeadAgendamentoCalendar(leadRow as unknown as LeadAgendamentoRow).catch((err) =>
+            console.error('[calendarSync] lead-rows (agendamento):', err),
+          );
+        }
       }
 
       // Corrigir o MRR/Implementação numa venda sincronizada (ex.: desconto fechado depois)

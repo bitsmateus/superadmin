@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { BarChart3, Calendar, LayoutGrid, ShoppingBag, Tags, UserCheck, UserRound, Users } from 'lucide-react'
+import { BarChart3, Calendar, LayoutGrid, PhoneCall, ShoppingBag, Tags, UserCheck, UserRound, Users } from 'lucide-react'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useLeadMilestones } from '@/hooks/useLeadMilestones'
 import { useMonthFilter, withinBounds, addMonthsToId, currentMonthId } from '@/hooks/useMonthFilter'
@@ -8,6 +8,7 @@ import { ClickableStat } from '@/components/comercial/ClickableStat'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 import { diaLocal } from '@/lib/diaLocal'
+import { CANAIS_DE_AGENDAMENTO, agendadoEhOutro, textoDoAgendadoOutro } from '@/lib/regraDoStatus'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
 /** Etiquetas de Status que "contam" pro funil do SDR — precisam bater com o texto exato
@@ -238,6 +239,155 @@ function SdrMetricsTable({ bySdr, title = 'Métricas por SDR' }: { bySdr: SdrMet
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+type PeriodoCanal = 'hoje' | 'ontem' | '7dias' | 'mes' | 'personalizado'
+
+/** Dia local (AAAA-MM-DD) deslocado em `dias` a partir de hoje. */
+function diaDeHoje(dias = 0): string {
+  const d = new Date()
+  d.setDate(d.getDate() + dias)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const NAO_INFORMADO = 'Não informado'
+
+/**
+ * AGENDAMENTOS POR CANAL — quantas reuniões foram marcadas no período e por onde (o campo "Agendado por" que o SDR
+ * preenche ao agendar). Conta no dia em que a reunião foi marcada pela primeira vez, igual ao "Dia a dia".
+ * Agendamento sem o campo preenchido (os de antes do campo existir) aparece em "Não informado".
+ */
+function AgendamentosPorCanal({
+  rows, boards, onOpenLead, bounds, milestoneById,
+}: {
+  rows: LeadRow[]
+  boards: LeadBoard[]
+  onOpenLead: (id: string) => void
+  bounds: { from: string; to: string }
+  milestoneById: Map<string, { firstAgendadaAt: string | null }>
+}) {
+  const [periodo, setPeriodo] = React.useState<PeriodoCanal>('hoje')
+  const [de, setDe] = React.useState(() => diaDeHoje(-6))
+  const [ate, setAte] = React.useState(() => diaDeHoje())
+
+  const faixa = React.useMemo(() => {
+    if (periodo === 'hoje') return { from: diaDeHoje(), to: diaDeHoje() }
+    if (periodo === 'ontem') return { from: diaDeHoje(-1), to: diaDeHoje(-1) }
+    if (periodo === '7dias') return { from: diaDeHoje(-6), to: diaDeHoje() }
+    if (periodo === 'mes') return bounds
+    return de <= ate ? { from: de, to: ate } : { from: ate, to: de }
+  }, [periodo, bounds, de, ate])
+
+  const { porCanal, total, textosOutro } = React.useMemo(() => {
+    const mapa = new Map<string, LeadRow[]>()
+    for (const c of [...CANAIS_DE_AGENDAMENTO, NAO_INFORMADO]) mapa.set(c, [])
+    const textos: string[] = []
+    let n = 0
+    for (const r of rows) {
+      const quando = milestoneById.get(r.id)?.firstAgendadaAt
+      if (!quando) continue
+      const dia = diaLocal(quando)
+      if (dia < faixa.from || dia > faixa.to) continue
+      const v = (r.agendadoPor ?? '').trim()
+      const canal = !v ? NAO_INFORMADO
+        : agendadoEhOutro(v) ? 'Outro'
+        : (CANAIS_DE_AGENDAMENTO as readonly string[]).includes(v) ? v : 'Outro'
+      if (canal === 'Outro') textos.push(`${textoDoAgendadoOutro(v) || v} (${r.nome || r.empresa || 'sem nome'})`)
+      mapa.get(canal)!.push(r)
+      n++
+    }
+    return { porCanal: mapa, total: n, textosOutro: textos }
+  }, [rows, milestoneById, faixa])
+
+  const maior = Math.max(1, ...Array.from(porCanal.values()).map((l) => l.length))
+  const rotuloDoPeriodo = periodo === 'hoje' ? 'Hoje' : periodo === 'ontem' ? 'Ontem' : periodo === '7dias' ? 'Últimos 7 dias'
+    : periodo === 'mes' ? 'Mês selecionado' : 'Período'
+  const opcoes: { id: PeriodoCanal; rotulo: string }[] = [
+    { id: 'hoje', rotulo: 'Hoje' }, { id: 'ontem', rotulo: 'Ontem' }, { id: '7dias', rotulo: '7 dias' },
+    { id: 'mes', rotulo: 'Mês' }, { id: 'personalizado', rotulo: 'Personalizado' },
+  ]
+
+  return (
+    <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <PhoneCall className="h-4 w-4 text-accent" /> Agendamentos por canal
+          </p>
+          <p className="mt-0.5 text-xs text-foreground/45">Por onde as reuniões foram marcadas (o campo "Agendado por" do lead).</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {opcoes.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => setPeriodo(o.id)}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-medium',
+                periodo === o.id ? 'bg-accent/10 text-accent ring-1 ring-accent/20' : 'text-foreground/55 hover:bg-elevate/[0.05]',
+              )}
+            >
+              {o.rotulo}
+            </button>
+          ))}
+        </div>
+      </div>
+      {periodo === 'personalizado' && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5 text-xs text-foreground/60">
+          de
+          <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="h-8 rounded-md border border-line bg-surface px-2 text-xs text-foreground outline-none focus:border-accent" />
+          até
+          <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="h-8 rounded-md border border-line bg-surface px-2 text-xs text-foreground outline-none focus:border-accent" />
+        </div>
+      )}
+      <div className="px-4 py-3">
+        <p className="mb-3 text-sm text-foreground/70">
+          <span className="text-xs uppercase tracking-wide text-foreground/45">{rotuloDoPeriodo}</span>
+          <span className="ml-2 text-2xl font-bold tabular-nums text-foreground">{total}</span>
+          <span className="ml-1.5">{total === 1 ? 'agendado' : 'agendados'}</span>
+        </p>
+        <ul className="space-y-1.5">
+          {Array.from(porCanal.entries())
+            // Do canal que mais agendou pro que menos; "Não informado" sempre por último.
+            .sort((x, y) => (x[0] === NAO_INFORMADO ? 1 : 0) - (y[0] === NAO_INFORMADO ? 1 : 0) || y[1].length - x[1].length)
+            .map(([canal, lista]) => {
+            const n = lista.length
+            const pct = total > 0 ? Math.round((n / total) * 100) : 0
+            return (
+              <li key={canal} className={cn('grid grid-cols-[minmax(0,150px)_1fr_auto] items-center gap-3 text-sm sm:grid-cols-[180px_1fr_88px]', n === 0 && 'text-foreground/35')}>
+                <span title={canal} className={cn('truncate', canal === NAO_INFORMADO && 'italic')}>{canal}</span>
+                <span className="h-2 overflow-hidden rounded-full bg-elevate/[0.06]">
+                  <span
+                    className={cn('block h-full rounded-full', canal === NAO_INFORMADO ? 'bg-foreground/25' : 'bg-accent')}
+                    style={{ width: `${n === 0 ? 0 : Math.max(3, (n / maior) * 100)}%` }}
+                  />
+                </span>
+                <span className="flex items-center justify-end gap-2 tabular-nums">
+                  {n === 0 ? (
+                    <span>0</span>
+                  ) : (
+                    <ClickableStat matches={lista} boards={boards} onOpenLead={onOpenLead}>
+                      {(onClick, ref) => (
+                        <button ref={ref} type="button" onClick={onClick} title="Ver quem é" className="rounded px-1.5 font-semibold text-foreground hover:bg-elevate/[0.08]">
+                          {n}
+                        </button>
+                      )}
+                    </ClickableStat>
+                  )}
+                  <span className="w-9 text-right text-xs text-foreground/45">{n > 0 ? `${pct}%` : ''}</span>
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+        {textosOutro.length > 0 && (
+          <div className="mt-3 rounded-lg bg-elevate/[0.03] px-3 py-2 text-xs text-foreground/60">
+            <span className="font-medium text-foreground/75">Em "Outro" escreveram:</span> {textosOutro.join(' · ')}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -483,7 +633,10 @@ export function SdrMetricsGrid({
         {bySdr.map((m) => <SdrCard key={m.sdr} metrics={m} boards={boards} onOpenLead={onOpenLead} />)}
       </div>
       {mostrarPorDia && (
-        <MetricasPorDia rows={rows} boards={boards} onOpenLead={onOpenLead} bounds={monthFilter.bounds} milestoneById={milestoneById} />
+        <>
+          <AgendamentosPorCanal rows={rows} boards={boards} onOpenLead={onOpenLead} bounds={monthFilter.bounds} milestoneById={milestoneById} />
+          <MetricasPorDia rows={rows} boards={boards} onOpenLead={onOpenLead} bounds={monthFilter.bounds} milestoneById={milestoneById} />
+        </>
       )}
     </div>
   )

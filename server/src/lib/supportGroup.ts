@@ -37,13 +37,31 @@ export async function sendToSupportGroupId(groupId: string, text: string): Promi
   const base = ((g.baseUrl as string) || 'https://appapi.nxsystems.com.br').replace(/\/$/, '');
   if (!apiId || !token || !target) return { ok: false, reason: 'not_configured' };
 
+  return sendToGroupWith({ apiId, token, baseUrl: base }, target, t, 'support-alert');
+}
+
+/** Envia um texto a um grupo de WhatsApp por uma conexão da NX Systems (apiId + token). Usado pelos avisos do suporte
+ * e por quem tem conexão própria (ex.: o resumo do grupo LEADS, que sai pelo mesmo número dos avisos de lead novo). */
+export async function sendToGroupWith(
+  conexao: { apiId: string; token: string; baseUrl?: string },
+  groupId: string,
+  text: string,
+  externalKey: string
+): Promise<GroupSendResult> {
+  const t = (text ?? '').trim();
+  if (!t) return { ok: false, reason: 'empty' };
+  const { apiId, token } = conexao;
+  const target = (groupId || '').trim();
+  const base = (conexao.baseUrl || 'https://appapi.nxsystems.com.br').replace(/\/$/, '');
+  if (!apiId || !token || !target) return { ok: false, reason: 'not_configured' };
+
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15_000);
   try {
     const resp = await fetch(`${base}/v2/api/external/${encodeURIComponent(apiId)}/group`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ body: t, number: target, externalKey: 'support-alert', isClosed: false }),
+      body: JSON.stringify({ body: t, number: target, externalKey, isClosed: false }),
       signal: ctrl.signal,
     });
     if (!resp.ok) {

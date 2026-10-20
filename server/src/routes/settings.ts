@@ -25,6 +25,11 @@ export function mascararSettings(original: Record<string, unknown> | null | unde
       const sg = row.support_group as Record<string, unknown>;
       row.support_group = { ...sg, token: '', tokenSet: Boolean(sg.token) };
     }
+    // E o token da conexão do grupo LEADS (resumo de agendamentos).
+    if (row && row.leads_group && typeof row.leads_group === 'object') {
+      const lg = row.leads_group as Record<string, unknown>;
+      row.leads_group = { ...lg, token: '', tokenSet: Boolean(lg.token) };
+    }
     // Mascara a apiKey da Evolution.
     if (row && row.evolution && typeof row.evolution === 'object') {
       const ev = row.evolution as Record<string, unknown>;

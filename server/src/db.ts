@@ -134,6 +134,9 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE reminders ALTER COLUMN due_at DROP NOT NULL`);
   // Grupo do WhatsApp para alertas do suporte (apiId/token/groupId/baseUrl).
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS support_group JSONB`);
+  // Conexão do grupo LEADS no WhatsApp (apiId/token/groupId/baseUrl) — a mesma que avisa "Novo lead"; usada pelo
+  // resumo de agendamentos das 19h (jobs/leadsDailyReport.ts).
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS leads_group JSONB`);
   // Token da API do Autentique — usado pela checagem "assinou lá, marca aqui" (jobs/autentiqueSync.ts).
   // Fica aqui junto dos outros segredos (chave do Asaas, SMTP) pra poder ser trocado sem redeploy;
   // a rota GET /api/settings mascara esse campo, nunca manda pro front.

@@ -370,12 +370,12 @@ const POST_AGENDAMENTO_STATUSES = [
  * de proposta ou fecha venda sem ter conversado. É a prova positiva de comparecimento — melhor do
  * que "agendou e não marcaram no-show", que contava como presente até quem tem reunião marcada
  * pra semana que vem. */
-const POS_REUNIAO_STATUSES = ['Proposta Enviada', 'Follow-up Propostas', MILESTONE_VENDIDO];
+export const POS_REUNIAO_STATUSES = ['Proposta Enviada', 'Follow-up Propostas', MILESTONE_VENDIDO];
 
 /** As DUAS etapas que provam que existiu reunião marcada — comparecida ou não. É o único jeito de
  * entrar na conta de "Reunião agendada": proposta enviada direto do primeiro contato, sem reunião
  * no meio, não é agendamento e não pode inflar o funil. */
-const REUNIAO_STATUSES = [MILESTONE_AGENDADA, 'Reunião não comparecida'];
+export const REUNIAO_STATUSES = [MILESTONE_AGENDADA, 'Reunião não comparecida'];
 
 /**
  * Sincroniza o registro de venda quando o status de um lead muda.

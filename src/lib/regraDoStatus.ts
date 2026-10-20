@@ -35,6 +35,21 @@ export const ORIGENS_DO_LEAD: { valor: string; rotulo: string }[] = [
   { valor: 'outros', rotulo: 'Outros' },
 ]
 
+/** Origem "Outros" é salva junto com o que foi escrito: "outros: <de onde veio>". */
+export const PREFIXO_ORIGEM_OUTROS = 'outros: '
+export function origemEhOutros(valor: string | null | undefined): boolean {
+  return (valor ?? '').trim().toLowerCase().startsWith('outros')
+}
+export function textoDaOrigemOutros(valor: string | null | undefined): string {
+  return (valor ?? '').trim().replace(/^outros:?/i, '').trim()
+}
+/** Origem preenchida de verdade: uma da lista, ou "Outros" com pelo menos 5 letras escritas. */
+export function origemValida(valor: string | null | undefined): boolean {
+  const v = (valor ?? '').trim()
+  if (!v) return false
+  return origemEhOutros(v) ? textoDaOrigemOutros(v).length >= MINIMO_OUTRO : true
+}
+
 /** Status que fecham o lead sem venda: Disparo em massa, Perdidos, Desqualificado. */
 export function statusExigeMotivo(statusOuQuadro: string): boolean {
   const n = normaliza(statusOuQuadro)
@@ -76,6 +91,7 @@ export function campoOk(campo: CampoDoPopup, valor: string | null | undefined): 
   if (campo === 'agendamento' || campo === 'retornar') return temDataEHora(v)
   if (campo === 'motivoDesqualificacao') return motivoValido(v)
   if (campo === 'valorMrr' || campo === 'valorImplementacao') return /\d/.test(v)
+  if (campo === 'origem') return origemValida(v)
   return !!v
 }
 

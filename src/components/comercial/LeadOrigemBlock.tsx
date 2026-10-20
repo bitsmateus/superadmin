@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { MINIMO_OUTRO, ORIGENS_DO_LEAD, PREFIXO_OUTRO } from '@/lib/regraDoStatus'
+import { MINIMO_OUTRO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, PREFIXO_OUTRO, origemEhOutros, textoDaOrigemOutros } from '@/lib/regraDoStatus'
 import * as React from 'react'
 import { ExternalLink, Megaphone } from 'lucide-react'
 import { api } from '@/services/api'
@@ -57,6 +57,40 @@ function MotivoComOutro({ valor, motivos, onChange }: { valor: string; motivos: 
   )
 }
 
+/** Origem do lead (cadastro manual): a lista, e em "Outros" um campo pra escrever de onde veio (mínimo 5 letras),
+ * salvo como "outros: …". */
+function OrigemComOutros({ valor, onChange }: { valor: string; onChange: (v: string) => void }) {
+  const ehOutros = origemEhOutros(valor)
+  const [texto, setTexto] = React.useState(textoDaOrigemOutros(valor))
+  React.useEffect(() => { setTexto(origemEhOutros(valor) ? textoDaOrigemOutros(valor) : '') }, [valor])
+  const curto = ehOutros && texto.trim().length < MINIMO_OUTRO
+  return (
+    <div className="block text-[11px] text-foreground/40">
+      De onde o lead veio
+      <select
+        value={ehOutros ? 'outros' : valor}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-0.5 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
+      >
+        <option value="">— não informado —</option>
+        {ORIGENS_DO_LEAD.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
+      </select>
+      {ehOutros && (
+        <>
+          <input
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            onBlur={() => { const v = texto.trim(); if (v.length >= MINIMO_OUTRO) onChange(`${PREFIXO_ORIGEM_OUTROS}${v}`) }}
+            placeholder="De onde ele veio? (mínimo 5 letras)"
+            className={cn('mt-1 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none', curto && 'ring-1 ring-warning/50')}
+          />
+          {curto && <span className="text-[11px] text-warning">Escreva de onde veio com pelo menos {MINIMO_OUTRO} letras.</span>}
+        </>
+      )}
+    </div>
+  )
+}
+
 /** "Origem" do lead. Veio do Meta Ads: campanha › conjunto › anúncio com miniatura, nicho real e motivo de
  * desqualificação. Não veio (cadastro manual): escolha da origem (bio, site, indicação…), nicho e motivo. */
 export function LeadOrigemBlock({ leadRowId, nicho, motivoDesqualificacao, origem, mostrarSemAnuncio = false, onChange }: LeadOrigemBlockProps) {
@@ -85,17 +119,7 @@ export function LeadOrigemBlock({ leadRowId, nicho, motivoDesqualificacao, orige
           <Megaphone className="h-3.5 w-3.5 text-foreground/60" />
           Origem
         </div>
-        <label className="block text-[11px] text-foreground/40">
-          De onde o lead veio
-          <select
-            value={origem}
-            onChange={(e) => onChange({ origem: e.target.value })}
-            className="mt-0.5 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
-          >
-            <option value="">— não informado —</option>
-            {ORIGENS_DO_LEAD.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
-          </select>
-        </label>
+        <OrigemComOutros valor={origem} onChange={(v) => onChange({ origem: v })} />
         <div className="mt-2 space-y-1.5 border-t border-line/60 pt-2">
           <label className="block text-[11px] text-foreground/40">
             Nicho do lead

@@ -4,7 +4,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { registrarPedidoDeDadoDoStatus, type PedidoDeDadoDoStatus, type RespostaDoPedido } from '@/services/leadBoards'
 import {
-  MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_OUTRO, campoOk, type CampoDoPopup,
+  MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, PREFIXO_OUTRO, campoOk,
+  origemEhOutros, textoDaOrigemOutros, type CampoDoPopup,
 } from '@/lib/regraDoStatus'
 import { prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
 
@@ -34,6 +35,7 @@ export function PopupDadosDoStatus() {
   const [hora, setHora] = React.useState<Record<string, string>>({})
   const [texto, setTexto] = React.useState<Record<string, string>>({})
   const [outro, setOutro] = React.useState('')
+  const [origemOutros, setOrigemOutros] = React.useState('')
 
   React.useEffect(
     () => registrarPedidoDeDadoDoStatus((p) => new Promise<RespostaDoPedido | null>((responder) => setFila((f) => [...f, { ...p, responder }]))),
@@ -44,6 +46,7 @@ export function PopupDadosDoStatus() {
     if (!atual) return
     const d: Record<string, string> = {}, h: Record<string, string> = {}, tx: Record<string, string> = {}
     let o = ''
+    let oo = ''
     for (const c of atual.campos) {
       const v = atual.valores[c] ?? ''
       if (c === 'agendamento' || c === 'retornar') {
@@ -55,11 +58,14 @@ export function PopupDadosDoStatus() {
       } else if (c === 'motivoDesqualificacao') {
         tx[c] = v.startsWith('Outro') ? 'Outro' : v
         o = v.startsWith('Outro') ? v.replace(/^Outro:?/, '').trim() : ''
+      } else if (c === 'origem' && origemEhOutros(v)) {
+        tx[c] = 'outros'
+        oo = textoDaOrigemOutros(v)
       } else {
         tx[c] = v
       }
     }
-    setData(d); setHora(h); setTexto(tx); setOutro(o)
+    setData(d); setHora(h); setTexto(tx); setOutro(o); setOrigemOutros(oo)
   }, [atual])
 
   if (!atual) return null
@@ -68,6 +74,7 @@ export function PopupDadosDoStatus() {
     if (c === 'agendamento' || c === 'retornar') return data[c] && hora[c] ? `${data[c]}T${hora[c]}` : ''
     if (c === 'valorMrr' || c === 'valorImplementacao') return texto[c] ? prettifyCurrencyRaw(texto[c]) : ''
     if (c === 'motivoDesqualificacao') return texto[c] === 'Outro' ? `${PREFIXO_OUTRO}${outro.trim()}` : (texto[c] ?? '')
+    if (c === 'origem') return texto[c] === 'outros' ? `${PREFIXO_ORIGEM_OUTROS}${origemOutros.trim()}` : (texto[c] ?? '')
     return texto[c] ?? ''
   }
   const pronto = atual.campos.every((c) => campoOk(c, valorFinal(c)))
@@ -109,10 +116,25 @@ export function PopupDadosDoStatus() {
               </div>
             )}
             {c === 'origem' && (
-              <select value={texto[c] ?? ''} autoFocus={i === 0} onChange={(e) => setTexto((x) => ({ ...x, [c]: e.target.value }))} className={campoCls}>
-                <option value="">Escolha a origem…</option>
-                {ORIGENS_DO_LEAD.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
-              </select>
+              <>
+                <select value={texto[c] ?? ''} autoFocus={i === 0} onChange={(e) => setTexto((x) => ({ ...x, [c]: e.target.value }))} className={campoCls}>
+                  <option value="">Escolha a origem…</option>
+                  {ORIGENS_DO_LEAD.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
+                </select>
+                {texto[c] === 'outros' && (
+                  <>
+                    <input
+                      value={origemOutros}
+                      onChange={(e) => setOrigemOutros(e.target.value)}
+                      placeholder={`De onde ele veio? (mínimo ${MINIMO_OUTRO} letras)`}
+                      className={`${campoCls} mt-2`}
+                    />
+                    {origemOutros.trim().length > 0 && origemOutros.trim().length < MINIMO_OUTRO && (
+                      <span className="mt-1 block text-xs text-warning">Faltam {MINIMO_OUTRO - origemOutros.trim().length} letra(s).</span>
+                    )}
+                  </>
+                )}
+              </>
             )}
             {(c === 'valorMrr' || c === 'valorImplementacao') && (
               <div className="relative">

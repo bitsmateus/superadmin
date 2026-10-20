@@ -255,7 +255,8 @@ async function faltaDadoDoStatus(
   const faltando = exige.campos.filter((c) => {
     const v = final(c);
     if (c === 'agendamento' || c === 'retornar') return !dataEHora(v);
-    if (c === 'origem') return !v && !atual.do_anuncio;
+    // Origem: uma da lista; "outros" só vale com o texto escrito (mínimo 5 letras). Lead do anúncio já é Meta.
+    if (c === 'origem') return !atual.do_anuncio && (!v || (/^outros/i.test(v) && v.replace(/^outros:?/i, '').trim().length < 5));
     return !/\d/.test(v);
   });
   if (!faltando.length) return null;

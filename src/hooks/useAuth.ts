@@ -157,8 +157,9 @@ export async function saveOwnTheme(theme: 'light' | 'dark') {
   if (!profile) return
   try {
     const updated = await api.patch<Profile>(`/api/users/${profile.id}`, { theme })
-    setCurrentProfile(updated)
-    setState({ profile: updated })
+    const junto = juntarPerfil(state.profile ?? updated, updated)
+    setCurrentProfile(junto)
+    setState({ profile: junto })
   } catch {
     // Falha ao salvar não deve travar a troca de tema local — só fica sem sincronizar
     // pros outros dispositivos até a próxima tentativa.
@@ -175,8 +176,9 @@ export async function saveOwnSidebarOrder(sidebarOrder: Record<string, string[]>
   setState({ profile: { ...profile, sidebarOrder } })
   try {
     const updated = await api.patch<Profile>(`/api/users/${profile.id}`, { sidebarOrder })
-    setCurrentProfile(updated)
-    setState({ profile: updated })
+    const junto = juntarPerfil(state.profile ?? updated, updated)
+    setCurrentProfile(junto)
+    setState({ profile: junto })
   } catch {
     // Silencioso de propósito — ver comentário acima.
   }
@@ -184,14 +186,27 @@ export async function saveOwnSidebarOrder(sidebarOrder: Record<string, string[]>
 
 /** Salva os itens do menu fixados pela pessoa. Mesmo padrão de saveOwnSidebarOrder: aplica na
  * hora (o pino reage junto do clique) e salva depois, sem bloquear a UI se a rede falhar. */
+/** Junta o perfil que voltou do servidor com o que já estava na tela. Permissões (menuAccess) e a marca do
+ * Financeiro vêm do servidor quando ele manda; se uma resposta antiga vier sem elas, mantém as que já estavam
+ * — senão o menu esvaziava depois de fixar um item ou trocar o tema. */
+function juntarPerfil(anterior: Profile, novo: Profile): Profile {
+  return {
+    ...anterior,
+    ...novo,
+    menuAccess: novo.menuAccess ?? anterior.menuAccess,
+    financeiro: novo.financeiro ?? anterior.financeiro,
+  }
+}
+
 export async function saveOwnPinnedMenu(pinnedMenu: string[]) {
   const profile = state.profile
   if (!profile) return
   setState({ profile: { ...profile, pinnedMenu } })
   try {
     const updated = await api.patch<Profile>(`/api/users/${profile.id}`, { pinnedMenu })
-    setCurrentProfile(updated)
-    setState({ profile: updated })
+    const junto = juntarPerfil(state.profile ?? updated, updated)
+    setCurrentProfile(junto)
+    setState({ profile: junto })
   } catch {
     // Silencioso de propósito — ver comentário acima.
   }
@@ -202,8 +217,9 @@ export async function updateCurrentUser(updates: { name?: string; password?: str
   const profile = state.profile
   if (!profile) throw new Error('Não autenticado')
   const updated = await api.patch<Profile>(`/api/users/${profile.id}`, updates)
-  setCurrentProfile(updated)
-  setState({ profile: updated })
+  const junto = juntarPerfil(state.profile ?? updated, updated)
+  setCurrentProfile(junto)
+  setState({ profile: junto })
   toast.success('Perfil atualizado')
   return updated
 }

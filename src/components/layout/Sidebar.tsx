@@ -154,6 +154,13 @@ function chaveDoItem(item: { to: string; pageId?: string }): string {
   return item.pageId ?? item.to
 }
 
+/** Aba do Comercial/Demandas é a MESMA aba nos dois menus: um fixado salvo como /comercial/x continua valendo
+ * quando ela passa a ficar em Demandas (/demandas/x), e vice-versa. */
+function chaveComparavel(chave: string): string {
+  const aba = chave.match(/^\/(?:comercial|demandas)\/(.+)$/)
+  return aba ? `aba:${aba[1]}` : chave
+}
+
 /**
  * Arrastar os itens do menu pra montar a sequência que a pessoa quiser.
  *
@@ -471,15 +478,26 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     [suporteOrdenado, comercialOrdenado, demandasOrdenado, financeiroOrdenado, secundariosOrdenados, arquivadosOrdenados],
   )
   const pinnedKeys = profile?.pinnedMenu ?? []
-  const pinnedItems = React.useMemo(
-    () => pinnedKeys
-      .map((key) => pinnableItems.find((item) => chaveDoItem(item) === key))
-      .filter((item): item is (typeof pinnableItems)[number] => Boolean(item)),
-    [pinnedKeys, pinnableItems],
+  const pinnedItems = React.useMemo(() => {
+    const vistos = new Set<string>()
+    return pinnedKeys
+      .map((key) => pinnableItems.find((item) => chaveComparavel(chaveDoItem(item)) === chaveComparavel(key)))
+      .filter((item): item is (typeof pinnableItems)[number] => {
+        if (!item) return false
+        const k = chaveComparavel(chaveDoItem(item))
+        if (vistos.has(k)) return false
+        vistos.add(k)
+        return true
+      })
+  }, [pinnedKeys, pinnableItems])
+  const isPinned = React.useCallback(
+    (key: string) => pinnedKeys.some((k) => chaveComparavel(k) === chaveComparavel(key)),
+    [pinnedKeys],
   )
-  const isPinned = React.useCallback((key: string) => pinnedKeys.includes(key), [pinnedKeys])
   const togglePin = (key: string) => {
-    void saveOwnPinnedMenu(isPinned(key) ? pinnedKeys.filter((k) => k !== key) : [...pinnedKeys, key])
+    void saveOwnPinnedMenu(
+      isPinned(key) ? pinnedKeys.filter((k) => chaveComparavel(k) !== chaveComparavel(key)) : [...pinnedKeys, key],
+    )
   }
 
   return (

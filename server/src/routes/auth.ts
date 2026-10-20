@@ -184,6 +184,10 @@ export async function authRoutes(app: FastifyInstance) {
         (updated as { restrictAccess?: boolean }).restrictAccess = true;
       }
       if (!updated) return reply.status(404).send({ message: 'Usuário não encontrado' });
+      // Quem edita o PRÓPRIO perfil (tema, ordem do menu, fixados, nome, senha) recebe de volta também as
+      // permissões e a marca do Financeiro — sem isso o front trocava o perfil por um sem permissões e o menu
+      // "sumia" depois de fixar um item.
+      if (updated && id === sub) return attachMenuAccess(updated as Profile);
       return updated;
     }
   );

@@ -722,7 +722,7 @@ END; $$`);
       ('disparo',  'ENCERRADO', '#000000', 6)
     ) AS v(field, name, color, position)
     WHERE lp.archived_at IS NULL
-      AND lp.name ~* '(arthur|lu[ií]s)' AND lp.name !~* 'closer'
+      AND lp.name ~* '(arthur|lu[ií]s|luiza)' AND lp.name !~* 'closer'
       AND NOT EXISTS (SELECT 1 FROM lead_labels ll WHERE ll.field = v.field AND ll.page_id = lp.id)`);
 
   // Lead novo já nasce com Lig. = '0' (ver leadBoardsService.createRow) — isso só vale a partir

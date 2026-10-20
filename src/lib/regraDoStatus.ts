@@ -82,7 +82,7 @@ function normaliza(s: string): string {
 }
 
 export function abaComRegraDeStatus(nomeDaAba: string, idDaAba = ''): boolean {
-  return /(arthur|lu[ií]s)/i.test(nomeDaAba) || /(arthur|luis)/i.test(idDaAba)
+  return /(arthur|lu[ií]s|luiza)/i.test(nomeDaAba) || /(arthur|luis|luiza)/i.test(idDaAba)
 }
 
 

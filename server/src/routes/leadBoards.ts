@@ -251,7 +251,7 @@ async function faltaDadoDoStatus(
     'SELECT lp.id, lp.name FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1',
     [typeof patch.board_id === 'string' ? patch.board_id : atual.board_id]
   );
-  if (!aba || !(/(arthur|lu[ií]s)/i.test(aba.name) || /(arthur|luis)/i.test(aba.id))) return null;
+  if (!aba || !(/(arthur|lu[ií]s|luiza)/i.test(aba.name) || /(arthur|luis|luiza)/i.test(aba.id))) return null;
 
   const NOMES: Record<string, string> = {
     agendamento: 'dia e horário do agendamento', agendado_por: 'por onde foi agendado', retornar: 'dia e horário em "Retornar"', origem: 'origem do lead',
@@ -1397,7 +1397,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           'SELECT lp.id, lp.name FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1',
           [(leadRow as { board_id: string }).board_id]
         );
-        const agendaManual = !!aba && (/(arthur|lu[ií]s)/i.test(aba.name) || /(arthur|luis)/i.test(aba.id));
+        const agendaManual = !!aba && (/(arthur|lu[ií]s|luiza)/i.test(aba.name) || /(arthur|luis|luiza)/i.test(aba.id));
         if (!agendaManual) {
           void syncLeadAgendamentoCalendar(leadRow as unknown as LeadAgendamentoRow).catch((err) =>
             console.error('[calendarSync] lead-rows (agendamento):', err),

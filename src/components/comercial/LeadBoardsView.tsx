@@ -1347,7 +1347,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   // CRM do Arthur ou do Luis "normais" (o Closer tem outra rotina): é onde ficam as colunas de cadência. Casa também
   // pelo id da aba, que já existe antes de o nome carregar.
   const crmArthurLuis = React.useMemo(() => {
-    const ehDeles = (s: string) => /(arthur|lu[ií]s)/i.test(s)
+    const ehDeles = (s: string) => /(arthur|lu[ií]s|luiza)/i.test(s)
     return (ehDeles(title) || ehDeles(page)) && !/closer/i.test(title) && !/closer/i.test(page)
   }, [title, page])
 

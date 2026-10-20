@@ -19,11 +19,14 @@ export interface LeadMilestone {
   /** Data do PRIMEIRO "Reunião agendada" da história do lead — fica fixa mesmo que ele tenha
    * dado no-show e sido reagendado depois (reagendar não conta como um novo agendamento). */
   firstAgendadaAt: string | null
+  /** Quem fez esse primeiro agendamento (nome de quem mudou o status na linha do tempo). */
+  firstAgendadaBy: string | null
 }
 
 type Row = {
   id: string; board_id: string; sdr: string; milestone: string | null; milestone_at: string | null
   ever_agendada: boolean; ever_compareceu: boolean; first_agendada_at: string | null
+  first_agendada_by?: string | null
 }
 
 let milestones: LeadMilestone[] = []
@@ -67,6 +70,7 @@ export const leadMilestonesService = {
         id: r.id, boardId: r.board_id, sdr: r.sdr, milestone: r.milestone, milestoneAt: r.milestone_at,
         everAgendada: r.ever_agendada, everCompareceu: r.ever_compareceu,
         firstAgendadaAt: r.first_agendada_at,
+        firstAgendadaBy: r.first_agendada_by ?? null,
       }))
       loaded = true
       notify()

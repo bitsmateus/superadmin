@@ -1701,7 +1701,13 @@ export async function leadBoardRoutes(app: FastifyInstance) {
              WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $3),
             lr.created_at
           )
-        END AS first_agendada_at
+        END AS first_agendada_at,
+        -- Quem marcou a reunião: autor da PRIMEIRA mudança pra "Reunião agendada" na linha do tempo do lead.
+        CASE WHEN ${everAgendadaSql} THEN
+          (SELECT le.actor_name FROM lead_events le
+           WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $3
+           ORDER BY le.created_at ASC LIMIT 1)
+        END AS first_agendada_by
        FROM lead_rows lr
        JOIN lead_boards lb ON lb.id = lr.board_id
        WHERE lb.is_vendas = false

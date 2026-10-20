@@ -267,7 +267,7 @@ function AgendamentosPorCanal({
   boards: LeadBoard[]
   onOpenLead: (id: string) => void
   bounds: { from: string; to: string }
-  milestoneById: Map<string, { firstAgendadaAt: string | null }>
+  milestoneById: Map<string, { firstAgendadaAt: string | null; firstAgendadaBy?: string | null }>
 }) {
   const [periodo, setPeriodo] = React.useState<PeriodoCanal>('hoje')
   const [de, setDe] = React.useState(() => diaDeHoje(-6))
@@ -281,9 +281,11 @@ function AgendamentosPorCanal({
     return de <= ate ? { from: de, to: ate } : { from: ate, to: de }
   }, [periodo, bounds, de, ate])
 
-  const { porCanal, total, textosOutro } = React.useMemo(() => {
+  const { porCanal, porQuem, total, textosOutro } = React.useMemo(() => {
     const mapa = new Map<string, LeadRow[]>()
     for (const c of [...CANAIS_DE_AGENDAMENTO, NAO_INFORMADO]) mapa.set(c, [])
+    // Quem marcou: o autor da 1ª mudança pra "Reunião agendada". Por enquanto só os dois SDRs; o resto vai em "Outros".
+    const quem = new Map<string, LeadRow[]>([['SDR Arthur', []], ['SDR Luis', []]])
     const textos: string[] = []
     let n = 0
     for (const r of rows) {
@@ -297,9 +299,12 @@ function AgendamentosPorCanal({
         : (CANAIS_DE_AGENDAMENTO as readonly string[]).includes(v) ? v : 'Outro'
       if (canal === 'Outro') textos.push(`${textoDoAgendadoOutro(v) || v} (${r.nome || r.empresa || 'sem nome'})`)
       mapa.get(canal)!.push(r)
+      const autor = milestoneById.get(r.id)?.firstAgendadaBy ?? ''
+      const pessoa = /arthur/i.test(autor) ? 'SDR Arthur' : /lu[ií]s/i.test(autor) ? 'SDR Luis' : autor ? 'Outros' : NAO_INFORMADO
+      quem.set(pessoa, [...(quem.get(pessoa) ?? []), r])
       n++
     }
-    return { porCanal: mapa, total: n, textosOutro: textos }
+    return { porCanal: mapa, porQuem: quem, total: n, textosOutro: textos }
   }, [rows, milestoneById, faixa])
 
   const maior = Math.max(1, ...Array.from(porCanal.values()).map((l) => l.length))
@@ -317,7 +322,7 @@ function AgendamentosPorCanal({
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <PhoneCall className="h-4 w-4 text-accent" /> Agendamentos por canal
           </p>
-          <p className="mt-0.5 text-xs text-foreground/45">Por onde as reuniões foram marcadas (o campo "Agendado por" do lead).</p>
+          <p className="mt-0.5 text-xs text-foreground/45">Por onde as reuniões foram marcadas (o campo "Agendado por" do lead) e por quem.</p>
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {opcoes.map((o) => (
@@ -388,6 +393,36 @@ function AgendamentosPorCanal({
             <span className="font-medium text-foreground/75">Em "Outro" escreveram:</span> {textosOutro.join(' · ')}
           </div>
         )}
+
+        <p className="mb-2 mt-5 border-t border-line pt-3 text-xs font-semibold uppercase tracking-wide text-foreground/50">Por quem agendou</p>
+        <ul className="space-y-1.5">
+          {Array.from(porQuem.entries())
+            // Os dois SDRs sempre aparecem; "Outros" e "Não informado" só quando tiver alguém.
+            .filter(([p, l]) => p === 'SDR Arthur' || p === 'SDR Luis' || l.length > 0)
+            .map(([pessoa, lista]) => {
+              const n = lista.length
+              const pct = total > 0 ? Math.round((n / total) * 100) : 0
+              return (
+                <li key={pessoa} className={cn('grid grid-cols-[minmax(0,150px)_1fr_auto] items-center gap-3 text-sm sm:grid-cols-[180px_1fr_88px]', n === 0 && 'text-foreground/35')}>
+                  <span className={cn('truncate', pessoa === NAO_INFORMADO && 'italic')}>{pessoa}</span>
+                  <span className="h-2 overflow-hidden rounded-full bg-elevate/[0.06]">
+                    <span className={cn('block h-full rounded-full', pessoa === NAO_INFORMADO || pessoa === 'Outros' ? 'bg-foreground/25' : 'bg-accent')}
+                      style={{ width: `${n === 0 ? 0 : Math.max(3, (n / Math.max(1, total)) * 100)}%` }} />
+                  </span>
+                  <span className="flex items-center justify-end gap-2 tabular-nums">
+                    {n === 0 ? <span>0</span> : (
+                      <ClickableStat matches={lista} boards={boards} onOpenLead={onOpenLead}>
+                        {(onClick, ref) => (
+                          <button ref={ref} type="button" onClick={onClick} title="Ver quem é" className="rounded px-1.5 font-semibold text-foreground hover:bg-elevate/[0.08]">{n}</button>
+                        )}
+                      </ClickableStat>
+                    )}
+                    <span className="w-9 text-right text-xs text-foreground/45">{n > 0 ? `${pct}%` : ''}</span>
+                  </span>
+                </li>
+              )
+            })}
+        </ul>
       </div>
     </div>
   )
@@ -551,7 +586,7 @@ export function SdrMetricsGrid({
     () => new Map(milestones.map((m) => [
       m.id, {
         milestone: m.milestone, everAgendada: m.everAgendada, everCompareceu: m.everCompareceu,
-        milestoneAt: m.milestoneAt, firstAgendadaAt: m.firstAgendadaAt,
+        milestoneAt: m.milestoneAt, firstAgendadaAt: m.firstAgendadaAt, firstAgendadaBy: m.firstAgendadaBy,
       },
     ])),
     [milestones],

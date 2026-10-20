@@ -25,7 +25,7 @@ export async function findMatchingLeadRowId(
   if (key) {
     const byPhone = await query<{ id: string }>(
       `SELECT id FROM lead_rows
-       WHERE deleted_at IS NULL AND venda_origem_id IS NULL AND espelho_origem_id IS NULL
+       WHERE deleted_at IS NULL AND venda_origem_id IS NULL AND espelho_origem_id IS NULL AND copia_ia_origem_id IS NULL
          AND right(regexp_replace(telefone, '\\D', '', 'g'), 8) = $1`,
       [key]
     );
@@ -37,7 +37,7 @@ export async function findMatchingLeadRowId(
 
   const candidates = await query<{ id: string; nome: string; empresa: string }>(
     `SELECT id, nome, empresa FROM lead_rows
-     WHERE deleted_at IS NULL AND venda_origem_id IS NULL AND espelho_origem_id IS NULL
+     WHERE deleted_at IS NULL AND venda_origem_id IS NULL AND espelho_origem_id IS NULL AND copia_ia_origem_id IS NULL
        AND (nome <> '' OR empresa <> '')`
   );
   // Nome/empresa curto ou genérico ("D", "Brasil") vira falso positivo por containment contra

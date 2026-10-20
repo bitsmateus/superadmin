@@ -2,7 +2,7 @@ import { toast } from 'sonner'
 import { api, onSseEvent } from '@/services/api'
 import type { LeadBoard, LeadBoardPage, LeadRow } from '@/types/leadBoard'
 import { leadPagesService } from '@/services/leadPages'
-import { abaComRegraDeStatus, campoOk, exigenciasDoStatus, leadCobraMotivo, mesmoStatus, motivoValido, statusExigeMotivo, type CampoDoPopup } from '@/lib/regraDoStatus'
+import { abaComRegraDeStatus, campoOk, ehSdrDaIa, exigenciasDoStatus, leadCobraMotivo, mesmoStatus, motivoValido, ofereceAgendadoPelaIa, statusExigeMotivo, type CampoDoPopup } from '@/lib/regraDoStatus'
 
 function uuid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -56,6 +56,7 @@ type LeadRowRow = {
   veio_do_funil?: boolean
   contrato_assinado?: boolean
   espelho_origem_id?: string | null
+  copia_ia_origem_id?: string | null
   closer?: string
   last_note_preview?: string
   last_note_at?: string | null
@@ -86,6 +87,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     veioDoFunil: r.veio_do_funil ?? false,
     contratoAssinado: r.contrato_assinado ?? false,
     espelhoOrigemId: r.espelho_origem_id ?? null,
+    copiaIaOrigemId: r.copia_ia_origem_id ?? null,
     closer: r.closer ?? '',
     lastNotePreview: r.last_note_preview ?? '',
     lastNoteAt: r.last_note_at ?? null,
@@ -250,7 +252,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
     id: uuid(), boardId, nome: '', tipo: '', etiqueta: '', followup: '', disparo: '', origem: '', agendadoPor: '', nicho: '', motivoDesqualificacao: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
     status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
     dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
-    fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, closer: '',
+    fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, copiaIaOrigemId: null, closer: '',
     lastNotePreview: '', lastNoteAt: null,
     position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
     mrrPendente: true, implPendente: true, observacoes: '', veioDoFunil: false,
@@ -280,9 +282,13 @@ export type PedidoDeDadoDoStatus = {
   campos: CampoDoPopup[]
   /** O que o lead já tem, pra vir preenchido. */
   valores: Partial<Record<CampoDoPopup, string>>
+  /** Mostra a opção "Foi a IA Luiza que agendou" (Reunião agendada no CRM de um SDR). */
+  oferecerIa?: boolean
+  /** A lead já está marcada como agendada pela IA (vem com a opção ligada). */
+  iaJaMarcada?: boolean
 }
-/** O que o popup devolve: os campos preenchidos, ou null se cancelou. */
-export type RespostaDoPedido = Partial<Record<CampoDoPopup, string>>
+/** O que o popup devolve: os campos preenchidos (e o SDR, se a opção da IA mudou), ou null se cancelou. */
+export type RespostaDoPedido = Partial<Record<CampoDoPopup, string>> & { sdr?: string }
 let pedirDadoDoStatus: ((p: PedidoDeDadoDoStatus) => Promise<RespostaDoPedido | null>) | null = null
 export function registrarPedidoDeDadoDoStatus(fn: (p: PedidoDeDadoDoStatus) => Promise<RespostaDoPedido | null>): () => void {
   pedirDadoDoStatus = fn
@@ -292,7 +298,7 @@ export function registrarPedidoDeDadoDoStatus(fn: (p: PedidoDeDadoDoStatus) => P
 type LeadParaRegra = Pick<LeadRow, 'boardId' | 'status' | 'createdAt' | 'metaLeadId' | CampoDoPopup>
 
 /** Os campos que faltam pra essa mudança de status, ou null se pode seguir. */
-function exigenciaDaMudanca(atual: LeadParaRegra | null, patch: Partial<LeadRow>): { status: string; campos: CampoDoPopup[] } | null {
+function exigenciaDaMudanca(atual: LeadParaRegra | null, patch: Partial<LeadRow>): { status: string; campos: CampoDoPopup[]; oferecerIa: boolean } | null {
   const quadroDestino = boards.find((b) => b.id === (patch.boardId ?? atual?.boardId))
   if (!quadroDestino) return null
   // O status novo: o que veio no patch ou, ao trocar de quadro, o nome do quadro (o servidor alinha o status a ele).
@@ -303,7 +309,7 @@ function exigenciaDaMudanca(atual: LeadParaRegra | null, patch: Partial<LeadRow>
   // Lead que entrou de outubro/2026 pra frente (anúncio ou manual) indo pra Disparo em massa / Perdidos /
   // Desqualificado: precisa do motivo (em qualquer aba). Os mais antigos não são cobrados.
   if (atual && leadCobraMotivo(atual.createdAt) && statusExigeMotivo(statusNovo)) {
-    return motivoValido(final('motivoDesqualificacao')) ? null : { status: statusNovo, campos: ['motivoDesqualificacao'] }
+    return motivoValido(final('motivoDesqualificacao')) ? null : { status: statusNovo, campos: ['motivoDesqualificacao'], oferecerIa: false }
   }
   const aba = leadPagesService.getAll().find((p) => p.id === quadroDestino.page)
   if (!abaComRegraDeStatus(aba?.name ?? '', quadroDestino.page)) return null
@@ -315,7 +321,9 @@ function exigenciaDaMudanca(atual: LeadParaRegra | null, patch: Partial<LeadRow>
     // "seFaltar": só se o lead não tem. Origem de lead do anúncio já é Meta.
     ...regra.seFaltar.filter((c) => !(c === 'origem' && atual?.metaLeadId) && !campoOk(c, final(c))),
   ]
-  return campos.length ? { status: statusNovo, campos } : null
+  return campos.length
+    ? { status: statusNovo, campos, oferecerIa: ofereceAgendadoPelaIa(statusNovo, aba?.name ?? '', quadroDestino.page) }
+    : null
 }
 
 function valoresDoLead(l: Partial<LeadRow> | null): Partial<Record<CampoDoPopup, string>> {
@@ -418,7 +426,10 @@ export const leadBoardsService = {
   async createRowComRegra(boardId: string, initial: Partial<LeadRow>): Promise<LeadRow | null> {
     const exig = exigenciaDaMudanca(null, { ...initial, boardId })
     if (exig && pedirDadoDoStatus) {
-      const resposta = await pedirDadoDoStatus({ nome: initial.nome || 'Lead novo', status: exig.status, campos: exig.campos, valores: valoresDoLead(initial) })
+      const resposta = await pedirDadoDoStatus({
+        nome: initial.nome || 'Lead novo', status: exig.status, campos: exig.campos, valores: valoresDoLead(initial),
+        oferecerIa: exig.oferecerIa, iaJaMarcada: ehSdrDaIa(initial.sdr),
+      })
       if (!resposta) return null
       return leadBoardsService.createRow(boardId, { ...initial, ...resposta })
     }
@@ -461,6 +472,7 @@ export const leadBoardsService = {
       void pedirDadoDoStatus({
         nome: prev.nome || prev.empresa || 'Lead sem nome', status: exig.status, campos: exig.campos,
         valores: { ...valoresDoLead(prev), ...valoresDoLead(patch as Partial<LeadRow>) },
+        oferecerIa: exig.oferecerIa, iaJaMarcada: ehSdrDaIa(patch.sdr ?? prev.sdr),
       }).then((resposta) => { if (resposta) leadBoardsService.updateRow(id, { ...patch, ...resposta }) })
       return
     }

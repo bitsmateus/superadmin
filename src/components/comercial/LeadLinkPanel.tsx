@@ -162,7 +162,7 @@ function LeadPickerModal({
       // espelhoOrigemId marca a cópia no CRM do closer (espelho do CRM ARTHUR): mesmo nome e
       // telefone da original, então aparecer as duas na busca só confunde — o vínculo é sempre
       // com a lead original, que é onde o histórico mora.
-      .filter((r) => !r.vendaOrigemId && !r.espelhoOrigemId)
+      .filter((r) => !r.vendaOrigemId && !r.espelhoOrigemId && !r.copiaIaOrigemId)
       .filter((r) => {
         if (r.nome.toLowerCase().includes(needle)) return true
         if (r.empresa.toLowerCase().includes(needle)) return true

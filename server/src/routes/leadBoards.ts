@@ -399,11 +399,11 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
     // Cópia do espelho nunca registra venda: o closer pode ser quem marca "Vendido", mas a venda
     // (e a comissão) sai UMA vez só, sempre pela lead original do Arthur — quem chama por ela
     // nesse caso é o propagarEspelho.
-    const espelho = await queryOne<{ espelho_origem_id: string | null }>(
-      'SELECT espelho_origem_id FROM lead_rows WHERE id = $1',
+    const espelho = await queryOne<{ espelho_origem_id: string | null; copia_ia_origem_id: string | null }>(
+      'SELECT espelho_origem_id, copia_ia_origem_id FROM lead_rows WHERE id = $1',
       [leadRowId]
     );
-    if (espelho?.espelho_origem_id) return;
+    if (espelho?.espelho_origem_id || espelho?.copia_ia_origem_id) return;
 
     if (toStatus !== MILESTONE_VENDIDO) {
       if (fromStatus !== MILESTONE_VENDIDO) return;
@@ -691,88 +691,182 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
 /** Status do começo do funil: nunca chegam ao CRM do closer. */
 const STATUS_INICIO_DO_FUNIL = new Set(['primeirocontato', 'leadsnovos']);
 
-/** Edição de conteúdo vai pro outro lado do espelho (original <-> cópia). É um pulo só: o UPDATE
- * daqui não passa pelo PATCH de novo, então não entra em loop. */
+/** Edição de conteúdo vai pras outras linhas da mesma lead: a original e as cópias dela (a do CRM do closer e a do
+ * CRM IA LUIZA). É um pulo só: o UPDATE daqui não passa pelo PATCH de novo, então não entra em loop. */
 async function propagarEspelho(
   leadRowId: string,
   espelhoOrigemId: string | null,
   patch: Record<string, unknown>,
-  actorId: string
+  actorId: string,
+  copiaIaOrigemId: string | null = null
 ) {
   try {
-    const campos = Object.keys(patch).filter((k) => ESPELHO_CAMPOS.includes(k));
+    const camposDoPatch = Object.keys(patch).filter((k) => ESPELHO_CAMPOS.includes(k));
     // QUALQUER status atravessa o espelho, não só as etapas do funil: os dois CRMs mostram a mesma
     // lead, então ela tem que estar no mesmo lugar nos dois. Quando o Arthur manda pra "Disparo em
     // massa", a cópia do closer vai junto — antes ela ficava parada em "Reunião agendada" e os dois
     // quadros se contradiziam.
     const novoStatus = typeof patch.status === 'string' && patch.status.trim() ? patch.status : null;
-    if (!campos.length && !novoStatus) return;
+    if (!camposDoPatch.length && !novoStatus) return;
 
-    // espelhoOrigemId preenchido = quem foi editado é a CÓPIA, então o parceiro é a original.
-    const parceiro = await queryOne<{ id: string; status: string; board_id: string; page: string }>(
-      `SELECT r.id, r.status, r.board_id, lb.page
+    // Quem foi editado é uma cópia quando tem a original marcada; a original é a raiz da família.
+    const editouCopia = !!(espelhoOrigemId || copiaIaOrigemId);
+    const original = espelhoOrigemId ?? copiaIaOrigemId ?? leadRowId;
+    const parceiros = await query<{
+      id: string; status: string; board_id: string; page: string;
+      espelho_origem_id: string | null; copia_ia_origem_id: string | null;
+    }>(
+      `SELECT r.id, r.status, r.board_id, lb.page, r.espelho_origem_id, r.copia_ia_origem_id
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
-       WHERE ${espelhoOrigemId ? 'r.id = $1' : 'r.espelho_origem_id = $1'}`,
-      [espelhoOrigemId ?? leadRowId]
+       WHERE (r.id = $1 OR r.espelho_origem_id = $1 OR r.copia_ia_origem_id = $1) AND r.id <> $2`,
+      [original, leadRowId]
     );
-    if (!parceiro) return;
 
-    // Lead que o Arthur devolve pro INÍCIO do funil (Primeiro Contato / Leads Novos) deixa de ser do closer:
-    // a reunião não vingou. A cópia sai do CRM do Luis (vai pra lixeira, dá pra recuperar) em vez de virar um
-    // quadro "Primeiro Contato" lá. Se a lead voltar a "Reunião agendada", a cópia é restaurada.
-    if (!espelhoOrigemId && novoStatus && STATUS_INICIO_DO_FUNIL.has(normalizaNome(novoStatus))) {
-      await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [parceiro.id]);
-      return;
-    }
+    for (const parceiro of parceiros) {
+      const parceiroEhOriginal = !parceiro.espelho_origem_id && !parceiro.copia_ia_origem_id;
 
-    const sets: string[] = [];
-    const params: unknown[] = [];
-    for (const k of campos) {
-      sets.push(`${k} = $${params.length + 1}`);
-      params.push(patch[k]);
-    }
-
-    // Grava a etapa com o nome que ELA tem na aba do parceiro (é o nome que tem cor lá); faltando
-    // a etiqueta, ela é criada com a mesma cor da origem, pra não aparecer cinza do outro lado.
-    const corDaOrigem = novoStatus
-      ? (await queryOne<{ color: string }>(
-          `SELECT color FROM lead_labels WHERE field = 'status' AND name = $1 LIMIT 1`,
-          [novoStatus]
-        ))?.color ?? null
-      : null;
-    const statusParceiro = novoStatus
-      ? await etiquetaEquivalente(parceiro.page, novoStatus, corDaOrigem)
-      : null;
-    const statusMudou = !!statusParceiro && normalizaNome(statusParceiro) !== normalizaNome(parceiro.status);
-    if (statusMudou) {
-      sets.push(`status = $${params.length + 1}`);
-      params.push(statusParceiro);
-      // O quadro acompanha: mesmo nome do status, criado na aba do parceiro se ainda não existir.
-      const quadro = await quadroEquivalente(parceiro.page, statusParceiro!, corDaOrigem ?? '#9CA3AF');
-      if (quadro && quadro !== parceiro.board_id) {
-        sets.push(`board_id = $${params.length + 1}`);
-        params.push(quadro);
+      // Lead que o Arthur devolve pro INÍCIO do funil (Primeiro Contato / Leads Novos) deixa de ser do closer
+      // (e da IA): a reunião não vingou. A cópia sai do outro CRM (vai pra lixeira, dá pra recuperar) em vez de
+      // virar um quadro "Primeiro Contato" lá. Se a lead voltar a "Reunião agendada", a cópia é restaurada.
+      if (!editouCopia && novoStatus && STATUS_INICIO_DO_FUNIL.has(normalizaNome(novoStatus))) {
+        await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [parceiro.id]);
+        continue;
       }
-    }
-    if (!sets.length) return;
 
-    params.push(parceiro.id);
-    await query(`UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+      // O SDR da cópia da IA é sempre "IA Luiza" (é o CRM dela): ele não vai nem vem por aqui.
+      const campos = parceiro.copia_ia_origem_id || copiaIaOrigemId
+        ? camposDoPatch.filter((k) => k !== 'sdr')
+        : camposDoPatch;
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      for (const k of campos) {
+        sets.push(`${k} = $${params.length + 1}`);
+        params.push(patch[k]);
+      }
 
-    // Quem recebeu foi a lead ORIGINAL (ou seja, quem editou foi o closer): a correção segue pra
-    // aba Vendas também, senão o nome novo só aparecia nos dois CRMs e não na lista de vendas.
-    if (espelhoOrigemId) void propagarVenda(parceiro.id, patch);
+      // Grava a etapa com o nome que ELA tem na aba do parceiro (é o nome que tem cor lá); faltando
+      // a etiqueta, ela é criada com a mesma cor da origem, pra não aparecer cinza do outro lado.
+      const corDaOrigem = novoStatus
+        ? (await queryOne<{ color: string }>(
+            `SELECT color FROM lead_labels WHERE field = 'status' AND name = $1 LIMIT 1`,
+            [novoStatus]
+          ))?.color ?? null
+        : null;
+      const statusParceiro = novoStatus
+        ? await etiquetaEquivalente(parceiro.page, novoStatus, corDaOrigem)
+        : null;
+      const statusMudou = !!statusParceiro && normalizaNome(statusParceiro) !== normalizaNome(parceiro.status);
+      if (statusMudou) {
+        sets.push(`status = $${params.length + 1}`);
+        params.push(statusParceiro);
+        // O quadro acompanha: mesmo nome do status, criado na aba do parceiro se ainda não existir.
+        const quadro = await quadroEquivalente(parceiro.page, statusParceiro!, corDaOrigem ?? '#9CA3AF');
+        if (quadro && quadro !== parceiro.board_id) {
+          sets.push(`board_id = $${params.length + 1}`);
+          params.push(quadro);
+        }
+      }
+      if (!sets.length) continue;
 
-    if (statusMudou) {
-      const actorName = await getActorName(actorId);
-      await logLeadEvent(parceiro.id, 'status', parceiro.status, statusParceiro, actorName);
-      // Quem mexeu foi a cópia (closer): a venda nasce aqui, pela original, uma vez só.
-      if (espelhoOrigemId) {
-        await syncVendaFromStatus(parceiro.id, parceiro.status, statusParceiro!);
+      params.push(parceiro.id);
+      await query(`UPDATE lead_rows SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+
+      // Quem recebeu foi a lead ORIGINAL (ou seja, quem editou foi uma cópia): a correção segue pra
+      // aba Vendas também, senão o nome novo só aparecia nos CRMs e não na lista de vendas.
+      if (editouCopia && parceiroEhOriginal) void propagarVenda(parceiro.id, patch);
+
+      if (statusMudou) {
+        const actorName = await getActorName(actorId);
+        await logLeadEvent(parceiro.id, 'status', parceiro.status, statusParceiro, actorName);
+        // Quem mexeu foi uma cópia: a venda nasce aqui, pela original, uma vez só.
+        if (editouCopia && parceiroEhOriginal) {
+          await syncVendaFromStatus(parceiro.id, parceiro.status, statusParceiro!);
+        }
       }
     }
   } catch (err) {
     console.error('[espelho] falha ao propagar edição do lead', leadRowId, err);
+  }
+}
+
+/**
+ * Lead que a IA LUIZA agendou dentro do CRM de outro SDR.
+ *
+ * Quando o SDR marca que foi a IA que agendou, o SDR da lead vira "IA Luiza": ela sai das métricas dele (que só
+ * contam as leads com o SDR dele) e passa a contar pra IA. A lead continua no CRM do SDR e ganha uma CÓPIA no CRM IA
+ * LUIZA, ligada por copia_ia_origem_id, que anda junto com a original (ver propagarEspelho). As métricas da cópia
+ * saem da linha do tempo da original (ver /api/lead-milestones) e os painéis gerais deixam a cópia de fora, pra não
+ * contar a mesma lead duas vezes. Venda e comissão saem só pela original.
+ *
+ * Voltou o SDR (não foi a IA) ou a lead voltou pro início do funil: a cópia vai pra lixeira. Marcou de novo: ela
+ * volta. Nunca lança: roda em background depois da edição.
+ */
+const PAGE_IA = 'crm-ia-luiza';
+export const SDR_IA = 'IA Luiza';
+const ehSdrDaIa = (sdr: string | null | undefined) => /luiza/i.test(sdr ?? '');
+
+export async function syncCopiaDaIa(leadRowId: string) {
+  try {
+    const lead = await queryOne<{
+      id: string; sdr: string; status: string; page: string; board_name: string;
+      espelho_origem_id: string | null; copia_ia_origem_id: string | null; venda_origem_id: string | null;
+    }>(
+      `SELECT r.id, r.sdr, r.status, lb.page, lb.name AS board_name, r.espelho_origem_id, r.copia_ia_origem_id, r.venda_origem_id
+       FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+       WHERE r.id = $1 AND r.deleted_at IS NULL AND lb.is_vendas = false`,
+      [leadRowId]
+    );
+    // Só a lead original, fora do CRM da própria IA.
+    if (!lead || lead.espelho_origem_id || lead.copia_ia_origem_id || lead.venda_origem_id || lead.page === PAGE_IA) return;
+
+    const copia = await queryOne<{ id: string; deleted_at: string | null }>(
+      'SELECT id, deleted_at FROM lead_rows WHERE copia_ia_origem_id = $1',
+      [leadRowId]
+    );
+    const etapa = lead.status || lead.board_name;
+    const deveTer = ehSdrDaIa(lead.sdr) && !!etapa && !STATUS_INICIO_DO_FUNIL.has(normalizaNome(etapa));
+    if (!deveTer) {
+      if (copia && !copia.deleted_at) await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1', [copia.id]);
+      return;
+    }
+    if (copia && !copia.deleted_at) return;
+
+    const quadro =
+      (await quadroDoStatus(PAGE_IA, etapa)) ??
+      (await quadroDoStatus(PAGE_IA, lead.board_name)) ??
+      (await queryOne<{ id: string }>('SELECT id FROM lead_boards WHERE page = $1 ORDER BY position LIMIT 1', [PAGE_IA]))?.id ??
+      null;
+    // Sem o CRM IA LUIZA (arquivado/excluído) não há onde pôr a cópia: a lead segue normal.
+    if (!quadro) return;
+    const status = (await etiquetaDeStatus(PAGE_IA, etapa)) ?? etapa;
+    const [{ max }] = await query<{ max: number | null }>(
+      'SELECT MAX(position) as max FROM lead_rows WHERE board_id = $1',
+      [quadro]
+    );
+
+    // Já existiu (foi pra lixeira quando desmarcaram): volta, com o conteúdo de agora.
+    const conteudo = [...ESPELHO_CAMPOS.filter((c) => c !== 'sdr'), 'nicho', 'motivo_desqualificacao', 'followup', 'disparo'];
+    if (copia) {
+      await query(
+        `UPDATE lead_rows c SET deleted_at = NULL, board_id = $2, status = $3, position = $4, sdr = $5,
+           ${conteudo.map((k) => `${k} = o.${k}`).join(', ')}
+         FROM lead_rows o WHERE c.id = $1 AND o.id = $6`,
+        [copia.id, quadro, status, (max ?? -1) + 1, SDR_IA, leadRowId]
+      );
+      return;
+    }
+    // A cópia nasce com a data de entrada da original: no Dia a dia da IA ela cai no mesmo dia do lead.
+    await query(
+      `INSERT INTO lead_rows (board_id, status, position, sdr, copia_ia_origem_id, created_at,
+         notes_count, last_note_preview, last_note_at, meta_campaign_id, meta_adset_id, meta_ad_id, ${conteudo.join(', ')})
+       SELECT $2, $3, $4, $5, o.id, o.created_at,
+         o.notes_count, o.last_note_preview, o.last_note_at, o.meta_campaign_id, o.meta_adset_id, o.meta_ad_id, ${conteudo.map((k) => `o.${k}`).join(', ')}
+       FROM lead_rows o WHERE o.id = $1
+       ON CONFLICT DO NOTHING`,
+      [leadRowId, quadro, status, (max ?? -1) + 1, SDR_IA]
+    );
+  } catch (err) {
+    console.error('[ia luiza] falha ao copiar lead pro CRM IA LUIZA', leadRowId, err);
   }
 }
 
@@ -833,11 +927,11 @@ async function propagarVenda(origemId: string, patch: Record<string, unknown>) {
 /** As Atualizações são compartilhadas: a cópia não tem histórico próprio, lê e escreve no da lead
  * original. É o que faz Arthur e Luis conversarem no mesmo lugar. */
 export async function idCanonicoDasNotas(leadRowId: string): Promise<string> {
-  const row = await queryOne<{ espelho_origem_id: string | null }>(
-    'SELECT espelho_origem_id FROM lead_rows WHERE id = $1',
+  const row = await queryOne<{ espelho_origem_id: string | null; copia_ia_origem_id: string | null }>(
+    'SELECT espelho_origem_id, copia_ia_origem_id FROM lead_rows WHERE id = $1',
     [leadRowId]
   );
-  return row?.espelho_origem_id ?? leadRowId;
+  return row?.espelho_origem_id ?? row?.copia_ia_origem_id ?? leadRowId;
 }
 
 /** Tira as tags HTML do rich-text da nota (ver RichTextEditor/LeadDetailModal) pra sobrar um
@@ -861,7 +955,7 @@ export async function sincronizarContagemNotas(canonicalId: string) {
          notes_count = (SELECT count(*) FROM lead_notes WHERE lead_row_id = $1),
          last_note_preview = $2,
          last_note_at = $3
-       WHERE id = $1 OR espelho_origem_id = $1`,
+       WHERE id = $1 OR espelho_origem_id = $1 OR copia_ia_origem_id = $1`,
       [canonicalId, ultima ? previewTextoNota(ultima.content) : '', ultima?.created_at ?? null]
     );
   } catch (err) {
@@ -945,17 +1039,17 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const lead = await queryOne<{
         id: string; telefone: string; nome: string; empresa: string;
-        venda_origem_id: string | null; espelho_origem_id: string | null;
+        venda_origem_id: string | null; espelho_origem_id: string | null; copia_ia_origem_id: string | null;
       }>(
-        'SELECT id, telefone, nome, empresa, venda_origem_id, espelho_origem_id FROM lead_rows WHERE id = $1',
+        'SELECT id, telefone, nome, empresa, venda_origem_id, espelho_origem_id, copia_ia_origem_id FROM lead_rows WHERE id = $1',
         [req.params.id]
       );
       if (!lead) return reply.status(404).send({ message: 'Lead não encontrada' });
 
-      const base = [lead.id, lead.venda_origem_id, lead.espelho_origem_id].filter((v): v is string => !!v);
+      const base = [lead.id, lead.venda_origem_id, lead.espelho_origem_id, lead.copia_ia_origem_id].filter((v): v is string => !!v);
       const related = await query<{ id: string }>(
         `SELECT id FROM lead_rows
-         WHERE id = ANY($1) OR venda_origem_id = ANY($1) OR espelho_origem_id = ANY($1)`,
+         WHERE id = ANY($1) OR venda_origem_id = ANY($1) OR espelho_origem_id = ANY($1) OR copia_ia_origem_id = ANY($1)`,
         [base]
       );
 
@@ -1262,6 +1356,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       }
       // Lead criada já dentro de "Reunião agendada" no CRM do Arthur também espelha pro closer.
       void syncEspelhoReuniaoAgendada(id);
+      void syncCopiaDaIa(id);
       return reply.status(201).send(leadRow);
     }
   );
@@ -1428,11 +1523,16 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         req.params.id,
         (leadRow as { espelho_origem_id?: string | null }).espelho_origem_id ?? null,
         patch,
-        sub
+        sub,
+        (leadRow as { copia_ia_origem_id?: string | null }).copia_ia_origem_id ?? null
       );
       // ...e chegar em "Reunião agendada" (pelo Status ou arrastando de quadro) cria a cópia.
       if ('status' in patch || 'board_id' in patch) {
         void syncEspelhoReuniaoAgendada(req.params.id);
+      }
+      // Foi a IA Luiza que agendou (SDR "IA Luiza"): a lead ganha a cópia no CRM IA LUIZA (ou perde, se desmarcar).
+      if ('sdr' in patch || 'status' in patch || 'board_id' in patch) {
+        void syncCopiaDaIa(req.params.id);
       }
       // Corrigir nome/empresa/telefone/SDR do lead atualiza a linha dele na aba Vendas também...
       void propagarVenda(req.params.id, patch);
@@ -1511,7 +1611,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       // só ela, a lead do Arthur continua.
       await query(
         `UPDATE lead_rows SET deleted_at = NOW(), delete_reason = $2
-         WHERE id = $1 OR espelho_origem_id = $1`,
+         WHERE id = $1 OR espelho_origem_id = $1 OR copia_ia_origem_id = $1`,
         [req.params.id, reason]
       );
       return reply.status(204).send();
@@ -1537,7 +1637,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       // Restaurar a original traz a cópia do closer de volta junto (foram excluídas juntas) — mas
       // quem volta pra tela é sempre a linha pedida, não a cópia que veio de carona.
       const restauradas = await query<{ id: string }>(
-        `UPDATE lead_rows SET deleted_at = NULL WHERE id = $1 OR espelho_origem_id = $1
+        `UPDATE lead_rows SET deleted_at = NULL WHERE id = $1 OR espelho_origem_id = $1 OR copia_ia_origem_id = $1
          RETURNING *`,
         [req.params.id]
       );
@@ -1667,7 +1767,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         lr.status = ANY($2)
         OR EXISTS (
           SELECT 1 FROM lead_events le
-          WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($2)
+          WHERE le.lead_row_id = COALESCE(lr.copia_ia_origem_id, lr.id) AND le.type = 'status' AND le.to_value = ANY($2)
         )
       )
       AND (lr.status = ANY($2) OR lr.status = ANY($4) OR lr.status = 'Perdidos')
@@ -1678,17 +1778,18 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       lr.status = ANY($4)
       OR EXISTS (
         SELECT 1 FROM lead_events le
-        WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($4)
+        WHERE le.lead_row_id = COALESCE(lr.copia_ia_origem_id, lr.id) AND le.type = 'status' AND le.to_value = ANY($4)
       )
     )`;
 
+    // A cópia da IA (CRM IA LUIZA) não tem linha do tempo própria: usa a da lead original (COALESCE abaixo).
     return query(
       `SELECT lr.id, lr.board_id, lr.sdr,
         CASE WHEN lr.status = ANY($1) THEN lr.status END AS milestone,
         CASE WHEN lr.status = ANY($1) THEN
           COALESCE(
             (SELECT le.created_at FROM lead_events le
-             WHERE le.lead_row_id = lr.id AND le.type = 'status'
+             WHERE le.lead_row_id = COALESCE(lr.copia_ia_origem_id, lr.id) AND le.type = 'status'
              ORDER BY le.created_at DESC LIMIT 1),
             lr.created_at
           )
@@ -1698,14 +1799,14 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         CASE WHEN ${everAgendadaSql} THEN
           COALESCE(
             (SELECT MIN(le.created_at) FROM lead_events le
-             WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $3),
+             WHERE le.lead_row_id = COALESCE(lr.copia_ia_origem_id, lr.id) AND le.type = 'status' AND le.to_value = $3),
             lr.created_at
           )
         END AS first_agendada_at,
         -- Quem marcou a reunião: autor da PRIMEIRA mudança pra "Reunião agendada" na linha do tempo do lead.
         CASE WHEN ${everAgendadaSql} THEN
           (SELECT le.actor_name FROM lead_events le
-           WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = $3
+           WHERE le.lead_row_id = COALESCE(lr.copia_ia_origem_id, lr.id) AND le.type = 'status' AND le.to_value = $3
            ORDER BY le.created_at ASC LIMIT 1)
         END AS first_agendada_by
        FROM lead_rows lr
@@ -1745,7 +1846,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
            ${compareceu} AS compareceu
          FROM lead_rows lr
          JOIN lead_boards lb ON lb.id = lr.board_id
-         WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL
+         WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.copia_ia_origem_id IS NULL AND lr.deleted_at IS NULL
            AND COALESCE(lr.sdr, '') <> ''
            AND (lr.created_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $3::date AND $4::date
          ORDER BY lr.nome`,

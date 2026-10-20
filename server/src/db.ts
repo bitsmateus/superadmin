@@ -464,6 +464,11 @@ END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS closer TEXT NOT NULL DEFAULT ''`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_espelho_origem_idx
     ON lead_rows(espelho_origem_id) WHERE espelho_origem_id IS NOT NULL`);
+  // Lead de outro CRM que a IA Luiza agendou (SDR = "IA Luiza"): a cópia no CRM IA LUIZA guarda aqui o id da
+  // original (ver syncCopiaDaIa em leadBoards.ts). No máximo uma cópia por lead.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS copia_ia_origem_id UUID`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_copia_ia_origem_idx
+    ON lead_rows(copia_ia_origem_id) WHERE copia_ia_origem_id IS NOT NULL`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS sdr TEXT NOT NULL DEFAULT ''`);
   // Marca se o retorno agendado já foi feito — usado pra colorir a coluna Retornar (amarelo = pendente, vermelho = atrasado).
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS retornado BOOLEAN NOT NULL DEFAULT false`);

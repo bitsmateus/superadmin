@@ -133,7 +133,7 @@ async function serieDiaria(de: string, ate: string, filtro?: { col: 'campaign_id
     `SELECT to_char((lr.created_at AT TIME ZONE '${TZ}')::date,'YYYY-MM-DD') AS dia, count(*) AS n,
        count(*) FILTER (WHERE lr.status IN ('Reunião agendada','Reunião não comparecida','Proposta Enviada','Follow-up Propostas','Vendido')) AS reunioes
      FROM lead_rows lr JOIN lead_boards lb ON lb.id = lr.board_id
-     WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL
+     WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.copia_ia_origem_id IS NULL AND lr.deleted_at IS NULL
        AND ${lcol ? `lr.${lcol} = $3` : 'lr.meta_lead_id IS NOT NULL'}
        AND (lr.created_at AT TIME ZONE '${TZ}')::date BETWEEN $1::date AND $2::date
      GROUP BY 1`, params,
@@ -210,7 +210,7 @@ export async function trafegoRoutes(app: FastifyInstance) {
       const leads = await query(
         `SELECT lr.id, lr.nome, lr.empresa, lr.status, lr.created_at, lb.name AS quadro, lb.page AS pagina
          FROM lead_rows lr JOIN lead_boards lb ON lb.id = lr.board_id
-         WHERE lr.${col} = $1 AND lr.deleted_at IS NULL AND lb.is_vendas = false AND lr.espelho_origem_id IS NULL
+         WHERE lr.${col} = $1 AND lr.deleted_at IS NULL AND lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.copia_ia_origem_id IS NULL
          ORDER BY lr.created_at DESC LIMIT 200`,
         [valor],
       );
@@ -226,7 +226,7 @@ export async function trafegoRoutes(app: FastifyInstance) {
          COALESCE(NULLIF(btrim(lr.nicho), ''), '(não informado)') AS real, count(*) AS leads
        FROM lead_rows lr JOIN lead_boards lb ON lb.id = lr.board_id
        LEFT JOIN meta_campaigns c ON c.campaign_id = lr.meta_campaign_id
-       WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL AND lr.meta_lead_id IS NOT NULL
+       WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.copia_ia_origem_id IS NULL AND lr.deleted_at IS NULL AND lr.meta_lead_id IS NOT NULL
          AND (lr.created_at AT TIME ZONE '${TZ}')::date BETWEEN $1::date AND $2::date
        GROUP BY 1, 2 ORDER BY count(*) DESC`, [de, ate]);
     return { de, ate, linhas: linhas.map((l) => ({ mirado: l.mirado, real: l.real, leads: Number(l.leads) })) };

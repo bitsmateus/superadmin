@@ -24,7 +24,7 @@ function rowToNote(r: NoteRow): LeadNote {
  */
 export function canonicalNoteLeadId(leadRowId: string): string {
   const row = leadBoardsService.getRows().find((r) => r.id === leadRowId)
-  return row?.espelhoOrigemId ?? leadRowId
+  return row?.espelhoOrigemId ?? row?.copiaIaOrigemId ?? leadRowId
 }
 
 // ---------- Cache (carregado sob demanda por lead, igual às mensagens de ticket) ----------

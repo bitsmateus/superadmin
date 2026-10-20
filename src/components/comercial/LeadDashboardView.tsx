@@ -300,7 +300,8 @@ function AgendamentosPorCanal({
       if (canal === 'Outro') textos.push(`${textoDoAgendadoOutro(v) || v} (${r.nome || r.empresa || 'sem nome'})`)
       mapa.get(canal)!.push(r)
       const autor = milestoneById.get(r.id)?.firstAgendadaBy ?? ''
-      const pessoa = /luiza/i.test(autor) ? 'IA Luiza' : /arthur/i.test(autor) ? 'SDR Arthur' : /lu[ií]s/i.test(autor) ? 'SDR Luis' : autor ? 'Outros' : NAO_INFORMADO
+      // SDR "IA Luiza" = marcado como agendado pela IA (mesmo que quem clicou tenha sido o SDR).
+      const pessoa = /luiza/i.test(autor) || /luiza/i.test(r.sdr ?? '') ? 'IA Luiza' : /arthur/i.test(autor) ? 'SDR Arthur' : /lu[ií]s/i.test(autor) ? 'SDR Luis' : autor ? 'Outros' : NAO_INFORMADO
       quem.set(pessoa, [...(quem.get(pessoa) ?? []), r])
       n++
     }

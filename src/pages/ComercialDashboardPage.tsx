@@ -65,7 +65,8 @@ export function ComercialDashboardPage() {
   // Vendas ficar de fora das métricas).
   const pageRows = React.useMemo(() => {
     const boardIds = new Set(boards.map((b) => b.id))
-    return allRows.filter((r) => boardIds.has(r.boardId) && !r.espelhoOrigemId)
+    // A cópia da IA Luiza (CRM IA LUIZA) também é a mesma lead de outro CRM.
+    return allRows.filter((r) => boardIds.has(r.boardId) && !r.espelhoOrigemId && !r.copiaIaOrigemId)
   }, [allRows, boards])
 
   const [dateRange, setDateRange] = React.useState<DateRange>('today')

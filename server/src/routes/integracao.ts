@@ -147,7 +147,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
 
       const rows = await query<CardRow>(
         `${SELECT_CARD}
-         WHERE r.deleted_at IS NULL AND r.espelho_origem_id IS NULL AND r.venda_origem_id IS NULL
+         WHERE r.deleted_at IS NULL AND r.espelho_origem_id IS NULL AND r.copia_ia_origem_id IS NULL AND r.venda_origem_id IS NULL
            AND r.board_id = ANY($1) AND ($2::timestamptz IS NULL OR r.entrou_coluna_em > $2)
          ORDER BY r.entrou_coluna_em ASC NULLS LAST, r.created_at ASC
          LIMIT $3`,
@@ -163,8 +163,8 @@ export async function integracaoRoutes(app: FastifyInstance) {
   app.get<{ Params: { numero: string } }>('/api/integracao/cards/telefone/:numero', async (req, reply) => {
     const chave = chaveTelefone(req.params.numero);
     if (!chave) return reply.status(400).send({ message: 'Telefone inválido: informe DDD + número.' });
-    const candidatos = await query<CardRow & { espelho_origem_id: string | null; venda_origem_id: string | null }>(
-      `${SELECT_CARD.replace('SELECT r.id,', 'SELECT r.espelho_origem_id, r.venda_origem_id, r.id,')}
+    const candidatos = await query<CardRow & { espelho_origem_id: string | null; copia_ia_origem_id: string | null; venda_origem_id: string | null }>(
+      `${SELECT_CARD.replace('SELECT r.id,', 'SELECT r.espelho_origem_id, r.copia_ia_origem_id, r.venda_origem_id, r.id,')}
        WHERE r.deleted_at IS NULL AND lp.archived_at IS NULL
          AND right(regexp_replace(r.telefone, '\\D', '', 'g'), 8) = $1`,
       [chave.ultimos8]
@@ -172,7 +172,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
     const achados = candidatos
       .filter((c) => mesmoTelefone(c.telefone, req.params.numero))
       .sort((a, b) => {
-        const copia = (x: typeof a) => (x.espelho_origem_id || x.venda_origem_id ? 1 : 0);
+        const copia = (x: typeof a) => (x.espelho_origem_id || x.copia_ia_origem_id || x.venda_origem_id ? 1 : 0);
         return copia(a) - copia(b) || (b.entrou_coluna_em ?? '').localeCompare(a.entrou_coluna_em ?? '');
       });
     if (!achados.length) return reply.status(404).send({ message: 'Nenhum card com esse telefone.' });

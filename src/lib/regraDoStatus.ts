@@ -86,6 +86,18 @@ export function abaComRegraDeStatus(nomeDaAba: string, idDaAba = ''): boolean {
 }
 
 
+/** A IA Luiza é SDR das leads que ela agendou — inclusive das que ficam no CRM de outro SDR. */
+export const SDR_IA = 'IA Luiza'
+export function ehSdrDaIa(sdr: string | null | undefined): boolean {
+  return /luiza/i.test(sdr ?? '')
+}
+/** Marcando "Reunião agendada" no CRM de um SDR (fora o da própria IA e o do closer), o popup pergunta se foi a IA
+ * Luiza que agendou: aí a lead conta pra ela, não pro SDR, e ganha uma cópia no CRM IA LUIZA. */
+export function ofereceAgendadoPelaIa(statusNovo: string, nomeDaAba: string, idDaAba = ''): boolean {
+  const aba = `${nomeDaAba} ${idDaAba}`
+  return normaliza(statusNovo).includes('reuniaoagendada') && !/luiza/i.test(aba) && !/closer/i.test(aba)
+}
+
 export function mesmoStatus(a: string, b: string): boolean {
   return normaliza(a) === normaliza(b)
 }

@@ -62,7 +62,7 @@ const SAFRA = `
        AND le.type = 'status' AND le.to_value = ANY($4))) AS compareceu,
     (lr.status = $5) AS vendido
   FROM lead_rows lr JOIN lead_boards lb ON lb.id = lr.board_id
-  WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL
+  WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.copia_ia_origem_id IS NULL AND lr.deleted_at IS NULL
     AND (lr.created_at AT TIME ZONE '${TZ}')::date BETWEEN $1::date AND $2::date`;
 const SAFRA_PARAMS = (desde: string, ate: string) =>
   [desde, ate, REUNIAO_STATUSES, POS_REUNIAO_STATUSES, MILESTONE_VENDIDO];
@@ -173,7 +173,7 @@ const PRIMEIRO_CONTATO = `LEAST(
   (SELECT MIN(le.created_at) FROM lead_events le WHERE le.lead_row_id = lr.id AND le.type IN ('status','dia_contato','sdr')),
   (SELECT MIN(n.created_at) FROM lead_notes n WHERE n.lead_row_id = lr.id))`;
 
-const LEAD_META_ATIVO = `lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL AND lr.meta_lead_id IS NOT NULL`;
+const LEAD_META_ATIVO = `lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.copia_ia_origem_id IS NULL AND lr.deleted_at IS NULL AND lr.meta_lead_id IS NOT NULL`;
 
 /** Leads do Meta parados sem contato do SDR há mais de `horas` (só dos últimos 7 dias, pra não reabrir passado). */
 export async function leadsSemContato(horas: number): Promise<{ total: number; maisAntigoHoras: number }> {

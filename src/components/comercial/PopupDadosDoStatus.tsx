@@ -1,11 +1,11 @@
 import * as React from 'react'
-import { BellRing, ClipboardCheck } from 'lucide-react'
+import { BellRing, Bot, Check, ClipboardCheck } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { registrarPedidoDeDadoDoStatus, type PedidoDeDadoDoStatus, type RespostaDoPedido } from '@/services/leadBoards'
 import {
   CANAIS_DE_AGENDAMENTO, MINIMO_DETALHE_MOTIVO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, textoDoAgendadoOutro, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, campoOk,
-  juntarMotivo, origemEhOutros, separarMotivo, textoDaOrigemOutros, type CampoDoPopup,
+  SDR_IA, juntarMotivo, origemEhOutros, separarMotivo, textoDaOrigemOutros, type CampoDoPopup,
 } from '@/lib/regraDoStatus'
 import { prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
 import { cn } from '@/lib/utils'
@@ -41,6 +41,8 @@ export function PopupDadosDoStatus() {
   const [agendadoOutro, setAgendadoOutro] = React.useState('')
   // Só depois de tentar confirmar é que o aviso do detalhe curto aparece.
   const [tentou, setTentou] = React.useState(false)
+  // "Foi a IA Luiza que agendou" (só em Reunião agendada no CRM de um SDR).
+  const [pelaIa, setPelaIa] = React.useState(false)
 
   React.useEffect(
     () => registrarPedidoDeDadoDoStatus((p) => new Promise<RespostaDoPedido | null>((responder) => setFila((f) => [...f, { ...p, responder }]))),
@@ -75,7 +77,7 @@ export function PopupDadosDoStatus() {
         tx[c] = v
       }
     }
-    setData(d); setHora(h); setTexto(tx); setOutro(o); setOrigemOutros(oo); setAgendadoOutro(ao); setTentou(false)
+    setData(d); setHora(h); setTexto(tx); setOutro(o); setOrigemOutros(oo); setAgendadoOutro(ao); setTentou(false); setPelaIa(!!atual.iaJaMarcada)
   }, [atual])
 
   if (!atual) return null
@@ -98,7 +100,10 @@ export function PopupDadosDoStatus() {
   }
   const confirmar = () => {
     if (!pronto) { setTentou(true); return }
-    fechar(Object.fromEntries(atual.campos.map((c) => [c, valorFinal(c)])) as RespostaDoPedido)
+    const campos = Object.fromEntries(atual.campos.map((c) => [c, valorFinal(c)])) as RespostaDoPedido
+    // Mudou a opção da IA: o SDR vira "IA Luiza", ou volta pro SDR da aba (vazio = o servidor põe o dono da aba).
+    const sdr = atual.oferecerIa && pelaIa !== !!atual.iaJaMarcada ? { sdr: pelaIa ? SDR_IA : '' } : {}
+    fechar({ ...campos, ...sdr })
   }
 
   return (
@@ -218,6 +223,29 @@ export function PopupDadosDoStatus() {
             )}
           </div>
         ))}
+        {atual.oferecerIa && (
+          <button
+            type="button"
+            onClick={() => setPelaIa((v) => !v)}
+            aria-pressed={pelaIa}
+            className={cn(
+              'flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left',
+              pelaIa ? 'border-pink-500/50 bg-pink-500/[0.08]' : 'border-line hover:bg-elevate/[0.04]',
+            )}
+          >
+            <span className={cn('mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border', pelaIa ? 'border-pink-500 bg-pink-500 text-white' : 'border-foreground/30')}>
+              {pelaIa && <Check className="h-3 w-3" />}
+            </span>
+            <span>
+              <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <Bot className="h-4 w-4 text-pink-500" /> Foi a IA Luiza que agendou
+              </span>
+              <span className="mt-0.5 block text-xs text-foreground/55">
+                O agendamento conta pra IA Luiza, não pro SDR, e a lead aparece também no CRM IA LUIZA.
+              </span>
+            </span>
+          </button>
+        )}
         {fila.length > 1 && <p className="text-xs text-foreground/45">Depois deste, mais {fila.length - 1} lead(s) pra preencher.</p>}
       </div>
     </Modal>

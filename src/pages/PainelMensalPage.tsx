@@ -161,7 +161,8 @@ export function PainelMensalPage() {
     return new Set(boards.filter((b) => comercialPageIds.has(b.page)).map((b) => b.id))
   }, [leadPages, boards])
   const comercialRows = React.useMemo(
-    () => allRows.filter((r) => comercialBoardIds.has(r.boardId)),
+    // A cópia da IA Luiza é a mesma lead de outro CRM: contá-la dobraria a lead.
+    () => allRows.filter((r) => comercialBoardIds.has(r.boardId) && !r.copiaIaOrigemId),
     [allRows, comercialBoardIds],
   )
 

@@ -93,7 +93,7 @@ export async function montarRelatorioDoMes(mes: string): Promise<RelatorioComerc
             WHERE le.lead_row_id = lr.id AND le.type = 'status' AND le.to_value = ANY($4)
           )) AS compareceu
        FROM lead_rows lr JOIN lead_boards lb ON lb.id = lr.board_id
-       WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.deleted_at IS NULL
+       WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.copia_ia_origem_id IS NULL AND lr.deleted_at IS NULL
          -- Dia em Brasília, não em UTC: lead criada às 23h do último dia do mês caía no mês
          -- seguinte, e o relatório público divergia da tela interna.
          AND (lr.created_at AT TIME ZONE 'America/Sao_Paulo') >= $1::date

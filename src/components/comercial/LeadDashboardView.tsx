@@ -299,10 +299,9 @@ function AgendamentosPorCanal({
         : (CANAIS_DE_AGENDAMENTO as readonly string[]).includes(v) ? v : 'Outro'
       if (canal === 'Outro') textos.push(`${textoDoAgendadoOutro(v) || v} (${r.nome || r.empresa || 'sem nome'})`)
       mapa.get(canal)!.push(r)
-      // Conta pro SDR da lead, não pra quem clicou: o closer movendo a lead pro CRM dele não é agendamento dele.
-      // SDR "IA Luiza" = marcado como agendado pela IA. Sem SDR, vale quem mudou o status na linha do tempo.
-      const quemFoi = (r.sdr ?? '').trim() || (milestoneById.get(r.id)?.firstAgendadaBy ?? '')
-      const pessoa = /luiza/i.test(quemFoi) ? 'IA Luiza' : /arthur/i.test(quemFoi) ? 'SDR Arthur' : /lu[ií]s/i.test(quemFoi) ? 'SDR Luis' : quemFoi ? 'Outros' : NAO_INFORMADO
+      const autor = milestoneById.get(r.id)?.firstAgendadaBy ?? ''
+      // SDR "IA Luiza" = marcado como agendado pela IA (mesmo que quem clicou tenha sido o SDR).
+      const pessoa = /luiza/i.test(autor) || /luiza/i.test(r.sdr ?? '') ? 'IA Luiza' : /arthur/i.test(autor) ? 'SDR Arthur' : /lu[ií]s/i.test(autor) ? 'SDR Luis' : autor ? 'Outros' : NAO_INFORMADO
       quem.set(pessoa, [...(quem.get(pessoa) ?? []), r])
       n++
     }

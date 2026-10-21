@@ -1549,11 +1549,10 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   // Novos Leads é só a porta de entrada: fica SEMPRE em lista, sem Kanban, Dashboard, filtro de SDR nem
   // "Simular lead". A preferência de visão das outras abas continua guardada, só não vale aqui.
   const soLista = page === 'novos_leads'
-  // CRM IAN: só em Kanban (sem lista, sem a troca Lista/Kanban, sem SDR, Filtro nem os quadrinhos de status do
-  // dia). O Dashboard continua, e o próprio botão dele volta pro Kanban.
+  // CRM IAN: só em Kanban (sem lista, sem Dashboard, sem a troca Lista/Kanban, sem SDR, Filtro nem os quadrinhos
+  // de status do dia).
   const kanbanIan = page === 'crm-ian'
-  const [dashboardIan, setDashboardIan] = React.useState(false)
-  const view: 'list' | 'kanban' | 'dashboard' = soLista ? 'list' : kanbanIan ? (dashboardIan ? 'dashboard' : 'kanban') : viewEscolhida
+  const view: 'list' | 'kanban' | 'dashboard' = soLista ? 'list' : kanbanIan ? 'kanban' : viewEscolhida
   React.useEffect(() => {
     if (soLista || kanbanIan) setSdrFilter(null)
     if (kanbanIan) setFilterRules([])
@@ -1614,17 +1613,16 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   className="h-9 w-full rounded-md border border-line bg-card pl-9 pr-2 text-sm sm:w-44 text-foreground placeholder:text-foreground/40 focus:border-accent/60 focus:outline-none"
                 />
               </div>
-              {!soLista && (
+              {!soLista && !kanbanIan && (
               <>
               <ToolbarButton
                 icon={<LayoutDashboard className="h-3.5 w-3.5" />}
-                onClick={() => (kanbanIan ? setDashboardIan((v) => !v) : changeView('dashboard'))}
+                onClick={() => changeView('dashboard')}
                 className={view === 'dashboard' ? 'bg-accent/10 text-accent' : undefined}
                 title="Ver resumo em relatório — só visualização"
               >
                 {sdrLock ? 'Minhas métricas' : 'Dashboard'}
               </ToolbarButton>
-              {!kanbanIan && (
               <div className="inline-flex overflow-hidden rounded-lg border border-line">
                 <button
                   type="button"
@@ -1651,10 +1649,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                   Kanban
                 </button>
               </div>
-              )}
-              {!kanbanIan && (
-                <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />
-              )}
+              <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />
               </>
               )}
               {!kanbanIan && (

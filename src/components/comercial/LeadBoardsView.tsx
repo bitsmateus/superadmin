@@ -1549,15 +1549,15 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   // Novos Leads é só a porta de entrada: fica SEMPRE em lista, sem Kanban, Dashboard, filtro de SDR nem
   // "Simular lead". A preferência de visão das outras abas continua guardada, só não vale aqui.
   const soLista = page === 'novos_leads'
-  // CRM IAN: também só em lista (sem Kanban, sem a troca Lista/Kanban, sem SDR, Filtro nem os quadrinhos de
-  // status do dia). O Dashboard continua, e o próprio botão dele volta pra lista.
-  const listaIan = page === 'crm-ian'
+  // CRM IAN: só em Kanban (sem lista, sem a troca Lista/Kanban, sem SDR, Filtro nem os quadrinhos de status do
+  // dia). O Dashboard continua, e o próprio botão dele volta pro Kanban.
+  const kanbanIan = page === 'crm-ian'
   const [dashboardIan, setDashboardIan] = React.useState(false)
-  const view: 'list' | 'kanban' | 'dashboard' = soLista ? 'list' : listaIan ? (dashboardIan ? 'dashboard' : 'list') : viewEscolhida
+  const view: 'list' | 'kanban' | 'dashboard' = soLista ? 'list' : kanbanIan ? (dashboardIan ? 'dashboard' : 'kanban') : viewEscolhida
   React.useEffect(() => {
-    if (soLista || listaIan) setSdrFilter(null)
-    if (listaIan) setFilterRules([])
-  }, [soLista, listaIan])
+    if (soLista || kanbanIan) setSdrFilter(null)
+    if (kanbanIan) setFilterRules([])
+  }, [soLista, kanbanIan])
   const VIEW_LABEL: Record<'list' | 'kanban' | 'dashboard', string> = {
     list: 'lista', kanban: 'Kanban', dashboard: sdrLock ? 'Minhas métricas' : 'Dashboard',
   }
@@ -1618,13 +1618,13 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               <>
               <ToolbarButton
                 icon={<LayoutDashboard className="h-3.5 w-3.5" />}
-                onClick={() => (listaIan ? setDashboardIan((v) => !v) : changeView('dashboard'))}
+                onClick={() => (kanbanIan ? setDashboardIan((v) => !v) : changeView('dashboard'))}
                 className={view === 'dashboard' ? 'bg-accent/10 text-accent' : undefined}
                 title="Ver resumo em relatório — só visualização"
               >
                 {sdrLock ? 'Minhas métricas' : 'Dashboard'}
               </ToolbarButton>
-              {!listaIan && (
+              {!kanbanIan && (
               <div className="inline-flex overflow-hidden rounded-lg border border-line">
                 <button
                   type="button"
@@ -1652,12 +1652,12 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
                 </button>
               </div>
               )}
-              {!listaIan && (
+              {!kanbanIan && (
                 <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />
               )}
               </>
               )}
-              {!listaIan && (
+              {!kanbanIan && (
                 <ToolbarButton
                   icon={<Filter className="h-3.5 w-3.5" />}
                   onClick={() => setFiltersOpen(true)}
@@ -1690,7 +1690,7 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} sdrLock={sdrLock ?? undefined} modoDemanda={hideIanMateusCols} />
             ) : (
               <>
-                {!listaIan && <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} />}
+                {!kanbanIan && <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} />}
                 <div className="flex-1">
                   {visibleBoards.map((board) => (
                     <BoardGroup

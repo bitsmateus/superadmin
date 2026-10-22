@@ -98,6 +98,18 @@ export function ofereceAgendadoPelaIa(statusNovo: string, nomeDaAba: string, idD
   return normaliza(statusNovo).includes('reuniaoagendada') && !/luiza/i.test(aba) && !/closer/i.test(aba)
 }
 
+/**
+ * O quadro da aba que corresponde a um status: mesmo nome ignorando acento, traço e maiúscula ("Follow-up Propostas" =
+ * "Follow up Propostas") ou, sem isso, o quadro cujo nome começa com o status ("Follow-up Propostas" →
+ * "FOLLOW UP PROPOSTAS (APÓS 3 TENTATIVAS)"). Mesma regra do servidor (quadroDoStatus em leadBoards.ts).
+ */
+export function quadroDoStatus<T extends { name: string; page: string }>(quadros: T[], page: string, status: string): T | undefined {
+  const alvo = normaliza(status)
+  if (!alvo) return undefined
+  const daAba = quadros.filter((b) => b.page === page)
+  return daAba.find((b) => normaliza(b.name) === alvo) ?? daAba.find((b) => normaliza(b.name).startsWith(alvo))
+}
+
 export function mesmoStatus(a: string, b: string): boolean {
   return normaliza(a) === normaliza(b)
 }

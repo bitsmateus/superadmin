@@ -1446,6 +1446,16 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         const etiqueta = await statusDoQuadro(patch.board_id);
         if (etiqueta) patch.status = etiqueta;
       }
+      // E o contrário: mudar só o Status leva a lead pro quadro dele na mesma aba, mesmo com o nome escrito diferente
+      // ("Follow-up Propostas" → "FOLLOW UP PROPOSTAS (APÓS 3 TENTATIVAS)"). Status sem quadro (ex.: "Leads 3C") fica onde está.
+      if (typeof patch.status === 'string' && patch.status.trim() && !('board_id' in patch)) {
+        const atual = await queryOne<{ board_id: string; page: string }>(
+          'SELECT r.board_id, lb.page FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id WHERE r.id = $1 AND lb.is_vendas = false',
+          [req.params.id]
+        );
+        const quadro = atual ? await quadroDoStatus(atual.page, patch.status) : null;
+        if (atual && quadro && quadro !== atual.board_id) patch.board_id = quadro;
+      }
 
       // Reunião agendada / Proposta enviada nos CRMs do Arthur e do Luis: sem data e horário, não muda.
       const falta = await faltaDadoDoStatus(req.params.id, patch);

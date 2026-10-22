@@ -48,7 +48,7 @@ import { useLeadEvents } from '@/hooks/useLeadEvents'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useTeam, teamMemberLabel, type TeamMember } from '@/hooks/useTeam'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
-import { CANAIS_DE_AGENDAMENTO, MINIMO_OUTRO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, textoDoAgendadoOutro } from '@/lib/regraDoStatus'
+import { CANAIS_DE_AGENDAMENTO, MINIMO_OUTRO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, quadroDoStatus, textoDoAgendadoOutro } from '@/lib/regraDoStatus'
 import { leadBoardsService } from '@/services/leadBoards'
 import { LeadOrigemBlock } from '@/components/comercial/LeadOrigemBlock'
 import { leadNotesService } from '@/services/leadNotes'
@@ -335,9 +335,8 @@ function LeadDetailModalInner({
                   // coisa e o Grupo (quadro) mostrando outra. Precisa ser um quadro da MESMA
                   // página — sem essa checagem, uma cópia arquivada com quadro de mesmo nome virava
                   // o alvo e o PATCH era rejeitado pelo servidor (não pode mover pra página arquivada).
-                  const target = boards.find(
-                    (b) => b.id !== row.boardId && b.page === board?.page && b.name.trim().toLowerCase() === v.trim().toLowerCase(),
-                  )
+                  const quadro = board ? quadroDoStatus(boards, board.page, v) : undefined
+                  const target = quadro && quadro.id !== row.boardId ? quadro : undefined
                   leadBoardsService.updateRow(row.id, target ? { status: v, boardId: target.id } : { status: v })
                 }}
                 required

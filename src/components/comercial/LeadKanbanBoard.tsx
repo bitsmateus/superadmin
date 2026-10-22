@@ -15,6 +15,7 @@ import { leadBoardsService } from '@/services/leadBoards'
 import { isLeadLabelsLoaded, leadLabelsService } from '@/services/leadLabels'
 import { LeadLabelCell, ManageLabelsModal } from '@/components/comercial/LeadLabelCell'
 import { cn } from '@/lib/utils'
+import { quadroDoStatus } from '@/lib/regraDoStatus'
 import { KanbanColunasNav } from '@/components/ui/KanbanColunasNav'
 import { formatBRLCompact, parseBRLCents } from '@/lib/currency'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
@@ -167,9 +168,8 @@ function LeadKanbanBoardPronto({ rows, allBoards, onOpenLead, sdrLock, modoDeman
     // vem filtrado pra UMA página só (ver comentário acima), então não corre o risco de casar
     // com um quadro de mesmo nome em outra página.
     if (groupField === 'status') {
-      const target = allBoards.find(
-        (b) => b.id !== row.boardId && b.name.trim().toLowerCase() === columnKey.trim().toLowerCase(),
-      )
+      const quadro = allBoards[0] ? quadroDoStatus(allBoards, allBoards[0].page, columnKey) : undefined
+      const target = quadro && quadro.id !== row.boardId ? quadro : undefined
       leadBoardsService.updateRow(rowId, target ? { status: columnKey, boardId: target.id } : { status: columnKey })
     } else {
       leadBoardsService.updateRow(rowId, { [groupField]: columnKey })
@@ -181,7 +181,7 @@ function LeadKanbanBoardPronto({ rows, allBoards, onOpenLead, sdrLock, modoDeman
   // e, sem quadro com esse nome, no primeiro quadro da aba.
   const criarNaColuna = (col: Column, nome: string) => {
     const quadro =
-      (groupField === 'status' && allBoards.find((b) => b.name.trim().toLowerCase() === col.key.trim().toLowerCase())) ||
+      (groupField === 'status' && allBoards[0] && quadroDoStatus(allBoards, allBoards[0].page, col.key)) ||
       allBoards[0]
     if (!quadro) return
     void leadBoardsService.createRowComRegra(quadro.id, {

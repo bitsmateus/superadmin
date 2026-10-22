@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ehSdrDaIa } from '@/lib/regraDoStatus'
+import { ehSdrDaIa, quadroDoStatus } from '@/lib/regraDoStatus'
 import {
   Archive,
   ArrowRightLeft,
@@ -1198,9 +1198,8 @@ function BoardGroup({
                               // existe em várias páginas de SDR diferentes, e uma cópia arquivada
                               // pode ter um quadro com o mesmo nome; sem essa checagem de página o
                               // lead somia parar numa página arquivada e sumia da tela do SDR).
-                              const target = allBoards.find(
-                                (b) => b.id !== row.boardId && b.page === board.page && b.name.trim().toLowerCase() === next.trim().toLowerCase(),
-                              )
+                              const quadro = quadroDoStatus(allBoards, board.page, next)
+                              const target = quadro && quadro.id !== row.boardId ? quadro : undefined
                               applyFieldChange(row, target ? { status: next, boardId: target.id } : { status: next })
                             } else if (col.key === 'sdr') {
                               // Marcar o SDR aqui (só existe em abas sem dono, ex.: Novos Leads) já

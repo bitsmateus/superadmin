@@ -1,11 +1,14 @@
 import { FastifyInstance } from 'fastify';
-import { query, queryOne, queryAsActor } from '../db.js';
+import { query, queryOne, queryAsActor, withTransaction } from '../db.js';
 import {
-  idCanonicoDasNotas, logLeadEvent, sincronizarContagemNotas, statusDoQuadro, syncEspelhoReuniaoAgendada,
+  idCanonicoDasNotas, logLeadEvent, propagarEspelho, sincronizarContagemNotas, statusDoQuadro, syncCopiaDaIa,
+  syncEspelhoReuniaoAgendada,
 } from './leadBoards.js';
+import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import {
-  chaveTelefone, chaveValida, colunasQueCasam, mesmoTelefone, montarEtiquetas, parseDataIntegracao,
-  resolverEtiquetas, telefoneComDdi, textoParaHtml, validarPatchIntegracao, type OpcoesEtiqueta,
+  chaveTelefone, chaveValida, colunasQueCasam, compararAchadosPorTelefone, mesmoTelefone, montarEtiquetas,
+  parseDataIntegracao, resolverEtiquetas, resolverQuadro, rotuloDaOrigem, telefoneComDdi, textoParaHtml,
+  validarCriacaoIntegracao, validarPatchIntegracao, type OpcoesEtiqueta,
 } from '../lib/integracaoCards.js';
 
 /**
@@ -16,6 +19,7 @@ import {
  *  - NUNCA cria venda nem comissão (não chama syncVendaFromStatus/propagarComissao) e recusa mover card
  *    pra coluna de Vendas/Contrato. Mover pra "Vendido" do funil só troca coluna e status.
  *  - Trocar a coluna registra o histórico (lead_board_history) como "automação".
+ *  - Editar um card leva a edição pras outras linhas da mesma lead (cópia do closer / da IA), como na tela.
  */
 
 const ATOR = 'automação';
@@ -24,10 +28,13 @@ const ATOR = 'automação';
 const CAMPOS_NA_LINHA_DO_TEMPO = ['status', 'dia_contato', 'sdr', 'tipo', 'ligacao', 'followup', 'disparo'] as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Quem aparece nas Atualizações do card criado pela automação. */
+const AUTOR_LUIZA = 'Luiza (SDR IA)';
 
 interface CardRow {
   id: string; nome: string; empresa: string; telefone: string; status: string; sdr: string;
-  dor_cliente: string; numero_atendentes: string; entrou_coluna_em: string | null;
+  dor_cliente: string; numero_atendentes: string; entrou_coluna_em: Date | string | null;
+  origem: string; observacoes: string; email: string; nicho: string; ticket_nx: string;
   regua: string; regua_etapa: string; regua_ultimo_envio_em: string | null; regua_status: string; optout: boolean;
   tipo: string; dia_contato: string; ligacao: string; followup: string; disparo: string;
   coluna_id: string; coluna: string; quadro_id: string; quadro: string;
@@ -37,6 +44,7 @@ const SELECT_CARD = `
   SELECT r.id, r.nome, r.empresa, r.telefone, r.status, r.sdr, r.dor_cliente, r.numero_atendentes,
          r.entrou_coluna_em, r.regua, r.regua_etapa, r.regua_ultimo_envio_em, r.regua_status, r.optout,
          r.tipo, r.dia_contato, r.ligacao, r.followup, r.disparo,
+         r.origem, r.observacoes, r.email, r.nicho, r.ticket_nx,
          lb.id AS coluna_id, lb.name AS coluna, lp.id AS quadro_id, lp.name AS quadro
   FROM lead_rows r
   JOIN lead_boards lb ON lb.id = r.board_id
@@ -84,6 +92,11 @@ function cardParaApi(r: CardRow, opcoes: OpcoesPorAba) {
     sdr: r.sdr,
     dor_cliente: r.dor_cliente,
     numero_atendentes: r.numero_atendentes,
+    origem: r.origem,
+    descricao: r.observacoes,
+    email: r.email,
+    ramo: r.nicho,
+    ticket_nx: r.ticket_nx,
     etiquetas: montarEtiquetas(r as unknown as Record<string, string>, opcoes(r.quadro_id)),
   };
 }
@@ -93,20 +106,26 @@ async function buscarCard(id: string): Promise<CardRow | null> {
 }
 
 /**
- * Espelho pro CRM do closer (Luis) quando a API leva um card do CRM do Arthur pra "Reunião agendada".
+ * Espelho pro CRM do closer (Luis) quando a API leva um card do CRM do Arthur ou da IA Luiza pra "Reunião agendada".
  *
  * Existe porque o espelho nasce de um efeito colateral do PATCH da TELA (leadBoards.ts), que a API não
  * passa — sem isto o Luis não veria a reunião marcada pela automação. Reaproveita
  * syncEspelhoReuniaoAgendada, a mesma função da tela, então valem as mesmas regras: só cards do
- * CRM do Arthur que estão em "Reunião agendada", nunca espelha uma cópia, não duplica (índice único em
+ * CRM do Arthur/IA Luiza que estão em "Reunião agendada", nunca espelha uma cópia, não duplica (índice único em
  * espelho_origem_id) e restaura a cópia se ela tinha sido retirada. Não cria venda nem comissão.
  * Nunca lança (a função da tela já captura os erros): falhar aqui não desfaz a movimentação.
  *
- * Limite conhecido: só CRIA/restaura a cópia. A propagação de edições para uma cópia já existente
- * (propagarEspelho) NÃO roda pela API.
+ * As edições seguintes chegam na cópia pelo propagarEspelho, chamado no PATCH da API.
  */
 export async function espelharSeReuniaoAgendada(cardId: string): Promise<void> {
   await syncEspelhoReuniaoAgendada(cardId);
+}
+
+/** Quadro (aba) pelo id/slug ou nome. Só abas não arquivadas. */
+async function acharQuadro(pedido: unknown): Promise<{ id?: string; nome?: string; erro?: string }> {
+  const quadros = await query<{ id: string; name: string }>('SELECT id, name FROM lead_pages WHERE archived_at IS NULL');
+  const r = resolverQuadro(quadros, pedido);
+  return r.id ? { id: r.id, nome: quadros.find((q) => q.id === r.id)?.name } : { erro: r.erro };
 }
 
 export async function integracaoRoutes(app: FastifyInstance) {
@@ -121,13 +140,19 @@ export async function integracaoRoutes(app: FastifyInstance) {
     }
   });
 
-  // GET /api/integracao/cards?coluna=NOME&board_id=UUID&entrou_depois=DATA&limite=N
-  // Lista os cards da coluna em TODOS os quadros. Fora da lista: cards excluídos, cópias do espelho
+  // GET /api/integracao/cards?coluna=NOME&board_id=UUID&quadro=ID_OU_NOME&entrou_depois=DATA&limite=N
+  // Lista os cards da coluna em TODOS os quadros (ou só no `quadro` pedido). Fora da lista: cards excluídos, cópias do espelho
   // do closer e da aba Vendas (senão o mesmo telefone receberia a régua duas vezes) e quadros arquivados.
-  app.get<{ Querystring: { coluna?: string; board_id?: string; entrou_depois?: string; limite?: string } }>(
+  app.get<{ Querystring: { coluna?: string; board_id?: string; quadro?: string; entrou_depois?: string; limite?: string } }>(
     '/api/integracao/cards',
     async (req, reply) => {
       const { coluna, board_id, entrou_depois } = req.query;
+      let quadroId: string | null = null;
+      if (req.query.quadro !== undefined) {
+        const q = await acharQuadro(req.query.quadro);
+        if (q.erro) return reply.status(400).send({ message: q.erro });
+        quadroId = q.id!;
+      }
       if (!coluna?.trim() && !board_id) return reply.status(400).send({ message: 'Informe "coluna" (nome) e/ou "board_id".' });
       if (board_id && !UUID.test(board_id)) return reply.status(400).send({ message: '"board_id" deve ser um UUID.' });
       let depois: Date | null = null;
@@ -141,7 +166,8 @@ export async function integracaoRoutes(app: FastifyInstance) {
         `SELECT lb.id, lb.name, lb.page FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page
          WHERE lp.archived_at IS NULL`
       );
-      let ids = coluna?.trim() ? colunasQueCasam(colunas, coluna) : colunas.map((c) => c.id);
+      const doQuadro = quadroId ? colunas.filter((c) => c.page === quadroId) : colunas;
+      let ids = coluna?.trim() ? colunasQueCasam(doQuadro, coluna) : doQuadro.map((c) => c.id);
       if (board_id) ids = ids.filter((id) => id === board_id);
       if (!ids.length) return [];
 
@@ -158,25 +184,116 @@ export async function integracaoRoutes(app: FastifyInstance) {
     }
   );
 
-  // GET /api/integracao/cards/telefone/:numero — com/sem 55, com/sem o 9.
-  // Se houver mais de um card com o número, devolve o original mais recente e lista os demais.
-  app.get<{ Params: { numero: string } }>('/api/integracao/cards/telefone/:numero', async (req, reply) => {
+  // GET /api/integracao/cards/telefone/:numero?quadro=ID_OU_NOME — com/sem 55, com/sem o 9.
+  // Se houver mais de um card com o número, devolve o original mais recente e lista os demais. Com `quadro`, só
+  // os cards daquele quadro.
+  app.get<{ Params: { numero: string }; Querystring: { quadro?: string } }>('/api/integracao/cards/telefone/:numero', async (req, reply) => {
     const chave = chaveTelefone(req.params.numero);
     if (!chave) return reply.status(400).send({ message: 'Telefone inválido: informe DDD + número.' });
+    let quadroId: string | null = null;
+    if (req.query.quadro !== undefined) {
+      const q = await acharQuadro(req.query.quadro);
+      if (q.erro) return reply.status(400).send({ message: q.erro });
+      quadroId = q.id!;
+    }
     const candidatos = await query<CardRow & { espelho_origem_id: string | null; copia_ia_origem_id: string | null; venda_origem_id: string | null }>(
       `${SELECT_CARD.replace('SELECT r.id,', 'SELECT r.espelho_origem_id, r.copia_ia_origem_id, r.venda_origem_id, r.id,')}
        WHERE r.deleted_at IS NULL AND lp.archived_at IS NULL
          AND right(regexp_replace(r.telefone, '\\D', '', 'g'), 8) = $1`,
       [chave.ultimos8]
     );
+    // entrou_coluna_em chega como Date (ou null): ordenar por timestamp, não por texto.
     const achados = candidatos
-      .filter((c) => mesmoTelefone(c.telefone, req.params.numero))
-      .sort((a, b) => {
-        const copia = (x: typeof a) => (x.espelho_origem_id || x.copia_ia_origem_id || x.venda_origem_id ? 1 : 0);
-        return copia(a) - copia(b) || (b.entrou_coluna_em ?? '').localeCompare(a.entrou_coluna_em ?? '');
-      });
+      .filter((c) => mesmoTelefone(c.telefone, req.params.numero) && (!quadroId || c.quadro_id === quadroId))
+      .map((c) => ({ ...c, copia: !!(c.espelho_origem_id || c.copia_ia_origem_id || c.venda_origem_id) }))
+      .sort(compararAchadosPorTelefone);
     if (!achados.length) return reply.status(404).send({ message: 'Nenhum card com esse telefone.' });
     return { ...cardParaApi(achados[0], await carregarOpcoesEtiqueta()), total_encontrados: achados.length, outros_ids: achados.slice(1).map((c) => c.id) };
+  });
+
+  // POST /api/integracao/cards — cria um card. Obrigatórios: quadro, nome, telefone (coluna: a primeira do quadro).
+  // Idempotente por quadro: já existe card com esse telefone NESSE quadro = devolve ele (200, created: false). Cards
+  // do mesmo telefone em outros quadros não impedem. Dispara o mesmo que a criação pela tela: entrada na coluna e
+  // histórico (gatilhos do banco), SDR da aba, linha do tempo, espelho do closer se já nascer em "Reunião agendada".
+  app.post<{ Body: unknown }>('/api/integracao/cards', async (req, reply) => {
+    const v = validarCriacaoIntegracao(req.body);
+    let quadro: { id: string; nome: string } | null = null;
+    if (v.quadro) {
+      const q = await acharQuadro(v.quadro);
+      if (q.erro) v.erros.push(q.erro);
+      else quadro = { id: q.id!, nome: q.nome ?? q.id! };
+    }
+    let coluna: { id: string; name: string } | null = null;
+    if (quadro) {
+      const colunas = await query<{ id: string; name: string; page: string; is_vendas: boolean; is_contrato: boolean }>(
+        'SELECT id, name, page, is_vendas, is_contrato FROM lead_boards WHERE page = $1 ORDER BY position, created_at',
+        [quadro.id]
+      );
+      const doFunil = colunas.filter((c) => !c.is_vendas && !c.is_contrato);
+      if (!doFunil.length) v.erros.push(`O quadro "${quadro.nome}" não tem colunas.`);
+      else if (v.coluna) {
+        const ids = colunasQueCasam(colunas, v.coluna);
+        const achada = colunas.find((c) => c.id === ids[0]);
+        if (!ids.length) v.erros.push(`Coluna "${v.coluna}" não existe no quadro "${quadro.nome}". Colunas: ${doFunil.map((c) => c.name).join(', ')}.`);
+        else if (ids.length > 1) v.erros.push(`Nome de coluna ambíguo ("${v.coluna}") no quadro "${quadro.nome}".`);
+        else if (achada && (achada.is_vendas || achada.is_contrato)) v.erros.push('A API não cria cards em colunas de Vendas/Contrato.');
+        else coluna = achada ?? null;
+      } else coluna = doFunil[0];
+    }
+    if (v.erros.length || !quadro || !coluna) {
+      return reply.status(400).send({ message: 'Não deu pra criar o card.', erros: v.erros.length ? v.erros : ['Quadro ou coluna inválidos.'] });
+    }
+
+    const telefone = v.campos.telefone;
+    const ultimos8 = chaveTelefone(telefone)!.ultimos8;
+    const status = (await statusDoQuadro(coluna.id)) ?? '';
+    // Trava por quadro + telefone: duas chamadas iguais ao mesmo tempo não criam dois cards.
+    const r = await withTransaction(async (client) => {
+      await client.query(`SELECT set_config('app.actor', $1, true)`, [ATOR]);
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`integracao-card:${quadro!.id}:${ultimos8}`]);
+      const { rows: mesmos } = await client.query<{ id: string; telefone: string; espelho_origem_id: string | null; copia_ia_origem_id: string | null }>(
+        `SELECT r.id, r.telefone, r.espelho_origem_id, r.copia_ia_origem_id FROM lead_rows r
+         JOIN lead_boards lb ON lb.id = r.board_id
+         WHERE lb.page = $1 AND lb.is_vendas = false AND r.deleted_at IS NULL
+           AND right(regexp_replace(r.telefone, '\\D', '', 'g'), 8) = $2
+         ORDER BY r.created_at ASC`,
+        [quadro!.id, ultimos8]
+      );
+      const existente = mesmos.filter((m) => mesmoTelefone(m.telefone, telefone))
+        .sort((a, b) => Number(!!(a.espelho_origem_id || a.copia_ia_origem_id)) - Number(!!(b.espelho_origem_id || b.copia_ia_origem_id)))[0];
+      if (existente) return { id: existente.id, criado: false };
+      const { rows: [{ max }] } = await client.query<{ max: number | null }>(
+        'SELECT MAX(position) AS max FROM lead_rows WHERE board_id = $1', [coluna!.id]);
+      // Nomes de coluna vêm da lista fixa do validador (nunca do cliente) — seguro interpolar.
+      const campos: Record<string, unknown> = { ...v.campos, board_id: coluna!.id, status, position: (max ?? -1) + 1, sdr: '' };
+      const chaves = Object.keys(campos);
+      const { rows: [novo] } = await client.query<{ id: string }>(
+        `INSERT INTO lead_rows (${chaves.join(', ')}) VALUES (${chaves.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING id`,
+        chaves.map((k) => campos[k])
+      );
+      return { id: novo.id, criado: true };
+    });
+
+    if (r.criado) {
+      // SDR: o dono da aba (no CRM IA LUIZA, "IA Luiza"); aba sem dono usa o "sdr" do corpo.
+      const sdrDaAba = await preencherSdrDaAba(r.id).catch(() => null);
+      if (!sdrDaAba && v.sdr) await query('UPDATE lead_rows SET sdr = $1 WHERE id = $2', [v.sdr, r.id]);
+      await logLeadEvent(r.id, 'created', null, null, 'Automação').catch(() => undefined);
+      await query(
+        `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments) VALUES ($1, NULL, $2, $3, '[]')`,
+        [r.id, AUTOR_LUIZA, textoParaHtml(`Card criado automaticamente pela Luiza (origem: ${rotuloDaOrigem(v.campos.origem ?? '')})`)]
+      );
+      await sincronizarContagemNotas(r.id);
+      await espelharSeReuniaoAgendada(r.id);
+      await syncCopiaDaIa(r.id);
+    }
+    const card = await buscarCard(r.id);
+    const resposta = {
+      id: r.id, quadro: card?.quadro_id ?? quadro.id, quadro_nome: card?.quadro ?? quadro.nome,
+      coluna: card?.coluna ?? coluna.name, coluna_id: card?.coluna_id ?? coluna.id, created: r.criado,
+      card: card ? cardParaApi(card, await carregarOpcoesEtiqueta()) : null,
+    };
+    return reply.status(r.criado ? 201 : 200).send(resposta);
   });
 
   // PATCH /api/integracao/cards/:id
@@ -188,10 +305,11 @@ export async function integracaoRoutes(app: FastifyInstance) {
 
     const atual = await queryOne<{
       board_id: string; page: string; venda_origem_id: string | null; board_is_vendas: boolean;
+      espelho_origem_id: string | null; copia_ia_origem_id: string | null;
       status: string; sdr: string; tipo: string; dia_contato: string; ligacao: string; followup: string; disparo: string;
     }>(
       `SELECT r.board_id, lb.page, r.status, r.sdr, r.tipo, r.dia_contato, r.ligacao, r.followup, r.disparo,
-              r.venda_origem_id, lb.is_vendas AS board_is_vendas
+              r.venda_origem_id, r.espelho_origem_id, r.copia_ia_origem_id, lb.is_vendas AS board_is_vendas
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
        WHERE r.id = $1 AND r.deleted_at IS NULL`,
       [id]
@@ -278,10 +396,15 @@ export async function integracaoRoutes(app: FastifyInstance) {
       if (de === para) continue;
       await logLeadEvent(id, tipo, de || null, para || null, 'Automação').catch(() => undefined);
     }
+    // As outras linhas da mesma lead (cópia do closer / da IA, ou a original) acompanham, como na tela.
+    await propagarEspelho(id, atual.espelho_origem_id, campos, '', atual.copia_ia_origem_id, 'Automação', true);
     // Espelho do closer: igual à tela, quando a coluna ou o status mudou.
     if (moveu || 'status' in campos) await espelharSeReuniaoAgendada(id);
+    // SDR virou "IA Luiza" num CRM de outro SDR: ganha a cópia no CRM IA LUIZA (ou perde, se desmarcar).
+    if (moveu || 'status' in campos || 'sdr' in campos) await syncCopiaDaIa(id);
 
-    return cardParaApi(depois, opcoes);
+    const final = await buscarCard(id);
+    return cardParaApi(final ?? depois, opcoes);
   });
 
   // POST /api/integracao/cards/:id/log  { "texto": "Luiza: enviou template D7", "autor": "Luiza" (opcional) }

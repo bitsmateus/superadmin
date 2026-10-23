@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ehSdrDaIa, quadroDoStatus } from '@/lib/regraDoStatus'
+import { ehSdrDaIa, origemMostraSelo, quadroDoStatus, rotuloDaOrigem } from '@/lib/regraDoStatus'
 import {
   Archive,
   ArrowRightLeft,
@@ -1158,6 +1158,14 @@ function BoardGroup({
                             onSave={(next) => leadBoardsService.updateRow(row.id, { nome: next })}
                             className="bg-transparent px-2.5 py-1.5 text-sm font-normal text-foreground"
                           />
+                          {origemMostraSelo(row.origem) && (
+                            <span
+                              title={`Origem: ${rotuloDaOrigem(row.origem)}`}
+                              className="mr-1.5 max-w-[9rem] shrink-0 truncate rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-300"
+                            >
+                              {rotuloDaOrigem(row.origem)}
+                            </span>
+                          )}
                           {sdrLock && row.sdr && row.sdr !== sdrLock && ehSdrDaIa(row.sdr) && (
                             <span
                               title="Agendada pela IA Luiza: conta nas métricas dela, não nas deste CRM"

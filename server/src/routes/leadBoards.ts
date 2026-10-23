@@ -493,7 +493,8 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
  *    com a lead que já estava trabalhando.
  * As Atualizações são compartilhadas (ver idCanonicoDasNotas): os dois escrevem no mesmo histórico.
  */
-const ESPELHO_PAGE_ORIGEM = 'crm-arthur';
+/** CRMs cuja "Reunião agendada" vai pro closer: o do Arthur e o da IA Luiza. */
+const ESPELHO_PAGES_ORIGEM = ['crm-arthur', 'crm-ia-luiza'];
 const ESPELHO_PAGE_DESTINO = 'crm-luis-closer';
 
 /** Campos de CONTEÚDO que andam juntos. Fora daqui: status e board_id (funil é de cada um),
@@ -501,7 +502,7 @@ const ESPELHO_PAGE_DESTINO = 'crm-luis-closer';
 const ESPELHO_CAMPOS = [
   'nome', 'tipo', 'empresa', 'telefone', 'dia_contato', 'ligacao', 'agendamento', 'retornar',
   'retornado', 'responsavel', 'sdr', 'numero', 'dor_cliente', 'numero_atendentes',
-  'valor_mrr', 'valor_implementacao', 'observacoes', 'fechamento', 'origem', 'agendado_por',
+  'valor_mrr', 'valor_implementacao', 'observacoes', 'fechamento', 'origem', 'agendado_por', 'email', 'ticket_nx',
 ];
 
 /** "Reunião agendada"/"REUNIÃO AGENDADA" — nome do quadro varia de CRM pra CRM. "Reunião não
@@ -628,10 +629,10 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
       [leadRowId]
     );
     if (!lead) return;
-    // Só nasce do CRM do Arthur, e só quando está de fato em "Reunião agendada".
-    if (lead.page !== ESPELHO_PAGE_ORIGEM) return;
-    // A própria linha já é uma cópia — nunca espelha o espelho.
-    if (lead.espelho_origem_id) return;
+    // Só nasce do CRM do Arthur ou da IA Luiza, e só quando está de fato em "Reunião agendada".
+    if (!ESPELHO_PAGES_ORIGEM.includes(lead.page)) return;
+    // A própria linha já é uma cópia (do closer ou da IA) — nunca espelha: a original já mandou a dela.
+    if (lead.espelho_origem_id || (lead as { copia_ia_origem_id?: string | null }).copia_ia_origem_id) return;
     if (lead.status !== MILESTONE_AGENDADA && !ehQuadroReuniaoAgendada(lead.board_name)) return;
 
     const jaEspelhada = await queryOne<{ id: string; deleted_at: string | null }>(
@@ -693,12 +694,16 @@ const STATUS_INICIO_DO_FUNIL = new Set(['primeirocontato', 'leadsnovos']);
 
 /** Edição de conteúdo vai pras outras linhas da mesma lead: a original e as cópias dela (a do CRM do closer e a do
  * CRM IA LUIZA). É um pulo só: o UPDATE daqui não passa pelo PATCH de novo, então não entra em loop. */
-async function propagarEspelho(
+export async function propagarEspelho(
   leadRowId: string,
   espelhoOrigemId: string | null,
   patch: Record<string, unknown>,
   actorId: string,
-  copiaIaOrigemId: string | null = null
+  copiaIaOrigemId: string | null = null,
+  /** Nome que vai na linha do tempo do parceiro quando quem editou não é uma pessoa (ex.: "Automação"). */
+  nomeDoAtor?: string,
+  /** A API de integração nunca cria venda: a cópia virar "Vendido" por ela só move a original. */
+  semVenda = false
 ) {
   try {
     const camposDoPatch = Object.keys(patch).filter((k) => ESPELHO_CAMPOS.includes(k));
@@ -776,10 +781,10 @@ async function propagarEspelho(
       if (editouCopia && parceiroEhOriginal) void propagarVenda(parceiro.id, patch);
 
       if (statusMudou) {
-        const actorName = await getActorName(actorId);
+        const actorName = nomeDoAtor ?? await getActorName(actorId);
         await logLeadEvent(parceiro.id, 'status', parceiro.status, statusParceiro, actorName);
         // Quem mexeu foi uma cópia: a venda nasce aqui, pela original, uma vez só.
-        if (editouCopia && parceiroEhOriginal) {
+        if (editouCopia && parceiroEhOriginal && !semVenda) {
           await syncVendaFromStatus(parceiro.id, parceiro.status, statusParceiro!);
         }
       }

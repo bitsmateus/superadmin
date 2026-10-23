@@ -4,8 +4,12 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import type { LeadLabelField, LeadRow } from '@/types/leadBoard'
+import { ROTULOS_ORIGEM, grupoDaOrigem } from '@/lib/regraDoStatus'
 
-export type FilterField = 'tipo' | 'diaContato' | 'status' | 'sdr' | 'retornar' | 'createdAt'
+/** Opções do filtro de origem: os rótulos amigáveis (sem repetir) + "Outros". */
+const GRUPOS_DE_ORIGEM = [...new Set([...Object.values(ROTULOS_ORIGEM), 'Outros'])]
+
+export type FilterField = 'tipo' | 'diaContato' | 'status' | 'sdr' | 'origem' | 'retornar' | 'createdAt'
 
 export interface FilterRule {
   id: string
@@ -20,15 +24,17 @@ const FIELD_LABELS: Record<FilterField, string> = {
   diaContato: 'Dia de contato',
   status: 'Status',
   sdr: 'SDR',
+  origem: 'Origem',
   retornar: 'Retornar',
   createdAt: 'Log de criação',
 }
 
-const FIELD_KIND: Record<FilterField, 'label' | 'date'> = {
+const FIELD_KIND: Record<FilterField, 'label' | 'date' | 'origem'> = {
   tipo: 'label',
   diaContato: 'label',
   status: 'label',
   sdr: 'label',
+  origem: 'origem',
   retornar: 'date',
   createdAt: 'date',
 }
@@ -63,6 +69,17 @@ function dayKey(iso: string): string {
 /** Todas as regras precisam bater (E) pra linha aparecer. */
 export function matchesLeadFilters(row: LeadRow, rules: FilterRule[]): boolean {
   return rules.every((rule) => {
+    // Origem compara pelo grupo amigável: "Link da bio" pega "bio" e "bio_instagram".
+    if (FIELD_KIND[rule.field] === 'origem') {
+      const val = grupoDaOrigem(row.origem)
+      switch (rule.operator) {
+        case 'is': return !rule.value || val === rule.value
+        case 'is_not': return !rule.value || val !== rule.value
+        case 'is_empty': return !val
+        case 'is_not_empty': return !!val
+        default: return true
+      }
+    }
     if (FIELD_KIND[rule.field] === 'label') {
       const val = row[rule.field] as string
       switch (rule.operator) {
@@ -103,7 +120,7 @@ function FilterRuleRow({
 }) {
   const kind = FIELD_KIND[rule.field]
   const labels = useLeadLabels(kind === 'label' ? (rule.field as LeadLabelField) : 'status', pageId)
-  const operators = kind === 'label' ? LABEL_OPERATORS : DATE_OPERATORS
+  const operators = kind === 'date' ? DATE_OPERATORS : LABEL_OPERATORS
   const needsValue = rule.operator !== 'is_empty' && rule.operator !== 'is_not_empty'
   const needsValue2 = rule.operator === 'between'
 
@@ -115,7 +132,7 @@ function FilterRuleRow({
         onChange={(e) => {
           const field = e.target.value as FilterField
           const nextKind = FIELD_KIND[field]
-          onChange({ field, operator: nextKind === 'label' ? 'is' : 'is', value: '', value2: '' })
+          onChange({ field, operator: nextKind === 'date' ? 'is' : 'is', value: '', value2: '' })
         }}
         className={selectClass}
       >
@@ -131,7 +148,12 @@ function FilterRuleRow({
         {operators.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       {needsValue && (
-        kind === 'label' ? (
+        kind === 'origem' ? (
+          <select value={rule.value} onChange={(e) => onChange({ value: e.target.value })} className={selectClass}>
+            <option value="">Selecione…</option>
+            {GRUPOS_DE_ORIGEM.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        ) : kind === 'label' ? (
           <select value={rule.value} onChange={(e) => onChange({ value: e.target.value })} className={selectClass}>
             <option value="">Selecione…</option>
             {labels.map((l) => <option key={l.id} value={l.name}>{l.name}</option>)}

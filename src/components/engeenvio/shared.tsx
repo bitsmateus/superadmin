@@ -1,12 +1,23 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { engeApi, type EngeEmpreendimento, type EngeEnvio, type EngeGarantia } from '@/api/engeEnvio'
+import { Mail, MessageCircle } from 'lucide-react'
+import { engeApi, type EngeCanais, type EngeEmpreendimento, type EngeEnvio, type EngeGarantia } from '@/api/engeEnvio'
 import { cn } from '@/lib/utils'
 
 export const CHAVE_TUDO = ['engeenvio', 'tudo'] as const
 
 export function useEngeTudo() {
   return useQuery({ queryKey: CHAVE_TUDO, queryFn: engeApi.tudo, staleTime: 15_000 })
+}
+
+export function useEngeConfig() {
+  return useQuery({ queryKey: ['engeenvio', 'config'], queryFn: engeApi.config })
+}
+
+/** Canais padrão de um aviso novo: e-mail sempre; WhatsApp quando a NX está configurada. */
+export function useCanaisPadrao(): EngeCanais {
+  const { data } = useEngeConfig()
+  return { email: true, whatsapp: Boolean(data?.nxOk) }
 }
 
 export function useRecarregar() {
@@ -59,4 +70,47 @@ export const td = 'px-4 py-3 align-middle text-sm text-foreground'
 
 export function Vazio({ children }: { children: React.ReactNode }) {
   return <p className="px-4 py-8 text-center text-sm text-foreground/50">{children}</p>
+}
+
+/** Liga/desliga e-mail e WhatsApp de um aviso. */
+export function CanaisToggle({
+  valor,
+  onChange,
+  idBase,
+  compacto,
+}: {
+  valor: EngeCanais
+  onChange: (v: EngeCanais) => void
+  idBase: string
+  compacto?: boolean
+}) {
+  const item = (chave: keyof EngeCanais, rotulo: string, Icone: typeof Mail) => {
+    const on = valor[chave]
+    return (
+      <button
+        id={`${idBase}-${chave}`}
+        type="button"
+        aria-pressed={on}
+        title={on ? `${rotulo}: vai sair` : `${rotulo}: não vai sair`}
+        onClick={() => {
+          const novo = { ...valor, [chave]: !on }
+          if (novo.email || novo.whatsapp) onChange(novo)
+        }}
+        className={cn(
+          'inline-flex items-center gap-1 rounded-md border font-medium transition-colors',
+          compacto ? 'h-8 px-2 text-xs' : 'h-8 px-2.5 text-xs',
+          on ? 'border-accent/40 bg-accent/10 text-accent' : 'border-line text-foreground/50 line-through hover:text-foreground',
+        )}
+      >
+        <Icone className="h-3.5 w-3.5" />
+        {rotulo}
+      </button>
+    )
+  }
+  return (
+    <span className="inline-flex gap-1">
+      {item('email', 'E-mail', Mail)}
+      {item('whatsapp', 'WhatsApp', MessageCircle)}
+    </span>
+  )
 }

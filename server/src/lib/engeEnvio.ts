@@ -26,7 +26,17 @@ export interface DadosAviso {
   vencimento: string;
   /** Dia em que o aviso sai (YYYY-MM-DD), pra calcular o "faltam N dias". */
   enviadoEm: string;
+  /** Link "estou ciente" — vira a variável {link} (usada na mensagem de WhatsApp). */
+  link?: string | null;
 }
+
+export const WHATSAPP_PADRAO = `Olá, {sindico}! Aqui é da Enge Services.
+
+A garantia do item *{item}* do {empreendimento} vence em *{vencimento}* ({dias}).
+
+Se houver algum problema nesse item, é preciso abrir chamado com a {construtora} antes dessa data, para não perder a cobertura. O aviso oficial também foi enviado por e-mail.
+
+Confirme o recebimento por aqui: {link}`;
 
 const dataBr = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
 
@@ -52,6 +62,7 @@ export function preencher(modelo: string, d: DadosAviso): string {
     construtora: d.construtora?.trim() || 'construtora',
     vencimento: dataBr(d.vencimento),
     dias: textoDias(diasEntre(d.enviadoEm, d.vencimento)),
+    link: d.link || '',
   };
   return modelo.replace(/\{(\w+)\}/g, (todo, nome: string) => (nome in vars ? vars[nome] : todo));
 }
@@ -79,4 +90,14 @@ export function listaEmails(texto: string | null | undefined): string[] {
     .split(/[,;\n]/)
     .map((e) => e.trim())
     .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+}
+
+/** Telefones digitados (vírgula, ponto e vírgula, barra ou quebra de linha) → só dígitos com 55. */
+export function listaTelefones(texto: string | null | undefined): string[] {
+  const nums = (texto ?? '')
+    .split(/[,;/\n]/)
+    .map((t) => t.replace(/\D/g, ''))
+    .filter((t) => t.length >= 10)
+    .map((t) => (t.startsWith('55') && t.length >= 12 ? t : `55${t}`));
+  return [...new Set(nums)];
 }

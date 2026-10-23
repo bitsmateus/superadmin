@@ -77,6 +77,48 @@ export async function sendToGroupWith(
   }
 }
 
+/** Texto para um NÚMERO por uma conexão da NX própria (apiId + token) — ex.: os avisos de garantia
+ * da Enge Services, que saem pelo WhatsApp da própria Enge. A NX às vezes responde 200 com
+ * `success: false`; isso também conta como falha. */
+export async function sendTextWith(
+  conexao: { apiId: string; token: string; baseUrl?: string },
+  number: string,
+  text: string,
+  externalKey: string,
+  isClosed = false
+): Promise<GroupSendResult> {
+  const t = (text ?? '').trim();
+  const num = normalizeNumber(number);
+  if (!t) return { ok: false, reason: 'empty' };
+  if (!conexao.apiId || !conexao.token || !num) return { ok: false, reason: 'not_configured' };
+  const base = (conexao.baseUrl || 'https://appapi.nxsystems.com.br').replace(/\/$/, '');
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20_000);
+  try {
+    const resp = await fetch(`${base}/v2/api/external/${encodeURIComponent(conexao.apiId)}/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conexao.token}` },
+      body: JSON.stringify({ body: t, number: num, externalKey, isClosed }),
+      signal: ctrl.signal,
+    });
+    const raw = await resp.text().catch(() => '');
+    let falhou = !resp.ok;
+    try {
+      if ((JSON.parse(raw) as { success?: boolean })?.success === false) falhou = true;
+    } catch {
+      /* resposta sem JSON */
+    }
+    if (falhou) return { ok: false, status: resp.status, detail: raw.slice(0, 300) || '(resposta vazia)' };
+    return { ok: true };
+  } catch (err) {
+    const aborted = err instanceof Error && err.name === 'AbortError';
+    return { ok: false, detail: aborted ? 'timeout (20s)' : String(err).slice(0, 300) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Normaliza um número para o formato esperado (55 + DDD + número, só dígitos). */
 export function normalizeNumber(n: string): string {
   let digits = (n ?? '').replace(/\D/g, '');

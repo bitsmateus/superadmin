@@ -5,9 +5,9 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
-import { engeApi, type EngeEmpreendimento, type EngeEnvio, type EngeGarantia } from '@/api/engeEnvio'
+import { engeApi, type EngeCanais, type EngeEmpreendimento, type EngeEnvio, type EngeGarantia } from '@/api/engeEnvio'
 import { dataBr, dataHoraBr, diasAte, hoje, paraCampo, somarDias, statusEnvio, sugerirEnvios, textoDias } from '@/lib/engeEnvio'
-import { useRecarregar } from './shared'
+import { CanaisToggle, useCanaisPadrao, useRecarregar } from './shared'
 import { EmailModal } from './EmailModal'
 
 /**
@@ -33,6 +33,9 @@ export function GarantiaModal({
   const [protocolo, setProtocolo] = React.useState('')
   const [novoEnvio, setNovoEnvio] = React.useState('')
   const [remarcar, setRemarcar] = React.useState<Record<string, string>>({})
+  const [canaisEdit, setCanaisEdit] = React.useState<Record<string, EngeCanais>>({})
+  const canaisPadrao = useCanaisPadrao()
+  const [canaisNovo, setCanaisNovo] = React.useState<EngeCanais>(canaisPadrao)
   const [ocupado, setOcupado] = React.useState<string | null>(null)
   const [verEmail, setVerEmail] = React.useState<string | null>(null)
 
@@ -45,6 +48,9 @@ export function GarantiaModal({
     setProtocolo(garantia.chamadoProtocolo ?? '')
     setNovoEnvio(sugerirEnvios(garantia.vencimento, [30], '09:00')[0] ?? `${somarDias(hoje(), 1)}T09:00`)
     setRemarcar({})
+    setCanaisEdit({})
+    setCanaisNovo(canaisPadrao)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [garantia])
 
   if (!garantia) return null
@@ -57,6 +63,8 @@ export function GarantiaModal({
       await recarregar()
     } catch (err) {
       toast.error((err as Error).message)
+      // Mesmo com erro pode ter mudado algo (ex.: o e-mail saiu e o WhatsApp falhou).
+      await recarregar()
     } finally {
       setOcupado(null)
     }
@@ -97,8 +105,9 @@ export function GarantiaModal({
         <div className="space-y-6">
           <section className="space-y-3">
             <h3 className="text-sm font-semibold text-foreground">Avisos ao síndico</h3>
-            <p className="text-xs text-foreground/50">
-              Para: {empreendimento?.emails || <span className="text-danger">cadastre o e-mail do síndico no empreendimento</span>}
+            <p className="break-words text-xs text-foreground/50">
+              E-mail: {empreendimento?.emails || <span className="text-danger">sem e-mail cadastrado</span>} · WhatsApp:{' '}
+              {empreendimento?.telefone || <span className="text-warning">sem número cadastrado</span>}
             </p>
             {ordenados.length === 0 && <p className="text-sm text-foreground/50">Nenhum aviso agendado para esta garantia.</p>}
             <ul className="divide-y divide-line rounded-lg border border-line">
@@ -106,7 +115,10 @@ export function GarantiaModal({
                 const s = statusEnvio(e)
                 const editavel = e.status !== 'enviado'
                 const valor = remarcar[e.id] ?? paraCampo(e.enviarEm)
-                const mudou = valor !== paraCampo(e.enviarEm)
+                const canaisAtuais = { email: e.canalEmail, whatsapp: e.canalWhatsapp }
+                const canais = canaisEdit[e.id] ?? canaisAtuais
+                const mudou =
+                  valor !== paraCampo(e.enviarEm) || canais.email !== canaisAtuais.email || canais.whatsapp !== canaisAtuais.whatsapp
                 return (
                   <li key={e.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
                     <Badge tone={s.tom} dot className="shrink-0">
@@ -123,19 +135,22 @@ export function GarantiaModal({
                       />
                     ) : (
                       <span className="text-xs tabular-nums text-foreground/70">
-                        Enviado em {dataHoraBr(e.enviadoEm)}
+                        Enviado em {dataHoraBr(e.enviadoEm ?? e.whatsappEnviadoEm)}
                         {e.cienteEm && ` · ciente por ${e.cienteNome} em ${dataHoraBr(e.cienteEm)}`}
                       </span>
                     )}
-                    {e.status === 'erro' && e.erro && <span className="w-full text-xs text-danger">{e.erro}</span>}
+                    {editavel ? (
+                      <CanaisToggle idBase={`ee-env-${e.id}`} valor={canais} onChange={(v) => setCanaisEdit((c) => ({ ...c, [e.id]: v }))} compacto />
+                    ) : null}
+                    <ResultadoCanais envio={e} />
                     <span className="ml-auto flex flex-wrap gap-1">
                       {editavel && mudou && (
                         <Button
                           size="sm"
                           loading={ocupado === `r${e.id}`}
-                          onClick={() => agir(`r${e.id}`, () => engeApi.remarcarEnvio(e.id, valor), 'Aviso remarcado')}
+                          onClick={() => agir(`r${e.id}`, () => engeApi.remarcarEnvio(e.id, valor, canais), 'Aviso remarcado')}
                         >
-                          Salvar data
+                          Salvar
                         </Button>
                       )}
                       {e.status === 'cancelado' && !mudou && (
@@ -170,9 +185,9 @@ export function GarantiaModal({
                           </Button>
                         </>
                       )}
-                      {e.status === 'enviado' && (
+                      {(e.enviadoEm || e.whatsappEnviadoEm) && (
                         <Button size="sm" variant="ghost" leftIcon={<Eye className="h-3.5 w-3.5" />} onClick={() => setVerEmail(e.id)}>
-                          Ver e-mail
+                          Ver enviado
                         </Button>
                       )}
                     </span>
@@ -189,13 +204,14 @@ export function GarantiaModal({
                   className="h-8 rounded-md border border-line bg-surface px-2 text-xs text-foreground"
                   aria-label="Dia e hora do novo aviso"
                 />
+                <CanaisToggle idBase="ee-novo-canais" valor={canaisNovo} onChange={setCanaisNovo} compacto />
                 <Button
                   size="sm"
                   className="ml-auto"
                   leftIcon={<Plus className="h-3.5 w-3.5" />}
                   disabled={!novoEnvio}
                   loading={ocupado === 'novo'}
-                  onClick={() => agir('novo', () => engeApi.agendarEnvio(garantia.id, novoEnvio), `Aviso agendado para ${dataBr(novoEnvio)}`)}
+                  onClick={() => agir('novo', () => engeApi.agendarEnvio(garantia.id, novoEnvio, canaisNovo), `Aviso agendado para ${dataBr(novoEnvio)}`)}
                 >
                   Agendar
                 </Button>
@@ -251,5 +267,28 @@ export function GarantiaModal({
       </Modal>
       <EmailModal envioId={verEmail} onFechar={() => setVerEmail(null)} />
     </>
+  )
+}
+
+/** O que já aconteceu em cada canal escolhido do aviso (saiu, falhou ou ainda não). */
+function ResultadoCanais({ envio: e }: { envio: EngeEnvio }) {
+  const linhas: { texto: string; cor: string }[] = []
+  if (e.canalEmail) {
+    if (e.enviadoEm) linhas.push({ texto: `E-mail enviado para ${e.destinatarios}`, cor: 'text-foreground/50' })
+    else if (e.erro) linhas.push({ texto: `E-mail: ${e.erro}`, cor: 'text-danger' })
+  }
+  if (e.canalWhatsapp) {
+    if (e.whatsappEnviadoEm) linhas.push({ texto: `WhatsApp enviado para ${e.whatsappPara}`, cor: 'text-foreground/50' })
+    if (e.whatsappErro) linhas.push({ texto: `WhatsApp: ${e.whatsappErro}`, cor: e.whatsappEnviadoEm ? 'text-warning' : 'text-danger' })
+  }
+  if (!linhas.length) return null
+  return (
+    <span className="w-full space-y-0.5">
+      {linhas.map((l) => (
+        <span key={l.texto} className={`block break-words text-xs ${l.cor}`}>
+          {l.texto}
+        </span>
+      ))}
+    </span>
   )
 }

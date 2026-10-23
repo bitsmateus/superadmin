@@ -3,8 +3,16 @@ import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { query, queryOne, withTransaction } from '../db.js';
 import { sendMail, type SmtpConfig } from '../lib/mailer.js';
-import { ASSUNTO_PADRAO, CORPO_PADRAO, montarHtml, preencher } from '../lib/engeEnvio.js';
-import { enviarAviso, lerConfigEnge, linkCiente, smtpCompleto } from '../jobs/engeEnvioDispatch.js';
+import { ASSUNTO_PADRAO, CORPO_PADRAO, WHATSAPP_PADRAO, listaTelefones, montarHtml, preencher } from '../lib/engeEnvio.js';
+import {
+  enviarAviso,
+  lerConfigEnge,
+  linkCiente,
+  mandarWhatsApp,
+  nxCompleto,
+  smtpCompleto,
+  type NxEnge,
+} from '../jobs/engeEnvioDispatch.js';
 
 /**
  * Enge Services (/engeenvio) — avisos de garantia dos empreendimentos que a Enge administra.
@@ -13,7 +21,8 @@ import { enviarAviso, lerConfigEnge, linkCiente, smtpCompleto } from '../jobs/en
  * do app carimbado com `scope: 'engeenvio'`, e `app.authenticate` (painel) recusa qualquer token
  * com `scope` — um login não vira o outro.
  *
- * O envio em si fica em jobs/engeEnvioDispatch.ts (a cada minuto manda o que já chegou na data).
+ * O envio em si fica em jobs/engeEnvioDispatch.ts (a cada minuto manda o que já chegou na data),
+ * por e-mail (SMTP da Enge) e/ou WhatsApp (conexão da Enge na NX / Z-PRO), conforme os canais de cada aviso.
  */
 
 interface Usuario {
@@ -35,7 +44,18 @@ const SELECT_GAR = `g.id, g.empreendimento_id AS "empreendimentoId", g.item, g.p
                     to_char(g.chamado_em, 'YYYY-MM-DD') AS "chamadoEm", g.chamado_protocolo AS "chamadoProtocolo"`;
 const SELECT_ENV = `v.id, v.garantia_id AS "garantiaId", v.enviar_em AS "enviarEm", v.status, v.destinatarios,
                     v.assunto, v.enviado_em AS "enviadoEm", v.erro, v.ciente_em AS "cienteEm",
-                    v.ciente_nome AS "cienteNome"`;
+                    v.ciente_nome AS "cienteNome", v.canal_email AS "canalEmail", v.canal_whatsapp AS "canalWhatsapp",
+                    v.whatsapp_para AS "whatsappPara", v.whatsapp_enviado_em AS "whatsappEnviadoEm",
+                    v.whatsapp_erro AS "whatsappErro"`;
+// Já saiu por pelo menos um canal (o link "estou ciente" vai no e-mail e no WhatsApp).
+const JA_SAIU = '(v.enviado_em IS NOT NULL OR v.whatsapp_enviado_em IS NOT NULL)';
+
+interface Canais {
+  email?: boolean;
+  whatsapp?: boolean;
+}
+/** Canais de um aviso; sem nada informado, só e-mail (o aviso que vale juridicamente). */
+const lerCanais = (c?: Canais | null) => ({ email: c?.email ?? true, whatsapp: c?.whatsapp ?? false });
 
 /** "2026-11-10T09:00" (horário de Brasília, como vem do campo da tela) → timestamp com fuso. */
 function paraTimestamp(valor: unknown): string | null {
@@ -151,16 +171,22 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
     const cfg = await lerConfigEnge();
     // A senha do SMTP nunca volta pra tela — só se existe.
     const { password, ...smtp } = cfg.smtp ?? {};
+    const { token, ...nx } = cfg.nx ?? {};
     return {
       smtp: { ...smtp, temSenha: Boolean(password) },
       copiaOculta: cfg.copia_oculta ?? '',
       assunto: cfg.assunto?.trim() || ASSUNTO_PADRAO,
       corpo: cfg.corpo?.trim() || CORPO_PADRAO,
       smtpOk: smtpCompleto(cfg.smtp),
+      nx: { modo: 'texto', baseUrl: 'https://appapi.nxsystems.com.br', idioma: 'pt_BR', parametros: [], ...nx, temToken: Boolean(token) },
+      whatsappTexto: cfg.whatsapp_texto?.trim() || WHATSAPP_PADRAO,
+      nxOk: nxCompleto(cfg.nx),
     };
   });
 
-  app.put<{ Body: { smtp?: SmtpConfig; copiaOculta?: string; assunto?: string; corpo?: string } }>(
+  app.put<{
+    Body: { smtp?: SmtpConfig; copiaOculta?: string; assunto?: string; corpo?: string; nx?: NxEnge; whatsappTexto?: string };
+  }>(
     `${P}/config`,
     comAuth,
     async (req) => {
@@ -179,12 +205,33 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
           fromName: b.smtp.fromName?.trim() || undefined,
         };
       }
+      let nx = atual.nx;
+      if (b.nx) {
+        nx = {
+          apiId: b.nx.apiId?.trim() || undefined,
+          // Campo de token vazio = manter o que já está salvo.
+          token: b.nx.token?.trim() || atual.nx?.token,
+          baseUrl: b.nx.baseUrl?.trim().replace(/\/$/, '') || undefined,
+          modo: b.nx.modo === 'template' ? 'template' : 'texto',
+          template: b.nx.template?.trim() || undefined,
+          idioma: b.nx.idioma?.trim() || undefined,
+          parametros: (b.nx.parametros ?? []).map((p) => String(p).trim()).filter(Boolean),
+        };
+      }
       await query(
         `UPDATE ee_config SET smtp = $1, copia_oculta = COALESCE($2, copia_oculta), assunto = COALESCE($3, assunto),
-                corpo = COALESCE($4, corpo), updated_at = NOW() WHERE id = true`,
-        [smtp ? JSON.stringify(smtp) : null, b.copiaOculta ?? null, b.assunto ?? null, b.corpo ?? null],
+                corpo = COALESCE($4, corpo), nx = $5, whatsapp_texto = COALESCE($6, whatsapp_texto), updated_at = NOW()
+         WHERE id = true`,
+        [
+          smtp ? JSON.stringify(smtp) : null,
+          b.copiaOculta ?? null,
+          b.assunto ?? null,
+          b.corpo ?? null,
+          nx ? JSON.stringify(nx) : null,
+          b.whatsappTexto ?? null,
+        ],
       );
-      return { ok: true, smtpOk: smtpCompleto(smtp) };
+      return { ok: true, smtpOk: smtpCompleto(smtp), nxOk: nxCompleto(nx) };
     },
   );
 
@@ -206,8 +253,29 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  app.post<{ Body: { numero?: string } }>(`${P}/config/teste-whatsapp`, comAuth, async (req, reply) => {
+    const numeros = listaTelefones(req.body?.numero);
+    if (!numeros.length) return reply.status(400).send({ message: 'Informe um número com DDD para o teste.' });
+    const cfg = await lerConfigEnge();
+    if (!nxCompleto(cfg.nx)) return reply.status(400).send({ message: 'Preencha e salve a conexão da NX primeiro.' });
+    const dados = {
+      sindico: 'Teste',
+      empreendimento: 'Residencial Exemplo',
+      item: 'Teste de envio',
+      prazo: null,
+      construtora: 'Construtora Exemplo',
+      vencimento: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
+      enviadoEm: new Date().toISOString().slice(0, 10),
+      link: linkCiente(cfg, 'exemplo'),
+    };
+    const texto = `Teste do Enge Envio: se esta mensagem chegou, os avisos de garantia vão sair por este WhatsApp.`;
+    const r = await mandarWhatsApp(cfg.nx!, numeros.slice(0, 1), texto, dados);
+    if (!r.ok.length) return reply.status(400).send({ message: `Não enviou: ${r.falhas.join(' | ')}` });
+    return { ok: true };
+  });
+
   // Pré-visualização do e-mail com o modelo digitado (ainda não salvo) e um item de verdade.
-  app.post<{ Body: { assunto?: string; corpo?: string; garantiaId?: string; data?: string } }>(
+  app.post<{ Body: { assunto?: string; corpo?: string; whatsappTexto?: string; garantiaId?: string; data?: string } }>(
     `${P}/previa`,
     comAuth,
     async (req) => {
@@ -230,9 +298,12 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
         construtora: 'Construtora Exemplo',
       };
       const enviadoEm = req.body?.data && DATA_OK.test(req.body.data.slice(0, 10)) ? req.body.data.slice(0, 10) : hoje;
-      const assunto = preencher(req.body?.assunto?.trim() || cfg.assunto?.trim() || ASSUNTO_PADRAO, { ...dados, enviadoEm });
-      const corpo = preencher(req.body?.corpo?.trim() || cfg.corpo?.trim() || CORPO_PADRAO, { ...dados, enviadoEm });
-      return { assunto, html: montarHtml(corpo, linkCiente(cfg, 'exemplo')) };
+      const link = linkCiente(cfg, 'exemplo');
+      const comData = { ...dados, enviadoEm, link };
+      const assunto = preencher(req.body?.assunto?.trim() || cfg.assunto?.trim() || ASSUNTO_PADRAO, comData);
+      const corpo = preencher(req.body?.corpo?.trim() || cfg.corpo?.trim() || CORPO_PADRAO, comData);
+      const whatsapp = preencher(req.body?.whatsappTexto?.trim() || cfg.whatsapp_texto?.trim() || WHATSAPP_PADRAO, comData);
+      return { assunto, html: montarHtml(corpo, link), whatsapp };
     },
   );
 
@@ -267,10 +338,12 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
    * partir do modelo padrão e da data de entrega; cada aviso tem o dia/hora escolhido).
    */
   app.post<{
-    Body: EmpBody & { garantias?: Array<{ item?: string; prazo?: string; vencimento?: string; envios?: string[] }> };
+    Body: EmpBody & { canais?: Canais; garantias?: Array<{ item?: string; prazo?: string; vencimento?: string; envios?: string[] }> };
   }>(`${P}/empreendimentos`, comAuth, async (req, reply) => {
     const b = req.body ?? {};
     if (!b.nome?.trim()) return reply.status(400).send({ message: 'Dê um nome ao empreendimento.' });
+    const canais = lerCanais(b.canais);
+    if (!canais.email && !canais.whatsapp) return reply.status(400).send({ message: 'Escolha pelo menos um canal (e-mail ou WhatsApp).' });
     const garantias = (b.garantias ?? []).filter((g) => g.item?.trim() && g.vencimento && DATA_OK.test(g.vencimento));
     const emp = await withTransaction(async (c) => {
       const { rows } = await c.query(
@@ -284,7 +357,10 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
           [rows[0].id, g.item!.trim(), g.prazo?.trim() || null, g.vencimento],
         );
         for (const quando of (g.envios ?? []).map(paraTimestamp).filter(Boolean)) {
-          await c.query(`INSERT INTO ee_envios (garantia_id, enviar_em, token) VALUES ($1,$2,$3)`, [gr[0].id, quando, novoToken()]);
+          await c.query(
+            `INSERT INTO ee_envios (garantia_id, enviar_em, token, canal_email, canal_whatsapp) VALUES ($1,$2,$3,$4,$5)`,
+            [gr[0].id, quando, novoToken(), canais.email, canais.whatsapp],
+          );
         }
       }
       return rows[0];
@@ -320,20 +396,25 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
   });
 
   // ── Garantias ──────────────────────────────────────────────────────────────────────
-  app.post<{ Params: { id: string }; Body: { item?: string; prazo?: string; vencimento?: string; envios?: string[] } }>(
+  app.post<{ Params: { id: string }; Body: { item?: string; prazo?: string; vencimento?: string; envios?: string[]; canais?: Canais } }>(
     `${P}/empreendimentos/:id/garantias`,
     comAuth,
     async (req, reply) => {
       const b = req.body ?? {};
       if (!b.item?.trim()) return reply.status(400).send({ message: 'Informe o item da garantia.' });
       if (!b.vencimento || !DATA_OK.test(b.vencimento)) return reply.status(400).send({ message: 'Informe a data de vencimento.' });
+      const canais = lerCanais(b.canais);
+      if (!canais.email && !canais.whatsapp) return reply.status(400).send({ message: 'Escolha pelo menos um canal (e-mail ou WhatsApp).' });
       const g = await withTransaction(async (c) => {
         const { rows } = await c.query<{ id: string }>(
           `INSERT INTO ee_garantias (empreendimento_id, item, prazo, vencimento) VALUES ($1,$2,$3,$4) RETURNING id`,
           [req.params.id, b.item!.trim(), b.prazo?.trim() || null, b.vencimento],
         );
         for (const quando of (b.envios ?? []).map(paraTimestamp).filter(Boolean)) {
-          await c.query(`INSERT INTO ee_envios (garantia_id, enviar_em, token) VALUES ($1,$2,$3)`, [rows[0].id, quando, novoToken()]);
+          await c.query(
+            `INSERT INTO ee_envios (garantia_id, enviar_em, token, canal_email, canal_whatsapp) VALUES ($1,$2,$3,$4,$5)`,
+            [rows[0].id, quando, novoToken(), canais.email, canais.whatsapp],
+          );
         }
         return rows[0];
       });
@@ -378,24 +459,31 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
   });
 
   // ── Avisos (envios) ────────────────────────────────────────────────────────────────
-  app.post<{ Params: { id: string }; Body: { enviarEm?: string } }>(`${P}/garantias/:id/envios`, comAuth, async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { enviarEm?: string } & Canais }>(`${P}/garantias/:id/envios`, comAuth, async (req, reply) => {
     const quando = paraTimestamp(req.body?.enviarEm);
     if (!quando) return reply.status(400).send({ message: 'Escolha o dia do envio.' });
+    const canais = lerCanais(req.body);
+    if (!canais.email && !canais.whatsapp) return reply.status(400).send({ message: 'Escolha pelo menos um canal (e-mail ou WhatsApp).' });
     const env = await queryOne(
-      `INSERT INTO ee_envios (garantia_id, enviar_em, token) VALUES ($1,$2,$3) RETURNING id`,
-      [req.params.id, quando, novoToken()],
+      `INSERT INTO ee_envios (garantia_id, enviar_em, token, canal_email, canal_whatsapp) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [req.params.id, quando, novoToken(), canais.email, canais.whatsapp],
     );
     return reply.status(201).send(env);
   });
 
-  // Remarcar: muda o dia/hora. Um aviso com erro volta pra fila.
-  app.put<{ Params: { id: string }; Body: { enviarEm?: string } }>(`${P}/envios/:id`, comAuth, async (req, reply) => {
+  // Remarcar: muda o dia/hora (e os canais). Um aviso com erro volta pra fila — e no próximo envio
+  // só sai o canal que ainda não tinha saído.
+  app.put<{ Params: { id: string }; Body: { enviarEm?: string } & Canais }>(`${P}/envios/:id`, comAuth, async (req, reply) => {
     const quando = paraTimestamp(req.body?.enviarEm);
     if (!quando) return reply.status(400).send({ message: 'Escolha o dia do envio.' });
+    if (req.body?.email === false && req.body?.whatsapp === false) {
+      return reply.status(400).send({ message: 'Escolha pelo menos um canal (e-mail ou WhatsApp).' });
+    }
     const env = await queryOne(
-      `UPDATE ee_envios SET enviar_em = $2, status = 'agendado', erro = NULL
+      `UPDATE ee_envios SET enviar_em = $2, status = 'agendado', erro = NULL, whatsapp_erro = NULL,
+              canal_email = COALESCE($3, canal_email), canal_whatsapp = COALESCE($4, canal_whatsapp)
        WHERE id = $1 AND status IN ('agendado','erro','cancelado') RETURNING id`,
-      [req.params.id, quando],
+      [req.params.id, quando, req.body?.email ?? null, req.body?.whatsapp ?? null],
     );
     if (!env) return reply.status(400).send({ message: 'Este aviso já foi enviado — agende um novo.' });
     return env;
@@ -418,14 +506,19 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
 
   // O e-mail exatamente como saiu (comprovante).
   app.get<{ Params: { id: string } }>(`${P}/envios/:id`, comAuth, async (req, reply) => {
-    const env = await queryOne<{ corpo: string | null; token: string; ciente_ip: string | null }>(
-      `SELECT ${SELECT_ENV}, v.corpo, v.token, v.ciente_ip FROM ee_envios v WHERE v.id = $1`,
+    const env = await queryOne<{ corpo: string | null; token: string; ciente_ip: string | null; whatsapp_texto: string | null }>(
+      `SELECT ${SELECT_ENV}, v.corpo, v.token, v.ciente_ip, v.whatsapp_texto FROM ee_envios v WHERE v.id = $1`,
       [req.params.id],
     );
     if (!env) return reply.status(404).send({ message: 'Aviso não encontrado.' });
     const cfg = await lerConfigEnge();
-    const { token, ...resto } = env;
-    return { ...resto, cienteIp: env.ciente_ip, html: env.corpo ? montarHtml(env.corpo, linkCiente(cfg, token)) : null };
+    const { token, ciente_ip, whatsapp_texto, ...resto } = env;
+    return {
+      ...resto,
+      cienteIp: ciente_ip,
+      whatsappTexto: whatsapp_texto,
+      html: env.corpo ? montarHtml(env.corpo, linkCiente(cfg, token)) : null,
+    };
   });
 
   // ── "Estou ciente" (público, sem login — é o síndico clicando no e-mail) ─────────────
@@ -434,9 +527,10 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
   app.get<{ Params: { token: string } }>(`${P}/ciente/:token`, async (req, reply) => {
     const e = await queryOne(
       `SELECT g.item, to_char(g.vencimento, 'YYYY-MM-DD') AS vencimento, m.nome AS empreendimento,
-              v.enviado_em AS "enviadoEm", v.ciente_em AS "cienteEm", v.ciente_nome AS "cienteNome"
+              COALESCE(v.enviado_em, v.whatsapp_enviado_em) AS "enviadoEm",
+              v.ciente_em AS "cienteEm", v.ciente_nome AS "cienteNome"
        FROM ee_envios v JOIN ee_garantias g ON g.id = v.garantia_id JOIN ee_empreendimentos m ON m.id = g.empreendimento_id
-       WHERE v.token = $1 AND v.status = 'enviado'`,
+       WHERE v.token = $1 AND ${JA_SAIU}`,
       [req.params.token],
     );
     if (!e) return reply.status(404).send({ message: 'Aviso não encontrado.' });
@@ -447,9 +541,9 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
     const nome = (req.body?.nome ?? '').trim().slice(0, 120);
     if (!nome) return reply.status(400).send({ message: 'Informe seu nome para confirmar.' });
     const e = await queryOne(
-      `UPDATE ee_envios SET ciente_em = COALESCE(ciente_em, NOW()), ciente_nome = COALESCE(ciente_nome, $2),
+      `UPDATE ee_envios v SET ciente_em = COALESCE(ciente_em, NOW()), ciente_nome = COALESCE(ciente_nome, $2),
               ciente_ip = COALESCE(ciente_ip, $3)
-       WHERE token = $1 AND status = 'enviado'
+       WHERE token = $1 AND ${JA_SAIU}
        RETURNING ciente_em AS "cienteEm", ciente_nome AS "cienteNome"`,
       [req.params.token, nome, req.ip],
     );

@@ -61,6 +61,16 @@ export interface EngeEnvio {
   erro: string | null
   cienteEm: string | null
   cienteNome: string | null
+  canalEmail: boolean
+  canalWhatsapp: boolean
+  whatsappPara: string | null
+  whatsappEnviadoEm: string | null
+  whatsappErro: string | null
+}
+
+export interface EngeCanais {
+  email: boolean
+  whatsapp: boolean
 }
 
 export interface EngeTudo {
@@ -80,12 +90,27 @@ export interface EngeSmtp {
   temSenha?: boolean
 }
 
+/** Conexão da Enge na NX (Z-PRO). `template` = número oficial (WABA): fora da janela de 24h só sai template aprovado. */
+export interface EngeNx {
+  apiId?: string
+  token?: string
+  baseUrl?: string
+  modo?: 'texto' | 'template'
+  template?: string
+  idioma?: string
+  parametros?: string[]
+  temToken?: boolean
+}
+
 export interface EngeConfig {
   smtp: EngeSmtp
   copiaOculta: string
   assunto: string
   corpo: string
   smtpOk: boolean
+  nx: EngeNx
+  whatsappTexto: string
+  nxOk: boolean
 }
 
 export type EmpreendimentoDados = Omit<EngeEmpreendimento, 'id'>
@@ -148,18 +173,20 @@ export const engeApi = {
   removerUsuario: (id: string) => del<{ ok: true }>(`/usuarios/${id}`),
 
   config: () => req<EngeConfig>('/config'),
-  salvarConfig: (dados: Partial<Omit<EngeConfig, 'smtpOk'>>) => put<{ ok: true; smtpOk: boolean }>('/config', dados),
+  salvarConfig: (dados: Partial<Omit<EngeConfig, 'smtpOk' | 'nxOk'>>) =>
+    put<{ ok: true; smtpOk: boolean; nxOk: boolean }>('/config', dados),
   testarEnvio: (para: string) => post<{ ok: true }>('/config/teste', { para }),
-  previa: (dados: { assunto?: string; corpo?: string; garantiaId?: string; data?: string }) =>
-    post<{ assunto: string; html: string }>('/previa', dados),
+  testarWhatsApp: (numero: string) => post<{ ok: true }>('/config/teste-whatsapp', { numero }),
+  previa: (dados: { assunto?: string; corpo?: string; whatsappTexto?: string; garantiaId?: string; data?: string }) =>
+    post<{ assunto: string; html: string; whatsapp: string }>('/previa', dados),
 
   tudo: () => req<EngeTudo>('/tudo'),
-  criarEmpreendimento: (dados: EmpreendimentoDados & { garantias: NovaGarantia[] }) =>
+  criarEmpreendimento: (dados: EmpreendimentoDados & { garantias: NovaGarantia[]; canais: EngeCanais }) =>
     post<EngeEmpreendimento>('/empreendimentos', dados),
   salvarEmpreendimento: (id: string, dados: EmpreendimentoDados) => put<EngeEmpreendimento>(`/empreendimentos/${id}`, dados),
   removerEmpreendimento: (id: string) => del<{ ok: true }>(`/empreendimentos/${id}`),
 
-  criarGarantia: (empreendimentoId: string, dados: NovaGarantia) =>
+  criarGarantia: (empreendimentoId: string, dados: NovaGarantia & { canais: EngeCanais }) =>
     post<{ id: string }>(`/empreendimentos/${empreendimentoId}/garantias`, dados),
   salvarGarantia: (
     id: string,
@@ -169,12 +196,13 @@ export const engeApi = {
   ) => put<{ ok: true }>(`/garantias/${id}`, dados),
   removerGarantia: (id: string) => del<{ ok: true }>(`/garantias/${id}`),
 
-  agendarEnvio: (garantiaId: string, enviarEm: string) => post<{ id: string }>(`/garantias/${garantiaId}/envios`, { enviarEm }),
-  remarcarEnvio: (id: string, enviarEm: string) => put<{ id: string }>(`/envios/${id}`, { enviarEm }),
+  agendarEnvio: (garantiaId: string, enviarEm: string, canais: EngeCanais) =>
+    post<{ id: string }>(`/garantias/${garantiaId}/envios`, { enviarEm, ...canais }),
+  remarcarEnvio: (id: string, enviarEm: string, canais?: EngeCanais) => put<{ id: string }>(`/envios/${id}`, { enviarEm, ...canais }),
   cancelarEnvio: (id: string) => post<{ ok: true }>(`/envios/${id}/cancelar`),
   enviarAgora: (id: string) => post<{ ok: true }>(`/envios/${id}/enviar-agora`),
   verEnvio: (id: string) =>
-    req<EngeEnvio & { html: string | null; cienteIp: string | null }>(`/envios/${id}`),
+    req<EngeEnvio & { html: string | null; cienteIp: string | null; whatsappTexto: string | null }>(`/envios/${id}`),
 
   ciente: (token: string) =>
     req<{ item: string; vencimento: string; empreendimento: string; enviadoEm: string; cienteEm: string | null; cienteNome: string | null }>(

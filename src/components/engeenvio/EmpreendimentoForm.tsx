@@ -4,7 +4,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
-import { engeApi, type EmpreendimentoDados, type EngeEmpreendimento } from '@/api/engeEnvio'
+import { engeApi, type EmpreendimentoDados, type EngeCanais, type EngeEmpreendimento } from '@/api/engeEnvio'
 import { cn } from '@/lib/utils'
 import {
   ANTECEDENCIAS,
@@ -15,7 +15,7 @@ import {
   somarMeses,
   sugerirEnvios,
 } from '@/lib/engeEnvio'
-import { useRecarregar } from './shared'
+import { CanaisToggle, useCanaisPadrao, useRecarregar } from './shared'
 
 interface LinhaGarantia {
   chave: string
@@ -59,6 +59,8 @@ export function EmpreendimentoForm({
   const [cvcb, setCvcb] = React.useState('')
   const [antecedencias, setAntecedencias] = React.useState<number[]>(ANTECEDENCIAS_PADRAO)
   const [hora, setHora] = React.useState('09:00')
+  const canaisPadrao = useCanaisPadrao()
+  const [canais, setCanais] = React.useState<EngeCanais>(canaisPadrao)
   const [salvando, setSalvando] = React.useState(false)
 
   React.useEffect(() => {
@@ -77,6 +79,8 @@ export function EmpreendimentoForm({
     setCvcb('')
     setAntecedencias(ANTECEDENCIAS_PADRAO)
     setHora('09:00')
+    setCanais(canaisPadrao)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, editando])
 
   // Trocar a entrega recalcula o vencimento das garantias que vêm do modelo.
@@ -110,7 +114,7 @@ export function EmpreendimentoForm({
         toast.success('Empreendimento salvo')
       } else {
         const garantias = garantiasParaCriar()
-        const criado = await engeApi.criarEmpreendimento({ ...dados, garantias })
+        const criado = await engeApi.criarEmpreendimento({ ...dados, garantias, canais })
         const avisos = garantias.reduce((s, g) => s + g.envios.length, 0)
         toast.success(`Empreendimento criado com ${garantias.length} garantias e ${avisos} avisos agendados`)
         onCriado?.(criado.id)
@@ -156,7 +160,13 @@ export function EmpreendimentoForm({
             value={dados.emails ?? ''}
             onChange={set('emails')}
           />
-          <Input id="ee-tel" label="Telefone / WhatsApp" value={dados.telefone ?? ''} onChange={set('telefone')} />
+          <Input
+            id="ee-tel"
+            label="WhatsApp do síndico"
+            hint="Com DDD. Separe por vírgula para mandar a mais de um número"
+            value={dados.telefone ?? ''}
+            onChange={set('telefone')}
+          />
           <Input id="ee-construtora" label="Construtora" value={dados.construtora ?? ''} onChange={set('construtora')} />
           <Input
             id="ee-entrega"
@@ -201,8 +211,12 @@ export function EmpreendimentoForm({
                   className="h-8 rounded-md border border-line bg-surface px-2 text-xs text-foreground"
                 />
               </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-foreground/50">Enviar por</span>
+                <CanaisToggle idBase="ee-form-canais" valor={canais} onChange={setCanais} />
+              </div>
               <p className="text-xs text-foreground/40">
-                Depois de criar, dá para trocar o dia de cada aviso, item por item. Datas que já passaram não entram.
+                Depois de criar, dá para trocar o dia e os canais de cada aviso, item por item. Datas que já passaram não entram.
               </p>
             </div>
 

@@ -30,7 +30,7 @@ export function Avisos({ dados, onAbrirEmpreendimento }: { dados: EngeTudo; onAb
   return (
     <div className="space-y-4">
       <p className="text-sm text-foreground/60">
-        Cada e-mail fica registrado com data, hora, destinatário e o texto exato que saiu. É a prova de que o cliente foi avisado.
+        Cada aviso fica registrado com data, hora, destinatário e o texto exato que saiu, por e-mail e por WhatsApp. É a prova de que o cliente foi avisado.
       </p>
       <Cartao
         titulo={
@@ -61,6 +61,7 @@ export function Avisos({ dados, onAbrirEmpreendimento }: { dados: EngeTudo; onAb
                   <th className={th}>{filtro === 'enviado' ? 'Enviado em' : 'Envio marcado para'}</th>
                   <th className={th}>Garantia</th>
                   <th className={th}>Destinatário</th>
+                  <th className={th}>Canais</th>
                   <th className={th}>Situação</th>
                   <th className={th} />
                 </tr>
@@ -72,26 +73,49 @@ export function Avisos({ dados, onAbrirEmpreendimento }: { dados: EngeTudo; onAb
                   const s = statusEnvio(e)
                   return (
                     <tr key={e.id}>
-                      <td className={`${td} whitespace-nowrap tabular-nums`}>{dataHoraBr(e.enviadoEm ?? e.enviarEm)}</td>
+                      <td className={`${td} whitespace-nowrap tabular-nums`}>{dataHoraBr(e.enviadoEm ?? e.whatsappEnviadoEm ?? e.enviarEm)}</td>
                       <td className={td}>
                         <span className="font-medium">{g?.item ?? '—'}</span>
                         <span className="block text-xs text-foreground/50">{emp?.nome}</span>
                       </td>
                       <td className={`${td} break-words text-xs text-foreground/70`}>
                         {emp?.sindico && <span className="block text-sm text-foreground">{emp.sindico}</span>}
-                        {e.destinatarios ?? emp?.emails ?? '—'}
+                        {e.canalEmail && <span className="block">{e.destinatarios ?? emp?.emails ?? 'sem e-mail'}</span>}
+                        {e.canalWhatsapp && <span className="block">{e.whatsappPara ?? emp?.telefone ?? 'sem WhatsApp'}</span>}
+                      </td>
+                      <td className={`${td} whitespace-nowrap text-xs`}>
+                        {e.canalEmail && (
+                          <span className={cn('block', e.enviadoEm ? 'text-success' : e.erro ? 'text-danger' : 'text-foreground/60')}>
+                            E-mail {e.enviadoEm ? '✓' : e.erro ? '✗' : ''}
+                          </span>
+                        )}
+                        {e.canalWhatsapp && (
+                          <span
+                            className={cn(
+                              'block',
+                              e.whatsappEnviadoEm ? 'text-success' : e.whatsappErro ? 'text-danger' : 'text-foreground/60',
+                            )}
+                          >
+                            WhatsApp {e.whatsappEnviadoEm ? '✓' : e.whatsappErro ? '✗' : ''}
+                          </span>
+                        )}
                       </td>
                       <td className={td}>
                         <Badge tone={s.tom} dot>
                           {s.label}
                         </Badge>
                         {e.cienteEm && <span className="block text-xs text-foreground/50">{e.cienteNome} · {dataHoraBr(e.cienteEm)}</span>}
-                        {e.erro && <span className="block max-w-xs text-xs text-danger">{e.erro}</span>}
+                        {e.erro && <span className="block max-w-xs text-xs text-danger">E-mail: {e.erro}</span>}
+                        {e.whatsappErro && (
+                          <span className={cn('block max-w-xs break-words text-xs', e.whatsappEnviadoEm ? 'text-warning' : 'text-danger')}>
+                            WhatsApp: {e.whatsappErro}
+                          </span>
+                        )}
                       </td>
                       <td className={`${td} text-right`}>
-                        {e.status === 'enviado' ? (
+                        {e.enviadoEm || e.whatsappEnviadoEm ? (
                           <Button size="sm" variant="ghost" onClick={() => setVerEmail(e.id)}>
-                            Ver e-mail
+                            Ver enviado
                           </Button>
                         ) : (
                           g && (

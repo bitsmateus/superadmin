@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/Modal'
 import { engeApi, type EngeEmpreendimento, type EngeTudo } from '@/api/engeEnvio'
 import { cn } from '@/lib/utils'
 import { dataBr, dataHoraBr, diasAte, statusGarantia, sugerirEnvios, textoDias } from '@/lib/engeEnvio'
-import { Cartao, Vazio, td, th, useIndices, useRecarregar } from './shared'
+import { CanaisToggle, Cartao, Vazio, td, th, useCanaisPadrao, useIndices, useRecarregar } from './shared'
 import { EmpreendimentoForm } from './EmpreendimentoForm'
 import { GarantiaModal } from './GarantiaModal'
 
@@ -145,7 +145,7 @@ function Detalhe({ emp, dados, onVoltar }: { emp: EngeEmpreendimento; dados: Eng
         {[
           ['Síndico', emp.sindico],
           ['E-mail dos avisos', emp.emails],
-          ['Telefone', emp.telefone],
+          ['WhatsApp dos avisos', emp.telefone],
           ['Construtora', emp.construtora],
         ].map(([rotulo, valor]) => (
           <div key={rotulo} className="min-w-0 bg-card px-4 py-3">
@@ -154,6 +154,11 @@ function Detalhe({ emp, dados, onVoltar }: { emp: EngeEmpreendimento; dados: Eng
           </div>
         ))}
       </div>
+      {!emp.telefone && dados.envios.some((v) => v.canalWhatsapp && v.status === 'agendado' && dados.garantias.some((g) => g.id === v.garantiaId && g.empreendimentoId === emp.id)) && (
+        <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+          Há avisos marcados para WhatsApp, mas o empreendimento não tem número do síndico. Cadastre em “Editar”.
+        </p>
+      )}
       {!emp.emails && (
         <p className="rounded-lg border border-danger/30 bg-danger/[0.06] px-3 py-2 text-sm text-danger">
           Sem e-mail do síndico: os avisos agendados vão falhar até você cadastrar um em “Editar”.
@@ -277,6 +282,8 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
   const [prazo, setPrazo] = React.useState('')
   const [vencimento, setVencimento] = React.useState('')
   const [envios, setEnvios] = React.useState<string[]>([])
+  const canaisPadrao = useCanaisPadrao()
+  const [canais, setCanais] = React.useState(canaisPadrao)
   const [salvando, setSalvando] = React.useState(false)
 
   React.useEffect(() => {
@@ -285,7 +292,9 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
       setPrazo('')
       setVencimento('')
       setEnvios([])
+      setCanais(canaisPadrao)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto])
 
   const mudarVencimento = (v: string) => {
@@ -297,7 +306,7 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
     e.preventDefault()
     setSalvando(true)
     try {
-      await engeApi.criarGarantia(empreendimentoId, { item, prazo, vencimento, envios: envios.filter(Boolean) })
+      await engeApi.criarGarantia(empreendimentoId, { item, prazo, vencimento, envios: envios.filter(Boolean), canais })
       toast.success('Garantia criada')
       await recarregar()
       onFechar()
@@ -331,7 +340,10 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
           <Input id="ee-ng-venc" type="date" label="Vencimento" value={vencimento} onChange={(e) => mudarVencimento(e.target.value)} required />
         </div>
         <div className="space-y-2">
-          <p className="text-xs font-medium text-foreground/70">Dias de envio dos avisos</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-foreground/70">Dias de envio dos avisos</p>
+            <CanaisToggle idBase="ee-ng-canais" valor={canais} onChange={setCanais} />
+          </div>
           {envios.map((v, i) => (
             <div key={i} className="flex items-center gap-2">
               <input

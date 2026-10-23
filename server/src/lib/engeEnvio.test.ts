@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diasEntre, listaEmails, montarHtml, preencher, textoDias } from './engeEnvio.js';
+import { diasEntre, listaEmails, listaTelefones, montarHtml, preencher, textoDias } from './engeEnvio.js';
 
 const dados = {
   sindico: 'Carlos Mendes',
@@ -42,4 +42,12 @@ test('montarHtml escapa o texto e põe o link de ciente', () => {
 
 test('listaEmails separa e descarta inválidos', () => {
   assert.deepEqual(listaEmails('a@x.com, b@y.com.br;\nruim'), ['a@x.com', 'b@y.com.br']);
+});
+
+test('listaTelefones põe o 55 e descarta curtos', () => {
+  assert.deepEqual(listaTelefones('(43) 99812-4410, 5543991210575 / 123'), ['5543998124410', '5543991210575']);
+});
+
+test('preencher troca {link}', () => {
+  assert.equal(preencher('ok: {link}', { ...dados, link: 'https://x/c/1' }), 'ok: https://x/c/1');
 });

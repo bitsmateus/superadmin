@@ -1812,6 +1812,17 @@ END; $$`);
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS ee_envios_garantia_idx ON ee_envios (garantia_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS ee_envios_fila_idx ON ee_envios (enviar_em) WHERE status = 'agendado'`);
+  // WhatsApp pela NX (Z-PRO) como reforço do e-mail. Conexão (apiId/token/baseUrl + texto livre ou
+  // template aprovado) na config; cada aviso escolhe os canais e guarda o resultado de cada um
+  // separado — o e-mail pode sair e o WhatsApp falhar (ou o contrário), e o reenvio só refaz o que faltou.
+  await pool.query(`ALTER TABLE ee_config ADD COLUMN IF NOT EXISTS nx JSONB`);
+  await pool.query(`ALTER TABLE ee_config ADD COLUMN IF NOT EXISTS whatsapp_texto TEXT`);
+  await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS canal_email BOOLEAN NOT NULL DEFAULT true`);
+  await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS canal_whatsapp BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS whatsapp_para TEXT`);
+  await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS whatsapp_texto TEXT`);
+  await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS whatsapp_enviado_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS whatsapp_erro TEXT`);
 
   // ── Pulso de satisfação + Risco de Churn ───────────────────────────────────────────
   // "Pulso": pergunta curta (sim/não) mandada de fora pelo WhatsApp de tempos em tempos — o n8n é

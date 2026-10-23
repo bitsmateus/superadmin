@@ -112,7 +112,7 @@ export function Painel({ dados, onAbrirEmpreendimento }: { dados: EngeTudo; onAb
                       <span className="min-w-0">
                         <span className="block text-sm font-medium text-foreground">{g?.item ?? '—'}</span>
                         <span className="block break-words text-xs text-foreground/50">
-                          {emp?.nome} · para {emp?.emails || 'sem e-mail cadastrado'}
+                          {emp?.nome} · {[e.canalEmail && 'e-mail', e.canalWhatsapp && 'WhatsApp'].filter(Boolean).join(' + ')}
                         </span>
                       </span>
                     </button>

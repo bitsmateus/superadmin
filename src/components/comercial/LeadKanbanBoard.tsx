@@ -15,7 +15,7 @@ import { leadBoardsService } from '@/services/leadBoards'
 import { isLeadLabelsLoaded, leadLabelsService } from '@/services/leadLabels'
 import { LeadLabelCell, ManageLabelsModal } from '@/components/comercial/LeadLabelCell'
 import { cn } from '@/lib/utils'
-import { quadroDoStatus } from '@/lib/regraDoStatus'
+import { origemMostraSelo, quadroDoStatus, rotuloDaOrigem } from '@/lib/regraDoStatus'
 import { KanbanColunasNav } from '@/components/ui/KanbanColunasNav'
 import { formatBRLCompact, parseBRLCents } from '@/lib/currency'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
@@ -473,6 +473,14 @@ function KanbanCard({
       <div className="flex items-start gap-1.5">
         <div className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
           {row.nome || 'Sem nome'}
+          {origemMostraSelo(row.origem) && (
+            <span
+              title={`Origem: ${rotuloDaOrigem(row.origem)}`}
+              className="ml-1.5 inline-block max-w-full truncate rounded bg-sky-500/15 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-sky-700 dark:text-sky-300"
+            >
+              {rotuloDaOrigem(row.origem)}
+            </span>
+          )}
           {modoDemanda && row.retornar && (
             <span
               className="ml-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded bg-elevate/[0.06] px-1.5 py-0.5 align-middle text-[11px] font-medium text-foreground/60"

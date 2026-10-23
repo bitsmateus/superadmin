@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import {
   MINIMO_DETALHE_MOTIVO, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS,
-  juntarMotivo, origemEhOutros, separarMotivo, textoDaOrigemOutros,
+  juntarMotivo, origemEhOutros, rotuloDaOrigem, separarMotivo, textoDaOrigemOutros,
 } from '@/lib/regraDoStatus'
 import * as React from 'react'
 import { ExternalLink, Megaphone } from 'lucide-react'
@@ -84,6 +84,8 @@ function OrigemComOutros({ valor, onChange }: { valor: string; onChange: (v: str
         className="mt-0.5 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
       >
         <option value="">— não informado —</option>
+        {/* Origem que veio da automação (ex.: "lp_teste") e não está na lista da tela: aparece com o rótulo dela. */}
+        {valor && !ehOutros && !ORIGENS_DO_LEAD.some((o) => o.valor === valor) && <option value={valor}>{rotuloDaOrigem(valor)}</option>}
         {ORIGENS_DO_LEAD.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
       </select>
       {ehOutros && (

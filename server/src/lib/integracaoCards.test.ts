@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  compararAchadosPorTelefone, normalizarOrigem, resolverQuadro, validarCriacaoIntegracao,
   chaveValida, colunasQueCasam, mesmoTelefone, montarEtiquetas, resolverEtiquetas, parseDataIntegracao, telefoneComDdi, textoParaHtml, validarPatchIntegracao,
 } from './integracaoCards.js';
 
@@ -63,7 +64,7 @@ test('validarPatchIntegracao', () => {
   assert.ok(validarPatchIntegracao({ regua: 'outra' }).erro);
   assert.ok(validarPatchIntegracao({ regua_status: 'x' }).erro);
   assert.ok(validarPatchIntegracao({ board_id: 'nao-uuid' }).erro);
-  assert.ok(validarPatchIntegracao({ nome: 'Fulano' }).erro); // campo fora da lista
+  assert.ok(validarPatchIntegracao({ apelido: 'Fulano' }).erro); // campo fora da lista
   assert.ok(validarPatchIntegracao({ coluna: 'A', board_id: '11111111-1111-1111-1111-111111111111' }).erro);
   assert.ok(validarPatchIntegracao({}).erro);
   assert.ok(validarPatchIntegracao({ regua_ultimo_envio_em: 'xx' }).erro);
@@ -114,4 +115,68 @@ test('validarPatchIntegracao aceita "etiquetas"', () => {
   assert.equal(v.erro, undefined);
   assert.deepEqual(v.etiquetas, { Disparo: 'D7' });
   assert.ok(validarPatchIntegracao({ etiquetas: 'D7' }).erro);
+});
+
+test('resolverQuadro: id, nome e palavras ("crm-luiza" acha "CRM IA LUIZA")', () => {
+  const qs = [
+    { id: 'crm-arthur', name: 'CRM ARTHUR' }, { id: 'crm-luis-2', name: 'CRM LUIS' },
+    { id: 'crm-luis-closer', name: 'CRM LUIS CLOSER' }, { id: 'crm-ia-luiza', name: 'CRM IA LUIZA' },
+  ];
+  assert.equal(resolverQuadro(qs, 'crm-ia-luiza').id, 'crm-ia-luiza');
+  assert.equal(resolverQuadro(qs, 'crm-luiza').id, 'crm-ia-luiza');
+  assert.equal(resolverQuadro(qs, 'CRM LUIZA').id, 'crm-ia-luiza');
+  assert.equal(resolverQuadro(qs, 'CRM IA LUIZA').id, 'crm-ia-luiza');
+  assert.equal(resolverQuadro(qs, 'CRM LUIS').id, 'crm-luis-2'); // nome igual ganha do "contém"
+  assert.match(resolverQuadro(qs, 'crm-mateus').erro ?? '', /não existe/);
+  assert.match(resolverQuadro(qs, 'crm').erro ?? '', /ambíguo/);
+  assert.match(resolverQuadro(qs, '').erro ?? '', /obrigatório/);
+});
+
+test('normalizarOrigem: códigos do n8n, os da tela, "outros: …" e inválidos', () => {
+  assert.equal(normalizarOrigem('bio_instagram'), 'bio_instagram');
+  assert.equal(normalizarOrigem('LP_TESTE'), 'lp_teste');
+  assert.equal(normalizarOrigem('meta'), 'meta');
+  assert.equal(normalizarOrigem('Outros: feira'), 'outros: feira');
+  assert.equal(normalizarOrigem(''), '');
+  assert.equal(normalizarOrigem('instagram'), null);
+  assert.equal(normalizarOrigem(3), null);
+});
+
+test('validarCriacaoIntegracao: obrigatórios, telefone, campos e lista de erros', () => {
+  const ok = validarCriacaoIntegracao({
+    quadro: 'crm-luiza', coluna: 'Primeiro contato', nome: 'Lorena Luísa', telefone: '82 98705-6959',
+    empresa: 'Pet Vida', origem: 'bio_instagram', descricao: 'quer organizar', dor_cliente: 'demora',
+    numero_atendentes: 3, email: 'a@b.com', ramo: 'pet', ticket_nx: '370651', sdr: 'Luiza',
+  });
+  assert.deepEqual(ok.erros, []);
+  assert.equal(ok.campos.telefone, '5582987056959');
+  assert.equal(ok.campos.observacoes, 'quer organizar');
+  assert.equal(ok.campos.nicho, 'pet');
+  assert.equal(ok.campos.numero_atendentes, '3');
+  assert.equal(ok.sdr, 'Luiza');
+  const ruim = validarCriacaoIntegracao({ telefone: '123', origem: 'xx', campo_doido: 1 });
+  assert.ok(ruim.erros.some((e) => e.includes('"quadro"')));
+  assert.ok(ruim.erros.some((e) => e.includes('"nome"')));
+  assert.ok(ruim.erros.some((e) => e.includes('"telefone" inválido')));
+  assert.ok(ruim.erros.some((e) => e.includes('"origem" inválida')));
+  assert.ok(ruim.erros.some((e) => e.includes('campo_doido')));
+  assert.ok(validarCriacaoIntegracao({ quadro: 'x', nome: 'y' }).erros.some((e) => e.includes('"telefone" é obrigatório')));
+});
+
+test('compararAchadosPorTelefone: Date ou null (o bug do localeCompare), original antes de cópia', () => {
+  const lista = [
+    { id: 'velho', copia: false, entrou_coluna_em: new Date('2026-10-01T10:00:00Z') },
+    { id: 'sem-data', copia: false, entrou_coluna_em: null },
+    { id: 'copia', copia: true, entrou_coluna_em: new Date('2026-10-22T10:00:00Z') },
+    { id: 'novo', copia: false, entrou_coluna_em: new Date('2026-10-20T10:00:00Z') },
+  ];
+  assert.deepEqual(lista.sort(compararAchadosPorTelefone).map((x) => x.id), ['novo', 'velho', 'sem-data', 'copia']);
+});
+
+test('validarPatchIntegracao: aceita descricao, empresa, nome, origem, email e ramo', () => {
+  const v = validarPatchIntegracao({ descricao: 'x', empresa: 'Pet', nome: 'Lo', origem: 'lp_teste', email: 'a@b', ramo: 'pet', ticket_nx: 1 });
+  assert.equal(v.erro, undefined);
+  assert.deepEqual(v.campos, { observacoes: 'x', empresa: 'Pet', nome: 'Lo', origem: 'lp_teste', email: 'a@b', nicho: 'pet', ticket_nx: '1' });
+  assert.match(validarPatchIntegracao({ origem: 'tiktok' }).erro ?? '', /origem/);
+  assert.match(validarPatchIntegracao({ nome: '  ' }).erro ?? '', /nome/);
 });

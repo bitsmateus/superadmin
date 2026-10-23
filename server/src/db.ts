@@ -470,6 +470,9 @@ END $$`);
   // Lead de outro CRM que a IA Luiza agendou (SDR = "IA Luiza"): a cópia no CRM IA LUIZA guarda aqui o id da
   // original (ver syncCopiaDaIa em leadBoards.ts). No máximo uma cópia por lead.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS copia_ia_origem_id UUID`);
+  // E-mail e ticket da NX do lead (preenchidos pela automação da Luiza, editáveis na ficha).
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS ticket_nx TEXT NOT NULL DEFAULT ''`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_copia_ia_origem_idx
     ON lead_rows(copia_ia_origem_id) WHERE copia_ia_origem_id IS NOT NULL`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS sdr TEXT NOT NULL DEFAULT ''`);

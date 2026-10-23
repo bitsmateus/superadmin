@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { registrarPedidoDeDadoDoStatus, type PedidoDeDadoDoStatus, type RespostaDoPedido } from '@/services/leadBoards'
 import {
   CANAIS_DE_AGENDAMENTO, MINIMO_DETALHE_MOTIVO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, textoDoAgendadoOutro, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, campoOk,
-  SDR_IA, juntarMotivo, origemEhOutros, separarMotivo, textoDaOrigemOutros, type CampoDoPopup,
+  SDR_IA, juntarMotivo, origemEhOutros, rotuloDaOrigem, separarMotivo, textoDaOrigemOutros, type CampoDoPopup,
 } from '@/lib/regraDoStatus'
 import { prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
 import { cn } from '@/lib/utils'
@@ -165,6 +165,9 @@ export function PopupDadosDoStatus() {
               <>
                 <select value={texto[c] ?? ''} autoFocus={i === 0} onChange={(e) => setTexto((x) => ({ ...x, [c]: e.target.value }))} className={campoCls}>
                   <option value="">Escolha a origem…</option>
+                  {!!texto[c] && texto[c] !== 'outros' && !ORIGENS_DO_LEAD.some((o) => o.valor === texto[c]) && (
+                    <option value={texto[c]}>{rotuloDaOrigem(texto[c])}</option>
+                  )}
                   {ORIGENS_DO_LEAD.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
                 </select>
                 {texto[c] === 'outros' && (

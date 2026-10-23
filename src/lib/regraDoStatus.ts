@@ -50,6 +50,40 @@ export const ORIGENS_DO_LEAD: { valor: string; rotulo: string }[] = [
   { valor: 'outros', rotulo: 'Outros' },
 ]
 
+/** Rótulo amigável de cada origem — as da tela e as que a automação da Luiza manda (mesmos do servidor, em
+ * server/src/lib/integracaoCards.ts). Origens com o mesmo rótulo contam juntas no filtro. */
+export const ROTULOS_ORIGEM: Record<string, string> = {
+  meta: 'Anúncio Meta', anuncio_meta: 'Anúncio Meta',
+  bio: 'Link da bio', bio_instagram: 'Link da bio',
+  site: 'Site', lp_teste: 'Teste da LP',
+  formulario_organizar: 'Formulário do site', formulario_falar: 'Formulário do site',
+  formulario_profissionalizar: 'Formulário do site', formulario_suporte: 'Formulário do site',
+  indicacao: 'Indicação', indique_ganhe: 'Indique e ganhe',
+  disparo_em_massa: 'Disparo em massa', whatsapp_direto: 'WhatsApp direto',
+}
+/** "Formulário do site (organizar)" etc.: o rótulo com o detalhe que o código traz. */
+export function rotuloDaOrigem(valor: string | null | undefined): string {
+  const v = (valor ?? '').trim()
+  if (!v) return ''
+  if (origemEhOutros(v)) return textoDaOrigemOutros(v) ? `Outros (${textoDaOrigemOutros(v)})` : 'Outros'
+  const base = ROTULOS_ORIGEM[v.toLowerCase()]
+  if (!base) return v
+  const form = v.match(/^formulario_(.+)$/i)
+  return form ? `${base} (${form[1].replace(/_/g, ' ')})` : base
+}
+/** Grupo da origem no filtro (sem o detalhe): todos os formulários juntos, "Outros" junto. */
+export function grupoDaOrigem(valor: string | null | undefined): string {
+  const v = (valor ?? '').trim()
+  if (!v) return ''
+  if (origemEhOutros(v)) return 'Outros'
+  return ROTULOS_ORIGEM[v.toLowerCase()] ?? v
+}
+/** Selo de origem no card: todas menos "meta", que é o anúncio padrão (milhares de leads; a ficha já mostra o anúncio). */
+export function origemMostraSelo(valor: string | null | undefined): boolean {
+  const v = (valor ?? '').trim().toLowerCase()
+  return !!v && v !== 'meta'
+}
+
 /** Origem "Outros" é salva junto com o que foi escrito: "outros: <de onde veio>". */
 export const PREFIXO_ORIGEM_OUTROS = 'outros: '
 export function origemEhOutros(valor: string | null | undefined): boolean {

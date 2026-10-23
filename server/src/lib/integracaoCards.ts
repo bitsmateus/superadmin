@@ -96,6 +96,14 @@ export const REGUA_STATUS = ['', 'ativa', 'respondeu', 'encerrada', 'optout'] as
 
 /** Campos de texto aceitos: nome na API -> coluna em lead_rows (com apelidos curtos). */
 const CAMPOS_TEXTO: Record<string, string> = {
+  nome: 'nome',
+  empresa: 'empresa',
+  descricao: 'observacoes',
+  observacoes: 'observacoes',
+  email: 'email',
+  ramo: 'nicho',
+  nicho: 'nicho',
+  ticket_nx: 'ticket_nx',
   status: 'status',
   agendamento: 'agendamento',
   retornar: 'retornar',
@@ -145,7 +153,13 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
       out.boardId = valor;
     } else if (chave in CAMPOS_TEXTO) {
       if (valor !== null && typeof valor !== 'string' && typeof valor !== 'number') return { ...out, erro: `"${chave}" deve ser texto ou número.` };
-      out.campos[CAMPOS_TEXTO[chave]] = valor === null ? '' : String(valor).trim();
+      const texto = valor === null ? '' : String(valor).trim();
+      if (chave === 'nome' && !texto) return { ...out, erro: '"nome" não pode ficar vazio.' };
+      out.campos[CAMPOS_TEXTO[chave]] = texto;
+    } else if (chave === 'origem') {
+      const o = normalizarOrigem(valor);
+      if (o === null) return { ...out, erro: erroDeOrigem() };
+      out.campos.origem = o;
     } else if (chave === 'regua' || chave === 'regua_status') {
       const lista: readonly string[] = chave === 'regua' ? REGUAS : REGUA_STATUS;
       const v = valor === null ? '' : typeof valor === 'string' ? valor.trim().toLowerCase() : null;
@@ -179,6 +193,145 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
   if (out.campos.optout === true && !('regua_status' in out.campos)) out.campos.regua_status = 'optout';
   if (!Object.keys(out.campos).length && !out.coluna && !out.boardId && !out.etiquetas) return { ...out, erro: 'Nada para atualizar.' };
   return out;
+}
+
+// ── Origem ──────────────────────────────────────────────────────────────────
+
+/** Origens que a automação (n8n) manda. As antigas da tela (meta, bio, site, indicacao, "outros: …") continuam
+ * aceitas. Rótulos amigáveis em src/lib/regraDoStatus.ts (ROTULOS_ORIGEM). */
+export const ORIGENS_INTEGRACAO = [
+  'bio_instagram', 'lp_teste', 'formulario_organizar', 'formulario_falar', 'formulario_profissionalizar',
+  'formulario_suporte', 'indique_ganhe', 'disparo_em_massa', 'anuncio_meta', 'whatsapp_direto',
+] as const;
+const ORIGENS_DA_TELA = ['meta', 'bio', 'site', 'indicacao'];
+
+/** Origem válida em minúsculas; '' limpa; null = inválida. "outros: texto" passa como está. */
+export function normalizarOrigem(valor: unknown): string | null {
+  if (valor === null || valor === '') return '';
+  if (typeof valor !== 'string') return null;
+  const v = valor.trim();
+  if (/^outros:\s*\S/i.test(v)) return `outros: ${v.replace(/^outros:\s*/i, '')}`;
+  const n = v.toLowerCase();
+  return (ORIGENS_INTEGRACAO as readonly string[]).includes(n) || ORIGENS_DA_TELA.includes(n) ? n : null;
+}
+
+/** Rótulo amigável (mesmo da tela, src/lib/regraDoStatus.ts). */
+const ROTULOS_ORIGEM: Record<string, string> = {
+  meta: 'Anúncio Meta', anuncio_meta: 'Anúncio Meta', bio: 'Link da bio', bio_instagram: 'Link da bio', site: 'Site',
+  lp_teste: 'Teste da LP', formulario_organizar: 'Formulário do site (organizar)', formulario_falar: 'Formulário do site (falar)',
+  formulario_profissionalizar: 'Formulário do site (profissionalizar)', formulario_suporte: 'Formulário do site (suporte)',
+  indicacao: 'Indicação', indique_ganhe: 'Indique e ganhe', disparo_em_massa: 'Disparo em massa', whatsapp_direto: 'WhatsApp direto',
+};
+export function rotuloDaOrigem(origem: string): string {
+  if (!origem) return 'não informada';
+  if (/^outros:/i.test(origem)) return `Outros (${origem.replace(/^outros:\s*/i, '')})`;
+  return ROTULOS_ORIGEM[origem] ?? origem;
+}
+
+export function erroDeOrigem(): string {
+  return `"origem" inválida. Valores aceitos: ${ORIGENS_INTEGRACAO.join(', ')} (ou "outros: <texto>").`;
+}
+
+// ── Quadro (aba do CRM) ─────────────────────────────────────────────────────
+
+export interface QuadroRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * O quadro pedido pelo id/slug ou pelo nome, ignorando maiúscula, acento e pontuação. Ordem: id igual; id ou nome
+ * igual (normalizado); e por último todas as palavras pedidas dentro do nome/id ("crm-luiza" acha "CRM IA LUIZA").
+ * Mais de um no último passo = ambíguo.
+ */
+export function resolverQuadro(quadros: QuadroRef[], pedido: unknown): { id?: string; erro?: string } {
+  if (typeof pedido !== 'string' || !pedido.trim()) return { erro: '"quadro" é obrigatório (id ou nome do quadro).' };
+  const p = pedido.trim();
+  const exato = quadros.find((q) => q.id === p);
+  if (exato) return { id: exato.id };
+  const alvo = normalizaNome(p);
+  const igual = quadros.find((q) => normalizaNome(q.id) === alvo || normalizaNome(q.name) === alvo);
+  if (igual) return { id: igual.id };
+  const palavras = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const pedidas = palavras(p);
+  const contem = quadros.filter((q) => {
+    const tem = new Set([...palavras(q.name), ...palavras(q.id)]);
+    return pedidas.length > 0 && pedidas.every((w) => tem.has(w));
+  });
+  if (contem.length === 1) return { id: contem[0].id };
+  if (contem.length > 1) return { erro: `Quadro "${p}" é ambíguo: ${contem.map((q) => `${q.name} (${q.id})`).join(', ')}.` };
+  return { erro: `Quadro "${p}" não existe.` };
+}
+
+// ── Criação de card (POST) ──────────────────────────────────────────────────
+
+export interface CriacaoValidada {
+  quadro: string;
+  coluna?: string;
+  /** coluna em lead_rows -> valor (já com o telefone normalizado) */
+  campos: Record<string, string>;
+  /** sdr pedido pelo corpo (só vale se a aba não tiver SDR dono) */
+  sdr?: string;
+  erros: string[];
+}
+
+/** Valida o corpo do POST /cards. Junta todos os problemas numa lista (400 único). */
+export function validarCriacaoIntegracao(body: unknown): CriacaoValidada {
+  const out: CriacaoValidada = { quadro: '', campos: {}, erros: [] };
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return { ...out, erros: ['Corpo inválido: envie um objeto JSON.'] };
+  const b = body as Record<string, unknown>;
+  for (const [chave, valor] of Object.entries(b)) {
+    if (chave === 'quadro') {
+      if (typeof valor !== 'string' || !valor.trim()) out.erros.push('"quadro" deve ser um texto não vazio.');
+      else out.quadro = valor.trim();
+    } else if (chave === 'coluna') {
+      if (valor === null || valor === '') continue;
+      if (typeof valor !== 'string') out.erros.push('"coluna" deve ser texto.');
+      else out.coluna = valor.trim();
+    } else if (chave === 'telefone') {
+      const tel = typeof valor === 'string' || typeof valor === 'number' ? telefoneComDdi(String(valor)) : null;
+      if (!tel) out.erros.push('"telefone" inválido: informe DDD + número (com ou sem 55).');
+      else out.campos.telefone = tel;
+    } else if (chave === 'origem') {
+      const o = normalizarOrigem(valor);
+      if (o === null) out.erros.push(erroDeOrigem());
+      else out.campos.origem = o;
+    } else if (chave === 'sdr') {
+      if (valor !== null && typeof valor !== 'string') out.erros.push('"sdr" deve ser texto.');
+      else if (typeof valor === 'string' && valor.trim()) out.sdr = valor.trim();
+    } else if (chave in CAMPOS_TEXTO && !['status', 'agendamento', 'retornar', 'regua_etapa', 'valor_mrr', 'mrr', 'valor_implementacao', 'implementacao'].includes(chave)) {
+      if (valor !== null && typeof valor !== 'string' && typeof valor !== 'number') out.erros.push(`"${chave}" deve ser texto ou número.`);
+      else out.campos[CAMPOS_TEXTO[chave]] = valor === null ? '' : String(valor).trim();
+    } else {
+      out.erros.push(`Campo não permitido: "${chave}".`);
+    }
+  }
+  if (!out.quadro && !('quadro' in b)) out.erros.push('"quadro" é obrigatório.');
+  if (!out.campos.nome) out.erros.push('"nome" é obrigatório.');
+  if (!('telefone' in b)) out.erros.push('"telefone" é obrigatório.');
+  return out;
+}
+
+// ── Busca por telefone ──────────────────────────────────────────────────────
+
+/** Ordem dos cards achados pelo telefone: original antes de cópia (espelho, IA, venda); depois quem entrou na
+ * coluna mais recentemente; sem data por último. entrou_coluna_em chega do banco como Date (ou null). */
+export function compararAchadosPorTelefone(
+  a: { copia: boolean; entrou_coluna_em: Date | string | null },
+  b: { copia: boolean; entrou_coluna_em: Date | string | null },
+): number {
+  const ts = (x: Date | string | null) => {
+    if (x === null || x === undefined) return null;
+    const n = new Date(x).getTime();
+    return Number.isNaN(n) ? null : n;
+  };
+  if (a.copia !== b.copia) return a.copia ? 1 : -1;
+  const ta = ts(a.entrou_coluna_em);
+  const tb = ts(b.entrou_coluna_em);
+  if (ta === tb) return 0;
+  if (ta === null) return 1;
+  if (tb === null) return -1;
+  return tb - ta;
 }
 
 /** Texto puro vira HTML seguro pro bloco de Atualizações (que renderiza HTML sanitizado). */

@@ -309,6 +309,21 @@ function LeadDetailModalInner({
             <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Empresa">
               <BoxedField value={row.empresa} onSave={(v) => leadBoardsService.updateRow(row.id, { empresa: v })} />
             </FieldRow>
+            {!modoSimples && (
+              <>
+                <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Descrição">
+                  <DescricaoField valor={row.observacoes} onSave={(v) => leadBoardsService.updateRow(row.id, { observacoes: v })} />
+                </FieldRow>
+                <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="E-mail">
+                  <BoxedField value={row.email} onSave={(v) => leadBoardsService.updateRow(row.id, { email: v.trim() })} />
+                </FieldRow>
+                {!!row.ticketNx && (
+                  <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Ticket NX">
+                    <BoxedField value={row.ticketNx} onSave={(v) => leadBoardsService.updateRow(row.id, { ticketNx: v.trim() })} />
+                  </FieldRow>
+                )}
+              </>
+            )}
             <FieldRow icon={<Phone className="h-3.5 w-3.5" />} label="Telefone" required={!modoSimples}>
               <BoxedField value={row.telefone} onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })} required={!modoSimples} />
             </FieldRow>
@@ -480,6 +495,22 @@ function FieldRow({ icon, label, required, children }: { icon: React.ReactNode; 
       </span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
+  )
+}
+
+/** Texto livre de várias linhas (resumo da conversa, o que a Luiza anotou…); salva ao sair do campo. */
+function DescricaoField({ valor, onSave }: { valor: string; onSave: (v: string) => void }) {
+  const [texto, setTexto] = React.useState(valor)
+  React.useEffect(() => { setTexto(valor) }, [valor])
+  return (
+    <textarea
+      value={texto}
+      onChange={(e) => setTexto(e.target.value)}
+      onBlur={() => { if (texto !== valor) onSave(texto) }}
+      rows={Math.min(8, Math.max(2, texto.split('\n').length))}
+      placeholder="Resumo da conversa, o que o lead precisa…"
+      className="w-full resize-y rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-foreground/35"
+    />
   )
 }
 

@@ -47,6 +47,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { abaDeFora } from '@/lib/abasJuntas'
 import logoNx from '@/assets/logo-nx.jpg'
 import { signOut, useAuth, saveOwnTheme, saveOwnSidebarOrder, saveOwnPinnedMenu } from '@/hooks/useAuth'
 import { canManageUsers, canSeeFinancials } from '@/services/supabase'
@@ -371,6 +372,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const visibleComercialItems = canSee('/comercial')
     ? leadPages
         .filter((p) => p.section === 'comercial' && !financeiroPageIds.has(p.id))
+        // Aba que vive dentro de outra (CRM IA LUIZA, dentro do CRM ARTHUR) não ganha item próprio no menu: entra-se
+        // por lá. Quem não enxerga a de fora continua com o item dela.
+        .filter((p) => { const fora = abaDeFora(p.id); return !fora || !leadPages.some((o) => o.id === fora) })
         .map((p) => ({ to: `/comercial/${p.id}`, label: p.name, icon: Contact }))
     : []
   // O Dashboard Comercial entra na mesma lista dos demais — assim ele também pode ser arrastado

@@ -430,6 +430,46 @@ function AgendadoPorField({ valor, onChange }: { valor: string; onChange: (v: st
   )
 }
 
+/** PDF anexado é tratado como PDF mesmo quando o navegador não informou o tipo (só pela extensão). */
+function ehPdf(a: LeadNoteAttachment): boolean {
+  return a.type === 'application/pdf' || /\.pdf$/i.test(a.name)
+}
+
+/**
+ * Mostra o PDF anexado. O anexo vem como data: URL, e o Chrome não abre PDF assim dentro da página (fica em branco).
+ * Aqui ele vira um endereço temporário (blob:) que abre no visualizador do navegador, com a opção de abrir numa aba.
+ */
+function PdfDoAnexo({ anexo }: { anexo: LeadNoteAttachment }) {
+  const [url, setUrl] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    let ativo = true
+    let criada: string | null = null
+    void fetch(anexo.dataUrl)
+      .then((r) => r.blob())
+      .then((b) => {
+        criada = URL.createObjectURL(new Blob([b], { type: 'application/pdf' }))
+        if (ativo) setUrl(criada)
+        else URL.revokeObjectURL(criada)
+      })
+      .catch(() => toast.error('Não deu pra abrir esse PDF. Use "Baixar".'))
+    return () => {
+      ativo = false
+      if (criada) URL.revokeObjectURL(criada)
+    }
+  }, [anexo.dataUrl])
+  if (!url) {
+    return <div className="grid h-[80vh] w-[90vw] place-items-center rounded-lg bg-white text-sm text-foreground/50">Abrindo PDF…</div>
+  }
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <a href={url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/20">
+        <ExternalLink className="h-3.5 w-3.5" /> Abrir em outra aba
+      </a>
+      <iframe src={url} title={anexo.name} className="h-[76vh] w-[90vw] rounded-lg bg-white" />
+    </div>
+  )
+}
+
 function FieldRow({ icon, label, required, children }: { icon: React.ReactNode; label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5 border-b border-line/60 py-1.5">
@@ -575,6 +615,8 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
   const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null)
   const [editingText, setEditingText] = React.useState('')
   const [preview, setPreview] = React.useState<LeadNoteAttachment | null>(null)
+  // Arquivo sendo arrastado do computador por cima da caixa de atualização.
+  const [arrastando, setArrastando] = React.useState(false)
 
   const editorRef = React.useRef<RichTextEditorHandle>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -721,13 +763,39 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
       <div className="flex-1 overflow-y-auto p-4">
         {tab === 'updates' && (
           <>
-            <div className="rounded-lg border border-line p-3 transition-colors focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15">
+            <div
+              className={cn(
+                'relative rounded-lg border p-3 transition-colors focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15',
+                arrastando ? 'border-accent bg-accent/[0.04] ring-4 ring-accent/15' : 'border-line',
+              )}
+              // Arrastar arquivos do computador (PDF, imagem, planilha) direto pra cá anexa, igual ao clipe.
+              onDragOver={(e) => {
+                if (!Array.from(e.dataTransfer.types).includes('Files')) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'copy'
+                if (!arrastando) setArrastando(true)
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArrastando(false)
+              }}
+              onDrop={(e) => {
+                if (!e.dataTransfer.files.length) return
+                e.preventDefault()
+                setArrastando(false)
+                void handleFiles(Array.from(e.dataTransfer.files))
+              }}
+            >
+              {arrastando && (
+                <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-lg bg-card/85 text-sm font-medium text-accent">
+                  <span className="flex items-center gap-2"><Paperclip className="h-4 w-4" /> Solte pra anexar</span>
+                </div>
+              )}
               <RichTextEditor
                 ref={editorRef}
                 value={text}
                 onChange={(html) => { setText(html); saveDraft(html) }}
                 onPasteFiles={handleFiles}
-                placeholder="Escreva uma atualização, cole um print (Ctrl+V) e mencione outros com @"
+                placeholder="Escreva uma atualização, cole um print (Ctrl+V), arraste um arquivo pra cá e mencione outros com @"
               />
               {pendingAttachments.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -1037,12 +1105,8 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
                 alt={preview.name}
                 className="max-h-[80vh] max-w-[90vw] rounded-lg object-contain"
               />
-            ) : preview.type === 'application/pdf' ? (
-              <iframe
-                src={preview.dataUrl}
-                title={preview.name}
-                className="h-[80vh] w-[90vw] rounded-lg bg-white"
-              />
+            ) : ehPdf(preview) ? (
+              <PdfDoAnexo anexo={preview} />
             ) : (
               <div className="grid h-40 w-80 max-w-[90vw] place-items-center rounded-lg bg-white/10 p-4 text-center text-sm text-white/70">
                 Pré-visualização não disponível pra esse tipo de arquivo. Clique em "Baixar" pra abrir.

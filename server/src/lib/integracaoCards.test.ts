@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  compararAchadosPorTelefone, normalizarOrigem, resolverQuadro, validarCriacaoIntegracao,
+  compararAchadosPorTelefone, normalizarOrigem, resolverQuadro, textoDaNota, validarCriacaoIntegracao,
   chaveValida, colunasQueCasam, mesmoTelefone, montarEtiquetas, resolverEtiquetas, parseDataIntegracao, telefoneComDdi, textoParaHtml, validarPatchIntegracao,
 } from './integracaoCards.js';
 
@@ -150,7 +150,8 @@ test('validarCriacaoIntegracao: obrigatórios, telefone, campos e lista de erros
   });
   assert.deepEqual(ok.erros, []);
   assert.equal(ok.campos.telefone, '5582987056959');
-  assert.equal(ok.campos.observacoes, 'quer organizar');
+  assert.equal(ok.campos.observacoes, undefined);
+  assert.deepEqual(ok.nota, { descricao: 'quer organizar', email: 'a@b.com' });
   assert.equal(ok.campos.nicho, 'pet');
   assert.equal(ok.campos.numero_atendentes, '3');
   assert.equal(ok.sdr, 'Luiza');
@@ -176,7 +177,9 @@ test('compararAchadosPorTelefone: Date ou null (o bug do localeCompare), origina
 test('validarPatchIntegracao: aceita descricao, empresa, nome, origem, email e ramo', () => {
   const v = validarPatchIntegracao({ descricao: 'x', empresa: 'Pet', nome: 'Lo', origem: 'lp_teste', email: 'a@b', ramo: 'pet', ticket_nx: 1 });
   assert.equal(v.erro, undefined);
-  assert.deepEqual(v.campos, { observacoes: 'x', empresa: 'Pet', nome: 'Lo', origem: 'lp_teste', email: 'a@b', nicho: 'pet', ticket_nx: '1' });
+  assert.deepEqual(v.campos, { empresa: 'Pet', nome: 'Lo', origem: 'lp_teste', nicho: 'pet', ticket_nx: '1' });
+  assert.equal(textoDaNota(v.nota), 'Descrição: x\nE-mail: a@b');
+  assert.equal(validarPatchIntegracao({ descricao: 'só isso' }).erro, undefined); // só a anotação já é "algo pra atualizar"
   assert.match(validarPatchIntegracao({ origem: 'tiktok' }).erro ?? '', /origem/);
   assert.match(validarPatchIntegracao({ nome: '  ' }).erro ?? '', /nome/);
 });

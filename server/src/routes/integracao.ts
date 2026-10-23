@@ -7,7 +7,7 @@ import {
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import {
   chaveTelefone, chaveValida, colunasQueCasam, compararAchadosPorTelefone, mesmoTelefone, montarEtiquetas,
-  parseDataIntegracao, resolverEtiquetas, resolverQuadro, rotuloDaOrigem, telefoneComDdi, textoParaHtml,
+  parseDataIntegracao, resolverEtiquetas, resolverQuadro, rotuloDaOrigem, telefoneComDdi, textoDaNota, textoParaHtml,
   validarCriacaoIntegracao, validarPatchIntegracao, type OpcoesEtiqueta,
 } from '../lib/integracaoCards.js';
 
@@ -34,7 +34,7 @@ const AUTOR_LUIZA = 'Luiza (SDR IA)';
 interface CardRow {
   id: string; nome: string; empresa: string; telefone: string; status: string; sdr: string;
   dor_cliente: string; numero_atendentes: string; entrou_coluna_em: Date | string | null;
-  origem: string; observacoes: string; email: string; nicho: string; ticket_nx: string;
+  origem: string; nicho: string; ticket_nx: string;
   regua: string; regua_etapa: string; regua_ultimo_envio_em: string | null; regua_status: string; optout: boolean;
   tipo: string; dia_contato: string; ligacao: string; followup: string; disparo: string;
   coluna_id: string; coluna: string; quadro_id: string; quadro: string;
@@ -44,7 +44,7 @@ const SELECT_CARD = `
   SELECT r.id, r.nome, r.empresa, r.telefone, r.status, r.sdr, r.dor_cliente, r.numero_atendentes,
          r.entrou_coluna_em, r.regua, r.regua_etapa, r.regua_ultimo_envio_em, r.regua_status, r.optout,
          r.tipo, r.dia_contato, r.ligacao, r.followup, r.disparo,
-         r.origem, r.observacoes, r.email, r.nicho, r.ticket_nx,
+         r.origem, r.nicho, r.ticket_nx,
          lb.id AS coluna_id, lb.name AS coluna, lp.id AS quadro_id, lp.name AS quadro
   FROM lead_rows r
   JOIN lead_boards lb ON lb.id = r.board_id
@@ -93,8 +93,6 @@ function cardParaApi(r: CardRow, opcoes: OpcoesPorAba) {
     dor_cliente: r.dor_cliente,
     numero_atendentes: r.numero_atendentes,
     origem: r.origem,
-    descricao: r.observacoes,
-    email: r.email,
     ramo: r.nicho,
     ticket_nx: r.ticket_nx,
     etiquetas: montarEtiquetas(r as unknown as Record<string, string>, opcoes(r.quadro_id)),
@@ -119,6 +117,16 @@ async function buscarCard(id: string): Promise<CardRow | null> {
  */
 export async function espelharSeReuniaoAgendada(cardId: string): Promise<void> {
   await syncEspelhoReuniaoAgendada(cardId);
+}
+
+/** Grava uma Atualização da Luiza no card (texto puro, escapado). Numa cópia, vai pro histórico da original. */
+async function anotar(cardId: string, texto: string): Promise<void> {
+  const canonico = await idCanonicoDasNotas(cardId);
+  await query(
+    `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments) VALUES ($1, NULL, $2, $3, '[]')`,
+    [canonico, AUTOR_LUIZA, textoParaHtml(texto)]
+  );
+  await sincronizarContagemNotas(canonico);
 }
 
 /** Quadro (aba) pelo id/slug ou nome. Só abas não arquivadas. */
@@ -274,6 +282,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
       return { id: novo.id, criado: true };
     });
 
+    if (!r.criado && textoDaNota(v.nota)) await anotar(r.id, textoDaNota(v.nota));
     if (r.criado) {
       // SDR: o dono da aba (no CRM IA LUIZA, "IA Luiza"); aba sem dono usa o "sdr" do corpo.
       const sdrDaAba = await preencherSdrDaAba(r.id).catch(() => null);
@@ -281,7 +290,10 @@ export async function integracaoRoutes(app: FastifyInstance) {
       await logLeadEvent(r.id, 'created', null, null, 'Automação').catch(() => undefined);
       await query(
         `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments) VALUES ($1, NULL, $2, $3, '[]')`,
-        [r.id, AUTOR_LUIZA, textoParaHtml(`Card criado automaticamente pela Luiza (origem: ${rotuloDaOrigem(v.campos.origem ?? '')})`)]
+        [r.id, AUTOR_LUIZA, textoParaHtml([
+          `Card criado automaticamente pela Luiza (origem: ${rotuloDaOrigem(v.campos.origem ?? '')})`,
+          textoDaNota(v.nota),
+        ].filter(Boolean).join('\n\n'))]
       );
       await sincronizarContagemNotas(r.id);
       await espelharSeReuniaoAgendada(r.id);
@@ -371,6 +383,9 @@ export async function integracaoRoutes(app: FastifyInstance) {
         if (etiqueta) campos.status = etiqueta;
       }
     }
+    // descricao/email não são campos do card: entram nas Atualizações (no histórico da original, se for cópia).
+    const nota = textoDaNota(v.nota);
+    if (nota) await anotar(id, nota);
     const chaves = Object.keys(campos);
     if (!chaves.length) {
       const semMudanca = await buscarCard(id);

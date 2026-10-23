@@ -98,9 +98,6 @@ export const REGUA_STATUS = ['', 'ativa', 'respondeu', 'encerrada', 'optout'] as
 const CAMPOS_TEXTO: Record<string, string> = {
   nome: 'nome',
   empresa: 'empresa',
-  descricao: 'observacoes',
-  observacoes: 'observacoes',
-  email: 'email',
   ramo: 'nicho',
   nicho: 'nicho',
   ticket_nx: 'ticket_nx',
@@ -119,8 +116,31 @@ const CAMPOS_TEXTO: Record<string, string> = {
   regua_etapa: 'regua_etapa',
 };
 
+/** descricao e email não são campos do card: viram uma Atualização (ver textoDaNota). */
+export interface NotaDaAutomacao {
+  descricao?: string;
+  email?: string;
+}
+
+/** "Descrição: …" e "E-mail: …", uma por linha. Vazio = nada a anotar. */
+export function textoDaNota(nota: NotaDaAutomacao | undefined): string {
+  const linhas: string[] = [];
+  if (nota?.descricao) linhas.push(`Descrição: ${nota.descricao}`);
+  if (nota?.email) linhas.push(`E-mail: ${nota.email}`);
+  return linhas.join('\n');
+}
+
+/** Lê descricao/email do corpo. Devolve o erro (texto) se o tipo estiver errado. */
+function lerNota(chave: 'descricao' | 'email', valor: unknown, nota: NotaDaAutomacao): string | null {
+  if (valor !== null && typeof valor !== 'string' && typeof valor !== 'number') return `"${chave}" deve ser texto.`;
+  const v = valor === null ? '' : String(valor).trim();
+  if (v) nota[chave] = v;
+  return null;
+}
+
 export interface PatchValidado {
   campos: Record<string, unknown>; // coluna em lead_rows -> valor
+  nota?: NotaDaAutomacao; // descricao/email -> Atualização do card
   coluna?: string; // nome da coluna de destino
   boardId?: string; // id da coluna de destino
   etiquetas?: unknown; // pedido bruto {"Disparo":"D7"}; resolvido na rota contra as etiquetas da aba
@@ -160,6 +180,10 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
       const o = normalizarOrigem(valor);
       if (o === null) return { ...out, erro: erroDeOrigem() };
       out.campos.origem = o;
+    } else if (chave === 'descricao' || chave === 'email') {
+      out.nota ??= {};
+      const e = lerNota(chave, valor, out.nota);
+      if (e) return { ...out, erro: e };
     } else if (chave === 'regua' || chave === 'regua_status') {
       const lista: readonly string[] = chave === 'regua' ? REGUAS : REGUA_STATUS;
       const v = valor === null ? '' : typeof valor === 'string' ? valor.trim().toLowerCase() : null;
@@ -191,7 +215,7 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
   if (out.coluna && out.boardId) return { ...out, erro: 'Envie "coluna" OU "board_id", não os dois.' };
   // Marcar opt-out sem dizer o status da régua encerra a régua: ninguém pode continuar recebendo.
   if (out.campos.optout === true && !('regua_status' in out.campos)) out.campos.regua_status = 'optout';
-  if (!Object.keys(out.campos).length && !out.coluna && !out.boardId && !out.etiquetas) return { ...out, erro: 'Nada para atualizar.' };
+  if (!Object.keys(out.campos).length && !out.coluna && !out.boardId && !out.etiquetas && !textoDaNota(out.nota)) return { ...out, erro: 'Nada para atualizar.' };
   return out;
 }
 
@@ -272,12 +296,14 @@ export interface CriacaoValidada {
   campos: Record<string, string>;
   /** sdr pedido pelo corpo (só vale se a aba não tiver SDR dono) */
   sdr?: string;
+  /** descricao/email: vão na Atualização de criação do card */
+  nota: NotaDaAutomacao;
   erros: string[];
 }
 
 /** Valida o corpo do POST /cards. Junta todos os problemas numa lista (400 único). */
 export function validarCriacaoIntegracao(body: unknown): CriacaoValidada {
-  const out: CriacaoValidada = { quadro: '', campos: {}, erros: [] };
+  const out: CriacaoValidada = { quadro: '', campos: {}, nota: {}, erros: [] };
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { ...out, erros: ['Corpo inválido: envie um objeto JSON.'] };
   const b = body as Record<string, unknown>;
   for (const [chave, valor] of Object.entries(b)) {
@@ -296,6 +322,9 @@ export function validarCriacaoIntegracao(body: unknown): CriacaoValidada {
       const o = normalizarOrigem(valor);
       if (o === null) out.erros.push(erroDeOrigem());
       else out.campos.origem = o;
+    } else if (chave === 'descricao' || chave === 'email') {
+      const e = lerNota(chave, valor, out.nota);
+      if (e) out.erros.push(e);
     } else if (chave === 'sdr') {
       if (valor !== null && typeof valor !== 'string') out.erros.push('"sdr" deve ser texto.');
       else if (typeof valor === 'string' && valor.trim()) out.sdr = valor.trim();

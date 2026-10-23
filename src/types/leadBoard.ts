@@ -121,8 +121,6 @@ export interface LeadRow {
   /** Lead que a IA Luiza agendou no CRM de outro SDR: na cópia dela no CRM IA LUIZA, o id da lead original; null
    * em lead comum. Os painéis gerais deixam a cópia de fora, pra não contar a mesma lead duas vezes. */
   copiaIaOrigemId: string | null
-  /** E-mail do lead (a automação da Luiza preenche; editável na ficha). */
-  email: string
   /** Número do ticket na NX (atendimento que gerou o card). */
   ticketNx: string
   /** Quem FECHOU a venda (só a aba Vendas usa). Diferente do SDR = a venda também gera a comissão

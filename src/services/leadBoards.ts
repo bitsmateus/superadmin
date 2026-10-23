@@ -57,7 +57,6 @@ type LeadRowRow = {
   contrato_assinado?: boolean
   espelho_origem_id?: string | null
   copia_ia_origem_id?: string | null
-  email?: string
   ticket_nx?: string
   closer?: string
   last_note_preview?: string
@@ -90,7 +89,6 @@ function rowToLead(r: LeadRowRow): LeadRow {
     contratoAssinado: r.contrato_assinado ?? false,
     espelhoOrigemId: r.espelho_origem_id ?? null,
     copiaIaOrigemId: r.copia_ia_origem_id ?? null,
-    email: r.email ?? '',
     ticketNx: r.ticket_nx ?? '',
     closer: r.closer ?? '',
     lastNotePreview: r.last_note_preview ?? '',
@@ -128,7 +126,6 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('mrrPendente' in patch) row.mrr_pendente = patch.mrrPendente
   if ('implPendente' in patch) row.impl_pendente = patch.implPendente
   if ('observacoes' in patch) row.observacoes = patch.observacoes
-  if ('email' in patch) row.email = patch.email
   if ('ticketNx' in patch) row.ticket_nx = patch.ticketNx
   if ('veioDoFunil' in patch) row.veio_do_funil = patch.veioDoFunil
   if ('contratoAssinado' in patch) row.contrato_assinado = patch.contratoAssinado
@@ -258,7 +255,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
     id: uuid(), boardId, nome: '', tipo: '', etiqueta: '', followup: '', disparo: '', origem: '', agendadoPor: '', nicho: '', motivoDesqualificacao: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
     status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
     dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
-    fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, copiaIaOrigemId: null, email: '', ticketNx: '', closer: '',
+    fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, copiaIaOrigemId: null, ticketNx: '', closer: '',
     lastNotePreview: '', lastNoteAt: null,
     position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
     mrrPendente: true, implPendente: true, observacoes: '', veioDoFunil: false,

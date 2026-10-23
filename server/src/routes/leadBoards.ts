@@ -689,8 +689,8 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
   }
 }
 
-/** Status do começo do funil: nunca chegam ao CRM do closer. */
-const STATUS_INICIO_DO_FUNIL = new Set(['primeirocontato', 'leadsnovos']);
+/** Status do começo do funil: nunca chegam ao CRM do closer ("Qualificado" é a etapa antes de agendar, no CRM IA LUIZA). */
+const STATUS_INICIO_DO_FUNIL = new Set(['primeirocontato', 'leadsnovos', 'qualificado']);
 
 /** Edição de conteúdo vai pras outras linhas da mesma lead: a original e as cópias dela (a do CRM do closer e a do
  * CRM IA LUIZA). É um pulo só: o UPDATE daqui não passa pelo PATCH de novo, então não entra em loop. */

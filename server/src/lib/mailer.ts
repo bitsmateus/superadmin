@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import { queryOne } from '../db.js';
 
-interface SmtpConfig {
+export interface SmtpConfig {
   host?: string;
   port?: number;
   user?: string;
@@ -25,9 +25,12 @@ export async function sendMail(opts: {
   subject: string;
   html: string;
   attachments?: { filename: string; content: Buffer }[];
+  bcc?: string;
+  /** SMTP próprio de quem envia (ex.: Enge Services) em vez do de Configurações > E-mail. */
+  smtp?: SmtpConfig;
 }): Promise<void> {
-  const smtp = await getSmtpConfig();
-  if (!smtp) {
+  const smtp = opts.smtp ?? (await getSmtpConfig());
+  if (!smtp?.host || !smtp.user || !smtp.password) {
     throw new Error('SMTP não configurado — configure em Configurações > E-mail (SMTP)');
   }
 
@@ -43,6 +46,7 @@ export async function sendMail(opts: {
       from: smtp.fromName ? `"${smtp.fromName}" <${fromEmail}>` : fromEmail,
       replyTo,
       to: opts.to,
+      bcc: opts.bcc || undefined,
       subject: opts.subject,
       html: opts.html,
       attachments: opts.attachments,

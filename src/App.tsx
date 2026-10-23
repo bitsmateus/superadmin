@@ -169,6 +169,18 @@ const AcouguePage = React.lazy(() =>
   })),
 )
 
+// Enge Services — avisos de garantia por e-mail, com login próprio (como o açougue).
+const EngeEnvioPage = React.lazy(() =>
+  import('./pages/EngeEnvioPage').then((m) => ({
+    default: m.EngeEnvioPage,
+  })),
+)
+const EngeCientePage = React.lazy(() =>
+  import('./pages/EngeCientePage').then((m) => ({
+    default: m.EngeCientePage,
+  })),
+)
+
 export default function App() {
   return (
     <React.Suspense fallback={<PageFallback />}>
@@ -180,6 +192,8 @@ export default function App() {
         <Route path="/laundry/:token" element={<LaundryPortalPage />} />
         <Route path="/mercadonunes" element={<MercadoNunesPage />} />
         <Route path="/mercadonunes/acougue" element={<AcouguePage />} />
+        <Route path="/engeenvio" element={<EngeEnvioPage />} />
+        <Route path="/engeenvio/ciente/:token" element={<EngeCientePage />} />
         <Route path="/pendencias/:token" element={<PendenciasPublicPage />} />
         <Route path="/ficha" element={<FichaPublicPage />} />
         {/* /dashboard/<nome> é o endereço que se compartilha; /relatorio e /r continuam valendo

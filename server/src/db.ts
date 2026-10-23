@@ -1741,6 +1741,75 @@ END; $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
 
+  // ── Enge Services (/engeenvio) — avisos de garantia por e-mail ─────────────────────
+  // Mesma ideia do açougue: login PRÓPRIO, separado de `profiles`. A Enge cadastra os
+  // empreendimentos que administra, as garantias de cada um e agenda em que dia cada aviso sai
+  // pro síndico. O e-mail é o aviso que vale juridicamente, então cada envio fica registrado
+  // (quando saiu, pra quem, o texto exato) e o síndico pode confirmar "estou ciente" por um link.
+  await pool.query(`CREATE TABLE IF NOT EXISTS ee_usuarios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL UNIQUE,
+    nome TEXT,
+    senha_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  // Linha única: SMTP da Enge (os avisos saem do e-mail dela), modelo do e-mail e o endereço
+  // do painel (pro link "estou ciente" — o job não tem requisição de onde tirar a origem).
+  await pool.query(`CREATE TABLE IF NOT EXISTS ee_config (
+    id BOOLEAN PRIMARY KEY DEFAULT true CHECK (id),
+    smtp JSONB,
+    copia_oculta TEXT,
+    assunto TEXT,
+    corpo TEXT,
+    app_url TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`INSERT INTO ee_config (id) VALUES (true) ON CONFLICT DO NOTHING`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS ee_empreendimentos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    cidade TEXT,
+    entrega DATE,
+    sindico TEXT,
+    emails TEXT,
+    telefone TEXT,
+    construtora TEXT,
+    observacoes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS ee_garantias (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empreendimento_id UUID NOT NULL REFERENCES ee_empreendimentos(id) ON DELETE CASCADE,
+    item TEXT NOT NULL,
+    prazo TEXT,
+    vencimento DATE NOT NULL,
+    chamado_em DATE,
+    chamado_protocolo TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS ee_garantias_emp_idx ON ee_garantias (empreendimento_id)`);
+  // Cada aviso agendado. `enviar_em` é escolhido na tela (dia + hora). Depois de enviado, assunto,
+  // corpo e destinatários ficam gravados como saíram — é o comprovante, não muda se o modelo mudar.
+  await pool.query(`CREATE TABLE IF NOT EXISTS ee_envios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    garantia_id UUID NOT NULL REFERENCES ee_garantias(id) ON DELETE CASCADE,
+    enviar_em TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL DEFAULT 'agendado' CHECK (status IN ('agendado','enviado','erro','cancelado')),
+    destinatarios TEXT,
+    assunto TEXT,
+    corpo TEXT,
+    enviado_em TIMESTAMPTZ,
+    erro TEXT,
+    token TEXT NOT NULL UNIQUE, -- gerado no código (crypto.randomBytes), vai no link "estou ciente"
+    ciente_em TIMESTAMPTZ,
+    ciente_nome TEXT,
+    ciente_ip TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS ee_envios_garantia_idx ON ee_envios (garantia_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS ee_envios_fila_idx ON ee_envios (enviar_em) WHERE status = 'agendado'`);
+
   // ── Pulso de satisfação + Risco de Churn ───────────────────────────────────────────
   // "Pulso": pergunta curta (sim/não) mandada de fora pelo WhatsApp de tempos em tempos — o n8n é
   // quem manda de fato (ver server/src/routes/pulses.ts); aqui só decidimos quem recebe e

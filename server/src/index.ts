@@ -46,6 +46,7 @@ import { mercadoNunesRoutes } from './routes/mercadoNunes.js';
 import { pulseRoutes } from './routes/pulses.js';
 import { churnRiskRoutes } from './routes/churnRisk.js';
 import { agendaRoutes } from './routes/agenda.js';
+import { engeEnvioRoutes } from './routes/engeEnvio.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startFollowUpDigest } from './jobs/followUpDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
@@ -61,6 +62,7 @@ import { startTrafficDailyReport } from './jobs/trafficDailyReport.js';
 import { startLeadsDailyReport } from './jobs/leadsDailyReport.js';
 import { startTrafficAiReview } from './jobs/trafficAiReview.js';
 import { startDemandasAiDiario } from './jobs/demandasAiDiario.js';
+import { startEngeEnvioDispatch } from './jobs/engeEnvioDispatch.js';
 
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
@@ -170,6 +172,7 @@ async function main() {
   await app.register(pulseRoutes);
   await app.register(churnRiskRoutes);
   await app.register(agendaRoutes);
+  await app.register(engeEnvioRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -207,6 +210,7 @@ async function main() {
   startDemandasAiDiario();
   startPulseSweep();
   startPulseDispatch();
+  startEngeEnvioDispatch();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

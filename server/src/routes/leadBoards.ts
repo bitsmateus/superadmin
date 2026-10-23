@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne, queryAsActor } from '../db.js';
 import { allowedPageIds } from './leadPages.js';
+import { comAbasJuntas, saoAbasJuntas } from '../lib/abasJuntas.js';
 import { ehDoFinanceiro, podeVerMetricasDoCloser } from '../lib/acessoMenu.js';
 import { podeVerFinanceiro } from '../lib/financeiro.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
@@ -304,7 +305,7 @@ export async function restrictedBoardFilter(userId: string, role: string): Promi
 
   const boards = await query<{ id: string }>(
     'SELECT id FROM lead_boards WHERE page = ANY($1) AND NOT is_vendas AND NOT is_contrato',
-    [pageAccess.map((r) => r.page_id)]
+    [comAbasJuntas(pageAccess.map((r) => r.page_id))]
   );
   return boards.map((r) => r.id);
 }
@@ -829,7 +830,10 @@ export async function syncCopiaDaIa(leadRowId: string) {
       [leadRowId]
     );
     const etapa = lead.status || lead.board_name;
-    const deveTer = ehSdrDaIa(lead.sdr) && !!etapa && !STATUS_INICIO_DO_FUNIL.has(normalizaNome(etapa));
+    // CRM ARTHUR e CRM IA LUIZA são a mesma tela (abas juntas): a lead fica só no CRM do Arthur, sem cópia na IA.
+    // Uma cópia que já existia vai pra lixeira na próxima edição da original.
+    const deveTer = ehSdrDaIa(lead.sdr) && !!etapa && !STATUS_INICIO_DO_FUNIL.has(normalizaNome(etapa))
+      && !saoAbasJuntas(lead.page, PAGE_IA);
     if (!deveTer) {
       if (copia && !copia.deleted_at) await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1', [copia.id]);
       return;

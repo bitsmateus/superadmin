@@ -5,6 +5,8 @@ import { LeadBoardsView } from '@/components/comercial/LeadBoardsView'
 import { VendasView } from '@/components/comercial/VendasView'
 import { ContratoView } from '@/components/comercial/ContratoView'
 import { NotasView } from '@/components/comercial/NotasView'
+import { AbasJuntasView } from '@/components/comercial/AbasJuntasView'
+import { ABAS_JUNTAS, abaDeFora } from '@/lib/abasJuntas'
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 
@@ -49,9 +51,18 @@ export function ComercialPage() {
     return <Navigate to={fallback ? `${basePath}/${fallback.id}` : '/'} replace />
   }
 
+  // Aba que vive dentro de outra (CRM IA LUIZA dentro do CRM ARTHUR): o endereço antigo abre a aba lá dentro.
+  // Quem não enxerga a de fora continua abrindo esta sozinha.
+  const fora = abaDeFora(pageId as string)
+  if (fora && pages.some((p) => p.id === fora)) {
+    return <Navigate to={`${basePath}/${fora}?quadro=${pageId}`} replace />
+  }
+
   if (isVendasPage) return <VendasView pageId={pageId as string} />
   if (isContratoPage) return <ContratoView pageId={pageId as string} />
   if (isNotasPage) return <NotasView pageId={pageId as string} />
+
+  if (ABAS_JUNTAS[pageId as string]) return <AbasJuntasView pageId={pageId as string} />
 
   return <LeadBoardsView page={pageId as string} />
 }

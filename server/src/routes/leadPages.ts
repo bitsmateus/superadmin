@@ -1,4 +1,5 @@
 import { podeVerFinanceiro } from '../lib/financeiro.js';
+import { comAbasJuntas } from '../lib/abasJuntas.js';
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { gerarESalvarPlano, planoSalvo } from '../lib/demandasAi.js';
@@ -72,7 +73,8 @@ export async function allowedPageIds(userId: string, role: string): Promise<stri
     [userId]
   );
   if (!rows.length) return [];
-  return rows.map((r) => r.page_id);
+  // Quem acessa o CRM ARTHUR vê também o CRM IA LUIZA, que é uma aba dentro da tela dele.
+  return comAbasJuntas(rows.map((r) => r.page_id));
 }
 
 export async function leadPageRoutes(app: FastifyInstance) {

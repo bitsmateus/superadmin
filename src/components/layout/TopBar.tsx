@@ -29,12 +29,14 @@ export interface TopBarProps {
   subtitle?: string
   /** Sobrescreve o tamanho padrão (text-base) do <h1> — ex.: "text-[36px]". */
   titleClassName?: string
+  /** Fica ao lado do título (ex.: o seletor de abas do CRM ARTHUR | CRM IA LUIZA). */
+  titleAddon?: React.ReactNode
   breadcrumbs?: { label: string; to?: string }[]
   /** No celular: sem migalhas e sem subtítulo, só o título e as ações numa linha. */
   compacto?: boolean
 }
 
-export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs, compacto }: TopBarProps) {
+export function TopBar({ rightSlot, title, subtitle, titleClassName, titleAddon, breadcrumbs, compacto }: TopBarProps) {
   const location = useLocation()
   const parts = location.pathname.split('/').filter(Boolean)
   // Numa cópia do menu Suporte a URL é /visao/<id>, que viraria um breadcrumb "visao / a1b2c3".
@@ -88,8 +90,9 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, breadcrumbs
               </span>
             ))}
           </nav>
-          <div className="mt-0.5 flex items-baseline gap-2">
+          <div className={cn('mt-0.5 flex items-baseline gap-2', titleAddon && 'flex-wrap gap-y-1')}>
             <h1 className={cn('text-foreground truncate', titleClassName ?? 'text-base font-semibold')}>{heading}</h1>
+            {titleAddon}
             {subtitle && <span className={cn('text-xs text-foreground/40', compacto && 'hidden sm:inline')}>{subtitle}</span>}
           </div>
         </div>

@@ -1347,9 +1347,13 @@ function CreateBoardModal({ open, onClose, page }: { open: boolean; onClose: () 
 
 export interface LeadBoardsViewProps {
   page: LeadBoardPage
+  /** Título do topo quando esta aba aparece dentro de outra (ver AbasJuntasView); a lógica segue pelo nome da própria aba. */
+  tituloDaTela?: string
+  /** Vai ao lado do título (o seletor das abas juntas). */
+  aoLadoDoTitulo?: React.ReactNode
 }
 
-export function LeadBoardsView({ page }: LeadBoardsViewProps) {
+export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoardsViewProps) {
   const { profile } = useAuth()
   const isAdmin = canManageUsers(profile?.role)
   const allPages = useLeadPages()
@@ -1576,13 +1580,14 @@ export function LeadBoardsView({ page }: LeadBoardsViewProps) {
   return (
     <>
       <TopBar
-        title={title}
+        title={tituloDaTela ?? title}
         subtitle={subtitle}
         titleClassName="text-[30px] font-medium font-['Roboto']"
+        titleAddon={aoLadoDoTitulo}
         breadcrumbs={[
           { label: 'Grupo NX Digital', to: '/' },
           isDemandas ? { label: 'Demandas', to: '/demandas' } : { label: 'Comercial', to: '/comercial' },
-          { label: title },
+          { label: tituloDaTela ?? title },
         ]}
         rightSlot={isDemandas ? (
           <DemandaTopo pageId={page} pageName={title} responsavel={currentPage?.responsavel ?? ''} isAdmin={isAdmin} />

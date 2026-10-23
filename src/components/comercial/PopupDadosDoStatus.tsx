@@ -244,7 +244,7 @@ export function PopupDadosDoStatus() {
                 <Bot className="h-4 w-4 text-pink-500" /> Foi a IA Luiza que agendou
               </span>
               <span className="mt-0.5 block text-xs text-foreground/55">
-                O agendamento conta pra IA Luiza, não pro SDR, e a lead aparece também no CRM IA LUIZA.
+                O agendamento conta pra IA Luiza, não pro SDR{atual.copiaNaIa === false ? '.' : ', e a lead aparece também no CRM IA LUIZA.'}
               </span>
             </span>
           </button>

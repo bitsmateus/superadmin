@@ -47,6 +47,7 @@ import { pulseRoutes } from './routes/pulses.js';
 import { churnRiskRoutes } from './routes/churnRisk.js';
 import { agendaRoutes } from './routes/agenda.js';
 import { engeEnvioRoutes } from './routes/engeEnvio.js';
+import { reunioesRoutes } from './routes/reunioes.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startFollowUpDigest } from './jobs/followUpDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
@@ -173,6 +174,7 @@ async function main() {
   await app.register(churnRiskRoutes);
   await app.register(agendaRoutes);
   await app.register(engeEnvioRoutes);
+  await app.register(reunioesRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

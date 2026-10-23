@@ -8,6 +8,7 @@ import {
   ArrowRightLeft,
   AtSign,
   Calendar,
+  CalendarCheck2,
   CheckCircle2,
   Circle,
   Clock,
@@ -51,7 +52,7 @@ import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { CANAIS_DE_AGENDAMENTO, MINIMO_OUTRO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, quadroDoStatus, textoDoAgendadoOutro } from '@/lib/regraDoStatus'
 import { leadBoardsService } from '@/services/leadBoards'
 import { LeadOrigemBlock } from '@/components/comercial/LeadOrigemBlock'
-import { leadNotesService } from '@/services/leadNotes'
+import { canonicalNoteLeadId, leadNotesService } from '@/services/leadNotes'
 import { leadEventsService } from '@/services/leadEvents'
 import { leadLabelsService } from '@/services/leadLabels'
 import { cn, formatDateTimeShort, initials } from '@/lib/utils'
@@ -75,6 +76,9 @@ export interface LeadDetailModalProps {
   /** Ficha enxuta, pros CRMs de demanda (Ian e Mateus): sem tipo, dia de contato, ligação, SDR, dor, nº de
    * atendentes nem valores; telefone opcional; sem os botões "Ficha de cadastro" e "Acessar planos". */
   modoSimples?: boolean
+  /** Ficha que não fecha (popup de resultado da reunião): sem X, ESC, clique fora nem Excluir; Grupo e Status
+   * travados (a etapa é escolhida no `topo`). O `topo` vai entre o cabeçalho e os campos. */
+  obrigatorio?: { topo: React.ReactNode }
 }
 
 type FichaStatus = {
@@ -159,7 +163,7 @@ function FichaCadastroButton({ ficha, onOpenClient }: { ficha: FichaStatus | nul
 
 /** Casca do modal: guarda o cadastro do cliente aberto pelo botão "Ficha de cadastro", que abre
  * por cima da lead (fora do portal dela, pra não herdar a animação/camada do modal). */
-export function LeadDetailModal({ leadRowId, onClose, mostrarContrato, modoSimples }: LeadDetailModalProps) {
+export function LeadDetailModal({ leadRowId, onClose, mostrarContrato, modoSimples, obrigatorio }: LeadDetailModalProps) {
   const [fichaClientId, setFichaClientId] = React.useState<string | null>(null)
   React.useEffect(() => { if (!leadRowId) setFichaClientId(null) }, [leadRowId])
 
@@ -172,6 +176,7 @@ export function LeadDetailModal({ leadRowId, onClose, mostrarContrato, modoSimpl
         fichaDrawerOpen={!!fichaClientId}
         mostrarContrato={mostrarContrato}
         modoSimples={modoSimples}
+        obrigatorio={obrigatorio}
       />
       <ClientDrawer clientId={fichaClientId} onClose={() => setFichaClientId(null)} />
     </>
@@ -179,7 +184,7 @@ export function LeadDetailModal({ leadRowId, onClose, mostrarContrato, modoSimpl
 }
 
 function LeadDetailModalInner({
-  leadRowId, onClose, onOpenFichaClient, fichaDrawerOpen, mostrarContrato, modoSimples,
+  leadRowId, onClose, onOpenFichaClient, fichaDrawerOpen, mostrarContrato, modoSimples, obrigatorio,
 }: LeadDetailModalProps & { onOpenFichaClient: (id: string) => void; fichaDrawerOpen: boolean }) {
   const row = useLeadRow(leadRowId)
   const boards = useLeadBoards()
@@ -201,14 +206,14 @@ function LeadDetailModalInner({
   React.useEffect(() => {
     if (!leadRowId) return
     // Com o cadastro do cliente aberto por cima, o ESC é dele — não fecha a lead junto.
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !fichaDrawerOpen) onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !fichaDrawerOpen && !obrigatorio) onClose() }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [leadRowId, onClose, fichaDrawerOpen])
+  }, [leadRowId, onClose, fichaDrawerOpen, obrigatorio])
 
   const [ficha, setFicha] = React.useState<FichaStatus | null>(null)
   React.useEffect(() => {
@@ -225,7 +230,7 @@ function LeadDetailModalInner({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 animate-fade-in sm:p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={obrigatorio ? undefined : onClose} />
       <div
         role="dialog"
         aria-modal="true"
@@ -259,7 +264,7 @@ function LeadDetailModalInner({
                 Acessar planos
               </a>
             )}
-            {!mostrarContrato && (
+            {!mostrarContrato && !obrigatorio && (
               <button
                 type="button"
                 onClick={() => {
@@ -273,16 +278,20 @@ function LeadDetailModalInner({
                 Excluir
               </button>
             )}
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Fechar"
-              className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground focus-ring"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            {!obrigatorio && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Fechar"
+                className="rounded-md p-1 text-foreground/50 hover:bg-elevate/[0.06] hover:text-foreground focus-ring"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
+
+        {obrigatorio?.topo}
 
         {/* No celular empilha (campos em cima, atualizações embaixo) e a área inteira rola junto */}
         <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
@@ -290,6 +299,7 @@ function LeadDetailModalInner({
             <FieldRow icon={<Circle className="h-3.5 w-3.5" style={{ color: board?.color }} fill={board?.color} />} label="Grupo">
               <select
                 value={row.boardId}
+                disabled={!!obrigatorio}
                 onChange={(e) => leadBoardsService.updateRow(row.id, { boardId: e.target.value })}
                 className="w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
               >
@@ -335,6 +345,7 @@ function LeadDetailModalInner({
               </>
             )}
             <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Status" required>
+              <div className={cn(obrigatorio && 'pointer-events-none opacity-60')} aria-disabled={!!obrigatorio}>
               <LeadLabelCell
                 field="status"
                 value={row.status}
@@ -351,6 +362,7 @@ function LeadDetailModalInner({
                 required
                 pageId={board?.page}
               />
+              </div>
             </FieldRow>
             {!modoSimples && (
               <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="SDR">
@@ -589,6 +601,15 @@ export function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescri
         to: chip(e.toValue, {}),
       }
     }
+    case 'reuniao':
+      return {
+        icon: <CalendarCheck2 className="h-3.5 w-3.5" />,
+        text: e.fromValue ? `Resultado da reunião de ${e.fromValue}` : 'Resultado da reunião',
+        to: {
+          label: e.toValue || 'registrado',
+          color: /^Compareceu/.test(e.toValue ?? '') ? '#15803D' : /^Não compareceu/.test(e.toValue ?? '') ? '#DC2626' : '#2563EB',
+        },
+      }
     case 'template_sent':
       return {
         icon: <Send className="h-3.5 w-3.5" />,
@@ -609,7 +630,9 @@ export function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescri
 function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string }) {
   const { profile } = useAuth()
   const notes = useLeadNotes(leadRowId)
-  const events = useLeadEvents(leadRowId)
+  // A cópia (CRM do closer, CRM IA LUIZA) não tem linha do tempo própria: mostra a da original, como as Atualizações.
+  const idDoHistorico = canonicalNoteLeadId(leadRowId)
+  const events = useLeadEvents(idDoHistorico)
   const statusLabels = useLeadLabels('status', pageId)
   const diaContatoLabels = useLeadLabels('diaContato', pageId)
   const sdrLabels = useLeadLabels('sdr')
@@ -634,7 +657,7 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
   useOutsideClose(mentionPopRef, mentionOpen, () => setMentionOpen(false))
 
   React.useEffect(() => { void leadNotesService.loadNotes(leadRowId) }, [leadRowId])
-  React.useEffect(() => { void leadEventsService.loadEvents(leadRowId) }, [leadRowId])
+  React.useEffect(() => { void leadEventsService.loadEvents(idDoHistorico) }, [idDoHistorico])
   React.useEffect(() => { void leadLabelsService.ensureLoaded() }, [])
 
   // Rascunho local — o texto ainda não enviado fica salvo no navegador enquanto a pessoa digita,

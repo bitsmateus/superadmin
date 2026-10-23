@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { normalizaNome } from './normalizaNome.js';
+import { agendamentoDaIntegracao } from './reuniaoResultado.js';
 
 /** Funções puras da API de integração (n8n) — ficam fora da rota pra poderem ser testadas sem banco. */
 
@@ -171,6 +172,11 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
     } else if (chave === 'board_id' || chave === 'coluna_id') {
       if (typeof valor !== 'string' || !/^[0-9a-f-]{36}$/i.test(valor)) return { ...out, erro: `"${chave}" deve ser um UUID.` };
       out.boardId = valor;
+    } else if (chave === 'agendamento') {
+      // ISO com fuso (n8n) ou já no formato da ficha; grava sempre "YYYY-MM-DDTHH:MM" no horário de Brasília.
+      const a = agendamentoDaIntegracao(valor);
+      if ('erro' in a) return { ...out, erro: a.erro };
+      out.campos.agendamento = a.valor;
     } else if (chave in CAMPOS_TEXTO) {
       if (valor !== null && typeof valor !== 'string' && typeof valor !== 'number') return { ...out, erro: `"${chave}" deve ser texto ou número.` };
       const texto = valor === null ? '' : String(valor).trim();

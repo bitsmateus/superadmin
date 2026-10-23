@@ -185,7 +185,7 @@ export function campoOk(campo: CampoDoPopup, valor: string | null | undefined): 
 export function exigenciasDoStatus(statusOuQuadro: string): { sempre: CampoDoPopup[]; seFaltar: CampoDoPopup[] } | null {
   const n = normaliza(statusOuQuadro)
   if (n.includes('reuniaoagendada')) return { sempre: ['agendamento', 'agendadoPor'], seFaltar: ['origem'] }
-  if (n.includes('propostaenviada')) return { sempre: ['retornar'], seFaltar: ['valorMrr', 'valorImplementacao'] }
+  if (n.includes('propostaenviada')) return { sempre: [], seFaltar: ['retornar', 'valorMrr', 'valorImplementacao'] }
   if (n.startsWith('vendido')) return { sempre: [], seFaltar: ['valorMrr', 'valorImplementacao', 'origem'] }
   return null
 }

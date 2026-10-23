@@ -27,7 +27,7 @@ export interface LeadOrigemBlockProps {
 
 /** Motivo da desqualificação: escolhe da lista e detalha o porquê (salvo como "<Motivo>: <detalhe>"). O detalhe
  * só é salvo com pelo menos 10 caracteres — o aviso aparece só depois de tentar sair do campo com menos. */
-function MotivoComOutro({ valor, onChange }: { valor: string; motivos?: string[]; onChange: (v: string) => void }) {
+export function MotivoComOutro({ valor, onChange }: { valor: string; motivos?: string[]; onChange: (v: string) => void }) {
   const salvo = separarMotivo(valor)
   const [motivo, setMotivo] = React.useState(salvo.motivo)
   const [detalhe, setDetalhe] = React.useState(salvo.detalhe)

@@ -18,3 +18,8 @@ export function comAbasJuntas(pageIds: string[]): string[] {
 export function saoAbasJuntas(a: string, b: string): boolean {
   return (ABAS_JUNTAS[a] ?? []).includes(b) || (ABAS_JUNTAS[b] ?? []).includes(a);
 }
+
+/** A aba de fora que mostra esta por dentro (crm-ia-luiza -> crm-arthur), ou undefined. */
+export function abaDeFora(pageId: string): string | undefined {
+  return Object.keys(ABAS_JUNTAS).find((fora) => ABAS_JUNTAS[fora].includes(pageId));
+}

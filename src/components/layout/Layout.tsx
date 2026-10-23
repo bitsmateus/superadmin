@@ -8,6 +8,7 @@ import { useAsaasAutoSync } from '@/hooks/useAsaasAutoSync'
 import { useTicketNotifications } from '@/hooks/useTicketNotifications'
 import { usePushSubscription } from '@/hooks/usePushSubscription'
 import { PopupDadosDoStatus } from '@/components/comercial/PopupDadosDoStatus'
+import { ReuniaoResultadoPopup } from '@/components/comercial/ReuniaoResultadoPopup'
 
 const isDesktop = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -32,6 +33,7 @@ export function Layout() {
       )}
 
       <PopupDadosDoStatus />
+      <ReuniaoResultadoPopup />
 
       <Sidebar
         open={open}

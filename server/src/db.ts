@@ -1908,6 +1908,26 @@ END; $$`);
   gerado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`);
 
+  // Resultado da reunião (popup obrigatório depois do horário do Agendamento — ver routes/reunioes.ts). Uma linha por
+  // reunião: a lead ORIGINAL (a cópia do closer/da IA conta como a mesma) + o horário que estava marcado. Remarcar
+  // muda o horário, então o novo vira outra reunião e é cobrado de novo. Base da taxa de comparecimento.
+  await pool.query(`CREATE TABLE IF NOT EXISTS reuniao_resultados (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_row_id UUID NOT NULL REFERENCES lead_rows(id) ON DELETE CASCADE,
+    card_id UUID REFERENCES lead_rows(id) ON DELETE SET NULL,
+    agendamento TEXT NOT NULL,
+    resultado TEXT NOT NULL CHECK (resultado IN ('compareceu', 'nao_compareceu', 'remarcada')),
+    proxima_etapa TEXT,
+    motivo TEXT,
+    resumo TEXT NOT NULL DEFAULT '',
+    agendamento_novo TEXT,
+    user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (lead_row_id, agendamento)
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS reuniao_resultados_created_idx ON reuniao_resultados(created_at)`);
+
   console.log('[db] migrations applied');
 }
 

@@ -5,6 +5,7 @@ import {
   syncEspelhoReuniaoAgendada,
 } from './leadBoards.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
+import { agendamentoParaIso } from '../lib/reuniaoResultado.js';
 import {
   chaveTelefone, chaveValida, colunasQueCasam, compararAchadosPorTelefone, mesmoTelefone, montarEtiquetas,
   parseDataIntegracao, resolverEtiquetas, resolverQuadro, rotuloDaOrigem, telefoneComDdi, textoDaNota, textoParaHtml,
@@ -38,13 +39,19 @@ interface CardRow {
   regua: string; regua_etapa: string; regua_ultimo_envio_em: string | null; regua_status: string; optout: boolean;
   tipo: string; dia_contato: string; ligacao: string; followup: string; disparo: string;
   coluna_id: string; coluna: string; quadro_id: string; quadro: string;
+  agendamento: string;
+  reuniao_resultado: { resultado: string; agendamento: string; proxima_etapa: string | null; motivo: string | null; usuario: string; em: string } | null;
 }
 
 const SELECT_CARD = `
   SELECT r.id, r.nome, r.empresa, r.telefone, r.status, r.sdr, r.dor_cliente, r.numero_atendentes,
          r.entrou_coluna_em, r.regua, r.regua_etapa, r.regua_ultimo_envio_em, r.regua_status, r.optout,
          r.tipo, r.dia_contato, r.ligacao, r.followup, r.disparo,
-         r.origem, r.nicho, r.ticket_nx,
+         r.origem, r.nicho, r.ticket_nx, r.agendamento,
+         (SELECT json_build_object('resultado', rr.resultado, 'agendamento', rr.agendamento, 'proxima_etapa', rr.proxima_etapa,
+                                   'motivo', rr.motivo, 'usuario', rr.user_name, 'em', rr.created_at)
+          FROM reuniao_resultados rr WHERE rr.lead_row_id = COALESCE(r.espelho_origem_id, r.copia_ia_origem_id, r.id)
+          ORDER BY rr.created_at DESC LIMIT 1) AS reuniao_resultado,
          lb.id AS coluna_id, lb.name AS coluna, lp.id AS quadro_id, lp.name AS quadro
   FROM lead_rows r
   JOIN lead_boards lb ON lb.id = r.board_id
@@ -95,6 +102,12 @@ function cardParaApi(r: CardRow, opcoes: OpcoesPorAba) {
     origem: r.origem,
     ramo: r.nicho,
     ticket_nx: r.ticket_nx,
+    // Horário de Brasília com o fuso ("2026-10-27T09:00:00-03:00"); sem agendamento, null.
+    agendamento: agendamentoParaIso(r.agendamento),
+    // Último resultado da reunião dessa lead (popup do app); o "agendamento" dele diz de qual horário era.
+    reuniao_resultado: r.reuniao_resultado
+      ? { ...r.reuniao_resultado, agendamento: agendamentoParaIso(r.reuniao_resultado.agendamento) }
+      : null,
     etiquetas: montarEtiquetas(r as unknown as Record<string, string>, opcoes(r.quadro_id)),
   };
 }

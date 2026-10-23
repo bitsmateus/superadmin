@@ -272,6 +272,20 @@ async function faltaDadoDoStatus(
 }
 
 /**
+ * Ler o HISTÓRICO (Atualizações e Linha do tempo) de uma lead: vale pra quem enxerga ela OU uma cópia dela. A cópia
+ * (CRM do closer, CRM IA LUIZA) não tem histórico próprio, mostra o da original, e quem só tem o CRM da cópia (o
+ * closer) não enxerga o CRM de origem. Só leitura: escrever/editar continua pedindo acesso à própria linha.
+ */
+async function podeLerHistorico(allowed: string[], leadRowId: string): Promise<boolean> {
+  const linhas = await query<{ board_id: string }>(
+    `SELECT board_id FROM lead_rows
+     WHERE id = $1 OR ((espelho_origem_id = $1 OR copia_ia_origem_id = $1) AND deleted_at IS NULL)`,
+    [leadRowId]
+  );
+  return linhas.some((l) => allowed.includes(l.board_id));
+}
+
+/**
  * Resolve a allowlist de quadros de um usuário restrito. A permissão de menu é só "comercial"
  * (tudo ou nada — as abas viraram gerenciáveis, não dá mais pra restringir por aba individual
  * nessa camada); a granularidade fina é por ABA inteira (user_page_access) — ex.: um SDR só
@@ -525,7 +539,7 @@ const ESPELHO_STATUS = [
 /** Quadro equivalente ao status dentro da página do parceiro — senão a etiqueta muda mas a lead
  * fica parada no grupo errado. Sem equivalente (o CRM do closer não tem "Vendido" nem "Reunião
  * não comparecida"), devolve null: muda só a etiqueta e a lead fica onde está. */
-async function quadroDoStatus(page: string, status: string): Promise<string | null> {
+export async function quadroDoStatus(page: string, status: string): Promise<string | null> {
   const alvo = normalizaNome(status);
   const boards = await query<{ id: string; name: string }>(
     'SELECT id, name FROM lead_boards WHERE page = $1 ORDER BY position',
@@ -540,7 +554,7 @@ async function quadroDoStatus(page: string, status: string): Promise<string | nu
 /** A etiqueta de Status daquela aba com esse nome, ignorando maiúscula/acento — cada CRM escreve a
  * mesma etapa do jeito dele ("Reunião Não Comparecida" num, "Reunião não comparecida" no outro").
  * Devolve o nome exato da etiqueta de lá (é ele que tem cor na tela); sem equivalente, null. */
-async function etiquetaDeStatus(page: string, status: string): Promise<string | null> {
+export async function etiquetaDeStatus(page: string, status: string): Promise<string | null> {
   const alvo = normalizaNome(status);
   const labels = await query<{ name: string }>(
     `SELECT name FROM lead_labels WHERE field = 'status' AND page_id = $1 ORDER BY position`,
@@ -1699,14 +1713,9 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       }
 
       if (!req.query.lead_row_id) return reply.status(400).send({ message: 'lead_row_id ou page é obrigatório' });
-      if (allowed !== null) {
-        const row = await queryOne<{ board_id: string }>(
-          'SELECT board_id FROM lead_rows WHERE id = $1',
-          [req.query.lead_row_id]
-        );
-        if (!row || !allowed.includes(row.board_id)) {
-          return reply.status(403).send({ message: 'Acesso negado' });
-        }
+      // A ficha da cópia mostra a Linha do tempo da original: quem só enxerga a cópia também lê.
+      if (allowed !== null && !(await podeLerHistorico(allowed, req.query.lead_row_id))) {
+        return reply.status(403).send({ message: 'Acesso negado' });
       }
       return query(
         'SELECT * FROM lead_events WHERE lead_row_id = $1 ORDER BY created_at DESC',
@@ -1895,14 +1904,9 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       if (!req.query.lead_row_id) return reply.status(400).send({ message: 'lead_row_id é obrigatório' });
       const { sub, role } = req.user as { sub: string; role: string };
       const allowed = await restrictedBoardFilter(sub, role);
-      if (allowed !== null) {
-        const row = await queryOne<{ board_id: string }>(
-          'SELECT board_id FROM lead_rows WHERE id = $1',
-          [req.query.lead_row_id]
-        );
-        if (!row || !allowed.includes(row.board_id)) {
-          return reply.status(403).send({ message: 'Acesso negado' });
-        }
+      // O front pede pelo id da original; quem só enxerga a cópia (o closer) também lê.
+      if (allowed !== null && !(await podeLerHistorico(allowed, req.query.lead_row_id))) {
+        return reply.status(403).send({ message: 'Acesso negado' });
       }
       // Lead espelhada lê o histórico da original — os dois CRMs veem as mesmas Atualizações.
       const canonicalId = await idCanonicoDasNotas(req.query.lead_row_id as string);

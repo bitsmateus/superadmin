@@ -20,6 +20,43 @@ export const ATRASADO_CUTOFF = '2026-08-01'
  * atrasado (o lead seguiu o funil, não está "esquecido"). */
 export const ATRASADO_STATUS = 'Proposta Enviada'
 
+/** Status sem maiúscula, acento, espaço nem traço: "Proposta enviada" = "Proposta Enviada", "Follow-up" = "Follow up". */
+function normalizaStatus(s: string): string {
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/** Status do closer que contam em "Propostas paradas": a proposta saiu e está esperando o retorno do cliente. */
+export function ehStatusDeProposta(status: string): boolean {
+  const n = normalizaStatus(status)
+  return n === 'propostaenviada' || n.startsWith('followuppropostas')
+}
+
+/** Dias sem nenhum movimento (Linha do tempo ou Atualização) pra uma proposta do closer contar como parada. */
+export const DIAS_PROPOSTA_PARADA = 3
+
+/** Proposta do closer parada: sem movimento há DIAS_PROPOSTA_PARADA dias ou mais, e sem um retorno marcado de hoje
+ * em diante (retorno agendado não é esquecimento — e o de hoje já está em "Propostas p/ retornar hoje"). */
+export function propostaParada<T extends { status: string; retornar: string; retornado: boolean }>(
+  row: T,
+  ultimaAtividade: string | undefined,
+  today: string,
+): boolean {
+  if (!ehStatusDeProposta(row.status)) return false
+  const retornarKey = dateKey(row.retornar)
+  if (retornarKey && retornarKey >= today && !row.retornado) return false
+  const d = new Date(`${today}T12:00:00`)
+  d.setDate(d.getDate() - DIAS_PROPOSTA_PARADA)
+  const limite = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return !!ultimaAtividade && localDateKey(ultimaAtividade) <= limite
+}
+
+/** "YYYY-MM-DD" no fuso local de um timestamp do banco (ISO com fuso). */
+function localDateKey(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return dateKey(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /** Classifica um lead nos 4 "status do dia" (não atualizado, atrasado, reunião hoje, proposta
  * hoje) — mesma lógica usada no painel do dia e no dashboard comercial, geral ou por SDR. */
 export function classifyLeadToday<T extends { id: string; retornar: string; retornado: boolean; agendamento: string; status: string }>(
@@ -33,7 +70,7 @@ export function classifyLeadToday<T extends { id: string; retornar: string; reto
   // dependendo de que horas foi a última atualização do dia anterior.
   const naoAtualizado = dateKey(diaContatoUpdatedAt ?? '') !== today
   const retornarKey = dateKey(row.retornar)
-  const atrasado = row.status === ATRASADO_STATUS && !!retornarKey && retornarKey >= ATRASADO_CUTOFF && retornarKey < today && !row.retornado
+  const atrasado = normalizaStatus(row.status) === normalizaStatus(ATRASADO_STATUS) && !!retornarKey && retornarKey >= ATRASADO_CUTOFF && retornarKey < today && !row.retornado
   const reuniaoHoje = dateKey(row.agendamento) === today
   const propostaHoje = retornarKey === today && !row.retornado
   return { naoAtualizado, atrasado, reuniaoHoje, propostaHoje }

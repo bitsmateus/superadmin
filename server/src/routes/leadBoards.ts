@@ -1786,6 +1786,9 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     const boardFilter = allowed !== null ? 'WHERE lr.board_id = ANY($1)' : '';
     const params: unknown[] = allowed !== null ? [allowed] : [];
 
+    // ultima_atividade: o último movimento da lead (Linha do tempo ou Atualização), contando o card e a original
+    // da família (cópia do closer/IA grava a Linha do tempo e as Atualizações na original). Usado no closer pra
+    // "Propostas paradas".
     return query(
       `SELECT lr.id, lr.board_id,
         COALESCE(
@@ -1793,7 +1796,14 @@ export async function leadBoardRoutes(app: FastifyInstance) {
            WHERE le.lead_row_id = lr.id AND le.type = 'dia_contato'
            ORDER BY le.created_at DESC LIMIT 1),
           lr.created_at
-        ) AS dia_contato_updated_at
+        ) AS dia_contato_updated_at,
+        GREATEST(
+          lr.created_at,
+          (SELECT MAX(le.created_at) FROM lead_events le
+           WHERE le.lead_row_id IN (lr.id, COALESCE(lr.espelho_origem_id, lr.copia_ia_origem_id, lr.id))),
+          (SELECT MAX(n.created_at) FROM lead_notes n
+           WHERE n.lead_row_id IN (lr.id, COALESCE(lr.espelho_origem_id, lr.copia_ia_origem_id, lr.id)))
+        ) AS ultima_atividade
        FROM lead_rows lr
        ${boardFilter}`,
       params

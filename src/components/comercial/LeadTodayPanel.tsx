@@ -2,7 +2,7 @@ import * as React from 'react'
 import { AlertTriangle, CalendarCheck2, Clock, FileText, ChevronRight } from 'lucide-react'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadActivity } from '@/hooks/useLeadActivity'
-import { todayKey, classifyLeadToday } from '@/lib/leadDates'
+import { todayKey, classifyLeadToday, propostaParada, DIAS_PROPOSTA_PARADA } from '@/lib/leadDates'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
@@ -82,6 +82,8 @@ export interface LeadTodayPanelProps {
   rows: LeadRow[]
   boards: LeadBoard[]
   onOpenLead: (id: string) => void
+  /** CRM do closer: o 1º card vira "Propostas paradas" (o Luis não trabalha com Primeiro contato/Dia de contato). */
+  closer?: boolean
 }
 
 function boardIdsNamed(boards: LeadBoard[], name: string): Set<string> {
@@ -100,12 +102,18 @@ function boardIdsNamed(boards: LeadBoard[], name: string): Set<string> {
  * - "Reuniões de hoje" só conta quem está no quadro "Reunião agendada" (sem esse quadro, soma
  *   tudo) — não algum lead com agendamento de hoje só que já mudou de quadro/status.
  * - "Atrasados" e "Propostas p/ retornar hoje" somam de QUALQUER quadro da aba, sem restrição —
- *   é sobre a data de retorno, não importa onde o lead está agora. */
-export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps) {
+ *   é sobre a data de retorno, não importa onde o lead está agora.
+ * - No closer, o 1º card é "Propostas paradas": Proposta enviada/Follow up sem movimento há 3+ dias e sem retorno
+ *   marcado pra frente (ver propostaParada). */
+export function LeadTodayPanel({ rows, boards, onOpenLead, closer = false }: LeadTodayPanelProps) {
   const today = React.useMemo(() => todayKey(), [])
   const activity = useLeadActivity()
   const activityById = React.useMemo(
     () => new Map(activity.map((a) => [a.id, a.diaContatoUpdatedAt])),
+    [activity],
+  )
+  const ultimaAtividadeById = React.useMemo(
+    () => new Map(activity.map((a) => [a.id, a.ultimaAtividade])),
     [activity],
   )
   const primeiroContatoIds = React.useMemo(() => boardIdsNamed(boards, 'primeiro contato'), [boards])
@@ -120,16 +128,18 @@ export function LeadTodayPanel({ rows, boards, onOpenLead }: LeadTodayPanelProps
     const inReuniaoAgendada = (r: LeadRow) => reuniaoAgendadaIds.size === 0 || reuniaoAgendadaIds.has(r.boardId)
     for (const r of rows) {
       const c = classifyLeadToday(r, activityById.get(r.id), today)
-      if (c.naoAtualizado && inPrimeiroContato(r)) naoAtualizados.push(r)
+      if (closer ? propostaParada(r, ultimaAtividadeById.get(r.id), today) : c.naoAtualizado && inPrimeiroContato(r)) naoAtualizados.push(r)
       if (c.atrasado) atrasados.push(r)
       if (c.reuniaoHoje && inReuniaoAgendada(r)) reunioesHoje.push(r)
       if (c.propostaHoje) propostasHoje.push(r)
     }
     return { naoAtualizados, atrasados, reunioesHoje, propostasHoje }
-  }, [rows, today, activityById, primeiroContatoIds, reuniaoAgendadaIds])
+  }, [rows, today, activityById, ultimaAtividadeById, closer, primeiroContatoIds, reuniaoAgendadaIds])
 
   const cards: StatCard[] = [
-    { key: 'nao-atualizados', icon: <Clock className="h-4 w-4" />, label: 'Status não atualizado hoje', tone: 'text-warning bg-warning/10', matches: groups.naoAtualizados },
+    closer
+      ? { key: 'propostas-paradas', icon: <Clock className="h-4 w-4" />, label: `Propostas paradas (${DIAS_PROPOSTA_PARADA}+ dias)`, tone: 'text-warning bg-warning/10', matches: groups.naoAtualizados }
+      : { key: 'nao-atualizados', icon: <Clock className="h-4 w-4" />, label: 'Status não atualizado hoje', tone: 'text-warning bg-warning/10', matches: groups.naoAtualizados },
     { key: 'atrasados', icon: <AlertTriangle className="h-4 w-4" />, label: 'Atrasados (não retornados)', tone: 'text-danger bg-danger/10', matches: groups.atrasados },
     { key: 'reunioes', icon: <CalendarCheck2 className="h-4 w-4" />, label: 'Reuniões de hoje', tone: 'text-accent bg-accent/10', matches: groups.reunioesHoje },
     { key: 'propostas', icon: <FileText className="h-4 w-4" />, label: 'Propostas p/ retornar hoje', tone: 'text-success bg-success/10', matches: groups.propostasHoje },

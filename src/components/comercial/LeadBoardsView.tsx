@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ehSdrDaIa, origemMostraSelo, quadroDoStatus, rotuloDaOrigem } from '@/lib/regraDoStatus'
+import { ehSdrDaIa, mesmoStatus, origemMostraSelo, quadroDoStatus, rotuloDaOrigem } from '@/lib/regraDoStatus'
 import {
   Archive,
   ArrowRightLeft,
@@ -874,7 +874,10 @@ function BoardGroup({
   // Ordenação é por QUADRO — cada um guarda a própria coluna/direção, ao contrário de antes (um
   // botão só na barra de cima ordenando todos juntos por data). Disparada passando o mouse em
   // QUALQUER coluna, igual o Monday: aparece um ícone de ordenar, sem precisar de botão fixo.
-  const [sortBy, setSortBy] = React.useState<{ key: LeadRowField | 'createdAt' | 'position'; desc: boolean }>({ key: 'createdAt', desc: false })
+  // "Reunião não comparecida" abre ordenada pelo Agendamento: sem data e as mais antigas em cima, a mais recente embaixo.
+  const [sortBy, setSortBy] = React.useState<{ key: LeadRowField | 'createdAt' | 'position'; desc: boolean }>(
+    () => mesmoStatus(board.name, 'Reunião não comparecida') ? { key: 'agendamento', desc: false } : { key: 'createdAt', desc: false },
+  )
   const toggleSort = (key: LeadRowField | 'createdAt') => {
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
   }
@@ -1712,7 +1715,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} sdrLock={sdrLock ?? undefined} modoDemanda={hideIanMateusCols} />
             ) : (
               <>
-                {!kanbanIan && <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} />}
+                {!kanbanIan && <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} closer={page === 'crm-luis-closer'} />}
                 <div className="flex-1">
                   {visibleBoards.map((board) => (
                     <BoardGroup

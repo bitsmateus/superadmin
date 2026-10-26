@@ -312,27 +312,48 @@ function exigenciaDaMudanca(atual: LeadParaRegra | null, patch: Partial<LeadRow>
   if (!statusNovo) return null
   if (atual && mesmoStatus(atual.status, statusNovo)) return null
   const final = (c: CampoDoPopup) => (c in patch ? (patch[c] as string | undefined) : atual?.[c]) ?? ''
+  // Origem vazia ("não informado") não passa de "Primeiro contato", em qualquer aba do Comercial (lead do anúncio já é
+  // Meta). Mesma regra do servidor (faltaDadoDoStatus).
+  const pedeOrigem = !(atual?.metaLeadId ?? patch.metaLeadId) && !final('origem').trim() && depoisDoPrimeiroContato(quadroDestino)
+  const comOrigem = (campos: CampoDoPopup[]) => (pedeOrigem && !campos.includes('origem') ? [...campos, 'origem' as CampoDoPopup] : campos)
+  const soOrigem = pedeOrigem ? { status: statusNovo, campos: ['origem'] as CampoDoPopup[], oferecerIa: false } : null
   // Lead que entrou de outubro/2026 pra frente (anúncio ou manual) indo pra Disparo em massa / Perdidos /
   // Desqualificado: precisa do motivo (em qualquer aba). Os mais antigos não são cobrados.
   if (atual && leadCobraMotivo(atual.createdAt) && statusExigeMotivo(statusNovo)) {
-    return motivoValido(final('motivoDesqualificacao')) ? null : { status: statusNovo, campos: ['motivoDesqualificacao'], oferecerIa: false }
+    return motivoValido(final('motivoDesqualificacao'))
+      ? soOrigem
+      : { status: statusNovo, campos: comOrigem(['motivoDesqualificacao']), oferecerIa: false }
   }
   const aba = leadPagesService.getAll().find((p) => p.id === quadroDestino.page)
-  if (!abaComRegraDeStatus(aba?.name ?? '', quadroDestino.page)) return null
+  if (!abaComRegraDeStatus(aba?.name ?? '', quadroDestino.page)) return soOrigem
   const regra = exigenciasDoStatus(statusNovo)
-  if (!regra) return null
-  const campos: CampoDoPopup[] = [
+  if (!regra) return soOrigem
+  const campos: CampoDoPopup[] = comOrigem([
     // "sempre": pergunta a não ser que a própria mudança já traga o dado.
     ...regra.sempre.filter((c) => !campoOk(c, patch[c] as string | undefined)),
     // "seFaltar": só se o lead não tem. Origem de lead do anúncio já é Meta.
     ...regra.seFaltar.filter((c) => !(c === 'origem' && atual?.metaLeadId) && !campoOk(c, final(c))),
-  ]
+  ])
   return campos.length
     ? {
         status: statusNovo, campos, oferecerIa: ofereceAgendadoPelaIa(statusNovo, aba?.name ?? '', quadroDestino.page),
         copiaNaIa: !saoAbasJuntas(quadroDestino.page, 'crm-ia-luiza'),
       }
     : null
+}
+
+/** O quadro fica depois de "Primeiro contato" na aba dele (ordem dos quadros)? Só no Comercial, fora Vendas/Contrato. */
+function depoisDoPrimeiroContato(quadro: LeadBoard): boolean {
+  if (quadro.isVendas || quadro.isContrato) return false
+  if (leadPagesService.getAll().find((p) => p.id === quadro.page)?.section !== 'comercial') return false
+  const primeiro = boards
+    .filter((b) => b.page === quadro.page && /^primeirocontato/.test(normalizaNomeDoQuadro(b.name)))
+    .sort((a, b) => a.position - b.position)[0]
+  return !!primeiro && quadro.position > primeiro.position
+}
+
+function normalizaNomeDoQuadro(s: string): string {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 function valoresDoLead(l: Partial<LeadRow> | null): Partial<Record<CampoDoPopup, string>> {

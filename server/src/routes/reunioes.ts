@@ -180,7 +180,12 @@ export async function reunioesRoutes(app: FastifyInstance) {
       const res = await app.inject({
         method: 'PATCH',
         url: `/api/lead-rows/${card.id}`,
-        headers: { authorization: (req as FastifyRequest).headers.authorization ?? '', 'content-type': 'application/json' },
+        headers: {
+          authorization: (req as FastifyRequest).headers.authorization ?? '',
+          'content-type': 'application/json',
+          // "Não compareceu" move o card sem a ficha aberta: não tem onde escolher a origem (no "Compareceu" ela é cobrada).
+          ...(r.resultado === 'nao_compareceu' ? { 'x-sem-regra-origem': '1' } : {}),
+        },
         payload: JSON.stringify(patch),
       });
       if (res.statusCode >= 400) {

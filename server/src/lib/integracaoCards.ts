@@ -183,9 +183,7 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
       if (chave === 'nome' && !texto) return { ...out, erro: '"nome" não pode ficar vazio.' };
       out.campos[CAMPOS_TEXTO[chave]] = texto;
     } else if (chave === 'origem') {
-      const o = normalizarOrigem(valor);
-      if (o === null) return { ...out, erro: erroDeOrigem() };
-      out.campos.origem = o;
+      out.campos.origem = normalizarOrigem(valor);
     } else if (chave === 'descricao' || chave === 'email') {
       out.nota ??= {};
       const e = lerNota(chave, valor, out.nota);
@@ -227,28 +225,35 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
 
 // ── Origem ──────────────────────────────────────────────────────────────────
 
-/** Origens que a automação (n8n) manda. As antigas da tela (meta, bio, site, indicacao, "outros: …") continuam
- * aceitas. Rótulos amigáveis em src/lib/regraDoStatus.ts (ROTULOS_ORIGEM). */
-export const ORIGENS_INTEGRACAO = [
-  'bio_instagram', 'lp_teste', 'formulario_organizar', 'formulario_falar', 'formulario_profissionalizar',
-  'formulario_suporte', 'indique_ganhe', 'disparo_em_massa', 'anuncio_meta', 'whatsapp_direto',
-] as const;
-const ORIGENS_DA_TELA = ['meta', 'bio', 'site', 'indicacao'];
+/**
+ * Origem do card = uma das opções da ficha: "meta" (Anúncio Meta), "bio" (Link na bio do Instagram), "site", "indicacao"
+ * ou "outros" ("outros: <texto>" quando há o que dizer). Os códigos que a automação (n8n) manda são convertidos aqui, e
+ * nunca dão erro: o que não for reconhecido vira "outros: <valor>" (o card não é recusado por causa da origem).
+ * Os cards antigos com esses códigos são convertidos na subida do servidor (db.ts, mesma tabela).
+ */
+export const CONVERSAO_ORIGEM: Record<string, string> = {
+  lp_teste: 'bio', bio_instagram: 'bio', bio: 'bio',
+  anuncio_meta: 'meta', meta: 'meta',
+  formulario_organizar: 'site', formulario_falar: 'site', formulario_profissionalizar: 'site', formulario_suporte: 'site',
+  site: 'site',
+  indique_ganhe: 'indicacao', indicacao: 'indicacao',
+  disparo_em_massa: 'outros: Disparo em massa', whatsapp_direto: 'outros: WhatsApp direto', outros: 'outros',
+};
 
-/** Origem válida em minúsculas; '' limpa; null = inválida. "outros: texto" passa como está. */
-export function normalizarOrigem(valor: unknown): string | null {
-  if (valor === null || valor === '') return '';
-  if (typeof valor !== 'string') return null;
+/** A origem gravada no card. '' (ou null) limpa; "outros: texto" passa como está; qualquer outra coisa vira "outros". */
+export function normalizarOrigem(valor: unknown): string {
+  if (valor === null || valor === undefined || valor === '') return '';
+  if (typeof valor !== 'string') return 'outros';
   const v = valor.trim();
-  if (/^outros:\s*\S/i.test(v)) return `outros: ${v.replace(/^outros:\s*/i, '')}`;
-  const n = v.toLowerCase();
-  return (ORIGENS_INTEGRACAO as readonly string[]).includes(n) || ORIGENS_DA_TELA.includes(n) ? n : null;
+  if (!v) return '';
+  if (/^outros:\s*\S/i.test(v)) return `outros: ${v.replace(/^outros:\s*/i, '').slice(0, 80)}`;
+  return CONVERSAO_ORIGEM[v.toLowerCase()] ?? `outros: ${v.slice(0, 80)}`;
 }
 
 /** Rótulo amigável (mesmo da tela, src/lib/regraDoStatus.ts). */
 const ROTULOS_ORIGEM: Record<string, string> = {
   meta: 'Anúncio Meta', anuncio_meta: 'Anúncio Meta', bio: 'Link da bio', bio_instagram: 'Link da bio', site: 'Site',
-  lp_teste: 'Teste da LP', formulario_organizar: 'Formulário do site (organizar)', formulario_falar: 'Formulário do site (falar)',
+  lp_teste: 'Link da bio', formulario_organizar: 'Formulário do site (organizar)', formulario_falar: 'Formulário do site (falar)',
   formulario_profissionalizar: 'Formulário do site (profissionalizar)', formulario_suporte: 'Formulário do site (suporte)',
   indicacao: 'Indicação', indique_ganhe: 'Indique e ganhe', disparo_em_massa: 'Disparo em massa', whatsapp_direto: 'WhatsApp direto',
 };
@@ -258,9 +263,6 @@ export function rotuloDaOrigem(origem: string): string {
   return ROTULOS_ORIGEM[origem] ?? origem;
 }
 
-export function erroDeOrigem(): string {
-  return `"origem" inválida. Valores aceitos: ${ORIGENS_INTEGRACAO.join(', ')} (ou "outros: <texto>").`;
-}
 
 // ── Quadro (aba do CRM) ─────────────────────────────────────────────────────
 
@@ -325,9 +327,7 @@ export function validarCriacaoIntegracao(body: unknown): CriacaoValidada {
       if (!tel) out.erros.push('"telefone" inválido: informe DDD + número (com ou sem 55).');
       else out.campos.telefone = tel;
     } else if (chave === 'origem') {
-      const o = normalizarOrigem(valor);
-      if (o === null) out.erros.push(erroDeOrigem());
-      else out.campos.origem = o;
+      out.campos.origem = normalizarOrigem(valor);
     } else if (chave === 'descricao' || chave === 'email') {
       const e = lerNota(chave, valor, out.nota);
       if (e) out.erros.push(e);

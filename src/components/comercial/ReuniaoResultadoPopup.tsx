@@ -257,6 +257,8 @@ function CompareceuNaFicha({ reuniao, contador, enviando, onConcluir }: {
     { ok: !!etapa, rotulo: 'Próxima etapa' },
     ...(pedeRetorno ? [{ ok: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(row.retornar), rotulo: 'Retornar' }] : []),
     ...(pedeMotivo ? [{ ok: motivoValido(row.motivoDesqualificacao), rotulo: 'Motivo' }] : []),
+    // Origem vazia não passa de "Primeiro contato" (o servidor recusa mover o card): fica no bloco Origem da ficha.
+    ...(!row.metaLeadId ? [{ ok: !!row.origem.trim(), rotulo: 'Origem' }] : []),
   ]
   const pronto = itens.every((i) => i.ok)
 

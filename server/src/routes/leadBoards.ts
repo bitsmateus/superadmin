@@ -215,7 +215,7 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
  * Devolve o que falta (e a mensagem) ou null.
  */
 async function faltaDadoDoStatus(
-  leadId: string, patch: Record<string, unknown>,
+  leadId: string, patch: Record<string, unknown>, semRegraDeOrigem = false,
 ): Promise<{ campos: string[]; mensagem: string } | null> {
   if (typeof patch.status !== 'string') return null;
   const atual = await queryOne<Record<string, unknown> & { status: string; board_id: string; cobra_motivo: boolean; do_anuncio: boolean }>(
@@ -229,6 +229,10 @@ async function faltaDadoDoStatus(
   if (novo === normalizaNome(atual.status ?? '')) return null;
   const final = (c: string) => String(c in patch ? patch[c] ?? '' : atual[c] ?? '').trim();
   const dataEHora = (v: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v);
+  const quadroDestino = typeof patch.board_id === 'string' ? patch.board_id : atual.board_id;
+  // Origem vazia ("não informado") não passa de "Primeiro contato" (lead do anúncio já é Meta).
+  const pedeOrigem = !semRegraDeOrigem && !atual.do_anuncio && !final('origem') && (await depoisDoPrimeiroContato(quadroDestino));
+  const SO_ORIGEM = { campos: ['origem'], mensagem: 'Pra mover o lead pra essa etapa, informe a origem do lead.' };
 
   if (atual.cobra_motivo && (novo.includes('disparoemmassa') || novo.includes('perdido') || novo.includes('desqualificad'))) {
     // Motivo da lista + detalhe escrito (mínimo 10 caracteres), salvo como "<Motivo>: <detalhe>".
@@ -237,9 +241,11 @@ async function faltaDadoDoStatus(
     const nome = (i >= 0 ? motivo.slice(0, i) : motivo).trim();
     const detalhe = i >= 0 ? motivo.slice(i + 1).trim() : '';
     const valido = (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(nome) && detalhe.length >= MINIMO_DETALHE_MOTIVO;
-    return valido ? null : {
-      campos: ['motivo_desqualificacao'],
-      mensagem: 'Pra tirar esse lead do funil, escolha o motivo da desqualificação e detalhe o porquê (mínimo de 10 caracteres).',
+    if (valido) return pedeOrigem ? SO_ORIGEM : null;
+    return {
+      campos: ['motivo_desqualificacao', ...(pedeOrigem ? ['origem'] : [])],
+      mensagem: 'Pra tirar esse lead do funil, escolha o motivo da desqualificação e detalhe o porquê (mínimo de 10 caracteres)'
+        + (pedeOrigem ? ', e informe a origem do lead.' : '.'),
     };
   }
 
@@ -247,12 +253,12 @@ async function faltaDadoDoStatus(
     : novo.includes('propostaenviada') ? { rotulo: 'Proposta enviada', campos: ['retornar', 'valor_mrr', 'valor_implementacao'] }
     : novo.startsWith('vendido') ? { rotulo: 'Vendido', campos: ['valor_mrr', 'valor_implementacao', 'origem'] }
     : null;
-  if (!exige) return null;
+  if (!exige) return pedeOrigem ? SO_ORIGEM : null;
   const aba = await queryOne<{ id: string; name: string }>(
     'SELECT lp.id, lp.name FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1',
-    [typeof patch.board_id === 'string' ? patch.board_id : atual.board_id]
+    [quadroDestino]
   );
-  if (!aba || !(/(arthur|lu[ií]s|luiza)/i.test(aba.name) || /(arthur|luis|luiza)/i.test(aba.id))) return null;
+  if (!aba || !(/(arthur|lu[ií]s|luiza)/i.test(aba.name) || /(arthur|luis|luiza)/i.test(aba.id))) return pedeOrigem ? SO_ORIGEM : null;
 
   const NOMES: Record<string, string> = {
     agendamento: 'dia e horário do agendamento', agendado_por: 'por onde foi agendado', retornar: 'dia e horário em "Retornar"', origem: 'origem do lead',
@@ -267,8 +273,27 @@ async function faltaDadoDoStatus(
     if (c === 'origem') return !atual.do_anuncio && (!v || (/^outros/i.test(v) && v.replace(/^outros:?/i, '').trim().length < 5));
     return !/\d/.test(v);
   });
+  if (pedeOrigem && !faltando.includes('origem')) faltando.push('origem');
   if (!faltando.length) return null;
   return { campos: faltando, mensagem: `Pra marcar como ${exige.rotulo}, preencha: ${faltando.map((c) => NOMES[c]).join(', ')}.` };
+}
+
+/**
+ * O quadro fica depois de "Primeiro contato" na aba dele (pela ordem dos quadros)? Só nas abas do Comercial, fora
+ * Vendas/Contrato. Aba sem quadro "Primeiro contato": não se aplica. É a partir daí que a origem do lead é obrigatória.
+ */
+async function depoisDoPrimeiroContato(boardId: string): Promise<boolean> {
+  const r = await queryOne<{ depois: boolean }>(
+    `SELECT lb.position > pc.position AS depois
+     FROM lead_boards lb
+     JOIN lead_pages lp ON lp.id = lb.page
+     JOIN LATERAL (
+       SELECT position FROM lead_boards b WHERE b.page = lb.page AND lower(b.name) ~ '^primeiro\\s*contato' ORDER BY position LIMIT 1
+     ) pc ON true
+     WHERE lb.id = $1 AND lp.section = 'comercial' AND NOT lb.is_vendas AND NOT lb.is_contrato`,
+    [boardId]
+  );
+  return !!r?.depois;
 }
 
 /**
@@ -1481,7 +1506,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       }
 
       // Reunião agendada / Proposta enviada nos CRMs do Arthur e do Luis: sem data e horário, não muda.
-      const falta = await faltaDadoDoStatus(req.params.id, patch);
+      // O popup de resultado da reunião ("Não compareceu") move o card sem ficha aberta: lá a origem não é cobrada.
+      const falta = await faltaDadoDoStatus(req.params.id, patch, req.headers['x-sem-regra-origem'] === '1');
       if (falta) return reply.status(400).send({ message: falta.mensagem, exigir: falta.campos });
 
       const sets: string[] = [];
@@ -1613,7 +1639,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
               actorName
             );
           }
-        })();
+        })().catch((err) => console.error('[lead-rows] falha ao gravar a linha do tempo', req.params.id, err));
       }
 
       return leadRow;

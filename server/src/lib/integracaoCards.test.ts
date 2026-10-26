@@ -132,14 +132,18 @@ test('resolverQuadro: id, nome e palavras ("crm-luiza" acha "CRM IA LUIZA")', ()
   assert.match(resolverQuadro(qs, '').erro ?? '', /obrigatório/);
 });
 
-test('normalizarOrigem: códigos do n8n, os da tela, "outros: …" e inválidos', () => {
-  assert.equal(normalizarOrigem('bio_instagram'), 'bio_instagram');
-  assert.equal(normalizarOrigem('LP_TESTE'), 'lp_teste');
-  assert.equal(normalizarOrigem('meta'), 'meta');
-  assert.equal(normalizarOrigem('Outros: feira'), 'outros: feira');
-  assert.equal(normalizarOrigem(''), '');
-  assert.equal(normalizarOrigem('instagram'), null);
-  assert.equal(normalizarOrigem(3), null);
+test('normalizarOrigem: códigos do n8n viram as opções da ficha; nada é recusado', () => {
+  const tabela: [unknown, string][] = [
+    ['lp_teste', 'bio'], ['LP_TESTE', 'bio'], ['bio_instagram', 'bio'], ['bio', 'bio'],
+    ['anuncio_meta', 'meta'], ['meta', 'meta'],
+    ['formulario_organizar', 'site'], ['formulario_falar', 'site'], ['formulario_profissionalizar', 'site'],
+    ['formulario_suporte', 'site'], ['site', 'site'],
+    ['indique_ganhe', 'indicacao'], ['indicacao', 'indicacao'],
+    ['disparo_em_massa', 'outros: Disparo em massa'], ['whatsapp_direto', 'outros: WhatsApp direto'], ['outros', 'outros'],
+    ['Outros: feira', 'outros: feira'], ['tiktok', 'outros: tiktok'], [3, 'outros'],
+    ['', ''], [null, ''], ['   ', ''],
+  ];
+  for (const [entrada, saida] of tabela) assert.equal(normalizarOrigem(entrada), saida, String(entrada));
 });
 
 test('validarCriacaoIntegracao: obrigatórios, telefone, campos e lista de erros', () => {
@@ -159,7 +163,7 @@ test('validarCriacaoIntegracao: obrigatórios, telefone, campos e lista de erros
   assert.ok(ruim.erros.some((e) => e.includes('"quadro"')));
   assert.ok(ruim.erros.some((e) => e.includes('"nome"')));
   assert.ok(ruim.erros.some((e) => e.includes('"telefone" inválido')));
-  assert.ok(ruim.erros.some((e) => e.includes('"origem" inválida')));
+  assert.ok(!ruim.erros.some((e) => e.includes('origem'))); // origem desconhecida não recusa o card
   assert.ok(ruim.erros.some((e) => e.includes('campo_doido')));
   assert.ok(validarCriacaoIntegracao({ quadro: 'x', nome: 'y' }).erros.some((e) => e.includes('"telefone" é obrigatório')));
 });
@@ -177,9 +181,9 @@ test('compararAchadosPorTelefone: Date ou null (o bug do localeCompare), origina
 test('validarPatchIntegracao: aceita descricao, empresa, nome, origem, email e ramo', () => {
   const v = validarPatchIntegracao({ descricao: 'x', empresa: 'Pet', nome: 'Lo', origem: 'lp_teste', email: 'a@b', ramo: 'pet', ticket_nx: 1 });
   assert.equal(v.erro, undefined);
-  assert.deepEqual(v.campos, { empresa: 'Pet', nome: 'Lo', origem: 'lp_teste', nicho: 'pet', ticket_nx: '1' });
+  assert.deepEqual(v.campos, { empresa: 'Pet', nome: 'Lo', origem: 'bio', nicho: 'pet', ticket_nx: '1' });
   assert.equal(textoDaNota(v.nota), 'Descrição: x\nE-mail: a@b');
   assert.equal(validarPatchIntegracao({ descricao: 'só isso' }).erro, undefined); // só a anotação já é "algo pra atualizar"
-  assert.match(validarPatchIntegracao({ origem: 'tiktok' }).erro ?? '', /origem/);
+  assert.deepEqual(validarPatchIntegracao({ origem: 'tiktok' }).campos, { origem: 'outros: tiktok' });
   assert.match(validarPatchIntegracao({ nome: '  ' }).erro ?? '', /nome/);
 });

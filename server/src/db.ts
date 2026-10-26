@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import { DEFAULT_CONTRACT_HTML } from './data/contractTemplateSeed.js';
 import { criarEstruturaGestaoClientes } from './db/gestaoClientes.js';
+import { CONVERSAO_ORIGEM } from './lib/integracaoCards.js';
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -1958,6 +1959,19 @@ END; $$`);
     UNIQUE (lead_row_id, agendamento)
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS reuniao_resultados_created_idx ON reuniao_resultados(created_at)`);
+  // Origem: os códigos antigos da automação (lp_teste, bio_instagram, anuncio_meta, formulario_*, …) viram as opções
+  // da ficha (meta, bio, site, indicacao, outros), pela mesma tabela que a API usa agora (CONVERSAO_ORIGEM).
+  // Idempotente: o que já está no formato novo não muda.
+  {
+    const antigos = Object.entries(CONVERSAO_ORIGEM).filter(([codigo, novo]) => codigo !== novo);
+    const r = await pool.query(
+      `UPDATE lead_rows lr SET origem = m.novo
+       FROM unnest($1::text[], $2::text[]) AS m(codigo, novo)
+       WHERE lower(trim(lr.origem)) = m.codigo AND lr.origem <> m.novo`,
+      [antigos.map(([c]) => c), antigos.map(([, n]) => n)]
+    );
+    if (r.rowCount) console.log(`[db] origem: ${r.rowCount} card(s) convertidos dos códigos antigos pras opções da ficha`);
+  }
   // Aviso pro n8n (N8N_WEBHOOK_REUNIAO): quando chegou, quantas tentativas e o último erro. NULL em webhook_enviado_em =
   // ainda não chegou e o job de reenvio tenta de novo (jobs/reuniaoWebhook.ts).
   await pool.query(`ALTER TABLE reuniao_resultados ADD COLUMN IF NOT EXISTS webhook_enviado_em TIMESTAMPTZ`);

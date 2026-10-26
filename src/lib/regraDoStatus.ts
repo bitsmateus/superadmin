@@ -55,7 +55,7 @@ export const ORIGENS_DO_LEAD: { valor: string; rotulo: string }[] = [
 export const ROTULOS_ORIGEM: Record<string, string> = {
   meta: 'Anúncio Meta', anuncio_meta: 'Anúncio Meta',
   bio: 'Link da bio', bio_instagram: 'Link da bio',
-  site: 'Site', lp_teste: 'Teste da LP',
+  site: 'Site', lp_teste: 'Link da bio',
   formulario_organizar: 'Formulário do site', formulario_falar: 'Formulário do site',
   formulario_profissionalizar: 'Formulário do site', formulario_suporte: 'Formulário do site',
   indicacao: 'Indicação', indique_ganhe: 'Indique e ganhe',

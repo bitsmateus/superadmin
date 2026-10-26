@@ -1,7 +1,9 @@
-import { query, queryOne } from '../db.js';
+import { pool, query, queryOne, withTransaction } from '../db.js';
 import { sendPushToUsers } from './webPush.js';
 import { abaDeFora } from './abasJuntas.js';
-import { chaveTelefone, mesmoTelefone, resolverQuadro } from './integracaoCards.js';
+import { chaveTelefone, mesmoTelefone, resolverQuadro, telefoneComDdi, textoParaHtml } from './integracaoCards.js';
+import { preencherSdrDaAba } from './sdrDaAba.js';
+import { logLeadEvent, sincronizarContagemNotas, statusDoQuadro } from '../routes/leadBoards.js';
 import { donoDaAba, ehAPessoa, primeiroNome } from './reuniaoResultado.js';
 
 /**
@@ -104,8 +106,11 @@ async function destinatarios(tipo: TipoNotificacao, para: string[] | null): Prom
   return perfis.filter((p) => nomes.some((n) => ehAPessoa(n, p.name ?? ''))).map((p) => p.id);
 }
 
-/** O card da lead: o card_id, se existir; senão pelo telefone (a original, de preferência no quadro pedido). */
-async function acharCard(cardId: string | null, telefone: string, quadro: string): Promise<{ id: string; nome: string } | null> {
+/**
+ * O card da lead: o card_id, se existir; senão pelo telefone (a original, de preferência no quadro pedido). Com mais de
+ * um card no mesmo telefone (ex.: dois contatos da mesma empresa), prefere o que tem o mesmo nome do contato.
+ */
+async function acharCard(cardId: string | null, telefone: string, quadro: string, nome = ''): Promise<{ id: string; nome: string } | null> {
   if (cardId) {
     const r = await queryOne<{ id: string; nome: string }>(
       `SELECT COALESCE(espelho_origem_id, copia_ia_origem_id, id) AS id, COALESCE(nome, '') AS nome
@@ -127,13 +132,99 @@ async function acharCard(cardId: string | null, telefone: string, quadro: string
      WHERE r.deleted_at IS NULL AND NOT lb.is_vendas AND right(regexp_replace(r.telefone, '\\D', '', 'g'), 8) = $1`,
     [chave.ultimos8]
   );
+  const mesmoNome = (c: { nome: string }) => !!nome && primeiroNome(c.nome) === primeiroNome(nome);
   const achados = candidatos
     .filter((c) => mesmoTelefone(c.telefone, telefone))
     .sort((a, b) =>
+      Number(mesmoNome(b)) - Number(mesmoNome(a)) ||
       Number(!!quadroId && b.page === quadroId) - Number(!!quadroId && a.page === quadroId) ||
       Number(a.copia) - Number(b.copia) ||
       String(b.updated_at).localeCompare(String(a.updated_at)));
   return achados[0] ? { id: achados[0].id, nome: achados[0].nome } : null;
+}
+
+/**
+ * Transferência pra humano e lead novo ficam SEMPRE num card do CRM IA LUIZA: quem chamou por outro assunto (suporte,
+ * cancelamento…) não pode cair no card de outra pessoa com o mesmo telefone em outro CRM. Sem card dele lá, a Luiza
+ * cria um em "Leads Novos" (o comercial decide depois: qualifica ou apaga).
+ */
+const PAGINA_LUIZA = 'crm-ia-luiza';
+const SEMPRE_NA_LUIZA: TipoNotificacao[] = ['transferencia_ia', 'lead_novo_ia'];
+const AUTOR_LUIZA = 'Luiza (SDR IA)';
+
+/** Os cards dessa lead no CRM IA LUIZA (o card_id, se for de lá; senão pelo telefone), o original primeiro. */
+async function buscarNaLuiza(
+  cardId: string | null, telefone: string, db: { query: typeof pool.query } = pool,
+): Promise<{ id: string; nome: string } | null> {
+  const chave = chaveTelefone(telefone);
+  if (!cardId && !chave) return null;
+  const { rows } = await db.query<{ id: string; nome: string; telefone: string; copia: boolean; pedido: boolean }>(
+    `SELECT COALESCE(r.espelho_origem_id, r.copia_ia_origem_id, r.id) AS id, COALESCE(r.nome, '') AS nome, r.telefone,
+            (r.espelho_origem_id IS NOT NULL OR r.copia_ia_origem_id IS NOT NULL) AS copia, r.id = $2 AS pedido
+     FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+     WHERE lb.page = $1 AND r.deleted_at IS NULL AND NOT lb.is_vendas
+       AND (r.id = $2 OR right(regexp_replace(r.telefone, '\\D', '', 'g'), 8) = $3)
+     ORDER BY r.updated_at DESC`,
+    [PAGINA_LUIZA, cardId, chave?.ultimos8 ?? '']
+  );
+  const achado = rows
+    .filter((c) => c.pedido || mesmoTelefone(c.telefone, telefone))
+    .sort((a, b) => Number(b.pedido) - Number(a.pedido) || Number(a.copia) - Number(b.copia))[0];
+  return achado ? { id: achado.id, nome: achado.nome } : null;
+}
+
+/** Cria o card no começo do CRM IA LUIZA ("Leads Novos"), com uma Atualização dizendo o que o contato pediu. */
+async function criarNaLuiza(d: DadosDaNotificacao): Promise<{ id: string; nome: string } | null> {
+  const telefone = telefoneComDdi(d.telefone);
+  const chave = chaveTelefone(d.telefone);
+  if (!telefone || !chave) return null;
+  const quadro = await queryOne<{ id: string }>(
+    `SELECT id FROM lead_boards WHERE page = $1 AND NOT is_vendas AND NOT is_contrato ORDER BY position LIMIT 1`, [PAGINA_LUIZA]);
+  if (!quadro) return null;
+  const status = (await statusDoQuadro(quadro.id)) ?? '';
+  const nome = d.nome || 'Contato sem nome';
+  // Mesma trava da API de cards (quadro + telefone): duas mensagens juntas não criam dois cards.
+  const r = await withTransaction(async (client) => {
+    await client.query(`SELECT set_config('app.actor', 'automação', true)`);
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`integracao-card:${PAGINA_LUIZA}:${chave.ultimos8}`]);
+    const existente = await buscarNaLuiza(null, d.telefone, client);
+    if (existente) return { ...existente, criado: false };
+    const { rows: [{ max }] } = await client.query<{ max: number | null }>('SELECT MAX(position) AS max FROM lead_rows WHERE board_id = $1', [quadro.id]);
+    const { rows: [novo] } = await client.query<{ id: string }>(
+      `INSERT INTO lead_rows (board_id, nome, telefone, ticket_nx, status, sdr, position) VALUES ($1,$2,$3,$4,$5,'',$6) RETURNING id`,
+      [quadro.id, nome, telefone, d.ticket_nx, status, (max ?? -1) + 1]
+    );
+    // O gatilho registra um "card novo" pra virar notificação de lead novo: aqui a notificação é esta, então não duplica.
+    await client.query('UPDATE lead_avisos SET push_enviado_em = NOW() WHERE lead_row_id = $1', [novo.id]);
+    return { id: novo.id, nome, criado: true };
+  });
+  if (!r.criado) return { id: r.id, nome: r.nome };
+  await preencherSdrDaAba(r.id).catch(() => null);
+  await logLeadEvent(r.id, 'created', null, null, 'Automação').catch(() => undefined);
+  const texto = [
+    `Card criado pela Luiza: ${TITULO_PADRAO[d.tipo].toLowerCase()} (não identificou como lead de agendamento).`,
+    d.mensagem,
+    d.ultima_mensagem_lead && `Última mensagem do contato: ${d.ultima_mensagem_lead}`,
+    d.resposta_luiza && `Resposta da Luiza: ${d.resposta_luiza}`,
+    d.ticket_nx && `Ticket NX #${d.ticket_nx}`,
+  ].filter(Boolean).join('\n\n');
+  await query(
+    `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments) VALUES ($1, NULL, $2, $3, '[]')`,
+    [r.id, AUTOR_LUIZA, textoParaHtml(texto)]
+  );
+  await sincronizarContagemNotas(r.id);
+  return { id: r.id, nome };
+}
+
+/** O card da notificação: no CRM IA LUIZA pra transferência/lead novo (cria se não houver); o resto, onde estiver. */
+async function cardDaNotificacao(d: DadosDaNotificacao): Promise<{ id: string; nome: string } | null> {
+  if (SEMPRE_NA_LUIZA.includes(d.tipo)) return (await buscarNaLuiza(d.card_id, d.telefone)) ?? (await criarNaLuiza(d));
+  // Reunião da Luiza: o card dela, se houver; senão onde estiver.
+  if (d.tipo === 'reuniao_agendada_ia') {
+    const daLuiza = await buscarNaLuiza(d.card_id, d.telefone);
+    if (daLuiza) return daLuiza;
+  }
+  return acharCard(d.card_id, d.telefone, d.quadro, d.nome);
 }
 
 /** Link "Abrir card" pra uma página: o CRM IA LUIZA abre como aba dentro do CRM ARTHUR. */
@@ -149,7 +240,7 @@ export function linkDoCard(pagina: string, cardId: string): string {
 export async function criarNotificacao(
   d: DadosDaNotificacao, para: string[] | null = null, opcoes: { semPush?: boolean } = {},
 ): Promise<{ id: string; duplicada: boolean }> {
-  const card = await acharCard(d.card_id, d.telefone, d.quadro);
+  const card = await cardDaNotificacao(d);
   if (card) {
     const igual = await queryOne<{ id: string }>(
       `SELECT id FROM notificacoes WHERE tipo = $1 AND card_id = $2 AND created_at > NOW() - ${JANELA_DE_DUPLICADA}

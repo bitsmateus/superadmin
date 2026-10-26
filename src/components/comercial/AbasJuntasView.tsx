@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { LeadBoardsView } from '@/components/comercial/LeadBoardsView'
+import { AvisosDaLuiza } from '@/components/comercial/AvisosDaLuiza'
 import { useAllLeadRows, useLeadBoards } from '@/hooks/useLeadBoards'
 import { useLeadPages } from '@/hooks/useLeadPages'
 import { useAuth } from '@/hooks/useAuth'
@@ -94,5 +95,19 @@ export function AbasJuntasView({ pageId }: { pageId: string }) {
     </div>
   ) : undefined
 
-  return <LeadBoardsView key={ativa} page={ativa} tituloDaTela={nomeDaTela} aoLadoDoTitulo={seletor} />
+  // Avisos da Luiza (card novo, Qualificado, Reunião agendada) pra quem está nesta tela. "Abrir card" vai pra aba dela
+  // com ?lead=, que abre a ficha (ver LeadBoardsView).
+  const abaDaLuiza = abas.find((a) => a.id === 'crm-ia-luiza')?.id
+  const abrirCard = (cardId: string) => {
+    if (!abaDaLuiza) return
+    try { window.localStorage.setItem(chave, abaDaLuiza) } catch { /* ignore */ }
+    setParams((p) => { const n = new URLSearchParams(p); n.set('quadro', abaDaLuiza); n.set('lead', cardId); return n })
+  }
+
+  return (
+    <>
+      <LeadBoardsView key={ativa} page={ativa} tituloDaTela={nomeDaTela} aoLadoDoTitulo={seletor} />
+      {abaDaLuiza && <AvisosDaLuiza onAbrir={abrirCard} />}
+    </>
+  )
 }

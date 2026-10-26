@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ehSdrDaIa, origemMostraSelo, quadroDoStatus, rotuloDaOrigem } from '@/lib/regraDoStatus'
 import {
@@ -1400,6 +1400,14 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   const [trashModalOpen, setTrashModalOpen] = React.useState(false)
   const [focusRowId, setFocusRowId] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
+  // ?lead=<id> na URL (aviso da Luiza, push no celular) abre a ficha desse card assim que ele carregar nesta aba.
+  const [params, setParams] = useSearchParams()
+  const leadDaUrl = params.get('lead')
+  React.useEffect(() => {
+    if (!leadDaUrl || !pageRows.some((r) => r.id === leadDaUrl)) return
+    setOpenLeadId(leadDaUrl)
+    setParams((p) => { const n = new URLSearchParams(p); n.delete('lead'); return n }, { replace: true })
+  }, [leadDaUrl, pageRows, setParams])
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [draggingIds, setDraggingIds] = React.useState<string[] | null>(null)
   const [dragOverBoardId, setDragOverBoardId] = React.useState<string | null>(null)

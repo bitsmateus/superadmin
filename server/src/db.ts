@@ -1978,6 +1978,59 @@ END; $$`);
   await pool.query(`ALTER TABLE reuniao_resultados ADD COLUMN IF NOT EXISTS webhook_tentativas INT NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE reuniao_resultados ADD COLUMN IF NOT EXISTS webhook_erro TEXT`);
 
+  // Avisos da Luiza pro CRM ARTHUR (toast na tela + push no celular, ver routes/leadAvisos.ts e jobs/leadAvisosPush.ts):
+  // card novo no CRM IA LUIZA, card que vai pra "Qualificado" e card que vai pra "Reunião agendada". O gatilho fica no
+  // banco, então vale pra tudo que mexe no card (API do n8n, tela, espelho). Cópias de outros CRMs não avisam.
+  // Cada pessoa marca o seu "lido" (lead_avisos_lidos).
+  await pool.query(`CREATE TABLE IF NOT EXISTS lead_avisos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_row_id UUID NOT NULL REFERENCES lead_rows(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL CHECK (tipo IN ('novo', 'qualificado', 'reuniao_agendada')),
+    coluna TEXT NOT NULL DEFAULT '',
+    push_enviado_em TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_avisos_created_idx ON lead_avisos(created_at)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS lead_avisos_lidos (
+    aviso_id UUID NOT NULL REFERENCES lead_avisos(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    lido_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (aviso_id, user_id)
+  )`);
+  await pool.query(`CREATE OR REPLACE FUNCTION registrar_aviso_luiza() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+  DECLARE
+    pagina_nova TEXT; quadro_novo TEXT; pagina_antiga TEXT; tipo_aviso TEXT;
+  BEGIN
+    IF NEW.deleted_at IS NOT NULL OR NEW.copia_ia_origem_id IS NOT NULL OR NEW.espelho_origem_id IS NOT NULL THEN
+      RETURN NEW;
+    END IF;
+    SELECT page, name INTO pagina_nova, quadro_novo FROM lead_boards WHERE id = NEW.board_id;
+    IF pagina_nova IS DISTINCT FROM 'crm-ia-luiza' THEN RETURN NEW; END IF;
+    IF TG_OP = 'INSERT' THEN
+      tipo_aviso := 'novo';
+    ELSE
+      IF NEW.board_id IS NOT DISTINCT FROM OLD.board_id THEN RETURN NEW; END IF;
+      SELECT page INTO pagina_antiga FROM lead_boards WHERE id = OLD.board_id;
+      IF lower(quadro_novo) LIKE '%agendada%' THEN tipo_aviso := 'reuniao_agendada';
+      -- "Desqualificado" também tem "qualificad": só o que COMEÇA com "qualificad".
+      ELSIF lower(quadro_novo) LIKE 'qualificad%' THEN tipo_aviso := 'qualificado';
+      ELSIF pagina_antiga IS DISTINCT FROM 'crm-ia-luiza' THEN tipo_aviso := 'novo';
+      ELSE RETURN NEW;
+      END IF;
+    END IF;
+    INSERT INTO lead_avisos (lead_row_id, tipo, coluna) VALUES (NEW.id, tipo_aviso, COALESCE(quadro_novo, ''));
+    RETURN NEW;
+  END $$`);
+  await pool.query(`DROP TRIGGER IF EXISTS lead_rows_aviso_luiza ON lead_rows`);
+  await pool.query(`CREATE TRIGGER lead_rows_aviso_luiza AFTER INSERT OR UPDATE OF board_id ON lead_rows
+    FOR EACH ROW EXECUTE FUNCTION registrar_aviso_luiza()`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_lead_avisos ON lead_avisos;
+      CREATE TRIGGER notify_lead_avisos AFTER INSERT ON lead_avisos FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

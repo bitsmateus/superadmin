@@ -10,6 +10,7 @@ import { usePushSubscription } from '@/hooks/usePushSubscription'
 import { PopupDadosDoStatus } from '@/components/comercial/PopupDadosDoStatus'
 import { ReuniaoResultadoPopup } from '@/components/comercial/ReuniaoResultadoPopup'
 import { RetornoPropostaPopup } from '@/components/comercial/RetornoPropostaPopup'
+import { PopupDeNotificacoes } from '@/components/notificacoes/PopupDeNotificacoes'
 
 const isDesktop = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -36,6 +37,7 @@ export function Layout() {
       <PopupDadosDoStatus />
       <ReuniaoResultadoPopup />
       <RetornoPropostaPopup />
+      <PopupDeNotificacoes />
 
       <Sidebar
         open={open}

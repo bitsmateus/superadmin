@@ -6,6 +6,7 @@ import {
 } from './leadBoards.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { agendamentoParaIso } from '../lib/reuniaoResultado.js';
+import { criarNotificacao, lerNotificacaoDaIntegracao } from '../lib/notificacoes.js';
 import {
   chaveTelefone, chaveValida, colunasQueCasam, compararAchadosPorTelefone, mesmoTelefone, montarEtiquetas,
   parseDataIntegracao, resolverEtiquetas, resolverQuadro, rotuloDaOrigem, telefoneComDdi, textoDaNota, textoParaHtml,
@@ -230,6 +231,17 @@ export async function integracaoRoutes(app: FastifyInstance) {
       .sort(compararAchadosPorTelefone);
     if (!achados.length) return reply.status(404).send({ message: 'Nenhum card com esse telefone.' });
     return { ...cardParaApi(achados[0], await carregarOpcoesEtiqueta()), total_encontrados: achados.length, outros_ids: achados.slice(1).map((c) => c.id) };
+  });
+
+  // POST /api/integracao/notificacoes — notificação do comercial pro sininho/popup (Arthur e/ou Luis). Tipos:
+  // transferencia_ia, reuniao_agendada_ia, resposta_proposta, lead_novo_ia. Campo opcional torto não recusa; tipo
+  // desconhecido responde 200 e não cria nada; "destino" é ignorado; "para" troca quem recebe. Sem card_id, acha o card
+  // pelo telefone. A mesma (tipo + card) nas últimas 2h não duplica (devolve a que já existe).
+  app.post<{ Body: unknown }>('/api/integracao/notificacoes', async (req, reply) => {
+    const lido = lerNotificacaoDaIntegracao(req.body);
+    if (!('dados' in lido)) return reply.status(200).send({ ignorada: true, message: 'Tipo de notificação desconhecido: ignorado.' });
+    const { id, duplicada } = await criarNotificacao(lido.dados, lido.para);
+    return reply.status(201).send({ id, duplicada });
   });
 
   // POST /api/integracao/cards — cria um card. Obrigatórios: quadro, nome, telefone (coluna: a primeira do quadro).

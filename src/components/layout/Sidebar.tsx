@@ -69,6 +69,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import type { LeadPage, LeadPageSection } from '@/types/leadBoard'
 import { ServerSwitcher } from './ServerSwitcher'
+import { SinoDeNotificacoes } from '@/components/notificacoes/SinoDeNotificacoes'
 
 // "Tarefas" (/tarefas) saiu daqui de propósito — agora só se chega lá pela aba dentro de
 // Pipeline (ver PipelineSectionTabs), não mais como item próprio do menu. A rota continua
@@ -1107,7 +1108,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
           <div className="grid h-7 w-7 place-items-center rounded-full bg-elevate/[0.05] text-foreground/70 ring-1 ring-line">
             <UserCircle2 className="h-4 w-4" />
           </div>
-          <div className="min-w-0 leading-tight">
+          <div className="min-w-0 flex-1 leading-tight">
             <div className="truncate text-xs font-medium text-foreground/90">
               {profile?.name || profile?.email || '—'}
             </div>
@@ -1115,6 +1116,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
               {profile ? ROLE_LABELS[profile.role] : '…'}
             </div>
           </div>
+          {/* Notificações do comercial: só aparece pra quem recebe (Arthur e Luis). */}
+          <SinoDeNotificacoes />
         </div>
 
         {/* Tema */}

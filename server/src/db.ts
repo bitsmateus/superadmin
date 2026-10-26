@@ -2034,6 +2034,41 @@ END; $$`);
     END IF;
   END $$`);
 
+  // Notificações do comercial (sininho + popup), por pessoa — ver lib/notificacoes.ts e routes/notificacoes.ts. Cada
+  // destinatário tem o seu lida/não lida (lida_em) e o seu "fechou o popup" (popup_fechado_em, que NÃO marca como lida).
+  await pool.query(`CREATE TABLE IF NOT EXISTS notificacoes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo TEXT NOT NULL,
+    titulo TEXT NOT NULL DEFAULT '',
+    mensagem TEXT NOT NULL DEFAULT '',
+    nome TEXT NOT NULL DEFAULT '',
+    telefone TEXT NOT NULL DEFAULT '',
+    ticket_nx TEXT NOT NULL DEFAULT '',
+    card_id UUID REFERENCES lead_rows(id) ON DELETE SET NULL,
+    quadro TEXT NOT NULL DEFAULT '',
+    ultima_mensagem_lead TEXT NOT NULL DEFAULT '',
+    resposta_luiza TEXT NOT NULL DEFAULT '',
+    reuniao_em TIMESTAMPTZ,
+    link_reuniao TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS notificacoes_card_idx ON notificacoes(card_id, tipo, created_at)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS notificacao_destinatarios (
+    notificacao_id UUID NOT NULL REFERENCES notificacoes(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    lida_em TIMESTAMPTZ,
+    popup_fechado_em TIMESTAMPTZ,
+    PRIMARY KEY (notificacao_id, user_id)
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS notificacao_destinatarios_user_idx ON notificacao_destinatarios(user_id, lida_em)`);
+  await pool.query(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
+      DROP TRIGGER IF EXISTS notify_notificacao_destinatarios ON notificacao_destinatarios;
+      CREATE TRIGGER notify_notificacao_destinatarios AFTER INSERT OR UPDATE ON notificacao_destinatarios
+        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+    END IF;
+  END $$`);
+
   console.log('[db] migrations applied');
 }
 

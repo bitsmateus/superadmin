@@ -39,6 +39,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { PageActivityLogModal } from '@/components/comercial/PageActivityLogModal'
 import { DemandaTopo } from '@/components/comercial/DemandaTopo'
+import { SinoDeNotificacoes } from '@/components/notificacoes/SinoDeNotificacoes'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
@@ -1345,6 +1346,9 @@ function CreateBoardModal({ open, onClose, page }: { open: boolean; onClose: () 
   )
 }
 
+/** Abas em que o admin vê o sininho do dono (Arthur: CRM ARTHUR e a aba CRM IA LUIZA; Luis: CRM LUIS CLOSER). */
+const PAGINAS_COM_SININHO = new Set(['crm-arthur', 'crm-ia-luiza', 'crm-luis-closer'])
+
 export interface LeadBoardsViewProps {
   page: LeadBoardPage
   /** Título do topo quando esta aba aparece dentro de outra (ver AbasJuntasView); a lógica segue pelo nome da própria aba. */
@@ -1599,6 +1603,9 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
         ]}
         rightSlot={isDemandas ? (
           <DemandaTopo pageId={page} pageName={title} responsavel={currentPage?.responsavel ?? ''} isAdmin={isAdmin} />
+        ) : isAdmin && PAGINAS_COM_SININHO.has(page) ? (
+          // Admin dentro do CRM do Arthur ou do Luis: o sininho daquele usuário, só pra olhar.
+          <SinoDeNotificacoes pagina={page} />
         ) : undefined}
       />
 

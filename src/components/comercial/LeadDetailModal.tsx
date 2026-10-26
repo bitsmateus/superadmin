@@ -49,7 +49,7 @@ import { useLeadEvents } from '@/hooks/useLeadEvents'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useTeam, teamMemberLabel, type TeamMember } from '@/hooks/useTeam'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
-import { CANAIS_DE_AGENDAMENTO, MINIMO_OUTRO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, quadroDoStatus, textoDoAgendadoOutro } from '@/lib/regraDoStatus'
+import { CANAIS_DE_AGENDAMENTO, MINIMO_OUTRO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, quadroDoStatus, rotuloDaOrigem, textoDoAgendadoOutro } from '@/lib/regraDoStatus'
 import { leadBoardsService } from '@/services/leadBoards'
 import { LeadOrigemBlock } from '@/components/comercial/LeadOrigemBlock'
 import { canonicalNoteLeadId, leadNotesService } from '@/services/leadNotes'
@@ -619,6 +619,14 @@ export function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescri
           color: /^Retornou/.test(e.toValue ?? '') ? '#15803D' : /^Sem resposta/.test(e.toValue ?? '') ? '#D97706' : '#2563EB',
         },
       }
+    case 'excluido':
+      return {
+        icon: <Trash2 className="h-3.5 w-3.5" />,
+        text: 'Card excluído (foi pra Lixeira)',
+        to: e.toValue ? { label: curtoNaLinha(e.toValue), color: '#DC2626' } : undefined,
+      }
+    case 'restaurado':
+      return { icon: <CheckCircle2 className="h-3.5 w-3.5" />, text: '', to: { label: 'Card restaurado da Lixeira', color: '#15803D' } }
     case 'template_sent':
       return {
         icon: <Send className="h-3.5 w-3.5" />,
@@ -631,9 +639,51 @@ export function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescri
         text: 'Falha ao enviar mensagem',
         to: { label: e.toValue || 'erro', color: '#DC2626' },
       }
-    default:
+    default: {
+      // Campo editado (agendamento, valores, origem, nome…): "Campo: de → para".
+      const campo = CAMPOS_EDITADOS[e.type as keyof typeof CAMPOS_EDITADOS]
+      if (campo) {
+        const chipDe = (v: string | null) => ({ label: v ? curtoNaLinha(campo.formatar(v)) : '(vazio)', color: '#9CA3AF' })
+        return {
+          icon: campo.icone,
+          text: e.fromValue ? campo.rotulo : `${campo.rotulo} definido como`,
+          from: e.fromValue ? chipDe(e.fromValue) : undefined,
+          to: { ...chipDe(e.toValue), color: e.toValue ? '#2563EB' : '#9CA3AF' },
+        }
+      }
       return { icon: <Sparkles className="h-3.5 w-3.5" />, text: 'Atualização' }
+    }
   }
+}
+
+/** Texto do chip na Linha do tempo: uma linha, curto. */
+function curtoNaLinha(v: string): string {
+  const t = v.replace(/\s+/g, ' ').trim()
+  return t.length > 60 ? `${t.slice(0, 60)}…` : t
+}
+
+/** "2026-10-27T09:00" -> "27/10/2026 09:00" (o resto passa como está). */
+function dataNaLinha(v: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(v)
+  return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : v
+}
+
+/** Os campos editados que a Linha do tempo mostra (mesma lista do servidor, lib/linhaDoTempo.ts). */
+const CAMPOS_EDITADOS: Record<string, { rotulo: string; icone: React.ReactNode; formatar: (v: string) => string }> = {
+  agendamento: { rotulo: 'Agendamento', icone: <Calendar className="h-3.5 w-3.5" />, formatar: dataNaLinha },
+  retornar: { rotulo: 'Retornar', icone: <Calendar className="h-3.5 w-3.5" />, formatar: dataNaLinha },
+  valor_mrr: { rotulo: 'Valor MRR', icone: <Hash className="h-3.5 w-3.5" />, formatar: (v) => v },
+  valor_implementacao: { rotulo: 'Valor implementação', icone: <Hash className="h-3.5 w-3.5" />, formatar: (v) => v },
+  numero_atendentes: { rotulo: 'Nº atendentes', icone: <Hash className="h-3.5 w-3.5" />, formatar: (v) => v },
+  origem: { rotulo: 'Origem', icone: <Type className="h-3.5 w-3.5" />, formatar: (v) => rotuloDaOrigem(v) || v },
+  nicho: { rotulo: 'Nicho', icone: <Type className="h-3.5 w-3.5" />, formatar: (v) => v },
+  motivo_desqualificacao: { rotulo: 'Motivo', icone: <Type className="h-3.5 w-3.5" />, formatar: (v) => v },
+  agendado_por: { rotulo: 'Agendado por', icone: <PhoneCall className="h-3.5 w-3.5" />, formatar: (v) => v },
+  nome: { rotulo: 'Nome', icone: <Pencil className="h-3.5 w-3.5" />, formatar: (v) => v },
+  empresa: { rotulo: 'Empresa', icone: <Pencil className="h-3.5 w-3.5" />, formatar: (v) => v },
+  telefone: { rotulo: 'Telefone', icone: <Phone className="h-3.5 w-3.5" />, formatar: (v) => v },
+  dor_cliente: { rotulo: 'Dor do cliente', icone: <Type className="h-3.5 w-3.5" />, formatar: (v) => v },
+  closer: { rotulo: 'Closer', icone: <UserCircle2 className="h-3.5 w-3.5" />, formatar: (v) => v },
 }
 
 function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string }) {

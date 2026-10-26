@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne, queryAsActor } from '../db.js';
 import { allowedPageIds } from './leadPages.js';
 import { comAbasJuntas, saoAbasJuntas } from '../lib/abasJuntas.js';
+import { CAMPOS_DA_LINHA_DO_TEMPO, ehCampoDaLinhaDoTempo, registrarMudancaDeCampo } from '../lib/linhaDoTempo.js';
 import { ehDoFinanceiro, podeVerMetricasDoCloser } from '../lib/acessoMenu.js';
 import { podeVerFinanceiro } from '../lib/financeiro.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
@@ -1521,10 +1522,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
 
       // Snapshot "antes" só dos campos rastreados na linha do tempo — pra saber o que
       // realmente mudou depois do UPDATE (nada disso roda se não tiver campo rastreado no patch).
-      const trackedKeys = Object.keys(patch).filter((k) => k in TRACKED_FIELDS || k === 'board_id');
+      // Os demais campos (agendamento, valores, origem, nome…) também entram, com "de → para" (lib/linhaDoTempo.ts).
+      const trackedKeys = Object.keys(patch).filter((k) => k in TRACKED_FIELDS || k === 'board_id' || ehCampoDaLinhaDoTempo(k));
       const before = trackedKeys.length
-        ? await queryOne<{ status: string; dia_contato: string; sdr: string; retornado: boolean; board_id: string }>(
-            'SELECT status, dia_contato, sdr, retornado, board_id FROM lead_rows WHERE id = $1',
+        ? await queryOne<Record<string, unknown> & { status: string; dia_contato: string; sdr: string; retornado: boolean; board_id: string }>(
+            `SELECT status, dia_contato, sdr, retornado, board_id, ${CAMPOS_DA_LINHA_DO_TEMPO.join(', ')} FROM lead_rows WHERE id = $1`,
             [req.params.id]
           )
         : null;
@@ -1608,7 +1610,14 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       if (before) {
         void (async () => {
           const actorName = await getActorName(sub);
+          // Campos editados: vão pra Linha do tempo da ORIGINAL (a que a ficha mostra, inclusive na cópia do closer).
+          const camposMudados = trackedKeys.filter(ehCampoDaLinhaDoTempo);
+          if (camposMudados.length) {
+            const original = await idCanonicoDasNotas(req.params.id);
+            for (const k of camposMudados) await registrarMudancaDeCampo(original, k, before[k], patch[k], actorName);
+          }
           for (const key of trackedKeys) {
+            if (ehCampoDaLinhaDoTempo(key)) continue;
             if (key === 'board_id') {
               const fromId = before.board_id;
               const toId = patch.board_id as string;
@@ -1664,6 +1673,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         }
       }
       const reason = req.body?.reason?.trim() || null;
+      void (async () => {
+        const original = await idCanonicoDasNotas(req.params.id);
+        await logLeadEvent(original, 'excluido', null, reason, await getActorName(sub));
+      })().catch((err) => console.error('[linha do tempo] exclusão', req.params.id, err));
       // A cópia do espelho (CRM do closer) vai junto: ela é derivada da lead original e, sem isso,
       // excluir no CRM do Arthur deixava um fantasma no CRM do Luis — com as Atualizações apontando
       // pra uma lead que não existe mais. No sentido contrário nada acontece: excluir a cópia tira
@@ -1702,6 +1715,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       );
       const row = restauradas.find((r) => r.id === req.params.id);
       if (!row) return reply.status(404).send({ message: 'Linha não encontrada' });
+      void (async () => {
+        const original = await idCanonicoDasNotas(req.params.id);
+        await logLeadEvent(original, 'restaurado', null, null, await getActorName(sub));
+      })().catch((err) => console.error('[linha do tempo] restauração', req.params.id, err));
       return row;
     }
   );

@@ -169,6 +169,10 @@ export interface LeadNote {
 export type LeadEventType =
   | 'created' | 'status' | 'dia_contato' | 'sdr' | 'board' | 'retornado' | 'template_sent' | 'template_failed'
   | 'tipo' | 'ligacao' | 'followup' | 'disparo' | 'reuniao' | 'retorno'
+  // Campos editados (de -> para) e exclusão/restauração do card — ver server/src/lib/linhaDoTempo.ts.
+  | 'agendamento' | 'retornar' | 'valor_mrr' | 'valor_implementacao' | 'numero_atendentes' | 'origem' | 'nicho'
+  | 'motivo_desqualificacao' | 'agendado_por' | 'nome' | 'empresa' | 'telefone' | 'dor_cliente' | 'closer'
+  | 'excluido' | 'restaurado'
 
 /** Entrada da linha do tempo automática — gravada pelo backend a cada mudança relevante. */
 export interface LeadEvent {

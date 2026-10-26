@@ -7,6 +7,7 @@ import {
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { agendamentoParaIso } from '../lib/reuniaoResultado.js';
 import { criarNotificacao, lerNotificacaoDaIntegracao } from '../lib/notificacoes.js';
+import { CAMPOS_DA_LINHA_DO_TEMPO, ehCampoDaLinhaDoTempo, registrarMudancaDeCampo } from '../lib/linhaDoTempo.js';
 import {
   chaveTelefone, chaveValida, colunasQueCasam, compararAchadosPorTelefone, mesmoTelefone, montarEtiquetas,
   parseDataIntegracao, resolverEtiquetas, resolverQuadro, rotuloDaOrigem, telefoneComDdi, textoDaNota, textoParaHtml,
@@ -340,12 +341,12 @@ export async function integracaoRoutes(app: FastifyInstance) {
     const v = validarPatchIntegracao(req.body);
     if (v.erro) return reply.status(400).send({ message: v.erro });
 
-    const atual = await queryOne<{
+    const atual = await queryOne<Record<string, unknown> & {
       board_id: string; page: string; venda_origem_id: string | null; board_is_vendas: boolean;
       espelho_origem_id: string | null; copia_ia_origem_id: string | null;
       status: string; sdr: string; tipo: string; dia_contato: string; ligacao: string; followup: string; disparo: string;
     }>(
-      `SELECT r.board_id, lb.page, r.status, r.sdr, r.tipo, r.dia_contato, r.ligacao, r.followup, r.disparo,
+      `SELECT ${CAMPOS_DA_LINHA_DO_TEMPO.map((c) => `r.${c}`).join(', ')}, r.board_id, lb.page, r.status, r.sdr, r.dia_contato,
               r.venda_origem_id, r.espelho_origem_id, r.copia_ia_origem_id, lb.is_vendas AS board_is_vendas
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
        WHERE r.id = $1 AND r.deleted_at IS NULL`,
@@ -435,6 +436,12 @@ export async function integracaoRoutes(app: FastifyInstance) {
       const para = String(campos[tipo] ?? '');
       if (de === para) continue;
       await logLeadEvent(id, tipo, de || null, para || null, 'Automação').catch(() => undefined);
+    }
+    // Os outros campos (agendamento, valores, origem, nome…), na Linha do tempo da original — como na tela.
+    const outros = Object.keys(campos).filter((k) => ehCampoDaLinhaDoTempo(k) && !(CAMPOS_NA_LINHA_DO_TEMPO as readonly string[]).includes(k));
+    if (outros.length) {
+      const original = await idCanonicoDasNotas(id);
+      for (const k of outros) await registrarMudancaDeCampo(original, k, atual[k], campos[k], 'Automação');
     }
     // As outras linhas da mesma lead (cópia do closer / da IA, ou a original) acompanham, como na tela.
     await propagarEspelho(id, atual.espelho_origem_id, campos, '', atual.copia_ia_origem_id, 'Automação', true);

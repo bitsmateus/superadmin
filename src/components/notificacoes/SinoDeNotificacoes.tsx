@@ -85,7 +85,8 @@ export function SinoDeNotificacoes({ pagina, className }: { pagina?: string; cla
           className,
         )}
       >
-        {dados.nao_lidas > 0 && <span className="absolute inset-0 animate-ping rounded-full bg-accent/40" aria-hidden />}
+        {/* Anel pulsando sem crescer (o "ping" escalava e, colado na borda do celular, criava rolagem pro lado). */}
+        {dados.nao_lidas > 0 && <span className="absolute -inset-1 animate-pulse rounded-full ring-4 ring-accent/45" aria-hidden />}
         <Bell className="relative h-[18px] w-[18px]" />
         {leitura && (
           <span className="absolute -bottom-1 -left-1 grid h-4 w-4 place-items-center rounded-full bg-card text-foreground/60 ring-1 ring-line" title="Só visualização">

@@ -61,7 +61,7 @@ export function RetornoPropostaPopup() {
   const atual = lista[0]
   const atualId = atual?.card_id
   React.useEffect(() => { setPasso('escolha') }, [atualId])
-  useTelaTravada(!!atual)
+  useTelaTravada(!!atual, 'retorno')
 
   const enviar = async (pedido: PedidoDeRetorno) => {
     if (!atual || enviando) return
@@ -238,11 +238,12 @@ function Retornou({ atual, enviando, onVoltar, onConcluir }: Form) {
       {desfecho === 'fechou' && (
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
+            {/* O campo de valor ocupa a altura toda do pai: a caixa de altura fixa segura ele (senão passa por cima do texto de baixo). */}
             <label className="block text-xs text-foreground/50">Valor MRR
-              <CurrencyField value={mrr} onSave={setMrr} className={cn(campoCls, 'mt-0.5')} />
+              <div className="mt-0.5 h-10"><CurrencyField value={mrr} onSave={setMrr} className={campoCls} /></div>
             </label>
             <label className="block text-xs text-foreground/50">Valor implementação
-              <CurrencyField value={impl} onSave={setImpl} className={cn(campoCls, 'mt-0.5')} />
+              <div className="mt-0.5 h-10"><CurrencyField value={impl} onSave={setImpl} className={campoCls} /></div>
             </label>
           </div>
           {!origemConhecida && (

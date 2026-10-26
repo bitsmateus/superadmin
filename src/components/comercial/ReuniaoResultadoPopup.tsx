@@ -48,7 +48,7 @@ export function ReuniaoResultadoPopup() {
   // Se a reunião da tela sumiu da lista (outra pessoa resolveu), recomeça na escolha da próxima.
   const atualId = atual?.card_id
   React.useEffect(() => { setPasso('escolha') }, [atualId])
-  useTelaTravada(!!atual)
+  useTelaTravada(!!atual, 'reuniao')
 
   const enviar = async (pedido: PedidoDeResultado) => {
     if (!atual || enviando) return

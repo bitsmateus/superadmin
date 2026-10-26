@@ -11,6 +11,7 @@ import { PopupDadosDoStatus } from '@/components/comercial/PopupDadosDoStatus'
 import { ReuniaoResultadoPopup } from '@/components/comercial/ReuniaoResultadoPopup'
 import { RetornoPropostaPopup } from '@/components/comercial/RetornoPropostaPopup'
 import { PopupDeNotificacoes } from '@/components/notificacoes/PopupDeNotificacoes'
+import { LembreteDeNotificacoes } from '@/components/notificacoes/LembreteDeNotificacoes'
 
 const isDesktop = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -38,6 +39,7 @@ export function Layout() {
       <ReuniaoResultadoPopup />
       <RetornoPropostaPopup />
       <PopupDeNotificacoes />
+      <LembreteDeNotificacoes />
 
       <Sidebar
         open={open}

@@ -138,7 +138,7 @@ export function GarantiaModal({
         title={garantia.item}
         description={`${empreendimento?.nome ?? ''} · vence em ${dataBr(garantia.vencimento)} (${textoDias(dias)})`}
       >
-        <div className="space-y-6">
+        <div className="space-y-6 text-foreground">
           <section className="space-y-3">
             <h3 className="text-sm font-semibold text-foreground">Avisos ao síndico</h3>
             <p className="break-words text-xs text-foreground/50">

@@ -16,7 +16,7 @@ export function EmailModal({ envioId, onFechar }: { envioId: string | null; onFe
       {isLoading && <p className="text-sm text-foreground/50">Carregando…</p>}
       {error && <p className="text-sm text-danger">{(error as Error).message}</p>}
       {data && (
-        <div className="space-y-4">
+        <div className="space-y-4 text-foreground">
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
             {data.enviadoEm && (
               <>

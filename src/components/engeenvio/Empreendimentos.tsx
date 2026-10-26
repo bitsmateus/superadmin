@@ -339,7 +339,7 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
         </>
       }
     >
-      <form id="ee-form-gar" onSubmit={salvar} className="space-y-4">
+      <form id="ee-form-gar" onSubmit={salvar} className="space-y-4 text-foreground">
         <Input id="ee-ng-item" label="Item" value={item} onChange={(e) => setItem(e.target.value)} required />
         <div className="grid gap-3 sm:grid-cols-2">
           <Input id="ee-ng-prazo" label="Prazo" placeholder="ex.: 2 anos" value={prazo} onChange={(e) => setPrazo(e.target.value)} />

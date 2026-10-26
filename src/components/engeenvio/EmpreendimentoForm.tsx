@@ -176,7 +176,7 @@ export function EmpreendimentoForm({
         </>
       }
     >
-      <form id="ee-form-emp" onSubmit={salvar} className="space-y-6">
+      <form id="ee-form-emp" onSubmit={salvar} className="space-y-6 text-foreground">
         <section className="space-y-3">
           {!editando && <Passo n={1} titulo="Dados do empreendimento" />}
           <div className="grid gap-3 sm:grid-cols-2">

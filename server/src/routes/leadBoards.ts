@@ -544,7 +544,19 @@ const ESPELHO_CAMPOS = [
   'nome', 'tipo', 'empresa', 'telefone', 'dia_contato', 'ligacao', 'agendamento', 'retornar',
   'retornado', 'responsavel', 'sdr', 'numero', 'dor_cliente', 'numero_atendentes',
   'valor_mrr', 'valor_implementacao', 'observacoes', 'fechamento', 'origem', 'agendado_por', 'email', 'ticket_nx',
+  'nicho', 'motivo_desqualificacao',
 ];
+
+/** O que a cópia do closer leva da original quando nasce (ou volta da lixeira): o conteúdo que anda junto, o anúncio do
+ * Meta de onde a lead veio (é o que monta o bloco "Origem (Meta Ads)" da ficha) e o resumo das Atualizações. A origem
+ * vai à parte: lead do anúncio sem origem escrita entra como "meta". meta_lead_id NÃO vai (é único por lead). */
+const COPIA_LEVA = [
+  ...ESPELHO_CAMPOS.filter((c) => c !== 'origem'),
+  'meta_campaign_id', 'meta_adset_id', 'meta_ad_id', 'origem_campanha', 'qualificacao', 'lead_raw',
+  'notes_count', 'last_note_preview', 'last_note_at',
+];
+const ORIGEM_DA_COPIA = `COALESCE(NULLIF(o.origem, ''), CASE WHEN o.meta_lead_id IS NOT NULL OR o.meta_campaign_id IS NOT NULL
+  OR o.meta_ad_id IS NOT NULL THEN 'meta' ELSE '' END)`;
 
 /** "Reunião agendada"/"REUNIÃO AGENDADA" — nome do quadro varia de CRM pra CRM. "Reunião não
  * comparecida" não cai aqui porque não tem "agendada" no nome. */
@@ -702,28 +714,24 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
     );
 
     // A cópia foi retirada quando a lead voltou pro começo do funil e agora ela agendou de novo: restaura a mesma.
+    // Volta já com o conteúdo de agora da original.
     if (jaEspelhada?.deleted_at) {
       await query(
-        `UPDATE lead_rows SET deleted_at = NULL, board_id = $2, status = $3, position = $4 WHERE id = $1`,
-        [jaEspelhada.id, destino.id, MILESTONE_AGENDADA, (max ?? -1) + 1]
+        `UPDATE lead_rows c SET deleted_at = NULL, board_id = $2, status = $3, position = $4,
+           ${COPIA_LEVA.map((k) => `${k} = o.${k}`).join(', ')}, origem = ${ORIGEM_DA_COPIA}
+         FROM lead_rows o WHERE c.id = $1 AND o.id = $5`,
+        [jaEspelhada.id, destino.id, MILESTONE_AGENDADA, (max ?? -1) + 1, leadRowId]
       );
       return;
     }
 
+    // A cópia nasce idêntica à original (antes ela vinha sem origem, sem o anúncio do Meta, sem nicho/motivo…).
     await query(
-      `INSERT INTO lead_rows (
-        board_id, nome, tipo, empresa, telefone, dia_contato, ligacao, status, agendamento,
-        retornar, retornado, responsavel, sdr, numero, dor_cliente, numero_atendentes,
-        valor_mrr, valor_implementacao, observacoes, fechamento, espelho_origem_id, position
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-      ON CONFLICT DO NOTHING`,
-      [
-        destino.id, lead.nome, lead.tipo, lead.empresa, lead.telefone, lead.dia_contato,
-        lead.ligacao, MILESTONE_AGENDADA, lead.agendamento, lead.retornar, lead.retornado,
-        lead.responsavel, lead.sdr, lead.numero, lead.dor_cliente, lead.numero_atendentes,
-        lead.valor_mrr, lead.valor_implementacao, lead.observacoes, lead.fechamento, leadRowId,
-        (max ?? -1) + 1,
-      ]
+      `INSERT INTO lead_rows (board_id, status, espelho_origem_id, position, origem, ${COPIA_LEVA.join(', ')})
+       SELECT $1, $2, o.id, $3, ${ORIGEM_DA_COPIA}, ${COPIA_LEVA.map((k) => `o.${k}`).join(', ')}
+       FROM lead_rows o WHERE o.id = $4
+       ON CONFLICT DO NOTHING`,
+      [destino.id, MILESTONE_AGENDADA, (max ?? -1) + 1, leadRowId]
     );
   } catch (err) {
     console.error('[espelho] falha ao espelhar lead pro CRM do closer', leadRowId, err);
@@ -894,7 +902,7 @@ export async function syncCopiaDaIa(leadRowId: string) {
     );
 
     // Já existiu (foi pra lixeira quando desmarcaram): volta, com o conteúdo de agora.
-    const conteudo = [...ESPELHO_CAMPOS.filter((c) => c !== 'sdr'), 'nicho', 'motivo_desqualificacao', 'followup', 'disparo'];
+    const conteudo = [...new Set([...ESPELHO_CAMPOS.filter((c) => c !== 'sdr'), 'nicho', 'motivo_desqualificacao', 'followup', 'disparo'])];
     if (copia) {
       await query(
         `UPDATE lead_rows c SET deleted_at = NULL, board_id = $2, status = $3, position = $4, sdr = $5,

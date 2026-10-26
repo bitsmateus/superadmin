@@ -2069,6 +2069,32 @@ END; $$`);
     END IF;
   END $$`);
 
+  // Cópias do CRM do closer que nasceram incompletas (sem origem, sem o anúncio do Meta, sem nicho/motivo/agendado
+  // por/ticket): completa SÓ o que está vazio na cópia com o que tem na original — nada preenchido nela é trocado.
+  {
+    const r = await pool.query(`UPDATE lead_rows c SET
+        origem = CASE WHEN c.origem = '' THEN COALESCE(NULLIF(o.origem, ''), CASE WHEN o.meta_lead_id IS NOT NULL
+          OR o.meta_campaign_id IS NOT NULL OR o.meta_ad_id IS NOT NULL THEN 'meta' ELSE '' END) ELSE c.origem END,
+        nicho = CASE WHEN c.nicho = '' THEN o.nicho ELSE c.nicho END,
+        motivo_desqualificacao = CASE WHEN c.motivo_desqualificacao = '' THEN o.motivo_desqualificacao ELSE c.motivo_desqualificacao END,
+        agendado_por = CASE WHEN c.agendado_por = '' THEN o.agendado_por ELSE c.agendado_por END,
+        ticket_nx = CASE WHEN c.ticket_nx = '' THEN o.ticket_nx ELSE c.ticket_nx END,
+        origem_campanha = CASE WHEN c.origem_campanha = '' THEN o.origem_campanha ELSE c.origem_campanha END,
+        qualificacao = CASE WHEN c.qualificacao = '{}'::jsonb THEN o.qualificacao ELSE c.qualificacao END,
+        lead_raw = COALESCE(c.lead_raw, o.lead_raw),
+        meta_campaign_id = COALESCE(c.meta_campaign_id, o.meta_campaign_id),
+        meta_adset_id = COALESCE(c.meta_adset_id, o.meta_adset_id),
+        meta_ad_id = COALESCE(c.meta_ad_id, o.meta_ad_id)
+      FROM lead_rows o
+      WHERE c.espelho_origem_id = o.id AND (
+        (c.origem = '' AND (o.origem <> '' OR o.meta_lead_id IS NOT NULL OR o.meta_campaign_id IS NOT NULL OR o.meta_ad_id IS NOT NULL))
+        OR (c.nicho = '' AND o.nicho <> '') OR (c.motivo_desqualificacao = '' AND o.motivo_desqualificacao <> '')
+        OR (c.agendado_por = '' AND o.agendado_por <> '') OR (c.ticket_nx = '' AND o.ticket_nx <> '')
+        OR (c.meta_campaign_id IS NULL AND o.meta_campaign_id IS NOT NULL) OR (c.meta_ad_id IS NULL AND o.meta_ad_id IS NOT NULL)
+        OR (c.lead_raw IS NULL AND o.lead_raw IS NOT NULL))`);
+    if (r.rowCount) console.log(`[db] espelho do closer: ${r.rowCount} cópia(s) completada(s) com os dados da lead original`);
+  }
+
   console.log('[db] migrations applied');
 }
 

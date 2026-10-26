@@ -64,6 +64,7 @@ import { startLeadsDailyReport } from './jobs/leadsDailyReport.js';
 import { startTrafficAiReview } from './jobs/trafficAiReview.js';
 import { startDemandasAiDiario } from './jobs/demandasAiDiario.js';
 import { startEngeEnvioDispatch } from './jobs/engeEnvioDispatch.js';
+import { startReuniaoWebhook } from './jobs/reuniaoWebhook.js';
 
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
@@ -213,6 +214,7 @@ async function main() {
   startPulseSweep();
   startPulseDispatch();
   startEngeEnvioDispatch();
+  startReuniaoWebhook();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

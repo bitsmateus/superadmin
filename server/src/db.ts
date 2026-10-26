@@ -1958,6 +1958,11 @@ END; $$`);
     UNIQUE (lead_row_id, agendamento)
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS reuniao_resultados_created_idx ON reuniao_resultados(created_at)`);
+  // Aviso pro n8n (N8N_WEBHOOK_REUNIAO): quando chegou, quantas tentativas e o último erro. NULL em webhook_enviado_em =
+  // ainda não chegou e o job de reenvio tenta de novo (jobs/reuniaoWebhook.ts).
+  await pool.query(`ALTER TABLE reuniao_resultados ADD COLUMN IF NOT EXISTS webhook_enviado_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE reuniao_resultados ADD COLUMN IF NOT EXISTS webhook_tentativas INT NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE reuniao_resultados ADD COLUMN IF NOT EXISTS webhook_erro TEXT`);
 
   console.log('[db] migrations applied');
 }

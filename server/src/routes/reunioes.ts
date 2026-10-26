@@ -5,8 +5,9 @@ import {
 } from './leadBoards.js';
 import { textoParaHtml } from '../lib/integracaoCards.js';
 import { abaDeFora } from '../lib/abasJuntas.js';
+import { enviarWebhookDaReuniao } from '../jobs/reuniaoWebhook.js';
 import {
-  agendamentoLegivel, agendamentoParaDate, agendamentoParaIso, dateParaAgendamento, cardDaPessoa, reunioesPendentes, responsaveisDaReuniao,
+  agendamentoLegivel, agendamentoParaDate, dateParaAgendamento, cardDaPessoa, reunioesPendentes, responsaveisDaReuniao,
   linkDeReuniao, rotuloDoEvento, textoDaNotaDeResultado, validarResultado, chaveDaReuniao, ESPERA_MS,
   type CandidatoReuniao, type CamposDoCard, type ResultadoValidado,
 } from '../lib/reuniaoResultado.js';
@@ -22,7 +23,6 @@ import {
  * meses de cards parados em "Reunião agendada" de uma vez.
  */
 const DESDE = process.env.REUNIAO_RESULTADO_DESDE || '2026-10-23T00:00';
-const WEBHOOK_TIMEOUT_MS = 5000;
 
 interface Candidato extends CandidatoReuniao {
   sdr: string;
@@ -126,20 +126,6 @@ async function pendenciasDe(userId: string, role: string) {
   });
 }
 
-/** Avisa o n8n (env N8N_WEBHOOK_REUNIAO). Vazio = não envia. Nunca trava nem lança: só loga. */
-function avisarN8n(payload: Record<string, unknown>) {
-  const url = process.env.N8N_WEBHOOK_REUNIAO?.trim();
-  if (!url) return;
-  void fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
-  })
-    .then((res) => { if (!res.ok) console.error('[reuniao] webhook n8n respondeu', res.status); })
-    .catch((err) => console.error('[reuniao] webhook n8n falhou', err instanceof Error ? err.message : err));
-}
-
 export async function reunioesRoutes(app: FastifyInstance) {
   // GET /api/reunioes/pendentes — as reuniões que o usuário logado precisa resolver (mais antiga primeiro).
   app.get('/api/reunioes/pendentes', { onRequest: [app.authenticate] }, async (req) => {
@@ -215,25 +201,8 @@ export async function reunioesRoutes(app: FastifyInstance) {
       await logLeadEvent(canonico, 'reuniao', agendamentoLegivel(pendencia.agendamento), rotuloDoEvento(r), nomeDoUsuario)
         .catch((err) => console.error('[reuniao] falha ao gravar na linha do tempo', canonico, err));
 
-      // O n8n conhece a lead pelo card original (ex.: o do CRM IA LUIZA).
-      const original = await queryOne<{ page: string; telefone: string; nome: string }>(
-        `SELECT lb.page, COALESCE(r.telefone, '') AS telefone, COALESCE(r.nome, '') AS nome
-         FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id WHERE r.id = $1`,
-        [pendencia.familia]
-      );
-      avisarN8n({
-        evento: r.resultado,
-        card_id: pendencia.familia,
-        quadro_id: original?.page ?? card.page,
-        telefone: original?.telefone || card.telefone,
-        nome: original?.nome || card.nome,
-        agendamento_anterior: agendamentoParaIso(pendencia.agendamento),
-        agendamento_novo: agendamentoParaIso(r.agendamentoNovo),
-        proxima_etapa: r.proximaEtapa,
-        motivo: r.motivo,
-        resumo: r.resumo || null,
-        usuario: nomeDoUsuario,
-      });
+      // Aviso pro n8n em background: grava se chegou, e o que falhar é reenviado (jobs/reuniaoWebhook.ts).
+      void enviarWebhookDaReuniao(reserva.id);
 
       return { ok: true, resultado: r.resultado };
     }

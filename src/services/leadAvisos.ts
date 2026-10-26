@@ -12,6 +12,8 @@ export interface AvisoDaLuiza {
   origem: string
   /** "YYYY-MM-DDTHH:MM" (Brasília), quando tem. */
   agendamento: string
+  /** O X de quem está logado conclui o aviso pra todo mundo (é o dono do CRM ARTHUR); senão, esconde só pra ele. */
+  fecha_pra_todos: boolean
 }
 
 export const leadAvisosService = {

@@ -19,8 +19,9 @@ const TIPO: Record<AvisoDaLuiza['tipo'], { titulo: string; icone: React.ReactNod
 
 /**
  * Avisos da Luiza na tela do CRM ARTHUR (card novo no CRM IA LUIZA, Qualificado, Reunião agendada). Ficam no canto,
- * sem travar nada, até a pessoa marcar como lido (X) — cada um tem o seu "lido". Chegam na hora pelo tempo real e,
- * de garantia, a cada 1 min.
+ * sem travar nada, pra todo mundo que abre a tela. O X do Arthur (dono do CRM ARTHUR) conclui o aviso e ele some pra
+ * todos; o X de qualquer outra pessoa só esconde pra ela. Chegam (e somem) na hora pelo tempo real e, de garantia, a
+ * cada 1 min.
  */
 export function AvisosDaLuiza({ onAbrir }: { onAbrir: (cardId: string) => void }) {
   const [avisos, setAvisos] = React.useState<AvisoDaLuiza[]>([])
@@ -47,6 +48,8 @@ export function AvisosDaLuiza({ onAbrir }: { onAbrir: (cardId: string) => void }
 
   if (!avisos.length) return null
   const resto = avisos.length - VISIVEIS
+  const praTodos = avisos[0].fecha_pra_todos
+  const rotuloDoX = praTodos ? 'Concluir (some pra todos)' : 'Esconder só pra mim'
 
   return (
     <div className="fixed bottom-10 right-4 z-40 flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2" aria-live="polite">
@@ -76,8 +79,8 @@ export function AvisosDaLuiza({ onAbrir }: { onAbrir: (cardId: string) => void }
               <button
                 type="button"
                 onClick={() => void marcar([a.id])}
-                title="Marcar como lido"
-                aria-label="Marcar como lido"
+                title={rotuloDoX}
+                aria-label={rotuloDoX}
                 className="rounded-md p-1 text-foreground/40 hover:bg-elevate/[0.06] hover:text-foreground"
               >
                 <X className="h-4 w-4" />
@@ -90,7 +93,7 @@ export function AvisosDaLuiza({ onAbrir }: { onAbrir: (cardId: string) => void }
         <div className="flex items-center justify-between rounded-xl border border-line bg-card px-3 py-2 text-xs shadow-lg">
           <span className="text-foreground/55">{resto > 0 ? `+${resto} aviso(s)` : `${avisos.length} avisos`}</span>
           <button type="button" onClick={() => void marcar()} className="font-medium text-accent hover:underline">
-            Marcar todos como lidos
+            {praTodos ? 'Concluir todos' : 'Esconder todos'}
           </button>
         </div>
       )}

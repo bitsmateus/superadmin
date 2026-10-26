@@ -1997,6 +1997,9 @@ END; $$`);
     lido_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (aviso_id, user_id)
   )`);
+  // O X do dono do CRM ARTHUR conclui o aviso pra todo mundo (resolvido_em); o X de qualquer outro só esconde pra ele.
+  await pool.query(`ALTER TABLE lead_avisos ADD COLUMN IF NOT EXISTS resolvido_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE lead_avisos ADD COLUMN IF NOT EXISTS resolvido_por TEXT`);
   await pool.query(`CREATE OR REPLACE FUNCTION registrar_aviso_luiza() RETURNS TRIGGER LANGUAGE plpgsql AS $$
   DECLARE
     pagina_nova TEXT; quadro_novo TEXT; pagina_antiga TEXT; tipo_aviso TEXT;
@@ -2027,7 +2030,7 @@ END; $$`);
   await pool.query(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
       DROP TRIGGER IF EXISTS notify_lead_avisos ON lead_avisos;
-      CREATE TRIGGER notify_lead_avisos AFTER INSERT ON lead_avisos FOR EACH ROW EXECUTE FUNCTION notify_db_change();
+      CREATE TRIGGER notify_lead_avisos AFTER INSERT OR UPDATE OF resolvido_em ON lead_avisos FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);
 

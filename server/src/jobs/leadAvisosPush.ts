@@ -1,6 +1,6 @@
 import { query } from '../db.js';
 import { sendPushToUsers } from '../lib/webPush.js';
-import { criarNotificacao, linkDoCard, type DadosDaNotificacao, type TipoNotificacao } from '../lib/notificacoes.js';
+import { criarNotificacao, linkDoCard, religarNotificacoesForaDaLuiza, type DadosDaNotificacao, type TipoNotificacao } from '../lib/notificacoes.js';
 import { agendamentoParaIso } from '../lib/reuniaoResultado.js';
 import { abaDeFora } from '../lib/abasJuntas.js';
 
@@ -64,5 +64,11 @@ export function startLeadAvisosPush() {
   const tick = () => { converterPendentes().catch((err) => console.error('[avisos-luiza] erro ao gerar notificação:', err)); };
   setTimeout(tick, 20_000);
   setInterval(tick, INTERVALO_MS);
+  // Uma vez por subida: as transferências antigas ligadas ao card errado (fora do CRM IA LUIZA) são religadas.
+  setTimeout(() => {
+    religarNotificacoesForaDaLuiza()
+      .then((n) => { if (n) console.log(`[avisos-luiza] ${n} notificação(ões) religada(s) ao card do CRM IA LUIZA`); })
+      .catch((err) => console.error('[avisos-luiza] erro ao religar notificações:', err));
+  }, 15_000);
   console.log(`[avisos-luiza] avisos do CRM IA LUIZA viram notificações (a cada 5s; aba de fora: ${abaDeFora(PAGINA_LUIZA) ?? '—'})`);
 }

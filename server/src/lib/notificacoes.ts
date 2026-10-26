@@ -227,6 +227,35 @@ async function cardDaNotificacao(d: DadosDaNotificacao): Promise<{ id: string; n
   return acharCard(d.card_id, d.telefone, d.quadro, d.nome);
 }
 
+/**
+ * Conserta as transferências/leads novos criados antes da regra do CRM IA LUIZA (ex.: Felipe Sampaio ligado ao card
+ * da Poliane, que tem o mesmo telefone): religa ao card dele na Luiza. Sem card lá, só cria se a notificação ainda
+ * está não lida pra alguém (as já resolvidas não enchem "Leads Novos"). Idempotente: as já certas ficam como estão.
+ */
+export async function religarNotificacoesForaDaLuiza(): Promise<number> {
+  const erradas = await query<DadosDaNotificacao & { id: string; nao_lida: boolean }>(
+    `SELECT n.id, n.tipo, n.titulo, n.mensagem, n.nome, n.telefone, n.ticket_nx, n.card_id, n.quadro,
+            n.ultima_mensagem_lead, n.resposta_luiza, n.reuniao_em, n.link_reuniao,
+            EXISTS (SELECT 1 FROM notificacao_destinatarios nd WHERE nd.notificacao_id = n.id AND nd.lida_em IS NULL) AS nao_lida
+     FROM notificacoes n
+     WHERE n.tipo = ANY($1) AND n.created_at > NOW() - INTERVAL '30 days' AND n.telefone <> ''
+       AND NOT EXISTS (
+         SELECT 1 FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+         WHERE lb.page = $2 AND r.deleted_at IS NULL
+           AND COALESCE(r.espelho_origem_id, r.copia_ia_origem_id, r.id) = n.card_id)
+     ORDER BY n.created_at`,
+    [SEMPRE_NA_LUIZA, PAGINA_LUIZA]
+  );
+  let religadas = 0;
+  for (const n of erradas) {
+    const card = (await buscarNaLuiza(null, n.telefone)) ?? (n.nao_lida ? await criarNaLuiza(n) : null);
+    if (!card || card.id === n.card_id) continue;
+    await query('UPDATE notificacoes SET card_id = $2 WHERE id = $1', [n.id, card.id]);
+    religadas++;
+  }
+  return religadas;
+}
+
 /** Link "Abrir card" pra uma página: o CRM IA LUIZA abre como aba dentro do CRM ARTHUR. */
 export function linkDoCard(pagina: string, cardId: string): string {
   const fora = abaDeFora(pagina);

@@ -2,6 +2,7 @@ import { useLocation, Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSupportView } from '@/components/support/SupportViewContext'
+import { SinoDeNotificacoes } from '@/components/notificacoes/SinoDeNotificacoes'
 
 const labels: Record<string, string> = {
   '': 'Dashboard',
@@ -97,6 +98,8 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, titleAddon,
           </div>
         </div>
         {rightSlot && <div className="max-w-full shrink-0">{rightSlot}</div>}
+        {/* Sininho das notificações do comercial no topo de toda tela (só aparece pra quem recebe: Arthur e Luis). */}
+        <SinoDeNotificacoes />
       </div>
     </header>
   )

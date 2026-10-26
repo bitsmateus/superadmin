@@ -79,12 +79,21 @@ export function SinoDeNotificacoes({ pagina, className }: { pagina?: string; cla
         onMouseDown={(e) => e.stopPropagation()}
         title={leitura ? `Notificações do ${dados.de?.nome ?? ''} (só visualização)` : 'Notificações'}
         aria-label="Notificações"
-        className={cn('relative grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/60 hover:bg-elevate/[0.06] hover:text-foreground', className)}
+        // Bolinha azul cheia, bem visível; com não lida, um anel pulsando em volta e o número em vermelho.
+        className={cn(
+          'relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-white shadow-md ring-2 ring-accent/25 transition-transform hover:scale-105 focus-ring',
+          className,
+        )}
       >
-        {leitura ? <Eye className="absolute -left-0.5 -top-0.5 h-3 w-3 text-foreground/40" /> : null}
-        <Bell className="h-4 w-4" />
+        {dados.nao_lidas > 0 && <span className="absolute inset-0 animate-ping rounded-full bg-accent/40" aria-hidden />}
+        <Bell className="relative h-[18px] w-[18px]" />
+        {leitura && (
+          <span className="absolute -bottom-1 -left-1 grid h-4 w-4 place-items-center rounded-full bg-card text-foreground/60 ring-1 ring-line" title="Só visualização">
+            <Eye className="h-2.5 w-2.5" />
+          </span>
+        )}
         {dados.nao_lidas > 0 && (
-          <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-danger px-1 text-center text-[10px] font-bold leading-[18px] text-white">
+          <span className="absolute -right-1.5 -top-1.5 min-w-[20px] rounded-full bg-danger px-1 text-center text-[11px] font-bold leading-5 text-white ring-2 ring-card">
             {dados.nao_lidas > 99 ? '99+' : dados.nao_lidas}
           </span>
         )}

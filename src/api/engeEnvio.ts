@@ -66,6 +66,43 @@ export interface EngeEnvio {
   whatsappPara: string | null
   whatsappEnviadoEm: string | null
   whatsappErro: string | null
+  modeloId: string | null
+}
+
+/** Modelo de mensagem: o texto do e-mail e o do WhatsApp de um tipo de aviso. */
+export interface EngeModelo {
+  id: string
+  nome: string
+  assunto: string
+  corpo: string
+  whatsappTexto: string
+  /** Só no número oficial (WABA): template aprovado na Meta e as variáveis dele, na ordem. */
+  whatsappTemplate: string | null
+  whatsappIdioma: string | null
+  whatsappParametros: string[]
+  padrao: boolean
+}
+export type ModeloDados = Omit<EngeModelo, 'id' | 'padrao'>
+
+/** Uma etapa da régua: quando sai (em relação ao vencimento), com qual modelo, por quais canais e se repete. */
+export interface EtapaRegua {
+  id: string
+  momento: 'antes' | 'dia' | 'depois'
+  dias: number
+  hora: string
+  modeloId: string | null
+  email: boolean
+  whatsapp: boolean
+  repetir: boolean
+  aCada: number
+  vezes: number
+}
+
+export interface EngeRegua {
+  id: string
+  nome: string
+  etapas: EtapaRegua[]
+  padrao: boolean
 }
 
 export interface EngeCanais {
@@ -105,21 +142,25 @@ export interface EngeNx {
 export interface EngeConfig {
   smtp: EngeSmtp
   copiaOculta: string
-  assunto: string
-  corpo: string
   smtpOk: boolean
   nx: EngeNx
-  whatsappTexto: string
   nxOk: boolean
 }
 
 export type EmpreendimentoDados = Omit<EngeEmpreendimento, 'id'>
+/** Aviso a criar: dia/hora ("YYYY-MM-DDTHH:mm", horário de Brasília), modelo e canais. */
+export interface EnvioNovo {
+  enviarEm: string
+  modeloId: string | null
+  email: boolean
+  whatsapp: boolean
+}
+
 export interface NovaGarantia {
   item: string
   prazo: string
   vencimento: string
-  /** Dia/hora de cada aviso, "YYYY-MM-DDTHH:mm" no horário de Brasília. */
-  envios: string[]
+  envios: EnvioNovo[]
 }
 
 /** 401/403 = sessão do Enge Envio caiu — quem chama volta pro login. */
@@ -177,16 +218,28 @@ export const engeApi = {
     put<{ ok: true; smtpOk: boolean; nxOk: boolean }>('/config', dados),
   testarEnvio: (para: string) => post<{ ok: true }>('/config/teste', { para }),
   testarWhatsApp: (numero: string) => post<{ ok: true }>('/config/teste-whatsapp', { numero }),
-  previa: (dados: { assunto?: string; corpo?: string; whatsappTexto?: string; garantiaId?: string; data?: string }) =>
+  previa: (dados: { assunto?: string; corpo?: string; whatsappTexto?: string; modeloId?: string; garantiaId?: string; data?: string }) =>
     post<{ assunto: string; html: string; whatsapp: string }>('/previa', dados),
 
+  modelos: () => req<EngeModelo[]>('/modelos'),
+  criarModelo: (dados: ModeloDados) => post<EngeModelo>('/modelos', dados),
+  salvarModelo: (id: string, dados: ModeloDados) => put<EngeModelo>(`/modelos/${id}`, dados),
+  tornarModeloPadrao: (id: string) => post<{ ok: true }>(`/modelos/${id}/padrao`),
+  removerModelo: (id: string) => del<{ ok: true }>(`/modelos/${id}`),
+
+  reguas: () => req<EngeRegua[]>('/reguas'),
+  criarRegua: (nome: string, etapas: EtapaRegua[]) => post<EngeRegua>('/reguas', { nome, etapas }),
+  salvarRegua: (id: string, nome: string, etapas: EtapaRegua[]) => put<EngeRegua>(`/reguas/${id}`, { nome, etapas }),
+  tornarReguaPadrao: (id: string) => post<{ ok: true }>(`/reguas/${id}/padrao`),
+  removerRegua: (id: string) => del<{ ok: true }>(`/reguas/${id}`),
+
   tudo: () => req<EngeTudo>('/tudo'),
-  criarEmpreendimento: (dados: EmpreendimentoDados & { garantias: NovaGarantia[]; canais: EngeCanais }) =>
+  criarEmpreendimento: (dados: EmpreendimentoDados & { garantias: NovaGarantia[] }) =>
     post<EngeEmpreendimento>('/empreendimentos', dados),
   salvarEmpreendimento: (id: string, dados: EmpreendimentoDados) => put<EngeEmpreendimento>(`/empreendimentos/${id}`, dados),
   removerEmpreendimento: (id: string) => del<{ ok: true }>(`/empreendimentos/${id}`),
 
-  criarGarantia: (empreendimentoId: string, dados: NovaGarantia & { canais: EngeCanais }) =>
+  criarGarantia: (empreendimentoId: string, dados: NovaGarantia) =>
     post<{ id: string }>(`/empreendimentos/${empreendimentoId}/garantias`, dados),
   salvarGarantia: (
     id: string,
@@ -196,9 +249,12 @@ export const engeApi = {
   ) => put<{ ok: true }>(`/garantias/${id}`, dados),
   removerGarantia: (id: string) => del<{ ok: true }>(`/garantias/${id}`),
 
-  agendarEnvio: (garantiaId: string, enviarEm: string, canais: EngeCanais) =>
-    post<{ id: string }>(`/garantias/${garantiaId}/envios`, { enviarEm, ...canais }),
-  remarcarEnvio: (id: string, enviarEm: string, canais?: EngeCanais) => put<{ id: string }>(`/envios/${id}`, { enviarEm, ...canais }),
+  agendarEnvio: (garantiaId: string, enviarEm: string, canais: EngeCanais, modeloId: string | null) =>
+    post<{ id: string }>(`/garantias/${garantiaId}/envios`, { enviarEm, ...canais, modeloId }),
+  agendarLote: (garantiaId: string, envios: EnvioNovo[]) =>
+    post<{ criados: number }>(`/garantias/${garantiaId}/envios/lote`, { envios }),
+  remarcarEnvio: (id: string, enviarEm: string, canais?: EngeCanais, modeloId?: string | null) =>
+    put<{ id: string }>(`/envios/${id}`, { enviarEm, ...canais, ...(modeloId !== undefined ? { modeloId } : {}) }),
   cancelarEnvio: (id: string) => post<{ ok: true }>(`/envios/${id}/cancelar`),
   enviarAgora: (id: string) => post<{ ok: true }>(`/envios/${id}/enviar-agora`),
   verEnvio: (id: string) =>

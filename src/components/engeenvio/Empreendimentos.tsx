@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
-import { engeApi, type EngeEmpreendimento, type EngeTudo } from '@/api/engeEnvio'
+import { engeApi, type EngeEmpreendimento, type EngeTudo, type EnvioNovo } from '@/api/engeEnvio'
 import { cn } from '@/lib/utils'
-import { dataBr, dataHoraBr, diasAte, statusGarantia, sugerirEnvios, textoDias } from '@/lib/engeEnvio'
-import { CanaisToggle, Cartao, Vazio, td, th, useCanaisPadrao, useIndices, useRecarregar } from './shared'
+import { dataBr, dataHoraBr, diasAte, expandirRegua, statusGarantia, textoDias } from '@/lib/engeEnvio'
+import { Cartao, Vazio, td, th, useEngeConfig, useIndices, useModelos, useRecarregar, useReguas } from './shared'
+import { ListaEnviosNovos } from './ReguaEditor'
 import { EmpreendimentoForm } from './EmpreendimentoForm'
 import { GarantiaModal } from './GarantiaModal'
 
@@ -278,12 +279,15 @@ function Detalhe({ emp, dados, onVoltar }: { emp: EngeEmpreendimento; dados: Eng
 
 function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boolean; empreendimentoId: string; onFechar: () => void }) {
   const recarregar = useRecarregar()
+  const { data: reguas = [] } = useReguas()
+  const { data: modelos = [] } = useModelos()
+  const { data: cfg } = useEngeConfig()
+  const whatsappDisponivel = Boolean(cfg?.nxOk)
   const [item, setItem] = React.useState('')
   const [prazo, setPrazo] = React.useState('')
   const [vencimento, setVencimento] = React.useState('')
-  const [envios, setEnvios] = React.useState<string[]>([])
-  const canaisPadrao = useCanaisPadrao()
-  const [canais, setCanais] = React.useState(canaisPadrao)
+  const [reguaId, setReguaId] = React.useState('')
+  const [envios, setEnvios] = React.useState<EnvioNovo[]>([])
   const [salvando, setSalvando] = React.useState(false)
 
   React.useEffect(() => {
@@ -292,21 +296,22 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
       setPrazo('')
       setVencimento('')
       setEnvios([])
-      setCanais(canaisPadrao)
+      setReguaId((reguas.find((r) => r.padrao) ?? reguas[0])?.id ?? '')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto])
 
-  const mudarVencimento = (v: string) => {
-    setVencimento(v)
-    if (v) setEnvios(sugerirEnvios(v, [30, 15, 7], '09:00'))
+  // Vencimento ou régua mudou: refaz os avisos pela régua (dá pra ajustar um por um depois).
+  const gerar = (venc: string, id: string) => {
+    const r = reguas.find((x) => x.id === id)
+    setEnvios(venc && r ? expandirRegua(r.etapas, venc, { whatsappDisponivel }) : [])
   }
 
   const salvar = async (e: React.FormEvent) => {
     e.preventDefault()
     setSalvando(true)
     try {
-      await engeApi.criarGarantia(empreendimentoId, { item, prazo, vencimento, envios: envios.filter(Boolean), canais })
+      await engeApi.criarGarantia(empreendimentoId, { item, prazo, vencimento, envios: envios.filter((x) => x.enviarEm) })
       toast.success('Garantia criada')
       await recarregar()
       onFechar()
@@ -321,6 +326,7 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
     <Modal
       open={aberto}
       onClose={onFechar}
+      size="lg"
       title="Nova garantia"
       footer={
         <>
@@ -328,51 +334,61 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
             Cancelar
           </Button>
           <Button type="submit" form="ee-form-gar" loading={salvando}>
-            Criar garantia
+            Criar e agendar {envios.length} {envios.length === 1 ? 'aviso' : 'avisos'}
           </Button>
         </>
       }
     >
-      <form id="ee-form-gar" onSubmit={salvar} className="space-y-3">
+      <form id="ee-form-gar" onSubmit={salvar} className="space-y-4">
         <Input id="ee-ng-item" label="Item" value={item} onChange={(e) => setItem(e.target.value)} required />
         <div className="grid gap-3 sm:grid-cols-2">
           <Input id="ee-ng-prazo" label="Prazo" placeholder="ex.: 2 anos" value={prazo} onChange={(e) => setPrazo(e.target.value)} />
-          <Input id="ee-ng-venc" type="date" label="Vencimento" value={vencimento} onChange={(e) => mudarVencimento(e.target.value)} required />
+          <Input
+            id="ee-ng-venc"
+            type="date"
+            label="Vencimento"
+            value={vencimento}
+            onChange={(e) => {
+              setVencimento(e.target.value)
+              gerar(e.target.value, reguaId)
+            }}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="ee-ng-regua" className="mb-1.5 block text-xs font-medium text-foreground/70">
+            Régua de envio
+          </label>
+          <select
+            id="ee-ng-regua"
+            value={reguaId}
+            onChange={(e) => {
+              setReguaId(e.target.value)
+              gerar(vencimento, e.target.value)
+            }}
+            className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-foreground focus:border-accent focus:outline-none"
+          >
+            <option value="">Sem régua (montar os avisos à mão)</option>
+            {reguas.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.nome}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium text-foreground/70">Dias de envio dos avisos</p>
-            <CanaisToggle idBase="ee-ng-canais" valor={canais} onChange={setCanais} />
-          </div>
-          {envios.map((v, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                id={`ee-ng-env-${i}`}
-                type="datetime-local"
-                value={v}
-                onChange={(e) => setEnvios((l) => l.map((x, j) => (j === i ? e.target.value : x)))}
-                className="h-9 rounded-md border border-line bg-surface px-2 text-sm text-foreground"
-                aria-label={`Aviso ${i + 1}`}
-              />
-              <button
-                type="button"
-                onClick={() => setEnvios((l) => l.filter((_, j) => j !== i))}
-                className="rounded p-1 text-foreground/40 hover:text-danger"
-                aria-label="Remover aviso"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            leftIcon={<Plus className="h-3.5 w-3.5" />}
-            onClick={() => setEnvios((l) => [...l, ''])}
-          >
-            Adicionar dia de envio
-          </Button>
+          <p className="text-xs font-medium text-foreground/70">Avisos que vão ser agendados</p>
+          {!vencimento ? (
+            <p className="text-sm text-foreground/50">Informe o vencimento para montar os avisos.</p>
+          ) : (
+            <ListaEnviosNovos
+              idBase="ee-ng-env"
+              envios={envios}
+              onChange={setEnvios}
+              modelos={modelos}
+              whatsappDisponivel={whatsappDisponivel}
+            />
+          )}
         </div>
       </form>
     </Modal>

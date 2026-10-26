@@ -5,14 +5,15 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
-import { engeApi, type EngeCanais, type EngeEmpreendimento, type EngeEnvio, type EngeGarantia } from '@/api/engeEnvio'
-import { dataBr, dataHoraBr, diasAte, hoje, paraCampo, somarDias, statusEnvio, sugerirEnvios, textoDias } from '@/lib/engeEnvio'
-import { CanaisToggle, useCanaisPadrao, useRecarregar } from './shared'
+import { engeApi, type EngeCanais, type EngeEmpreendimento, type EngeEnvio, type EngeGarantia, type EnvioNovo } from '@/api/engeEnvio'
+import { dataBr, dataHoraBr, diasAte, expandirRegua, hoje, paraCampo, somarDias, statusEnvio, sugerirEnvios, textoDias } from '@/lib/engeEnvio'
+import { CanaisToggle, useCanaisPadrao, useEngeConfig, useModelos, useRecarregar, useReguas } from './shared'
+import { ListaEnviosNovos } from './ReguaEditor'
 import { EmailModal } from './EmailModal'
 
 /**
- * Uma garantia e os avisos dela: escolher/remarcar o dia e a hora de cada envio, mandar na hora,
- * cancelar e marcar o chamado aberto na construtora.
+ * Uma garantia e os avisos dela: escolher/remarcar o dia, a hora, o modelo e os canais de cada
+ * envio, aplicar uma régua, mandar na hora, cancelar e marcar o chamado aberto na construtora.
  */
 export function GarantiaModal({
   garantia,
@@ -36,6 +37,14 @@ export function GarantiaModal({
   const [canaisEdit, setCanaisEdit] = React.useState<Record<string, EngeCanais>>({})
   const canaisPadrao = useCanaisPadrao()
   const [canaisNovo, setCanaisNovo] = React.useState<EngeCanais>(canaisPadrao)
+  const [modeloEdit, setModeloEdit] = React.useState<Record<string, string | null>>({})
+  const [modeloNovo, setModeloNovo] = React.useState<string | null>(null)
+  const [reguaId, setReguaId] = React.useState('')
+  const [enviosRegua, setEnviosRegua] = React.useState<EnvioNovo[]>([])
+  const { data: modelos = [] } = useModelos()
+  const { data: reguas = [] } = useReguas()
+  const { data: cfg } = useEngeConfig()
+  const whatsappDisponivel = Boolean(cfg?.nxOk)
   const [ocupado, setOcupado] = React.useState<string | null>(null)
   const [verEmail, setVerEmail] = React.useState<string | null>(null)
 
@@ -50,6 +59,10 @@ export function GarantiaModal({
     setRemarcar({})
     setCanaisEdit({})
     setCanaisNovo(canaisPadrao)
+    setModeloEdit({})
+    setModeloNovo(null)
+    setReguaId('')
+    setEnviosRegua([])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [garantia])
 
@@ -73,6 +86,29 @@ export function GarantiaModal({
   const ordenados = [...envios].sort((a, b) => a.enviarEm.localeCompare(b.enviarEm))
   const pendentes = envios.filter((e) => e.status === 'agendado' || e.status === 'erro').length
   const dias = diasAte(garantia.vencimento)
+  const nomeModelo = (id: string | null) =>
+    modelos.find((m) => m.id === id)?.nome ?? `Padrão${modelos.find((m) => m.padrao) ? ` (${modelos.find((m) => m.padrao)!.nome})` : ''}`
+  const seletorModelo = (id: string, valor: string | null, onChange: (v: string | null) => void) => (
+    <select
+      id={id}
+      value={valor ?? ''}
+      onChange={(ev) => onChange(ev.target.value || null)}
+      className="h-8 max-w-[200px] rounded-md border border-line bg-surface px-2 text-xs text-foreground"
+      aria-label="Modelo da mensagem"
+    >
+      <option value="">{nomeModelo(null)}</option>
+      {modelos.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.nome}
+        </option>
+      ))}
+    </select>
+  )
+  const escolherRegua = (id: string) => {
+    setReguaId(id)
+    const r = reguas.find((x) => x.id === id)
+    setEnviosRegua(r ? expandirRegua(r.etapas, garantia.vencimento, { whatsappDisponivel }) : [])
+  }
 
   const salvarDados = () =>
     agir('dados', () => engeApi.salvarGarantia(garantia.id, { item, prazo, vencimento }), 'Garantia salva')
@@ -117,8 +153,12 @@ export function GarantiaModal({
                 const valor = remarcar[e.id] ?? paraCampo(e.enviarEm)
                 const canaisAtuais = { email: e.canalEmail, whatsapp: e.canalWhatsapp }
                 const canais = canaisEdit[e.id] ?? canaisAtuais
+                const modelo = e.id in modeloEdit ? modeloEdit[e.id] : e.modeloId
                 const mudou =
-                  valor !== paraCampo(e.enviarEm) || canais.email !== canaisAtuais.email || canais.whatsapp !== canaisAtuais.whatsapp
+                  valor !== paraCampo(e.enviarEm) ||
+                  canais.email !== canaisAtuais.email ||
+                  canais.whatsapp !== canaisAtuais.whatsapp ||
+                  modelo !== e.modeloId
                 return (
                   <li key={e.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
                     <Badge tone={s.tom} dot className="shrink-0">
@@ -140,15 +180,20 @@ export function GarantiaModal({
                       </span>
                     )}
                     {editavel ? (
-                      <CanaisToggle idBase={`ee-env-${e.id}`} valor={canais} onChange={(v) => setCanaisEdit((c) => ({ ...c, [e.id]: v }))} compacto />
-                    ) : null}
+                      <>
+                        {seletorModelo(`ee-env-${e.id}-modelo`, modelo, (v) => setModeloEdit((m) => ({ ...m, [e.id]: v })))}
+                        <CanaisToggle idBase={`ee-env-${e.id}`} valor={canais} onChange={(v) => setCanaisEdit((c) => ({ ...c, [e.id]: v }))} compacto />
+                      </>
+                    ) : (
+                      <span className="text-xs text-foreground/50">· {nomeModelo(e.modeloId)}</span>
+                    )}
                     <ResultadoCanais envio={e} />
                     <span className="ml-auto flex flex-wrap gap-1">
                       {editavel && mudou && (
                         <Button
                           size="sm"
                           loading={ocupado === `r${e.id}`}
-                          onClick={() => agir(`r${e.id}`, () => engeApi.remarcarEnvio(e.id, valor, canais), 'Aviso remarcado')}
+                          onClick={() => agir(`r${e.id}`, () => engeApi.remarcarEnvio(e.id, valor, canais, modelo), 'Aviso salvo')}
                         >
                           Salvar
                         </Button>
@@ -204,6 +249,7 @@ export function GarantiaModal({
                   className="h-8 rounded-md border border-line bg-surface px-2 text-xs text-foreground"
                   aria-label="Dia e hora do novo aviso"
                 />
+                {seletorModelo('ee-novo-modelo', modeloNovo, setModeloNovo)}
                 <CanaisToggle idBase="ee-novo-canais" valor={canaisNovo} onChange={setCanaisNovo} compacto />
                 <Button
                   size="sm"
@@ -211,12 +257,55 @@ export function GarantiaModal({
                   leftIcon={<Plus className="h-3.5 w-3.5" />}
                   disabled={!novoEnvio}
                   loading={ocupado === 'novo'}
-                  onClick={() => agir('novo', () => engeApi.agendarEnvio(garantia.id, novoEnvio, canaisNovo), `Aviso agendado para ${dataBr(novoEnvio)}`)}
+                  onClick={() => agir('novo', () => engeApi.agendarEnvio(garantia.id, novoEnvio, canaisNovo, modeloNovo), `Aviso agendado para ${dataBr(novoEnvio)}`)}
                 >
                   Agendar
                 </Button>
               </li>
             </ul>
+          </section>
+
+          <section className="space-y-3 rounded-lg border border-line p-3">
+            <h3 className="text-sm font-semibold text-foreground">Aplicar uma régua</h3>
+            <p className="text-xs text-foreground/50">Agenda de uma vez os avisos de uma régua para este vencimento (os que já existem continuam).</p>
+            <select
+              id="ee-g-regua"
+              value={reguaId}
+              onChange={(e) => escolherRegua(e.target.value)}
+              className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-foreground focus:border-accent focus:outline-none"
+            >
+              <option value="">Escolha uma régua…</option>
+              {reguas.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.nome}
+                </option>
+              ))}
+            </select>
+            {reguaId && (
+              <>
+                <ListaEnviosNovos
+                  idBase="ee-g-regua-env"
+                  envios={enviosRegua}
+                  onChange={setEnviosRegua}
+                  modelos={modelos}
+                  whatsappDisponivel={whatsappDisponivel}
+                />
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    disabled={!enviosRegua.length}
+                    loading={ocupado === 'regua'}
+                    onClick={() =>
+                      agir('regua', () => engeApi.agendarLote(garantia.id, enviosRegua), `${enviosRegua.length} aviso(s) agendado(s)`).then(() =>
+                        escolherRegua(''),
+                      )
+                    }
+                  >
+                    Agendar {enviosRegua.length} {enviosRegua.length === 1 ? 'aviso' : 'avisos'}
+                  </Button>
+                </div>
+              </>
+            )}
           </section>
 
           <section className="space-y-3 rounded-lg border border-line p-3">

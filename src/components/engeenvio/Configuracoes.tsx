@@ -3,31 +3,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Input, Textarea } from '@/components/ui/Input'
+import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { engeApi, type EngeNx, type EngeSmtp, type EngeUsuario } from '@/api/engeEnvio'
 import { Cartao } from './shared'
-
-const VARIAVEIS = ['{sindico}', '{empreendimento}', '{item}', '{prazo}', '{vencimento}', '{dias}', '{construtora}']
-const VARIAVEIS_WHATSAPP = [...VARIAVEIS, '{link}']
-
-function Variaveis({ lista }: { lista: string[] }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {lista.map((v) => (
-        <code key={v} className="rounded border border-line bg-elevate/[0.04] px-1.5 py-0.5 text-xs text-foreground/80">
-          {v}
-        </code>
-      ))}
-    </div>
-  )
-}
 
 export function Configuracoes({ usuario }: { usuario: EngeUsuario }) {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <EmailEnvio />
-      <ModeloEmail />
       <WhatsAppNx />
       <Acessos usuario={usuario} />
     </div>
@@ -139,70 +123,6 @@ function EmailEnvio() {
   )
 }
 
-function ModeloEmail() {
-  const qc = useQueryClient()
-  const { data } = useQuery({ queryKey: ['engeenvio', 'config'], queryFn: engeApi.config })
-  const [assunto, setAssunto] = React.useState('')
-  const [corpo, setCorpo] = React.useState('')
-  const [previa, setPrevia] = React.useState<{ assunto: string; html: string } | null>(null)
-  const [salvando, setSalvando] = React.useState(false)
-
-  React.useEffect(() => {
-    if (data) {
-      setAssunto(data.assunto)
-      setCorpo(data.corpo)
-    }
-  }, [data])
-
-  // Pré-visualização com um pequeno atraso pra não chamar a API a cada tecla.
-  React.useEffect(() => {
-    if (!assunto && !corpo) return
-    const t = setTimeout(() => {
-      engeApi.previa({ assunto, corpo }).then(setPrevia).catch(() => undefined)
-    }, 400)
-    return () => clearTimeout(t)
-  }, [assunto, corpo])
-
-  const salvar = async () => {
-    setSalvando(true)
-    try {
-      await engeApi.salvarConfig({ assunto, corpo })
-      toast.success('Modelo salvo')
-      await qc.invalidateQueries({ queryKey: ['engeenvio', 'config'] })
-    } catch (err) {
-      toast.error((err as Error).message)
-    } finally {
-      setSalvando(false)
-    }
-  }
-
-  return (
-    <Cartao titulo="Modelo do e-mail">
-      <div className="space-y-3 p-4">
-        <Input id="ee-m-ass" label="Assunto" value={assunto} onChange={(e) => setAssunto(e.target.value)} />
-        <Textarea id="ee-m-corpo" label="Mensagem" value={corpo} onChange={(e) => setCorpo(e.target.value)} className="min-h-[240px]" />
-        <div>
-          <p className="mb-1.5 text-xs font-medium text-foreground/70">Variáveis (trocadas pelos dados de cada garantia)</p>
-          <Variaveis lista={VARIAVEIS} />
-          <p className="mt-1.5 text-xs text-foreground/40">O botão “Estou ciente deste aviso” entra sozinho no fim do e-mail.</p>
-        </div>
-        <div className="flex justify-end">
-          <Button loading={salvando} onClick={salvar}>
-            Salvar modelo
-          </Button>
-        </div>
-        {previa && (
-          <div className="space-y-2 border-t border-line pt-3">
-            <p className="text-xs font-medium text-foreground/70">Pré-visualização (dados de exemplo)</p>
-            <p className="text-sm font-medium text-foreground">{previa.assunto}</p>
-            <div className="rounded-lg border border-line bg-white p-4" dangerouslySetInnerHTML={{ __html: previa.html }} />
-          </div>
-        )}
-      </div>
-    </Cartao>
-  )
-}
-
 /**
  * Conexão da Enge na NX (Z-PRO) — o WhatsApp sai pelo número dela. Número não oficial aceita
  * mensagem livre; número oficial (WABA) fora da janela de 24h só aceita template aprovado na Meta.
@@ -211,9 +131,6 @@ function WhatsAppNx() {
   const qc = useQueryClient()
   const { data } = useQuery({ queryKey: ['engeenvio', 'config'], queryFn: engeApi.config })
   const [nx, setNx] = React.useState<EngeNx>({})
-  const [parametros, setParametros] = React.useState('')
-  const [texto, setTexto] = React.useState('')
-  const [previa, setPrevia] = React.useState('')
   const [numeroTeste, setNumeroTeste] = React.useState('')
   const [salvando, setSalvando] = React.useState(false)
   const [testando, setTestando] = React.useState(false)
@@ -221,32 +138,17 @@ function WhatsAppNx() {
   React.useEffect(() => {
     if (data) {
       setNx({ ...data.nx, token: '' })
-      setParametros((data.nx.parametros ?? []).join('\n'))
-      setTexto(data.whatsappTexto)
     }
   }, [data])
 
-  React.useEffect(() => {
-    if (!texto) return
-    const t = setTimeout(() => {
-      engeApi
-        .previa({ whatsappTexto: texto })
-        .then((r) => setPrevia(r.whatsapp))
-        .catch(() => undefined)
-    }, 400)
-    return () => clearTimeout(t)
-  }, [texto])
-
   const set = (k: keyof EngeNx) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setNx((n) => ({ ...n, [k]: e.target.value }))
-  const template = nx.modo === 'template'
 
   const salvar = async () => {
     setSalvando(true)
     try {
       const r = await engeApi.salvarConfig({
-        nx: { ...nx, parametros: parametros.split('\n').map((p) => p.trim()).filter(Boolean) },
-        whatsappTexto: texto,
+        nx: { apiId: nx.apiId, token: nx.token, baseUrl: nx.baseUrl, modo: nx.modo },
       })
       toast.success(r.nxOk ? 'WhatsApp salvo' : 'Salvo, mas ainda faltam dados para enviar')
       await qc.invalidateQueries({ queryKey: ['engeenvio', 'config'] })
@@ -313,41 +215,11 @@ function WhatsAppNx() {
           </div>
         </div>
 
-        {template ? (
-          <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input id="ee-nx-tpl" label="Nome do template" placeholder="aviso_garantia" value={nx.template ?? ''} onChange={set('template')} />
-              <Input id="ee-nx-lang" label="Idioma" placeholder="pt_BR" value={nx.idioma ?? ''} onChange={set('idioma')} />
-            </div>
-            <Textarea
-              id="ee-nx-params"
-              label="Variáveis do template, uma por linha, na ordem {{1}}, {{2}}…"
-              placeholder={'{sindico}\n{item}\n{empreendimento}\n{vencimento}\n{link}'}
-              value={parametros}
-              onChange={(e) => setParametros(e.target.value)}
-              className="min-h-[110px] font-mono text-xs"
-            />
-            <Variaveis lista={VARIAVEIS_WHATSAPP} />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <Textarea
-              id="ee-nx-texto"
-              label="Mensagem"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              className="min-h-[180px]"
-            />
-            <Variaveis lista={VARIAVEIS_WHATSAPP} />
-            <p className="text-xs text-foreground/40">{'{link}'} é o link para o síndico confirmar que recebeu. *texto* sai em negrito.</p>
-            {previa && (
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-foreground/70">Pré-visualização (dados de exemplo)</p>
-                <p className="whitespace-pre-wrap rounded-lg border border-line bg-elevate/[0.03] p-3 text-sm text-foreground/85">{previa}</p>
-              </div>
-            )}
-          </div>
-        )}
+        <p className="rounded-lg border border-line bg-elevate/[0.03] px-3 py-2 text-xs text-foreground/60">
+          {nx.modo === 'template'
+            ? 'Número oficial: em cada modelo (aba Modelos e réguas) você informa o nome do template aprovado na Meta e as variáveis dele.'
+            : 'O texto de cada mensagem fica nos modelos (aba Modelos e réguas).'}
+        </p>
 
         <div className="flex justify-end">
           <Button loading={salvando} onClick={salvar}>

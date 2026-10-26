@@ -20,6 +20,14 @@ export function useCanaisPadrao(): EngeCanais {
   return { email: true, whatsapp: Boolean(data?.nxOk) }
 }
 
+export function useModelos() {
+  return useQuery({ queryKey: ['engeenvio', 'modelos'], queryFn: engeApi.modelos })
+}
+
+export function useReguas() {
+  return useQuery({ queryKey: ['engeenvio', 'reguas'], queryFn: engeApi.reguas })
+}
+
 export function useRecarregar() {
   const qc = useQueryClient()
   return React.useCallback(() => qc.invalidateQueries({ queryKey: CHAVE_TUDO }), [qc])

@@ -10,6 +10,7 @@ import { Painel } from '@/components/engeenvio/Painel'
 import { Empreendimentos } from '@/components/engeenvio/Empreendimentos'
 import { Avisos } from '@/components/engeenvio/Avisos'
 import { Configuracoes } from '@/components/engeenvio/Configuracoes'
+import { ModelosReguas } from '@/components/engeenvio/ModelosReguas'
 
 /**
  * Enge Envio — /engeenvio.
@@ -22,7 +23,7 @@ import { Configuracoes } from '@/components/engeenvio/Configuracoes'
  * Login próprio (e-mail + senha só desta ferramenta), como o açougue do Mercado Nunes.
  */
 
-type Aba = 'painel' | 'empreendimentos' | 'avisos' | 'config'
+type Aba = 'painel' | 'empreendimentos' | 'avisos' | 'modelos' | 'config'
 
 export function EngeEnvioPage() {
   const [usuario, setUsuario] = React.useState<EngeUsuario | null>(null)
@@ -141,6 +142,7 @@ const ABAS: { value: Aba; label: string }[] = [
   { value: 'painel', label: 'Painel' },
   { value: 'empreendimentos', label: 'Empreendimentos' },
   { value: 'avisos', label: 'Avisos enviados' },
+  { value: 'modelos', label: 'Modelos e réguas' },
   { value: 'config', label: 'Configurações' },
 ]
 
@@ -183,6 +185,7 @@ function Sistema({ usuario, onSair }: { usuario: EngeUsuario; onSair: () => void
         {data && aba === 'painel' && <Painel dados={data} onAbrirEmpreendimento={abrirEmpreendimento} />}
         {data && aba === 'empreendimentos' && <Empreendimentos dados={data} selecionado={empAberto} onSelecionar={setEmpAberto} />}
         {data && aba === 'avisos' && <Avisos dados={data} onAbrirEmpreendimento={abrirEmpreendimento} />}
+        {aba === 'modelos' && <ModelosReguas />}
         {aba === 'config' && <Configuracoes usuario={usuario} />}
       </div>
     </Moldura>

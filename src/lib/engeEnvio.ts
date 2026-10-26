@@ -1,4 +1,4 @@
-import type { EngeEnvio, EngeGarantia } from '@/api/engeEnvio'
+import type { EngeEnvio, EngeGarantia, EnvioNovo, EtapaRegua } from '@/api/engeEnvio'
 
 /** Regras de data e status do Enge Envio (/engeenvio). Datas de calendário em "YYYY-MM-DD". */
 
@@ -18,10 +18,6 @@ export const MODELO_GARANTIAS: { item: string; meses: number }[] = [
   { item: 'Fachada e revestimento externo', meses: 60 },
   { item: 'Estrutura e fundações', meses: 60 },
 ]
-
-/** Antecedências sugeridas ao criar (dá pra mudar o dia de cada aviso depois). */
-export const ANTECEDENCIAS = [60, 30, 15, 7, 1]
-export const ANTECEDENCIAS_PADRAO = [30, 15, 7]
 
 export const prazoTexto = (meses: number) =>
   meses === 12 ? '1 ano' : meses % 12 === 0 ? `${meses / 12} anos` : `${meses} meses`
@@ -111,4 +107,66 @@ export function textoDias(dias: number): string {
   if (dias === 0) return 'vence hoje'
   if (dias > 0) return dias === 1 ? 'em 1 dia' : `em ${dias} dias`
   return dias === -1 ? 'venceu há 1 dia' : `venceu há ${-dias} dias`
+}
+
+/** Etapa nova da régua (30 dias antes, às 9h, modelo padrão, e-mail + WhatsApp se houver). */
+export function novaEtapa(whatsapp: boolean): EtapaRegua {
+  return {
+    id: `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    momento: 'antes',
+    dias: 30,
+    hora: '09:00',
+    modeloId: null,
+    email: true,
+    whatsapp,
+    repetir: false,
+    aCada: 7,
+    vezes: 1,
+  }
+}
+
+/** Dias da etapa em relação ao vencimento (negativo = antes). */
+const deslocamento = (e: EtapaRegua) => (e.momento === 'dia' ? 0 : e.momento === 'antes' ? -e.dias : e.dias)
+
+/** Todas as datas (YYYY-MM-DD) que uma etapa gera pra um vencimento, já com as repetições. */
+export function datasDaEtapa(e: EtapaRegua, vencimento: string): string[] {
+  const primeira = somarDias(vencimento, deslocamento(e))
+  const datas = [primeira]
+  if (e.repetir) for (let k = 1; k <= e.vezes; k++) datas.push(somarDias(primeira, k * e.aCada))
+  return datas
+}
+
+/**
+ * Régua → avisos de uma garantia. Fica só o que ainda vai acontecer (não dá pra avisar no
+ * passado); duas etapas no mesmo dia e hora com o mesmo modelo viram um aviso só. Sem a NX
+ * configurada, o WhatsApp das etapas é desligado (senão todo aviso ficaria com erro nesse canal).
+ */
+export function expandirRegua(etapas: EtapaRegua[], vencimento: string, opcoes: { whatsappDisponivel: boolean }): EnvioNovo[] {
+  const agora = hoje()
+  const vistos = new Set<string>()
+  const out: EnvioNovo[] = []
+  for (const e of etapas) {
+    const email = e.email
+    const whatsapp = e.whatsapp && opcoes.whatsappDisponivel
+    if (!email && !whatsapp) continue
+    for (const d of datasDaEtapa(e, vencimento)) {
+      if (d <= agora) continue
+      const enviarEm = `${d}T${e.hora || '09:00'}`
+      const chave = `${enviarEm}|${e.modeloId ?? ''}`
+      if (vistos.has(chave)) continue
+      vistos.add(chave)
+      out.push({ enviarEm, modeloId: e.modeloId, email, whatsapp })
+    }
+  }
+  return out.sort((a, b) => a.enviarEm.localeCompare(b.enviarEm))
+}
+
+/** "30 dias antes do vencimento, às 09:00 · repete a cada 15 dias, 3 vezes" */
+export function descreverEtapa(e: EtapaRegua): string {
+  const quando =
+    e.momento === 'dia'
+      ? 'No dia do vencimento'
+      : `${e.dias} ${e.dias === 1 ? 'dia' : 'dias'} ${e.momento === 'antes' ? 'antes' : 'depois'} do vencimento`
+  const rep = e.repetir ? ` · repete a cada ${e.aCada} ${e.aCada === 1 ? 'dia' : 'dias'}, ${e.vezes} ${e.vezes === 1 ? 'vez' : 'vezes'}` : ''
+  return `${quando}, às ${e.hora}${rep}`
 }

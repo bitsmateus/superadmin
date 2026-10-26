@@ -50,8 +50,40 @@ export interface ConfigEnge {
   whatsapp_texto: string | null;
 }
 
+/** Modelo de mensagem (aba Modelos e réguas). */
+export interface ModeloEnge {
+  id: string;
+  nome: string;
+  assunto: string;
+  corpo: string;
+  whatsapp_texto: string;
+  whatsapp_template: string | null;
+  whatsapp_idioma: string | null;
+  whatsapp_parametros: string[];
+}
+
+/**
+ * Textos que valem pra um aviso: o modelo dele; sem modelo (ou apagado), o modelo padrão; sem
+ * nenhum modelo, os textos antigos da config e, por fim, os textos de fábrica.
+ */
+export async function textosDoAviso(cfg: ConfigEnge, modeloId: string | null) {
+  const modelo =
+    (modeloId ? await queryOne<ModeloEnge>('SELECT * FROM ee_modelos WHERE id = $1', [modeloId]) : null) ??
+    (await queryOne<ModeloEnge>('SELECT * FROM ee_modelos ORDER BY padrao DESC, ordem, created_at LIMIT 1'));
+  return {
+    assunto: modelo?.assunto?.trim() || cfg.assunto?.trim() || ASSUNTO_PADRAO,
+    corpo: modelo?.corpo?.trim() || cfg.corpo?.trim() || CORPO_PADRAO,
+    whatsapp: modelo?.whatsapp_texto?.trim() || cfg.whatsapp_texto?.trim() || WHATSAPP_PADRAO,
+    // Número oficial: template do modelo; sem template no modelo, o que ficou na conexão (versão antiga).
+    template: modelo?.whatsapp_template?.trim() || cfg.nx?.template?.trim() || '',
+    idioma: modelo?.whatsapp_idioma?.trim() || cfg.nx?.idioma?.trim() || 'pt_BR',
+    parametros: modelo?.whatsapp_template?.trim() ? modelo.whatsapp_parametros ?? [] : cfg.nx?.parametros ?? [],
+  };
+}
+
 interface EnvioParaMandar {
   id: string;
+  modelo_id: string | null;
   token: string;
   status: string;
   canal_email: boolean;
@@ -75,9 +107,9 @@ export function smtpCompleto(smtp: SmtpConfig | null | undefined): smtp is SmtpC
   return Boolean(smtp?.host && smtp.user && smtp.password && smtp.fromEmail);
 }
 
+/** Conexão preenchida (o template, no número oficial, vem de cada modelo). */
 export function nxCompleto(nx: NxEnge | null | undefined): boolean {
-  if (!nx?.apiId || !nx.token) return false;
-  return nx.modo === 'template' ? Boolean(nx.template?.trim()) : true;
+  return Boolean(nx?.apiId && nx.token);
 }
 
 export async function lerConfigEnge(): Promise<ConfigEnge> {
@@ -98,6 +130,7 @@ export async function mandarWhatsApp(
   numeros: string[],
   texto: string,
   dados: DadosAviso,
+  tpl?: { template: string; idioma: string; parametros: string[] },
 ): Promise<{ ok: string[]; falhas: string[] }> {
   const ok: string[] = [];
   const falhas: string[] = [];
@@ -105,9 +138,18 @@ export async function mandarWhatsApp(
   for (const numero of numeros) {
     try {
       if (nx.modo === 'template') {
+        const template = tpl?.template || nx.template?.trim();
+        if (!template) throw new Error('Número oficial: o modelo deste aviso não tem o nome do template aprovado.');
         // WhatsApp recusa parâmetro vazio — variável sem valor vira um traço.
-        const params = (nx.parametros ?? []).map((p) => preencher(p, dados).trim() || '-');
-        await sendNxTemplate({ baseUrl, apiId: nx.apiId!, apiToken: nx.token! }, numero, nx.template!.trim(), nx.idioma?.trim() || 'pt_BR', params, false);
+        const params = (tpl?.parametros ?? nx.parametros ?? []).map((p) => preencher(p, dados).trim() || '-');
+        await sendNxTemplate(
+          { baseUrl, apiId: nx.apiId!, apiToken: nx.token! },
+          numero,
+          template,
+          tpl?.idioma || nx.idioma?.trim() || 'pt_BR',
+          params,
+          false,
+        );
       } else {
         const r = await sendTextWith({ apiId: nx.apiId!, token: nx.token!, baseUrl }, numero, texto, 'engeenvio', false);
         if (!r.ok) throw new Error(r.detail || (r.status ? `NX HTTP ${r.status}` : 'Não enviou.'));
@@ -130,7 +172,7 @@ export async function enviarAviso(id: string): Promise<string | null> {
   emAndamento.add(id);
   try {
     const e = await queryOne<EnvioParaMandar>(
-      `SELECT v.id, v.token, v.status, v.canal_email, v.canal_whatsapp, v.enviado_em, v.whatsapp_enviado_em,
+      `SELECT v.id, v.modelo_id, v.token, v.status, v.canal_email, v.canal_whatsapp, v.enviado_em, v.whatsapp_enviado_em,
               g.item, g.prazo, to_char(g.vencimento, 'YYYY-MM-DD') AS vencimento,
               m.nome AS empreendimento, m.sindico, m.emails, m.telefone, m.construtora
        FROM ee_envios v
@@ -145,6 +187,7 @@ export async function enviarAviso(id: string): Promise<string | null> {
     const cfg = await lerConfigEnge();
     const link = linkCiente(cfg, e.token);
     const dados: DadosAviso = { ...e, enviadoEm: hojeSp(), link };
+    const textos = await textosDoAviso(cfg, e.modelo_id);
     let emailOk = !e.canal_email || Boolean(e.enviado_em);
     let whatsOk = !e.canal_whatsapp || Boolean(e.whatsapp_enviado_em);
     const erros: string[] = [];
@@ -155,8 +198,8 @@ export async function enviarAviso(id: string): Promise<string | null> {
       if (!smtpCompleto(cfg.smtp)) erro = 'E-mail de envio não configurado (Configurações › E-mail de envio).';
       else if (!para.length) erro = 'O empreendimento não tem e-mail válido do síndico.';
       else {
-        const assunto = preencher(cfg.assunto?.trim() || ASSUNTO_PADRAO, dados);
-        const corpo = preencher(cfg.corpo?.trim() || CORPO_PADRAO, dados);
+        const assunto = preencher(textos.assunto, dados);
+        const corpo = preencher(textos.corpo, dados);
         try {
           await sendMail({
             to: para.join(', '),
@@ -186,15 +229,15 @@ export async function enviarAviso(id: string): Promise<string | null> {
       if (!nxCompleto(cfg.nx)) erro = 'WhatsApp (NX) não configurado (Configurações › WhatsApp pela NX).';
       else if (!numeros.length) erro = 'O empreendimento não tem telefone/WhatsApp válido do síndico.';
       else {
-        const texto = preencher(cfg.whatsapp_texto?.trim() || WHATSAPP_PADRAO, dados);
-        const r = await mandarWhatsApp(cfg.nx!, numeros, texto, dados);
+        const texto = preencher(textos.whatsapp, dados);
+        const r = await mandarWhatsApp(cfg.nx!, numeros, texto, dados, textos);
         if (r.ok.length) {
           whatsOk = true;
           // Saiu pra pelo menos um número: conta como enviado (não reenviar pra quem já recebeu);
           // quem falhou fica anotado no aviso.
           await query(
             `UPDATE ee_envios SET whatsapp_enviado_em = NOW(), whatsapp_para = $2, whatsapp_texto = $3, whatsapp_erro = $4 WHERE id = $1`,
-            [id, r.ok.join(', '), cfg.nx!.modo === 'template' ? `[template ${cfg.nx!.template}]` : texto, r.falhas.join(' | ') || null],
+            [id, r.ok.join(', '), cfg.nx!.modo === 'template' ? `[template ${textos.template}]` : texto, r.falhas.join(' | ') || null],
           );
         } else {
           erro = r.falhas.join(' | ');

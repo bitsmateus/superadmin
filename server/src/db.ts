@@ -1823,6 +1823,37 @@ END; $$`);
   await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS whatsapp_texto TEXT`);
   await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS whatsapp_enviado_em TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS whatsapp_erro TEXT`);
+  // Modelos de mensagem (um texto de e-mail + um de WhatsApp cada) e réguas de envio (sequência de
+  // etapas: quando, qual modelo, por quais canais, se repete). A régua só GERA os avisos ao montar
+  // o empreendimento — mudar a régua depois não mexe nos avisos já agendados. Os modelos padrão
+  // são semeados pela rota na primeira vez (ver garantirPadroes em routes/engeEnvio.ts).
+  await pool.query(`CREATE TABLE IF NOT EXISTS ee_modelos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    assunto TEXT NOT NULL DEFAULT '',
+    corpo TEXT NOT NULL DEFAULT '',
+    whatsapp_texto TEXT NOT NULL DEFAULT '',
+    whatsapp_template TEXT,
+    whatsapp_idioma TEXT,
+    whatsapp_parametros JSONB NOT NULL DEFAULT '[]',
+    padrao BOOLEAN NOT NULL DEFAULT false,
+    ordem INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS ee_reguas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    etapas JSONB NOT NULL DEFAULT '[]',
+    padrao BOOLEAN NOT NULL DEFAULT false,
+    ordem INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  // Semente dos padrões só uma vez: sem isso, apagar todos os modelos/réguas fazia eles voltarem.
+  await pool.query(`ALTER TABLE ee_config ADD COLUMN IF NOT EXISTS padroes_criados BOOLEAN NOT NULL DEFAULT false`);
+  // Aviso sem modelo (ou cujo modelo foi apagado) usa o modelo padrão.
+  await pool.query(`ALTER TABLE ee_envios ADD COLUMN IF NOT EXISTS modelo_id UUID REFERENCES ee_modelos(id) ON DELETE SET NULL`);
 
   // ── Pulso de satisfação + Risco de Churn ───────────────────────────────────────────
   // "Pulso": pergunta curta (sim/não) mandada de fora pelo WhatsApp de tempos em tempos — o n8n é

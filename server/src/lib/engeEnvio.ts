@@ -101,3 +101,122 @@ export function listaTelefones(texto: string | null | undefined): string[] {
     .map((t) => (t.startsWith('55') && t.length >= 12 ? t : `55${t}`));
   return [...new Set(nums)];
 }
+
+/**
+ * Etapa de uma régua de envio. `momento` + `dias` dizem quando sai em relação ao vencimento
+ * (30 dias antes, no dia, 5 dias depois); `repetir` manda de novo a cada `aCada` dias, `vezes`
+ * vezes, seguindo pra frente no tempo (ex.: 60 dias antes, repetindo a cada 15 dias 3 vezes →
+ * D-60, D-45, D-30, D-15). A régua é expandida na tela (src/lib/engeEnvio.ts › expandirRegua).
+ */
+export interface EtapaRegua {
+  id: string;
+  momento: 'antes' | 'dia' | 'depois';
+  dias: number;
+  hora: string;
+  modeloId: string | null;
+  email: boolean;
+  whatsapp: boolean;
+  repetir: boolean;
+  aCada: number;
+  vezes: number;
+}
+
+/** Modelos que a Enge já recebe prontos (editáveis/apagáveis). `chave` só serve pra semente das réguas. */
+export const MODELOS_PADRAO = [
+  {
+    chave: 'aviso',
+    nome: 'Aviso de vencimento',
+    assunto: ASSUNTO_PADRAO,
+    corpo: CORPO_PADRAO,
+    whatsapp: WHATSAPP_PADRAO,
+  },
+  {
+    chave: 'ultima',
+    nome: 'Última chamada',
+    assunto: 'Última chamada: garantia de {item} vence em {vencimento}',
+    corpo: `Prezado(a) {sindico},
+
+Este é o último aviso: a garantia do item {item} do {empreendimento} vence em {vencimento} ({dias}).
+
+Se houver qualquer problema neste item, o chamado precisa ser aberto junto à {construtora} antes do vencimento. Depois dessa data, a construtora não tem mais obrigação de atender.
+
+Por favor, confirme o recebimento deste aviso no botão abaixo.
+
+Atenciosamente,
+Enge Services`,
+    whatsapp: `{sindico}, último aviso da Enge Services: a garantia de *{item}* do {empreendimento} vence em *{vencimento}* ({dias}).
+
+Se houver algum problema, o chamado com a {construtora} precisa ser aberto antes dessa data.
+
+Confirme o recebimento: {link}`,
+  },
+  {
+    chave: 'cvcb',
+    nome: 'Renovação do CVCB',
+    assunto: 'Renovação do CVCB do {empreendimento}: vence em {vencimento}',
+    corpo: `Prezado(a) {sindico},
+
+O CVCB (Certificado de Vistoria do Corpo de Bombeiros) do {empreendimento} vence em {vencimento} ({dias}).
+
+É preciso agendar a nova vistoria com antecedência para o condomínio não ficar com o certificado vencido.
+
+Por favor, confirme o recebimento deste aviso no botão abaixo.
+
+Atenciosamente,
+Enge Services`,
+    whatsapp: `Olá, {sindico}! Aqui é da Enge Services.
+
+O *CVCB* do {empreendimento} vence em *{vencimento}* ({dias}). É preciso agendar a nova vistoria do Corpo de Bombeiros com antecedência.
+
+Confirme o recebimento: {link}`,
+  },
+] as const;
+
+type EtapaSemente = Omit<EtapaRegua, 'id' | 'modeloId' | 'email' | 'whatsapp'> & { modelo: (typeof MODELOS_PADRAO)[number]['chave'] };
+
+const etapa = (momento: EtapaRegua['momento'], dias: number, modelo: EtapaSemente['modelo'], repetir?: { aCada: number; vezes: number }): EtapaSemente => ({
+  momento,
+  dias,
+  hora: '09:00',
+  modelo,
+  repetir: Boolean(repetir),
+  aCada: repetir?.aCada ?? 7,
+  vezes: repetir?.vezes ?? 1,
+});
+
+export const REGUAS_PADRAO: { nome: string; padrao?: boolean; etapas: EtapaSemente[] }[] = [
+  {
+    nome: 'Padrão: 30, 15 e 7 dias antes',
+    padrao: true,
+    etapas: [etapa('antes', 30, 'aviso'), etapa('antes', 15, 'aviso'), etapa('antes', 7, 'ultima')],
+  },
+  {
+    nome: 'Intensiva: a cada 15 dias desde 60 dias antes',
+    etapas: [etapa('antes', 60, 'aviso', { aCada: 15, vezes: 3 }), etapa('antes', 7, 'ultima'), etapa('antes', 1, 'ultima')],
+  },
+  {
+    nome: 'CVCB: 60, 30 e 7 dias antes',
+    etapas: [etapa('antes', 60, 'cvcb'), etapa('antes', 30, 'cvcb'), etapa('antes', 7, 'ultima')],
+  },
+];
+
+/** Limpa uma etapa vinda da tela (números dentro de faixas razoáveis, hora válida). */
+export function normalizarEtapa(e: Partial<EtapaRegua>, i: number): EtapaRegua {
+  const int = (v: unknown, min: number, max: number, padrao: number) => {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : padrao;
+  };
+  const momento = e.momento === 'depois' || e.momento === 'dia' ? e.momento : 'antes';
+  return {
+    id: typeof e.id === 'string' && e.id ? e.id.slice(0, 40) : `e${i}`,
+    momento,
+    dias: momento === 'dia' ? 0 : int(e.dias, 0, 3650, 30),
+    hora: typeof e.hora === 'string' && /^\d{2}:\d{2}$/.test(e.hora) ? e.hora : '09:00',
+    modeloId: typeof e.modeloId === 'string' && e.modeloId ? e.modeloId : null,
+    email: e.email !== false,
+    whatsapp: Boolean(e.whatsapp),
+    repetir: Boolean(e.repetir),
+    aCada: int(e.aCada, 1, 365, 7),
+    vezes: int(e.vezes, 1, 52, 1),
+  };
+}

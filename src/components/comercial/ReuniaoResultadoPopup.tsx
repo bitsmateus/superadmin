@@ -13,24 +13,9 @@ import {
 } from '@/services/reunioes'
 import { motivoValido } from '@/lib/regraDoStatus'
 import { cn } from '@/lib/utils'
+import { useTelaTravada } from '@/lib/telaTravada'
 
 const INTERVALO_MS = 90_000
-
-/** O app inteiro (dentro de #root) fica inerte enquanto houver reunião pendente: sem clique, Tab nem navegação por trás. */
-function useAppInerte(ativo: boolean) {
-  React.useEffect(() => {
-    const root = document.getElementById('root')
-    if (!root || !ativo) return
-    root.inert = true
-    // ESC não fecha nada que esteja por baixo (a ficha, um modal aberto antes…).
-    const travaEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault() } }
-    window.addEventListener('keydown', travaEsc, true)
-    return () => {
-      root.inert = false
-      window.removeEventListener('keydown', travaEsc, true)
-    }
-  }, [ativo])
-}
 
 /**
  * Popup obrigatório de resultado da reunião (layout global). Busca as pendências ao abrir o app, a cada 1min30 e ao
@@ -63,7 +48,7 @@ export function ReuniaoResultadoPopup() {
   // Se a reunião da tela sumiu da lista (outra pessoa resolveu), recomeça na escolha da próxima.
   const atualId = atual?.card_id
   React.useEffect(() => { setPasso('escolha') }, [atualId])
-  useAppInerte(!!atual)
+  useTelaTravada(!!atual)
 
   const enviar = async (pedido: PedidoDeResultado) => {
     if (!atual || enviando) return

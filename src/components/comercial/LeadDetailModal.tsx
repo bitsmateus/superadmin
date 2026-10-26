@@ -610,6 +610,15 @@ export function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescri
           color: /^Compareceu/.test(e.toValue ?? '') ? '#15803D' : /^Não compareceu/.test(e.toValue ?? '') ? '#DC2626' : '#2563EB',
         },
       }
+    case 'retorno':
+      return {
+        icon: <PhoneCall className="h-3.5 w-3.5" />,
+        text: 'Retorno da proposta',
+        to: {
+          label: e.toValue || 'registrado',
+          color: /^Retornou/.test(e.toValue ?? '') ? '#15803D' : /^Sem resposta/.test(e.toValue ?? '') ? '#D97706' : '#2563EB',
+        },
+      }
     case 'template_sent':
       return {
         icon: <Send className="h-3.5 w-3.5" />,

@@ -9,6 +9,7 @@ import { useTicketNotifications } from '@/hooks/useTicketNotifications'
 import { usePushSubscription } from '@/hooks/usePushSubscription'
 import { PopupDadosDoStatus } from '@/components/comercial/PopupDadosDoStatus'
 import { ReuniaoResultadoPopup } from '@/components/comercial/ReuniaoResultadoPopup'
+import { RetornoPropostaPopup } from '@/components/comercial/RetornoPropostaPopup'
 
 const isDesktop = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -34,6 +35,7 @@ export function Layout() {
 
       <PopupDadosDoStatus />
       <ReuniaoResultadoPopup />
+      <RetornoPropostaPopup />
 
       <Sidebar
         open={open}

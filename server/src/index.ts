@@ -72,7 +72,6 @@ import { startDemandasAiDiario } from './jobs/demandasAiDiario.js';
 import { startEngeEnvioDispatch } from './jobs/engeEnvioDispatch.js';
 import { startReuniaoWebhook } from './jobs/reuniaoWebhook.js';
 import { startLeadAvisosPush } from './jobs/leadAvisosPush.js';
-import { startRotinaAvisos } from './jobs/rotinaAvisos.js';
 
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
@@ -230,7 +229,6 @@ async function main() {
   startEngeEnvioDispatch();
   startReuniaoWebhook();
   startLeadAvisosPush();
-  startRotinaAvisos();
   // Uma vez por subida: o mesmo lead em mais de um card aberto do CRM LUIS CLOSER vira um card só.
   setTimeout(() => {
     juntarEspelhosRepetidos()

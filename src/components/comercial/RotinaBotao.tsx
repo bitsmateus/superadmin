@@ -1,12 +1,11 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarClock, ChevronLeft, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, ListChecks, Loader2, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Tabs } from '@/components/ui/Tabs'
 import {
-  ESTADOS_ENCERRADOS, PESO_NA_ADERENCIA, VISUAL_DO_ESTADO, VISUAL_DO_TIPO, rotinaService,
-  type BlocoBase, type EstadoDoBloco, type SemanaDaRotina, type TipoDeBloco,
+  VISUAL_DO_TIPO, rotinaService, type BlocoBase, type BlocoDoDia, type RotinaDeHoje, type SemanaDaRotina, type TipoDeBloco,
 } from '@/services/rotina'
 import { cn } from '@/lib/utils'
 
@@ -18,20 +17,106 @@ function somarDias(data: string, n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** Botão "Rotina" do admin dentro do CRM ARTHUR / CRM LUIS CLOSER: a semana do dono da aba, folgas e os blocos. */
-export function BotaoRotinaAdmin({ pagina }: { pagina: string }) {
+/**
+ * Botão "Rotina" no topo do CRM ARTHUR / CRM LUIS CLOSER (server/src/routes/rotina.ts). Pro dono do CRM, abre o
+ * checklist de hoje (cada bloco: feito ou não). Pro admin, a semana do dono (o que ele marcou), as folgas e a edição dos
+ * blocos. Pra mais ninguém aparece.
+ */
+export function BotaoRotina({ pagina }: { pagina: string }) {
+  const [hoje, setHoje] = React.useState<RotinaDeHoje>({ tem: false })
   const [aberto, setAberto] = React.useState(false)
+
+  const carregar = React.useCallback(async () => {
+    try { setHoje(await rotinaService.hoje(pagina)) } catch { /* sem rede: o botão só não aparece */ }
+  }, [pagina])
+  React.useEffect(() => { void carregar() }, [carregar])
+
+  if (!hoje.tem) return null
+  const doDia = hoje.dia_util && !hoje.folga
+  const feitos = hoje.blocos.filter((b) => b.estado === 'feito').length
+
   return (
     <>
-      <Button variant="secondary" size="sm" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={() => setAberto(true)}>
-        Rotina
+      <Button variant="secondary" size="sm" leftIcon={<ListChecks className="h-4 w-4" />} onClick={() => setAberto(true)}>
+        Rotina{!hoje.somente_leitura && doDia && hoje.blocos.length ? ` ${feitos}/${hoje.blocos.length}` : ''}
       </Button>
-      {aberto && <RotinaAdminModal pagina={pagina} onClose={() => setAberto(false)} />}
+      {aberto && (hoje.somente_leitura
+        ? <RotinaDoAdmin pagina={hoje.pagina} onClose={() => setAberto(false)} />
+        : <ChecklistDeHoje rotina={hoje} mudou={setHoje} onClose={() => { setAberto(false); void carregar() }} />)}
     </>
   )
 }
 
-function RotinaAdminModal({ pagina, onClose }: { pagina: string; onClose: () => void }) {
+function ChecklistDeHoje({ rotina, mudou, onClose }: {
+  rotina: Extract<RotinaDeHoje, { tem: true }>; mudou: (r: RotinaDeHoje) => void; onClose: () => void
+}) {
+  const [salvando, setSalvando] = React.useState<string | null>(null)
+  const doDia = rotina.dia_util && !rotina.folga
+  const feitos = rotina.blocos.filter((b) => b.estado === 'feito').length
+
+  const alternar = async (b: BlocoDoDia) => {
+    const feito = b.estado !== 'feito'
+    setSalvando(b.id)
+    try {
+      await rotinaService.marcar(b.id, feito)
+      mudou(await rotinaService.hoje(rotina.pagina))
+    } catch (err) {
+      toast.error((err as Error).message || 'Não deu pra marcar.')
+    } finally {
+      setSalvando(null)
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="md"
+      title="Rotina de hoje"
+      description={doDia ? `${feitos} de ${rotina.blocos.length} feitos` : rotina.folga ? 'Hoje está como folga.' : 'Hoje não tem rotina (fim de semana).'}
+    >
+      {doDia && (
+        <ul className="divide-y divide-line rounded-lg border border-line">
+          {rotina.blocos.map((b) => {
+            const feito = b.estado === 'feito'
+            return (
+              <li key={b.id}>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={feito}
+                  disabled={salvando === b.id}
+                  onClick={() => void alternar(b)}
+                  className={cn('flex w-full items-start gap-3 px-3 py-2.5 text-left hover:bg-elevate/[0.04] disabled:opacity-60', b.estado === 'agora' && 'bg-accent/[0.06]')}
+                >
+                  <span className={cn(
+                    'mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border',
+                    feito ? 'border-success bg-success text-white' : 'border-line',
+                  )}>
+                    {salvando === b.id ? <Loader2 className="h-3 w-3 animate-spin" /> : feito && <Check className="h-3.5 w-3.5" />}
+                  </span>
+                  <span className={cn('mt-0.5 h-4 w-1 shrink-0 rounded-full', VISUAL_DO_TIPO[b.tipo].barra)} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline gap-2">
+                      <span className="shrink-0 text-xs tabular-nums text-foreground/55">{b.inicio}–{b.fim}</span>
+                      <span className={cn('text-sm font-medium text-foreground', feito && 'text-foreground/50 line-through')}>{b.titulo}</span>
+                      {b.estado === 'agora' && <span className="text-[10px] font-semibold uppercase text-accent">agora</span>}
+                    </span>
+                    {b.itens.length > 0 && (
+                      <span className="mt-0.5 block text-xs leading-relaxed text-foreground/55">{b.itens.join(' · ')}</span>
+                    )}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Modal>
+  )
+}
+
+function RotinaDoAdmin({ pagina, onClose }: { pagina: string; onClose: () => void }) {
   const [aba, setAba] = React.useState<'semana' | 'editar'>('semana')
   const [semana, setSemana] = React.useState<string | undefined>()
   const [dados, setDados] = React.useState<SemanaDaRotina | null>(null)
@@ -48,13 +133,7 @@ function RotinaAdminModal({ pagina, onClose }: { pagina: string; onClose: () => 
   React.useEffect(() => { void carregar() }, [carregar])
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      size="2xl"
-      title={dados ? `Rotina · ${dados.nome_da_pagina}` : 'Rotina'}
-      description={dados?.dono ? `Quem marca: ${dados.dono}. Segunda a sexta.` : undefined}
-    >
+    <Modal open onClose={onClose} size="2xl" title="Rotina" description={dados?.dono ? `Quem marca: ${dados.dono}. Segunda a sexta.` : undefined}>
       <Tabs value={aba} onChange={(v) => setAba(v as 'semana' | 'editar')} items={[{ value: 'semana', label: 'Semana' }, { value: 'editar', label: 'Editar blocos' }]} />
       <div className="pt-4">
         {erro ? (
@@ -72,18 +151,10 @@ function RotinaAdminModal({ pagina, onClose }: { pagina: string; onClose: () => 
 }
 
 function Semana({ dados, mudarSemana, recarregar }: { dados: SemanaDaRotina; mudarSemana: (n: number) => void; recarregar: () => Promise<void> }) {
-  const [sel, setSel] = React.useState<{ bloco: string; data: string } | null>(null)
   const [mudandoFolga, setMudandoFolga] = React.useState<string | null>(null)
-
-  const celulas = dados.blocos.flatMap((b) => b.dias.map((d) => ({ bloco: b, ...d })))
-  const avaliados = celulas.filter((c) => ESTADOS_ENCERRADOS.includes(c.estado) && c.estado !== 'pendente')
-  const pontos = avaliados.reduce((s, c) => s + (PESO_NA_ADERENCIA[c.estado] ?? 0), 0)
-  const contar = (e: EstadoDoBloco) => avaliados.filter((c) => c.estado === e).length
-  const motivos = celulas
-    .filter((c) => c.marcacao && c.marcacao.status !== 'feito')
-    .sort((a, b) => `${a.data}${a.bloco.inicio}`.localeCompare(`${b.data}${b.bloco.inicio}`))
-  const atrasados = celulas.filter((c) => c.marcacao?.atrasado).length
-  const escolhida = sel && celulas.find((c) => c.bloco.id === sel.bloco && c.data === sel.data)
+  const celulas = dados.blocos.flatMap((b) => b.dias)
+  const feitos = celulas.filter((c) => c.estado === 'feito').length
+  const contam = feitos + celulas.filter((c) => c.estado === 'nao_feito').length
 
   const alternarFolga = async (data: string, folga: boolean) => {
     setMudandoFolga(data)
@@ -105,17 +176,9 @@ function Semana({ dados, mudarSemana, recarregar }: { dados: SemanaDaRotina; mud
           <span className="text-sm font-medium tabular-nums text-foreground">{ddmm(dados.dias[0].data)} a {ddmm(dados.dias[4].data)}</span>
           <Button variant="ghost" size="sm" onClick={() => mudarSemana(1)} aria-label="Próxima semana"><ChevronRight className="h-4 w-4" /></Button>
         </div>
-        <div className="flex flex-wrap items-center gap-4 text-xs text-foreground/70">
-          <span className="text-base font-semibold text-foreground">
-            {avaliados.length ? `${Math.round((pontos / avaliados.length) * 100)}%` : '—'}
-            <span className="ml-1 text-xs font-normal text-foreground/55">de aderência</span>
-          </span>
-          {(['feito', 'reuniao', 'parcial', 'nao_deu', 'sem_resposta'] as EstadoDoBloco[]).map((e) => (
-            <span key={e} className="inline-flex items-center gap-1">
-              <span className={cn('h-2.5 w-2.5 rounded-full', VISUAL_DO_ESTADO[e].bolinha)} />{VISUAL_DO_ESTADO[e].nome}: {contar(e)}
-            </span>
-          ))}
-          {atrasados > 0 && <span>Marcados depois do horário: {atrasados}</span>}
+        <div className="text-sm text-foreground/70">
+          <span className="text-base font-semibold text-foreground">{contam ? `${Math.round((feitos / contam) * 100)}%` : '—'}</span>
+          {' '}feito · {feitos} de {contam} blocos
         </div>
       </div>
 
@@ -149,60 +212,27 @@ function Semana({ dados, mudarSemana, recarregar }: { dados: SemanaDaRotina; mud
                     <span className="truncate text-foreground">{b.titulo}</span>
                   </div>
                 </td>
-                {b.dias.map((d) => {
-                  const v = VISUAL_DO_ESTADO[d.estado]
-                  const ativo = sel?.bloco === b.id && sel.data === d.data
-                  return (
-                    <td key={d.data} className="px-2 py-1.5 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setSel(ativo ? null : { bloco: b.id, data: d.data })}
-                        title={v.nome}
-                        className={cn(
-                          'mx-auto grid h-6 w-10 place-items-center rounded text-[10px] font-bold text-white',
-                          d.estado === 'futuro' ? 'border border-dashed border-line' : v.bolinha.replace('animate-pulse', ''),
-                          ativo && 'outline outline-2 outline-offset-1 outline-accent',
-                        )}
-                      >
-                        {v.icone}{d.marcacao?.atrasado ? '·' : ''}
-                      </button>
-                    </td>
-                  )
-                })}
+                {b.dias.map((d) => (
+                  <td key={d.data} className="px-2 py-1.5 text-center">
+                    <span
+                      title={d.estado === 'feito' ? `Feito às ${d.feito_em?.slice(11, 16)}` : d.estado === 'nao_feito' ? 'Não marcado' : d.estado === 'folga' ? 'Folga' : ''}
+                      className={cn(
+                        'mx-auto grid h-6 w-10 place-items-center rounded text-[11px] font-bold',
+                        d.estado === 'feito' && 'bg-success text-white',
+                        d.estado === 'nao_feito' && 'bg-danger/15 text-danger',
+                        d.estado === 'folga' && 'bg-foreground/10',
+                        (d.estado === 'futuro' || d.estado === 'agora') && 'border border-dashed border-line',
+                      )}
+                    >
+                      {d.estado === 'feito' ? '✓' : d.estado === 'nao_feito' ? '✕' : ''}
+                    </span>
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-
-      {escolhida && (
-        <div className="rounded-lg border border-line p-3 text-xs text-foreground/80">
-          <div className="font-semibold text-foreground">
-            {DIAS[dados.dias.findIndex((d) => d.data === escolhida.data)]} {ddmm(escolhida.data)} · {escolhida.bloco.inicio}–{escolhida.bloco.fim} · {escolhida.bloco.titulo}
-          </div>
-          <div className="mt-1">{VISUAL_DO_ESTADO[escolhida.estado].nome}
-            {escolhida.marcacao && <> · marcado às {escolhida.marcacao.marcado_em.slice(11, 16)}{escolhida.marcacao.atrasado ? ' (depois do horário)' : ''}</>}
-          </div>
-          {escolhida.marcacao?.motivo && <div className="mt-1">Motivo: {escolhida.marcacao.motivo}</div>}
-          {escolhida.reunioes.length > 0 && (
-            <div className="mt-1">Reuniões no horário: {escolhida.reunioes.map((r) => `${r.agendamento.slice(11, 16)} ${r.nome || r.empresa}`).join(' · ')}</div>
-          )}
-        </div>
-      )}
-
-      {motivos.length > 0 && (
-        <div>
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">Parcial e não deu</div>
-          <ul className="space-y-1 text-xs text-foreground/80">
-            {motivos.map((c) => (
-              <li key={`${c.bloco.id}-${c.data}`} className="flex gap-2">
-                <span className={cn('mt-1 h-2 w-2 shrink-0 rounded-full', VISUAL_DO_ESTADO[c.estado].bolinha)} />
-                <span><b className="tabular-nums">{ddmm(c.data)} {c.bloco.inicio}</b> {c.bloco.titulo}: {c.marcacao?.motivo}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   )
 }
@@ -237,9 +267,7 @@ function EditarBlocos({ pagina, blocos, salvo }: { pagina: string; blocos: Bloco
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-foreground/55">
-        Um item por linha. Em "Reunião", os itens são o que fazer quando não tem reunião no horário. As marcações antigas continuam guardadas.
-      </p>
+      <p className="text-xs text-foreground/55">Um item por linha. As marcações antigas continuam guardadas.</p>
       <div className="space-y-2">
         {lista.map((b) => (
           <div key={b.chave} className="grid grid-cols-[auto_auto_1fr_auto] items-start gap-2 rounded-lg border border-line p-2 sm:grid-cols-[auto_auto_auto_1fr_auto]">

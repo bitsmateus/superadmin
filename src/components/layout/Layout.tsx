@@ -12,7 +12,6 @@ import { ReuniaoResultadoPopup } from '@/components/comercial/ReuniaoResultadoPo
 import { RetornoPropostaPopup } from '@/components/comercial/RetornoPropostaPopup'
 import { PopupDeNotificacoes } from '@/components/notificacoes/PopupDeNotificacoes'
 import { LembreteDeNotificacoes } from '@/components/notificacoes/LembreteDeNotificacoes'
-import { RotinaLateral } from '@/components/comercial/RotinaLateral'
 
 const isDesktop = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -41,7 +40,6 @@ export function Layout() {
       <RetornoPropostaPopup />
       <PopupDeNotificacoes />
       <LembreteDeNotificacoes />
-      <RotinaLateral />
 
       <Sidebar
         open={open}

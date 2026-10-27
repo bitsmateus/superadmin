@@ -1,21 +1,12 @@
 import { dateParaAgendamento } from './reuniaoResultado.js';
 
 /**
- * Rotina do dia (barra lateral do SDR e do closer, ver routes/rotina.ts). Funções puras: horário sempre de Brasília
- * ("HH:MM", "YYYY-MM-DD"), o mesmo do campo Agendamento. Segunda a sexta; o admin marca folga num dia.
+ * Rotina do dia (checklist do botão "Rotina" no CRM do SDR e do closer, ver routes/rotina.ts). Cada bloco é feito ou
+ * não. Funções puras: horário sempre de Brasília ("HH:MM", "YYYY-MM-DD"). Segunda a sexta; o admin marca folga.
  */
 
 export const TIPOS_DE_BLOCO = ['tarefa', 'ligacao', 'reuniao', 'crm'] as const;
 export type TipoDeBloco = (typeof TIPOS_DE_BLOCO)[number];
-
-export const STATUS_DA_MARCACAO = ['feito', 'parcial', 'nao_deu'] as const;
-export type StatusDaMarcacao = (typeof STATUS_DA_MARCACAO)[number];
-
-/** Depois do fim do bloco, quanto tempo ele fica "pendente" antes de virar "sem resposta" (ainda dá pra marcar). */
-export const TOLERANCIA_MIN = 30;
-export const MINIMO_MOTIVO = 5;
-/** Aviso de início de bloco: vale até 5 min depois do horário (cobre o servidor reiniciando bem na hora). */
-export const JANELA_DO_AVISO_MIN = 5;
 
 export interface Bloco {
   id: string;
@@ -28,16 +19,8 @@ export interface Bloco {
   tipo: TipoDeBloco;
 }
 
-export interface Marcacao {
-  status: StatusDaMarcacao;
-  motivo: string;
-  /** "YYYY-MM-DDTHH:MM" de Brasília. */
-  marcado_em: string;
-}
-
-/** futuro/agora/pendente/sem_resposta (sem marcação), reuniao (bloco de reunião que teve reunião), fora (o bloco ainda
- * não existia nesse horário — não conta), ou a marcação. */
-export type EstadoDoBloco = 'futuro' | 'agora' | 'pendente' | 'sem_resposta' | 'reuniao' | 'fora' | StatusDaMarcacao;
+/** futuro/agora (ainda no horário), feito, nao_feito (passou sem marcar) ou fora (o bloco ainda não existia). */
+export type EstadoDoBloco = 'futuro' | 'agora' | 'feito' | 'nao_feito' | 'fora';
 
 export interface BlocoModelo { inicio: string; fim: string; titulo: string; itens: string[]; tipo: TipoDeBloco }
 
@@ -134,54 +117,26 @@ export function segundaDaSemana(data: string): string {
   return somarDias(data, dia === 0 ? -6 : 1 - dia);
 }
 
-const minutos = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
-const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/** Limite pra marcar sem contar como atrasado: fim do bloco + TOLERANCIA_MIN, no mesmo dia. */
-export function limiteDoBloco(bloco: Pick<Bloco, 'fim'>, data: string): string {
-  return `${data}T${hhmm(Math.min(minutos(bloco.fim) + TOLERANCIA_MIN, 23 * 60 + 59))}`;
-}
-
 /**
- * Estado do bloco num dia, visto de `agora`. Bloco de reunião em que teve reunião marcada no horário não pede
- * marcação (quem responde é o popup de resultado da reunião) — a não ser que a pessoa tenha marcado mesmo assim.
- * `criadoEm` ("YYYY-MM-DDTHH:MM"): bloco que já tinha terminado quando foi criado não cobra nada (a rotina começou
- * depois — não vira "sem resposta").
+ * Estado do bloco num dia, visto de `agora`. `criadoEm` ("YYYY-MM-DDTHH:MM"): bloco que já tinha terminado quando foi
+ * criado fica "fora" (a rotina começou depois — não conta como não feito).
  */
 export function estadoDoBloco(
-  bloco: Pick<Bloco, 'inicio' | 'fim' | 'tipo'>, data: string, agora: { data: string; hora: string },
-  marcacao: Marcacao | null | undefined, teveReuniao: boolean, criadoEm = '',
+  bloco: Pick<Bloco, 'inicio' | 'fim'>, data: string, agora: { data: string; hora: string }, feito: boolean, criadoEm = '',
 ): EstadoDoBloco {
-  if (marcacao) return marcacao.status;
+  if (feito) return 'feito';
   if (criadoEm && `${data}T${bloco.fim}` <= criadoEm) return 'fora';
   const agoraTxt = `${agora.data}T${agora.hora}`;
   if (agoraTxt < `${data}T${bloco.inicio}`) return 'futuro';
   if (agoraTxt < `${data}T${bloco.fim}`) return 'agora';
-  if (bloco.tipo === 'reuniao' && teveReuniao) return 'reuniao';
-  return agoraTxt < limiteDoBloco(bloco, data) ? 'pendente' : 'sem_resposta';
+  return 'nao_feito';
 }
 
-/** Pode marcar: bloco que já começou, só no dia dele (e que já existia quando terminou). */
-export function podeMarcar(
-  bloco: Pick<Bloco, 'inicio' | 'fim'>, data: string, agora: { data: string; hora: string }, criadoEm = '',
-): boolean {
-  return data === agora.data && agora.hora >= bloco.inicio && !(criadoEm && `${data}T${bloco.fim}` <= criadoEm);
-}
-
-/** Marcou depois do limite (fim + tolerância)? */
-export function marcouAtrasado(bloco: Pick<Bloco, 'fim'>, data: string, marcacao: Marcacao): boolean {
-  return marcacao.marcado_em > limiteDoBloco(bloco, data);
-}
-
-/** Valida o pedido de marcação. Parcial/Não deu pedem o motivo. */
-export function validarMarcacao(body: unknown): { erro: string } | { ok: { status: StatusDaMarcacao; motivo: string } } {
-  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
-  const status = typeof b.status === 'string' ? b.status : '';
-  if (!(STATUS_DA_MARCACAO as readonly string[]).includes(status)) return { erro: `"status" deve ser ${STATUS_DA_MARCACAO.join(', ')}.` };
-  const motivo = typeof b.motivo === 'string' ? b.motivo.trim().slice(0, 500) : '';
-  if (status !== 'feito' && motivo.length < MINIMO_MOTIVO) return { erro: `Escreva o motivo (mínimo ${MINIMO_MOTIVO} caracteres).` };
-  return { ok: { status: status as StatusDaMarcacao, motivo } };
+/** Marcar/desmarcar: qualquer bloco, só no dia de hoje. */
+export function podeMarcar(data: string, agora: { data: string }): boolean {
+  return data === agora.data;
 }
 
 /** Valida a lista inteira de blocos que o admin salva. Devolve os blocos limpos, em ordem de horário. */
@@ -208,29 +163,4 @@ export function validarBlocos(body: unknown): { erro: string } | { ok: (BlocoMod
     out.push({ id, inicio, fim, titulo, tipo: tipo as TipoDeBloco, itens });
   }
   return { ok: out.sort((a, b) => a.inicio.localeCompare(b.inicio) || a.fim.localeCompare(b.fim)) };
-}
-
-/** Blocos que começam agora (dentro da janela do aviso). */
-export function blocosComecando<T extends Pick<Bloco, 'inicio'>>(blocos: T[], hora: string): T[] {
-  const m = minutos(hora);
-  return blocos.filter((b) => m >= minutos(b.inicio) && m < minutos(b.inicio) + JANELA_DO_AVISO_MIN);
-}
-
-/** Texto do push do início do bloco. */
-export function textoDoAviso(
-  bloco: Pick<Bloco, 'inicio' | 'fim' | 'titulo' | 'itens' | 'tipo'>,
-  reunioes: { nome: string; empresa: string; agendamento: string }[],
-  faltaMarcar: Pick<Bloco, 'inicio' | 'titulo'>[],
-): { title: string; body: string } {
-  const title = `${bloco.inicio}–${bloco.fim} · ${bloco.titulo}`;
-  let corpo: string;
-  if (bloco.tipo === 'reuniao' && reunioes.length) {
-    corpo = reunioes.map((r) => `Reunião ${r.agendamento.slice(11, 16)}: ${r.nome || r.empresa || 'lead sem nome'}`).join(' · ');
-  } else {
-    corpo = (bloco.tipo === 'reuniao' ? bloco.itens.join(' ') : bloco.itens[0]) || 'Hora de começar esse bloco.';
-  }
-  if (faltaMarcar.length) {
-    corpo += ` · Falta marcar: ${faltaMarcar.map((b) => `${b.inicio} ${b.titulo}`).join(', ')}`;
-  }
-  return { title, body: corpo.slice(0, 300) };
 }

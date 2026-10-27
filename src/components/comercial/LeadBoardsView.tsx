@@ -40,7 +40,7 @@ import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { PageActivityLogModal } from '@/components/comercial/PageActivityLogModal'
 import { DemandaTopo } from '@/components/comercial/DemandaTopo'
 import { SinoDeNotificacoes } from '@/components/notificacoes/SinoDeNotificacoes'
-import { BotaoRotinaAdmin } from '@/components/comercial/RotinaAdmin'
+import { BotaoRotina } from '@/components/comercial/RotinaBotao'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
@@ -1610,9 +1610,12 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
         ) : isAdmin && PAGINAS_COM_SININHO.has(page) ? (
           // Admin dentro do CRM do Arthur ou do Luis: o sininho daquele usuário, só pra olhar, e a rotina dele.
           <div className="flex items-center gap-2">
-            <BotaoRotinaAdmin pagina={page} />
+            <BotaoRotina pagina={page} />
             <SinoDeNotificacoes pagina={page} />
           </div>
+        ) : PAGINAS_COM_SININHO.has(page) ? (
+          // O dono do CRM: o checklist da rotina de hoje (some pra quem não é o dono).
+          <BotaoRotina pagina={page} />
         ) : undefined}
       />
 

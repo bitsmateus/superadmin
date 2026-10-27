@@ -2111,9 +2111,10 @@ END; $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS espelho_origens_extras UUID[] NOT NULL DEFAULT '{}'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_espelho_extras_idx ON lead_rows USING GIN (espelho_origens_extras)`);
 
-  // Rotina do dia (barra lateral do SDR e do closer, ver routes/rotina.ts e lib/rotina.ts). A rotina é da aba
-  // (crm-arthur, crm-luis-closer): quem marca é o dono da aba, pelo nome (a mesma regra do sininho). Bloco removido
-  // fica com removido_em, pra não perder as marcações antigas. Uma marcação por bloco por dia (dá pra trocar).
+  // Rotina do dia (checklist do botão "Rotina" no CRM do SDR e do closer, ver routes/rotina.ts e lib/rotina.ts). A
+  // rotina é da aba (crm-arthur, crm-luis-closer): quem marca é o dono da aba, pelo nome (a mesma regra do sininho).
+  // Bloco removido fica com removido_em, pra não perder as marcações antigas. Uma marcação por bloco por dia; só
+  // "feito" conta (parcial/nao_deu ficaram da primeira versão).
   await pool.query(`CREATE TABLE IF NOT EXISTS rotina_blocos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     pagina TEXT NOT NULL,
@@ -2144,13 +2145,8 @@ END; $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (pagina, data)
   )`);
-  // Push do início do bloco: uma linha por bloco por dia, então reiniciar (ou duas instâncias) não manda duas vezes.
-  await pool.query(`CREATE TABLE IF NOT EXISTS rotina_avisos (
-    bloco_id UUID NOT NULL REFERENCES rotina_blocos(id) ON DELETE CASCADE,
-    data DATE NOT NULL,
-    enviado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (bloco_id, data)
-  )`);
+  // O push do início do bloco saiu (a rotina virou só o checklist do botão "Rotina"): a tabela dele vai embora.
+  await pool.query(`DROP TABLE IF EXISTS rotina_avisos`);
   // A rotina de partida (a que o admin mandou): só na primeira vez de cada aba — depois quem manda é a tela de edição.
   for (const [pagina, blocos] of Object.entries(ROTINAS_INICIAIS)) {
     const r = await pool.query(

@@ -1,7 +1,9 @@
 import { MINIMO_DETALHE_MOTIVO, MOTIVOS_DESQUALIFICACAO } from '../lib/trafegoNicho.js';
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
-import { query, queryOne, queryAsActor } from '../db.js';
+import type { PoolClient } from 'pg';
+import { query, queryOne, queryAsActor, withTransaction } from '../db.js';
+import { chaveTelefone, mesmoTelefone } from '../lib/integracaoCards.js';
 import { allowedPageIds } from './leadPages.js';
 import { comAbasJuntas, saoAbasJuntas } from '../lib/abasJuntas.js';
 import { CAMPOS_DA_LINHA_DO_TEMPO, ehCampoDaLinhaDoTempo, registrarMudancaDeCampo } from '../lib/linhaDoTempo.js';
@@ -305,7 +307,8 @@ async function depoisDoPrimeiroContato(boardId: string): Promise<boolean> {
 async function podeLerHistorico(allowed: string[], leadRowId: string): Promise<boolean> {
   const linhas = await query<{ board_id: string }>(
     `SELECT board_id FROM lead_rows
-     WHERE id = $1 OR ((espelho_origem_id = $1 OR copia_ia_origem_id = $1) AND deleted_at IS NULL)`,
+     WHERE id = $1 OR ((espelho_origem_id = $1 OR copia_ia_origem_id = $1 OR $1::uuid = ANY(espelho_origens_extras))
+       AND deleted_at IS NULL)`,
     [leadRowId]
   );
   return linhas.some((l) => allowed.includes(l.board_id));
@@ -664,19 +667,76 @@ async function etiquetaEquivalente(page: string, status: string, corOrigem: stri
   return status;
 }
 
-/** Cria a cópia no CRM do closer, se ainda não existir. Nunca lança: roda em background depois da
- * edição, e falhar aqui não pode derrubar o que o usuário acabou de fazer. */
+/** Card do closer já fechado (Vendido, Perdido, Desqualificado): não recebe outra origem — reunião nova vira card novo. */
+function espelhoFechado(status: string, quadro: string): boolean {
+  return [status, quadro].some((s) => /^(vendid|perdid|desqualificad)/.test(normalizaNome(s ?? '')));
+}
+
+/** As origens (cards do CRM ARTHUR / CRM IA LUIZA) de um card do closer `c`: a principal e as extras. */
+const ORIGENS_DO_ESPELHO = `(o.id = c.espelho_origem_id OR o.id = ANY(c.espelho_origens_extras))`;
+
+/**
+ * Liga mais uma origem a um card do closer que já existe (mesma lead, mesmo telefone): ela entra nas origens extras
+ * (e sai de qualquer outro card do closer em que estivesse), o agendamento passa a ser o dela e os campos vazios do
+ * card são completados com os dela. O card volta pra "Reunião agendada" se estava em outra coluna (reunião nova).
+ * Só usa a conexão da transação (`db`); devolve o status de antes, pra Linha do tempo ser gravada depois do COMMIT.
+ */
+async function juntarOrigemNoEspelho(
+  db: PoolClient, espelhoId: string, origemId: string, quadroAgendada: string, status: string,
+): Promise<string | null> {
+  await db.query(
+    `UPDATE lead_rows SET espelho_origens_extras = array_remove(espelho_origens_extras, $2::uuid)
+     WHERE id <> $1 AND $2::uuid = ANY(espelho_origens_extras)`,
+    [espelhoId, origemId]
+  );
+  const { rows: [antes] } = await db.query<{ status: string }>('SELECT status FROM lead_rows WHERE id = $1', [espelhoId]);
+  await db.query(
+    `UPDATE lead_rows c SET
+       espelho_origens_extras = CASE WHEN c.espelho_origem_id = o.id OR o.id = ANY(c.espelho_origens_extras)
+         THEN c.espelho_origens_extras ELSE array_append(c.espelho_origens_extras, o.id) END,
+       agendamento = COALESCE(NULLIF(o.agendamento, ''), c.agendamento),
+       empresa = COALESCE(NULLIF(c.empresa, ''), o.empresa),
+       nicho = COALESCE(NULLIF(c.nicho, ''), o.nicho),
+       dor_cliente = COALESCE(NULLIF(c.dor_cliente, ''), o.dor_cliente),
+       numero_atendentes = COALESCE(NULLIF(c.numero_atendentes, ''), o.numero_atendentes),
+       board_id = $3, status = $4
+     FROM lead_rows o WHERE c.id = $1 AND o.id = $2`,
+    [espelhoId, origemId, quadroAgendada, status]
+  );
+  return antes && normalizaNome(antes.status) !== normalizaNome(status) ? antes.status : null;
+}
+
+/**
+ * Acerta o que o card do closer tira de TODAS as origens: SDR "IA Luiza" se alguma origem tem esse SDR, e o "Dia de
+ * contato" (a cópia que vem do CRM IA LUIZA chega sem ele) do card do SDR, se o do closer estiver vazio.
+ */
+export async function completarEspelhoComAsOrigens(espelhoId: string) {
+  await query(
+    `UPDATE lead_rows c SET
+       sdr = CASE WHEN EXISTS (SELECT 1 FROM lead_rows o WHERE ${ORIGENS_DO_ESPELHO} AND o.sdr ~* 'luiza') THEN $2 ELSE c.sdr END,
+       dia_contato = COALESCE(NULLIF(c.dia_contato, ''), (
+         SELECT o.dia_contato FROM lead_rows o JOIN lead_boards ob ON ob.id = o.board_id
+         WHERE ${ORIGENS_DO_ESPELHO} AND o.dia_contato <> ''
+         ORDER BY (ob.page = 'crm-ia-luiza'), o.updated_at DESC LIMIT 1), '')
+     WHERE c.id = $1`,
+    [espelhoId, SDR_IA]
+  );
+}
+
+/**
+ * Cria a cópia no CRM do closer — ou liga a lead ao card que o closer já tem. Um card por lead no closer: se ele já
+ * tem um card ABERTO (fora de Vendido/Perdido/Desqualificado) com o mesmo telefone — ex.: o card do CRM ARTHUR e o do
+ * CRM IA LUIZA da mesma lead, os dois agendados pela Luiza —, a segunda origem entra nele (juntarOrigemNoEspelho) em
+ * vez de ganhar outro. Trava por telefone: as duas origens chegando juntas não criam dois. Nunca lança: roda em
+ * background depois da edição, e falhar aqui não pode derrubar o que o usuário acabou de fazer.
+ */
 export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
   try {
     const lead = await queryOne<{
-      status: string; espelho_origem_id: string | null; page: string; board_name: string;
-      nome: string; tipo: string; empresa: string; telefone: string; dia_contato: string;
-      ligacao: string; agendamento: string; retornar: string; retornado: boolean;
-      responsavel: string; sdr: string; numero: string; dor_cliente: string;
-      numero_atendentes: string; valor_mrr: string; valor_implementacao: string; observacoes: string;
-      fechamento: string;
+      status: string; espelho_origem_id: string | null; copia_ia_origem_id: string | null; page: string;
+      board_name: string; telefone: string;
     }>(
-      `SELECT r.*, lb.page, lb.name AS board_name
+      `SELECT r.status, r.espelho_origem_id, r.copia_ia_origem_id, r.telefone, lb.page, lb.name AS board_name
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
        WHERE r.id = $1 AND r.deleted_at IS NULL`,
       [leadRowId]
@@ -685,14 +745,8 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
     // Só nasce do CRM do Arthur ou da IA Luiza, e só quando está de fato em "Reunião agendada".
     if (!ESPELHO_PAGES_ORIGEM.includes(lead.page)) return;
     // A própria linha já é uma cópia (do closer ou da IA) — nunca espelha: a original já mandou a dela.
-    if (lead.espelho_origem_id || (lead as { copia_ia_origem_id?: string | null }).copia_ia_origem_id) return;
+    if (lead.espelho_origem_id || lead.copia_ia_origem_id) return;
     if (lead.status !== MILESTONE_AGENDADA && !ehQuadroReuniaoAgendada(lead.board_name)) return;
-
-    const jaEspelhada = await queryOne<{ id: string; deleted_at: string | null }>(
-      'SELECT id, deleted_at FROM lead_rows WHERE espelho_origem_id = $1',
-      [leadRowId]
-    );
-    if (jaEspelhada && !jaEspelhada.deleted_at) return;
 
     const destino =
       (await queryOne<{ id: string }>(
@@ -708,34 +762,136 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
     // Arthur segue normal.
     if (!destino) return;
 
-    const [{ max }] = await query<{ max: number | null }>(
-      'SELECT MAX(position) as max FROM lead_rows WHERE board_id = $1',
-      [destino.id]
-    );
+    const ultimos8 = chaveTelefone(lead.telefone)?.ultimos8 ?? null;
+    const statusAgendada = (await etiquetaDeStatus(ESPELHO_PAGE_DESTINO, MILESTONE_AGENDADA)) ?? MILESTONE_AGENDADA;
+    let statusDeAntes: string | null = null;
+    // Dentro da transação, só a conexão dela (db): nada de query() do pool com a trava do telefone segura.
+    const espelhoId = await withTransaction(async (db) => {
+      await db.query(`SELECT set_config('app.actor', 'automação', true)`);
+      await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`espelho-closer:${ultimos8 ?? leadRowId}`]);
 
-    // A cópia foi retirada quando a lead voltou pro começo do funil e agora ela agendou de novo: restaura a mesma.
-    // Volta já com o conteúdo de agora da original.
-    if (jaEspelhada?.deleted_at) {
-      await query(
-        `UPDATE lead_rows c SET deleted_at = NULL, board_id = $2, status = $3, position = $4,
-           ${COPIA_LEVA.map((k) => `${k} = o.${k}`).join(', ')}, origem = ${ORIGEM_DA_COPIA}
-         FROM lead_rows o WHERE c.id = $1 AND o.id = $5`,
-        [jaEspelhada.id, destino.id, MILESTONE_AGENDADA, (max ?? -1) + 1, leadRowId]
+      const { rows: [jaEspelhada] } = await db.query<{ id: string; deleted_at: string | null }>(
+        'SELECT id, deleted_at FROM lead_rows WHERE espelho_origem_id = $1', [leadRowId]
       );
-      return;
-    }
+      if (jaEspelhada && !jaEspelhada.deleted_at) return null;
 
-    // A cópia nasce idêntica à original (antes ela vinha sem origem, sem o anúncio do Meta, sem nicho/motivo…).
-    await query(
-      `INSERT INTO lead_rows (board_id, status, espelho_origem_id, position, origem, ${COPIA_LEVA.join(', ')})
-       SELECT $1, $2, o.id, $3, ${ORIGEM_DA_COPIA}, ${COPIA_LEVA.map((k) => `o.${k}`).join(', ')}
-       FROM lead_rows o WHERE o.id = $4
-       ON CONFLICT DO NOTHING`,
-      [destino.id, MILESTONE_AGENDADA, (max ?? -1) + 1, leadRowId]
-    );
+      // Card aberto do closer em que ela já está ligada, ou com o mesmo telefone: entra nele.
+      const { rows: candidatos } = await db.query<{ id: string; telefone: string; status: string; quadro: string; ligada: boolean }>(
+        `SELECT r.id, r.telefone, r.status, lb.name AS quadro, ($1::uuid = ANY(r.espelho_origens_extras)) AS ligada
+         FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+         WHERE lb.page = $2 AND NOT lb.is_vendas AND r.deleted_at IS NULL
+           AND ($1::uuid = ANY(r.espelho_origens_extras)
+             OR ($3::text IS NOT NULL AND right(regexp_replace(r.telefone, '\\D', '', 'g'), 8) = $3::text))
+         ORDER BY ($1::uuid = ANY(r.espelho_origens_extras)) DESC, r.created_at ASC`,
+        [leadRowId, ESPELHO_PAGE_DESTINO, ultimos8]
+      );
+      const aberto = candidatos.find((c) => !espelhoFechado(c.status, c.quadro) && (c.ligada || mesmoTelefone(c.telefone, lead.telefone)));
+      if (aberto) {
+        statusDeAntes = await juntarOrigemNoEspelho(db, aberto.id, leadRowId, destino.id, statusAgendada);
+        return aberto.id;
+      }
+
+      const { rows: [{ max }] } = await db.query<{ max: number | null }>(
+        'SELECT MAX(position) as max FROM lead_rows WHERE board_id = $1', [destino.id]
+      );
+      // A cópia foi retirada quando a lead voltou pro começo do funil e agora ela agendou de novo: restaura a mesma.
+      // Volta já com o conteúdo de agora da original.
+      if (jaEspelhada?.deleted_at) {
+        await db.query(
+          `UPDATE lead_rows c SET deleted_at = NULL, board_id = $2, status = $3, position = $4,
+             ${COPIA_LEVA.map((k) => `${k} = o.${k}`).join(', ')}, origem = ${ORIGEM_DA_COPIA}
+           FROM lead_rows o WHERE c.id = $1 AND o.id = $5`,
+          [jaEspelhada.id, destino.id, MILESTONE_AGENDADA, (max ?? -1) + 1, leadRowId]
+        );
+        return jaEspelhada.id;
+      }
+
+      // A cópia nasce idêntica à original (antes ela vinha sem origem, sem o anúncio do Meta, sem nicho/motivo…).
+      const { rows: [nova] } = await db.query<{ id: string }>(
+        `INSERT INTO lead_rows (board_id, status, espelho_origem_id, position, origem, ${COPIA_LEVA.join(', ')})
+         SELECT $1, $2, o.id, $3, ${ORIGEM_DA_COPIA}, ${COPIA_LEVA.map((k) => `o.${k}`).join(', ')}
+         FROM lead_rows o WHERE o.id = $4
+         ON CONFLICT DO NOTHING RETURNING id`,
+        [destino.id, MILESTONE_AGENDADA, (max ?? -1) + 1, leadRowId]
+      );
+      return nova?.id ?? null;
+    });
+    if (espelhoId) {
+      if (statusDeAntes) await logLeadEvent(espelhoId, 'status', statusDeAntes, statusAgendada, 'Automação');
+      await completarEspelhoComAsOrigens(espelhoId);
+      await sincronizarContagemNotas(await idCanonicoDasNotas(espelhoId));
+    }
   } catch (err) {
     console.error('[espelho] falha ao espelhar lead pro CRM do closer', leadRowId, err);
   }
+}
+
+/**
+ * Cards repetidos do closer (o mesmo telefone em mais de uma cópia aberta, de antes de existir a junção): fica um só —
+ * o que está mais adiante no funil (empate: o que veio do CRM ARTHUR, depois o mais antigo). As origens dos outros
+ * entram nele, os campos vazios dele são completados com os dos outros, e os outros vão pra lixeira (dá pra recuperar).
+ * Roda uma vez por subida; sem repetidos, não faz nada.
+ */
+export async function juntarEspelhosRepetidos(): Promise<number> {
+  const cards = await query<{
+    id: string; telefone: string; status: string; quadro: string; posicao: number; pagina_da_origem: string | null;
+    espelho_origem_id: string; espelho_origens_extras: string[]; created_at: Date;
+  }>(
+    `SELECT r.id, r.telefone, r.status, lb.name AS quadro, lb.position AS posicao, ob.page AS pagina_da_origem,
+            r.espelho_origem_id, r.espelho_origens_extras, r.created_at
+     FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+     LEFT JOIN lead_rows o ON o.id = r.espelho_origem_id LEFT JOIN lead_boards ob ON ob.id = o.board_id
+     WHERE lb.page = $1 AND NOT lb.is_vendas AND r.deleted_at IS NULL AND r.espelho_origem_id IS NOT NULL
+       AND r.telefone <> ''`,
+    [ESPELHO_PAGE_DESTINO]
+  );
+  const porChave = new Map<string, typeof cards>();
+  for (const c of cards) {
+    const chave = chaveTelefone(c.telefone);
+    if (!chave || espelhoFechado(c.status, c.quadro)) continue;
+    porChave.set(chave.ultimos8, [...(porChave.get(chave.ultimos8) ?? []), c]);
+  }
+  let juntados = 0;
+  for (const grupo of porChave.values()) {
+    if (grupo.length < 2) continue;
+    const [fica, ...resto] = [...grupo].sort((a, b) =>
+      b.posicao - a.posicao
+      || Number(b.pagina_da_origem === 'crm-arthur') - Number(a.pagina_da_origem === 'crm-arthur')
+      || new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const saem = resto.filter((c) => mesmoTelefone(c.telefone, fica.telefone));
+    if (!saem.length) continue;
+    const novasOrigens = [...new Set(saem.flatMap((c) => [c.espelho_origem_id, ...c.espelho_origens_extras]))]
+      .filter((id) => id !== fica.espelho_origem_id && !fica.espelho_origens_extras.includes(id));
+    const dosOutros = (campo: string) => `COALESCE(NULLIF(c.${campo}, ''), (SELECT max(o.${campo}) FROM lead_rows o WHERE o.id = ANY($3::uuid[])), '')`;
+    await withTransaction(async (db) => {
+      await db.query(
+        `UPDATE lead_rows c SET
+           espelho_origens_extras = c.espelho_origens_extras || $2::uuid[],
+           agendamento = ${dosOutros('agendamento')}, empresa = ${dosOutros('empresa')}, nicho = ${dosOutros('nicho')},
+           dor_cliente = ${dosOutros('dor_cliente')}, numero_atendentes = ${dosOutros('numero_atendentes')}
+         WHERE c.id = $1`,
+        [fica.id, novasOrigens, saem.map((c) => c.id)]
+      );
+      await db.query(
+        `UPDATE lead_rows SET deleted_at = NOW(), delete_reason = 'Mesmo lead de outro card do closer: juntado nele'
+         WHERE id = ANY($1::uuid[])`,
+        [saem.map((c) => c.id)]
+      );
+    });
+    await completarEspelhoComAsOrigens(fica.id);
+    await sincronizarContagemNotas(fica.espelho_origem_id);
+    console.log(`[espelho] closer: ${saem.length} card(s) repetido(s) juntado(s) no card ${fica.id}`);
+    juntados += saem.length;
+  }
+  // Cópias que nasceram sem "Dia de contato" (as do CRM IA LUIZA): pega o do card do SDR, quando ele está ligado.
+  const semDia = await query<{ id: string }>(
+    `SELECT c.id FROM lead_rows c JOIN lead_boards lb ON lb.id = c.board_id
+     WHERE lb.page = $1 AND c.deleted_at IS NULL AND c.dia_contato = ''
+       AND EXISTS (SELECT 1 FROM lead_rows o WHERE ${ORIGENS_DO_ESPELHO} AND o.dia_contato <> '')`,
+    [ESPELHO_PAGE_DESTINO]
+  );
+  for (const c of semDia) await completarEspelhoComAsOrigens(c.id);
+  return juntados;
 }
 
 /** Status do começo do funil: nunca chegam ao CRM do closer ("Qualificado" é a etapa antes de agendar, no CRM IA LUIZA). */
@@ -766,29 +922,59 @@ export async function propagarEspelho(
     // Quem foi editado é uma cópia quando tem a original marcada; a original é a raiz da família.
     const editouCopia = !!(espelhoOrigemId || copiaIaOrigemId);
     const original = espelhoOrigemId ?? copiaIaOrigemId ?? leadRowId;
-    const parceiros = await query<{
-      id: string; status: string; board_id: string; page: string;
-      espelho_origem_id: string | null; copia_ia_origem_id: string | null;
-    }>(
-      `SELECT r.id, r.status, r.board_id, lb.page, r.espelho_origem_id, r.copia_ia_origem_id
-       FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
-       WHERE (r.id = $1 OR r.espelho_origem_id = $1 OR r.copia_ia_origem_id = $1) AND r.id <> $2`,
+    // Um card do closer pode ter mais de uma origem (espelho_origens_extras: a mesma lead no CRM ARTHUR e no CRM IA
+    // LUIZA). Aí a família é a do card do closer: ele, todas as origens dele e as cópias delas — o que muda numa
+    // chega em todas.
+    const espelhos = await query<{ id: string; espelho_origem_id: string | null; espelho_origens_extras: string[] }>(
+      `SELECT id, espelho_origem_id, espelho_origens_extras FROM lead_rows
+       WHERE deleted_at IS NULL AND (espelho_origem_id = $1 OR $1::uuid = ANY(espelho_origens_extras)
+         OR (id = $2 AND cardinality(espelho_origens_extras) > 0))`,
       [original, leadRowId]
     );
+    const espelhoIds = espelhos.map((e) => e.id);
+    const raizes = [...new Set([original, ...espelhos.flatMap((e) => [e.espelho_origem_id ?? e.id, ...e.espelho_origens_extras])])];
+    const parceiros = await query<{
+      id: string; status: string; board_id: string; page: string;
+      espelho_origem_id: string | null; copia_ia_origem_id: string | null; deleted_at: string | null;
+    }>(
+      `SELECT r.id, r.status, r.board_id, lb.page, r.espelho_origem_id, r.copia_ia_origem_id, r.deleted_at
+       FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+       WHERE (r.id = ANY($1::uuid[]) OR r.espelho_origem_id = ANY($1::uuid[]) OR r.copia_ia_origem_id = ANY($1::uuid[])
+              OR r.id = ANY($3::uuid[]))
+         AND r.id <> $2`,
+      [raizes, leadRowId, espelhoIds]
+    );
+
+    // Lead que o Arthur devolve pro INÍCIO do funil (Primeiro Contato / Leads Novos) deixa de ser do closer
+    // (e da IA): a reunião não vingou. A cópia sai do outro CRM (vai pra lixeira, dá pra recuperar) em vez de
+    // virar um quadro "Primeiro Contato" lá. Se a lead voltar a "Reunião agendada", a cópia é restaurada.
+    // Com outra origem do mesmo card do closer ainda no funil, o card fica (com ela) e só esta origem sai dele.
+    const voltouProInicio = !editouCopia && !!novoStatus && STATUS_INICIO_DO_FUNIL.has(normalizaNome(novoStatus));
+    const ehOutraRaiz = (id: string) => raizes.includes(id) && id !== original && !espelhoIds.includes(id);
+    const outraOrigemNoFunil = parceiros.some((p) => ehOutraRaiz(p.id) && !p.deleted_at
+      && !STATUS_INICIO_DO_FUNIL.has(normalizaNome(p.status)));
 
     for (const parceiro of parceiros) {
-      const parceiroEhOriginal = !parceiro.espelho_origem_id && !parceiro.copia_ia_origem_id;
+      const ehEspelho = espelhoIds.includes(parceiro.id);
+      const parceiroEhOriginal = !parceiro.espelho_origem_id && !parceiro.copia_ia_origem_id && !ehEspelho;
 
-      // Lead que o Arthur devolve pro INÍCIO do funil (Primeiro Contato / Leads Novos) deixa de ser do closer
-      // (e da IA): a reunião não vingou. A cópia sai do outro CRM (vai pra lixeira, dá pra recuperar) em vez de
-      // virar um quadro "Primeiro Contato" lá. Se a lead voltar a "Reunião agendada", a cópia é restaurada.
-      if (!editouCopia && novoStatus && STATUS_INICIO_DO_FUNIL.has(normalizaNome(novoStatus))) {
-        await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [parceiro.id]);
+      if (voltouProInicio) {
+        if (ehEspelho && outraOrigemNoFunil) {
+          await query(
+            'UPDATE lead_rows SET espelho_origens_extras = array_remove(espelho_origens_extras, $2::uuid) WHERE id = $1',
+            [parceiro.id, original]
+          );
+          continue;
+        }
+        // As outras origens (e as cópias delas) seguem a vida delas.
+        const daMesmaOrigem = ehEspelho || parceiro.espelho_origem_id === original || parceiro.copia_ia_origem_id === original;
+        if (daMesmaOrigem) await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [parceiro.id]);
         continue;
       }
 
-      // O SDR da cópia da IA é sempre "IA Luiza" (é o CRM dela): ele não vai nem vem por aqui.
-      const campos = parceiro.copia_ia_origem_id || copiaIaOrigemId
+      // O SDR da cópia da IA (e de qualquer card do CRM IA LUIZA) é sempre "IA Luiza" (é o CRM dela): ele não vai nem
+      // vem por aqui. No card do closer, completarEspelhoComAsOrigens acerta o SDR depois.
+      const campos = parceiro.copia_ia_origem_id || copiaIaOrigemId || parceiro.page === PAGE_IA
         ? camposDoPatch.filter((k) => k !== 'sdr')
         : camposDoPatch;
       const sets: string[] = [];
@@ -832,11 +1018,15 @@ export async function propagarEspelho(
       if (statusMudou) {
         const actorName = nomeDoAtor ?? await getActorName(actorId);
         await logLeadEvent(parceiro.id, 'status', parceiro.status, statusParceiro, actorName);
-        // Quem mexeu foi uma cópia: a venda nasce aqui, pela original, uma vez só.
-        if (editouCopia && parceiroEhOriginal && !semVenda) {
+        // Quem mexeu foi uma cópia: a venda nasce aqui, pela original PRINCIPAL, uma vez só (o card do closer com duas
+        // origens não pode registrar a venda em dobro).
+        if (editouCopia && parceiro.id === original && !semVenda) {
           await syncVendaFromStatus(parceiro.id, parceiro.status, statusParceiro!);
         }
       }
+    }
+    if ('sdr' in patch || 'dia_contato' in patch) {
+      for (const id of espelhoIds) await completarEspelhoComAsOrigens(id);
     }
   } catch (err) {
     console.error('[espelho] falha ao propagar edição do lead', leadRowId, err);
@@ -1015,6 +1205,23 @@ export async function sincronizarContagemNotas(canonicalId: string) {
        WHERE id = $1 OR espelho_origem_id = $1 OR copia_ia_origem_id = $1`,
       [canonicalId, ultima ? previewTextoNota(ultima.content) : '', ultima?.created_at ?? null]
     );
+    // Card do closer com mais de uma origem (espelho_origens_extras): mostra as Atualizações de todas.
+    const juntos = await query<{ id: string; origens: string[] }>(
+      `SELECT id, array_prepend(COALESCE(espelho_origem_id, id), espelho_origens_extras) AS origens FROM lead_rows
+       WHERE cardinality(espelho_origens_extras) > 0 AND (espelho_origem_id = $1 OR id = $1 OR $1::uuid = ANY(espelho_origens_extras))`,
+      [canonicalId]
+    );
+    for (const j of juntos) {
+      const ultimaDeTodas = await queryOne<{ content: string; created_at: string }>(
+        'SELECT content, created_at FROM lead_notes WHERE lead_row_id = ANY($1::uuid[]) ORDER BY created_at DESC LIMIT 1',
+        [j.origens]
+      );
+      await query(
+        `UPDATE lead_rows SET notes_count = (SELECT count(*) FROM lead_notes WHERE lead_row_id = ANY($2::uuid[])),
+           last_note_preview = $3, last_note_at = $4 WHERE id = $1`,
+        [j.id, j.origens, ultimaDeTodas ? previewTextoNota(ultimaDeTodas.content) : '', ultimaDeTodas?.created_at ?? null]
+      );
+    }
   } catch (err) {
     console.error('[espelho] falha ao sincronizar contagem de notas', canonicalId, err);
   }
@@ -1689,10 +1896,16 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       // excluir no CRM do Arthur deixava um fantasma no CRM do Luis — com as Atualizações apontando
       // pra uma lead que não existe mais. No sentido contrário nada acontece: excluir a cópia tira
       // só ela, a lead do Arthur continua.
+      // Card do closer que tem outra origem (espelho_origens_extras) fica: só esta origem sai dele.
       await query(
         `UPDATE lead_rows SET deleted_at = NOW(), delete_reason = $2
-         WHERE id = $1 OR espelho_origem_id = $1 OR copia_ia_origem_id = $1`,
+         WHERE id = $1 OR (espelho_origem_id = $1 AND cardinality(espelho_origens_extras) = 0) OR copia_ia_origem_id = $1`,
         [req.params.id, reason]
+      );
+      await query(
+        `UPDATE lead_rows SET espelho_origens_extras = array_remove(espelho_origens_extras, $1::uuid)
+         WHERE $1::uuid = ANY(espelho_origens_extras)`,
+        [req.params.id]
       );
       return reply.status(204).send();
     }
@@ -1802,7 +2015,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           (SELECT MAX(le.created_at) FROM lead_events le
            WHERE le.lead_row_id IN (lr.id, COALESCE(lr.espelho_origem_id, lr.copia_ia_origem_id, lr.id))),
           (SELECT MAX(n.created_at) FROM lead_notes n
-           WHERE n.lead_row_id IN (lr.id, COALESCE(lr.espelho_origem_id, lr.copia_ia_origem_id, lr.id)))
+           WHERE n.lead_row_id IN (lr.id, COALESCE(lr.espelho_origem_id, lr.copia_ia_origem_id, lr.id))
+              OR n.lead_row_id = ANY(lr.espelho_origens_extras))
         ) AS ultima_atividade
        FROM lead_rows lr
        ${boardFilter}`,

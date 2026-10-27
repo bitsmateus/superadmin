@@ -45,8 +45,13 @@ async function pendenciasDe(userId: string, role: string) {
     nome_da_pagina: string; board_id: string; nome: string; empresa: string; telefone: string; dor_cliente: string;
     observacoes: string; last_note_preview: string;
   }>(
-    `SELECT r.id, COALESCE(r.espelho_origem_id, r.copia_ia_origem_id, r.id) AS familia,
-            (r.espelho_origem_id IS NOT NULL) AS eh_copia_closer, r.agendamento, COALESCE(r.sdr, '') AS sdr,
+    `SELECT r.id,
+            -- Origem extra de um card do closer (a mesma lead em outro CRM): é a mesma reunião do card do closer.
+            COALESCE(r.espelho_origem_id, r.copia_ia_origem_id,
+              (SELECT COALESCE(c.espelho_origem_id, c.id) FROM lead_rows c
+               WHERE r.id = ANY(c.espelho_origens_extras) AND c.deleted_at IS NULL LIMIT 1), r.id) AS familia,
+            (r.espelho_origem_id IS NOT NULL OR cardinality(r.espelho_origens_extras) > 0) AS eh_copia_closer,
+            r.agendamento, COALESCE(r.sdr, '') AS sdr,
             lb.page AS pagina, lp.name AS nome_da_pagina, r.board_id, COALESCE(r.nome, '') AS nome,
             COALESCE(r.empresa, '') AS empresa, COALESCE(r.telefone, '') AS telefone,
             COALESCE(r.dor_cliente, '') AS dor_cliente, COALESCE(r.observacoes, '') AS observacoes,

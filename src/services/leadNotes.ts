@@ -27,6 +27,13 @@ export function canonicalNoteLeadId(leadRowId: string): string {
   return row?.espelhoOrigemId ?? row?.copiaIaOrigemId ?? leadRowId
 }
 
+/** De onde vêm as Atualizações que o card mostra: a original e, no card do closer com mais de uma origem (a mesma lead
+ * no CRM ARTHUR e no CRM IA LUIZA), as outras origens também. Escrever continua indo só pra original. */
+export function idsDoHistorico(leadRowId: string): string[] {
+  const row = leadBoardsService.getRows().find((r) => r.id === leadRowId)
+  return [...new Set([canonicalNoteLeadId(leadRowId), ...(row?.espelhoOrigensExtras ?? [])])]
+}
+
 // ---------- Cache (carregado sob demanda por lead, igual às mensagens de ticket) ----------
 
 let notes: LeadNote[] = []
@@ -69,12 +76,12 @@ export const leadNotesService = {
 
   async loadNotes(leadRowId: string): Promise<void> {
     ensureRealtime()
-    const canonicalId = canonicalNoteLeadId(leadRowId)
+    const ids = idsDoHistorico(leadRowId)
     try {
-      const rows = await api.get<NoteRow[]>(`/api/lead-notes?lead_row_id=${canonicalId}`)
-      const fresh = rows.map(rowToNote)
-      notes = [...notes.filter((n) => n.leadRowId !== canonicalId), ...fresh]
-      loadedLeadIds.add(canonicalId)
+      const listas = await Promise.all(ids.map((id) => api.get<NoteRow[]>(`/api/lead-notes?lead_row_id=${id}`)))
+      const fresh = listas.flat().map(rowToNote)
+      notes = [...notes.filter((n) => !ids.includes(n.leadRowId)), ...fresh]
+      for (const id of ids) loadedLeadIds.add(id)
       notify()
     } catch (err) {
       toast.error('Falha ao carregar anotações: ' + (err as Error).message)

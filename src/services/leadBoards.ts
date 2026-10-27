@@ -58,6 +58,7 @@ type LeadRowRow = {
   contrato_assinado?: boolean
   espelho_origem_id?: string | null
   copia_ia_origem_id?: string | null
+  espelho_origens_extras?: string[] | null
   ticket_nx?: string
   closer?: string
   last_note_preview?: string
@@ -90,6 +91,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     contratoAssinado: r.contrato_assinado ?? false,
     espelhoOrigemId: r.espelho_origem_id ?? null,
     copiaIaOrigemId: r.copia_ia_origem_id ?? null,
+    espelhoOrigensExtras: r.espelho_origens_extras ?? [],
     ticketNx: r.ticket_nx ?? '',
     closer: r.closer ?? '',
     lastNotePreview: r.last_note_preview ?? '',
@@ -256,7 +258,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
     id: uuid(), boardId, nome: '', tipo: '', etiqueta: '', followup: '', disparo: '', origem: '', agendadoPor: '', nicho: '', motivoDesqualificacao: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
     status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
     dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
-    fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, copiaIaOrigemId: null, ticketNx: '', closer: '',
+    fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, copiaIaOrigemId: null, espelhoOrigensExtras: [], ticketNx: '', closer: '',
     lastNotePreview: '', lastNoteAt: null,
     position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
     mrrPendente: true, implPendente: true, observacoes: '', veioDoFunil: false,

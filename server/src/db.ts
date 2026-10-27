@@ -2104,6 +2104,13 @@ END; $$`);
     if (r.rowCount) console.log(`[db] espelho do closer: ${r.rowCount} cópia(s) completada(s) com os dados da lead original`);
   }
 
+  // Um card por lead no CRM LUIS CLOSER: quando outra origem da mesma lead (ex.: o card do CRM ARTHUR e o do CRM IA
+  // LUIZA) chega em "Reunião agendada" e o closer já tem um card aberto com o mesmo telefone, ela não ganha cópia
+  // própria: entra aqui, no card que já existe (ver syncEspelhoReuniaoAgendada). espelho_origem_id continua sendo a
+  // origem principal (dona das Atualizações que o closer escreve); estas são as outras.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS espelho_origens_extras UUID[] NOT NULL DEFAULT '{}'`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_espelho_extras_idx ON lead_rows USING GIN (espelho_origens_extras)`);
+
   // Rotina do dia (barra lateral do SDR e do closer, ver routes/rotina.ts e lib/rotina.ts). A rotina é da aba
   // (crm-arthur, crm-luis-closer): quem marca é o dono da aba, pelo nome (a mesma regra do sininho). Bloco removido
   // fica com removido_em, pra não perder as marcações antigas. Uma marcação por bloco por dia (dá pra trocar).

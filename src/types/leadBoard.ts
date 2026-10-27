@@ -121,6 +121,9 @@ export interface LeadRow {
   /** Lead que a IA Luiza agendou no CRM de outro SDR: na cópia dela no CRM IA LUIZA, o id da lead original; null
    * em lead comum. Os painéis gerais deixam a cópia de fora, pra não contar a mesma lead duas vezes. */
   copiaIaOrigemId: string | null
+  /** Card do closer com mais de uma origem (a mesma lead no CRM ARTHUR e no CRM IA LUIZA): as outras origens, além
+   * do espelhoOrigemId. As Atualizações delas aparecem no card também. */
+  espelhoOrigensExtras: string[]
   /** Número do ticket na NX (atendimento que gerou o card). */
   ticketNx: string
   /** Quem FECHOU a venda (só a aba Vendas usa). Diferente do SDR = a venda também gera a comissão
@@ -141,7 +144,7 @@ export type LeadRowField = Exclude<
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
   | 'lastNotePreview' | 'lastNoteAt'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
-  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId' | 'copiaIaOrigemId' | 'closer' | 'metaLeadId'
+  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId' | 'copiaIaOrigemId' | 'espelhoOrigensExtras' | 'closer' | 'metaLeadId'
   | 'boasVindasEnviadaEm' | 'boasVindasErro'
 >
 

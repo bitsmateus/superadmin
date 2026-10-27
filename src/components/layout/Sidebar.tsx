@@ -43,6 +43,7 @@ import {
   Users,
   KanbanSquare,
   Palette,
+  Activity,
   Wallet,
   Zap,
 } from 'lucide-react'
@@ -146,6 +147,7 @@ function useGrupoAberto(chave: string): [boolean, React.Dispatch<React.SetStateA
 /** As sub-abas do grupo "Clientes NX Digital", na ordem em que aparecem. */
 const SUB_ABAS_CLIENTES_NX = [
   { to: '/clientesnxdigital/clientes', label: 'Clientes', icon: Users },
+  { to: '/clientesnxdigital/trafego', label: 'Tráfego', icon: Activity },
   { to: '/clientesnxdigital/demandas', label: 'Kanban demandas', icon: KanbanSquare },
   { to: '/clientesnxdigital/socialmedia', label: 'Social media', icon: Palette },
 ]

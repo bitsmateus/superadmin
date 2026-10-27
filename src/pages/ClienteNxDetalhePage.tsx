@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useModuloNxNoCelular } from '@/hooks/useModuloNxNoCelular'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, MessageSquare, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, MessageSquare, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -16,10 +16,13 @@ import { AbaEstrategias } from '@/components/gestaoClientes/AbaEstrategias'
 import { AbaBriefing } from '@/components/gestaoClientes/AbaBriefing'
 import { KanbanDemandas } from '@/components/gestaoClientes/KanbanDemandas'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
+import { AbaTrafego } from '@/components/gestaoClientes/AbaTrafego'
+import { AbaConteudo } from '@/components/gestaoClientes/AbaConteudo'
+import { AssistenteIa } from '@/components/gestaoClientes/AssistenteIa'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 import type { Destino } from '@/lib/gcSaude'
 
-type Aba = 'visao' | 'demandas' | 'planejamento' | 'briefing' | 'estrategias' | 'relatorios' | 'notas'
+type Aba = 'visao' | 'trafego' | 'conteudo' | 'demandas' | 'planejamento' | 'briefing' | 'estrategias' | 'relatorios' | 'notas'
 
 /**
  * Detalhe do cliente de tráfego — Visão geral, Jornada e Histórico.
@@ -35,10 +38,13 @@ export function ClienteNxDetalhePage() {
   const [detalhe, setDetalhe] = React.useState<GcClienteDetalhe | null>(null)
   const [carregando, setCarregando] = React.useState(true)
   const [busca] = useSearchParams()
-  const [aba, setAba] = React.useState<Aba>(busca.get('aba') === 'relatorios' ? 'relatorios' : 'visao')
+  const [aba, setAba] = React.useState<Aba>(
+    busca.get('aba') === 'relatorios' ? 'relatorios' : busca.get('aba') === 'trafego' ? 'trafego' : busca.get('aba') === 'conteudo' ? 'conteudo' : 'visao',
+  )
   const [editando, setEditando] = React.useState(false)
   const [confirmandoExclusao, setConfirmandoExclusao] = React.useState(false)
   const [notasAbertas, setNotasAbertas] = React.useState(false)
+  const [assistenteAberto, setAssistenteAberto] = React.useState(false)
   const [excluindo, setExcluindo] = React.useState(false)
   const carregar = React.useCallback(async () => {
     try {
@@ -122,6 +128,14 @@ export function ClienteNxDetalhePage() {
           detalhe ? (
             <div className="flex items-center gap-2">
               <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Sparkles className="h-4 w-4" />}
+                onClick={() => setAssistenteAberto(true)}
+              >
+                <span className="hidden sm:inline">Assistente IA</span>
+              </Button>
+              <Button
                 variant="ghost"
                 size="sm"
                 leftIcon={<Trash2 className="h-4 w-4" />}
@@ -172,6 +186,8 @@ export function ClienteNxDetalhePage() {
               onChange={(v) => setAba(v as Aba)}
               items={[
                 { value: 'visao', label: 'Visão geral' },
+                { value: 'trafego', label: 'Tráfego' },
+                { value: 'conteudo', label: 'Conteúdo' },
                 { value: 'demandas', label: 'Demandas' },
                 { value: 'planejamento', label: 'Planejamento' },
                 { value: 'briefing', label: 'Briefing' },
@@ -222,6 +238,8 @@ export function ClienteNxDetalhePage() {
             {aba === 'planejamento' && (
               <AbaPlanejamento clienteId={id} cliente={detalhe.cliente} onMudou={carregar} />
             )}
+            {aba === 'trafego' && <AbaTrafego clienteId={id} />}
+            {aba === 'conteudo' && <AbaConteudo clienteId={id} />}
             {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
             {aba === 'demandas' && <KanbanDemandas clienteId={id} />}
             {aba === 'briefing' && <AbaBriefing cliente={detalhe.cliente} onMudou={carregar} />}
@@ -244,6 +262,10 @@ export function ClienteNxDetalhePage() {
           clienteId={id}
           onMudou={carregar}
         />
+      )}
+
+      {detalhe && (
+        <AssistenteIa aberto={assistenteAberto} onFechar={() => setAssistenteAberto(false)} clienteId={id} nome={nome} />
       )}
 
       <ModalCliente

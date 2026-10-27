@@ -65,6 +65,9 @@ const SocialMediaPage = React.lazy(() =>
 const SocialMediaClientePage = React.lazy(() =>
   import('./pages/SocialMediaClientePage').then((m) => ({ default: m.SocialMediaClientePage })),
 )
+const TrafegoNxPage = React.lazy(() =>
+  import('./pages/TrafegoNxPage').then((m) => ({ default: m.TrafegoNxPage })),
+)
 const DemandasNxPage = React.lazy(() =>
   import('./pages/DemandasNxPage').then((m) => ({ default: m.DemandasNxPage })),
 )
@@ -245,8 +248,8 @@ export default function App() {
           <Route path="/clientesnxdigital/demandas" element={<DemandasNxPage />} />
           <Route path="/clientesnxdigital/socialmedia" element={<SocialMediaPage />} />
           <Route path="/clientesnxdigital/socialmedia/:id" element={<SocialMediaClientePage />} />
-          {/* As telas Tráfego e Estratégias saíram: quem tem o link antigo volta pra lista. */}
-          <Route path="/clientesnxdigital/trafego" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
+          <Route path="/clientesnxdigital/trafego" element={<TrafegoNxPage />} />
+          {/* A tela Estratégias saiu: quem tem o link antigo volta pra lista. */}
           <Route path="/clientesnxdigital/estrategias" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           {/* Uma cópia do menu Suporte tem rota só dela — ver SupportViewPage. */}

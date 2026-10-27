@@ -54,6 +54,7 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   // resto do menu. As telas de detalhe do cliente (/clientesnxdigital/clientes/<id>) valem pela chave de
   // Clientes.
   { key: 'nxdigital_clientes', label: 'Clientes', path: '/clientesnxdigital/clientes', group: 'nxdigital' },
+  { key: 'nxdigital_trafego', label: 'Tráfego', path: '/clientesnxdigital/trafego', group: 'nxdigital' },
   { key: 'nxdigital_demandas', label: 'Kanban demandas', path: '/clientesnxdigital/demandas', group: 'nxdigital' },
   { key: 'nxdigital_socialmedia', label: 'Social media', path: '/clientesnxdigital/socialmedia', group: 'nxdigital' },
   // Tela que não é aba: marca própria. (O Financeiro inteiro — Vendas, Contrato, Contas a Pagar, Clientes Geral —
@@ -62,7 +63,7 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
 ]
 
 /** As chaves das abas do NX DIGITAL. */
-export const CHAVES_NX_DIGITAL = ['nxdigital_clientes', 'nxdigital_demandas', 'nxdigital_socialmedia'] as const
+export const CHAVES_NX_DIGITAL = ['nxdigital_clientes', 'nxdigital_trafego', 'nxdigital_demandas', 'nxdigital_socialmedia'] as const
 
 /** A pessoa restrita pode abrir a Agenda? Só com a marca "Agenda" — ter uma aba do Comercial não basta. */
 export function acessoAAgenda(allowed: Set<string>): boolean {

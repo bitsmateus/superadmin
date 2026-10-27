@@ -25,7 +25,7 @@ export function metaAdsConfig(): { token: string; account: string } | null {
 type GraphPage<T> = { data?: T[]; paging?: { next?: string }; error?: { message?: string; code?: number } };
 
 /** GET paginado na Graph API. A mensagem de erro vem do Meta e não contém o token. */
-async function graphList<T>(path: string, params: Record<string, string>, token: string): Promise<T[]> {
+export async function graphList<T>(path: string, params: Record<string, string>, token: string): Promise<T[]> {
   const url = new URL(`https://graph.facebook.com/${VERSION}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set('limit', String(PAGE_LIMIT));
@@ -65,13 +65,13 @@ interface MetaAdset {
   id: string; name?: string; campaign_id?: string; effective_status?: string;
   daily_budget?: string; optimization_goal?: string; targeting?: unknown;
 }
-interface MetaAd {
+export interface MetaAd {
   id: string; name?: string; adset_id?: string; campaign_id?: string; effective_status?: string;
   preview_shareable_link?: string;
   creative?: { thumbnail_url?: string; title?: string; body?: string; object_type?: string; video_id?: string };
 }
 
-function formatoDoCriativo(c: MetaAd['creative']): string {
+export function formatoDoCriativo(c: MetaAd['creative']): string {
   if (!c) return '';
   if (c.video_id || c.object_type === 'VIDEO') return 'video';
   if (c.object_type === 'PHOTO') return 'imagem';
@@ -149,7 +149,7 @@ const soma = (arr: Action[] | undefined, tipo?: string): number =>
   (arr ?? []).filter((a) => !tipo || a.action_type === tipo).reduce((s, a) => s + num(a.value), 0);
 
 /** Janela de no máximo 30 dias por chamada, pra não estourar o tamanho da resposta. */
-function janelas(desde: string, ate: string): Array<[string, string]> {
+export function janelas(desde: string, ate: string): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   let ini = new Date(`${desde}T12:00:00Z`);
   const fim = new Date(`${ate}T12:00:00Z`);

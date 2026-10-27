@@ -562,6 +562,133 @@ const TABELAS = [
     atualizado_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+
+  // ---------------------------------------------------------------- tráfego (Meta) por cliente
+  // Conta de anúncio do cliente. Separada das tabelas meta_* (a conta da própria NX, aba Tráfego):
+  // aqui cada linha de catálogo/insight carrega o gc_cliente_id e nada cruza com o CRM interno.
+  // `token` é opcional: vazio usa o META_ADS_TOKEN do servidor (o usuário do sistema do BM da
+  // agência, que já enxerga as contas dos clientes). Nunca volta pra tela.
+  `CREATE TABLE IF NOT EXISTS gc_trafego_contas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    ad_account_id TEXT NOT NULL,
+    nome TEXT NOT NULL DEFAULT '',
+    moeda TEXT NOT NULL DEFAULT '',
+    token TEXT,
+    ativo BOOLEAN NOT NULL DEFAULT true,
+    ultimo_sync_em TIMESTAMPTZ,
+    ultimo_erro TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (gc_cliente_id, ad_account_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS gc_meta_campanhas (
+    campaign_id TEXT PRIMARY KEY,
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    ad_account_id TEXT NOT NULL,
+    nome TEXT NOT NULL DEFAULT '',
+    objetivo TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    orcamento_dia NUMERIC(14,2),
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS gc_meta_anuncios (
+    ad_id TEXT PRIMARY KEY,
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    ad_account_id TEXT NOT NULL,
+    campaign_id TEXT,
+    adset_id TEXT,
+    conjunto_nome TEXT NOT NULL DEFAULT '',
+    nome TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    formato TEXT NOT NULL DEFAULT '',
+    thumbnail_url TEXT NOT NULL DEFAULT '',
+    titulo TEXT NOT NULL DEFAULT '',
+    texto TEXT NOT NULL DEFAULT '',
+    preview_url TEXT NOT NULL DEFAULT '',
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  // "Resultado" varia com o objetivo do cliente: lead de formulário, conversa no WhatsApp/Direct
+  // ou compra no site. Os três ficam separados; a tela soma lead + conversa como resultado.
+  `CREATE TABLE IF NOT EXISTS gc_meta_insights_dia (
+    dia DATE NOT NULL,
+    ad_id TEXT NOT NULL,
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    campaign_id TEXT,
+    adset_id TEXT,
+    gasto NUMERIC(14,2) NOT NULL DEFAULT 0,
+    impressoes BIGINT NOT NULL DEFAULT 0,
+    alcance BIGINT NOT NULL DEFAULT 0,
+    cliques_link BIGINT NOT NULL DEFAULT 0,
+    leads INT NOT NULL DEFAULT 0,
+    conversas INT NOT NULL DEFAULT 0,
+    compras INT NOT NULL DEFAULT 0,
+    valor_compras NUMERIC(14,2) NOT NULL DEFAULT 0,
+    video_3s BIGINT NOT NULL DEFAULT 0,
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (dia, ad_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_meta_insights_cliente_idx ON gc_meta_insights_dia (gc_cliente_id, dia)`,
+  // Alertas do painel de tráfego: um aberto por regra+entidade, fica aberto até a regra parar de
+  // disparar (resolve sozinho) ou alguém marcar como visto.
+  `CREATE TABLE IF NOT EXISTS gc_trafego_alertas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    regra TEXT NOT NULL,
+    nivel TEXT NOT NULL CHECK (nivel IN ('critico','atencao','oportunidade')),
+    entidade_id TEXT NOT NULL DEFAULT '',
+    mensagem TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ,
+    resolvido_por UUID REFERENCES profiles(id) ON DELETE SET NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS gc_trafego_alertas_aberto_uniq
+     ON gc_trafego_alertas (gc_cliente_id, regra, entidade_id) WHERE resolved_at IS NULL`,
+
+  // ---------------------------------------------------------------- IA e conteúdo (Instagram)
+  // O que a IA gerou pro cliente: análise do tráfego (todo dia ou à mão) e ideias de conteúdo
+  // (roteiros/artes). Guarda o histórico; a tela mostra a mais nova de cada tipo.
+  `CREATE TABLE IF NOT EXISTS gc_ia_analises (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL CHECK (tipo IN ('trafego','conteudo')),
+    dia DATE NOT NULL,
+    origem TEXT NOT NULL DEFAULT 'manual' CHECK (origem IN ('manual','auto')),
+    conteudo JSONB NOT NULL,
+    gerado_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_ia_analises_cliente_idx ON gc_ia_analises (gc_cliente_id, tipo, created_at DESC)`,
+  // Perfil do Instagram (conta profissional) do cliente, lido pela Graph API com o mesmo token do
+  // BM (META_ADS_TOKEN) ou um próprio. Token nunca volta pra tela.
+  `CREATE TABLE IF NOT EXISTS gc_instagram_contas (
+    gc_cliente_id UUID PRIMARY KEY REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    ig_user_id TEXT NOT NULL,
+    username TEXT NOT NULL DEFAULT '',
+    seguidores INTEGER,
+    token TEXT,
+    ultimo_sync_em TIMESTAMPTZ,
+    ultimo_erro TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS gc_instagram_posts (
+    media_id TEXT PRIMARY KEY,
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL DEFAULT '',
+    produto TEXT NOT NULL DEFAULT '',
+    legenda TEXT NOT NULL DEFAULT '',
+    permalink TEXT NOT NULL DEFAULT '',
+    thumbnail_url TEXT NOT NULL DEFAULT '',
+    publicado_em TIMESTAMPTZ,
+    curtidas INTEGER NOT NULL DEFAULT 0,
+    comentarios INTEGER NOT NULL DEFAULT 0,
+    alcance INTEGER,
+    salvos INTEGER,
+    compartilhamentos INTEGER,
+    visualizacoes INTEGER,
+    interacoes INTEGER,
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_instagram_posts_cliente_idx ON gc_instagram_posts (gc_cliente_id, publicado_em DESC)`,
 ];
 
 /** As 9 etapas padrão da jornada, com o checklist inicial de cada uma. */

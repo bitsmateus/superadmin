@@ -350,7 +350,7 @@ function mesesDeReferencia(periodo?: string): [string, string] {
  * (Equipe → Permissões). Esconder o menu não basta: sem esta checagem, quem conhece a URL da API
  * leria os clientes de tráfego mesmo sem ver o item no menu.
  */
-async function podeUsarModulo(userId: string, role: string): Promise<boolean> {
+export async function podeUsarModulo(userId: string, role: string): Promise<boolean> {
   // Só administrador entra sem marca; os demais precisam de uma aba do NX DIGITAL marcada.
   if (role === 'admin') return true;
   const chave = await queryOne(

@@ -257,6 +257,99 @@ function ModalContas({ aberto, onFechar, clienteId, contas, onMudou }: {
   )
 }
 
+/** "3.500,00", "3500", "R$ 3.500", "2.000" → número. Vazio → null; texto que não é número → undefined. */
+function lerReais(texto: string): number | null | undefined {
+  let t = texto.replace(/R\$|\s/g, '')
+  if (!t) return null
+  // Jeito brasileiro: vírgula é centavo e ponto é milhar ("2.000" = dois mil, não dois reais).
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.')
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '')
+  const n = Number(t)
+  return Number.isFinite(n) && n >= 0 ? n : undefined
+}
+
+const paraEditar = (v: number | null) =>
+  v == null ? '' : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/**
+ * Verba prevista do mês (fica no serviço Tráfego Meta do cliente) e quanto já foi gasto. É com ela
+ * que os alertas de ritmo do painel de Tráfego medem se o mês vai estourar ou sobrar.
+ */
+function VerbaDoMes({ clienteId, ritmo, onSalvou }: {
+  clienteId: string; ritmo: { gastoMes: number; previstoMes: number | null }; onSalvou: () => void
+}) {
+  const [texto, setTexto] = React.useState(paraEditar(ritmo.previstoMes))
+  const [salvando, setSalvando] = React.useState(false)
+  React.useEffect(() => setTexto(paraEditar(ritmo.previstoMes)), [ritmo.previstoMes])
+
+  const salvar = async () => {
+    const valor = lerReais(texto)
+    if (valor === undefined) {
+      toast.error('Valor inválido. Use só números, ex.: 3.500,00')
+      setTexto(paraEditar(ritmo.previstoMes))
+      return
+    }
+    if (valor === ritmo.previstoMes) return
+    setSalvando(true)
+    try {
+      await gcTrafego.salvarPrevisto(clienteId, valor)
+      toast.success(valor == null ? 'Verba prevista removida' : 'Verba prevista salva')
+      onSalvou()
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const previsto = ritmo.previstoMes
+  const hoje = new Date()
+  const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate()
+  const esperado = previsto ? (previsto * hoje.getDate()) / diasNoMes : 0
+  const desvio = esperado > 0 ? ritmo.gastoMes / esperado : 1
+  const projecao = (ritmo.gastoMes / hoje.getDate()) * diasNoMes
+
+  return (
+    <Painel>
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="w-full sm:w-56">
+          <Input
+            label="Verba prevista do mês (R$)"
+            inputMode="decimal"
+            placeholder="ex.: 3.000,00"
+            value={texto}
+            disabled={salvando}
+            onChange={(e) => setTexto(e.target.value)}
+            onBlur={() => void salvar()}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+          />
+        </div>
+        <div className="min-w-[220px] flex-1">
+          {previsto ? (
+            <>
+              <div className="flex items-baseline justify-between text-xs text-foreground/55">
+                <span>Gasto no mês: <strong className="tabular-nums text-foreground">{brl(ritmo.gastoMes)}</strong> de {brl(previsto)}</span>
+                <span className="tabular-nums">fecha em ~{brl(projecao)}</span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-elevate/[0.08]">
+                <div
+                  className={cn('h-full rounded-full', desvio > 1.15 ? 'bg-danger' : desvio < 0.7 ? 'bg-amber-500' : 'bg-emerald-500')}
+                  style={{ width: `${Math.min(100, (ritmo.gastoMes / previsto) * 100)}%` }}
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-foreground/45">Esperado até hoje: {brl(esperado)}</p>
+            </>
+          ) : (
+            <p className="text-xs text-foreground/50">
+              Informe quanto o cliente vai investir por mês no Meta pra receber alerta quando o ritmo de gasto sair do previsto.
+            </p>
+          )}
+        </div>
+      </div>
+    </Painel>
+  )
+}
+
 /**
  * Aba Tráfego do cliente NX: números do Meta (gasto, resultados, custo, CTR...), comparação com o
  * período anterior, alertas abertos, campanhas e os criativos que mais receberam verba.
@@ -358,6 +451,7 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
             )}
 
             <Kpis atual={dados.totais.atual} anterior={dados.totais.anterior} benchmark={dados.benchmark} />
+            <VerbaDoMes clienteId={clienteId} ritmo={dados.ritmo} onSalvou={recarregar} />
             {dados.benchmark && dados.benchmark.custoResultado != null && dados.totais.atual.custoResultado != null && (
               <p className="text-xs text-foreground/50">
                 Comparando com {dados.benchmark.clientes} outros clientes de <strong>{dados.benchmark.segmento}</strong>: custo por resultado{' '}

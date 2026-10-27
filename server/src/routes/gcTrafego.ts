@@ -132,7 +132,8 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
       const id = req.params.id;
       const { de, ate } = periodo(req.query);
       const ant = anteriorA(de, ate);
-      const [contas, atual, anterior, serie, campanhas, anuncios, alertas, benchmark] = await Promise.all([
+      const hoje = diasAtras(0);
+      const [contas, atual, anterior, serie, campanhas, anuncios, alertas, benchmark, mes, previsto] = await Promise.all([
         query(`SELECT ${CAMPOS_CONTA} FROM gc_trafego_contas WHERE gc_cliente_id = $1 ORDER BY created_at`, [id]),
         totaisDoCliente(id, de, ate),
         totaisDoCliente(id, ant.de, ant.ate),
@@ -146,8 +147,53 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
           [id],
         ),
         benchmarkDoSegmento(id, de, ate),
+        totaisDoCliente(id, hoje.slice(0, 8) + '01', hoje),
+        queryOne<{ total: string | null }>(
+          `SELECT SUM(investimento_previsto_mensal) AS total FROM gc_servicos
+           WHERE gc_cliente_id = $1 AND tipo = 'trafego_meta' AND status = 'ativo'`,
+          [id],
+        ),
       ]);
-      return { de, ate, anterior: ant, contas, totais: { atual, anterior }, serie, campanhas, anuncios, alertas, benchmark };
+      const ritmo = { gastoMes: mes.gasto, previstoMes: previsto?.total == null ? null : Number(previsto.total) };
+      return { de, ate, anterior: ant, contas, totais: { atual, anterior }, serie, campanhas, anuncios, alertas, benchmark, ritmo };
+    },
+  );
+
+  // PUT /api/gc/clientes/:id/trafego/previsto — a verba prevista do mês (serviço Tráfego Meta). É
+  // com ela que os alertas de ritmo medem o mês. A lista de serviços saiu da Visão geral, então o
+  // valor é editado aqui: grava no serviço Meta ativo mais antigo (zerando os outros, pra a soma
+  // bater com o que foi digitado) e, se o cliente não tem um, cria.
+  app.put<{ Params: { id: string }; Body: { valor?: number | string | null } }>(
+    '/api/gc/clientes/:id/trafego/previsto',
+    autenticado,
+    async (req, reply) => {
+      const bruto = req.body?.valor;
+      const valor = bruto === null || bruto === undefined || bruto === '' ? null : Number(bruto);
+      if (valor !== null && (!Number.isFinite(valor) || valor < 0 || valor > 9_999_999_999)) {
+        return reply.status(400).send({ message: 'Informe um valor válido em reais.' });
+      }
+      const cliente = await queryOne('SELECT 1 FROM gc_clientes WHERE id = $1', [req.params.id]);
+      if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+
+      const servicos = await query<{ id: string }>(
+        `SELECT id FROM gc_servicos WHERE gc_cliente_id = $1 AND tipo = 'trafego_meta' AND status = 'ativo'
+         ORDER BY created_at`,
+        [req.params.id],
+      );
+      if (servicos.length) {
+        await query(
+          `UPDATE gc_servicos SET investimento_previsto_mensal = CASE WHEN id = $2 THEN $3::numeric ELSE NULL END,
+             updated_at = NOW()
+           WHERE gc_cliente_id = $1 AND tipo = 'trafego_meta' AND status = 'ativo'`,
+          [req.params.id, servicos[0].id, valor],
+        );
+      } else if (valor !== null) {
+        await query(
+          `INSERT INTO gc_servicos (gc_cliente_id, tipo, investimento_previsto_mensal) VALUES ($1, 'trafego_meta', $2)`,
+          [req.params.id, valor],
+        );
+      }
+      return { previstoMes: valor };
     },
   );
 

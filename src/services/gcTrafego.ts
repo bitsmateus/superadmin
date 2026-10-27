@@ -41,6 +41,8 @@ export interface GcTrafegoCliente {
   anuncios: GcAnuncioTrafego[]
   alertas: GcAlertaTrafego[]
   benchmark: GcBenchmark | null
+  /** Gasto do mês corrente contra a verba prevista no serviço Tráfego Meta (null = não cadastrada). */
+  ritmo: { gastoMes: number; previstoMes: number | null }
 }
 
 export type GcStatusTrafego = 'ok' | 'atencao' | 'critico' | 'sem_conta'
@@ -79,6 +81,8 @@ export const gcTrafego = {
   vincularConta: (id: string, ad_account_id: string, token?: string) =>
     api.post<GcContaTrafego>(`/api/gc/clientes/${id}/trafego/contas`, { ad_account_id, token: token || undefined }),
   desvincularConta: (contaId: string) => api.delete(`/api/gc/trafego/contas/${contaId}`),
+  salvarPrevisto: (id: string, valor: number | null) =>
+    api.put<{ previstoMes: number | null }>(`/api/gc/clientes/${id}/trafego/previsto`, { valor }),
   sincronizar: (id: string) =>
     api.post<{ resultados: { conta: string; ok: boolean; linhas: number; erro?: string }[] }>(`/api/gc/clientes/${id}/trafego/sincronizar`),
 }

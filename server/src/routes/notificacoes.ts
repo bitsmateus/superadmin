@@ -13,7 +13,7 @@ import { PAGINA_DO_CLOSER, PAGINA_DO_SDR, linkDoCard } from '../lib/notificacoes
 const JANELA = "INTERVAL '30 days'";
 
 /** O dono (perfil) de uma aba do comercial, pelo nome da aba (o CRM IA LUIZA é do dono do CRM ARTHUR). */
-async function donoDaPagina(pagina: string): Promise<{ id: string; nome: string } | null> {
+export async function donoDaPagina(pagina: string): Promise<{ id: string; nome: string } | null> {
   const alvo = abaDeFora(pagina) ?? pagina;
   if (![PAGINA_DO_SDR, PAGINA_DO_CLOSER].includes(alvo)) return null;
   const [aba, sdrs, perfis] = await Promise.all([

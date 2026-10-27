@@ -2,6 +2,7 @@ import { Pool, PoolClient } from 'pg';
 import { DEFAULT_CONTRACT_HTML } from './data/contractTemplateSeed.js';
 import { criarEstruturaGestaoClientes } from './db/gestaoClientes.js';
 import { CONVERSAO_ORIGEM } from './lib/integracaoCards.js';
+import { ROTINAS_INICIAIS } from './lib/rotina.js';
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -2101,6 +2102,58 @@ END; $$`);
         OR (c.meta_campaign_id IS NULL AND o.meta_campaign_id IS NOT NULL) OR (c.meta_ad_id IS NULL AND o.meta_ad_id IS NOT NULL)
         OR (c.lead_raw IS NULL AND o.lead_raw IS NOT NULL))`);
     if (r.rowCount) console.log(`[db] espelho do closer: ${r.rowCount} cópia(s) completada(s) com os dados da lead original`);
+  }
+
+  // Rotina do dia (barra lateral do SDR e do closer, ver routes/rotina.ts e lib/rotina.ts). A rotina é da aba
+  // (crm-arthur, crm-luis-closer): quem marca é o dono da aba, pelo nome (a mesma regra do sininho). Bloco removido
+  // fica com removido_em, pra não perder as marcações antigas. Uma marcação por bloco por dia (dá pra trocar).
+  await pool.query(`CREATE TABLE IF NOT EXISTS rotina_blocos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pagina TEXT NOT NULL,
+    inicio TEXT NOT NULL,
+    fim TEXT NOT NULL,
+    titulo TEXT NOT NULL,
+    itens TEXT[] NOT NULL DEFAULT '{}',
+    tipo TEXT NOT NULL DEFAULT 'tarefa' CHECK (tipo IN ('tarefa', 'ligacao', 'reuniao', 'crm')),
+    removido_em TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS rotina_blocos_pagina_idx ON rotina_blocos(pagina, inicio)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS rotina_marcacoes (
+    bloco_id UUID NOT NULL REFERENCES rotina_blocos(id) ON DELETE CASCADE,
+    data DATE NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('feito', 'parcial', 'nao_deu')),
+    motivo TEXT NOT NULL DEFAULT '',
+    user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    marcado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (bloco_id, data)
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS rotina_folgas (
+    pagina TEXT NOT NULL,
+    data DATE NOT NULL,
+    criado_por TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (pagina, data)
+  )`);
+  // Push do início do bloco: uma linha por bloco por dia, então reiniciar (ou duas instâncias) não manda duas vezes.
+  await pool.query(`CREATE TABLE IF NOT EXISTS rotina_avisos (
+    bloco_id UUID NOT NULL REFERENCES rotina_blocos(id) ON DELETE CASCADE,
+    data DATE NOT NULL,
+    enviado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (bloco_id, data)
+  )`);
+  // A rotina de partida (a que o admin mandou): só na primeira vez de cada aba — depois quem manda é a tela de edição.
+  for (const [pagina, blocos] of Object.entries(ROTINAS_INICIAIS)) {
+    const r = await pool.query(
+      `INSERT INTO rotina_blocos (pagina, inicio, fim, titulo, itens, tipo)
+       SELECT $1, b.inicio, b.fim, b.titulo, ARRAY(SELECT jsonb_array_elements_text(b.itens)), b.tipo
+       FROM jsonb_to_recordset($2::jsonb) AS b(inicio TEXT, fim TEXT, titulo TEXT, itens JSONB, tipo TEXT)
+       WHERE NOT EXISTS (SELECT 1 FROM rotina_blocos WHERE pagina = $1)`,
+      [pagina, JSON.stringify(blocos)]
+    );
+    if (r.rowCount) console.log(`[db] rotina: ${r.rowCount} bloco(s) iniciais em ${pagina}`);
   }
 
   console.log('[db] migrations applied');

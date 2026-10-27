@@ -17,29 +17,57 @@ function somarDias(data: string, n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+/** Bloco que já chegou no horário (ou passou) e ainda não foi marcado: deixa o botão vermelho até marcar. */
+const ehPendente = (b: BlocoDoDia) => b.estado === 'agora' || b.estado === 'nao_feito'
+const INTERVALO_MS = 60_000
+
 /**
  * Botão "Rotina" no topo do CRM ARTHUR / CRM LUIS CLOSER (server/src/routes/rotina.ts). Pro dono do CRM, abre o
- * checklist de hoje (cada bloco: feito ou não). Pro admin, a semana do dono (o que ele marcou), as folgas e a edição dos
- * blocos. Pra mais ninguém aparece.
+ * checklist de hoje (cada bloco: feito ou não) e fica vermelho, com a contagem, quando chega o horário de um bloco que
+ * ainda não foi marcado — marcou, o vermelho sai. Pro admin, a semana do dono (o que ele marcou), as folgas e a edição
+ * dos blocos. Pra mais ninguém aparece.
  */
 export function BotaoRotina({ pagina }: { pagina: string }) {
   const [hoje, setHoje] = React.useState<RotinaDeHoje>({ tem: false })
   const [aberto, setAberto] = React.useState(false)
 
   const carregar = React.useCallback(async () => {
-    try { setHoje(await rotinaService.hoje(pagina)) } catch { /* sem rede: o botão só não aparece */ }
+    try { setHoje(await rotinaService.hoje(pagina)) } catch { /* sem rede: tenta de novo no próximo minuto */ }
   }, [pagina])
-  React.useEffect(() => { void carregar() }, [carregar])
+  // Uma vez por minuto (e ao voltar pra aba): é o que acende o vermelho quando chega o horário do bloco.
+  React.useEffect(() => {
+    void carregar()
+    const timer = window.setInterval(() => { void carregar() }, INTERVALO_MS)
+    const aoVoltar = () => { if (document.visibilityState === 'visible') void carregar() }
+    document.addEventListener('visibilitychange', aoVoltar)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', aoVoltar) }
+  }, [carregar])
 
   if (!hoje.tem) return null
   const doDia = hoje.dia_util && !hoje.folga
   const feitos = hoje.blocos.filter((b) => b.estado === 'feito').length
+  const pendentes = !hoje.somente_leitura && doDia ? hoje.blocos.filter(ehPendente).length : 0
 
   return (
     <>
-      <Button variant="secondary" size="sm" leftIcon={<ListChecks className="h-4 w-4" />} onClick={() => setAberto(true)}>
-        Rotina{!hoje.somente_leitura && doDia && hoje.blocos.length ? ` ${feitos}/${hoje.blocos.length}` : ''}
-      </Button>
+      <span className="relative inline-flex">
+        <Button
+          variant="secondary"
+          size="sm"
+          leftIcon={<ListChecks className="h-4 w-4" />}
+          onClick={() => setAberto(true)}
+          // cn não desfaz conflito de classe (é só clsx): o "!" garante o vermelho por cima do secondary.
+          className={cn(pendentes > 0 && '!border-danger/60 !bg-danger/10 !text-danger hover:!bg-danger/20')}
+          title={pendentes ? `${pendentes} bloco(s) da rotina para marcar` : undefined}
+        >
+          Rotina{!hoje.somente_leitura && doDia && hoje.blocos.length ? ` ${feitos}/${hoje.blocos.length}` : ''}
+        </Button>
+        {pendentes > 0 && (
+          <span className="pointer-events-none absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold leading-none text-white">
+            {pendentes}
+          </span>
+        )}
+      </span>
       {aberto && (hoje.somente_leitura
         ? <RotinaDoAdmin pagina={hoje.pagina} onClose={() => setAberto(false)} />
         : <ChecklistDeHoje rotina={hoje} mudou={setHoje} onClose={() => { setAberto(false); void carregar() }} />)}
@@ -91,7 +119,7 @@ function ChecklistDeHoje({ rotina, mudou, onClose }: {
                 >
                   <span className={cn(
                     'mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border',
-                    feito ? 'border-success bg-success text-white' : 'border-line',
+                    feito ? 'border-success bg-success text-white' : ehPendente(b) ? 'border-2 border-danger' : 'border-line',
                   )}>
                     {salvando === b.id ? <Loader2 className="h-3 w-3 animate-spin" /> : feito && <Check className="h-3.5 w-3.5" />}
                   </span>

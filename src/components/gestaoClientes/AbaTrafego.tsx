@@ -242,7 +242,8 @@ function ModalContas({ aberto, onFechar, clienteId, contas, onMudou }: {
             label="Token de acesso (opcional)"
             hint="Deixe em branco pra usar o token da NX no servidor (o BM da agência precisa ter acesso à conta)."
             type="password"
-            autoComplete="off"
+            autoComplete="new-password"
+            name="token-meta"
             value={token}
             onChange={(e) => setToken(e.target.value)}
           />

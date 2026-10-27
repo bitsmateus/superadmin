@@ -70,7 +70,8 @@ function ModalInstagram({ aberto, onFechar, clienteId, onMudou }: { aberto: bool
           label="Token de acesso (opcional)"
           hint="Em branco usa o token da NX no servidor."
           type="password"
-          autoComplete="off"
+          autoComplete="new-password"
+          name="token-meta"
           value={token}
           onChange={(e) => setToken(e.target.value)}
         />
@@ -83,7 +84,7 @@ function ModalInstagram({ aberto, onFechar, clienteId, onMudou }: { aberto: bool
           </div>
           {perfis && (
             <div className="mt-3 space-y-2">
-              {perfis.length > 6 && <Input placeholder="Filtrar" value={filtro} onChange={(e) => setFiltro(e.target.value)} />}
+              {perfis.length > 6 && <Input placeholder="Filtrar" autoComplete="off" value={filtro} onChange={(e) => setFiltro(e.target.value)} />}
               {visiveis.length === 0 ? (
                 <p className="text-xs text-foreground/50">Nenhum perfil encontrado com esse token.</p>
               ) : (
@@ -108,7 +109,7 @@ function ModalInstagram({ aberto, onFechar, clienteId, onMudou }: { aberto: bool
           )}
         </div>
         <div className="flex items-end gap-2">
-          <Input label="Ou informe o ID do Instagram profissional" placeholder="ex.: 17841400000000000" value={igId} onChange={(e) => setIgId(e.target.value)} containerClassName="flex-1" />
+          <Input label="Ou informe o ID do Instagram profissional" placeholder="ex.: 17841400000000000" autoComplete="off" name="ig-id" value={igId} onChange={(e) => setIgId(e.target.value)} containerClassName="flex-1" />
           <Button loading={salvando} disabled={!igId.trim()} onClick={() => void vincular(igId.trim())}>Vincular</Button>
         </div>
       </div>

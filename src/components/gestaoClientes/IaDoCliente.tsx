@@ -61,7 +61,7 @@ function BarraGerar({ rotulo, gerando, configurada, temAnalise, onGerar, placeho
   }
   return (
     <div className="flex flex-col gap-2 sm:flex-row">
-      <Input placeholder={placeholder} value={pedido} onChange={(e) => setPedido(e.target.value)} containerClassName="flex-1" />
+      <Input placeholder={placeholder} autoComplete="off" name="pedido-ia" value={pedido} onChange={(e) => setPedido(e.target.value)} containerClassName="flex-1" />
       <Button loading={gerando} leftIcon={<Sparkles className="h-4 w-4" />} onClick={() => onGerar(pedido)}>
         {gerando ? 'A IA está analisando…' : temAnalise ? `Gerar ${rotulo} de novo` : `Gerar ${rotulo}`}
       </Button>

@@ -32,6 +32,14 @@ export function canalDoAgendamento(canal: string): string {
   return v;
 }
 
+/** Toda reunião que a IA Luiza agenda é pelo WhatsApp Comercial: sem o "Agendado por" preenchido, conta lá. */
+export const CANAL_DA_LUIZA = 'WhatsApp Comercial';
+
+/** O canal que vale pra contagem: o "Agendado por", ou o da Luiza quando foi ela e o campo está vazio. */
+export function canalEfetivo(a: AgendamentoDoDia): string {
+  return a.canal.trim() || (quemAgendou(a) === 'IA Luiza' ? CANAL_DA_LUIZA : '');
+}
+
 /** Contagem decrescente; "Não informado" sempre por último. */
 function contar(valores: string[]): Array<[string, number]> {
   const mapa = new Map<string, number>();
@@ -58,6 +66,6 @@ export function montarResumoAgendamentos(dia: string, agendamentos: AgendamentoD
     lista(contar(agendamentos.map(quemAgendou))),
     '',
     '📞 *Agendamentos por canal*',
-    lista(contar(agendamentos.map((a) => canalDoAgendamento(a.canal)))),
+    lista(contar(agendamentos.map((a) => canalDoAgendamento(canalEfetivo(a))))),
   ].join('\n');
 }

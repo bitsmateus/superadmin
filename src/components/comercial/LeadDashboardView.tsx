@@ -254,6 +254,7 @@ function diaDeHoje(dias = 0): string {
 }
 
 const NAO_INFORMADO = 'Não informado'
+const CANAL_DA_LUIZA = 'WhatsApp Comercial'
 
 /**
  * AGENDAMENTOS POR CANAL — quantas reuniões foram marcadas no período e por onde (o campo "Agendado por" que o SDR
@@ -293,15 +294,16 @@ function AgendamentosPorCanal({
       if (!quando) continue
       const dia = diaLocal(quando)
       if (dia < faixa.from || dia > faixa.to) continue
-      const v = (r.agendadoPor ?? '').trim()
+      const autor = milestoneById.get(r.id)?.firstAgendadaBy ?? ''
+      // SDR "IA Luiza" = marcado como agendado pela IA (mesmo que quem clicou tenha sido o SDR).
+      const pessoa = /luiza/i.test(autor) || /luiza/i.test(r.sdr ?? '') ? 'IA Luiza' : /arthur/i.test(autor) ? 'SDR Arthur' : /lu[ií]s/i.test(autor) ? 'SDR Luis' : autor ? 'Outros' : NAO_INFORMADO
+      // Toda reunião que a IA Luiza agenda é pelo WhatsApp Comercial: sem o "Agendado por", conta lá.
+      const v = (r.agendadoPor ?? '').trim() || (pessoa === 'IA Luiza' ? CANAL_DA_LUIZA : '')
       const canal = !v ? NAO_INFORMADO
         : agendadoEhOutro(v) ? 'Outro'
         : (CANAIS_DE_AGENDAMENTO as readonly string[]).includes(v) ? v : 'Outro'
       if (canal === 'Outro') textos.push(`${textoDoAgendadoOutro(v) || v} (${r.nome || r.empresa || 'sem nome'})`)
       mapa.get(canal)!.push(r)
-      const autor = milestoneById.get(r.id)?.firstAgendadaBy ?? ''
-      // SDR "IA Luiza" = marcado como agendado pela IA (mesmo que quem clicou tenha sido o SDR).
-      const pessoa = /luiza/i.test(autor) || /luiza/i.test(r.sdr ?? '') ? 'IA Luiza' : /arthur/i.test(autor) ? 'SDR Arthur' : /lu[ií]s/i.test(autor) ? 'SDR Luis' : autor ? 'Outros' : NAO_INFORMADO
       quem.set(pessoa, [...(quem.get(pessoa) ?? []), r])
       n++
     }

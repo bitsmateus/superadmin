@@ -7,6 +7,7 @@ import {
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { agendamentoParaIso } from '../lib/reuniaoResultado.js';
 import { criarNotificacao, lerNotificacaoDaIntegracao } from '../lib/notificacoes.js';
+import { CANAL_DA_LUIZA } from '../lib/resumoAgendamentos.js';
 import { CAMPOS_DA_LINHA_DO_TEMPO, ehCampoDaLinhaDoTempo, registrarMudancaDeCampo } from '../lib/linhaDoTempo.js';
 import {
   chaveTelefone, chaveValida, colunasQueCasam, compararAchadosPorTelefone, mesmoTelefone, montarEtiquetas,
@@ -132,6 +133,21 @@ async function buscarCard(id: string): Promise<CardRow | null> {
  */
 export async function espelharSeReuniaoAgendada(cardId: string): Promise<void> {
   await syncEspelhoReuniaoAgendada(cardId);
+}
+
+/**
+ * Reunião que a IA Luiza agenda é sempre pelo WhatsApp Comercial: card em "Reunião agendada" com SDR "IA Luiza" e o
+ * "Agendado por" vazio ganha esse canal — e as outras linhas da mesma lead (cópia do closer, da IA) também.
+ */
+async function canalDaLuiza(cardId: string): Promise<void> {
+  await query(
+    `UPDATE lead_rows r SET agendado_por = $2
+     FROM lead_rows o JOIN lead_boards lb ON lb.id = o.board_id
+     WHERE o.id = $1 AND o.sdr ~* 'luiza' AND lower(lb.name) LIKE '%agendada%' AND o.agendado_por = ''
+       AND r.deleted_at IS NULL AND r.agendado_por = ''
+       AND (r.id = o.id OR r.espelho_origem_id = o.id OR r.copia_ia_origem_id = o.id OR o.id = ANY(r.espelho_origens_extras))`,
+    [cardId, CANAL_DA_LUIZA]
+  );
 }
 
 /** Grava uma Atualização da Luiza no card (texto puro, escapado). Numa cópia, vai pro histórico da original. */
@@ -324,6 +340,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
       await sincronizarContagemNotas(r.id);
       await espelharSeReuniaoAgendada(r.id);
       await syncCopiaDaIa(r.id);
+      await canalDaLuiza(r.id);
     }
     const card = await buscarCard(r.id);
     const resposta = {
@@ -449,6 +466,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
     if (moveu || 'status' in campos) await espelharSeReuniaoAgendada(id);
     // SDR virou "IA Luiza" num CRM de outro SDR: ganha a cópia no CRM IA LUIZA (ou perde, se desmarcar).
     if (moveu || 'status' in campos || 'sdr' in campos) await syncCopiaDaIa(id);
+    if (moveu || 'status' in campos || 'sdr' in campos) await canalDaLuiza(id);
 
     const final = await buscarCard(id);
     return cardParaApi(final ?? depois, opcoes);

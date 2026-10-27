@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canalDoAgendamento, montarResumoAgendamentos, quemAgendou } from './resumoAgendamentos.js';
+import { canalDoAgendamento, canalEfetivo, montarResumoAgendamentos, quemAgendou } from './resumoAgendamentos.js';
 
 test('quemAgendou: SDR IA Luiza vence quem clicou; Arthur/Luis viram "SDR ..."', () => {
   assert.equal(quemAgendou({ autor: 'Arthur Faveri', sdr: 'IA Luiza', canal: '' }), 'IA Luiza');
@@ -23,13 +23,21 @@ test('montarResumoAgendamentos: listas somam o total e só mostram quem agendou'
     { autor: 'Arthur Faveri', sdr: 'Arthur', canal: 'Ligação' },
     { autor: 'Arthur Faveri', sdr: 'IA Luiza', canal: 'WhatsApp Business SDR' },
     { autor: 'Arthur Faveri', sdr: 'IA Luiza', canal: '' },
+    { autor: 'Luis otavio', sdr: 'Luis', canal: '' },
   ];
   const txt = montarResumoAgendamentos('2026-10-20', ag);
   assert.match(txt, /20\/10 \(terça\)/);
-  assert.match(txt, /Total de A\.G:\* 5/);
-  assert.match(txt, /• SDR Arthur: 3\n• IA Luiza: 2/);
-  assert.ok(!/SDR Luis/.test(txt));
-  assert.match(txt, /• WhatsApp Comercial: 2\n• Ligação: 1\n• WhatsApp Business SDR: 1\n• Não informado: 1$/);
+  assert.match(txt, /Total de A\.G:\* 6/);
+  assert.match(txt, /• SDR Arthur: 3\n• IA Luiza: 2\n• SDR Luis: 1/);
+  // O da Luiza sem canal conta como WhatsApp Comercial; o do Luis sem canal continua "Não informado".
+  assert.match(txt, /• WhatsApp Comercial: 3\n• Ligação: 1\n• WhatsApp Business SDR: 1\n• Não informado: 1$/);
+});
+
+test('canalEfetivo: agendamento da IA Luiza sem canal é WhatsApp Comercial; o canal preenchido vale', () => {
+  assert.equal(canalEfetivo({ autor: 'Automação', sdr: 'IA Luiza', canal: '' }), 'WhatsApp Comercial');
+  assert.equal(canalEfetivo({ autor: 'Luiza (SDR IA)', sdr: '', canal: '' }), 'WhatsApp Comercial');
+  assert.equal(canalEfetivo({ autor: 'Arthur', sdr: 'IA Luiza', canal: 'Ligação' }), 'Ligação');
+  assert.equal(canalEfetivo({ autor: 'Arthur', sdr: 'Arthur', canal: '' }), '');
 });
 
 test('montarResumoAgendamentos: dia sem agendamento', () => {

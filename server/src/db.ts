@@ -3,6 +3,7 @@ import { DEFAULT_CONTRACT_HTML } from './data/contractTemplateSeed.js';
 import { criarEstruturaGestaoClientes } from './db/gestaoClientes.js';
 import { CONVERSAO_ORIGEM } from './lib/integracaoCards.js';
 import { ROTINAS_INICIAIS } from './lib/rotina.js';
+import { CANAL_DA_LUIZA } from './lib/resumoAgendamentos.js';
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -2110,6 +2111,17 @@ END; $$`);
   // origem principal (dona das Atualizações que o closer escreve); estas são as outras.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS espelho_origens_extras UUID[] NOT NULL DEFAULT '{}'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS lead_rows_espelho_extras_idx ON lead_rows USING GIN (espelho_origens_extras)`);
+
+  // Reunião agendada pela IA Luiza é sempre pelo WhatsApp Comercial: as que ficaram com o "Agendado por" vazio (o n8n
+  // não preenche) ganham esse canal. Idempotente: o que já tem canal não muda.
+  {
+    const r = await pool.query(
+      `UPDATE lead_rows SET agendado_por = $1
+       WHERE agendado_por = '' AND sdr ~* 'luiza' AND agendamento <> '' AND deleted_at IS NULL AND venda_origem_id IS NULL`,
+      [CANAL_DA_LUIZA]
+    );
+    if (r.rowCount) console.log(`[db] agendado por: ${r.rowCount} reunião(ões) da IA Luiza marcadas como ${CANAL_DA_LUIZA}`);
+  }
 
   // Rotina do dia (checklist do botão "Rotina" no CRM do SDR e do closer, ver routes/rotina.ts e lib/rotina.ts). A
   // rotina é da aba (crm-arthur, crm-luis-closer): quem marca é o dono da aba, pelo nome (a mesma regra do sininho).

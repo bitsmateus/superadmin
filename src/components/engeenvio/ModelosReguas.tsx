@@ -11,7 +11,7 @@ import { descreverEtapa, novaEtapa } from '@/lib/engeEnvio'
 import { Cartao, useEngeConfig, useModelos, useReguas } from './shared'
 import { ReguaEditor, ReguaLinhaTempo } from './ReguaEditor'
 
-const VARIAVEIS = ['{sindico}', '{empreendimento}', '{item}', '{prazo}', '{vencimento}', '{dias}', '{construtora}', '{link}']
+const VARIAVEIS = ['{responsavel}', '{empreendimento}', '{item}', '{prazo}', '{vencimento}', '{dias}', '{construtora}', '{link}']
 
 /**
  * Aba "Modelos e réguas": os textos de cada tipo de aviso (e-mail + WhatsApp) e as réguas de
@@ -160,8 +160,8 @@ function Acoes({
 const modeloVazio: ModeloDados = {
   nome: '',
   assunto: 'Aviso de garantia: {item} vence em {vencimento}',
-  corpo: 'Prezado(a) {sindico},\n\n\n\nAtenciosamente,\nEnge Services',
-  whatsappTexto: 'Olá, {sindico}! Aqui é da Enge Services.\n\n\n\nConfirme o recebimento: {link}',
+  corpo: 'Prezado(a) {responsavel},\n\n\n\nAtenciosamente,\nEnge Services',
+  whatsappTexto: 'Olá, {responsavel}! Aqui é da Enge Services.\n\n\n\nConfirme o recebimento: {link}',
   whatsappTemplate: null,
   whatsappIdioma: null,
   whatsappParametros: [],
@@ -315,7 +315,7 @@ function Modelos() {
                     <Textarea
                       id="ee-mod-params"
                       label="Variáveis do template, uma por linha, na ordem {{1}}, {{2}}…"
-                      placeholder={'{sindico}\n{item}\n{vencimento}\n{link}'}
+                      placeholder={'{responsavel}\n{item}\n{vencimento}\n{link}'}
                       value={parametros}
                       onChange={(e) => setParametros(e.target.value)}
                       className="min-h-[120px] font-mono text-xs"

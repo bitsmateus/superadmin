@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { LogOut } from 'lucide-react'
+import { LogOut, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Tabs } from '@/components/ui/Tabs'
@@ -11,6 +11,7 @@ import { Empreendimentos } from '@/components/engeenvio/Empreendimentos'
 import { Avisos } from '@/components/engeenvio/Avisos'
 import { Configuracoes } from '@/components/engeenvio/Configuracoes'
 import { ModelosReguas } from '@/components/engeenvio/ModelosReguas'
+import { UsuarioModal } from '@/components/engeenvio/UsuarioModal'
 
 /**
  * Enge Envio — /engeenvio.
@@ -53,6 +54,7 @@ export function EngeEnvioPage() {
   return (
     <Sistema
       usuario={usuario}
+      onUsuarioAtualizado={setUsuario}
       onSair={() => {
         engeToken.clear()
         setUsuario(null)
@@ -146,7 +148,16 @@ const ABAS: { value: Aba; label: string }[] = [
   { value: 'config', label: 'Configurações' },
 ]
 
-function Sistema({ usuario, onSair }: { usuario: EngeUsuario; onSair: () => void }) {
+function Sistema({
+  usuario,
+  onSair,
+  onUsuarioAtualizado,
+}: {
+  usuario: EngeUsuario
+  onSair: () => void
+  onUsuarioAtualizado: (u: EngeUsuario) => void
+}) {
+  const [minhaConta, setMinhaConta] = React.useState(false)
   const [aba, setAba] = React.useState<Aba>('painel')
   const [empAberto, setEmpAberto] = React.useState<string | null>(null)
   const { data, isLoading, error } = useEngeTudo()
@@ -164,7 +175,16 @@ function Sistema({ usuario, onSair }: { usuario: EngeUsuario; onSair: () => void
     <Moldura
       direita={
         <div className="flex items-center gap-2">
-          <span className="hidden text-xs text-foreground/50 sm:inline">{usuario.nome || usuario.email}</span>
+          <button
+            type="button"
+            onClick={() => setMinhaConta(true)}
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-foreground/60 hover:bg-elevate/[0.05] hover:text-foreground"
+            title="Minha conta: nome, e-mail e senha"
+          >
+            <UserRound className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{usuario.nome || usuario.email}</span>
+            <span className="sm:hidden">Minha conta</span>
+          </button>
           <Button variant="ghost" size="sm" leftIcon={<LogOut className="h-3.5 w-3.5" />} onClick={onSair}>
             Sair
           </Button>
@@ -186,7 +206,8 @@ function Sistema({ usuario, onSair }: { usuario: EngeUsuario; onSair: () => void
         {data && aba === 'empreendimentos' && <Empreendimentos dados={data} selecionado={empAberto} onSelecionar={setEmpAberto} />}
         {data && aba === 'avisos' && <Avisos dados={data} onAbrirEmpreendimento={abrirEmpreendimento} />}
         {aba === 'modelos' && <ModelosReguas />}
-        {aba === 'config' && <Configuracoes usuario={usuario} />}
+        {aba === 'config' && <Configuracoes usuario={usuario} onUsuarioAtualizado={onUsuarioAtualizado} />}
+        <UsuarioModal usuario={minhaConta ? usuario : null} ehEu onFechar={() => setMinhaConta(false)} onSalvo={onUsuarioAtualizado} />
       </div>
     </Moldura>
   )

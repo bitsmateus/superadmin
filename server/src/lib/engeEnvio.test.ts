@@ -51,3 +51,8 @@ test('listaTelefones põe o 55 e descarta curtos', () => {
 test('preencher troca {link}', () => {
   assert.equal(preencher('ok: {link}', { ...dados, link: 'https://x/c/1' }), 'ok: https://x/c/1');
 });
+
+test('preencher aceita {responsavel} e o antigo {sindico}', () => {
+  assert.equal(preencher('{responsavel} / {sindico}', dados), 'Carlos Mendes / Carlos Mendes');
+  assert.equal(preencher('Prezado(a) {responsavel}', { ...dados, sindico: null }), 'Prezado(a) Responsável');
+});

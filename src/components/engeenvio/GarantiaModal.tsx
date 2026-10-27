@@ -140,7 +140,7 @@ export function GarantiaModal({
       >
         <div className="space-y-6 text-foreground">
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Avisos ao síndico</h3>
+            <h3 className="text-sm font-semibold text-foreground">Avisos ao responsável</h3>
             <p className="break-words text-xs text-foreground/50">
               E-mail: {empreendimento?.emails || <span className="text-danger">sem e-mail cadastrado</span>} · WhatsApp:{' '}
               {empreendimento?.telefone || <span className="text-warning">sem número cadastrado</span>}

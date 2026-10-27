@@ -254,6 +254,38 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
     }
   });
 
+  // Editar um acesso: nome, e-mail e (opcional) senha nova. Qualquer usuário pode redefinir a senha
+  // de outro (todos são administradores da ferramenta); pra trocar a PRÓPRIA senha, pede a atual.
+  app.put<{ Params: { id: string }; Body: { email?: string; nome?: string; senha?: string; senhaAtual?: string } }>(
+    `${P}/usuarios/:id`,
+    comAuth,
+    async (req, reply) => {
+      const { sub } = req.user as { sub: string };
+      const atual = await queryOne<Required<Usuario>>('SELECT id, email, nome, senha_hash FROM ee_usuarios WHERE id = $1', [
+        req.params.id,
+      ]);
+      if (!atual) return reply.status(404).send({ message: 'Acesso não encontrado.' });
+      const email = (req.body?.email ?? atual.email).trim().toLowerCase();
+      if (!EMAIL_OK.test(email)) return reply.status(400).send({ message: 'E-mail inválido.' });
+      const senha = req.body?.senha ?? '';
+      if (senha && senha.length < 6) return reply.status(400).send({ message: 'A senha precisa de pelo menos 6 caracteres.' });
+      if (senha && sub === atual.id && !(await bcrypt.compare(req.body?.senhaAtual ?? '', atual.senha_hash))) {
+        return reply.status(400).send({ message: 'Senha atual incorreta.' });
+      }
+      try {
+        const usuario = await queryOne<Usuario>(
+          `UPDATE ee_usuarios SET email = $2, nome = $3, senha_hash = COALESCE($4, senha_hash) WHERE id = $1
+           RETURNING id, email, nome, created_at`,
+          [atual.id, email, req.body?.nome !== undefined ? req.body.nome.trim() || null : atual.nome, senha ? await bcrypt.hash(senha, 10) : null],
+        );
+        return usuario;
+      } catch (err) {
+        if ((err as { code?: string }).code === '23505') return reply.status(409).send({ message: 'Esse e-mail já tem acesso.' });
+        throw err;
+      }
+    },
+  );
+
   app.delete<{ Params: { id: string } }>(`${P}/usuarios/:id`, comAuth, async (req, reply) => {
     const { sub } = req.user as { sub: string };
     if (sub === req.params.id) return reply.status(400).send({ message: 'Você não pode remover o próprio acesso.' });
@@ -393,7 +425,7 @@ export async function engeEnvioRoutes(app: FastifyInstance) {
         prazo: '3 anos',
         vencimento: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
         empreendimento: 'Residencial Exemplo',
-        sindico: 'Nome do Síndico',
+        sindico: 'Nome do Responsável',
         construtora: 'Construtora Exemplo',
       };
       const enviadoEm = req.body?.data && DATA_OK.test(req.body.data.slice(0, 10)) ? req.body.data.slice(0, 10) : hoje;

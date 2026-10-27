@@ -211,6 +211,9 @@ export const engeApi = {
 
   usuarios: () => req<EngeUsuario[]>('/usuarios'),
   criarUsuario: (email: string, nome: string, senha: string) => post<EngeUsuario>('/usuarios', { email, nome, senha }),
+  /** `senha` vazia mantém a atual; pra trocar a própria senha, `senhaAtual` é obrigatória. */
+  editarUsuario: (id: string, dados: { nome: string; email: string; senha?: string; senhaAtual?: string }) =>
+    put<EngeUsuario>(`/usuarios/${id}`, dados),
   removerUsuario: (id: string) => del<{ ok: true }>(`/usuarios/${id}`),
 
   config: () => req<EngeConfig>('/config'),

@@ -182,21 +182,21 @@ export function EmpreendimentoForm({
           <div className="grid gap-3 sm:grid-cols-2">
             <Input id="ee-nome" label="Nome do empreendimento" value={dados.nome ?? ''} onChange={set('nome')} required />
             <Input id="ee-cidade" label="Cidade" value={dados.cidade ?? ''} onChange={set('cidade')} />
-            <Input id="ee-sindico" label="Síndico" value={dados.sindico ?? ''} onChange={set('sindico')} />
-            <Input
-              id="ee-emails"
-              label="E-mail(s) do síndico"
-              hint="Separe por vírgula para mandar a mais de uma pessoa"
-              value={dados.emails ?? ''}
-              onChange={set('emails')}
-            />
+            <Input id="ee-sindico" label="Responsável" value={dados.sindico ?? ''} onChange={set('sindico')} />
             <Input
               id="ee-tel"
-              label="WhatsApp do síndico"
+              label="WhatsApp do responsável"
               hint="Com DDD. Separe por vírgula para mandar a mais de um número"
               value={dados.telefone ?? ''}
               onChange={set('telefone')}
             />
+            <div className="sm:col-span-2">
+              <ListaEmails
+                key={aberto ? editando?.id ?? 'novo' : 'fechado'}
+                valor={dados.emails ?? ''}
+                onChange={(emails) => setDados((d) => ({ ...d, emails }))}
+              />
+            </div>
             <Input id="ee-construtora" label="Construtora" value={dados.construtora ?? ''} onChange={set('construtora')} />
             <Input
               id="ee-entrega"
@@ -376,7 +376,7 @@ export function EmpreendimentoForm({
                     ])
                   }
                 >
-                  Adicionar garantia
+                  Adicionar item
                 </Button>
                 {!dados.entrega ? (
                   <p className="text-xs text-warning">Informe a data de entrega para calcular os vencimentos.</p>
@@ -402,6 +402,63 @@ function Passo({ n, titulo, detalhe }: { n: number; titulo: string; detalhe?: st
         <h3 className="text-sm font-semibold text-foreground">{titulo}</h3>
         {detalhe && <p className="text-xs text-foreground/50">{detalhe}</p>}
       </div>
+    </div>
+  )
+}
+
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/**
+ * E-mails que recebem os avisos, um por linha. No banco continua uma lista separada por vírgula
+ * (o envio já manda pra todos de uma vez); aqui cada e-mail ganha o próprio campo.
+ */
+const separarEmails = (texto: string) => texto.split(/[,;\n]/).map((e) => e.trim()).filter(Boolean)
+
+function ListaEmails({ valor, onChange }: { valor: string; onChange: (emails: string) => void }) {
+  const [linhas, setLinhas] = React.useState<string[]>(() => (separarEmails(valor).length ? separarEmails(valor) : ['']))
+  // Os dados do empreendimento chegam depois que a janela abre: quando o valor muda por fora (não
+  // por digitação aqui), as linhas acompanham. Sem isso, editar começava vazio e apagava os e-mails.
+  React.useEffect(() => {
+    const externo = separarEmails(valor)
+    setLinhas((atuais) => (separarEmails(atuais.join(',')).join(', ') === externo.join(', ') ? atuais : externo.length ? externo : ['']))
+  }, [valor])
+  const mudar = (novas: string[]) => {
+    setLinhas(novas)
+    onChange(separarEmails(novas.join(',')).join(', '))
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-foreground/70">E-mails do responsável</p>
+      {linhas.map((email, i) => {
+        const invalido = email.trim() !== '' && !EMAIL_OK.test(email.trim())
+        return (
+          <div key={i} className="flex items-start gap-2">
+            <Input
+              id={`ee-email-${i}`}
+              type="email"
+              placeholder="nome@exemplo.com.br"
+              value={email}
+              onChange={(e) => mudar(linhas.map((x, j) => (j === i ? e.target.value : x)))}
+              error={invalido ? 'E-mail inválido' : undefined}
+              aria-label={`E-mail ${i + 1}`}
+            />
+            {linhas.length > 1 && (
+              <button
+                type="button"
+                onClick={() => mudar(linhas.filter((_, j) => j !== i))}
+                className="mt-2.5 rounded p-1 text-foreground/40 hover:text-danger"
+                aria-label={`Remover e-mail ${i + 1}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )
+      })}
+      <Button type="button" variant="secondary" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={() => setLinhas((l) => [...l, ''])}>
+        Adicionar e-mail
+      </Button>
+      <p className="text-xs text-foreground/40">Todos os e-mails da lista recebem cada aviso.</p>
     </div>
   )
 }

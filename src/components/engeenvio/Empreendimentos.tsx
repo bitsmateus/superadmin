@@ -30,7 +30,7 @@ export function Empreendimentos({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-foreground/60">Cada condomínio, com o síndico que recebe os avisos e a construtora responsável.</p>
+        <p className="text-sm text-foreground/60">Cada condomínio, com o responsável que recebe os avisos e a construtora responsável.</p>
         <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setNovo(true)}>
           Novo empreendimento
         </Button>
@@ -57,7 +57,7 @@ export function Empreendimentos({
                   <p className="text-xs text-foreground/50">{[e.cidade, e.entrega && `entregue em ${dataBr(e.entrega)}`].filter(Boolean).join(' · ') || '—'}</p>
                 </div>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-                  <dt className="text-foreground/50">Síndico</dt>
+                  <dt className="text-foreground/50">Responsável</dt>
                   <dd className="truncate text-foreground/80">{e.sindico || '—'}</dd>
                   <dt className="text-foreground/50">Construtora</dt>
                   <dd className="truncate text-foreground/80">{e.construtora || '—'}</dd>
@@ -137,14 +137,14 @@ function Detalhe({ emp, dados, onVoltar }: { emp: EngeEmpreendimento; dados: Eng
             Editar
           </Button>
           <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setNova(true)}>
-            Nova garantia
+            Novo item
           </Button>
         </div>
       </div>
 
       <div className="grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ['Síndico', emp.sindico],
+          ['Responsável', emp.sindico],
           ['E-mail dos avisos', emp.emails],
           ['WhatsApp dos avisos', emp.telefone],
           ['Construtora', emp.construtora],
@@ -157,12 +157,12 @@ function Detalhe({ emp, dados, onVoltar }: { emp: EngeEmpreendimento; dados: Eng
       </div>
       {!emp.telefone && dados.envios.some((v) => v.canalWhatsapp && v.status === 'agendado' && dados.garantias.some((g) => g.id === v.garantiaId && g.empreendimentoId === emp.id)) && (
         <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
-          Há avisos marcados para WhatsApp, mas o empreendimento não tem número do síndico. Cadastre em “Editar”.
+          Há avisos marcados para WhatsApp, mas o empreendimento não tem número do responsável. Cadastre em “Editar”.
         </p>
       )}
       {!emp.emails && (
         <p className="rounded-lg border border-danger/30 bg-danger/[0.06] px-3 py-2 text-sm text-danger">
-          Sem e-mail do síndico: os avisos agendados vão falhar até você cadastrar um em “Editar”.
+          Sem e-mail do responsável: os avisos agendados vão falhar até você cadastrar um em “Editar”.
         </p>
       )}
 
@@ -312,7 +312,7 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
     setSalvando(true)
     try {
       await engeApi.criarGarantia(empreendimentoId, { item, prazo, vencimento, envios: envios.filter((x) => x.enviarEm) })
-      toast.success('Garantia criada')
+      toast.success('Item criado')
       await recarregar()
       onFechar()
     } catch (err) {
@@ -327,14 +327,14 @@ function NovaGarantiaModal({ aberto, empreendimentoId, onFechar }: { aberto: boo
       open={aberto}
       onClose={onFechar}
       size="lg"
-      title="Nova garantia"
+      title="Novo item"
       footer={
         <>
           <Button variant="secondary" onClick={onFechar}>
             Cancelar
           </Button>
           <Button type="submit" form="ee-form-gar" loading={salvando}>
-            Criar e agendar {envios.length} {envios.length === 1 ? 'aviso' : 'avisos'}
+            Criar item e agendar {envios.length} {envios.length === 1 ? 'aviso' : 'avisos'}
           </Button>
         </>
       }

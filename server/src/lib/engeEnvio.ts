@@ -5,7 +5,7 @@
 
 export const ASSUNTO_PADRAO = 'Aviso de garantia: {item} vence em {vencimento}';
 
-export const CORPO_PADRAO = `Prezado(a) {sindico},
+export const CORPO_PADRAO = `Prezado(a) {responsavel},
 
 Informamos que a garantia do item {item} do {empreendimento} vence em {vencimento} ({dias}).
 
@@ -30,7 +30,7 @@ export interface DadosAviso {
   link?: string | null;
 }
 
-export const WHATSAPP_PADRAO = `Olá, {sindico}! Aqui é da Enge Services.
+export const WHATSAPP_PADRAO = `Olá, {responsavel}! Aqui é da Enge Services.
 
 A garantia do item *{item}* do {empreendimento} vence em *{vencimento}* ({dias}).
 
@@ -55,7 +55,9 @@ export function textoDias(n: number): string {
 
 export function preencher(modelo: string, d: DadosAviso): string {
   const vars: Record<string, string> = {
-    sindico: d.sindico?.trim() || 'Síndico(a)',
+    // {responsavel} é o nome atual na tela; {sindico} continua valendo nos modelos já escritos.
+    responsavel: d.sindico?.trim() || 'Responsável',
+    sindico: d.sindico?.trim() || 'Responsável',
     empreendimento: d.empreendimento,
     item: d.item,
     prazo: d.prazo?.trim() || '',
@@ -134,7 +136,7 @@ export const MODELOS_PADRAO = [
     chave: 'ultima',
     nome: 'Última chamada',
     assunto: 'Última chamada: garantia de {item} vence em {vencimento}',
-    corpo: `Prezado(a) {sindico},
+    corpo: `Prezado(a) {responsavel},
 
 Este é o último aviso: a garantia do item {item} do {empreendimento} vence em {vencimento} ({dias}).
 
@@ -144,7 +146,7 @@ Por favor, confirme o recebimento deste aviso no botão abaixo.
 
 Atenciosamente,
 Enge Services`,
-    whatsapp: `{sindico}, último aviso da Enge Services: a garantia de *{item}* do {empreendimento} vence em *{vencimento}* ({dias}).
+    whatsapp: `{responsavel}, último aviso da Enge Services: a garantia de *{item}* do {empreendimento} vence em *{vencimento}* ({dias}).
 
 Se houver algum problema, o chamado com a {construtora} precisa ser aberto antes dessa data.
 
@@ -154,7 +156,7 @@ Confirme o recebimento: {link}`,
     chave: 'cvcb',
     nome: 'Renovação do CVCB',
     assunto: 'Renovação do CVCB do {empreendimento}: vence em {vencimento}',
-    corpo: `Prezado(a) {sindico},
+    corpo: `Prezado(a) {responsavel},
 
 O CVCB (Certificado de Vistoria do Corpo de Bombeiros) do {empreendimento} vence em {vencimento} ({dias}).
 
@@ -164,7 +166,7 @@ Por favor, confirme o recebimento deste aviso no botão abaixo.
 
 Atenciosamente,
 Enge Services`,
-    whatsapp: `Olá, {sindico}! Aqui é da Enge Services.
+    whatsapp: `Olá, {responsavel}! Aqui é da Enge Services.
 
 O *CVCB* do {empreendimento} vence em *{vencimento}* ({dias}). É preciso agendar a nova vistoria do Corpo de Bombeiros com antecedência.
 

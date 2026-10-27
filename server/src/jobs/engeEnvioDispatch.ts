@@ -196,7 +196,7 @@ export async function enviarAviso(id: string): Promise<string | null> {
       let erro: string | null = null;
       const para = listaEmails(e.emails);
       if (!smtpCompleto(cfg.smtp)) erro = 'E-mail de envio não configurado (Configurações › E-mail de envio).';
-      else if (!para.length) erro = 'O empreendimento não tem e-mail válido do síndico.';
+      else if (!para.length) erro = 'O empreendimento não tem e-mail válido do responsável.';
       else {
         const assunto = preencher(textos.assunto, dados);
         const corpo = preencher(textos.corpo, dados);
@@ -227,7 +227,7 @@ export async function enviarAviso(id: string): Promise<string | null> {
       let erro: string | null = null;
       const numeros = listaTelefones(e.telefone);
       if (!nxCompleto(cfg.nx)) erro = 'WhatsApp (NX) não configurado (Configurações › WhatsApp pela NX).';
-      else if (!numeros.length) erro = 'O empreendimento não tem telefone/WhatsApp válido do síndico.';
+      else if (!numeros.length) erro = 'O empreendimento não tem telefone/WhatsApp válido do responsável.';
       else {
         const texto = preencher(textos.whatsapp, dados);
         const r = await mandarWhatsApp(cfg.nx!, numeros, texto, dados, textos);

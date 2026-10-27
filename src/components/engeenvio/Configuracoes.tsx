@@ -1,19 +1,20 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { engeApi, type EngeNx, type EngeSmtp, type EngeUsuario } from '@/api/engeEnvio'
 import { Cartao } from './shared'
+import { UsuarioModal } from './UsuarioModal'
 
-export function Configuracoes({ usuario }: { usuario: EngeUsuario }) {
+export function Configuracoes({ usuario, onUsuarioAtualizado }: { usuario: EngeUsuario; onUsuarioAtualizado: (u: EngeUsuario) => void }) {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <EmailEnvio />
       <WhatsAppNx />
-      <Acessos usuario={usuario} />
+      <Acessos usuario={usuario} onUsuarioAtualizado={onUsuarioAtualizado} />
     </div>
   )
 }
@@ -175,7 +176,7 @@ function WhatsAppNx() {
     <Cartao titulo="WhatsApp pela NX">
       <div className="space-y-3 p-4">
         <p className="text-xs text-foreground/50">
-          Os avisos marcados com WhatsApp saem pela conexão da Enge na NX Systems, para o número do síndico cadastrado no
+          Os avisos marcados com WhatsApp saem pela conexão da Enge na NX Systems, para o número do responsável cadastrado no
           empreendimento. O API ID e o token ficam na NX, em Configurações › API.
         </p>
         {data && !data.nxOk && (
@@ -244,13 +245,14 @@ function WhatsAppNx() {
   )
 }
 
-function Acessos({ usuario }: { usuario: EngeUsuario }) {
+function Acessos({ usuario, onUsuarioAtualizado }: { usuario: EngeUsuario; onUsuarioAtualizado: (u: EngeUsuario) => void }) {
   const qc = useQueryClient()
   const { data: usuarios = [] } = useQuery({ queryKey: ['engeenvio', 'usuarios'], queryFn: engeApi.usuarios })
   const [nome, setNome] = React.useState('')
   const [email, setEmail] = React.useState('')
   const [senha, setSenha] = React.useState('')
   const [salvando, setSalvando] = React.useState(false)
+  const [editando, setEditando] = React.useState<EngeUsuario | null>(null)
 
   const recarregar = () => qc.invalidateQueries({ queryKey: ['engeenvio', 'usuarios'] })
 
@@ -287,9 +289,21 @@ function Acessos({ usuario }: { usuario: EngeUsuario }) {
         {usuarios.map((u) => (
           <li key={u.id} className="flex items-center gap-2 px-4 py-2.5">
             <span className="min-w-0 flex-1">
-              <span className="block text-sm text-foreground">{u.nome || u.email}</span>
+              <span className="block text-sm text-foreground">
+                {u.nome || u.email}
+                {u.id === usuario.id && <span className="ml-1.5 text-xs text-foreground/40">(você)</span>}
+              </span>
               {u.nome && <span className="block break-words text-xs text-foreground/50">{u.email}</span>}
             </span>
+            <button
+              type="button"
+              onClick={() => setEditando(u)}
+              className="rounded p-1 text-foreground/40 hover:text-accent"
+              aria-label={`Editar acesso de ${u.email}`}
+              title="Editar nome, e-mail ou senha"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
             {u.id !== usuario.id && (
               <button
                 type="button"
@@ -321,6 +335,12 @@ function Acessos({ usuario }: { usuario: EngeUsuario }) {
           </Button>
         </div>
       </form>
+      <UsuarioModal
+        usuario={editando}
+        ehEu={editando?.id === usuario.id}
+        onFechar={() => setEditando(null)}
+        onSalvo={(u) => u.id === usuario.id && onUsuarioAtualizado(u)}
+      />
     </Cartao>
   )
 }

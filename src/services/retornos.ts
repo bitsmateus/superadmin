@@ -18,6 +18,8 @@ export interface RetornoPendente {
   /** Tentativas sem resposta desde o último contato e adiamentos seguidos (saem da Linha do tempo). */
   tentativas: number
   adiamentos: number
+  /** Quantas vezes já usou o "Estou em reunião" neste retorno (máx. MAXIMO_EM_REUNIAO). */
+  em_reuniao_usados: number
 }
 
 export interface PedidoDeRetorno {
@@ -39,8 +41,11 @@ export const MINIMO_OBSERVACAO_TENTATIVA = 10
 export const MINIMO_MOTIVO_ADIAR = 10
 export const MAXIMO_ADIAMENTOS = 2
 export const TENTATIVAS_PRA_FOLLOW_UP = 3
+export const MAXIMO_EM_REUNIAO = 2
 
 export const retornosService = {
   pendentes: () => api.get<RetornoPendente[]>('/api/retornos/pendentes'),
+  emReuniao: (cardIds: string[]) =>
+    api.post<{ ok: true; escondidos: string[]; volta_as: string }>('/api/retornos/em-reuniao', { card_ids: cardIds }),
   registrar: (cardId: string, pedido: PedidoDeRetorno) => api.post<{ ok: true }>(`/api/retornos/${cardId}/resultado`, pedido),
 }

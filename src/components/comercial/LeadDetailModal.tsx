@@ -616,7 +616,8 @@ export function describeEvent(e: LeadEvent, colors: EventColorMaps): EventDescri
         text: 'Retorno da proposta',
         to: {
           label: e.toValue || 'registrado',
-          color: /^Retornou/.test(e.toValue ?? '') ? '#15803D' : /^Sem resposta/.test(e.toValue ?? '') ? '#D97706' : '#2563EB',
+          color: /^Retornou/.test(e.toValue ?? '') ? '#15803D' : /^Sem resposta/.test(e.toValue ?? '') ? '#D97706'
+            : /^Em reunião/.test(e.toValue ?? '') ? '#6B7280' : '#2563EB',
         },
       }
     case 'excluido':

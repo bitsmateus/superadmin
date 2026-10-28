@@ -6,7 +6,8 @@ import {
 import { textoParaHtml } from '../lib/integracaoCards.js';
 import { agendamentoParaDate, dateParaAgendamento, donoDaAba, ehAPessoa } from '../lib/reuniaoResultado.js';
 import {
-  PAGINA_DO_CLOSER, contarHistorico, ehQuadroDeProposta, rotuloDoEventoDeRetorno, textoDaNotaDeRetorno, validarRetorno,
+  MAXIMO_EM_REUNIAO, PAGINA_DO_CLOSER, SONECA_EM_REUNIAO_MS, contarHistorico, ehQuadroDeProposta, estadoEmReuniao,
+  rotuloDoEventoDeRetorno, rotuloDoEventoEmReuniao, textoDaNotaDeRetorno, validarRetorno,
 } from '../lib/retornoProposta.js';
 
 /**
@@ -58,21 +59,24 @@ async function pendenciasDe(userId: string, role: string) {
   if (!meus.length) return [];
 
   // Tentativas e adiamentos saem da Linha do tempo (a cópia usa a da original).
-  const eventos = await query<{ lead_row_id: string; to_value: string }>(
-    `SELECT lead_row_id, COALESCE(to_value, '') AS to_value FROM lead_events
+  const eventos = await query<{ lead_row_id: string; to_value: string; created_at: Date }>(
+    `SELECT lead_row_id, COALESCE(to_value, '') AS to_value, created_at FROM lead_events
      WHERE type = 'retorno' AND lead_row_id = ANY($1::uuid[]) ORDER BY created_at DESC`,
     [meus.map((r) => r.familia)]
   );
   return meus
     .sort((a, b) => a.retornar.localeCompare(b.retornar))
     .map((r) => {
-      const h = contarHistorico(eventos.filter((e) => e.lead_row_id === r.familia).map((e) => e.to_value));
+      const daLead = eventos.filter((e) => e.lead_row_id === r.familia);
+      const h = contarHistorico(daLead.map((e) => e.to_value));
+      const emReuniao = estadoEmReuniao(daLead, agora);
       return {
         card_id: r.id, familia: r.familia, nome: r.nome, empresa: r.empresa, telefone: r.telefone,
         retornar: r.retornar.slice(0, 16), coluna: r.coluna, crm_de_origem: r.crm_de_origem,
         valor_mrr: r.valor_mrr, valor_implementacao: r.valor_implementacao,
         origem: r.origem || (r.do_anuncio ? 'meta' : ''), resumo: r.resumo,
         tentativas: h.tentativas, adiamentos: h.adiamentos,
+        em_reuniao_usados: emReuniao.usados, escondido_ate: emReuniao.escondidoAte,
       };
     });
 }
@@ -81,8 +85,35 @@ export async function retornosRoutes(app: FastifyInstance) {
   // GET /api/retornos/pendentes — os retornos de proposta vencidos que o closer logado precisa registrar.
   app.get('/api/retornos/pendentes', { onRequest: [app.authenticate] }, async (req) => {
     const { sub, role } = req.user as { sub: string; role: string };
-    return pendenciasDe(sub, role);
+    // O que está escondido pelo "Estou em reunião" volta sozinho quando passa 1h.
+    return (await pendenciasDe(sub, role))
+      .filter((p) => !p.escondido_ate)
+      .map(({ escondido_ate: _, ...p }) => p);
   });
+
+  // POST /api/retornos/em-reuniao — { card_ids } — "Estou em reunião": esconde esses retornos por 1h (até 2 vezes
+  // por retorno). Fica na Linha do tempo do card; quando passa a hora, o popup volta até ele registrar.
+  app.post<{ Body: { card_ids?: unknown } }>(
+    '/api/retornos/em-reuniao',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const ids = Array.isArray(req.body?.card_ids) ? req.body.card_ids.filter((x): x is string => typeof x === 'string') : [];
+      if (!ids.length) return reply.status(400).send({ message: 'Informe os retornos.' });
+      const alvos = (await pendenciasDe(sub, role))
+        .filter((p) => ids.includes(p.card_id) && !p.escondido_ate && p.em_reuniao_usados < MAXIMO_EM_REUNIAO);
+      if (!alvos.length) {
+        return reply.status(409).send({ message: `Já usou o "Estou em reunião" ${MAXIMO_EM_REUNIAO} vezes: agora é registrar o retorno.` });
+      }
+      const usuario = await queryOne<{ name: string | null; email: string }>('SELECT name, email FROM profiles WHERE id = $1', [sub]);
+      const nomeDoUsuario = usuario?.name || usuario?.email || 'Alguém';
+      const voltaAs = new Date(Date.now() + SONECA_EM_REUNIAO_MS);
+      for (const p of alvos) {
+        await logLeadEvent(p.familia, 'retorno', null, rotuloDoEventoEmReuniao(p.em_reuniao_usados + 1, voltaAs), nomeDoUsuario);
+      }
+      return { ok: true, escondidos: alvos.map((p) => p.card_id), volta_as: voltaAs.toISOString() };
+    }
+  );
 
   // POST /api/retornos/:cardId/resultado — { resultado, observacao, desfecho?, retornar_novo?, motivo?,
   //   motivo_detalhe?, valor_mrr?, valor_implementacao?, origem?, mover_follow_up? }

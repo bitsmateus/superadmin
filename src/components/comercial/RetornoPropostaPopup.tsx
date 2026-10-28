@@ -1,11 +1,11 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
-import { CalendarClock, MessageCircleOff, PhoneCall, Phone } from 'lucide-react'
+import { CalendarClock, MessageCircleOff, PhoneCall, Phone, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import {
-  MAXIMO_ADIAMENTOS, MINIMO_MOTIVO_ADIAR, MINIMO_OBSERVACAO_RETORNO, MINIMO_OBSERVACAO_TENTATIVA, TENTATIVAS_PRA_FOLLOW_UP,
+  MAXIMO_ADIAMENTOS, MAXIMO_EM_REUNIAO, MINIMO_MOTIVO_ADIAR, MINIMO_OBSERVACAO_RETORNO, MINIMO_OBSERVACAO_TENTATIVA, TENTATIVAS_PRA_FOLLOW_UP,
   retornosService, type PedidoDeRetorno, type RetornoPendente,
 } from '@/services/retornos'
 import { agendamentoLegivel } from '@/services/reunioes'
@@ -35,6 +35,7 @@ const noFuturo = (data: string, hora: string) => !!data && !!hora && new Date(`$
  * de um card em Proposta enviada / Follow-up Propostas, abre em qualquer tela e só sai registrando: retornei (o que foi
  * conversado + fechou / ainda negociando / perdeu), tentei sem resposta (novo retorno) ou ainda não retornei (adiar,
  * até 2 vezes). Tudo vai pras Atualizações do card — quem decide o que é pendência é o servidor (routes/retornos.ts).
+ * "Estou em reunião" tira o popup por 1h (todos os retornos da fila de uma vez), no máximo 2 vezes por retorno.
  */
 export function RetornoPropostaPopup() {
   const [lista, setLista] = React.useState<RetornoPendente[]>([])
@@ -75,6 +76,24 @@ export function RetornoPropostaPopup() {
     } catch (err) {
       toast.error((err as Error).message || 'Não deu pra registrar o retorno.')
       if ((err as { status?: number }).status === 409) void carregar()
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  // Os da fila que ainda podem ser deixados pra daqui a 1h (o resto continua na tela).
+  const adiaveisPorReuniao = lista.filter((x) => x.em_reuniao_usados < MAXIMO_EM_REUNIAO)
+  const estouEmReuniao = async () => {
+    if (!adiaveisPorReuniao.length || enviando) return
+    setEnviando(true)
+    try {
+      const r = await retornosService.emReuniao(adiaveisPorReuniao.map((x) => x.card_id))
+      const hora = new Date(r.volta_as).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+      toast.success(`Beleza! ${r.escondidos.length > 1 ? `Os ${r.escondidos.length} retornos voltam` : 'O retorno volta'} às ${hora}.`)
+      setLista((l) => l.filter((x) => !r.escondidos.includes(x.card_id)))
+    } catch (err) {
+      toast.error((err as Error).message || 'Não deu pra adiar agora.')
+      void carregar()
     } finally {
       setEnviando(false)
     }
@@ -130,6 +149,18 @@ export function RetornoPropostaPopup() {
                 onClick={() => setPasso('adiar')}
               />
             </div>
+            <button type="button" onClick={estouEmReuniao} disabled={enviando || atual.em_reuniao_usados >= MAXIMO_EM_REUNIAO}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line px-3 py-2 text-sm text-foreground/70 transition-colors hover:border-accent/50 hover:text-foreground focus-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line disabled:hover:text-foreground/70">
+              <Users className="h-4 w-4" />
+              <span>
+                Estou em reunião, me lembra em 1h
+                <span className="block text-xs text-foreground/50">
+                  {atual.em_reuniao_usados >= MAXIMO_EM_REUNIAO
+                    ? `Já usado ${MAXIMO_EM_REUNIAO}x neste retorno: agora é registrar`
+                    : `${adiaveisPorReuniao.length > 1 ? `Vale pros ${adiaveisPorReuniao.length} retornos da fila · ` : ''}pode usar mais ${MAXIMO_EM_REUNIAO - atual.em_reuniao_usados}x`}
+                </span>
+              </span>
+            </button>
           </div>
         )}
         {passo === 'retornou' && <Retornou atual={atual} enviando={enviando} onVoltar={() => setPasso('escolha')} onConcluir={enviar} />}

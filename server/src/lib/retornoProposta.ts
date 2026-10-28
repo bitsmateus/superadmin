@@ -1,6 +1,6 @@
 import { normalizaNome } from './normalizaNome.js';
 import { MINIMO_DETALHE_MOTIVO, MOTIVOS_DESQUALIFICACAO } from './trafegoNicho.js';
-import { agendamentoLegivel, agendamentoParaDate } from './reuniaoResultado.js';
+import { agendamentoLegivel, agendamentoParaDate, dateParaAgendamento } from './reuniaoResultado.js';
 
 /**
  * Retorno da proposta (popup obrigatório do closer). Card do CRM LUIS CLOSER em "Proposta enviada" ou "Follow-up
@@ -32,6 +32,11 @@ export function ehQuadroDeProposta(nomeDoQuadro: string): boolean {
 export const ROTULO_RETORNOU = 'Retornou';
 export const ROTULO_SEM_RESPOSTA = 'Sem resposta';
 export const ROTULO_ADIADO = 'Adiado';
+export const ROTULO_EM_REUNIAO = 'Em reunião';
+
+/** "Estou em reunião": tira o popup por 1h, no máximo 2 vezes por retorno (zera quando ele registra o retorno). */
+export const MAXIMO_EM_REUNIAO = 2;
+export const SONECA_EM_REUNIAO_MS = 60 * 60_000;
 
 /**
  * Conta, nos eventos "retorno" da lead (mais novo primeiro): os adiamentos seguidos desde o último retorno de verdade,
@@ -40,6 +45,7 @@ export const ROTULO_ADIADO = 'Adiado';
 export function contarHistorico(eventosMaisNovoPrimeiro: string[]): { adiamentos: number; tentativas: number } {
   let adiamentos = 0;
   for (const e of eventosMaisNovoPrimeiro) {
+    if (e.startsWith(ROTULO_EM_REUNIAO)) continue;
     if (e.startsWith(ROTULO_ADIADO)) adiamentos++;
     else break;
   }
@@ -170,4 +176,26 @@ export function rotuloDoEventoDeRetorno(r: RetornoValidado, tentativaDeAgora: nu
   if (r.resultado === 'retornou') return `${ROTULO_RETORNOU} · ${DESFECHO_LEGIVEL[r.desfecho!]}`;
   if (r.resultado === 'sem_resposta') return `${ROTULO_SEM_RESPOSTA} · ${tentativaDeAgora}ª tentativa`;
   return `${ROTULO_ADIADO} pra ${agendamentoLegivel(r.retornarNovo!)}`;
+}
+
+/**
+ * Os "Estou em reunião" do retorno de agora (mais novo primeiro): os seguidos desde o último registro de verdade, e até
+ * quando o popup fica escondido (1h depois do último).
+ */
+export function estadoEmReuniao(
+  eventosMaisNovoPrimeiro: { to_value: string; created_at: Date }[], agora: Date,
+): { usados: number; escondidoAte: Date | null } {
+  let usados = 0;
+  for (const e of eventosMaisNovoPrimeiro) {
+    if (e.to_value.startsWith(ROTULO_EM_REUNIAO)) usados++;
+    else break;
+  }
+  if (!usados) return { usados, escondidoAte: null };
+  const ate = new Date(new Date(eventosMaisNovoPrimeiro[0].created_at).getTime() + SONECA_EM_REUNIAO_MS);
+  return { usados, escondidoAte: ate.getTime() > agora.getTime() ? ate : null };
+}
+
+/** Evento da Linha do tempo do "Estou em reunião" — começa com o rótulo que estadoEmReuniao lê. */
+export function rotuloDoEventoEmReuniao(vez: number, voltaAs: Date): string {
+  return `${ROTULO_EM_REUNIAO} · ${vez}ª vez, volta às ${dateParaAgendamento(voltaAs).slice(11, 16)}`;
 }

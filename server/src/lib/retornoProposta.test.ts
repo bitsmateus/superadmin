@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  contarHistorico, ehQuadroDeProposta, rotuloDoEventoDeRetorno, textoDaNotaDeRetorno, validarRetorno,
+  contarHistorico, ehQuadroDeProposta, estadoEmReuniao, rotuloDoEventoDeRetorno, rotuloDoEventoEmReuniao, textoDaNotaDeRetorno, validarRetorno,
 } from './retornoProposta.js';
 
 const agora = new Date('2026-10-27T13:30:00Z'); // 10:30 em Brasília
@@ -63,4 +63,19 @@ test('Atualização e evento da Linha do tempo', () => {
   assert.equal(rotuloDoEventoDeRetorno(v.ok, 2), 'Sem resposta · 2ª tentativa');
   // O rótulo é o que o contarHistorico lê de volta.
   assert.deepEqual(contarHistorico([rotuloDoEventoDeRetorno(v.ok, 2)]), { adiamentos: 0, tentativas: 1 });
+});
+
+test('Estou em reunião: some por 1h, conta só os seguidos e não quebra a conta de adiamentos', () => {
+  const ha = (min: number) => new Date(agora.getTime() - min * 60_000);
+  assert.deepEqual(estadoEmReuniao([], agora), { usados: 0, escondidoAte: null });
+  const recente = estadoEmReuniao([{ to_value: 'Em reunião · 1ª vez, volta às 11:10', created_at: ha(20) }], agora);
+  assert.equal(recente.usados, 1);
+  assert.equal(recente.escondidoAte?.getTime(), ha(20).getTime() + 60 * 60_000);
+  // Passou 1h: volta a aparecer, mas continua contando como usado.
+  assert.deepEqual(estadoEmReuniao([
+    { to_value: 'Em reunião · 2ª vez', created_at: ha(61) }, { to_value: 'Em reunião · 1ª vez', created_at: ha(130) },
+    { to_value: 'Adiado pra x', created_at: ha(3000) }, { to_value: 'Em reunião · 1ª vez', created_at: ha(4000) },
+  ], agora), { usados: 2, escondidoAte: null });
+  assert.deepEqual(contarHistorico(['Em reunião · 1ª vez', 'Adiado pra x', 'Em reunião · 2ª vez', 'Adiado pra y']), { adiamentos: 2, tentativas: 0 });
+  assert.equal(rotuloDoEventoEmReuniao(1, new Date('2026-10-27T14:30:00Z')), 'Em reunião · 1ª vez, volta às 11:30');
 });

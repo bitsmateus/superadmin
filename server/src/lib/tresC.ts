@@ -81,6 +81,67 @@ export async function gravacao3C(cfg: Config3C, callId: string): Promise<{ tipo:
   return { tipo: res.headers.get('content-type') ?? 'audio/mpeg', dados: Buffer.from(await res.arrayBuffer()) };
 }
 
+/**
+ * Telefone no formato que a 3C aceita: só dígitos, DDD + número (10 ou 11 dígitos). Tira o +55 e o 0 de
+ * operadora. null = não dá pra ligar (curto, longo ou vazio).
+ */
+export function telefonePara3C(bruto: string): string | null {
+  let d = (bruto ?? '').replace(/\D/g, '');
+  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+  d = d.replace(/^0+/, '');
+  return d.length === 10 || d.length === 11 ? d : null;
+}
+
+/**
+ * Liga pro número pelo ramal do agente (POST /click2call, token de gestor). A 3C só disca se o agente estiver
+ * logado numa campanha e livre; senão responde 422, que vira uma mensagem clara pra quem clicou.
+ */
+export async function clickToCall(cfg: Config3C, ramal: string, telefone: string): Promise<void> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
+  try {
+    const res = await fetch(montarUrl(cfg, '/click2call'), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cfg.token}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ extension: ramal, phone: telefone }).toString(),
+      signal: ctrl.signal,
+    });
+    if (res.ok) return;
+    const corpo = (await res.json().catch(() => ({}))) as { detail?: string; message?: string; errors?: Record<string, string[]> };
+    const detalhe = corpo.errors ? Object.values(corpo.errors).flat().join(' ') : corpo.detail || corpo.message || '';
+    if (res.status === 422) {
+      throw new Erro3C(
+        `A 3C não discou: você precisa estar logado na sua campanha da 3C e livre (sem ligação em andamento nem pausa).${detalhe ? ` (${detalhe})` : ''}`,
+        409,
+      );
+    }
+    if (res.status === 401 || res.status === 403) throw new Erro3C('O token da 3C não tem permissão pra ligar (precisa ser de gestor).', 502);
+    throw new Erro3C(`A 3C respondeu ${res.status} ao ligar${detalhe ? `: ${detalhe}` : ''}.`, 502);
+  } catch (e) {
+    if (e instanceof Erro3C) throw e;
+    if ((e as Error).name === 'AbortError') throw new Erro3C('A 3C demorou demais pra responder. Tente de novo.', 504);
+    throw new Erro3C(`Não consegui falar com a 3C: ${(e as Error).message}`, 502);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** THREEC_RAMAIS="arthur=1003;luis=1002" -> ramal pelo primeiro nome de quem está logado no painel. */
+export function ramalDaPessoa(nomeDoUsuario: string, mapa = process.env.THREEC_RAMAIS ?? ''): string | null {
+  const semAcento = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const primeiro = semAcento((nomeDoUsuario ?? '').split(/\s+/)[0] ?? '');
+  if (!primeiro) return null;
+  for (const par of mapa.split(/[;,\n]/)) {
+    const [nome, ramal] = par.split('=').map((x) => x?.trim() ?? '');
+    if (nome && ramal && /^\d+$/.test(ramal) && semAcento(nome.split(/\s+/)[0]) === primeiro) return ramal;
+  }
+  return null;
+}
+
 interface Paginado {
   data?: unknown;
   meta?: { pagination?: { total_pages?: number; current_page?: number } };

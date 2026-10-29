@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { TelefoneAcoes } from '@/components/comercial/TelefoneAcoes'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -329,7 +330,12 @@ function LeadDetailModalInner({
               </>
             )}
             <FieldRow icon={<Phone className="h-3.5 w-3.5" />} label="Telefone" required={!modoSimples}>
-              <BoxedField value={row.telefone} onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })} required={!modoSimples} />
+              <div className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <BoxedField value={row.telefone} onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })} required={!modoSimples} />
+                </div>
+                <TelefoneAcoes telefone={row.telefone} />
+              </div>
             </FieldRow>
             {!modoSimples && (
               <>

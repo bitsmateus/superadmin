@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { TelefoneAcoes } from '@/components/comercial/TelefoneAcoes'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { CalendarClock, MessageCircleOff, PhoneCall, Phone, Users } from 'lucide-react'
@@ -124,7 +125,7 @@ export function RetornoPropostaPopup() {
           <dd><span className="font-medium">{agendamentoLegivel(atual.retornar)}</span> <span className="text-danger">· venceu {timeAgo(`${atual.retornar}:00-03:00`)}</span></dd>
           <dt className="text-foreground/45">Etapa</dt>
           <dd>{atual.coluna}{atual.crm_de_origem ? ` · veio do ${atual.crm_de_origem}` : ''}</dd>
-          {atual.telefone && (<><dt className="text-foreground/45">Telefone</dt><dd className="inline-flex items-center gap-1"><Phone className="h-3.5 w-3.5 text-foreground/40" />{atual.telefone}</dd></>)}
+          {atual.telefone && (<><dt className="text-foreground/45">Telefone</dt><dd className="inline-flex items-center gap-1"><Phone className="h-3.5 w-3.5 text-foreground/40" />{atual.telefone}<TelefoneAcoes telefone={atual.telefone} /></dd></>)}
           <dt className="text-foreground/45">Proposta</dt>
           <dd>MRR {mrr ? formatBRLCents(mrr) : '—'} · Implementação {atual.valor_implementacao ? formatBRLCents(impl) : '—'}</dd>
           {atual.tentativas > 0 && (<><dt className="text-foreground/45">Tentativas</dt><dd>{atual.tentativas} sem resposta desde o último contato</dd></>)}

@@ -48,6 +48,7 @@ import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { LigacoesPainel, PAGINAS_COM_LIGACOES } from '@/components/comercial/LigacoesPainel'
+import { TelefoneAcoes } from '@/components/comercial/TelefoneAcoes'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
@@ -1244,6 +1245,19 @@ function BoardGroup({
                           onChange={(patch) => applyFieldChange(row, patch)}
                           className="bg-transparent px-2.5 py-1.5 text-sm text-foreground"
                         />
+                      ) : col.key === 'telefone' ? (
+                        <div className="flex items-center">
+                          <EditableField
+                            value={row.telefone}
+                            placeholder={col.required ? 'Obrigatório' : undefined}
+                            onSave={(next) => leadBoardsService.updateRow(row.id, { telefone: next })}
+                            className={cn(
+                              'min-w-0 flex-1 px-2.5 py-1.5 text-sm text-foreground',
+                              col.required && !row.telefone ? 'bg-danger/10 ring-1 ring-inset ring-danger/30' : 'bg-transparent',
+                            )}
+                          />
+                          <TelefoneAcoes telefone={row.telefone} className="mr-1" />
+                        </div>
                       ) : col.key === 'agendamento' ? (
                         <AgendamentoField
                           value={row.agendamento}

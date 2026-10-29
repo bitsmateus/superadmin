@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { TelefoneAcoes } from '@/components/comercial/TelefoneAcoes'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { CalendarClock, CalendarX2, CheckCircle2, Circle, ExternalLink, Phone, Video } from 'lucide-react'
@@ -96,7 +97,7 @@ export function ReuniaoResultadoPopup() {
           <dd className="font-medium text-foreground">{agendamentoLegivel(atual.agendamento)}</dd>
           <dt className="text-foreground/45">CRM</dt>
           <dd className="text-foreground">{atual.crm}{atual.crm_do_card !== atual.crm ? ` · card no ${atual.crm_do_card}` : ''}</dd>
-          {atual.telefone && (<><dt className="text-foreground/45">Telefone</dt><dd className="inline-flex items-center gap-1 text-foreground"><Phone className="h-3.5 w-3.5 text-foreground/40" />{atual.telefone}</dd></>)}
+          {atual.telefone && (<><dt className="text-foreground/45">Telefone</dt><dd className="inline-flex items-center gap-1 text-foreground"><Phone className="h-3.5 w-3.5 text-foreground/40" />{atual.telefone}<TelefoneAcoes telefone={atual.telefone} /></dd></>)}
           {atual.link && (
             <>
               <dt className="text-foreground/45">Link</dt>

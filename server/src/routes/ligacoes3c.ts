@@ -3,7 +3,7 @@ import { query, queryOne } from '../db.js';
 import { restrictedBoardFilter } from './leadBoards.js';
 import { donoDaAba, primeiroNome } from '../lib/reuniaoResultado.js';
 import {
-  Erro3C, amostraDeCampos, config3C, get3C, gravacao3C, listarLigacoes, montarRelatorio, normalizarAgentes,
+  Erro3C, amostraDeCampos, clickToCall, config3C, ramalDaPessoa, telefonePara3C, get3C, gravacao3C, listarLigacoes, montarRelatorio, normalizarAgentes,
   normalizarLigacao, type AgenteAgora, type Ligacao,
 } from '../lib/tresC.js';
 
@@ -200,6 +200,34 @@ export async function ligacoes3cRoutes(app: FastifyInstance) {
       }
     },
   );
+
+  /** Quem está logado tem ramal na 3C? (o menu do telefone mostra "Ligar pela 3C" só pra quem tem). */
+  app.get('/api/ligacoes-3c/meu-ramal', { onRequest: [app.authenticate] }, async (req) => {
+    const eu = req.user as { sub: string };
+    const perfil = await queryOne<{ name: string | null }>('SELECT name FROM profiles WHERE id = $1', [eu.sub]);
+    return { configurado: !!config3C(), ramal: ramalDaPessoa(perfil?.name ?? '') };
+  });
+
+  /** "Ligar pela 3C": a 3C disca pro número pelo ramal de quem clicou (a pessoa atende no webphone/softphone). */
+  app.post<{ Body: { telefone?: string } }>('/api/ligacoes-3c/ligar', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const cfg = config3C();
+    if (!cfg) return reply.status(503).send(NAO_CONFIGURADO);
+    const eu = req.user as { sub: string };
+    const perfil = await queryOne<{ name: string | null }>('SELECT name FROM profiles WHERE id = $1', [eu.sub]);
+    const ramal = ramalDaPessoa(perfil?.name ?? '');
+    if (!ramal) {
+      return reply.status(400).send({ message: 'Seu usuário não tem ramal na 3C configurado no painel (THREEC_RAMAIS).' });
+    }
+    const telefone = telefonePara3C(req.body?.telefone ?? '');
+    if (!telefone) return reply.status(400).send({ message: 'Número inválido: precisa ter DDD + número.' });
+    try {
+      await clickToCall(cfg, ramal, telefone);
+      req.log.info({ ramal }, 'click2call 3C');
+      return { ok: true, ramal, telefone };
+    } catch (e) {
+      return erro(reply, e);
+    }
+  });
 
   /**
    * Diagnóstico (só admin): mostra as CHAVES que a 3C manda em /calls e /agents/status, pra conferir

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { montarRelatorio, normalizarAgentes, normalizarLigacao, quando, segundos, type Ligacao } from './tresC.js';
+import { montarRelatorio, normalizarAgentes, normalizarLigacao, quando, ramalDaPessoa, segundos, telefonePara3C, type Ligacao } from './tresC.js';
 
 test('segundos: número, HH:MM:SS, MM:SS e texto', () => {
   assert.equal(segundos(95), 95);
@@ -73,4 +73,21 @@ test('ehDaPessoa: primeiro nome por padrão, nome completo quando configurado', 
   assert.equal(ehDaPessoa('Arthur Rosa', 'Arthur Rosa'), true);
   assert.equal(ehDaPessoa('Arthur Silva', 'Arthur Rosa'), false);
   assert.equal(ehDaPessoa('', 'Arthur'), false);
+});
+
+test('telefonePara3C: só DDD + número', () => {
+  assert.equal(telefonePara3C('+55 (48) 99999-0000'), '48999990000');
+  assert.equal(telefonePara3C('5548999990000'), '48999990000');
+  assert.equal(telefonePara3C('048 3622-1000'), '4836221000');
+  assert.equal(telefonePara3C('48 3622-1000'), '4836221000');
+  assert.equal(telefonePara3C('999990000'), null);
+  assert.equal(telefonePara3C(''), null);
+});
+
+test('ramalDaPessoa: pelo primeiro nome, sem acento', () => {
+  const mapa = 'arthur=1003; Luís=1002';
+  assert.equal(ramalDaPessoa('Arthur Faveri', mapa), '1003');
+  assert.equal(ramalDaPessoa('Luis Otávio', mapa), '1002');
+  assert.equal(ramalDaPessoa('Mateus', mapa), null);
+  assert.equal(ramalDaPessoa('', mapa), null);
 });

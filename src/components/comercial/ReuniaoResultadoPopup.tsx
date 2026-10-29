@@ -154,7 +154,7 @@ function NaoCompareceu({ enviando, onVoltar, onConcluir }: {
       <p className="text-sm font-medium text-foreground">Por que o lead não compareceu?</p>
       <div className="space-y-1.5">
         {MOTIVOS_NAO_COMPARECEU.map((m) => (
-          <label key={m} className={cn('flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm', motivo === m ? 'border-accent/60 bg-accent/[0.05]' : 'border-line hover:bg-elevate/[0.03]')}>
+          <label key={m} className={cn('flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm text-foreground', motivo === m ? 'border-accent/60 bg-accent/[0.05]' : 'border-line hover:bg-elevate/[0.03]')}>
             <input type="radio" name="motivo-nao" checked={motivo === m} onChange={() => setMotivo(m)} />
             {m}
           </label>

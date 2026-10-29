@@ -27,6 +27,7 @@ import {
   StickyNote,
   Trash2,
   Upload,
+  Phone,
   UserRound,
   X,
 } from 'lucide-react'
@@ -46,6 +47,7 @@ import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
+import { LigacoesPainel, PAGINAS_COM_LIGACOES } from '@/components/comercial/LigacoesPainel'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { EditableField } from '@/components/comercial/EditableField'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
@@ -1587,7 +1589,12 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   const VIEW_LABEL: Record<'list' | 'kanban' | 'dashboard', string> = {
     list: 'lista', kanban: 'Kanban', dashboard: sdrLock ? 'Minhas métricas' : 'Dashboard',
   }
+  // "Ligações" (3C Plus) só no CRM de quem liga. Não fica salvo: ao voltar pra aba, abre na visão de sempre.
+  const temLigacoes = PAGINAS_COM_LIGACOES.has(page)
+  const [verLigacoes, setVerLigacoes] = React.useState(false)
+  React.useEffect(() => setVerLigacoes(false), [page])
   const changeView = (next: 'list' | 'kanban' | 'dashboard') => {
+    setVerLigacoes(false)
     if (next === view) return
     setView(next)
     toast.success(`Visão em ${VIEW_LABEL[next]} aplicada — fica salva pra você.`)
@@ -1630,7 +1637,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
         ) : (
           <>
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              {view !== 'dashboard' && (
+              {view !== 'dashboard' && !verLigacoes && (
                 <>
                   <Button rightIcon={<ChevronDown className="h-4 w-4" />} onClick={handleCreateNome}>
                     Criar nome
@@ -1655,11 +1662,21 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
               <ToolbarButton
                 icon={<LayoutDashboard className="h-3.5 w-3.5" />}
                 onClick={() => changeView('dashboard')}
-                className={view === 'dashboard' ? 'bg-accent/10 text-accent' : undefined}
+                className={view === 'dashboard' && !verLigacoes ? 'bg-accent/10 text-accent' : undefined}
                 title="Ver resumo em relatório — só visualização"
               >
                 {sdrLock ? 'Minhas métricas' : 'Dashboard'}
               </ToolbarButton>
+              {temLigacoes && (
+                <ToolbarButton
+                  icon={<Phone className="h-3.5 w-3.5" />}
+                  onClick={() => setVerLigacoes(true)}
+                  className={verLigacoes ? 'bg-accent/10 text-accent' : undefined}
+                  title="Ligações feitas pela 3C Plus — só visualização"
+                >
+                  Ligações
+                </ToolbarButton>
+              )}
               <div className="inline-flex overflow-hidden rounded-lg border border-line">
                 <button
                   type="button"
@@ -1667,7 +1684,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                   title="Aplicar visão em lista"
                   className={cn(
                     'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-                    view === 'list' ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
+                    view === 'list' && !verLigacoes ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
                   )}
                 >
                   <ListTodo className="h-3.5 w-3.5" />
@@ -1679,7 +1696,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                   title="Aplicar visão em Kanban"
                   className={cn(
                     'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors',
-                    view === 'kanban' ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
+                    view === 'kanban' && !verLigacoes ? 'bg-accent/10 text-accent' : 'text-foreground/50 hover:bg-elevate/[0.04]',
                   )}
                 >
                   <KanbanSquare className="h-3.5 w-3.5" />
@@ -1714,6 +1731,8 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                 description={isAdmin ? 'Crie o primeiro quadro para começar a registrar leads.' : 'Peça pra um admin criar o primeiro quadro desta aba.'}
                 action={isAdmin ? <Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button> : undefined}
               />
+            ) : verLigacoes && temLigacoes ? (
+              <LigacoesPainel pagina={page} pessoa={sdrLock ?? undefined} />
             ) : view === 'dashboard' && page === 'crm-luis-closer' ? (
               <CloserMetricsGrid rows={visibleRows} boards={boards} onOpenLead={setOpenLeadId} />
             ) : view === 'dashboard' ? (

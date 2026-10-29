@@ -53,6 +53,7 @@ import { reunioesRoutes } from './routes/reunioes.js';
 import { rotinaRoutes } from './routes/rotina.js';
 import { notificacoesRoutes } from './routes/notificacoes.js';
 import { retornosRoutes } from './routes/retornos.js';
+import { ligacoes3cRoutes } from './routes/ligacoes3c.js';
 import { startDailyDigest } from './jobs/dailyDigest.js';
 import { startFollowUpDigest } from './jobs/followUpDigest.js';
 import { startChannelAlerts } from './jobs/channelAlerts.js';
@@ -187,6 +188,7 @@ async function main() {
   await app.register(reunioesRoutes);
   await app.register(notificacoesRoutes);
   await app.register(retornosRoutes);
+  await app.register(ligacoes3cRoutes);
   await app.register(rotinaRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));

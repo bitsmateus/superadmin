@@ -69,3 +69,69 @@ export function montarResumoAgendamentos(dia: string, agendamentos: AgendamentoD
     lista(contar(agendamentos.map((a) => canalDoAgendamento(canalEfetivo(a))))),
   ].join('\n');
 }
+
+// ── Retornos de proposta e no-show do dia ────────────────────────────────────
+
+/** Como o dia terminou nos retornos de proposta do CRM do closer. */
+export interface RetornosDoDia {
+  /** Registrou "Retornou" — o cliente deu resposta. */
+  retornou: number
+  /** Registrou "Sem resposta" — tentou e não achou. */
+  semResposta: number
+  /** Registrou "Adiado" — empurrou pra outra data. */
+  adiado: number
+  /** Venceu e ninguém registrou nada: a lista que precisa de cobrança. */
+  faltou: string[]
+}
+
+function linhaNomes(nomes: string[], limite = 12): string[] {
+  const mostra = nomes.slice(0, limite)
+  const linhas = mostra.map((n) => `• ${n}`)
+  if (nomes.length > mostra.length) linhas.push(`• _+${nomes.length - mostra.length} outros_`)
+  return linhas
+}
+
+/**
+ * Bloco de retornos de proposta. "Faltou" é o que venceu sem ninguém registrar — é o único
+ * número acionável aqui, por isso vem com os nomes e os outros só com a contagem.
+ */
+export function blocoRetornos(r: RetornosDoDia): string[] {
+  const total = r.retornou + r.semResposta + r.adiado
+  if (!total && !r.faltou.length) return []
+  const out = ['', '📝 *Retornos de proposta*']
+  out.push(`• Retornou: ${r.retornou}`)
+  out.push(`• Sem resposta: ${r.semResposta}`)
+  if (r.adiado) out.push(`• Adiado: ${r.adiado}`)
+  if (r.faltou.length) {
+    out.push('', `⚠️ *Faltou retornar (${r.faltou.length})*`, ...linhaNomes(r.faltou))
+  }
+  return out
+}
+
+/** O que aconteceu com as reuniões marcadas pro dia. */
+export interface ReunioesDoDia {
+  /** A reunião aconteceu e o lead andou de etapa. */
+  compareceu: string[]
+  /** Marcado como "Reunião não comparecida". */
+  noShow: string[]
+  /** Ainda em "Reunião agendada": ninguém registrou o resultado. */
+  pendentes: number
+}
+
+/**
+ * Bloco das reuniões do dia. Mostra quem compareceu e, quando houver, quem deu no-show com nome.
+ * Sem reunião nenhuma marcada, o bloco inteiro some.
+ */
+export function blocoReunioes(r: ReunioesDoDia): string[] {
+  const total = r.compareceu.length + r.noShow.length + r.pendentes
+  if (!total) return []
+  const out = ['', `🤝 *Reuniões de hoje (${total})*`]
+  out.push(`• Compareceram: ${r.compareceu.length}`)
+  out.push(`• Não compareceram: ${r.noShow.length}`)
+  // Sem resultado registrado é pendência de alguém, então só aparece quando existe.
+  if (r.pendentes) out.push(`• Sem resultado ainda: ${r.pendentes}`)
+  // Só o no-show vem com nome: é o que precisa de ação (reagendar, cobrar). Quem compareceu já
+  // andou de etapa sozinho, então listar os nomes só alongaria a mensagem sem ninguém usar.
+  if (r.noShow.length) out.push('', `🚫 *Não compareceram (${r.noShow.length})*`, ...linhaNomes(r.noShow))
+  return out
+}

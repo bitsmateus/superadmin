@@ -1,6 +1,10 @@
 import { query, queryOne } from '../db.js';
 import { POS_REUNIAO_STATUSES, REUNIAO_STATUSES } from '../routes/leadBoards.js';
-import { montarResumoAgendamentos, type AgendamentoDoDia } from '../lib/resumoAgendamentos.js';
+import {
+  blocoReunioes, blocoRetornos, montarResumoAgendamentos,
+  type AgendamentoDoDia, type RetornosDoDia,
+} from '../lib/resumoAgendamentos.js';
+import { PAGINA_DO_CLOSER, ROTULO_ADIADO, ROTULO_RETORNOU, ROTULO_SEM_RESPOSTA } from '../lib/retornoProposta.js';
 import { sendToGroupWith } from '../lib/supportGroup.js';
 
 /**
@@ -45,8 +49,89 @@ export async function agendamentosDoDia(dia: string): Promise<AgendamentoDoDia[]
   );
 }
 
+/**
+ * Retornos de proposta do dia: o que o closer registrou no popup (evento "retorno" na Linha do
+ * tempo) e o que venceu sem registro nenhum. O rótulo do evento é a fonte — é o mesmo texto que
+ * contarHistorico já lê, então não inventamos um campo novo só pro relatório.
+ */
+export async function retornosDoDia(dia: string): Promise<RetornosDoDia> {
+  const eventos = await query<{ rotulo: string }>(
+    `SELECT le.to_value AS rotulo
+     FROM lead_events le
+     WHERE le.type = 'retorno'
+       AND (le.created_at AT TIME ZONE '${TZ}')::date = $1::date`,
+    [dia]
+  );
+  let retornou = 0, semResposta = 0, adiado = 0;
+  for (const e of eventos) {
+    const r = e.rotulo ?? '';
+    if (r.startsWith(ROTULO_RETORNOU)) retornou++;
+    else if (r.startsWith(ROTULO_SEM_RESPOSTA)) semResposta++;
+    else if (r.startsWith(ROTULO_ADIADO)) adiado++;
+    // "Em reunião" é adiamento técnico de 1h, não é desfecho — fica de fora da conta.
+  }
+
+  // Venceu HOJE e continua sem registro. De propósito só o dia do relatório: arrastar o atrasado
+  // de semanas atrás repetiria os mesmos nomes todo dia até o grupo parar de ler. O acúmulo
+  // antigo continua cobrado onde é o lugar dele — o popup do closer, que não deixa passar.
+  const faltou = await query<{ nome: string }>(
+    `SELECT COALESCE(NULLIF(r.empresa, ''), NULLIF(r.nome, ''), 'Sem nome') AS nome
+     FROM lead_rows r
+     JOIN lead_boards lb ON lb.id = r.board_id
+     JOIN lead_pages lp ON lp.id = lb.page
+     WHERE lp.id = $1 AND r.deleted_at IS NULL AND lp.archived_at IS NULL
+       AND NOT COALESCE(r.retornado, false)
+       AND r.retornar ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}'
+       AND left(r.retornar, 10) = $2
+     ORDER BY r.retornar`,
+    [PAGINA_DO_CLOSER, dia]
+  );
+  return { retornou, semResposta, adiado, faltou: faltou.map((f) => f.nome) };
+}
+
+/**
+ * As reuniões MARCADAS pro dia e no que deram.
+ *
+ * Parte do "Agendamento" do card (a reunião daquele dia), não da data em que alguém mexeu no
+ * status — senão um no-show de ontem registrado hoje entraria no relatório de hoje.
+ *
+ * O desfecho vem do status atual: continua "Reunião agendada" = ainda não resolveram; virou
+ * "Reunião não comparecida" = no-show; qualquer outro status = a reunião aconteceu e o lead
+ * andou (Proposta Enviada, Vendido, Perdidos, e também os status próprios de cada quadro).
+ * Ler assim, por exclusão, evita depender do popup de resultado — que o time usa pouco: no dia
+ * 27 o popup registrou 1 no-show enquanto o status mostrava 3.
+ */
+export async function reunioesDoDia(dia: string): Promise<{ compareceu: string[]; noShow: string[]; pendentes: number }> {
+  const rows = await query<{ nome: string; status: string }>(
+    `SELECT COALESCE(NULLIF(lr.empresa, ''), NULLIF(lr.nome, ''), 'Sem nome') AS nome, lr.status
+     FROM lead_rows lr
+     JOIN lead_boards lb ON lb.id = lr.board_id
+     WHERE lb.is_vendas = false AND lr.deleted_at IS NULL
+       AND lr.espelho_origem_id IS NULL AND lr.copia_ia_origem_id IS NULL AND lr.venda_origem_id IS NULL
+       AND left(lr.agendamento, 10) = $1
+     ORDER BY lr.agendamento`,
+    [dia]
+  );
+  const compareceu: string[] = [];
+  const noShow: string[] = [];
+  let pendentes = 0;
+  for (const r of rows) {
+    if (r.status === REUNIAO_STATUSES[1]) noShow.push(r.nome);
+    else if (r.status === REUNIAO_STATUSES[0]) pendentes++;
+    else compareceu.push(r.nome);
+  }
+  return { compareceu, noShow, pendentes };
+}
+
 export async function montarResumoDoDia(dia: string): Promise<string> {
-  return montarResumoAgendamentos(dia, await agendamentosDoDia(dia));
+  const [agendamentos, retornos, reunioes] = await Promise.all([
+    agendamentosDoDia(dia), retornosDoDia(dia), reunioesDoDia(dia),
+  ]);
+  return [
+    montarResumoAgendamentos(dia, agendamentos),
+    ...blocoReunioes(reunioes),
+    ...blocoRetornos(retornos),
+  ].join('\n');
 }
 
 async function enviar(dia: string): Promise<void> {

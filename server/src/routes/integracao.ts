@@ -1,9 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne, queryAsActor, withTransaction } from '../db.js';
 import {
-  idCanonicoDasNotas, logLeadEvent, propagarEspelho, sincronizarContagemNotas, statusDoQuadro, syncCopiaDaIa,
-  syncEspelhoReuniaoAgendada,
+  completarEspelhoComAsOrigens, idCanonicoDasNotas, logLeadEvent, PAGE_IA, propagarEspelho, SDR_IA,
+  sincronizarContagemNotas, statusDoQuadro, syncCopiaDaIa, syncEspelhoReuniaoAgendada,
 } from './leadBoards.js';
+import { saoAbasJuntas } from '../lib/abasJuntas.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
 import { agendamentoParaIso } from '../lib/reuniaoResultado.js';
 import { criarNotificacao, lerNotificacaoDaIntegracao } from '../lib/notificacoes.js';
@@ -148,6 +149,39 @@ async function canalDaLuiza(cardId: string): Promise<void> {
        AND (r.id = o.id OR r.espelho_origem_id = o.id OR r.copia_ia_origem_id = o.id OR o.id = ANY(r.espelho_origens_extras))`,
     [cardId, CANAL_DA_LUIZA]
   );
+}
+
+/**
+ * A lead que a Luiza atendeu passa a ser dela.
+ *
+ * Quando a IA avança a etapa de uma lead que está num CRM que divide a tela com o CRM IA LUIZA (hoje o do
+ * Arthur), o card troca de dono: ganha o SDR "IA Luiza", e o syncCopiaDaIa o leva pra aba da IA com tudo —
+ * histórico, Atualizações, valores, espelho do closer —, sem copiar nem recriar nada. É o caso do disparo em
+ * massa do Arthur em que o lead responde pra Luiza: sai do CRM dele e vai pro dela, sem ficar nos dois.
+ *
+ * "Atendeu" é a IA ter conversado (alguma Atualização assinada por ela) E a etapa ter mudado nesta chamada.
+ * Só mandar a régua não troca o dono: o lead ainda não respondeu, então a lead continua sendo do Arthur.
+ *
+ * O card do closer, se já existir, é remarcado aqui; o que nasce depois já vem marcado pelo espelho.
+ */
+async function donoViraALuiza(cardId: string, page: string): Promise<void> {
+  if (!saoAbasJuntas(page, PAGE_IA)) return;
+  const lead = await queryOne<{ sdr: string }>(
+    `SELECT r.sdr FROM lead_rows r
+     WHERE r.id = $1 AND r.deleted_at IS NULL AND r.sdr !~* 'luiza'
+       AND r.espelho_origem_id IS NULL AND r.copia_ia_origem_id IS NULL AND r.venda_origem_id IS NULL
+       AND EXISTS (SELECT 1 FROM lead_notes n WHERE n.lead_row_id = r.id AND n.author_name ~* 'luiza')`,
+    [cardId]
+  );
+  if (!lead) return;
+  await queryAsActor(ATOR, 'UPDATE lead_rows SET sdr = $2 WHERE id = $1', [cardId, SDR_IA]);
+  await logLeadEvent(cardId, 'sdr', lead.sdr || null, SDR_IA, 'Automação').catch(() => undefined);
+  const espelhos = await query<{ id: string }>(
+    `SELECT id FROM lead_rows
+     WHERE deleted_at IS NULL AND (espelho_origem_id = $1 OR $1 = ANY(espelho_origens_extras))`,
+    [cardId]
+  );
+  for (const e of espelhos) await completarEspelhoComAsOrigens(e.id).catch(() => undefined);
 }
 
 /** Grava uma Atualização da Luiza no card (texto puro, escapado). Numa cópia, vai pro histórico da original. */
@@ -462,6 +496,8 @@ export async function integracaoRoutes(app: FastifyInstance) {
     }
     // As outras linhas da mesma lead (cópia do closer / da IA, ou a original) acompanham, como na tela.
     await propagarEspelho(id, atual.espelho_origem_id, campos, '', atual.copia_ia_origem_id, 'Automação', true);
+    // Antes do espelho: a lead que a Luiza atendeu troca de dono, pro card do closer já nascer marcado "IA Luiza".
+    if ((moveu || 'status' in campos) && !('sdr' in campos)) await donoViraALuiza(id, atual.page);
     // Espelho do closer: igual à tela, quando a coluna ou o status mudou.
     if (moveu || 'status' in campos) await espelharSeReuniaoAgendada(id);
     // SDR virou "IA Luiza" num CRM de outro SDR: ganha a cópia no CRM IA LUIZA (ou perde, se desmarcar).

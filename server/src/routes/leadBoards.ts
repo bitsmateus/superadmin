@@ -1045,7 +1045,7 @@ export async function propagarEspelho(
  * Voltou o SDR (não foi a IA) ou a lead voltou pro início do funil: a cópia vai pra lixeira. Marcou de novo: ela
  * volta. Nunca lança: roda em background depois da edição.
  */
-const PAGE_IA = 'crm-ia-luiza';
+export const PAGE_IA = 'crm-ia-luiza';
 export const SDR_IA = 'IA Luiza';
 const ehSdrDaIa = (sdr: string | null | undefined) => /luiza/i.test(sdr ?? '');
 

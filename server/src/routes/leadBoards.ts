@@ -1068,7 +1068,29 @@ export async function syncCopiaDaIa(leadRowId: string) {
       [leadRowId]
     );
     const etapa = lead.status || lead.board_name;
-    // CRM ARTHUR e CRM IA LUIZA são a mesma tela (abas juntas): a lead fica só no CRM do Arthur, sem cópia na IA.
+
+    // Aba junta (CRM ARTHUR mostra o CRM IA LUIZA por dentro): a lead da IA não vira cópia, ela MUDA
+    // de quadro pro CRM da IA. Como as duas abas são a mesma tela, o Arthur continua enxergando — só
+    // que o card passa a morar na aba de quem agendou, e para de contar como lead do Arthur.
+    if (ehSdrDaIa(lead.sdr) && !!etapa && saoAbasJuntas(lead.page, PAGE_IA)) {
+      const destino =
+        (await quadroDoStatus(PAGE_IA, etapa)) ??
+        (await quadroDoStatus(PAGE_IA, lead.board_name)) ??
+        (await queryOne<{ id: string }>('SELECT id FROM lead_boards WHERE page = $1 ORDER BY position LIMIT 1', [PAGE_IA]))?.id ??
+        null;
+      // Sem a aba da IA (arquivada/excluída) não há pra onde mover: a lead segue onde está.
+      if (destino) {
+        const [{ max }] = await query<{ max: number | null }>(
+          'SELECT MAX(position) as max FROM lead_rows WHERE board_id = $1', [destino]
+        );
+        await query('UPDATE lead_rows SET board_id = $2, position = $3 WHERE id = $1', [leadRowId, destino, (max ?? -1) + 1]);
+        // Uma cópia antiga (de antes das abas ficarem juntas) perde o sentido: a original já está na aba da IA.
+        if (copia && !copia.deleted_at) await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1', [copia.id]);
+      }
+      return;
+    }
+
+    // Abas separadas: a lead fica no CRM do SDR e ganha uma cópia no CRM IA LUIZA.
     // Uma cópia que já existia vai pra lixeira na próxima edição da original.
     const deveTer = ehSdrDaIa(lead.sdr) && !!etapa && !STATUS_INICIO_DO_FUNIL.has(normalizaNome(etapa))
       && !saoAbasJuntas(lead.page, PAGE_IA);

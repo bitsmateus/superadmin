@@ -148,6 +148,29 @@ export function mesmoStatus(a: string, b: string): boolean {
   return normaliza(a) === normaliza(b)
 }
 
+/** A coluna "Disparo em massa" (em qualquer CRM) ordena pela entrada na coluna, não pela criação do card. */
+export function ehColunaDeDisparo(nome: string): boolean {
+  return mesmoStatus(nome, 'Disparo em massa')
+}
+
+/**
+ * Ordem do "Disparo em massa": quem entrou na coluna há mais tempo em cima, quem acabou de entrar no fim. Card sem
+ * entrouColunaEm (os antigos, de antes do campo) vem antes de todos, pela data de criação. Sair e voltar pra coluna
+ * grava uma entrada nova, então o card volta pro fim.
+ */
+export function compararPorEntradaNaColuna(
+  a: { entrouColunaEm: string | null; createdAt: string }, b: { entrouColunaEm: string | null; createdAt: string },
+): number {
+  if (!a.entrouColunaEm !== !b.entrouColunaEm) return a.entrouColunaEm ? 1 : -1
+  // Como data, não como texto: a carga da tela traz "…Z" e o tempo real traz com o fuso ("…-03:00").
+  return (instante(a.entrouColunaEm) - instante(b.entrouColunaEm)) || (instante(a.createdAt) - instante(b.createdAt))
+}
+
+function instante(iso: string | null): number {
+  const n = iso ? Date.parse(iso) : NaN
+  return Number.isNaN(n) ? 0 : n
+}
+
 /** Data E horário preenchidos (formato salvo: AAAA-MM-DDTHH:MM). */
 export function temDataEHora(valor: string | null | undefined): boolean {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(valor ?? '')

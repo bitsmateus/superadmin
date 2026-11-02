@@ -1,7 +1,9 @@
 import * as React from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ehSdrDaIa, mesmoStatus, origemMostraSelo, quadroDoStatus, rotuloDaOrigem } from '@/lib/regraDoStatus'
+import {
+  compararPorEntradaNaColuna, ehColunaDeDisparo, ehSdrDaIa, mesmoStatus, origemMostraSelo, quadroDoStatus, rotuloDaOrigem,
+} from '@/lib/regraDoStatus'
 import {
   Archive,
   ArrowRightLeft,
@@ -225,8 +227,11 @@ function matchesSearch(row: LeadRow, term: string): boolean {
 /** Compara duas linhas por UMA coluna qualquer — valor em R$ ordena pelo número (não pelo texto
  * "R$ 1.234,56"), o resto ordena como texto (mas "numeric" no localeCompare já lê "Lead 10" depois
  * de "Lead 2" certinho, em vez de ordem alfabética pura). */
-function compareRowsByColumn(a: LeadRow, b: LeadRow, key: LeadRowField | 'createdAt' | 'position'): number {
+type ChaveDeOrdem = LeadRowField | 'createdAt' | 'position' | 'entrouColuna'
+
+function compareRowsByColumn(a: LeadRow, b: LeadRow, key: ChaveDeOrdem): number {
   if (key === 'position') return a.position - b.position
+  if (key === 'entrouColuna') return compararPorEntradaNaColuna(a, b)
   if (key === 'valorMrr' || key === 'valorImplementacao') {
     return parseBRLCents(a[key]) - parseBRLCents(b[key])
   }
@@ -879,8 +884,12 @@ function BoardGroup({
   // botão só na barra de cima ordenando todos juntos por data). Disparada passando o mouse em
   // QUALQUER coluna, igual o Monday: aparece um ícone de ordenar, sem precisar de botão fixo.
   // "Reunião não comparecida" abre ordenada pelo Agendamento: sem data e as mais antigas em cima, a mais recente embaixo.
-  const [sortBy, setSortBy] = React.useState<{ key: LeadRowField | 'createdAt' | 'position'; desc: boolean }>(
-    () => mesmoStatus(board.name, 'Reunião não comparecida') ? { key: 'agendamento', desc: false } : { key: 'createdAt', desc: false },
+  // "Disparo em massa", pela entrada na coluna: quem entrou há mais tempo em cima, quem acabou de entrar no fim. Arrastar
+  // um card troca pra ordem manual (position) só até recarregar a tela.
+  const [sortBy, setSortBy] = React.useState<{ key: ChaveDeOrdem; desc: boolean }>(
+    () => mesmoStatus(board.name, 'Reunião não comparecida') ? { key: 'agendamento', desc: false }
+      : ehColunaDeDisparo(board.name) ? { key: 'entrouColuna', desc: false }
+      : { key: 'createdAt', desc: false },
   )
   const toggleSort = (key: LeadRowField | 'createdAt') => {
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))

@@ -15,7 +15,7 @@ import { leadBoardsService } from '@/services/leadBoards'
 import { isLeadLabelsLoaded, leadLabelsService } from '@/services/leadLabels'
 import { LeadLabelCell, ManageLabelsModal } from '@/components/comercial/LeadLabelCell'
 import { cn } from '@/lib/utils'
-import { origemMostraSelo, quadroDoStatus, rotuloDaOrigem } from '@/lib/regraDoStatus'
+import { compararPorEntradaNaColuna, ehColunaDeDisparo, origemMostraSelo, quadroDoStatus, rotuloDaOrigem } from '@/lib/regraDoStatus'
 import { KanbanColunasNav } from '@/components/ui/KanbanColunasNav'
 import { formatBRLCompact, parseBRLCents } from '@/lib/currency'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
@@ -134,6 +134,10 @@ function LeadKanbanBoardPronto({ rows, allBoards, onOpenLead, sdrLock, modoDeman
       const value = row[groupField]
       const key = map.has(value) ? value : ''
       map.get(key)!.push(row)
+    }
+    // "Disparo em massa": quem entrou na coluna há mais tempo em cima, quem acabou de entrar no fim (igual à lista).
+    if (groupField === 'status') {
+      for (const [key, lista] of map) if (ehColunaDeDisparo(key)) lista.sort(compararPorEntradaNaColuna)
     }
     return map
   }, [rows, columns, groupField])

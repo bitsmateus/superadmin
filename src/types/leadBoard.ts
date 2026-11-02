@@ -124,6 +124,9 @@ export interface LeadRow {
   /** Card do closer com mais de uma origem (a mesma lead no CRM ARTHUR e no CRM IA LUIZA): as outras origens, além
    * do espelhoOrigemId. As Atualizações delas aparecem no card também. */
   espelhoOrigensExtras: string[]
+  /** Quando o card entrou no quadro (coluna) em que está agora — o banco grava a cada troca. null nos antigos, de
+   * antes de existir o campo. Ordena a coluna "Disparo em massa" (ver compararPorEntradaNaColuna). */
+  entrouColunaEm: string | null
   /** Número do ticket na NX (atendimento que gerou o card). */
   ticketNx: string
   /** Quem FECHOU a venda (só a aba Vendas usa). Diferente do SDR = a venda também gera a comissão
@@ -144,7 +147,7 @@ export type LeadRowField = Exclude<
   | 'id' | 'boardId' | 'position' | 'createdAt' | 'updatedAt' | 'notesCount' | 'retornado'
   | 'lastNotePreview' | 'lastNoteAt'
   | 'deletedAt' | 'deleteReason' | 'vendaOrigemId' | 'vendaRevertida' | 'mrrPendente' | 'implPendente'
-  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId' | 'copiaIaOrigemId' | 'espelhoOrigensExtras' | 'closer' | 'metaLeadId'
+  | 'observacoes' | 'veioDoFunil' | 'contratoAssinado' | 'espelhoOrigemId' | 'copiaIaOrigemId' | 'espelhoOrigensExtras' | 'entrouColunaEm' | 'closer' | 'metaLeadId'
   | 'boasVindasEnviadaEm' | 'boasVindasErro'
 >
 

@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom'
 import {
   Archive,
   Bell,
-  BookOpen,
   Briefcase,
   Building2,
   CalendarDays,
@@ -76,7 +75,6 @@ import { SinoDeNotificacoes } from '@/components/notificacoes/SinoDeNotificacoes
 // Pipeline (ver PipelineSectionTabs), não mais como item próprio do menu. A rota continua
 // funcionando normal (por isso segue em SUPORTE_ROUTES, pra "Suporte" acender como seção ativa).
 const suporteItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/followups', label: 'Follow-ups', icon: Bell },
@@ -437,9 +435,6 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     [
       // Gasto da empresa: só admin e supervisor (SDR não vê). A API também bloqueia.
       ...(seeFinancials ? [{ to: '/trafego', label: 'Tráfego', icon: Megaphone }] : []),
-      ...(isAdmin
-        ? [{ to: '/kb', label: 'Conhecimento', icon: BookOpen }]
-        : []),
       ...(isAdmin
         ? [{ to: '/users', label: 'Equipe', icon: ShieldCheck }]
         : []),

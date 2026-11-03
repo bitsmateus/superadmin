@@ -164,12 +164,13 @@ const SISTEMA_CONTEUDO = `Você é estrategista de social media e roteirista da 
 Seu trabalho: descobrir o que faz o conteúdo desse cliente dar visualização e transformar isso em novos conteúdos prontos pra produzir.
 Regras:
 - Os padrões precisam vir dos dados (cite o post/anúncio e os números). Se houver poucos dados, diga isso e use boas práticas do segmento, deixando claro que é hipótese.
-- Roteiros de vídeo (Reels): gancho forte nos 3 primeiros segundos, cenas numeradas com o que aparece e o que é falado, CTA no fim, duração sugerida e legenda pronta com hashtags.
-- Artes (post, carrossel ou story): o texto que vai NA arte (por slide no carrossel), o briefing visual pra designer e a legenda.
+- Roteiros de vídeo (Reels): gancho forte nos 3 primeiros segundos, de 3 a 6 cenas curtas (até 15 palavras cada, no formato "(0-3s) o que aparece / o que é falado"), CTA de uma frase, duração sugerida e legenda curta (até 3 linhas + hashtags).
+- Artes (post, carrossel ou story): o texto que vai NA arte (por slide no carrossel, frases curtas), o briefing visual pra designer em até 2 frases e a legenda curta (até 3 linhas + hashtags).
 - Fale a língua do público do cliente. Nada de promessa que o cliente não possa cumprir.
-- Pelo menos 3 roteiros de vídeo e 3 artes.
+- SEJA CURTO: "diagnostico" em UMA frase; no máximo 3 "padroes", cada "padrao" com até 12 palavras e "evidencia" só com o número que prova (até 15 palavras).
+- Quantidade: a que a equipe pedir no fim da mensagem; sem pedido, 3 roteiros de vídeo e 3 artes. Se pedir 0 de um tipo, devolva a lista vazia.
 Responda SOMENTE com JSON válido, sem markdown, neste formato:
-{"diagnostico":"2 a 4 frases","padroes":[{"padrao":"...","evidencia":"..."}],"roteiros_video":[{"titulo":"...","objetivo":"alcance|engajamento|conversao","duracao":"30s","gancho":"...","cenas":["1. ...","2. ..."],"cta":"...","legenda":"..."}],"artes":[{"titulo":"...","formato":"post|carrossel|story","texto_arte":["slide 1: ...","slide 2: ..."],"briefing_visual":"...","legenda":"..."}]}`;
+{"diagnostico":"1 frase","padroes":[{"padrao":"...","evidencia":"..."}],"roteiros_video":[{"titulo":"...","objetivo":"alcance|engajamento|conversao","duracao":"30s","gancho":"...","cenas":["1. ...","2. ..."],"cta":"...","legenda":"..."}],"artes":[{"titulo":"...","formato":"post|carrossel|story","texto_arte":["slide 1: ...","slide 2: ..."],"briefing_visual":"...","legenda":"..."}]}`;
 
 export interface IdeiasConteudo {
   diagnostico: string;
@@ -185,14 +186,14 @@ export function normalizarIdeias(b: Record<string, unknown>): IdeiasConteudo {
       const r = (p ?? {}) as Record<string, unknown>;
       return { padrao: txt(r.padrao, 300), evidencia: txt(r.evidencia, 400) };
     }).filter((p) => p.padrao),
-    roteiros_video: lista(b.roteiros_video, 8).map((p) => {
+    roteiros_video: lista(b.roteiros_video, 10).map((p) => {
       const r = (p ?? {}) as Record<string, unknown>;
       return {
         titulo: txt(r.titulo, 160), objetivo: txt(r.objetivo, 30), duracao: txt(r.duracao, 30), gancho: txt(r.gancho, 400),
         cenas: lista(r.cenas, 15).map((c) => txt(c, 500)).filter(Boolean), cta: txt(r.cta, 300), legenda: txt(r.legenda, 2200),
       };
     }).filter((p) => p.titulo),
-    artes: lista(b.artes, 8).map((p) => {
+    artes: lista(b.artes, 10).map((p) => {
       const r = (p ?? {}) as Record<string, unknown>;
       return {
         titulo: txt(r.titulo, 160), formato: txt(r.formato, 30),
@@ -211,11 +212,21 @@ export async function gerarAnalise(
   origem: 'manual' | 'auto',
   usuarioId: string | null,
   pedidoExtra = '',
+  /** Só no conteúdo: quantos roteiros de vídeo e quantas artes a equipe quer (0 a 10 cada). */
+  quantidade?: { videos: number; artes: number },
 ): Promise<{ id: string; conteudo: AnaliseTrafego | IdeiasConteudo; created_at: string }> {
   const contexto = await contextoDoCliente(clienteId);
   const sistema = tipo === 'trafego' ? SISTEMA_TRAFEGO : SISTEMA_CONTEUDO;
-  const extra = pedidoExtra.trim() ? `\n\nPedido da equipe pra esta geração: ${pedidoExtra.trim().slice(0, 1000)}` : '';
-  const bruto = await chamarClaude(sistema, [{ role: 'user', content: `Dados do cliente (JSON):\n${JSON.stringify(contexto)}${extra}` }]);
+  let extra = pedidoExtra.trim() ? `\n\nPedido da equipe pra esta geração: ${pedidoExtra.trim().slice(0, 1000)}` : '';
+  if (tipo === 'conteudo' && quantidade) {
+    extra += `\n\nQuantidade pedida: EXATAMENTE ${quantidade.videos} roteiro(s) de vídeo e ${quantidade.artes} arte(s).`;
+  }
+  // Dez roteiros + dez artes não cabem nos 8 mil tokens padrão: o conteúdo ganha folga.
+  const bruto = await chamarClaude(
+    sistema,
+    [{ role: 'user', content: `Dados do cliente (JSON):\n${JSON.stringify(contexto)}${extra}` }],
+    tipo === 'conteudo' ? 16000 : 8000,
+  );
   const obj = extrairJson<Record<string, unknown>>(bruto);
   const conteudo = tipo === 'trafego' ? normalizarAnalise(obj) : normalizarIdeias(obj);
   const r = await queryOne<{ id: string; created_at: string }>(

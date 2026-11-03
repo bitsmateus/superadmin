@@ -38,7 +38,7 @@ export async function gcIaRoutes(app: FastifyInstance) {
     return { analise: ultima, gerando: gerando.has(`${req.params.id}|${req.params.tipo}`), iaConfigurada: !!process.env.ANTHROPIC_API_KEY };
   });
 
-  app.post<{ Params: { id: string; tipo: string }; Body: { pedido?: string } }>(
+  app.post<{ Params: { id: string; tipo: string }; Body: { pedido?: string; videos?: number; artes?: number } }>(
     '/api/gc/clientes/:id/ia/:tipo/gerar',
     autenticado,
     async (req, reply) => {
@@ -50,7 +50,14 @@ export async function gcIaRoutes(app: FastifyInstance) {
       gerando.add(chave);
       try {
         const { sub } = req.user as { sub: string };
-        const r = await gerarAnalise(req.params.id, tipo, 'manual', sub, req.body?.pedido ?? '');
+        const qtd = (v: unknown, padrao: number) => {
+          const n = Math.round(Number(v));
+          return Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : padrao;
+        };
+        const quantidade = tipo === 'conteudo' && (req.body?.videos !== undefined || req.body?.artes !== undefined)
+          ? { videos: qtd(req.body?.videos, 3), artes: qtd(req.body?.artes, 3) }
+          : undefined;
+        const r = await gerarAnalise(req.params.id, tipo, 'manual', sub, req.body?.pedido ?? '', quantidade);
         return { analise: await ultimaAnalise(req.params.id, tipo), id: r.id };
       } catch (err) {
         return reply.status(502).send({ message: (err as Error).message });

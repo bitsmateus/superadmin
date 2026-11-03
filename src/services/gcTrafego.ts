@@ -124,8 +124,8 @@ export interface GcMensagemChat { role: 'user' | 'assistant'; content: string }
 export const gcIa = {
   ultima: <T,>(id: string, tipo: 'trafego' | 'conteudo') =>
     api.get<{ analise: GcAnaliseIa<T> | null; gerando: boolean; iaConfigurada: boolean }>(`/api/gc/clientes/${id}/ia/${tipo}`),
-  gerar: <T,>(id: string, tipo: 'trafego' | 'conteudo', pedido?: string) =>
-    api.post<{ analise: GcAnaliseIa<T> }>(`/api/gc/clientes/${id}/ia/${tipo}/gerar`, { pedido: pedido || undefined }),
+  gerar: <T,>(id: string, tipo: 'trafego' | 'conteudo', pedido?: string, quantidade?: { videos: number; artes: number }) =>
+    api.post<{ analise: GcAnaliseIa<T> }>(`/api/gc/clientes/${id}/ia/${tipo}/gerar`, { pedido: pedido || undefined, ...quantidade }),
   chat: (id: string, mensagem: string, historico: GcMensagemChat[]) =>
     api.post<{ resposta: string }>(`/api/gc/clientes/${id}/ia/chat`, { mensagem, historico }),
   instagram: (id: string, dias = 90) =>

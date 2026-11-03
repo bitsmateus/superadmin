@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronDown, Clapperboard, Image as ImageIcon, Send, Sparkles } from 'lucide-react'
+import { ChevronDown, Clapperboard, Image as ImageIcon, Lightbulb, Minus, Plus, Send, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -27,10 +27,10 @@ function useAnalise<T>(clienteId: string, tipo: 'trafego' | 'conteudo') {
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
   }, [clienteId, tipo])
-  const gerar = async (pedido?: string) => {
+  const gerar = async (pedido?: string, quantidade?: { videos: number; artes: number }) => {
     setGerando(true)
     try {
-      const r = await gcIa.gerar<T>(clienteId, tipo, pedido)
+      const r = await gcIa.gerar<T>(clienteId, tipo, pedido, quantidade)
       setAnalise(r.analise)
       toast.success('Pronto! A IA terminou.')
     } catch (e) {
@@ -243,102 +243,226 @@ function textoArte(a: GcIdeiasConteudoIa['artes'][number]): string {
   ].join('\n')
 }
 
-/** Ideias de conteúdo da IA: padrões do que dá certo, roteiros de Reels e artes prontos pra produzir. */
+/** Campo de quantidade com − e +, de 0 a 10. */
+function Quantidade({ rotulo, icone, valor, onChange }: { rotulo: string; icone: React.ReactNode; valor: number; onChange: (n: number) => void }) {
+  const botao = 'flex h-8 w-7 items-center justify-center text-foreground/55 hover:text-foreground disabled:opacity-30'
+  return (
+    <div className="flex h-10 items-center gap-1.5 rounded-lg border border-line bg-surface pl-2.5 text-sm">
+      <span className="flex items-center gap-1.5 text-foreground/65">{icone}{rotulo}</span>
+      <div className="flex items-center">
+        <button type="button" className={botao} disabled={valor <= 0} onClick={() => onChange(valor - 1)} aria-label={`Menos ${rotulo}`}>
+          <Minus className="h-3.5 w-3.5" />
+        </button>
+        <span className="w-5 text-center font-semibold tabular-nums">{valor}</span>
+        <button type="button" className={botao} disabled={valor >= 10} onClick={() => onChange(valor + 1)} aria-label={`Mais ${rotulo}`}>
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Uma ideia numa linha; clicar abre o resto (cenas/slides, CTA, legenda). */
+function ItemIdeia({ numero, titulo, chips, linha, aberto, onAlternar, onEnviar, textoCopiar, children }: {
+  numero: number; titulo: string; chips: string[]; linha: string; aberto: boolean; onAlternar: () => void
+  onEnviar: () => void; textoCopiar: string; children: React.ReactNode
+}) {
+  return (
+    <li className={cn('rounded-lg border transition-colors', aberto ? 'border-accent/40 bg-accent/[0.02]' : 'border-line')}>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button type="button" onClick={onAlternar} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-elevate/[0.06] text-xs font-semibold tabular-nums text-foreground/60">{numero}</span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span className="text-sm font-medium text-foreground">{titulo}</span>
+              {chips.filter(Boolean).map((c) => (
+                <span key={c} className="rounded bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] uppercase text-foreground/55">{c}</span>
+              ))}
+            </span>
+            {!aberto && linha && <span className="block truncate text-xs text-foreground/50">{linha}</span>}
+          </span>
+          <ChevronDown className={cn('h-4 w-4 shrink-0 text-foreground/35 transition-transform', aberto && 'rotate-180')} />
+        </button>
+        <button type="button" onClick={onEnviar} title="Enviar pra Social media → Para produzir" className="shrink-0 rounded-md p-1.5 text-accent hover:bg-accent/10" aria-label="Enviar pra produção">
+          <Send className="h-3.5 w-3.5" />
+        </button>
+        <BotaoCopiar texto={textoCopiar} />
+      </div>
+      {aberto && <div className="space-y-2.5 border-t border-line px-3 py-3 text-sm">{children}</div>}
+    </li>
+  )
+}
+
+function Bloco({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">{rotulo}</p>
+      {children}
+    </div>
+  )
+}
+
+type AbaIdeias = 'videos' | 'artes' | 'padroes'
+
+/**
+ * Ideias de conteúdo da IA, separadas por assunto: Vídeos, Artes e O que funciona. Cada ideia é uma
+ * linha (título, formato e gancho); o roteiro inteiro só abre no clique. A equipe escolhe quantos
+ * vídeos e quantas artes quer antes de gerar.
+ */
 export function PainelIaConteudo({ clienteId }: { clienteId: string }) {
   const { analise, carregando, gerando, configurada, gerar } = useAnalise<GcIdeiasConteudoIa>(clienteId, 'conteudo')
   const a = analise?.conteudo
+  const [pedido, setPedido] = React.useState('')
+  const [videos, setVideos] = React.useState(3)
+  const [artes, setArtes] = React.useState(3)
+  const [aba, setAba] = React.useState<AbaIdeias>('videos')
+  const [aberto, setAberto] = React.useState<string | null>(null)
+
+  // Nova geração: volta pra primeira aba que tem algo e fecha o que estava aberto.
+  React.useEffect(() => {
+    if (!a) return
+    setAberto(null)
+    setAba(a.roteiros_video.length ? 'videos' : a.artes.length ? 'artes' : 'padroes')
+  }, [analise?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const abas: { valor: AbaIdeias; rotulo: string; icone: React.ReactNode; total: number }[] = a
+    ? [
+        { valor: 'videos', rotulo: 'Vídeos', icone: <Clapperboard className="h-3.5 w-3.5" />, total: a.roteiros_video.length },
+        { valor: 'artes', rotulo: 'Artes', icone: <ImageIcon className="h-3.5 w-3.5" />, total: a.artes.length },
+        { valor: 'padroes', rotulo: 'O que funciona', icone: <Lightbulb className="h-3.5 w-3.5" />, total: a.padroes.length },
+      ]
+    : []
+
   return (
     <Painel
       title={<span className="flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-accent" /> Roteiros e artes com IA</span>}
       action={analise && <span className="text-xs text-foreground/45">por {analise.gerado_por_nome ?? 'alguém'} · {dataHora(analise.created_at)}</span>}
     >
       <div className="space-y-4">
-        <BarraGerar
-          rotulo="ideias"
-          gerando={gerando}
-          configurada={configurada}
-          temAnalise={!!a}
-          onGerar={(p) => void gerar(p)}
-          placeholder="Opcional: tema ou data (ex.: Black Friday, lançamento do serviço X, foco em Reels)"
-        />
+        {!configurada ? (
+          <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">A IA não está configurada no servidor (falta ANTHROPIC_API_KEY).</p>
+        ) : (
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <Input
+              placeholder="Tema ou data (opcional): Black Friday, lançamento do serviço X…"
+              autoComplete="off"
+              name="pedido-ia-conteudo"
+              value={pedido}
+              onChange={(e) => setPedido(e.target.value)}
+              containerClassName="flex-1"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Quantidade rotulo="Vídeos" icone={<Clapperboard className="h-3.5 w-3.5" />} valor={videos} onChange={setVideos} />
+              <Quantidade rotulo="Artes" icone={<ImageIcon className="h-3.5 w-3.5" />} valor={artes} onChange={setArtes} />
+              <Button
+                loading={gerando}
+                disabled={videos + artes === 0}
+                leftIcon={<Sparkles className="h-4 w-4" />}
+                onClick={() => void gerar(pedido, { videos, artes })}
+              >
+                {gerando ? 'Gerando…' : a ? 'Gerar de novo' : 'Gerar'}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {carregando ? (
           <Vazio>Carregando…</Vazio>
         ) : !a ? (
-          <Vazio>A IA lê os posts com mais alcance e os anúncios que mais converteram, e devolve roteiros de vídeo e artes prontos. Clique em Gerar.</Vazio>
+          <Vazio>Escolha quantos vídeos e artes quer e clique em Gerar. A IA usa os posts com mais alcance e os anúncios que mais converteram.</Vazio>
         ) : (
           <>
-            {a.diagnostico && <p className="text-sm leading-relaxed text-foreground/85">{a.diagnostico}</p>}
-            {a.padroes.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/50">O que faz o conteúdo dar certo</p>
+            {a.diagnostico && (
+              <p className="flex items-start gap-2 rounded-lg bg-elevate/[0.03] px-3 py-2 text-sm text-foreground/75">
+                <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-accent" /> {a.diagnostico}
+              </p>
+            )}
+
+            <div className="flex gap-1 border-b border-line">
+              {abas.map((t) => (
+                <button
+                  key={t.valor}
+                  type="button"
+                  onClick={() => { setAba(t.valor); setAberto(null) }}
+                  className={cn(
+                    '-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors',
+                    aba === t.valor ? 'border-accent font-medium text-foreground' : 'border-transparent text-foreground/55 hover:text-foreground',
+                  )}
+                >
+                  {t.icone} {t.rotulo}
+                  <span className="text-xs tabular-nums text-foreground/40">{t.total}</span>
+                </button>
+              ))}
+            </div>
+
+            {aba === 'videos' && (
+              a.roteiros_video.length === 0 ? <Vazio>Nenhum vídeo nesta geração.</Vazio> : (
                 <ul className="space-y-1.5">
+                  {a.roteiros_video.map((r, i) => (
+                    <ItemIdeia
+                      key={i}
+                      numero={i + 1}
+                      titulo={r.titulo}
+                      chips={[r.duracao, r.objetivo]}
+                      linha={r.gancho ? `Gancho: ${r.gancho}` : ''}
+                      aberto={aberto === `v${i}`}
+                      onAlternar={() => setAberto((x) => (x === `v${i}` ? null : `v${i}`))}
+                      onEnviar={() => void enviarParaProducao(clienteId, `Reels: ${r.titulo}`, textoRoteiro(r))}
+                      textoCopiar={textoRoteiro(r)}
+                    >
+                      {r.gancho && <p className="rounded bg-accent/10 px-2 py-1.5 text-foreground/85"><span className="text-xs font-semibold">Gancho:</span> {r.gancho}</p>}
+                      {r.cenas.length > 0 && (
+                        <Bloco rotulo="Cenas">
+                          <ol className="space-y-1 text-foreground/80">{r.cenas.map((c, k) => <li key={k}>{c}</li>)}</ol>
+                        </Bloco>
+                      )}
+                      {r.cta && <Bloco rotulo="CTA"><p className="text-foreground/80">{r.cta}</p></Bloco>}
+                      {r.legenda && <Bloco rotulo="Legenda"><p className="whitespace-pre-wrap text-foreground/70">{r.legenda}</p></Bloco>}
+                    </ItemIdeia>
+                  ))}
+                </ul>
+              )
+            )}
+
+            {aba === 'artes' && (
+              a.artes.length === 0 ? <Vazio>Nenhuma arte nesta geração.</Vazio> : (
+                <ul className="space-y-1.5">
+                  {a.artes.map((r, i) => (
+                    <ItemIdeia
+                      key={i}
+                      numero={i + 1}
+                      titulo={r.titulo}
+                      chips={[r.formato, r.texto_arte.length > 1 ? `${r.texto_arte.length} slides` : '']}
+                      linha={r.texto_arte[0] ?? ''}
+                      aberto={aberto === `a${i}`}
+                      onAlternar={() => setAberto((x) => (x === `a${i}` ? null : `a${i}`))}
+                      onEnviar={() => void enviarParaProducao(clienteId, `Arte: ${r.titulo}`, textoArte(r))}
+                      textoCopiar={textoArte(r)}
+                    >
+                      {r.texto_arte.length > 0 && (
+                        <Bloco rotulo="Texto da arte">
+                          <ul className="space-y-1 text-foreground/80">{r.texto_arte.map((c, k) => <li key={k}>{c}</li>)}</ul>
+                        </Bloco>
+                      )}
+                      {r.briefing_visual && <Bloco rotulo="Visual"><p className="text-foreground/75">{r.briefing_visual}</p></Bloco>}
+                      {r.legenda && <Bloco rotulo="Legenda"><p className="whitespace-pre-wrap text-foreground/70">{r.legenda}</p></Bloco>}
+                    </ItemIdeia>
+                  ))}
+                </ul>
+              )
+            )}
+
+            {aba === 'padroes' && (
+              a.padroes.length === 0 ? <Vazio>Sem padrões nesta geração.</Vazio> : (
+                <ul className="divide-y divide-line rounded-lg border border-line">
                   {a.padroes.map((p, i) => (
-                    <li key={i} className="rounded-lg bg-elevate/[0.03] px-3 py-2 text-sm">
-                      <p className="font-medium text-foreground">{p.padrao}</p>
+                    <li key={i} className="px-3 py-2">
+                      <p className="text-sm font-medium text-foreground">{p.padrao}</p>
                       {p.evidencia && <p className="text-xs text-foreground/50">{p.evidencia}</p>}
                     </li>
                   ))}
                 </ul>
-              </div>
-            )}
-            {a.roteiros_video.length > 0 && (
-              <div>
-                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-foreground/50"><Clapperboard className="h-3.5 w-3.5" /> Roteiros de vídeo</p>
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {a.roteiros_video.map((r, i) => (
-                    <article key={i} className="rounded-lg border border-line p-3 text-sm">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-medium text-foreground">{r.titulo}</p>
-                        <span className="shrink-0 text-[11px] text-foreground/45">{r.duracao}{r.objetivo ? ` · ${r.objetivo}` : ''}</span>
-                      </div>
-                      <p className="mt-1.5 rounded bg-accent/10 px-2 py-1 text-foreground/85"><span className="text-xs font-semibold">Gancho:</span> {r.gancho}</p>
-                      <ol className="mt-2 space-y-1 text-foreground/75">{r.cenas.map((c, k) => <li key={k}>{c}</li>)}</ol>
-                      {r.cta && <p className="mt-2 text-foreground/75"><span className="text-xs font-semibold">CTA:</span> {r.cta}</p>}
-                      {r.legenda && (
-                        <details className="mt-2">
-                          <summary className="cursor-pointer text-xs text-foreground/50">Legenda</summary>
-                          <p className="mt-1 whitespace-pre-wrap text-foreground/70">{r.legenda}</p>
-                        </details>
-                      )}
-                      <div className="mt-2 flex items-center gap-1">
-                        <button type="button" onClick={() => void enviarParaProducao(clienteId, `Reels: ${r.titulo}`, textoRoteiro(r))} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-accent hover:bg-accent/10">
-                          <Send className="h-3 w-3" /> Enviar pra produção
-                        </button>
-                        <BotaoCopiar texto={textoRoteiro(r)} />
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            )}
-            {a.artes.length > 0 && (
-              <div>
-                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-foreground/50"><ImageIcon className="h-3.5 w-3.5" /> Artes</p>
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {a.artes.map((r, i) => (
-                    <article key={i} className="rounded-lg border border-line p-3 text-sm">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-medium text-foreground">{r.titulo}</p>
-                        <span className="shrink-0 rounded bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] uppercase text-foreground/55">{r.formato}</span>
-                      </div>
-                      <ul className="mt-2 space-y-1 text-foreground/80">{r.texto_arte.map((c, k) => <li key={k}>{c}</li>)}</ul>
-                      {r.briefing_visual && <p className="mt-2 text-xs text-foreground/55"><span className="font-semibold">Visual:</span> {r.briefing_visual}</p>}
-                      {r.legenda && (
-                        <details className="mt-2">
-                          <summary className="cursor-pointer text-xs text-foreground/50">Legenda</summary>
-                          <p className="mt-1 whitespace-pre-wrap text-foreground/70">{r.legenda}</p>
-                        </details>
-                      )}
-                      <div className="mt-2 flex items-center gap-1">
-                        <button type="button" onClick={() => void enviarParaProducao(clienteId, `Arte: ${r.titulo}`, textoArte(r))} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-accent hover:bg-accent/10">
-                          <Send className="h-3 w-3" /> Enviar pra produção
-                        </button>
-                        <BotaoCopiar texto={textoArte(r)} />
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
+              )
             )}
           </>
         )}

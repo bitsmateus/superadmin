@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Clapperboard, Image as ImageIcon, Send, Sparkles } from 'lucide-react'
+import { ChevronDown, Clapperboard, Image as ImageIcon, Send, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -79,6 +79,7 @@ const PRIORIDADE_CLASSE: Record<string, string> = {
 export function PainelIaTrafego({ clienteId }: { clienteId: string }) {
   const { analise, carregando, gerando, configurada, gerar } = useAnalise<GcAnaliseTrafegoIa>(clienteId, 'trafego')
   const a = analise?.conteudo
+  const [completa, setCompleta] = React.useState(false)
   return (
     <Painel
       title={<span className="flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-accent" /> Análise da IA</span>}
@@ -103,82 +104,112 @@ export function PainelIaTrafego({ clienteId }: { clienteId: string }) {
           <Vazio>Nenhuma análise ainda. A IA roda sozinha todo dia às 08h pra quem teve gasto na semana, ou clique em Gerar.</Vazio>
         ) : (
           <>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div className="flex items-center gap-3">
               {a.nota != null && (
-                <div className={cn('flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-xl text-white',
+                <div className={cn('flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg text-white',
                   a.nota >= 7 ? 'bg-emerald-500' : a.nota >= 5 ? 'bg-amber-500' : 'bg-danger')}>
-                  <span className="text-2xl font-bold leading-none">{a.nota.toFixed(0)}</span>
-                  <span className="text-[10px] opacity-80">de 10</span>
+                  <span className="text-lg font-bold leading-none">{a.nota.toFixed(0)}</span>
+                  <span className="text-[9px] opacity-80">de 10</span>
                 </div>
               )}
-              <p className="text-sm leading-relaxed text-foreground/85">{a.resumo}</p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {a.pontos_fortes.length > 0 && (
-                <div className="rounded-lg bg-emerald-500/5 p-3">
-                  <p className="mb-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">O que está indo bem</p>
-                  <ul className="list-disc space-y-0.5 pl-4 text-sm text-foreground/80">{a.pontos_fortes.map((p, i) => <li key={i}>{p}</li>)}</ul>
-                </div>
-              )}
-              {a.problemas.length > 0 && (
-                <div className="rounded-lg bg-danger/5 p-3">
-                  <p className="mb-1 text-xs font-semibold text-danger">O que precisa de atenção</p>
-                  <ul className="list-disc space-y-0.5 pl-4 text-sm text-foreground/80">{a.problemas.map((p, i) => <li key={i}>{p}</li>)}</ul>
-                </div>
-              )}
+              <p className="line-clamp-2 text-sm font-medium text-foreground/85">{primeiraFrase(a.resumo)}</p>
             </div>
             {a.sugestoes.length > 0 && (
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/50">O que fazer agora</p>
-                <ol className="space-y-2">
-                  {a.sugestoes.map((s, i) => (
-                    <li key={i} className="rounded-lg border border-line p-3">
-                      <div className="flex items-center gap-2">
-                        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase', PRIORIDADE_CLASSE[s.prioridade])}>{s.prioridade}</span>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-foreground/50">O que fazer</p>
+                <ol className="divide-y divide-line rounded-lg border border-line">
+                  {a.sugestoes.slice(0, 3).map((s, i) => (
+                    <li key={i} className="flex items-start gap-2 px-3 py-2" title={s.detalhe}>
+                      <span className={cn('mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase', PRIORIDADE_CLASSE[s.prioridade])}>{s.prioridade}</span>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">{s.titulo}</p>
+                        {s.dado && <p className="truncate text-xs text-foreground/45">{s.dado}</p>}
                       </div>
-                      <p className="mt-1 text-sm text-foreground/75">{s.detalhe}</p>
-                      {s.dado && <p className="mt-1 text-xs text-foreground/45">Dado: {s.dado}</p>}
                     </li>
                   ))}
                 </ol>
               </div>
             )}
-            {a.ideias_criativos.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/50">Ideias de criativo</p>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {a.ideias_criativos.map((c, i) => (
-                    <div key={i} className="rounded-lg border border-line p-3 text-sm">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-medium text-foreground">{c.titulo}</p>
-                        <span className="shrink-0 rounded bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] uppercase text-foreground/55">{c.formato}</span>
-                      </div>
-                      {c.gancho && <p className="mt-1 text-foreground/75"><span className="text-foreground/45">Gancho:</span> {c.gancho}</p>}
-                      <p className="mt-1 text-foreground/70">{c.descricao}</p>
-                      <button
-                        type="button"
-                        onClick={() => void enviarParaProducao(clienteId, `Criativo: ${c.titulo}`, `Formato: ${c.formato}\nGancho: ${c.gancho}\n\n${c.descricao}\n\n(ideia gerada pela IA a partir dos números do tráfego)`)}
-                        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-                      >
-                        <Send className="h-3 w-3" /> Enviar pra produção
-                      </button>
+            <button
+              type="button"
+              onClick={() => setCompleta((c) => !c)}
+              className="flex items-center gap-1 text-xs font-medium text-foreground/55 hover:text-foreground"
+            >
+              <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !completa && '-rotate-90')} />
+              {completa ? 'Esconder detalhes' : 'Ver análise completa e mensagem pro cliente'}
+            </button>
+            {completa && (
+              <div className="space-y-3">
+                <p className="text-sm leading-relaxed text-foreground/75">{a.resumo}</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {a.pontos_fortes.length > 0 && (
+                    <div className="rounded-lg bg-emerald-500/5 p-3">
+                      <p className="mb-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Indo bem</p>
+                      <ul className="list-disc space-y-0.5 pl-4 text-sm text-foreground/80">{a.pontos_fortes.map((p, i) => <li key={i}>{p}</li>)}</ul>
                     </div>
-                  ))}
+                  )}
+                  {a.problemas.length > 0 && (
+                    <div className="rounded-lg bg-danger/5 p-3">
+                      <p className="mb-1 text-xs font-semibold text-danger">Atenção</p>
+                      <ul className="list-disc space-y-0.5 pl-4 text-sm text-foreground/80">{a.problemas.map((p, i) => <li key={i}>{p}</li>)}</ul>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-            {a.mensagem_cliente && (
-              <div className="rounded-lg border border-dashed border-accent/40 bg-accent/5 p-3">
-                <div className="mb-1 flex items-center justify-between">
-                  <p className="text-xs font-semibold text-foreground/70">Mensagem pronta pro cliente (WhatsApp)</p>
-                  <BotaoCopiar texto={a.mensagem_cliente} />
-                </div>
-                <p className="whitespace-pre-wrap text-sm text-foreground/85">{a.mensagem_cliente}</p>
+                {a.mensagem_cliente && (
+                  <div className="rounded-lg border border-dashed border-accent/40 bg-accent/5 p-3">
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-foreground/70">Mensagem pronta pro cliente (WhatsApp)</p>
+                      <BotaoCopiar texto={a.mensagem_cliente} />
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm text-foreground/85">{a.mensagem_cliente}</p>
+                  </div>
+                )}
               </div>
             )}
           </>
         )}
+      </div>
+    </Painel>
+  )
+}
+
+/** Só a primeira frase do resumo — o resto fica em "ver análise completa". */
+function primeiraFrase(texto: string): string {
+  const m = texto.match(/^.*?[.!?](\s|$)/)
+  return (m ? m[0] : texto).trim()
+}
+
+/**
+ * As ideias de criativo que a análise do TRÁFEGO sugere (a partir dos anúncios que mais converteram).
+ * Moram na aba Conteúdo, junto dos roteiros e artes, e não na análise do tráfego.
+ */
+export function IdeiasCriativoDoTrafego({ clienteId }: { clienteId: string }) {
+  const { analise, carregando } = useAnalise<GcAnaliseTrafegoIa>(clienteId, 'trafego')
+  const ideias = analise?.conteudo?.ideias_criativos ?? []
+  if (carregando || ideias.length === 0) return null
+  return (
+    <Painel
+      title={<span className="flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-accent" /> Ideias de criativo (do tráfego)</span>}
+      action={<span className="text-xs text-foreground/45">análise de {dataHora(analise!.created_at)}</span>}
+    >
+      <div className="grid gap-2 md:grid-cols-2">
+        {ideias.map((c, i) => (
+          <div key={i} className="rounded-lg border border-line p-3 text-sm">
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-medium text-foreground">{c.titulo}</p>
+              <span className="shrink-0 rounded bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] uppercase text-foreground/55">{c.formato}</span>
+            </div>
+            {c.gancho && <p className="mt-1 text-foreground/75"><span className="text-foreground/45">Gancho:</span> {c.gancho}</p>}
+            <p className="mt-1 text-foreground/70">{c.descricao}</p>
+            <button
+              type="button"
+              onClick={() => void enviarParaProducao(clienteId, `Criativo: ${c.titulo}`, `Formato: ${c.formato}\nGancho: ${c.gancho}\n\n${c.descricao}\n\n(ideia gerada pela IA a partir dos números do tráfego)`)}
+              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+            >
+              <Send className="h-3 w-3" /> Enviar pra produção
+            </button>
+          </div>
+        ))}
       </div>
     </Painel>
   )

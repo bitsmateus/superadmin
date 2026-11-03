@@ -7,7 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/utils'
 import { num, useCarregar, Estado, Painel, Vazio } from '@/components/trafego/format'
 import { quandoFoi } from '@/components/gestaoClientes/AbaTrafego'
-import { PainelIaConteudo } from '@/components/gestaoClientes/IaDoCliente'
+import { IdeiasCriativoDoTrafego, PainelIaConteudo } from '@/components/gestaoClientes/IaDoCliente'
 import { gcIa, type GcPostInstagram } from '@/services/gcTrafego'
 
 type Ordem = 'alcance' | 'engajamento' | 'salvos' | 'compartilhamentos' | 'recentes'
@@ -266,6 +266,7 @@ export function AbaConteudo({ clienteId }: { clienteId: string }) {
       </Estado>
 
       <PainelIaConteudo clienteId={clienteId} />
+      <IdeiasCriativoDoTrafego clienteId={clienteId} />
 
       <ModalInstagram aberto={modal} onFechar={() => setModal(false)} clienteId={clienteId} onMudou={recarregar} />
     </div>

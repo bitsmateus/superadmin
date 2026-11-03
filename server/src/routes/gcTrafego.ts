@@ -139,7 +139,7 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
         totaisDoCliente(id, ant.de, ant.ate),
         serieDoCliente(id, de, ate),
         campanhasDoCliente(id, de, ate),
-        anunciosDoCliente(id, de, ate, 12),
+        anunciosDoCliente(id, de, ate, 30),
         query(
           `SELECT id, regra, nivel, mensagem, created_at FROM gc_trafego_alertas
            WHERE gc_cliente_id = $1 AND resolved_at IS NULL

@@ -119,12 +119,14 @@ Regras:
 - Cite os números do JSON que sustentam cada ponto. Nunca invente número, campanha ou criativo.
 - "Resultado" = leads + conversas + compras. Julgue por custo por resultado, volume e tendência; compare com as metas e o benchmark quando houver.
 - Com menos de R$ 300 gastos ou menos de 15 resultados, diga que está em teste e o que observar.
-- No máximo 5 sugestões, da mais pra menos importante. Seja específico (qual campanha/criativo, quanto mudar).
+- SEJA CURTO E DIRETO: a tela já mostra a tabela de campanhas e de anúncios com todos os números, então não repita números à toa. A primeira frase do resumo é a manchete (ex.: "Campanha de Alcance gastando sem gerar conversa — trocar pra Mensagens.").
+- Resumo: no máximo 2 frases. Pontos fortes e problemas: no máximo 3 cada, uma frase curta cada (até ~15 palavras).
+- No máximo 3 sugestões, da mais pra menos importante. "titulo" é a ação em até 10 palavras (qual campanha/criativo, quanto mudar); "detalhe" é uma frase; "dado" é só o número-chave (ex.: "R$ 138 gastos, 0 resultados").
 - Ideias de criativo: baseie nos anúncios que mais converteram e nos posts orgânicos com mais alcance.
 - "mensagem_cliente": texto curto pra mandar no WhatsApp do cliente (tom próximo, sem jargão, 4 a 8 linhas, pode usar emoji com moderação), com o resumo do período e o próximo passo. Nunca prometa resultado.
 - Se não houver dados de tráfego, diga isso no resumo e foque no que falta configurar.
 Responda SOMENTE com JSON válido, sem markdown, neste formato:
-{"nota":0-10,"resumo":"3 a 5 frases","pontos_fortes":["..."],"problemas":["..."],"sugestoes":[{"prioridade":"alta|media|baixa","titulo":"curto","detalhe":"o que fazer e por quê","dado":"números"}],"ideias_criativos":[{"titulo":"...","formato":"video|imagem|carrossel","gancho":"primeira frase/cena","descricao":"como é o criativo"}],"mensagem_cliente":"..."}`;
+{"nota":0-10,"resumo":"1 a 2 frases","pontos_fortes":["..."],"problemas":["..."],"sugestoes":[{"prioridade":"alta|media|baixa","titulo":"curto","detalhe":"o que fazer e por quê","dado":"números"}],"ideias_criativos":[{"titulo":"...","formato":"video|imagem|carrossel","gancho":"primeira frase/cena","descricao":"como é o criativo"}],"mensagem_cliente":"..."}`;
 
 export interface AnaliseTrafego {
   nota: number | null; resumo: string; pontos_fortes: string[]; problemas: string[];

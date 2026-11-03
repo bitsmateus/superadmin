@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { brl, num, useCarregar, Estado, Painel, Vazio, diaCurto } from '@/components/trafego/format'
 import { PainelIaTrafego } from '@/components/gestaoClientes/IaDoCliente'
 import {
-  gcTrafego, type GcAlertaTrafego, type GcBenchmark, type GcContaTrafego, type GcNivelAlerta, type GcTotaisTrafego,
+  gcTrafego, type GcAlertaTrafego, type GcBenchmark, type GcCampanhaTrafego, type GcContaTrafego, type GcNivelAlerta, type GcTotaisTrafego,
 } from '@/services/gcTrafego'
 
 /** Data local (YYYY-MM-DD) de n dias atrás. */
@@ -165,6 +165,51 @@ function GraficoDiario({ serie }: { serie: { dia: string; gasto: number; resulta
 const STATUS_META: Record<string, string> = {
   ACTIVE: 'Ativa', PAUSED: 'Pausada', CAMPAIGN_PAUSED: 'Campanha pausada', ADSET_PAUSED: 'Conjunto pausado',
   ARCHIVED: 'Arquivada', DELETED: 'Excluída', WITH_ISSUES: 'Com problema', DISAPPROVED: 'Reprovado', IN_PROCESS: 'Em análise',
+}
+
+/**
+ * O objetivo da campanha no Meta em português, com cor. A cor diz se o tipo gera resultado (lead,
+ * conversa, venda) ou só entrega (alcance, engajamento, tráfego) — o que explica "0 resultados".
+ */
+export function tipoDeCampanha(objetivo: string): { nome: string; classe: string; ajuda: string; geraResultado: boolean } {
+  const o = (objetivo || '').toUpperCase()
+  const resultado = 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+  const entrega = 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
+  if (/MESSAGES/.test(o)) return { nome: 'Mensagens', classe: resultado, ajuda: 'Gera conversas no WhatsApp/Direct', geraResultado: true }
+  if (/LEAD/.test(o)) return { nome: 'Cadastros', classe: resultado, ajuda: 'Gera leads (formulário)', geraResultado: true }
+  if (/SALES|CONVERSIONS|PRODUCT_CATALOG/.test(o)) return { nome: 'Vendas', classe: resultado, ajuda: 'Otimiza pra compra/conversão', geraResultado: true }
+  if (/ENGAGEMENT|POST_ENGAGEMENT|PAGE_LIKES|VIDEO_VIEWS/.test(o)) return { nome: 'Engajamento', classe: entrega, ajuda: 'Curtidas, visualizações, interações — pode gerar conversa se o destino for WhatsApp', geraResultado: false }
+  if (/TRAFFIC|LINK_CLICKS/.test(o)) return { nome: 'Tráfego', classe: entrega, ajuda: 'Cliques pro site/link — não otimiza pra lead', geraResultado: false }
+  if (/AWARENESS|REACH|BRAND/.test(o)) return { nome: 'Alcance', classe: entrega, ajuda: 'Só entrega impressões — não gera lead, conversa nem venda', geraResultado: false }
+  if (/APP/.test(o)) return { nome: 'App', classe: entrega, ajuda: 'Instalações de app', geraResultado: false }
+  return { nome: o ? o.replace(/^OUTCOME_/, '').toLowerCase() : '—', classe: 'bg-elevate/[0.06] text-foreground/60', ajuda: objetivo, geraResultado: false }
+}
+
+/** "Que tipo de campanha está rodando": a verba do período dividida por tipo, numa linha. */
+function TiposDeCampanha({ campanhas }: { campanhas: GcCampanhaTrafego[] }) {
+  const total = campanhas.reduce((s, c) => s + c.gasto, 0)
+  const porTipo = new Map<string, { tipo: ReturnType<typeof tipoDeCampanha>; gasto: number; resultados: number; qtd: number }>()
+  for (const c of campanhas) {
+    const tipo = tipoDeCampanha(c.objetivo)
+    const g = porTipo.get(tipo.nome) ?? { tipo, gasto: 0, resultados: 0, qtd: 0 }
+    g.gasto += c.gasto
+    g.resultados += c.resultados
+    g.qtd += 1
+    porTipo.set(tipo.nome, g)
+  }
+  const grupos = [...porTipo.values()].sort((a, b) => b.gasto - a.gasto)
+  return (
+    <div className="mb-3 flex flex-wrap gap-2">
+      {grupos.map((g) => (
+        <div key={g.tipo.nome} className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-xs" title={g.tipo.ajuda}>
+          <span className={cn('rounded-full px-2 py-0.5 font-medium', g.tipo.classe)}>{g.tipo.nome}</span>
+          <span className="tabular-nums text-foreground/70">
+            {total > 0 ? `${Math.round((g.gasto / total) * 100)}% da verba` : '—'} · {g.qtd} campanha{g.qtd > 1 ? 's' : ''} · {num(g.resultados)} resultado{g.resultados === 1 ? '' : 's'}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function StatusMeta({ status }: { status: string }) {
@@ -473,35 +518,107 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
               </Painel>
             </div>
 
-            <PainelIaTrafego clienteId={clienteId} />
-
             <Painel title="Campanhas no período">
               {dados.campanhas.length === 0 ? (
                 <Vazio>Nenhuma campanha gastou no período.</Vazio>
               ) : (
+                <>
+                  <TiposDeCampanha campanhas={dados.campanhas} />
+                  <div className="-mx-4 overflow-x-auto">
+                    <table className="w-full min-w-[900px] text-sm">
+                      <thead>
+                        <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-foreground/45">
+                          <th className="px-4 py-2 font-medium">Campanha</th>
+                          <th className="px-2 py-2 font-medium">Tipo</th>
+                          <th className="px-2 py-2 font-medium">Status</th>
+                          <th className="px-2 py-2 text-right font-medium">Investido</th>
+                          <th className="px-2 py-2 text-right font-medium">Impressões</th>
+                          <th className="px-2 py-2 text-right font-medium">Cliques</th>
+                          <th className="px-2 py-2 text-right font-medium">CTR</th>
+                          <th className="px-2 py-2 text-right font-medium">Resultados</th>
+                          <th className="px-2 py-2 text-right font-medium">Custo/result.</th>
+                          <th className="px-4 py-2 text-right font-medium">Orç./dia</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dados.campanhas.map((c) => {
+                          const tipo = tipoDeCampanha(c.objetivo)
+                          return (
+                            <tr key={c.id} className="border-b border-line/60 last:border-0">
+                              <td className="max-w-[300px] truncate px-4 py-2 text-foreground" title={c.nome}>{c.nome}</td>
+                              <td className="px-2 py-2">
+                                <span className={cn('whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium', tipo.classe)} title={tipo.ajuda}>
+                                  {tipo.nome}
+                                </span>
+                              </td>
+                              <td className="px-2 py-2"><StatusMeta status={c.status} /></td>
+                              <td className="px-2 py-2 text-right tabular-nums">{brl(c.gasto)}</td>
+                              <td className="px-2 py-2 text-right tabular-nums">{num(c.impressoes)}</td>
+                              <td className="px-2 py-2 text-right tabular-nums">{num(c.cliques)}</td>
+                              <td className="px-2 py-2 text-right tabular-nums">{pct(c.ctr)}</td>
+                              <td className="px-2 py-2 text-right font-medium tabular-nums">{num(c.resultados)}</td>
+                              <td className="px-2 py-2 text-right tabular-nums">{brl(c.custoResultado)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums text-foreground/60">{brl(c.orcamentoDia)}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </Painel>
+
+            <Painel title="Anúncios no período">
+              {dados.anuncios.length === 0 ? (
+                <Vazio>Nenhum anúncio gastou no período.</Vazio>
+              ) : (
                 <div className="-mx-4 overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-sm">
+                  <table className="w-full min-w-[900px] text-sm">
                     <thead>
                       <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-foreground/45">
-                        <th className="px-4 py-2 font-medium">Campanha</th>
-                        <th className="px-2 py-2 font-medium">Status</th>
-                        <th className="px-2 py-2 text-right font-medium">Investimento</th>
+                        <th className="px-4 py-2 font-medium">Anúncio</th>
+                        <th className="px-2 py-2 text-right font-medium">Investido</th>
+                        <th className="px-2 py-2 text-right font-medium">Impressões</th>
+                        <th className="px-2 py-2 text-right font-medium">Cliques</th>
+                        <th className="px-2 py-2 text-right font-medium">CTR</th>
                         <th className="px-2 py-2 text-right font-medium">Resultados</th>
                         <th className="px-2 py-2 text-right font-medium">Custo/result.</th>
-                        <th className="px-2 py-2 text-right font-medium">CTR</th>
-                        <th className="px-4 py-2 text-right font-medium">Orç./dia</th>
+                        <th className="px-4 py-2 text-right font-medium">Frequência</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {dados.campanhas.map((c) => (
-                        <tr key={c.id} className="border-b border-line/60 last:border-0">
-                          <td className="max-w-[320px] truncate px-4 py-2 text-foreground" title={c.nome}>{c.nome}</td>
-                          <td className="px-2 py-2"><StatusMeta status={c.status} /></td>
-                          <td className="px-2 py-2 text-right tabular-nums">{brl(c.gasto)}</td>
-                          <td className="px-2 py-2 text-right tabular-nums">{num(c.resultados)}</td>
-                          <td className="px-2 py-2 text-right tabular-nums">{brl(c.custoResultado)}</td>
-                          <td className="px-2 py-2 text-right tabular-nums">{pct(c.ctr)}</td>
-                          <td className="px-4 py-2 text-right tabular-nums text-foreground/60">{brl(c.orcamentoDia)}</td>
+                      {dados.anuncios.map((a) => (
+                        <tr key={a.id} className="border-b border-line/60 last:border-0">
+                          <td className="px-4 py-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-elevate/[0.05]">
+                                {a.thumbnail && <img src={a.thumbnail} alt="" loading="lazy" className="h-full w-full object-cover" />}
+                              </div>
+                              <div className="min-w-0 max-w-[280px]">
+                                <p className="flex items-center gap-1.5 truncate font-medium text-foreground" title={a.nome}>
+                                  <span className="truncate">{a.nome}</span>
+                                  {a.previewUrl && (
+                                    <a href={a.previewUrl} target="_blank" rel="noreferrer" title="Ver anúncio" className="shrink-0 text-foreground/35 hover:text-foreground">
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  )}
+                                </p>
+                                <p className="truncate text-[11px] text-foreground/45" title={a.campanha}>
+                                  {a.formato ? `${a.formato.replace(/_/g, ' ').toLowerCase()} · ` : ''}{a.campanha}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">{brl(a.gasto)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{num(a.impressoes)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{num(a.cliques)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{pct(a.ctr)}</td>
+                          <td className="px-2 py-2 text-right font-medium tabular-nums">{num(a.resultados)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{brl(a.custoResultado)}</td>
+                          <td className={cn('px-4 py-2 text-right tabular-nums', a.frequencia != null && a.frequencia >= 3.5 && 'font-medium text-amber-600')}>
+                            {a.frequencia == null ? '—' : a.frequencia.toFixed(1).replace('.', ',')}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -510,49 +627,7 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
               )}
             </Painel>
 
-            <Painel title="Criativos que mais receberam verba">
-              {dados.anuncios.length === 0 ? (
-                <Vazio>Nenhum anúncio gastou no período.</Vazio>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {dados.anuncios.map((a) => (
-                    <article key={a.id} className="overflow-hidden rounded-lg border border-line">
-                      <div className="relative aspect-square bg-elevate/[0.04]">
-                        {a.thumbnail ? (
-                          <img src={a.thumbnail} alt="" loading="lazy" className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-xs text-foreground/35">sem miniatura</div>
-                        )}
-                        {a.formato && (
-                          <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">{a.formato.replace(/_/g, ' ')}</span>
-                        )}
-                        {a.frequencia != null && a.frequencia >= 3.5 && (
-                          <span className="absolute right-2 top-2 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-medium text-white">saturando</span>
-                        )}
-                      </div>
-                      <div className="space-y-1.5 p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="line-clamp-2 text-sm font-medium text-foreground" title={a.nome}>{a.nome}</p>
-                          {a.previewUrl && (
-                            <a href={a.previewUrl} target="_blank" rel="noreferrer" title="Ver anúncio" className="text-foreground/40 hover:text-foreground">
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                          )}
-                        </div>
-                        <p className="truncate text-[11px] text-foreground/45" title={a.campanha}>{a.campanha}</p>
-                        <dl className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs">
-                          <dt className="text-foreground/50">Investido</dt><dd className="text-right tabular-nums">{brl(a.gasto)}</dd>
-                          <dt className="text-foreground/50">Resultados</dt><dd className="text-right tabular-nums">{num(a.resultados)}</dd>
-                          <dt className="text-foreground/50">Custo/result.</dt><dd className="text-right tabular-nums">{brl(a.custoResultado)}</dd>
-                          <dt className="text-foreground/50">CTR</dt><dd className="text-right tabular-nums">{pct(a.ctr)}</dd>
-                          <dt className="text-foreground/50">Frequência</dt><dd className="text-right tabular-nums">{a.frequencia == null ? '—' : a.frequencia.toFixed(1).replace('.', ',')}</dd>
-                        </dl>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </Painel>
+            <PainelIaTrafego clienteId={clienteId} />
           </>
         ) : null}
       </Estado>

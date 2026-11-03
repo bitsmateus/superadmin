@@ -2317,7 +2317,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       [req.params.id]
     );
     const producao = await query(
-      `SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome,
+      `SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome, d.anexos,
               to_char(d.prazo, 'YYYY-MM-DD') AS prazo, d.created_at, d.updated_at
        FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id
        WHERE d.gc_cliente_id = $1 ORDER BY d.created_at DESC`,
@@ -2358,7 +2358,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   });
 
   const SELECT_PRODUCAO = `
-    SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome,
+    SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome, d.anexos,
            to_char(d.prazo, 'YYYY-MM-DD') AS prazo, d.created_at, d.updated_at
     FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id`;
 
@@ -2398,6 +2398,46 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
     return reply.status(204).send();
   });
+
+  // POST /api/gc/social/producao/:id/anexos — anexa UM arquivo (imagem de referência da copy). Um por
+  // chamada, somado no banco: mandar a lista inteira a cada foto estouraria o limite do corpo.
+  app.post<{ Params: { id: string }; Body: { name?: string; type?: string; size?: number; dataUrl?: string } }>(
+    '/api/gc/social/producao/:id/anexos',
+    autenticado,
+    async (req, reply) => {
+      const b = req.body ?? {};
+      const dataUrl = String(b.dataUrl ?? '');
+      if (!/^data:[\w.+-]+\/[\w.+-]+;base64,/.test(dataUrl)) return reply.status(400).send({ message: 'Arquivo inválido' });
+      if (dataUrl.length > 7 * 1024 * 1024) return reply.status(400).send({ message: 'Arquivo passa de 5MB' });
+      const anexo = {
+        id: crypto.randomUUID(), name: String(b.name ?? 'arquivo').slice(0, 200), type: String(b.type ?? '').slice(0, 100),
+        size: Number(b.size) || 0, dataUrl,
+      };
+      const r = await queryOne(
+        `UPDATE gc_social_producao SET anexos = anexos || $2::jsonb, updated_at = NOW()
+         WHERE id = $1 AND jsonb_array_length(anexos) < 30 RETURNING id`,
+        [req.params.id, JSON.stringify([anexo])]
+      );
+      if (!r) return reply.status(404).send({ message: 'Demanda não encontrada ou com 30 anexos' });
+      return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
+    }
+  );
+
+  app.delete<{ Params: { id: string; anexo: string } }>(
+    '/api/gc/social/producao/:id/anexos/:anexo',
+    autenticado,
+    async (req, reply) => {
+      const r = await queryOne(
+        `UPDATE gc_social_producao
+         SET anexos = COALESCE((SELECT jsonb_agg(a) FROM jsonb_array_elements(anexos) a WHERE a->>'id' <> $2), '[]'::jsonb),
+             updated_at = NOW()
+         WHERE id = $1 RETURNING id`,
+        [req.params.id, req.params.anexo]
+      );
+      if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
+      return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
+    }
+  );
 
   // ------------------------------------------------------------------ briefing do cliente
   // Dados do cliente (site, Instagram, campos extras) e as perguntas e respostas do briefing.

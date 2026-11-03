@@ -555,6 +555,8 @@ const TABELAS = [
   `ALTER TABLE gc_social_materiais ADD COLUMN IF NOT EXISTS enviado_pelo_cliente BOOLEAN NOT NULL DEFAULT false`,
   `CREATE INDEX IF NOT EXISTS gc_social_materiais_cliente_idx ON gc_social_materiais (gc_cliente_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS gc_social_producao_cliente_idx ON gc_social_producao (gc_cliente_id, status)`,
+  // Imagens de referência de cada copy/arte: [{ id, name, type, size, dataUrl }], mesmo formato dos anexos das notas.
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS anexos JSONB NOT NULL DEFAULT '[]'`,
   // ---------------------------------------------------------------- briefing do cliente
   `CREATE TABLE IF NOT EXISTS gc_briefing (
     gc_cliente_id UUID PRIMARY KEY REFERENCES gc_clientes(id) ON DELETE CASCADE,

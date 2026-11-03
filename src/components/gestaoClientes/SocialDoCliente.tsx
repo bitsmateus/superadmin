@@ -112,13 +112,144 @@ function CartaoProducao({ p, onAbrir, sobreposto }: { p: GcSocialProducao; onAbr
           <UserRound className="h-3 w-3 shrink-0" />
           <span className="truncate">{p.editor_nome ?? 'Sem editor'}</span>
         </span>
-        {p.prazo && (
-          <span className={cn('flex shrink-0 items-center gap-1 text-foreground/45', atrasada && 'font-medium text-danger')}>
-            <CalendarClock className="h-3 w-3" /> {dataBr(p.prazo).slice(0, 5)}
-          </span>
-        )}
+        <span className="flex shrink-0 items-center gap-2">
+          {(p.anexos?.length ?? 0) > 0 && (
+            <span className="flex items-center gap-0.5 text-foreground/45" title="Imagens de referência">
+              <Paperclip className="h-3 w-3" /> {p.anexos!.length}
+            </span>
+          )}
+          {p.prazo && (
+            <span className={cn('flex items-center gap-1 text-foreground/45', atrasada && 'font-medium text-danger')}>
+              <CalendarClock className="h-3 w-3" /> {dataBr(p.prazo).slice(0, 5)}
+            </span>
+          )}
+        </span>
       </div>
     </button>
+  )
+}
+
+/**
+ * Imagens de referência de UMA demanda (a copy e as fotos que ela usa ficam juntas). Anexa pelo botão,
+ * arrastando arquivos ou colando um print (Ctrl+V) com a janela aberta. Cada arquivo sobe sozinho.
+ */
+function ReferenciasDaArte({ demanda, onMudou }: { demanda: GcSocialProducao; onMudou: (d: GcSocialProducao) => void }) {
+  const [enviando, setEnviando] = React.useState(false)
+  const [ampliada, setAmpliada] = React.useState<string | null>(null)
+  const input = React.useRef<HTMLInputElement>(null)
+  const anexos = demanda.anexos ?? []
+
+  const enviar = React.useCallback(async (arquivos: File[]) => {
+    if (arquivos.length === 0) return
+    setEnviando(true)
+    try {
+      let atual: GcSocialProducao | null = null
+      for (const arquivo of arquivos) {
+        if (arquivo.size > MAX_BYTES) {
+          toast.error(`"${arquivo.name}" passa de 5MB — use um link do Drive pra arquivos grandes`)
+          continue
+        }
+        const { name, type, size, dataUrl } = await lerArquivo(arquivo)
+        atual = await gestaoClientes.anexarNaProducao(demanda.id, { name, type, size, dataUrl })
+      }
+      if (atual) onMudou(atual)
+    } catch (err) {
+      toast.error('Falha ao anexar: ' + (err as Error).message)
+    } finally {
+      setEnviando(false)
+    }
+  }, [demanda.id, onMudou])
+
+  // Colar um print com a janela aberta anexa direto.
+  React.useEffect(() => {
+    const aoColar = (e: ClipboardEvent) => {
+      const arquivos = Array.from(e.clipboardData?.files ?? [])
+      if (arquivos.length === 0) return
+      e.preventDefault()
+      void enviar(arquivos)
+    }
+    window.addEventListener('paste', aoColar)
+    return () => window.removeEventListener('paste', aoColar)
+  }, [enviar])
+
+  const remover = async (anexoId: string) => {
+    if (!window.confirm('Remover esta imagem?')) return
+    try {
+      onMudou(await gestaoClientes.removerAnexoDaProducao(demanda.id, anexoId))
+    } catch (err) {
+      toast.error('Falha ao remover: ' + (err as Error).message)
+    }
+  }
+
+  return (
+    <div
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault()
+        void enviar(Array.from(e.dataTransfer.files))
+      }}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <Paperclip className="h-4 w-4 text-accent" /> Imagens de referência
+          {anexos.length > 0 && <span className="text-xs font-normal text-foreground/45">{anexos.length}</span>}
+        </p>
+        <Button size="sm" variant="secondary" loading={enviando} leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={() => input.current?.click()}>
+          Adicionar arquivos
+        </Button>
+        <input
+          ref={input}
+          type="file"
+          multiple
+          accept="image/*,video/*,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            void enviar(Array.from(e.target.files ?? []))
+            e.target.value = ''
+          }}
+        />
+      </div>
+      {anexos.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-xs text-foreground/40">
+          Arraste as imagens aqui, cole um print (Ctrl+V) ou clique em Adicionar arquivos.
+        </p>
+      ) : (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {anexos.map((a) => (
+            <div key={a.id} className="group relative overflow-hidden rounded-lg border border-line">
+              {a.type.startsWith('image/') ? (
+                <button type="button" onClick={() => setAmpliada(a.dataUrl)} className="block w-full" title={a.name}>
+                  <img src={a.dataUrl} alt={a.name} className="h-24 w-full object-cover" />
+                </button>
+              ) : (
+                <a href={a.dataUrl} download={a.name} title={`Baixar ${a.name}`} className="flex h-24 w-full flex-col items-center justify-center gap-1 bg-elevate/[0.03] px-2 text-foreground/45">
+                  <FileText className="h-6 w-6" />
+                  <span className="w-full truncate text-center text-[10px]">{a.name}</span>
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => void remover(a.id)}
+                className="absolute right-1 top-1 rounded-md bg-black/55 p-1 text-white opacity-0 transition-opacity hover:bg-danger group-hover:opacity-100 max-sm:opacity-100"
+                aria-label="Remover imagem"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {ampliada && (
+        <button
+          type="button"
+          onClick={() => setAmpliada(null)}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+          aria-label="Fechar imagem"
+        >
+          <img src={ampliada} alt="" className="max-h-full max-w-full object-contain" />
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -536,12 +667,19 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
               </span>
             </div>
             {vendo.descricao.trim() ? (
-              <div className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-elevate/[0.02] p-4 text-sm leading-relaxed text-foreground/85">
+              <div className="max-h-[40vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-elevate/[0.02] p-4 text-sm leading-relaxed text-foreground/85">
                 {vendo.descricao}
               </div>
             ) : (
               <p className="text-sm text-foreground/45">Sem detalhes da arte. Clique em Editar pra escrever.</p>
             )}
+            <ReferenciasDaArte
+              demanda={vendo}
+              onMudou={(atualizada) => {
+                setVendo(atualizada)
+                setProducao((lista) => lista.map((p) => (p.id === atualizada.id ? atualizada : p)))
+              }}
+            />
           </div>
         )}
       </Modal>

@@ -175,6 +175,8 @@ export interface GcSocialProducao {
   editor_id: string | null
   editor_nome: string | null
   prazo: string | null
+  /** Imagens de referência da copy/arte. */
+  anexos?: { id: string; name: string; type: string; size: number; dataUrl: string }[]
   created_at: string
 }
 
@@ -1033,6 +1035,10 @@ export const gestaoClientes = {
     titulo: string; descricao: string; status: GcSocialStatus; editor_id: string | null; prazo: string | null
   }>) => api.patch<GcSocialProducao>(`/api/gc/social/producao/${id}`, dados),
   excluirSocialProducao: (id: string) => api.delete(`/api/gc/social/producao/${id}`),
+  anexarNaProducao: (id: string, anexo: { name: string; type: string; size: number; dataUrl: string }) =>
+    api.post<GcSocialProducao>(`/api/gc/social/producao/${id}/anexos`, anexo),
+  removerAnexoDaProducao: (id: string, anexoId: string) =>
+    api.delete<GcSocialProducao>(`/api/gc/social/producao/${id}/anexos/${anexoId}`),
 
   // Kanban de demandas
   demandasColunas: () => api.get<GcDemandaColuna[]>('/api/gc/demandas/colunas'),

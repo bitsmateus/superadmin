@@ -91,19 +91,36 @@ function resumoDaArte(descricao: string): string {
  * Card compacto: título, uma linha do que é a arte, editor e prazo. Clicar abre tudo (os detalhes
  * inteiros e o texto da arte); arrastar move de coluna.
  */
-function CartaoProducao({ p, onAbrir, sobreposto }: { p: GcSocialProducao; onAbrir?: () => void; sobreposto?: boolean }) {
+function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
+  p: GcSocialProducao; onAbrir?: () => void; onExcluir?: () => void; sobreposto?: boolean
+}) {
   const atrasada = p.prazo && p.prazo < hojeISO() && p.status !== 'pronto'
   const resumo = resumoDaArte(p.descricao)
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onAbrir}
+      onKeyDown={(e) => { if (e.key === 'Enter') onAbrir?.() }}
       className={cn(
-        'block w-full cursor-grab rounded-xl border border-line bg-surface px-3 py-2 text-left shadow-sm transition-colors hover:border-accent/40 active:cursor-grabbing',
+        'group relative block w-full cursor-grab rounded-xl border border-line bg-surface px-3 py-2 text-left shadow-sm transition-colors hover:border-accent/40 active:cursor-grabbing',
         sobreposto && 'shadow-lg ring-1 ring-accent/30',
       )}
     >
-      <p className={cn('line-clamp-2 text-[13px] font-medium leading-snug text-foreground', p.status === 'pronto' && 'text-foreground/50 line-through')}>
+      {onExcluir && (
+        <button
+          type="button"
+          // Não deixa o clique na lixeira virar arrasto nem abrir o card.
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onExcluir() }}
+          className="absolute right-1.5 top-1.5 rounded-md p-1 text-foreground/30 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100 max-sm:opacity-100"
+          aria-label="Excluir demanda"
+          title="Excluir"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+      <p className={cn('line-clamp-2 pr-5 text-[13px] font-medium leading-snug text-foreground', p.status === 'pronto' && 'text-foreground/50 line-through')}>
         {p.titulo}
       </p>
       {resumo && resumo !== p.titulo && <p className="mt-0.5 truncate text-[11px] text-foreground/45">{resumo}</p>}
@@ -125,7 +142,7 @@ function CartaoProducao({ p, onAbrir, sobreposto }: { p: GcSocialProducao; onAbr
           )}
         </span>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -329,6 +346,20 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
     if (destino) void mover(String(e.active.id), destino)
   }
 
+  /** Some da tela na hora; se o servidor recusar, recarrega o que vale. */
+  const excluir = async (p: GcSocialProducao) => {
+    if (!window.confirm(`Excluir "${p.titulo}"? Os anexos vão junto.`)) return
+    setVendo((v) => (v?.id === p.id ? null : v))
+    setProducao((lista) => lista.filter((x) => x.id !== p.id))
+    try {
+      await gestaoClientes.excluirSocialProducao(p.id)
+      toast.success('Demanda excluída')
+    } catch (err) {
+      toast.error('Falha ao excluir: ' + (err as Error).message)
+      await carregar()
+    }
+  }
+
   const editar = (p: GcSocialProducao) => {
     setVendo(null)
     setForm({ id: p.id, titulo: p.titulo, descricao: p.descricao, status: p.status, editor: p.editor_id ?? '', prazo: p.prazo ?? '' })
@@ -435,7 +466,7 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
                   )}
                   {itens.map((p) => (
                     <CartaoArrastavel key={p.id} id={p.id}>
-                      <CartaoProducao p={p} onAbrir={() => setVendo(p)} />
+                      <CartaoProducao p={p} onAbrir={() => setVendo(p)} onExcluir={() => void excluir(p)} />
                     </CartaoArrastavel>
                   ))}
                 </ColunaProducao>
@@ -627,7 +658,15 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
         title={vendo?.titulo}
         footer={
           vendo && (
-            <div className="flex justify-end gap-2">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                leftIcon={<Trash2 className="h-4 w-4" />}
+                className="mr-auto text-danger hover:bg-danger/10"
+                onClick={() => void excluir(vendo)}
+              >
+                Excluir
+              </Button>
               <Button variant="ghost" onClick={() => setVendo(null)}>
                 Fechar
               </Button>

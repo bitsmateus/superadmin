@@ -31,6 +31,7 @@ import {
   PanelLeftClose,
   Plus,
   Radio,
+  Newspaper,
   RotateCcw,
   Settings,
   ShieldCheck,
@@ -81,9 +82,10 @@ const suporteItems = [
   { to: '/agenda', label: 'Agenda', icon: CalendarDays },
   { to: '/canais', label: 'Canais', icon: Radio },
   { to: '/tenants', label: 'Tenants', icon: Building2 },
+  { to: '/comunicados', label: 'Comunicados', icon: Newspaper },
 ]
 
-const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/agenda', '/canais', '/tenants', '/nps', '/risco-churn', '/relatorios']
+const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/agenda', '/canais', '/tenants', '/comunicados', '/nps', '/risco-churn', '/relatorios']
 
 /** Intercala cópias ("Duplicar") logo depois do item original de cada rota. A cópia herda só o
  * ícone; o nome, o id e a ROTA são próprios dela: `/visao/<id>`, que abre a mesma tela do original
@@ -304,6 +306,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       // exato (/comercial/<id>) nunca bate igualzinho num dicionário fixo.
       if (to.startsWith('/comercial')) return menuAllowed.has('comercial')
       if (to === '/agenda') return acessoAAgenda(menuAllowed)
+      if (to === '/comunicados') return menuAllowed.has('comunicados')
       // O grupo NX DIGITAL aparece se QUALQUER aba dele está liberada; cada aba, pela chave dela.
       if (to === '/clientesnxdigital') return [...menuAllowed].some((k) => k.startsWith('nxdigital_'))
       if (to === '/comercial-dashboard') return menuAllowed.has('comercial_dashboard')
@@ -607,7 +610,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
               <NavLink
                 key={item.pageId ?? item.to}
                 to={item.to}
-                end={'end' in item ? item.end : undefined}
+                end={'end' in item ? (item.end as boolean | undefined) : undefined}
                 onClick={closeOnMobile}
                 {...drag.handlers}
                 className={({ isActive }) =>

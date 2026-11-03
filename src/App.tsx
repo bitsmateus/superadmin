@@ -116,6 +116,12 @@ const RelatoriosPage = React.lazy(() =>
 const SupportWorkspacePage = React.lazy(() =>
   import('./pages/SupportWorkspacePage').then((m) => ({ default: m.SupportWorkspacePage })),
 )
+const ComunicadosPage = React.lazy(() =>
+  import('./pages/ComunicadosPage').then((m) => ({ default: m.ComunicadosPage })),
+)
+const NovidadesPublicPage = React.lazy(() =>
+  import('./pages/NovidadesPublicPage').then((m) => ({ default: m.NovidadesPublicPage })),
+)
 const AuditLogPage = React.lazy(() =>
   import('./pages/AuditLogPage').then((m) => ({ default: m.AuditLogPage })),
 )
@@ -206,6 +212,8 @@ export default function App() {
         <Route path="/r/:token" element={<RelatorioPublicoPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />
         <Route path="/nps/:token" element={<NpsPublicPage />} />
+        {/* Changelog público (sem login) — o que foi publicado no menu Comunicados. */}
+        <Route path="/novidades" element={<NovidadesPublicPage />} />
         {/* Portal do cliente de tráfego (módulo Clientes NX Digital) — só relatórios publicados. */}
         <Route path="/cliente/:token" element={<PortalClientePage />} />
 
@@ -219,6 +227,7 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/canais" element={<CanaisPage />} />
+          <Route path="/comunicados" element={<ComunicadosPage />} />
           <Route path="/comercial" element={<Navigate to="/comercial/novos_leads" replace />} />
           <Route path="/comercial-dashboard" element={<ComercialDashboardPage />} />
           <Route path="/comercial-dashboard-mensal" element={<PainelMensalPage />} />

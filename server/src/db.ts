@@ -2171,6 +2171,53 @@ END; $$`);
     if (r.rowCount) console.log(`[db] rotina: ${r.rowCount} bloco(s) iniciais em ${pagina}`);
   }
 
+  // Comunicados (menu "Comunicados"): changelog público em /novidades + disparo por template da API
+  // Oficial pro número de cada cliente. Ver server/src/lib/comunicados.ts.
+  await pool.query(`CREATE TABLE IF NOT EXISTS comunicado_posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    titulo TEXT NOT NULL,
+    corpo TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT 'novidade',
+    publicado_em TIMESTAMPTZ,
+    criado_por TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  // A base de contatos é montada na hora a partir de clients (notificador de Canais + telefone da Visão
+  // Geral). Aqui só fica o que não dá pra tirar de lá: o contato avulso (manual) e a marca de fora do disparo.
+  await pool.query(`CREATE TABLE IF NOT EXISTS comunicado_contatos (
+    numero TEXT PRIMARY KEY,
+    nome TEXT NOT NULL DEFAULT '',
+    manual BOOLEAN NOT NULL DEFAULT false,
+    incluido BOOLEAN NOT NULL DEFAULT true,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS comunicado_disparos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template TEXT NOT NULL,
+    parametros JSONB NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'enviando',
+    criado_por TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS comunicado_disparo_itens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    disparo_id UUID NOT NULL REFERENCES comunicado_disparos(id) ON DELETE CASCADE,
+    numero TEXT NOT NULL,
+    nome TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pendente',
+    detalhe TEXT,
+    enviado_em TIMESTAMPTZ
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS comunicado_disparo_itens_disparo_idx ON comunicado_disparo_itens(disparo_id)`);
+  // Um card de lembrete por semana (a segunda-feira da semana é a chave) — o job de quarta não repete.
+  await pool.query(`CREATE TABLE IF NOT EXISTS comunicado_lembretes (
+    semana DATE PRIMARY KEY,
+    lead_row_id UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+
   console.log('[db] migrations applied');
 }
 

@@ -50,6 +50,9 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   // Agenda: a mesma tela é atalho do Suporte e do Comercial. Quem tem o Comercial liberado a enxerga por
   // lá (ver `acessoAAgenda`); quem só tem NX DIGITAL não vê a agenda do suporte sem esta marca.
   { key: 'agenda', label: 'Agenda', path: '/agenda', group: 'suporte', fixo: true },
+  // Comunicados (changelog público + disparo aos clientes): marca própria, fora das páginas arquiváveis do
+  // Suporte. Ver e editar segue esta marca; disparar é só do administrador (trava no servidor).
+  { key: 'comunicados', label: 'Comunicados', path: '/comunicados', group: 'suporte', fixo: true },
   // Grupo NX DIGITAL (gestão dos clientes de tráfego): uma chave POR aba, marcadas uma a uma como o
   // resto do menu. As telas de detalhe do cliente (/clientesnxdigital/clientes/<id>) valem pela chave de
   // Clientes.

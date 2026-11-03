@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
+import { DndContext, DragOverlay, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import {
   CalendarClock, ExternalLink, FileText, FolderOpen, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, UserRound, X,
 } from 'lucide-react'
@@ -8,6 +10,7 @@ import { Input, Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { useTeamProfiles } from '@/hooks/useTeamProfiles'
+import { useKanbanSensors } from '@/hooks/useKanbanSensors'
 import {
   gestaoClientes, type GcSocialMaterial, type GcSocialProducao, type GcSocialStatus,
 } from '@/services/gestaoClientes'
@@ -38,6 +41,85 @@ function lerArquivo(arquivo: File): Promise<{ id: string; name: string; type: st
     leitor.onerror = reject
     leitor.readAsDataURL(arquivo)
   })
+}
+
+/** A coluna do quadro de produção — é o alvo onde o card é solto. */
+function ColunaProducao({
+  col, total, children,
+}: {
+  col: (typeof COLUNAS)[number]
+  total: number
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `col:${col.valor}`, data: { status: col.valor } })
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'flex flex-col rounded-2xl border bg-elevate/[0.025] transition-colors',
+        isOver ? 'border-accent/60 bg-accent/[0.04]' : 'border-line',
+      )}
+    >
+      <header className="flex items-center justify-between gap-2 px-3.5 py-2.5">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground" title={col.ajuda}>
+          <span className={cn('h-2 w-2 rounded-full', col.cor)} />
+          {col.titulo}
+        </h3>
+        <span className="rounded-full bg-elevate/[0.06] px-2 text-xs tabular-nums text-foreground/55">{total}</span>
+      </header>
+      <div className="min-h-[80px] flex-1 space-y-1.5 px-2 pb-2">{children}</div>
+    </div>
+  )
+}
+
+function CartaoArrastavel({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id })
+  return (
+    <div ref={setNodeRef} {...attributes} {...listeners} className={cn('touch-manipulation', isDragging && 'opacity-30')}>
+      {children}
+    </div>
+  )
+}
+
+/** A primeira linha útil dos detalhes (o formato da arte, normalmente), sem emoji na frente. */
+function resumoDaArte(descricao: string): string {
+  const linha = descricao.split('\n').map((l) => l.trim()).find((l) => l && !/^texto da arte:?$/i.test(l)) ?? ''
+  return linha.replace(/^[^\p{L}\p{N}]+/u, '')
+}
+
+/**
+ * Card compacto: título, uma linha do que é a arte, editor e prazo. Clicar abre tudo (os detalhes
+ * inteiros e o texto da arte); arrastar move de coluna.
+ */
+function CartaoProducao({ p, onAbrir, sobreposto }: { p: GcSocialProducao; onAbrir?: () => void; sobreposto?: boolean }) {
+  const atrasada = p.prazo && p.prazo < hojeISO() && p.status !== 'pronto'
+  const resumo = resumoDaArte(p.descricao)
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className={cn(
+        'block w-full cursor-grab rounded-xl border border-line bg-surface px-3 py-2 text-left shadow-sm transition-colors hover:border-accent/40 active:cursor-grabbing',
+        sobreposto && 'shadow-lg ring-1 ring-accent/30',
+      )}
+    >
+      <p className={cn('line-clamp-2 text-[13px] font-medium leading-snug text-foreground', p.status === 'pronto' && 'text-foreground/50 line-through')}>
+        {p.titulo}
+      </p>
+      {resumo && resumo !== p.titulo && <p className="mt-0.5 truncate text-[11px] text-foreground/45">{resumo}</p>}
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+        <span className={cn('flex min-w-0 items-center gap-1 truncate', p.editor_nome ? 'text-accent' : 'text-foreground/35')}>
+          <UserRound className="h-3 w-3 shrink-0" />
+          <span className="truncate">{p.editor_nome ?? 'Sem editor'}</span>
+        </span>
+        {p.prazo && (
+          <span className={cn('flex shrink-0 items-center gap-1 text-foreground/45', atrasada && 'font-medium text-danger')}>
+            <CalendarClock className="h-3 w-3" /> {dataBr(p.prazo).slice(0, 5)}
+          </span>
+        )}
+      </div>
+    </button>
+  )
 }
 
 interface FormProducao {
@@ -90,6 +172,35 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
     } catch (err) {
       toast.error(falha + (err as Error).message)
     }
+  }
+
+  const sensors = useKanbanSensors()
+  const [arrastando, setArrastando] = React.useState<string | null>(null)
+  const [vendo, setVendo] = React.useState<GcSocialProducao | null>(null)
+
+  /** Muda a situação na tela na hora e grava; se o servidor recusar, recarrega o que vale. */
+  const mover = async (id: string, status: GcSocialStatus) => {
+    const atual = producao.find((p) => p.id === id)
+    if (!atual || atual.status === status) return
+    setProducao((lista) => lista.map((p) => (p.id === id ? { ...p, status } : p)))
+    setVendo((v) => (v?.id === id ? { ...v, status } : v))
+    try {
+      await gestaoClientes.atualizarSocialProducao(id, { status })
+    } catch (err) {
+      toast.error('Falha ao mover: ' + (err as Error).message)
+      await carregar()
+    }
+  }
+
+  const aoSoltar = (e: DragEndEvent) => {
+    setArrastando(null)
+    const destino = e.over?.data.current?.status as GcSocialStatus | undefined
+    if (destino) void mover(String(e.active.id), destino)
+  }
+
+  const editar = (p: GcSocialProducao) => {
+    setVendo(null)
+    setForm({ id: p.id, titulo: p.titulo, descricao: p.descricao, status: p.status, editor: p.editor_id ?? '', prazo: p.prazo ?? '' })
   }
 
   const opcoesEditor = [
@@ -175,81 +286,45 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
             Nova demanda de produção
           </Button>
         </div>
-        <div className="grid gap-3 lg:grid-cols-3">
-          {COLUNAS.map((col) => {
-            const itens = producao.filter((p) => p.status === col.valor)
-            return (
-              <div key={col.valor} className="rounded-2xl border border-line bg-elevate/[0.025]">
-                <header className="flex items-center justify-between gap-2 px-3.5 py-3">
-                  <div className="min-w-0">
-                    <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <span className={cn('h-2 w-2 rounded-full', col.cor)} />
-                      {col.titulo}
-                    </h3>
-                    <p className="text-[11px] text-foreground/40">{col.ajuda}</p>
-                  </div>
-                  <span className="rounded-full bg-elevate/[0.06] px-2 text-xs tabular-nums text-foreground/55">{itens.length}</span>
-                </header>
-                <div className="space-y-2 px-2 pb-2">
+        <DndContext
+          sensors={sensors}
+          onDragStart={(e) => setArrastando(String(e.active.id))}
+          onDragCancel={() => setArrastando(null)}
+          onDragEnd={aoSoltar}
+        >
+          <div className="grid gap-3 lg:grid-cols-3">
+            {COLUNAS.map((col) => {
+              const itens = producao.filter((p) => p.status === col.valor)
+              return (
+                <ColunaProducao key={col.valor} col={col} total={itens.length}>
                   {itens.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-line px-3 py-5 text-center text-xs text-foreground/35">Nada aqui</p>
+                    <p className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-xs text-foreground/35">
+                      Arraste um card pra cá
+                    </p>
                   )}
-                  {itens.map((p) => {
-                    const atrasada = p.prazo && p.prazo < hojeISO() && p.status !== 'pronto'
-                    return (
-                      <article key={p.id} className="rounded-xl border border-line bg-surface p-3 shadow-sm">
-                        <div className="flex items-start gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className={cn('text-sm font-medium text-foreground', p.status === 'pronto' && 'text-foreground/50 line-through')}>{p.titulo}</p>
-                            {p.descricao && <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap text-xs text-foreground/55">{p.descricao}</p>}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setForm({ id: p.id, titulo: p.titulo, descricao: p.descricao, status: p.status, editor: p.editor_id ?? '', prazo: p.prazo ?? '' })
-                            }
-                            className="shrink-0 rounded-md p-1 text-foreground/35 hover:text-accent"
-                            aria-label="Editar demanda"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-                          <span
-                            className={cn(
-                              'flex items-center gap-1 rounded-full px-2 py-0.5',
-                              p.editor_nome ? 'bg-accent/10 text-accent' : 'bg-elevate/[0.05] text-foreground/40',
-                            )}
-                          >
-                            <UserRound className="h-3 w-3" />
-                            {p.editor_nome ? `Editor: ${p.editor_nome}` : 'Sem editor'}
-                          </span>
-                          {p.prazo && (
-                            <span className={cn('flex items-center gap-1 text-foreground/50', atrasada && 'font-medium text-danger')}>
-                              <CalendarClock className="h-3 w-3" /> {dataBr(p.prazo)}
-                            </span>
-                          )}
-                        </div>
-                        <select
-                          value={p.status}
-                          onChange={(e) => void agir(() => gestaoClientes.atualizarSocialProducao(p.id, { status: e.target.value as GcSocialStatus }))}
-                          aria-label="Mover para"
-                          className="mt-2 h-9 w-full rounded-lg border border-line bg-surface px-2 text-xs text-foreground/70"
-                        >
-                          {COLUNAS.map((c) => (
-                            <option key={c.valor} value={c.valor}>
-                              Mover para: {c.titulo}
-                            </option>
-                          ))}
-                        </select>
-                      </article>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+                  {itens.map((p) => (
+                    <CartaoArrastavel key={p.id} id={p.id}>
+                      <CartaoProducao p={p} onAbrir={() => setVendo(p)} />
+                    </CartaoArrastavel>
+                  ))}
+                </ColunaProducao>
+              )
+            })}
+          </div>
+          {createPortal(
+            <DragOverlay>
+              {(() => {
+                const p = arrastando ? producao.find((x) => x.id === arrastando) : undefined
+                return p ? (
+                  <div className="w-[85vw] max-w-sm rotate-2 sm:w-[20rem]">
+                    <CartaoProducao p={p} sobreposto />
+                  </div>
+                ) : null
+              })()}
+            </DragOverlay>,
+            document.body,
+          )}
+        </DndContext>
       </section>
 
       {/* ------------------------------------------------------------ links e drive */}
@@ -399,7 +474,7 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
         {form && (
           <div className="space-y-3">
             <Input label="O que produzir *" value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Ex.: 3 criativos de implante, reels de bastidores…" autoFocus />
-            <Textarea label="Detalhes" rows={3} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Referências, texto, formato, onde está o material…" />
+            <Textarea label="Detalhes" rows={10} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Referências, texto, formato, onde está o material…" />
             <div className="grid grid-cols-2 gap-3">
               <Select
                 label="Situação"
@@ -410,6 +485,63 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
               <Select label="Editor" options={opcoesEditor} value={form.editor} onChange={(e) => setForm({ ...form, editor: e.target.value })} />
               <Input label="Prazo" type="date" value={form.prazo} onChange={(e) => setForm({ ...form, prazo: e.target.value })} />
             </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!vendo}
+        onClose={() => setVendo(null)}
+        size="lg"
+        title={vendo?.titulo}
+        footer={
+          vendo && (
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setVendo(null)}>
+                Fechar
+              </Button>
+              <Button variant="secondary" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => editar(vendo)}>
+                Editar
+              </Button>
+            </div>
+          )
+        }
+      >
+        {vendo && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-1.5">
+              {COLUNAS.map((c) => (
+                <button
+                  key={c.valor}
+                  type="button"
+                  onClick={() => void mover(vendo.id, c.valor)}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors',
+                    vendo.status === c.valor
+                      ? 'border-accent bg-accent/10 font-medium text-accent'
+                      : 'border-line text-foreground/55 hover:border-accent/40 hover:text-foreground',
+                  )}
+                >
+                  <span className={cn('h-1.5 w-1.5 rounded-full', c.cor)} />
+                  {c.titulo}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-foreground/60">
+              <span className="flex items-center gap-1.5">
+                <UserRound className="h-3.5 w-3.5" /> {vendo.editor_nome ?? 'Sem editor'}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CalendarClock className="h-3.5 w-3.5" /> {vendo.prazo ? `Prazo ${dataBr(vendo.prazo)}` : 'Sem prazo'}
+              </span>
+            </div>
+            {vendo.descricao.trim() ? (
+              <div className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-elevate/[0.02] p-4 text-sm leading-relaxed text-foreground/85">
+                {vendo.descricao}
+              </div>
+            ) : (
+              <p className="text-sm text-foreground/45">Sem detalhes da arte. Clique em Editar pra escrever.</p>
+            )}
           </div>
         )}
       </Modal>

@@ -69,8 +69,8 @@ async function criarLembrete(dataHoje: string): Promise<boolean> {
       [
         card.id,
         'Rotina de quarta:\n' +
-          '1. Site de ajuda (ajuda.nxsystems.com.br, entrar como admin): escrever o que mudou na semana na página Novidades.\n' +
-          '2. Conferir a página pública ajuda.nxsystems.com.br/novidades.\n' +
+          '1. Site de ajuda (ajuda.nxsystems.com.br, entrar como admin): escrever o que mudou na semana na página Novidades e atualizações.\n' +
+          '2. Conferir a página pública ajuda.nxsystems.com.br/novidades-e-atualizacoes.\n' +
           '3. Comunicados → Disparos: enviar o template "Atualizações da semana" pros contatos incluídos.',
       ],
     );

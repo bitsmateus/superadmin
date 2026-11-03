@@ -7,7 +7,7 @@ import { api } from '@/services/api'
 export const SITE_AJUDA = 'https://ajuda.nxsystems.com.br'
 
 /** Página de novidades no site de ajuda: o link que vai no template "atualizações da semana". */
-export const LINK_NOVIDADES = `${SITE_AJUDA}/novidades`
+export const LINK_NOVIDADES = `${SITE_AJUDA}/novidades-e-atualizacoes`
 
 export type OrigemContato = 'canais' | 'visao_geral' | 'manual'
 

@@ -226,14 +226,14 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
 // ── Origem ──────────────────────────────────────────────────────────────────
 
 /**
- * Origem do card = uma das opções da ficha: "meta" (Anúncio Meta), "bio" (Link na bio do Instagram), "site", "indicacao"
+ * Origem do card = uma das opções da ficha: "meta" (Anúncio Meta), "social_selling", "bio" (Link na bio do Instagram), "site", "indicacao"
  * ou "outros" ("outros: <texto>" quando há o que dizer). Os códigos que a automação (n8n) manda são convertidos aqui, e
  * nunca dão erro: o que não for reconhecido vira "outros: <valor>" (o card não é recusado por causa da origem).
  * Os cards antigos com esses códigos são convertidos na subida do servidor (db.ts, mesma tabela).
  */
 export const CONVERSAO_ORIGEM: Record<string, string> = {
   lp_teste: 'bio', bio_instagram: 'bio', bio: 'bio',
-  anuncio_meta: 'meta', meta: 'meta',
+  anuncio_meta: 'meta', meta: 'meta', social_selling: 'social_selling',
   formulario_organizar: 'site', formulario_falar: 'site', formulario_profissionalizar: 'site', formulario_suporte: 'site',
   site: 'site',
   indique_ganhe: 'indicacao', indicacao: 'indicacao',
@@ -252,7 +252,7 @@ export function normalizarOrigem(valor: unknown): string {
 
 /** Rótulo amigável (mesmo da tela, src/lib/regraDoStatus.ts). */
 const ROTULOS_ORIGEM: Record<string, string> = {
-  meta: 'Anúncio Meta', anuncio_meta: 'Anúncio Meta', bio: 'Link da bio', bio_instagram: 'Link da bio', site: 'Site',
+  meta: 'Anúncio Meta', anuncio_meta: 'Anúncio Meta', social_selling: 'Social Selling', bio:'Link da bio', bio_instagram: 'Link da bio', site: 'Site',
   lp_teste: 'Link da bio', formulario_organizar: 'Formulário do site (organizar)', formulario_falar: 'Formulário do site (falar)',
   formulario_profissionalizar: 'Formulário do site (profissionalizar)', formulario_suporte: 'Formulário do site (suporte)',
   indicacao: 'Indicação', indique_ganhe: 'Indique e ganhe', disparo_em_massa: 'Disparo em massa', whatsapp_direto: 'WhatsApp direto',

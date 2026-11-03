@@ -44,6 +44,7 @@ export function leadCobraMotivo(criadoEm: string | null | undefined): boolean {
 /** De onde o lead veio. "meta" também vale sozinho pra quem chegou pelo anúncio (tem campanha/anúncio ligado). */
 export const ORIGENS_DO_LEAD: { valor: string; rotulo: string }[] = [
   { valor: 'meta', rotulo: 'Anúncio (Meta)' },
+  { valor: 'social_selling', rotulo: 'Social Selling' },
   { valor: 'bio', rotulo: 'Link na bio do Instagram' },
   { valor: 'site', rotulo: 'Site' },
   { valor: 'indicacao', rotulo: 'Indicação' },
@@ -53,7 +54,7 @@ export const ORIGENS_DO_LEAD: { valor: string; rotulo: string }[] = [
 /** Rótulo amigável de cada origem — as da tela e as que a automação da Luiza manda (mesmos do servidor, em
  * server/src/lib/integracaoCards.ts). Origens com o mesmo rótulo contam juntas no filtro. */
 export const ROTULOS_ORIGEM: Record<string, string> = {
-  meta: 'Anúncio Meta', anuncio_meta: 'Anúncio Meta',
+  meta: 'Anúncio Meta', anuncio_meta: 'Anúncio Meta', social_selling: 'Social Selling',
   bio: 'Link da bio', bio_instagram: 'Link da bio',
   site: 'Site', lp_teste: 'Link da bio',
   formulario_organizar: 'Formulário do site', formulario_falar: 'Formulário do site',

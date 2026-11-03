@@ -46,6 +46,11 @@ import {
   Activity,
   Wallet,
   Zap,
+  Presentation,
+  MousePointerClick,
+  LayoutTemplate,
+  UserCheck,
+  Link2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { abaDeFora } from '@/lib/abasJuntas'
@@ -150,6 +155,16 @@ const SUB_ABAS_CLIENTES_NX = [
   { to: '/clientesnxdigital/trafego', label: 'Tráfego', icon: Activity },
   { to: '/clientesnxdigital/demandas', label: 'Kanban demandas', icon: KanbanSquare },
   { to: '/clientesnxdigital/socialmedia', label: 'Social media', icon: Palette },
+]
+
+/** As sub-abas do Demo Studio (demos interativas por link — docs/demo-studio/). */
+const SUB_ABAS_DEMO_STUDIO = [
+  { to: '/demo-studio', label: 'Visão geral', icon: BarChart3, end: true },
+  { to: '/demo-studio/demos', label: 'Demos', icon: MousePointerClick, end: false },
+  { to: '/demo-studio/exemplos', label: 'Exemplos', icon: LayoutTemplate, end: false },
+  { to: '/demo-studio/leads', label: 'Leads', icon: UserCheck, end: false },
+  { to: '/demo-studio/links', label: 'Links', icon: Link2, end: false },
+  { to: '/demo-studio/configuracoes', label: 'Configurações', icon: Settings, end: false },
 ]
 
 /** Chave estável de um item do menu pra guardar a ordem: a rota, ou o id quando é uma cópia
@@ -310,6 +325,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       // O grupo NX DIGITAL aparece se QUALQUER aba dele está liberada; cada aba, pela chave dela.
       if (to === '/clientesnxdigital') return [...menuAllowed].some((k) => k.startsWith('nxdigital_'))
       if (to === '/comercial-dashboard') return menuAllowed.has('comercial_dashboard')
+      if (to === '/demo-studio' || to.startsWith('/demo-studio/')) return menuAllowed.has('demo_studio')
       // Financeiro inteiro: só administrador (menuAllowed só existe pra quem não é).
       if (to.startsWith('/financeiro') || to === '/comando' || to === '/trafego') return false
       const key = MENU_KEY_BY_PATH[to]
@@ -355,6 +371,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const [financeiroOpen, setFinanceiroOpen] = useGrupoAberto('financeiro')
   const [suporteOpen, setSuporteOpen] = useGrupoAberto('suporte')
   const [clientesNxOpen, setClientesNxOpen] = useGrupoAberto('clientes-nx')
+  const [demoStudioOpen, setDemoStudioOpen] = useGrupoAberto('demo-studio')
   const [newPageOpen, setNewPageOpen] = React.useState(false)
   const [pagesArchiveOpen, setPagesArchiveOpen] = React.useState(false)
   const [newDemandaPageOpen, setNewDemandaPageOpen] = React.useState(false)
@@ -938,6 +955,67 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             <NavLink
               key={sub.to}
               to={sub.to}
+              onClick={closeOnMobile}
+              className={({ isActive }) =>
+                cn(
+                  'group flex items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm transition-colors',
+                  isActive
+                    ? 'bg-elevate/[0.05] text-foreground'
+                    : 'text-foreground/45 hover:bg-elevate/[0.03] hover:text-foreground/80',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <sub.icon
+                    className={cn(
+                      'h-4 w-4 shrink-0',
+                      isActive ? 'text-accent' : 'text-foreground/40 group-hover:text-foreground/70',
+                    )}
+                  />
+                  <span className="truncate">{sub.label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </>
+        )}
+
+        {/* DEMO STUDIO — demos interativas por link, com marca de acesso própria (demo_studio) */}
+        {canSee('/demo-studio') && (
+        <>
+        <button
+          type="button"
+          onClick={() => setDemoStudioOpen((o) => !o)}
+          className={cn(
+            'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+            location.pathname.startsWith('/demo-studio')
+              ? 'text-foreground'
+              : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
+          )}
+        >
+          <Presentation
+            className={cn(
+              'h-4 w-4 shrink-0',
+              location.pathname.startsWith('/demo-studio')
+                ? 'text-accent'
+                : 'text-foreground/50 group-hover:text-foreground/75',
+            )}
+          />
+          <span className="truncate">DEMO STUDIO</span>
+          <ChevronDown
+            className={cn(
+              'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',
+              demoStudioOpen ? '' : '-rotate-90',
+            )}
+          />
+        </button>
+        {demoStudioOpen &&
+          SUB_ABAS_DEMO_STUDIO.map((sub) => (
+            <NavLink
+              key={sub.to}
+              to={sub.to}
+              end={sub.end}
               onClick={closeOnMobile}
               className={({ isActive }) =>
                 cn(

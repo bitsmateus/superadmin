@@ -16,5 +16,9 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
+# Arquivos do Demo Studio (frames WebP, miniaturas, snapshots). No Easypanel, montar um volume em /data —
+# sem ele as imagens somem a cada deploy.
+ENV STORAGE_DIR=/data
+RUN mkdir -p /data
 EXPOSE 3001
 CMD ["node", "dist/index.js"]

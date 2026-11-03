@@ -63,6 +63,9 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   // Tela que não é aba: marca própria. (O Financeiro inteiro — Vendas, Contrato, Contas a Pagar, Clientes Geral —
   // NÃO está aqui de propósito: é só de administrador e não dá pra liberar pra ninguém.)
   { key: 'comercial_dashboard', label: 'Dashboard Comercial', path: '/comercial-dashboard', group: 'outros', fixo: true },
+  // Demo Studio (demos interativas por link): uma marca para o módulo inteiro. O que cada um faz lá dentro
+  // (editor ou vendedor) vem de profiles.ds_role — ver docs/demo-studio/ADAPTACAO.md.
+  { key: 'demo_studio', label: 'Demo Studio', path: '/demo-studio', group: 'outros', fixo: true },
 ]
 
 /** As chaves das abas do NX DIGITAL. */

@@ -7,3 +7,7 @@ dist
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# Demo Studio (arquivos das demos: frames, miniaturas, snapshots)
+/data/
+/server/data/

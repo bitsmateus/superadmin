@@ -74,6 +74,9 @@ const DemandasNxPage = React.lazy(() =>
 const ClienteNxDetalhePage = React.lazy(() =>
   import('./pages/ClienteNxDetalhePage').then((m) => ({ default: m.ClienteNxDetalhePage })),
 )
+const DemoStudioPage = React.lazy(() =>
+  import('./pages/DemoStudioPage').then((m) => ({ default: m.DemoStudioPage })),
+)
 const FinanceiroClientesGeralPage = React.lazy(() =>
   import('./pages/FinanceiroClientesGeralPage').then((m) => ({ default: m.FinanceiroClientesGeralPage })),
 )
@@ -260,6 +263,13 @@ export default function App() {
           <Route path="/clientesnxdigital/trafego" element={<TrafegoNxPage />} />
           {/* A tela Estratégias saiu: quem tem o link antigo volta pra lista. */}
           <Route path="/clientesnxdigital/estrategias" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
+          {/* Demo Studio — demos interativas por link (tabelas ds_*, docs/demo-studio/). */}
+          <Route path="/demo-studio" element={<DemoStudioPage secao="visao-geral" />} />
+          <Route path="/demo-studio/demos" element={<DemoStudioPage secao="demos" />} />
+          <Route path="/demo-studio/exemplos" element={<DemoStudioPage secao="exemplos" />} />
+          <Route path="/demo-studio/leads" element={<DemoStudioPage secao="leads" />} />
+          <Route path="/demo-studio/links" element={<DemoStudioPage secao="links" />} />
+          <Route path="/demo-studio/configuracoes" element={<DemoStudioPage secao="configuracoes" />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           {/* Uma cópia do menu Suporte tem rota só dela — ver SupportViewPage. */}
           <Route path="/visao/:pageId" element={<SupportViewPage />} />

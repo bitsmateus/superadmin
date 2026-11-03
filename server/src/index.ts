@@ -75,6 +75,7 @@ import { startEngeEnvioDispatch } from './jobs/engeEnvioDispatch.js';
 import { startReuniaoWebhook } from './jobs/reuniaoWebhook.js';
 import { startLeadAvisosPush } from './jobs/leadAvisosPush.js';
 import { comunicadosRoutes } from './routes/comunicados.js';
+import { demoStudioRoutes } from './routes/demoStudio.js';
 import { startComunicadosDisparo } from './lib/comunicados.js';
 import { startComunicadosSemanal } from './jobs/comunicadosSemanal.js';
 
@@ -195,6 +196,7 @@ async function main() {
   await app.register(ligacoes3cRoutes);
   await app.register(rotinaRoutes);
   await app.register(comunicadosRoutes);
+  await app.register(demoStudioRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

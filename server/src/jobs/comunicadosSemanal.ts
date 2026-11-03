@@ -3,7 +3,7 @@ import { statusDoQuadro } from '../routes/leadBoards.js';
 
 /**
  * Toda quarta a partir das 09h (America/Sao_Paulo): cria um card nas Demandas do Mateus lembrando de
- * publicar as atualizações da semana e fazer o disparo pelo menu Comunicados. Mesmo esquema de
+ * escrever as novidades da semana no site de ajuda e fazer o disparo pelo menu Comunicados. Mesmo esquema de
  * setInterval + janela de horário do demandasAiDiario.ts; o que impede de repetir é comunicado_lembretes
  * (uma linha por semana). Vale a quarta inteira depois das 09h — se o servidor estava fora às 09h,
  * o card sai quando ele voltar.
@@ -69,8 +69,8 @@ async function criarLembrete(dataHoje: string): Promise<boolean> {
       [
         card.id,
         'Rotina de quarta:\n' +
-          '1. Menu Comunicados → Atualizações: cadastrar e publicar o que mudou na semana.\n' +
-          '2. Conferir a página pública /novidades.\n' +
+          '1. Site de ajuda (ajuda.nxsystems.com.br, entrar como admin): escrever o que mudou na semana na página Novidades.\n' +
+          '2. Conferir a página pública ajuda.nxsystems.com.br/novidades.\n' +
           '3. Comunicados → Disparos: enviar o template "Atualizações da semana" pros contatos incluídos.',
       ],
     );

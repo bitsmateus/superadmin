@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Copy, ExternalLink, Pencil, Plus, Send, Trash2, UserPlus, X } from 'lucide-react'
+import { Copy, ExternalLink, Pencil, Send, UserPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -13,30 +13,28 @@ import { useAuth } from '@/hooks/useAuth'
 import { canManageUsers } from '@/services/supabase'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
-import { cn, formatDateShort, formatDateTimeShort } from '@/lib/utils'
+import { cn, formatDateTimeShort } from '@/lib/utils'
 import {
   comunicadosApi,
-  linkNovidades,
-  TIPO_LABEL,
-  type ComunicadoPost,
+  LINK_NOVIDADES,
+  SITE_AJUDA,
   type ContatoComunicado,
   type DisparoComunicado,
   type ItemDisparo,
   type OrigemContato,
   type TemplateComunicado,
-  type TipoComunicado,
 } from '@/api/comunicados'
 
 /**
- * Comunicados aos clientes: as atualizações da plataforma (o changelog que o cliente vê em /novidades),
- * a base de contatos (notificador de Canais + telefone da Visão Geral, sem duplicado) e o disparo pelo
- * número da API Oficial do Suporte — que só manda template aprovado na Meta.
+ * Comunicados aos clientes: a base de contatos (notificador de Canais + telefone da Visão Geral, sem
+ * duplicado) e o disparo pelo número da API Oficial do Suporte — que só manda template aprovado na Meta.
+ * As novidades em si são escritas no site de ajuda (com o editor de foto e vídeo de lá); aqui só vai o link.
  */
 export function ComunicadosPage() {
-  const [aba, setAba] = React.useState('atualizacoes')
+  const [aba, setAba] = React.useState('disparos')
   const copiarLink = async () => {
-    const ok = await copyToClipboard(linkNovidades())
-    if (ok) toast.success('Link da página pública copiado')
+    const ok = await copyToClipboard(LINK_NOVIDADES)
+    if (ok) toast.success('Link das novidades copiado')
     else toast.error('Falha ao copiar')
   }
 
@@ -44,13 +42,18 @@ export function ComunicadosPage() {
     <>
       <TopBar
         title="Comunicados"
-        subtitle="Atualizações da plataforma e avisos aos clientes"
+        subtitle="Avisos e novidades da plataforma pros clientes"
         rightSlot={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={copiarLink}>
-              Copiar link público
+            <a href={SITE_AJUDA} target="_blank" rel="noreferrer">
+              <Button variant="outline" size="sm" leftIcon={<Pencil className="h-3.5 w-3.5" />}>
+                Escrever novidades no site de ajuda
+              </Button>
+            </a>
+            <Button variant="ghost" size="sm" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={copiarLink}>
+              Copiar link
             </Button>
-            <a href="/novidades" target="_blank" rel="noreferrer">
+            <a href={LINK_NOVIDADES} target="_blank" rel="noreferrer">
               <Button variant="ghost" size="sm" leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>
                 Abrir
               </Button>
@@ -63,12 +66,10 @@ export function ComunicadosPage() {
           value={aba}
           onChange={setAba}
           items={[
-            { value: 'atualizacoes', label: 'Atualizações' },
-            { value: 'contatos', label: 'Contatos' },
             { value: 'disparos', label: 'Disparos' },
+            { value: 'contatos', label: 'Contatos' },
           ]}
         />
-        {aba === 'atualizacoes' && <AbaAtualizacoes />}
         {aba === 'contatos' && <AbaContatos />}
         {aba === 'disparos' && <AbaDisparos />}
       </div>
@@ -89,154 +90,6 @@ function useCarregar<T>(fn: () => Promise<T>, inicial: T): [T, () => void, boole
   }, [])
   React.useEffect(recarregar, [recarregar])
   return [dados, recarregar, carregando]
-}
-
-const TIPO_TONE: Record<TipoComunicado, 'success' | 'info' | 'warning' | 'neutral'> = {
-  novidade: 'success',
-  melhoria: 'info',
-  correcao: 'neutral',
-  aviso: 'warning',
-}
-
-// ── Atualizações ──────────────────────────────────────────────────────────────
-
-function AbaAtualizacoes() {
-  const [posts, recarregar, carregando] = useCarregar(comunicadosApi.posts, [] as ComunicadoPost[])
-  const [editando, setEditando] = React.useState<ComunicadoPost | 'novo' | null>(null)
-
-  const alternarPublicado = async (p: ComunicadoPost) => {
-    try {
-      await comunicadosApi.editarPost(p.id, { publicado: !p.publicado_em })
-      toast.success(p.publicado_em ? 'Voltou pra rascunho' : 'Publicado na página pública')
-      recarregar()
-    } catch (e) {
-      toast.error(extractErrorMessage(e, 'Falha ao salvar'))
-    }
-  }
-
-  const excluir = async (p: ComunicadoPost) => {
-    if (!window.confirm(`Excluir "${p.titulo}"?`)) return
-    try {
-      await comunicadosApi.excluirPost(p.id)
-      recarregar()
-    } catch (e) {
-      toast.error(extractErrorMessage(e, 'Falha ao excluir'))
-    }
-  }
-
-  return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-foreground/60">
-          O que estiver publicado aparece em <span className="font-medium text-foreground">/novidades</span>, sem login.
-        </p>
-        <Button size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={() => setEditando('novo')}>
-          Nova atualização
-        </Button>
-      </div>
-
-      {!carregando && posts.length === 0 ? (
-        <EmptyState title="Nenhuma atualização ainda" description="Cadastre o que mudou na plataforma e publique." />
-      ) : (
-        <ul className="space-y-2">
-          {posts.map((p) => (
-            <li key={p.id} className="rounded-xl border border-line bg-card p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone={TIPO_TONE[p.tipo] ?? 'neutral'}>{TIPO_LABEL[p.tipo] ?? p.tipo}</Badge>
-                    {p.publicado_em ? (
-                      <Badge tone="success" dot>Publicado {formatDateShort(p.publicado_em)}</Badge>
-                    ) : (
-                      <Badge tone="neutral">Rascunho</Badge>
-                    )}
-                  </div>
-                  <h3 className="text-sm font-medium text-foreground">{p.titulo}</h3>
-                  {p.corpo && <p className="whitespace-pre-wrap text-sm text-foreground/70">{p.corpo}</p>}
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button size="sm" variant={p.publicado_em ? 'outline' : 'primary'} onClick={() => alternarPublicado(p)}>
-                    {p.publicado_em ? 'Despublicar' : 'Publicar'}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditando(p)} aria-label="Editar">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => excluir(p)} aria-label="Excluir">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {editando && (
-        <EditorPost
-          post={editando === 'novo' ? null : editando}
-          onClose={() => setEditando(null)}
-          onSalvo={() => {
-            setEditando(null)
-            recarregar()
-          }}
-        />
-      )}
-    </section>
-  )
-}
-
-function EditorPost({ post, onClose, onSalvo }: { post: ComunicadoPost | null; onClose: () => void; onSalvo: () => void }) {
-  const [titulo, setTitulo] = React.useState(post?.titulo ?? '')
-  const [corpo, setCorpo] = React.useState(post?.corpo ?? '')
-  const [tipo, setTipo] = React.useState<TipoComunicado>(post?.tipo ?? 'novidade')
-  const [salvando, setSalvando] = React.useState(false)
-
-  const salvar = async (publicar: boolean) => {
-    if (!titulo.trim()) {
-      toast.error('Informe o título')
-      return
-    }
-    setSalvando(true)
-    try {
-      if (post) await comunicadosApi.editarPost(post.id, { titulo, corpo, tipo, ...(publicar ? { publicado: true } : {}) })
-      else await comunicadosApi.criarPost({ titulo, corpo, tipo, publicar })
-      toast.success(publicar ? 'Publicado' : 'Salvo')
-      onSalvo()
-    } catch (e) {
-      toast.error(extractErrorMessage(e, 'Falha ao salvar'))
-    } finally {
-      setSalvando(false)
-    }
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={post ? 'Editar atualização' : 'Nova atualização'}
-      size="lg"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button variant="outline" loading={salvando} onClick={() => salvar(false)}>Salvar</Button>
-          {!post?.publicado_em && (
-            <Button loading={salvando} onClick={() => salvar(true)}>Salvar e publicar</Button>
-          )}
-        </>
-      }
-    >
-      <div className="space-y-3">
-        <Input label="Título" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex.: Novo filtro por etiqueta no Kanban" />
-        <Select
-          label="Tipo"
-          value={tipo}
-          onChange={(e) => setTipo(e.target.value as TipoComunicado)}
-          options={Object.entries(TIPO_LABEL).map(([value, label]) => ({ value, label }))}
-        />
-        <Textarea label="O que mudou" rows={7} value={corpo} onChange={(e) => setCorpo(e.target.value)} placeholder="Explique em linguagem de cliente o que mudou e como usar." />
-      </div>
-    </Modal>
-  )
 }
 
 // ── Contatos ──────────────────────────────────────────────────────────────────
@@ -441,7 +294,7 @@ function AbaDisparos() {
   const [contatos] = useCarregar(comunicadosApi.contatos, [] as ContatoComunicado[])
   const [disparos, recarregarDisparos] = useCarregar(comunicadosApi.disparos, [] as DisparoComunicado[])
   const [templateId, setTemplateId] = React.useState('atualizacoes_semana')
-  const [link, setLink] = React.useState(linkNovidades())
+  const [link, setLink] = React.useState(LINK_NOVIDADES)
   const [texto, setTexto] = React.useState('')
   const [numeroTeste, setNumeroTeste] = React.useState('')
   const [enviando, setEnviando] = React.useState(false)

@@ -2171,18 +2171,9 @@ END; $$`);
     if (r.rowCount) console.log(`[db] rotina: ${r.rowCount} bloco(s) iniciais em ${pagina}`);
   }
 
-  // Comunicados (menu "Comunicados"): changelog público em /novidades + disparo por template da API
-  // Oficial pro número de cada cliente. Ver server/src/lib/comunicados.ts.
-  await pool.query(`CREATE TABLE IF NOT EXISTS comunicado_posts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    titulo TEXT NOT NULL,
-    corpo TEXT NOT NULL DEFAULT '',
-    tipo TEXT NOT NULL DEFAULT 'novidade',
-    publicado_em TIMESTAMPTZ,
-    criado_por TEXT NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
+  // Comunicados (menu "Comunicados"): disparo por template da API Oficial pro número de cada cliente, com o
+  // link das novidades do site de ajuda. Ver server/src/lib/comunicados.ts. (A tabela comunicado_posts, do
+  // changelog que morava aqui, ficou sem uso quando as novidades passaram pro site de ajuda.)
   // A base de contatos é montada na hora a partir de clients (notificador de Canais + telefone da Visão
   // Geral). Aqui só fica o que não dá pra tirar de lá: o contato avulso (manual) e a marca de fora do disparo.
   await pool.query(`CREATE TABLE IF NOT EXISTS comunicado_contatos (

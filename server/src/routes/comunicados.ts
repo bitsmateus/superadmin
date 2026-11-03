@@ -11,23 +11,10 @@ import {
 } from '../lib/comunicados.js';
 
 /**
- * Menu "Comunicados": cadastro das atualizações (changelog que o cliente vê em /novidades), base de
- * contatos dos clientes e disparo por template da API Oficial. Ver e editar segue a marca de menu
- * "comunicados"; disparar (inclusive o teste) é só do administrador — sai mensagem pra base inteira.
+ * Menu "Comunicados": base de contatos dos clientes e disparo por template da API Oficial. As novidades
+ * em si são escritas no site de ajuda (ajuda.nxsystems.com.br, repo faqnx) — aqui só se manda o link.
+ * Ver e editar segue a marca de menu "comunicados"; disparar (inclusive o teste) é só do administrador.
  */
-
-const TIPOS = ['novidade', 'melhoria', 'correcao', 'aviso'] as const;
-
-interface PostRow {
-  id: string;
-  titulo: string;
-  corpo: string;
-  tipo: string;
-  publicado_em: string | null;
-  criado_por: string;
-  created_at: string;
-  updated_at: string;
-}
 
 type Usuario = { sub: string; role?: string; email?: string };
 
@@ -44,78 +31,7 @@ function soAdmin(req: FastifyRequest, reply: FastifyReply): boolean {
   return false;
 }
 
-function tipoValido(t: unknown): string {
-  return TIPOS.includes(t as (typeof TIPOS)[number]) ? (t as string) : 'novidade';
-}
-
 export async function comunicadosRoutes(app: FastifyInstance) {
-  // ── Público ────────────────────────────────────────────────────────────────
-  app.get('/api/public/novidades', async () =>
-    query<Omit<PostRow, 'criado_por' | 'created_at' | 'updated_at'>>(
-      `SELECT id, titulo, corpo, tipo, publicado_em FROM comunicado_posts
-       WHERE publicado_em IS NOT NULL ORDER BY publicado_em DESC LIMIT 200`,
-    ),
-  );
-
-  // ── Atualizações ───────────────────────────────────────────────────────────
-  app.get('/api/comunicados/posts', { onRequest: [app.authenticate] }, async (req, reply) => {
-    if (!(await podeVer(req, reply))) return;
-    return query<PostRow>(
-      `SELECT * FROM comunicado_posts ORDER BY COALESCE(publicado_em, created_at) DESC`,
-    );
-  });
-
-  app.post<{ Body: { titulo?: string; corpo?: string; tipo?: string; publicar?: boolean } }>(
-    '/api/comunicados/posts',
-    { onRequest: [app.authenticate] },
-    async (req, reply) => {
-      if (!(await podeVer(req, reply))) return;
-      const titulo = (req.body?.titulo ?? '').trim();
-      if (!titulo) return reply.status(400).send({ message: 'Informe o título' });
-      return queryOne<PostRow>(
-        `INSERT INTO comunicado_posts (titulo, corpo, tipo, publicado_em, criado_por)
-         VALUES ($1, $2, $3, CASE WHEN $4 THEN NOW() END, $5) RETURNING *`,
-        [titulo, (req.body?.corpo ?? '').trim(), tipoValido(req.body?.tipo), !!req.body?.publicar, (req.user as Usuario).email ?? ''],
-      );
-    },
-  );
-
-  app.patch<{ Params: { id: string }; Body: { titulo?: string; corpo?: string; tipo?: string; publicado?: boolean } }>(
-    '/api/comunicados/posts/:id',
-    { onRequest: [app.authenticate] },
-    async (req, reply) => {
-      if (!(await podeVer(req, reply))) return;
-      const b = req.body ?? {};
-      if (b.titulo !== undefined && !b.titulo.trim()) return reply.status(400).send({ message: 'Informe o título' });
-      // publicado: true mantém a data da 1ª publicação (só preenche se estava em rascunho); false volta pra rascunho.
-      const post = await queryOne<PostRow>(
-        `UPDATE comunicado_posts SET
-           titulo = COALESCE($2, titulo),
-           corpo = COALESCE($3, corpo),
-           tipo = COALESCE($4, tipo),
-           publicado_em = CASE WHEN $5::boolean IS NULL THEN publicado_em
-                               WHEN $5 THEN COALESCE(publicado_em, NOW()) ELSE NULL END,
-           updated_at = NOW()
-         WHERE id = $1 RETURNING *`,
-        [
-          req.params.id,
-          b.titulo?.trim() ?? null,
-          b.corpo !== undefined ? b.corpo.trim() : null,
-          b.tipo !== undefined ? tipoValido(b.tipo) : null,
-          b.publicado ?? null,
-        ],
-      );
-      if (!post) return reply.status(404).send({ message: 'Atualização não encontrada' });
-      return post;
-    },
-  );
-
-  app.delete<{ Params: { id: string } }>('/api/comunicados/posts/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
-    if (!(await podeVer(req, reply))) return;
-    await query('DELETE FROM comunicado_posts WHERE id = $1', [req.params.id]);
-    return { ok: true };
-  });
-
   // ── Contatos ───────────────────────────────────────────────────────────────
   app.get('/api/comunicados/contatos', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await podeVer(req, reply))) return;

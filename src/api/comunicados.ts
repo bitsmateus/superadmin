@@ -1,20 +1,13 @@
 import { api } from '@/services/api'
 
-/** Menu Comunicados — changelog público (/novidades), base de contatos e disparo por template da API
- *  Oficial. Ver server/src/routes/comunicados.ts. */
+/** Menu Comunicados — base de contatos e disparo por template da API Oficial. As novidades são escritas
+ *  no site de ajuda (ajuda.nxsystems.com.br); aqui só vai o link. Ver server/src/routes/comunicados.ts. */
 
-export type TipoComunicado = 'novidade' | 'melhoria' | 'correcao' | 'aviso'
+/** Site de ajuda (repo faqnx) — é lá que se escrevem as novidades, com o editor de foto e vídeo de lá. */
+export const SITE_AJUDA = 'https://ajuda.nxsystems.com.br'
 
-export interface ComunicadoPost {
-  id: string
-  titulo: string
-  corpo: string
-  tipo: TipoComunicado
-  publicado_em: string | null
-  criado_por?: string
-  created_at?: string
-  updated_at?: string
-}
+/** Página de novidades no site de ajuda: o link que vai no template "atualizações da semana". */
+export const LINK_NOVIDADES = `${SITE_AJUDA}/novidades`
 
 export type OrigemContato = 'canais' | 'visao_geral' | 'manual'
 
@@ -60,21 +53,7 @@ export interface ItemDisparo {
   enviado_em: string | null
 }
 
-export const TIPO_LABEL: Record<TipoComunicado, string> = {
-  novidade: 'Novidade',
-  melhoria: 'Melhoria',
-  correcao: 'Correção',
-  aviso: 'Aviso',
-}
-
 export const comunicadosApi = {
-  posts: () => api.get<ComunicadoPost[]>('/api/comunicados/posts'),
-  criarPost: (body: { titulo: string; corpo: string; tipo: TipoComunicado; publicar: boolean }) =>
-    api.post<ComunicadoPost>('/api/comunicados/posts', body),
-  editarPost: (id: string, body: Partial<{ titulo: string; corpo: string; tipo: TipoComunicado; publicado: boolean }>) =>
-    api.patch<ComunicadoPost>(`/api/comunicados/posts/${id}`, body),
-  excluirPost: (id: string) => api.delete(`/api/comunicados/posts/${id}`),
-
   contatos: () => api.get<ContatoComunicado[]>('/api/comunicados/contatos'),
   marcarContato: (numero: string, incluido: boolean) =>
     api.put(`/api/comunicados/contatos/${encodeURIComponent(numero)}`, { incluido }),
@@ -89,13 +68,4 @@ export const comunicadosApi = {
   disparar: (body: { template: string; link?: string; texto?: string }) =>
     api.post<{ id: string; total: number }>('/api/comunicados/disparos', body),
   cancelar: (id: string) => api.post(`/api/comunicados/disparos/${id}/cancelar`),
-}
-
-export const novidadesPublicApi = {
-  list: () => api.get<ComunicadoPost[]>('/api/public/novidades'),
-}
-
-/** Link da página pública de atualizações, no domínio onde o painel está aberto. */
-export function linkNovidades(): string {
-  return `${window.location.origin}/novidades`
 }

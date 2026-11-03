@@ -212,7 +212,7 @@ export default function App() {
         <Route path="/r/:token" element={<RelatorioPublicoPage />} />
         <Route path="/suporte" element={<SupportPublicPage />} />
         <Route path="/nps/:token" element={<NpsPublicPage />} />
-        {/* Changelog público (sem login) — o que foi publicado no menu Comunicados. */}
+        {/* As novidades moram no site de ajuda — este caminho só redireciona pra lá. */}
         <Route path="/novidades" element={<NovidadesPublicPage />} />
         {/* Portal do cliente de tráfego (módulo Clientes NX Digital) — só relatórios publicados. */}
         <Route path="/cliente/:token" element={<PortalClientePage />} />

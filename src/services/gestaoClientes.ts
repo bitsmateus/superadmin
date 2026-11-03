@@ -1035,6 +1035,9 @@ export const gestaoClientes = {
     titulo: string; descricao: string; status: GcSocialStatus; editor_id: string | null; prazo: string | null
   }>) => api.patch<GcSocialProducao>(`/api/gc/social/producao/${id}`, dados),
   excluirSocialProducao: (id: string) => api.delete(`/api/gc/social/producao/${id}`),
+  /** PDF de apresentação das artes (capa + uma página por imagem). */
+  pdfDoSocial: (clienteId: string, dados: { periodo: string; itens: { id: string; titulo: string; texto: string }[] }) =>
+    api.postForBlob(`/api/gc/clientes/${clienteId}/social/pdf`, dados),
   anexarNaProducao: (id: string, anexo: { name: string; type: string; size: number; dataUrl: string }) =>
     api.post<GcSocialProducao>(`/api/gc/social/producao/${id}/anexos`, anexo),
   removerAnexoDaProducao: (id: string, anexoId: string) =>

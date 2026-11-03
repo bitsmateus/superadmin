@@ -2,7 +2,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { DndContext, DragOverlay, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import {
-  CalendarClock, ExternalLink, FileText, FolderOpen, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, UserRound, X,
+  CalendarClock, ExternalLink, FileDown, FileText, FolderOpen, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, UserRound, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
@@ -270,6 +270,191 @@ function ReferenciasDaArte({ demanda, onMudou }: { demanda: GcSocialProducao; on
   )
 }
 
+// ------------------------------------------------------------------ filtro por tempo
+
+type FiltroTempo = { tipo: 'tudo' | '7d' | '30d' | 'mes' | 'mes_passado' | 'personalizado'; de: string; ate: string }
+
+const FILTROS_TEMPO: { valor: FiltroTempo['tipo']; rotulo: string }[] = [
+  { valor: 'tudo', rotulo: 'Todo o período' },
+  { valor: '7d', rotulo: 'Últimos 7 dias' },
+  { valor: '30d', rotulo: 'Últimos 30 dias' },
+  { valor: 'mes', rotulo: 'Este mês' },
+  { valor: 'mes_passado', rotulo: 'Mês passado' },
+  { valor: 'personalizado', rotulo: 'Escolher datas' },
+]
+
+/** Data ISO → 'YYYY-MM-DD' no fuso de quem está vendo. */
+function diaLocal(iso: string | Date): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function limitesDoFiltro(f: FiltroTempo): { de: string; ate: string; rotulo: string } {
+  const hoje = new Date()
+  const atras = (n: number) => diaLocal(new Date(hoje.getTime() - n * 86_400_000))
+  const nomeMes = (d: Date) => {
+    const n = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    return n[0].toUpperCase() + n.slice(1)
+  }
+  switch (f.tipo) {
+    case '7d': return { de: atras(6), ate: '', rotulo: 'Últimos 7 dias' }
+    case '30d': return { de: atras(29), ate: '', rotulo: 'Últimos 30 dias' }
+    case 'mes': {
+      const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+      return { de: diaLocal(ini), ate: '', rotulo: nomeMes(ini) }
+    }
+    case 'mes_passado': {
+      const ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
+      const fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0)
+      return { de: diaLocal(ini), ate: diaLocal(fim), rotulo: nomeMes(ini) }
+    }
+    case 'personalizado':
+      return {
+        de: f.de, ate: f.ate,
+        rotulo: f.de || f.ate ? `${f.de ? dataBr(f.de) : '…'} a ${f.ate ? dataBr(f.ate) : 'hoje'}` : '',
+      }
+    default: return { de: '', ate: '', rotulo: '' }
+  }
+}
+
+function FiltroPeriodo({ filtro, onChange }: { filtro: FiltroTempo; onChange: (f: FiltroTempo) => void }) {
+  const campo = 'h-8 rounded-lg border border-line bg-surface px-2 text-xs text-foreground/75'
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <select
+        value={filtro.tipo}
+        onChange={(e) => onChange({ ...filtro, tipo: e.target.value as FiltroTempo['tipo'] })}
+        aria-label="Filtrar pela data de criação"
+        className={campo}
+      >
+        {FILTROS_TEMPO.map((f) => <option key={f.valor} value={f.valor}>{f.rotulo}</option>)}
+      </select>
+      {filtro.tipo === 'personalizado' && (
+        <>
+          <input type="date" value={filtro.de} onChange={(e) => onChange({ ...filtro, de: e.target.value })} className={campo} aria-label="De" />
+          <span className="text-xs text-foreground/40">até</span>
+          <input type="date" value={filtro.ate} onChange={(e) => onChange({ ...filtro, ate: e.target.value })} className={campo} aria-label="Até" />
+        </>
+      )}
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ PDF das artes
+
+/**
+ * Escolhe as artes que entram no PDF de apresentação (só as que têm imagem anexada) e deixa ajustar o
+ * título e o texto de cada uma — o texto é o que aparece ao lado da imagem ("Adicionamos o elemento 3D…").
+ */
+function ModalPdfArtes({ aberto, onFechar, clienteId, demandas, periodo }: {
+  aberto: boolean; onFechar: () => void; clienteId: string; demandas: GcSocialProducao[]; periodo: string
+}) {
+  const comImagem = demandas.filter((d) => (d.anexos ?? []).some((a) => a.type.startsWith('image/')))
+  const [marcados, setMarcados] = React.useState<Set<string>>(new Set())
+  const [textos, setTextos] = React.useState<Record<string, { titulo: string; texto: string }>>({})
+  const [gerando, setGerando] = React.useState(false)
+
+  // Ao abrir: tudo marcado, título sem o "Arte:/Reels:" da frente e texto em branco pra a pessoa escrever.
+  React.useEffect(() => {
+    if (!aberto) return
+    setMarcados(new Set(comImagem.map((d) => d.id)))
+    setTextos(Object.fromEntries(comImagem.map((d) => [d.id, { titulo: d.titulo.replace(/^(arte|reels|criativo)\s*:\s*/i, ''), texto: '' }])))
+  }, [aberto]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const gerar = async () => {
+    const itens = comImagem.filter((d) => marcados.has(d.id)).map((d) => ({ id: d.id, ...textos[d.id] }))
+    if (itens.length === 0) return toast.error('Marque ao menos uma arte')
+    setGerando(true)
+    try {
+      const blob = await gestaoClientes.pdfDoSocial(clienteId, { periodo, itens })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `social-media${periodo ? `-${periodo.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}` : ''}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      onFechar()
+    } catch (err) {
+      toast.error('Falha ao gerar o PDF: ' + (err as Error).message)
+    } finally {
+      setGerando(false)
+    }
+  }
+
+  const paginas = comImagem
+    .filter((d) => marcados.has(d.id))
+    .reduce((s, d) => s + (d.anexos ?? []).filter((a) => a.type.startsWith('image/')).length, 0)
+
+  return (
+    <Modal
+      open={aberto}
+      onClose={onFechar}
+      size="xl"
+      title="PDF das artes"
+      description={`Capa "Social media" com a logo da NX e uma página por imagem anexada${periodo ? ` · ${periodo}` : ''}.`}
+      footer={
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-foreground/50">{paginas} página{paginas === 1 ? '' : 's'} de arte + capa</span>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onFechar}>Cancelar</Button>
+            <Button loading={gerando} disabled={paginas === 0} leftIcon={<FileDown className="h-4 w-4" />} onClick={() => void gerar()}>
+              Baixar PDF
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      {comImagem.length === 0 ? (
+        <p className="py-6 text-center text-sm text-foreground/55">
+          Nenhuma demanda {periodo ? 'desse período ' : ''}tem imagem anexada. Abra o card e use "Adicionar arquivos" pra anexar a arte.
+        </p>
+      ) : (
+        <ul className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+          {comImagem.map((d) => {
+            const imagens = (d.anexos ?? []).filter((a) => a.type.startsWith('image/'))
+            const marcado = marcados.has(d.id)
+            const t = textos[d.id] ?? { titulo: d.titulo, texto: '' }
+            return (
+              <li key={d.id} className={cn('rounded-xl border p-3', marcado ? 'border-accent/40' : 'border-line opacity-60')}>
+                <div className="flex gap-3">
+                  <input
+                    type="checkbox"
+                    checked={marcado}
+                    onChange={() => setMarcados((s) => { const n = new Set(s); if (n.has(d.id)) n.delete(d.id); else n.add(d.id); return n })}
+                    className="mt-1 h-4 w-4 shrink-0 accent-[#4F8EF7]"
+                    aria-label={`Incluir ${d.titulo}`}
+                  />
+                  <div className="flex shrink-0 gap-1">
+                    {imagens.slice(0, 3).map((a) => <img key={a.id} src={a.dataUrl} alt="" className="h-16 w-14 rounded-md object-cover" />)}
+                    {imagens.length > 3 && <span className="flex h-16 w-8 items-center justify-center text-xs text-foreground/45">+{imagens.length - 3}</span>}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <input
+                      value={t.titulo}
+                      onChange={(e) => setTextos((x) => ({ ...x, [d.id]: { ...t, titulo: e.target.value } }))}
+                      disabled={!marcado}
+                      placeholder="Título da página (ex.: Tráfego pago)"
+                      className="h-8 w-full rounded-md border border-line bg-surface px-2 text-sm font-medium"
+                    />
+                    <textarea
+                      value={t.texto}
+                      onChange={(e) => setTextos((x) => ({ ...x, [d.id]: { ...t, texto: e.target.value } }))}
+                      disabled={!marcado}
+                      rows={2}
+                      placeholder="O que foi feito nessa arte (aparece ao lado da imagem). Opcional."
+                      className="w-full resize-y rounded-md border border-line bg-surface px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Modal>
+  )
+}
+
 interface FormProducao {
   id?: string
   titulo: string
@@ -325,6 +510,14 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
   const sensors = useKanbanSensors()
   const [arrastando, setArrastando] = React.useState<string | null>(null)
   const [vendo, setVendo] = React.useState<GcSocialProducao | null>(null)
+  const [filtro, setFiltro] = React.useState<FiltroTempo>({ tipo: 'tudo', de: '', ate: '' })
+  const [pdfAberto, setPdfAberto] = React.useState(false)
+  const limites = limitesDoFiltro(filtro)
+  // O filtro olha a data em que a demanda foi CRIADA (dia de São Paulo, como a pessoa vê).
+  const producaoNoPeriodo = producao.filter((p) => {
+    const dia = diaLocal(p.created_at)
+    return (!limites.de || dia >= limites.de) && (!limites.ate || dia <= limites.ate)
+  })
 
   /** Muda a situação na tela na hora e grava; se o servidor recusar, recarrega o que vale. */
   const mover = async (id: string, status: GcSocialStatus) => {
@@ -439,14 +632,27 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
       {/* ------------------------------------------------------------ produção */}
       <section>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-foreground">Produção</h2>
-          <Button
-            size="sm"
-            leftIcon={<Plus className="h-4 w-4" />}
-            onClick={() => setForm({ titulo: '', descricao: '', status: 'para_producao', editor: '', prazo: '' })}
-          >
-            Nova demanda de produção
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-foreground">Produção</h2>
+            <FiltroPeriodo filtro={filtro} onChange={setFiltro} />
+            {filtro.tipo !== 'tudo' && (
+              <span className="text-xs text-foreground/45">
+                {producaoNoPeriodo.length} de {producao.length} criadas
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" leftIcon={<FileDown className="h-4 w-4" />} onClick={() => setPdfAberto(true)}>
+              Gerar PDF das artes
+            </Button>
+            <Button
+              size="sm"
+              leftIcon={<Plus className="h-4 w-4" />}
+              onClick={() => setForm({ titulo: '', descricao: '', status: 'para_producao', editor: '', prazo: '' })}
+            >
+              Nova demanda de produção
+            </Button>
+          </div>
         </div>
         <DndContext
           sensors={sensors}
@@ -456,7 +662,7 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
         >
           <div className="grid gap-3 lg:grid-cols-3">
             {COLUNAS.map((col) => {
-              const itens = producao.filter((p) => p.status === col.valor)
+              const itens = producaoNoPeriodo.filter((p) => p.status === col.valor)
               return (
                 <ColunaProducao key={col.valor} col={col} total={itens.length}>
                   {itens.length === 0 && (
@@ -722,6 +928,14 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
           </div>
         )}
       </Modal>
+
+      <ModalPdfArtes
+        aberto={pdfAberto}
+        onFechar={() => setPdfAberto(false)}
+        clienteId={clienteId}
+        demandas={producaoNoPeriodo}
+        periodo={limites.rotulo}
+      />
 
       <Modal open={!!ampliado} onClose={() => setAmpliado(null)} size="2xl" title={ampliado?.titulo}>
         {ampliado?.anexo && <img src={ampliado.anexo.dataUrl} alt={ampliado.titulo} className="max-h-[70vh] w-full object-contain" />}

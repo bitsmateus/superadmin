@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import crypto from 'node:crypto';
 import { pool, query, queryOne, withTransaction } from '../db.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
+import { montarHtmlSocialPdf, type ItemPdfSocial } from '../lib/gcSocialPdf.js';
 import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
 import { validarMetricas } from '../lib/gcValidacao.js';
 import { garantirRecorrentes, sincronizarRotinaAutomatica } from '../lib/gcRecorrentes.js';
@@ -2438,6 +2439,50 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
     }
   );
+
+  // POST /api/gc/clientes/:id/social/pdf — PDF de apresentação com as artes escolhidas na tela (uma página
+  // por imagem anexada). Título e texto vêm da tela, que deixa editar antes; as imagens vêm do banco.
+  app.post<{
+    Params: { id: string };
+    Body: { periodo?: string; itens?: { id: string; titulo?: string; texto?: string }[] };
+  }>('/api/gc/clientes/:id/social/pdf', autenticado, async (req, reply) => {
+    const pedidos = (req.body?.itens ?? []).filter((x) => x && typeof x.id === 'string').slice(0, 60);
+    if (pedidos.length === 0) return reply.status(400).send({ message: 'Escolha ao menos uma arte' });
+    const cliente = await queryOne<{ nome_empresa: string }>('SELECT nome_empresa FROM gc_clientes WHERE id = $1', [req.params.id]);
+    if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+    const linhas = await query<{ id: string; titulo: string; anexos: { type?: string; dataUrl?: string }[] }>(
+      `SELECT id, titulo, anexos FROM gc_social_producao WHERE gc_cliente_id = $1 AND id = ANY($2::uuid[])`,
+      [req.params.id, pedidos.map((p) => p.id)]
+    );
+    const porId = new Map(linhas.map((l) => [l.id, l]));
+    const itens: ItemPdfSocial[] = [];
+    for (const p of pedidos) {
+      const l = porId.get(p.id);
+      if (!l) continue;
+      for (const a of l.anexos ?? []) {
+        if (!String(a.type ?? '').startsWith('image/') || !/^data:image\//.test(String(a.dataUrl ?? ''))) continue;
+        itens.push({
+          titulo: String(p.titulo ?? l.titulo).slice(0, 120),
+          texto: String(p.texto ?? '').slice(0, 900),
+          imagem: String(a.dataUrl),
+        });
+      }
+    }
+    if (itens.length === 0) return reply.status(400).send({ message: 'As artes escolhidas não têm imagem anexada' });
+    try {
+      const pdf = await renderFullHtmlToPdf(
+        montarHtmlSocialPdf({ cliente: cliente.nome_empresa, periodo: String(req.body?.periodo ?? '').slice(0, 80), itens }),
+        { width: '1280px', height: '720px', esperarRede: true },
+      );
+      return reply
+        .header('Content-Type', 'application/pdf')
+        .header('Content-Disposition', 'attachment; filename="social-media.pdf"')
+        .send(pdf);
+    } catch (err) {
+      app.log.error({ err }, 'falha ao gerar o PDF do social media');
+      return reply.status(500).send({ message: 'Não foi possível gerar o PDF' });
+    }
+  });
 
   // ------------------------------------------------------------------ briefing do cliente
   // Dados do cliente (site, Instagram, campos extras) e as perguntas e respostas do briefing.

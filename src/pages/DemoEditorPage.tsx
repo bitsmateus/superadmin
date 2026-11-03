@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { BarChart3, Check, Copy, Eye, History, ImagePlus, Loader2, Settings2, Trash2, Upload } from 'lucide-react'
+import { BarChart3, Check, Copy, Eye, History, Link2, ImagePlus, Loader2, Settings2, Trash2, Upload } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -200,6 +200,7 @@ export function DemoEditorPage() {
             {podeEditar && <Button size="sm" variant="ghost" leftIcon={<Settings2 className="h-4 w-4" />} onClick={() => setConfigAberta(true)}>Configurações</Button>}
             <Button size="sm" variant="ghost" leftIcon={<History className="h-4 w-4" />} onClick={() => setVersoesAberta(true)}>Versões</Button>
             <Button size="sm" variant="ghost" leftIcon={<BarChart3 className="h-4 w-4" />} onClick={() => navigate(`/demo-studio/demos/${id}/analytics`)}>Analytics</Button>
+            <Button size="sm" variant="ghost" leftIcon={<Link2 className="h-4 w-4" />} onClick={() => navigate(`/demo-studio/demos/${id}/links`)}>Links</Button>
             <Button size="sm" variant="outline" leftIcon={<Eye className="h-4 w-4" />} onClick={async () => { await descarregar(); navigate(`/demo-studio/demos/${id}/preview`) }}>
               Pré-visualizar
             </Button>
@@ -430,7 +431,10 @@ function ConfigDemoModal({ aberto, demo, onFechar, onSalvar }: {
       isTemplate: f.isTemplate,
       segment: f.segment.trim() || null,
       theme: { accent: f.accent, brandName: f.brandName.trim(), logoText: f.logoText.trim() },
-      settings: { showProgress: f.showProgress, showRestart: f.showRestart, ctaPhone: f.ctaPhone.replace(/\D/g, ''), ctaMessage: f.ctaMessage },
+      settings: {
+        showProgress: f.showProgress, showRestart: f.showRestart, ctaPhone: f.ctaPhone.replace(/\D/g, ''), ctaMessage: f.ctaMessage,
+        leadGateStep: f.leadGateStep ? Number(f.leadGateStep) : null,
+      },
     })
     setSalvando(false)
     if (ok) onFechar()
@@ -457,6 +461,17 @@ function ConfigDemoModal({ aberto, demo, onFechar, onSalvar }: {
         <Input label="Mensagem do botão do topo" value={f.ctaMessage} onChange={(e) => set({ ctaMessage: e.target.value })} placeholder="Olá! Estou vendo o tour…" />
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.showProgress} onChange={(e) => set({ showProgress: e.target.checked })} /> Mostrar barra de progresso</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.showRestart} onChange={(e) => set({ showRestart: e.target.checked })} /> Mostrar "Recomeçar"</label>
+        <div className="sm:col-span-2">
+          <Input
+            label="Pedir o contato antes da etapa nº (vazio = não pedir)"
+            type="number"
+            min={1}
+            max={demo.steps.length}
+            value={f.leadGateStep}
+            onChange={(e) => set({ leadGateStep: e.target.value })}
+            hint="Ao chegar nessa etapa, o formulário aparece e só libera o restante depois do envio. Links personalizados pulam essa parte (o lead já é conhecido)."
+          />
+        </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.isTemplate} onChange={(e) => set({ isTemplate: e.target.checked })} /> Usar como exemplo (template)</label>
         <Input label="Segmento" value={f.segment} placeholder="Clínica, Autopeças, Provedor…" onChange={(e) => set({ segment: e.target.value })} />
       </div>
@@ -476,6 +491,7 @@ function valoresIniciais(d: DemoCompleta) {
     logoText: d.theme.logoText ?? '',
     showProgress: d.settings.showProgress !== false,
     showRestart: d.settings.showRestart !== false,
+    leadGateStep: d.settings.leadGateStep ? String(d.settings.leadGateStep) : '',
     ctaPhone: d.settings.ctaPhone ?? '',
     ctaMessage: d.settings.ctaMessage ?? '',
   }

@@ -81,6 +81,7 @@ import { criarEstruturaDemoStudio } from './db/demoStudio.js';
 import { startComunicadosDisparo } from './lib/comunicados.js';
 import { startComunicadosSemanal } from './jobs/comunicadosSemanal.js';
 import { startDemoStudioLimpeza } from './jobs/demoStudioLimpeza.js';
+import { startDemoStudioWebhooks } from './lib/demoStudio/webhooks.js';
 
 async function main() {
   // Default do Fastify é 1MB — pequeno demais pra anexos em base64 (contrato em PDF, prints de
@@ -254,6 +255,7 @@ async function main() {
   startComunicadosDisparo();
   startComunicadosSemanal();
   startDemoStudioLimpeza();
+  startDemoStudioWebhooks();
   // Uma vez por subida: o mesmo lead em mais de um card aberto do CRM LUIS CLOSER vira um card só.
   setTimeout(() => {
     juntarEspelhosRepetidos()

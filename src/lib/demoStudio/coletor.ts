@@ -78,6 +78,8 @@ function idDaSessao(demoId: string, visitorId: string): { id: string; nova: bool
 export interface Coletor {
   registrar: (e: EventoColetado) => void
   encerrar: () => void
+  /** Ids desta visita — o envio do lead liga o lead à sessão e ao visitante. */
+  ids: { visitorId: string; sessionId: string }
 }
 
 export function criarColetor(opcoes: {
@@ -171,6 +173,7 @@ export function criarColetor(opcoes: {
 
   return {
     registrar,
+    ids: { visitorId, sessionId: sessao.id },
     encerrar: () => {
       window.clearInterval(timerEnvio)
       window.clearInterval(timerBatimento)

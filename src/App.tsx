@@ -99,6 +99,21 @@ const DemoPreviewPage = React.lazy(() =>
 const DemoPublicPage = React.lazy(() =>
   import('./pages/DemoPublicPage').then((m) => ({ default: m.DemoPublicPage })),
 )
+const DemoLinkPage = React.lazy(() =>
+  import('./pages/DemoPublicPage').then((m) => ({ default: m.DemoLinkPage })),
+)
+const DemoLeadsPage = React.lazy(() =>
+  import('./pages/DemoCrmPages').then((m) => ({ default: m.DemoLeadsPage })),
+)
+const DemoLeadPage = React.lazy(() =>
+  import('./pages/DemoCrmPages').then((m) => ({ default: m.DemoLeadPage })),
+)
+const DemoLinksPage = React.lazy(() =>
+  import('./pages/DemoCrmPages').then((m) => ({ default: m.DemoLinksPage })),
+)
+const DemoSettingsPage = React.lazy(() =>
+  import('./pages/DemoCrmPages').then((m) => ({ default: m.DemoSettingsPage })),
+)
 const DemoPreviewFramePage = React.lazy(() =>
   import('./pages/DemoPublicPage').then((m) => ({ default: m.DemoPreviewFramePage })),
 )
@@ -247,6 +262,7 @@ export default function App() {
         {/* Demo Studio — player público (sem login) e o iframe da pré-visualização do rascunho (com login). */}
         <Route path="/d/:slug" element={<DemoPublicPage />} />
         <Route path="/e/:slug" element={<DemoPublicPage embed />} />
+        <Route path="/l/:code" element={<DemoLinkPage />} />
         <Route path="/demo-studio/preview/:id" element={<ProtectedRoute><DemoPreviewFramePage /></ProtectedRoute>} />
 
         <Route
@@ -300,9 +316,11 @@ export default function App() {
           <Route path="/demo-studio/demos/:id" element={<DemoEditorPage />} />
           <Route path="/demo-studio/demos/:id/preview" element={<DemoPreviewPage />} />
           <Route path="/demo-studio/exemplos" element={<DemoStudioPage secao="exemplos" />} />
-          <Route path="/demo-studio/leads" element={<DemoStudioPage secao="leads" />} />
-          <Route path="/demo-studio/links" element={<DemoStudioPage secao="links" />} />
-          <Route path="/demo-studio/configuracoes" element={<DemoStudioPage secao="configuracoes" />} />
+          <Route path="/demo-studio/leads" element={<DemoLeadsPage />} />
+          <Route path="/demo-studio/leads/:id" element={<DemoLeadPage />} />
+          <Route path="/demo-studio/links" element={<DemoLinksPage />} />
+          <Route path="/demo-studio/demos/:id/links" element={<DemoLinksPage />} />
+          <Route path="/demo-studio/configuracoes" element={<DemoSettingsPage />} />
           <Route path="/tarefas" element={<SupportWorkspacePage />} />
           {/* Uma cópia do menu Suporte tem rota só dela — ver SupportViewPage. */}
           <Route path="/visao/:pageId" element={<SupportViewPage />} />

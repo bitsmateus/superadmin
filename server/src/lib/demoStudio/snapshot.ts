@@ -43,6 +43,7 @@ export interface Snapshot {
   chapters: string[];
   frames: SnapshotFrame[];
   steps: SnapshotStep[];
+  consent?: { texto?: string; politicaUrl?: string };
 }
 
 /** Snapshot do rascunho atual. Só os frames usados por etapas entram (o player pré-carrega todos). */
@@ -133,12 +134,16 @@ export async function despublicar(demoId: string): Promise<void> {
 
 /** Versão publicada de uma demo pelo slug (o que o link público mostra). */
 export async function versaoPublicada(slug: string): Promise<Snapshot | null> {
-  const row = await queryOne<{ id: string; snapshot: Snapshot }>(
-    `SELECT v.id, v.snapshot FROM ds_demos d JOIN ds_demo_versions v ON v.id = d.published_version_id
+  const row = await queryOne<{ id: string; snapshot: Snapshot; ws: Record<string, any> }>(
+    `SELECT v.id, v.snapshot, w.settings AS ws FROM ds_demos d
+     JOIN ds_demo_versions v ON v.id = d.published_version_id
+     JOIN ds_workspaces w ON w.id = d.workspace_id
      WHERE d.slug = $1 AND d.status = 'PUBLISHED'`,
     [slug]
   );
-  return row ? { ...row.snapshot, versionId: row.id } : null;
+  if (!row) return null;
+  // Consentimento e política de privacidade são do workspace (§13): valem para todas as demos, mesmo publicadas antes.
+  return { ...row.snapshot, versionId: row.id, consent: { texto: row.ws?.consentText || undefined, politicaUrl: row.ws?.privacyUrl || undefined } };
 }
 
 /**

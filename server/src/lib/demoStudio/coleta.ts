@@ -3,6 +3,8 @@ import UAParser from 'ua-parser-js';
 import { z } from 'zod';
 import type { PoolClient } from 'pg';
 import { withTransaction } from '../../db.js';
+import { atualizarPontuacao } from './leads.js';
+import { dispararEvento } from './webhooks.js';
 
 /**
  * Processamento do POST /api/t (§8.2): valida o lote do player, cria/atualiza visitante e sessão, grava os
@@ -113,14 +115,38 @@ export interface ContextoDaColeta {
   ipHash: string;
 }
 
+/** O que o lote mudou na sessão — usado pra disparar webhooks e recalcular a pontuação do lead. */
+export interface ResultadoDoLote {
+  sessionId: string;
+  leadId: string | null;
+  internal: boolean;
+  criada: boolean;
+  concluiuAgora: boolean;
+  ctaAgora: boolean;
+}
+
 /**
- * Grava o lote. Devolve false quando o lote não vale (demo inexistente, sessão de outra demo) — o
- * endpoint responde 204 do mesmo jeito: o player não tem o que fazer com erro.
+ * Grava o lote e, depois de confirmado, dispara os webhooks (§9.1) e recalcula a pontuação do lead.
+ * Devolve null quando o lote não vale (demo inexistente, sessão de outra demo) — o endpoint responde 204
+ * do mesmo jeito: o player não tem o que fazer com erro.
  */
-export async function gravarLote(lote: LoteDeEventos, c: ContextoDaColeta): Promise<boolean> {
+export async function gravarLote(lote: LoteDeEventos, c: ContextoDaColeta): Promise<ResultadoDoLote | null> {
+  const r = await gravarNoBanco(lote, c);
+  if (r?.leadId && !r.internal) {
+    await atualizarPontuacao(r.leadId);
+    if (r.criada) await dispararEvento('session.started', { sessionId: r.sessionId });
+  }
+  if (r && !r.internal) {
+    if (r.concluiuAgora) await dispararEvento('session.completed', { sessionId: r.sessionId });
+    if (r.ctaAgora) await dispararEvento('cta.clicked', { sessionId: r.sessionId });
+  }
+  return r;
+}
+
+async function gravarNoBanco(lote: LoteDeEventos, c: ContextoDaColeta): Promise<ResultadoDoLote | null> {
   return withTransaction(async (db) => {
     const { rows: demos } = await db.query(`SELECT id FROM ds_demos WHERE id = $1`, [lote.demoId]);
-    if (!demos[0]) return false;
+    if (!demos[0]) return null;
 
     let versionId: string | null = null;
     let totalSteps = 0;
@@ -150,7 +176,7 @@ export async function gravarLote(lote: LoteDeEventos, c: ContextoDaColeta): Prom
     // como uma view sem ninguém ter visto nada.
     if (lote.events.every((e) => e.t === 'heartbeat')) {
       const { rows } = await db.query(`SELECT 1 FROM ds_view_sessions WHERE id = $1`, [lote.sessionId]);
-      if (!rows[0]) return false;
+      if (!rows[0]) return null;
     }
 
     const agora = Date.now();
@@ -167,26 +193,30 @@ export async function gravarLote(lote: LoteDeEventos, c: ContextoDaColeta): Prom
 
     const disp = lerDispositivo(c.ua);
     const utm = lote.ctx?.utm ?? {};
-    await db.query(
+    const { rows: inserida } = await db.query(
       `INSERT INTO ds_view_sessions
          (id, demo_id, version_id, link_id, visitor_id, lead_id, started_at, last_seen_at, total_steps,
           internal, device, browser, os, referrer, utm, ip_hash)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-       ON CONFLICT (id) DO NOTHING`,
+       ON CONFLICT (id) DO NOTHING RETURNING id`,
       [
         lote.sessionId, lote.demoId, versionId, linkId, lote.visitorId, leadDoLink ?? visitante[0]?.lead_id ?? null,
         primeiro, totalSteps, !!lote.internal, disp.device, disp.browser, disp.os,
         lote.ctx?.referrer || null, JSON.stringify(utm), c.ipHash,
       ]
     );
-    const { rows: sessao } = await db.query(`SELECT demo_id, visitor_id FROM ds_view_sessions WHERE id = $1`, [lote.sessionId]);
+    const { rows: sessao } = await db.query(
+      `SELECT demo_id, visitor_id, completed, cta_clicked FROM ds_view_sessions WHERE id = $1`,
+      [lote.sessionId]
+    );
     // Id de sessão de outra demo/visitante: não mistura (o navegador gera ids novos por demo).
-    if (sessao[0]?.demo_id !== lote.demoId || sessao[0]?.visitor_id !== lote.visitorId) return false;
+    if (sessao[0]?.demo_id !== lote.demoId || sessao[0]?.visitor_id !== lote.visitorId) return null;
+    const antes = sessao[0];
 
     await inserirEventos(db, lote, horarios);
 
     const r = resumoDoLote(lote.events);
-    await db.query(
+    const { rows: depois } = await db.query(
       `UPDATE ds_view_sessions s SET
          last_seen_at = GREATEST(s.last_seen_at, $2),
          active_ms = s.active_ms + $3,
@@ -197,10 +227,19 @@ export async function gravarLote(lote: LoteDeEventos, c: ContextoDaColeta): Prom
          -- Alguém logado no painel continuou esta sessão (mesmo navegador, menos de 30 min): ela inteira
          -- deixa de contar, senão a visita interna somaria etapas na sessão de um visitante de verdade.
          internal = s.internal OR $7
-       WHERE s.id = $1`,
+       WHERE s.id = $1
+       RETURNING lead_id, internal, completed, cta_clicked`,
       [lote.sessionId, ultimo, r.activeMs, r.maxOrder, r.completed, r.cta, !!lote.internal]
     );
-    return true;
+    const d = depois[0];
+    return {
+      sessionId: lote.sessionId,
+      leadId: d.lead_id,
+      internal: d.internal,
+      criada: inserida.length > 0,
+      concluiuAgora: !antes.completed && d.completed,
+      ctaAgora: !antes.cta_clicked && d.cta_clicked,
+    };
   });
 }
 
@@ -212,6 +251,8 @@ async function inserirEventos(db: PoolClient, lote: LoteDeEventos, horarios: Dat
     const order = (resto.order as number | undefined) ?? null;
     delete resto.stepId;
     delete resto.order;
+    // Os dados do formulário vão para ds_leads (POST /api/public/ds/leads); no evento fica só quais campos vieram.
+    if (t === 'lead_submit' && resto.fields) resto.fields = Object.keys(resto.fields as object);
     valores.push(lote.sessionId, t, stepId, order, Object.keys(resto).length ? JSON.stringify(resto) : null, horarios[i]);
     const b = i * 6;
     return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6})`;

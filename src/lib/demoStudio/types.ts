@@ -66,4 +66,6 @@ export interface PlayerDemo {
   chapters: string[]
   frames: PlayerFrame[]
   steps: PlayerStep[]
+  /** Só no link público: texto de consentimento e política de privacidade do workspace. */
+  consent?: { texto?: string; politicaUrl?: string }
 }

@@ -221,6 +221,169 @@ export const analytics = {
   sessao: (id: string) => api.get<SessaoDetalhe>(`/api/ds/sessions/${id}`),
 }
 
+/* ------------------------------------------------------------------ links, leads e configurações (M3) */
+
+export type StatusLead = 'NOVO' | 'EM_CONTATO' | 'QUALIFICADO' | 'GANHO' | 'PERDIDO'
+export const ROTULO_STATUS: Record<StatusLead, string> = {
+  NOVO: 'Novo',
+  EM_CONTATO: 'Em contato',
+  QUALIFICADO: 'Qualificado',
+  GANHO: 'Ganho',
+  PERDIDO: 'Perdido',
+}
+
+export interface LinkDemo {
+  id: string
+  code: string
+  kind: 'CHANNEL' | 'PERSONAL'
+  label: string
+  demo: { id: string; name: string; slug: string; status: DemoStatus }
+  createdBy: { id: string; name: string | null } | null
+  lead: { id: string; name: string | null; company: string | null } | null
+  variables: { nome?: string; empresa?: string; vendedor?: string }
+  utm: { source?: string; medium?: string; campaign?: string }
+  active: boolean
+  expiresAt: string | null
+  createdAt: string
+  views: number
+  leads: number
+  completed: number
+  lastSeenAt: string | null
+}
+
+export interface Lead {
+  id: string
+  name: string | null
+  company: string | null
+  phone: string | null
+  email: string | null
+  role: string | null
+  cnpj: string | null
+  status: StatusLead
+  score: number
+  hot: boolean
+  owner: { id: string; name: string | null } | null
+  source: { demoId: string | null; demoName: string | null; linkLabel: string | null; channel: string | null }
+  notes: string | null
+  firstSeenAt: string
+  lastSeenAt: string
+  sessions: number
+  maxPct: number
+  ctaClicked: boolean
+}
+
+export interface LeadDetalhe extends Lead {
+  sessionsList: { id: string; startedAt: string; activeMs: number; stepsViewed: number; totalSteps: number; completed: boolean; ctaClicked: boolean; device: string | null; demoName: string; linkLabel: string | null }[]
+  links: LinkDemo[]
+}
+
+export interface Webhook {
+  id: string
+  url: string
+  secret: string
+  events: string[]
+  active: boolean
+  createdAt: string
+  failed: number
+  lastDeliveryAt: string | null
+}
+
+export interface EntregaWebhook {
+  id: string
+  event: string
+  status: 'PENDING' | 'SUCCESS' | 'FAILED'
+  attempts: number
+  responseCode: number | null
+  responseBody: string | null
+  createdAt: string
+  nextAttemptAt: string
+}
+
+export interface UsuarioDoModulo {
+  id: string
+  name: string | null
+  email: string
+  role: string
+  hasAccess: boolean
+  dsRole: 'ADMIN' | 'EDITOR' | 'SELLER'
+}
+
+export interface ConfigWorkspace {
+  ctaDefault?: { phone?: string; message?: string }
+  privacyUrl?: string
+  consentText?: string
+}
+
+export type NovoLink =
+  | { kind: 'CHANNEL'; label: string; utm?: { source?: string; medium?: string; campaign?: string }; expiresAt?: string | null }
+  | { kind: 'PERSONAL'; nome: string; empresa: string; whatsapp: string; label?: string; expiresAt?: string | null }
+
+export const crm = {
+  links: (f: { demoId?: string; scope?: 'mine' | 'all' } = {}) => api.get<LinkDemo[]>(`/api/ds/links?${qs(f)}`),
+  criarLink: (demoId: string, dados: NovoLink) => api.post<LinkDemo>(`/api/ds/demos/${demoId}/links`, dados),
+  editarLink: (id: string, dados: { label?: string; active?: boolean; expiresAt?: string | null }) => api.patch<LinkDemo>(`/api/ds/links/${id}`, dados),
+  leads: (f: { status?: string; ownerId?: string; demoId?: string; q?: string; quentes?: '1' } = {}) => api.get<Lead[]>(`/api/ds/leads?${qs(f)}`),
+  lead: (id: string) => api.get<LeadDetalhe>(`/api/ds/leads/${id}`),
+  editarLead: (id: string, dados: Partial<{ status: StatusLead; ownerId: string | null; notes: string | null; name: string | null; company: string | null; phone: string | null; email: string | null; role: string | null }>) =>
+    api.patch<Lead>(`/api/ds/leads/${id}`, dados),
+  apagarLead: (id: string) => api.delete(`/api/ds/leads/${id}`),
+  pessoas: () => api.get<{ id: string; name: string | null }[]>('/api/ds/people'),
+  usuarios: () => api.get<UsuarioDoModulo[]>('/api/ds/users'),
+  editarUsuario: (id: string, dados: { hasAccess?: boolean; dsRole?: 'EDITOR' | 'SELLER' }) => api.patch(`/api/ds/users/${id}`, dados),
+  config: () => api.get<ConfigWorkspace>('/api/ds/settings'),
+  salvarConfig: (dados: ConfigWorkspace) => api.patch('/api/ds/settings', dados),
+  webhooks: () => api.get<Webhook[]>('/api/ds/webhooks'),
+  criarWebhook: (dados: { url: string; events: string[] }) => api.post<{ id: string }>('/api/ds/webhooks', dados),
+  editarWebhook: (id: string, dados: { url?: string; events?: string[]; active?: boolean; regenerateSecret?: boolean }) => api.patch(`/api/ds/webhooks/${id}`, dados),
+  apagarWebhook: (id: string) => api.delete(`/api/ds/webhooks/${id}`),
+  testarWebhook: (id: string) => api.post<{ ok: boolean; status: number | null; body: string }>(`/api/ds/webhooks/${id}/test`),
+  entregas: (id: string) => api.get<EntregaWebhook[]>(`/api/ds/webhooks/${id}/deliveries`),
+}
+
+/** Endereço público de um link nomeado/personalizado. */
+export function urlDoLink(code: string, base: string | null | undefined): string {
+  return `${(base || window.location.origin).replace(/\/+$/, '')}/l/${code}`
+}
+
+export interface LinkPublico {
+  demo: PlayerDemo
+  linkCode: string
+  variables: { nome: string; empresa: string; vendedor: string }
+  utm: Record<string, string>
+  leadKnown: boolean
+}
+
+/** Link nomeado/personalizado, sem login. */
+export async function linkPublico(code: string): Promise<LinkPublico | null> {
+  const res = await fetch(`${API_URL}/api/public/ds/links/${encodeURIComponent(code)}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error('Não foi possível carregar a demo.')
+  return res.json()
+}
+
+/** Envio do formulário de lead / CTA com nome e empresa, sem login. */
+export async function enviarLeadPublico(dados: {
+  demoId: string
+  sessionId: string
+  visitorId: string
+  linkCode?: string
+  origem: 'form' | 'cta'
+  consent?: boolean
+  fields: Record<string, string>
+}): Promise<void> {
+  const res = await fetch(`${API_URL}/api/public/ds/leads`, {
+    method: 'POST',
+    // text/plain = requisição simples: sem preflight de CORS entre o domínio da demo e o da API.
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(dados),
+    keepalive: dados.origem === 'cta',
+  })
+  if (!res.ok && res.status !== 204) {
+    const corpo = await res.json().catch(() => ({}))
+    throw new Error((corpo as { message?: string }).message || 'Não foi possível enviar. Tente de novo.')
+  }
+}
+
 /** Versão publicada, sem login (player público). */
 export async function demoPublicada(slug: string): Promise<PlayerDemo | null> {
   const res = await fetch(`${API_URL}/api/public/ds/demos/${encodeURIComponent(slug)}`)

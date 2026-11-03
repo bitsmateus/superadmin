@@ -42,13 +42,13 @@ Referências: `docs/ESPECIFICACAO.md` (seções citadas entre parênteses) e `re
 **Aceite:** abrir a demo em 3 navegadores diferentes (um até o fim) → dashboard mostra 3 views, 3 únicos, 33% de conclusão e funil coerente.
 
 ## M3 — Leads, links personalizados e webhooks
-- [ ] Etapa LEAD_FORM com campos configuráveis, consentimento e gate (§4.3, §7.2); `POST /api/public/leads`.
-- [ ] CTA WhatsApp com variáveis e mensagem modelo.
-- [ ] Links CHANNEL e PERSONAL (§4.4) em `/app/demos/[id]/links` e `/app/links`; rota `/l/[code]`; "Copiar mensagem para WhatsApp"; QR code.
-- [ ] Leads (§4.6): lista, detalhe, status, responsável, notas, dedupe por telefone E.164/e-mail, exportar CSV.
-- [ ] Pontuação de engajamento e selo "quente" (§8.3).
-- [ ] Webhooks (§9.1): CRUD, HMAC, `WebhookDelivery` + worker com retentativas, botão de teste e log.
-- [ ] Permissões do papel SELLER (vê só os próprios links/leads).
+- [x] Etapa LEAD_FORM com campos configuráveis, consentimento obrigatório e gate (§4.3, §7.2); `POST /api/public/ds/leads` (text/plain, 10/min por IP).
+- [x] CTA WhatsApp com variáveis e mensagem modelo; nome/empresa digitados no cartão final também viram lead.
+- [x] Links CHANNEL e PERSONAL (§4.4) em `/demo-studio/demos/:id/links` e `/demo-studio/links`; rota `/l/:code`; "Copiar mensagem para WhatsApp"; QR code gerado no navegador (`qrcode`, MIT).
+- [x] Leads (§4.6): lista, detalhe, status, responsável, notas, dedupe por telefone E.164/e-mail, exportar CSV (no navegador, com o `downloadCsv` do superadmin), apagar lead + sessões (LGPD).
+- [x] Pontuação de engajamento e selo "quente" (§8.3), recalculada a cada lote de eventos.
+- [x] Webhooks (§9.1): CRUD, HMAC, `ds_webhook_deliveries` + worker (10s) com retentativas 1/5/30 min, botão de teste e log das últimas 50.
+- [x] Permissões do papel SELLER (vê só demos publicadas e os próprios links/leads; não cria link de canal nem edita demo). Papel e acesso definidos em Configurações → Usuários.
 
 **Aceite:** como vendedor, crio link para "Ana / Pedal Bikes", abro no celular, termino a demo → lead aparece com sessão 100%, e o n8n recebe `session.completed` com assinatura válida.
 

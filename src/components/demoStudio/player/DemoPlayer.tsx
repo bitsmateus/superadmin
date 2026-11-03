@@ -34,6 +34,25 @@ export interface DemoPlayerProps {
   /** Versão para iframe: sem o cabeçalho. */
   embed?: boolean
   onEvent?: (e: PlayerEvent) => void
+  /** Lead já conhecido (link personalizado): pula o gate do formulário (§7.2). */
+  leadConhecido?: boolean
+  /** Envia o formulário (origem 'form') ou o nome/empresa do CTA ('cta') ao servidor. Sem ele, só preenche as variáveis. */
+  enviarLead?: (campos: Record<string, string>, origem: 'form' | 'cta') => Promise<void>
+  /** Texto de consentimento e política de privacidade do workspace. */
+  consentimento?: { texto?: string; politicaUrl?: string }
+}
+
+/** Etapa sintética do gate: aparece na etapa N quando a demo pede o lead antes de continuar. */
+const ETAPA_DO_GATE: Omit<PlayerStep, 'id' | 'order' | 'frameId'> = {
+  kind: 'LEAD_FORM',
+  hotspot: null,
+  title: 'Antes de continuar',
+  body: 'Deixe seu contato para ver o restante do tour.',
+  placement: 'auto',
+  buttonLabel: 'Continuar o tour',
+  chapter: null,
+  cta: null,
+  form: null,
 }
 
 interface Geometria {
@@ -61,7 +80,7 @@ const SetaVoltar = ({ tamanho }: { tamanho: number }) => (
   </svg>
 )
 
-export function DemoPlayer({ demo, vars = {}, embed = false, onEvent }: DemoPlayerProps) {
+export function DemoPlayer({ demo, vars = {}, embed = false, onEvent, leadConhecido = false, enviarLead, consentimento }: DemoPlayerProps) {
   const steps = demo.steps
   const frames = React.useMemo(() => new Map(demo.frames.map((f) => [f.id, f])), [demo.frames])
   const hotspots = React.useMemo(() => steps.map((s, i) => (s.kind === 'HOTSPOT' ? i : -1)).filter((i) => i >= 0), [steps])
@@ -71,6 +90,7 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent }: DemoPlay
   const [anim, setAnim] = React.useState(false)
   const [tick, setTick] = React.useState(0)
   const [lead, setLead] = React.useState<Variaveis>({})
+  const [leadOk, setLeadOk] = React.useState(leadConhecido)
   const [geo, setGeo] = React.useState<Geometria | null>(null)
 
   const vpRef = React.useRef<HTMLDivElement>(null)
@@ -83,7 +103,12 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent }: DemoPlay
   const onEventRef = React.useRef(onEvent)
   onEventRef.current = onEvent
 
-  const step: PlayerStep | undefined = steps[cur]
+  const etapaAtual: PlayerStep | undefined = steps[cur]
+  // Gate (§7.2): da etapa N em diante, nada aparece até o formulário ser enviado. Vale mesmo pulando
+  // pela barra de progresso ou pelo teclado.
+  const gate = demo.settings.leadGateStep
+  const gateAtivo = !!gate && !leadOk && !!etapaAtual && etapaAtual.order >= gate && etapaAtual.kind !== 'LEAD_FORM'
+  const step: PlayerStep | undefined = gateAtivo && etapaAtual ? { ...etapaAtual, ...ETAPA_DO_GATE } : etapaAtual
   const frame = step ? frames.get(step.frameId) : undefined
   const ehHotspot = step?.kind === 'HOTSPOT'
   const hotspot = ehHotspot ? step?.hotspot ?? null : null
@@ -171,12 +196,13 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent }: DemoPlay
   const voltar = React.useCallback(() => ir(cur - 1), [ir, cur])
 
   // Eventos de etapa vista / conclusão (o coletor de analytics entra no M2 pelo onEvent).
+  // Etapa atrás do gate só conta como vista depois que o formulário libera.
   React.useEffect(() => {
-    if (!step || vistasRef.current.has(cur)) return
+    if (!etapaAtual || gateAtivo || vistasRef.current.has(cur)) return
     vistasRef.current.add(cur)
-    onEventRef.current?.({ t: 'step_view', stepId: step.id, order: step.order })
-    if (step.kind === 'CTA' || cur === steps.length - 1) onEventRef.current?.({ t: 'complete' })
-  }, [cur, step, steps.length])
+    onEventRef.current?.({ t: 'step_view', stepId: etapaAtual.id, order: etapaAtual.order })
+    if (etapaAtual.kind === 'CTA' || cur === steps.length - 1) onEventRef.current?.({ t: 'complete' })
+  }, [cur, etapaAtual, gateAtivo, steps.length])
 
   React.useEffect(() => {
     const aoTeclar = (e: KeyboardEvent) => {
@@ -305,6 +331,7 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent }: DemoPlay
               <div className="card">
                 <div className="box">
                   <Cartao
+                    key={gateAtivo ? 'gate' : step.id}
                     demo={demo}
                     step={step}
                     indice={cur}
@@ -314,14 +341,23 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent }: DemoPlay
                     totalHotspots={hotspots.length}
                     telefonePadrao={telefone}
                     marca={marca}
-                    onProximo={proximo}
+                    // No gate o formulário só libera a etapa atual; no LEAD_FORM normal, segue o tour.
+                    onProximo={gateAtivo ? () => undefined : proximo}
                     onRever={() => ir(hotspots[0] ?? 0)}
+                    consentimento={consentimento}
+                    enviarLead={enviarLead}
                     onLead={(campos) => {
                       setLead((l) => ({ ...l, ...campos }))
+                      setLeadOk(true)
                       onEventRef.current?.({ t: 'lead_submit', fields: campos })
                     }}
                     onCampo={(chave, valor) => setLead((l) => ({ ...l, [chave]: valor }))}
-                    onCta={(tipo) => onEventRef.current?.({ t: 'cta_click', cta: tipo })}
+                    onCta={(tipo) => {
+                      onEventRef.current?.({ t: 'cta_click', cta: tipo })
+                      // Nome/empresa digitados no cartão final também identificam o lead (§3).
+                      const campos = Object.fromEntries((step.cta?.collect ?? []).map((k) => [k, (todas[k] ?? '').trim()]).filter(([, v]) => v))
+                      if (tipo === 'whatsapp' && Object.keys(campos).length) enviarLead?.(campos, 'cta').catch(() => undefined)
+                    }}
                   />
                 </div>
               </div>
@@ -401,6 +437,8 @@ interface CartaoProps {
   onLead: (campos: Record<string, string>) => void
   onCampo: (chave: string, valor: string) => void
   onCta: (tipo: 'whatsapp' | 'url') => void
+  enviarLead?: DemoPlayerProps['enviarLead']
+  consentimento?: DemoPlayerProps['consentimento']
 }
 
 const ROTULO_CAMPO: Record<string, string> = { nome: 'Seu nome', empresa: 'Empresa' }
@@ -484,7 +522,10 @@ function Cartao(p: CartaoProps) {
   )
 }
 
-/** Formulário de lead. No M1 só guarda os dados na sessão e segue; o envio ao servidor entra no M3. */
+/**
+ * Formulário de lead (LEAD_FORM e gate). Envia ao servidor com o consentimento marcado (LGPD, §13) e só
+ * depois libera o tour; sem `enviarLead` (pré-visualização do editor) só preenche as variáveis.
+ */
 function FormularioLead(p: CartaoProps) {
   const campos = p.step.form?.fields?.length
     ? p.step.form.fields
@@ -492,17 +533,35 @@ function FormularioLead(p: CartaoProps) {
   const [valores, setValores] = React.useState<Record<string, string>>(() =>
     Object.fromEntries(campos.map((c) => [c.key, p.vars[c.key] ?? ''])),
   )
+  const [aceite, setAceite] = React.useState(false)
+  const [enviando, setEnviando] = React.useState(false)
   const [erro, setErro] = React.useState('')
-  const enviar = (e: React.FormEvent) => {
+  const enviar = async (e: React.FormEvent) => {
     e.preventDefault()
     const faltando = campos.find((c) => c.required && !valores[c.key]?.trim())
     if (faltando) {
       setErro(`Preencha: ${faltando.label}`)
       return
     }
-    p.onLead(Object.fromEntries(Object.entries(valores).map(([k, v]) => [k, v.trim()])))
+    if (!aceite) {
+      setErro('Marque que concorda em ser contatado.')
+      return
+    }
+    const limpos = Object.fromEntries(Object.entries(valores).map(([k, v]) => [k, v.trim()]))
+    setErro('')
+    setEnviando(true)
+    try {
+      await p.enviarLead?.(limpos, 'form')
+    } catch (err) {
+      setErro((err as Error).message)
+      setEnviando(false)
+      return
+    }
+    setEnviando(false)
+    p.onLead(limpos)
     p.onProximo()
   }
+  const politica = p.consentimento?.politicaUrl
   return (
     <form onSubmit={enviar}>
       <h2>{p.titulo}</h2>
@@ -521,13 +580,17 @@ function FormularioLead(p: CartaoProps) {
             />
           </label>
         ))}
-        <span className="consent">
-          {p.step.form?.consentText || 'Ao enviar, você concorda em ser contatado pela NX Digital sobre esta demonstração.'}
-        </span>
+        <label className="consent" style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <input type="checkbox" checked={aceite} onChange={(e) => setAceite(e.target.checked)} style={{ width: 18, height: 18, flex: 'none', marginTop: 1 }} />
+          <span>
+            {p.step.form?.consentText || p.consentimento?.texto || 'Ao enviar, você concorda em ser contatado pela NX Digital sobre esta demonstração.'}
+            {politica && <> <a href={politica} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Política de privacidade</a></>}
+          </span>
+        </label>
         {erro && <span className="erro" role="alert">{erro}</span>}
       </div>
       <div className="row">
-        <button className="btn btn-primary" type="submit">{p.step.buttonLabel || 'Continuar o tour'}</button>
+        <button className="btn btn-primary" type="submit" disabled={enviando}>{enviando ? 'Enviando…' : p.step.buttonLabel || 'Continuar o tour'}</button>
       </div>
     </form>
   )

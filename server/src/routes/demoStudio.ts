@@ -1,8 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne, withTransaction } from '../db.js';
 import { DS_WORKSPACE_ID } from '../db/demoStudio.js';
-import { exigir, papelNoModulo, validar, type Usuario } from '../lib/demoStudio/acesso.js';
+import { exigir, papelDaRequisicao, papelNoModulo, validar, type Usuario } from '../lib/demoStudio/acesso.js';
 import { demoStudioAnalyticsRoutes } from './demoStudioAnalytics.js';
+import { demoStudioLeadsRoutes } from './demoStudioLeads.js';
 import { storage, tipoDoArquivo } from '../lib/demoStudio/storage.js';
 import { ErroImagem, bufferDoDataUrl, processarImagem } from '../lib/demoStudio/images.js';
 import * as S from '../lib/demoStudio/schemas.js';
@@ -96,6 +97,7 @@ export async function demoStudioRoutes(app: FastifyInstance) {
   const soAdmin = { onRequest: [app.authenticate], preHandler: exigir('admin') };
 
   await demoStudioAnalyticsRoutes(app);
+  await demoStudioLeadsRoutes(app);
 
   /* ---------------------------------------------------------------- fundação (M0) */
 
@@ -134,7 +136,9 @@ export async function demoStudioRoutes(app: FastifyInstance) {
 
   /* ---------------------------------------------------------------- demos */
 
-  app.get('/api/ds/demos', ver, async () => {
+  app.get('/api/ds/demos', ver, async (req) => {
+    // Vendedor só enxerga demo publicada (§2).
+    const soPublicadas = papelDaRequisicao(req) === 'SELLER';
     const rows = await query(
       `SELECT d.*,
          (SELECT COUNT(*)::int FROM ds_steps s WHERE s.demo_id = d.id) AS steps_count,
@@ -145,9 +149,9 @@ export async function demoStudioRoutes(app: FastifyInstance) {
          (SELECT COUNT(DISTINCT v.lead_id)::int FROM ds_view_sessions v
            WHERE v.demo_id = d.id AND v.lead_id IS NOT NULL AND v.started_at > NOW() - INTERVAL '30 days') AS leads_30d
        FROM ds_demos d
-       WHERE d.workspace_id = $1 AND d.status <> 'ARCHIVED'
+       WHERE d.workspace_id = $1 AND d.status <> 'ARCHIVED' AND (NOT $2 OR d.status = 'PUBLISHED')
        ORDER BY d.updated_at DESC`,
-      [DS_WORKSPACE_ID]
+      [DS_WORKSPACE_ID, soPublicadas]
     );
     return rows.map((d: Record<string, any>) => ({
       ...demoDaLinha(d),
@@ -479,6 +483,7 @@ export async function demoStudioRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { slug: string } }>('/api/public/ds/demos/:slug', async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
     const snap = await versaoPublicada(req.params.slug);
     if (!snap) return reply.status(404).send({ message: 'Demo não encontrada ou fora do ar.' });
     return reply.header('Cache-Control', 'public, max-age=30').send(snap);

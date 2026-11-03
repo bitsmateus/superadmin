@@ -5,6 +5,7 @@ import {
   anunciosDoCliente, avaliarAlertasClientes, benchmarkDoSegmento, campanhasDoCliente, lerContaNaMeta, metricasDoMesPeloTrafego, normalizarConta,
   serieDoCliente, sincronizarConta, tokenDa, totaisDoCliente, totaisPorCliente, type ContaTrafego,
 } from '../lib/gcTrafego.js';
+import { instagramPeloTrafego } from '../lib/gcInstagram.js';
 import { podeUsarModulo } from './gestaoClientes.js';
 
 /**
@@ -238,6 +239,8 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
       );
       // O primeiro sync (90 dias) pode levar um tempo: roda em segundo plano e a tela vai atualizando.
       if (conta) void sincronizarConta(conta).then(() => avaliarAlertasClientes()).catch(() => undefined);
+      // Token do próprio cliente costuma enxergar só o Instagram dele: já vincula na aba Conteúdo.
+      if (tokenProprio) void instagramPeloTrafego(req.params.id, sub).catch(() => undefined);
       return queryOne(`SELECT ${CAMPOS_CONTA} FROM gc_trafego_contas WHERE id = $1`, [conta?.id]);
     },
   );

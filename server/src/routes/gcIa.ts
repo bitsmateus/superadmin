@@ -1,7 +1,9 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conversar, gerarAnalise, ultimaAnalise, type MensagemIa } from '../lib/gcIa.js';
-import { lerPerfil, perfisDisponiveis, postsDoCliente, sincronizarInstagram, tokenInstagram } from '../lib/gcInstagram.js';
+import {
+  instagramPeloTrafego, perfisDisponiveis, postsDoCliente, sincronizarInstagram, tokenDoTrafego, tokenInstagram, vincularInstagram,
+} from '../lib/gcInstagram.js';
 import { podeUsarModulo } from './gestaoClientes.js';
 
 /**
@@ -103,32 +105,31 @@ export async function gcIaRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const igUserId = String(req.body?.ig_user_id ?? '').trim();
       if (!/^\d{5,30}$/.test(igUserId)) return reply.status(400).send({ message: 'Informe o ID do Instagram profissional (só números).' });
-      const tokenProprio = (req.body?.token ?? '').trim() || null;
-      const token = tokenInstagram({ token: tokenProprio });
-      if (!token) return reply.status(400).send({ message: 'O servidor não tem META_ADS_TOKEN: informe um token.' });
-      let perfil: { username: string; seguidores: number | null };
+      // Sem token digitado, usa o da conta de tráfego do cliente (e, sem ele, o da NX no servidor).
+      const tokenProprio = (req.body?.token ?? '').trim() || (await tokenDoTrafego(req.params.id));
+      if (!tokenInstagram({ token: tokenProprio })) {
+        return reply.status(400).send({ message: 'O servidor não tem META_ADS_TOKEN: informe um token.' });
+      }
+      const { sub } = req.user as { sub: string };
       try {
-        perfil = await lerPerfil(igUserId, token);
+        const r = await vincularInstagram(req.params.id, igUserId, tokenProprio, sub);
+        return { ok: true, username: r.username };
       } catch (err) {
         return reply.status(400).send({ message: `A Meta não liberou esse perfil com o token usado. ${(err as Error).message}` });
       }
-      await query(
-        `INSERT INTO gc_instagram_contas (gc_cliente_id, ig_user_id, username, seguidores, token)
-         VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (gc_cliente_id) DO UPDATE SET ig_user_id = EXCLUDED.ig_user_id, username = EXCLUDED.username,
-           seguidores = EXCLUDED.seguidores, token = COALESCE(EXCLUDED.token, gc_instagram_contas.token), ultimo_erro = NULL`,
-        [req.params.id, igUserId, perfil.username, perfil.seguidores, tokenProprio],
-      );
-      const { sub } = req.user as { sub: string };
-      await query(
-        `INSERT INTO gc_historico (gc_cliente_id, tipo, titulo, descricao, autor_id)
-         VALUES ($1, 'evento_sistema', 'Instagram vinculado', $2, $3)`,
-        [req.params.id, `@${perfil.username}`, sub],
-      );
-      void sincronizarInstagram(req.params.id).catch(() => undefined);
-      return { ok: true, username: perfil.username };
     },
   );
+
+  // POST /api/gc/clientes/:id/instagram/pelo-trafego — perfis que o token da conta de tráfego enxerga;
+  // com um perfil só e o cliente ainda sem Instagram, já vincula.
+  app.post<{ Params: { id: string } }>('/api/gc/clientes/:id/instagram/pelo-trafego', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    try {
+      return await instagramPeloTrafego(req.params.id, sub);
+    } catch (err) {
+      return reply.status(400).send({ message: (err as Error).message });
+    }
+  });
 
   app.delete<{ Params: { id: string } }>('/api/gc/clientes/:id/instagram', autenticado, async (req, reply) => {
     await query('DELETE FROM gc_instagram_contas WHERE gc_cliente_id = $1', [req.params.id]);

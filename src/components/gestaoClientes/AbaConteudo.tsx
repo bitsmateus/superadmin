@@ -37,6 +37,30 @@ function ModalInstagram({ aberto, onFechar, clienteId, onMudou }: { aberto: bool
   const [buscando, setBuscando] = React.useState(false)
   const [salvando, setSalvando] = React.useState(false)
   const [filtro, setFiltro] = React.useState('')
+  const [origem, setOrigem] = React.useState<'trafego' | 'servidor' | null>(null)
+
+  // Ao abrir, já lista os perfis do token da conta de tráfego — sem precisar colar token nem clicar em Buscar.
+  React.useEffect(() => {
+    if (!aberto) return
+    let vivo = true
+    setBuscando(true)
+    gcIa.instagramPeloTrafego(clienteId)
+      .then((r) => {
+        if (!vivo) return
+        if (r.vinculado) {
+          toast.success(`@${r.vinculado} vinculado pela conta de tráfego. Puxando os posts…`)
+          onMudou()
+          onFechar()
+          return
+        }
+        setPerfis(r.perfis)
+        setOrigem(r.origem)
+      })
+      .catch(() => undefined)
+      .finally(() => { if (vivo) setBuscando(false) })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberto, clienteId])
 
   const buscar = async () => {
     setBuscando(true)
@@ -68,7 +92,7 @@ function ModalInstagram({ aberto, onFechar, clienteId, onMudou }: { aberto: bool
       <div className="space-y-4">
         <Input
           label="Token de acesso (opcional)"
-          hint="Em branco usa o token da NX no servidor."
+          hint="Em branco usa o token da conta de anúncio do cliente (aba Tráfego) ou, sem ele, o da NX."
           type="password"
           autoComplete="new-password"
           name="token-meta"
@@ -77,7 +101,14 @@ function ModalInstagram({ aberto, onFechar, clienteId, onMudou }: { aberto: bool
         />
         <div className="rounded-lg border border-line p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium">Escolher entre os perfis que o token enxerga</p>
+            <div>
+              <p className="text-sm font-medium">Escolher entre os perfis que o token enxerga</p>
+              {origem && !token.trim() && (
+                <p className="text-xs text-foreground/50">
+                  {origem === 'trafego' ? 'Usando o token da conta de anúncio deste cliente (aba Tráfego).' : 'Usando o token da NX — a conta de tráfego deste cliente não tem token próprio.'}
+                </p>
+              )}
+            </div>
             <Button size="sm" variant="secondary" loading={buscando} leftIcon={<Search className="h-3.5 w-3.5" />} onClick={() => void buscar()}>
               Buscar perfis
             </Button>
@@ -127,6 +158,20 @@ export function AbaConteudo({ clienteId }: { clienteId: string }) {
   const [ordem, setOrdem] = React.useState<Ordem>('alcance')
   const [modal, setModal] = React.useState(false)
   const [sincronizando, setSincronizando] = React.useState(false)
+
+  // Cliente sem Instagram: tenta vincular sozinho pelo token da conta de tráfego (uma vez por abertura da aba).
+  const tentouAuto = React.useRef(false)
+  React.useEffect(() => {
+    if (!dados || dados.conta || tentouAuto.current) return
+    tentouAuto.current = true
+    gcIa.instagramPeloTrafego(clienteId)
+      .then((r) => {
+        if (!r.vinculado) return
+        toast.success(`@${r.vinculado} vinculado pela conta de tráfego. Puxando os posts…`)
+        recarregar()
+      })
+      .catch(() => undefined)
+  }, [dados, clienteId, recarregar])
 
   const sincronizar = async () => {
     setSincronizando(true)

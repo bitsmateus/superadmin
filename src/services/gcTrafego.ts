@@ -134,6 +134,11 @@ export const gcIa = {
     api.post<{ perfis: { igUserId: string; username: string; pagina: string }[] }>('/api/gc/instagram/disponiveis', { token: token || undefined }),
   vincularInstagram: (id: string, ig_user_id: string, token?: string) =>
     api.post<{ ok: boolean; username: string }>(`/api/gc/clientes/${id}/instagram`, { ig_user_id, token: token || undefined }),
+  /** Perfis que o token da conta de tráfego do cliente enxerga; com um só, o servidor já vincula. */
+  instagramPeloTrafego: (id: string) =>
+    api.post<{ origem: 'trafego' | 'servidor'; perfis: { igUserId: string; username: string; pagina: string }[]; vinculado?: string }>(
+      `/api/gc/clientes/${id}/instagram/pelo-trafego`,
+    ),
   desvincularInstagram: (id: string) => api.delete(`/api/gc/clientes/${id}/instagram`),
   sincronizarInstagram: (id: string) =>
     api.post<{ ok: boolean; posts: number; erro?: string }>(`/api/gc/clientes/${id}/instagram/sincronizar`),

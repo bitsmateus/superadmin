@@ -162,3 +162,64 @@ export async function postsDoCliente(clienteId: string, dias = 90): Promise<Post
     };
   });
 }
+
+// ── Instagram a partir da conta de tráfego ────────────────────────────────────
+
+/** O token cadastrado na conta de anúncio do cliente (aba Tráfego), se alguém cadastrou um. */
+export async function tokenDoTrafego(clienteId: string): Promise<string | null> {
+  const r = await queryOne<{ token: string }>(
+    `SELECT token FROM gc_trafego_contas
+     WHERE gc_cliente_id = $1 AND ativo AND token IS NOT NULL AND trim(token) <> ''
+     ORDER BY created_at LIMIT 1`,
+    [clienteId],
+  );
+  return r?.token.trim() || null;
+}
+
+/** Grava o Instagram do cliente (lê o perfil antes, pra falhar na hora se o token não enxerga). */
+export async function vincularInstagram(
+  clienteId: string,
+  igUserId: string,
+  tokenProprio: string | null,
+  autorId: string | null,
+): Promise<{ username: string }> {
+  const token = tokenInstagram({ token: tokenProprio });
+  if (!token) throw new Error('O servidor não tem META_ADS_TOKEN: informe um token.');
+  const perfil = await lerPerfil(igUserId, token);
+  await query(
+    `INSERT INTO gc_instagram_contas (gc_cliente_id, ig_user_id, username, seguidores, token)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (gc_cliente_id) DO UPDATE SET ig_user_id = EXCLUDED.ig_user_id, username = EXCLUDED.username,
+       seguidores = EXCLUDED.seguidores, token = COALESCE(EXCLUDED.token, gc_instagram_contas.token), ultimo_erro = NULL`,
+    [clienteId, igUserId, perfil.username, perfil.seguidores, tokenProprio],
+  );
+  await query(
+    `INSERT INTO gc_historico (gc_cliente_id, tipo, titulo, descricao, autor_id)
+     VALUES ($1, 'evento_sistema', 'Instagram vinculado', $2, $3)`,
+    [clienteId, `@${perfil.username}`, autorId],
+  );
+  void sincronizarInstagram(clienteId).catch(() => undefined);
+  return { username: perfil.username };
+}
+
+/**
+ * Os perfis de Instagram que o token da conta de TRÁFEGO do cliente enxerga. Se o cliente ainda não
+ * tem Instagram e o token enxerga exatamente um perfil, já vincula — é o caso comum de token do próprio
+ * cliente. Sem token próprio no tráfego, usa o da NX e só lista (o BM da agência vê todos os clientes).
+ */
+export async function instagramPeloTrafego(
+  clienteId: string,
+  autorId: string | null,
+): Promise<{ origem: 'trafego' | 'servidor'; perfis: { igUserId: string; username: string; pagina: string }[]; vinculado?: string }> {
+  const doTrafego = await tokenDoTrafego(clienteId);
+  const token = tokenInstagram({ token: doTrafego });
+  if (!token) return { origem: 'servidor', perfis: [] };
+  const perfis = await perfisDisponiveis(token);
+  const origem = doTrafego ? 'trafego' : 'servidor';
+  const jaTem = await queryOne('SELECT 1 FROM gc_instagram_contas WHERE gc_cliente_id = $1', [clienteId]);
+  if (!jaTem && doTrafego && perfis.length === 1) {
+    const r = await vincularInstagram(clienteId, perfis[0].igUserId, doTrafego, autorId);
+    return { origem, perfis, vinculado: r.username };
+  }
+  return { origem, perfis };
+}

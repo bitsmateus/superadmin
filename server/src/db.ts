@@ -1,7 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { DEFAULT_CONTRACT_HTML } from './data/contractTemplateSeed.js';
 import { criarEstruturaGestaoClientes } from './db/gestaoClientes.js';
-import { criarEstruturaDemoStudio } from './db/demoStudio.js';
 import { CONVERSAO_ORIGEM } from './lib/integracaoCards.js';
 import { ROTINAS_INICIAIS } from './lib/rotina.js';
 import { CANAL_DA_LUIZA } from './lib/resumoAgendamentos.js';
@@ -111,8 +110,6 @@ async function freeUpSlug(cleanId: string, staleWithSuffixId: string) {
 export async function runMigrations() {
   // Módulo "Clientes NX Digital": cadastro próprio, ilhado do resto (ver db/gestaoClientes.ts).
   await criarEstruturaGestaoClientes(pool);
-  // Módulo "Demo Studio": demos interativas por link, tabelas ds_* (ver db/demoStudio.ts e docs/demo-studio/).
-  await criarEstruturaDemoStudio(pool);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS servers JSONB`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tenant_api_token TEXT`);
   // Token da Meta (Graph) do WhatsApp oficial do cliente: a NX parou de devolvê-lo (Z-PRO v4), e sem ele não

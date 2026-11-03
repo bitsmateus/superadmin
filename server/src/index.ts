@@ -2,7 +2,7 @@ import { recarregarQuadrosDoFinanceiro } from './lib/financeiro.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
-import { startRealtimeListener, onDbChange, runMigrations, queryOne } from './db.js';
+import { startRealtimeListener, onDbChange, runMigrations, queryOne, pool } from './db.js';
 import { isOriginAllowed } from './lib/corsOrigin.js';
 import { broadcast } from './sse.js';
 import { authRoutes } from './routes/auth.js';
@@ -76,6 +76,8 @@ import { startReuniaoWebhook } from './jobs/reuniaoWebhook.js';
 import { startLeadAvisosPush } from './jobs/leadAvisosPush.js';
 import { comunicadosRoutes } from './routes/comunicados.js';
 import { demoStudioRoutes } from './routes/demoStudio.js';
+import { semearTourNx } from './lib/demoStudio/seed.js';
+import { criarEstruturaDemoStudio } from './db/demoStudio.js';
 import { startComunicadosDisparo } from './lib/comunicados.js';
 import { startComunicadosSemanal } from './jobs/comunicadosSemanal.js';
 
@@ -217,6 +219,15 @@ async function main() {
     await runMigrations();
   } catch (err) {
     console.error('runMigrations falhou — subindo o servidor mesmo assim:', err);
+  }
+  // Demo Studio (tabelas ds_*) fica FORA do runMigrations: só depende de `profiles`, então uma migração de
+  // outro módulo que falhe antes não pode deixar o módulo sem tabela. Depois, o template "NX Systems — Tour
+  // completo" (uma vez por banco). Falha aqui também não derruba o servidor.
+  try {
+    await criarEstruturaDemoStudio(pool);
+    await semearTourNx();
+  } catch (err) {
+    console.error('[demo-studio] estrutura/seed falhou:', err);
   }
   await startRealtimeListener();
   startDailyDigest();

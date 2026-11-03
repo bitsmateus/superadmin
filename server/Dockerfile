@@ -20,5 +20,7 @@ COPY --from=builder /app/dist ./dist
 # sem ele as imagens somem a cada deploy.
 ENV STORAGE_DIR=/data
 RUN mkdir -p /data
+# Telas do template "NX Systems — Tour completo", importadas no primeiro boot (lib/demoStudio/seed.ts).
+COPY seed ./seed
 EXPOSE 3001
 CMD ["node", "dist/index.js"]

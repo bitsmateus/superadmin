@@ -1,0 +1,335 @@
+{
+ "name": "NX Systems - Tour completo",
+ "slug": "nx-systems-tour",
+ "isTemplate": true,
+ "segment": "Geral",
+ "theme": {
+  "accent": "#2c6bc8",
+  "brandName": "NX Systems",
+  "logoText": "NX"
+ },
+ "chapters": [
+  "Atendimento",
+  "Inteligência Artificial",
+  "Automação",
+  "Vendas e campanhas",
+  "Gestão"
+ ],
+ "frames": [
+  {
+   "key": "home",
+   "name": "Home",
+   "kind": "IMAGE",
+   "image": "frames/home.webp",
+   "width": 1536,
+   "height": 695,
+   "pixelRatio": 2,
+   "displayUrl": "app.nxsystems.com.br/",
+   "html": "html/home.json"
+  },
+  {
+   "key": "conversa",
+   "name": "Atendimento - conversa",
+   "kind": "IMAGE",
+   "image": "frames/conversa.webp",
+   "width": 1536,
+   "height": 695,
+   "pixelRatio": 2,
+   "displayUrl": "app.nxsystems.com.br/atendimento",
+   "html": "html/conversa.json"
+  },
+  {
+   "key": "agentes",
+   "name": "Agentes de IA - lista",
+   "kind": "IMAGE",
+   "image": "frames/agentes.webp",
+   "width": 1536,
+   "height": 695,
+   "pixelRatio": 2,
+   "displayUrl": "app.nxsystems.com.br/agentes-ia",
+   "html": "html/agentes.json"
+  },
+  {
+   "key": "agente-editar",
+   "name": "Agentes de IA - editar",
+   "kind": "IMAGE",
+   "image": "frames/agente-editar.webp",
+   "width": 1536,
+   "height": 695,
+   "pixelRatio": 2,
+   "displayUrl": "app.nxsystems.com.br/agentes-ia",
+   "html": "html/agente-editar.json"
+  },
+  {
+   "key": "chatflow-lista",
+   "name": "Chat Flow - lista",
+   "kind": "IMAGE",
+   "image": "frames/chatflow-lista.webp",
+   "width": 1536,
+   "height": 695,
+   "pixelRatio": 2,
+   "displayUrl": "app.nxsystems.com.br/chat-flow",
+   "html": "html/chatflow-lista.json"
+  },
+  {
+   "key": "chatflow-editor",
+   "name": "Chat Flow - editor",
+   "kind": "IMAGE",
+   "image": "frames/chatflow-editor.webp",
+   "width": 1536,
+   "height": 695,
+   "pixelRatio": 2,
+   "displayUrl": "app.nxsystems.com.br/chat-flow",
+   "html": "html/chatflow-editor.json"
+  },
+  {
+   "key": "kanban",
+   "name": "Kanban por etiqueta",
+   "kind": "IMAGE",
+   "image": "frames/kanban.webp",
+   "width": 1536,
+   "height": 695,
+   "pixelRatio": 2,
+   "displayUrl": "app.nxsystems.com.br/kanban/tags",
+   "html": "html/kanban.json"
+  },
+  {
+   "key": "campanhas",
+   "name": "Campanhas",
+   "kind": "IMAGE",
+   "image": "frames/campanhas.webp",
+   "width": 1536,
+   "height": 695,
+   "pixelRatio": 2,
+   "displayUrl": "app.nxsystems.com.br/campanhas",
+   "html": "html/campanhas.json"
+  },
+  {
+   "key": "dashboard",
+   "name": "Dashboard",
+   "kind": "IMAGE",
+   "image": "frames/dashboard.webp",
+   "width": 1536,
+   "height": 695,
+   "pixelRatio": 2,
+   "displayUrl": "app.nxsystems.com.br/dashboard",
+   "html": "html/dashboard.json"
+  }
+ ],
+ "steps": [
+  {
+   "order": 1,
+   "kind": "MODAL",
+   "frame": "home",
+   "title": "Veja o NX Systems por dentro",
+   "body": "Toque nos pontos destacados para navegar pela plataforma real: atendimento no WhatsApp, agentes de IA, chatbots, kanban, campanhas e indicadores. Os dados são fictícios.",
+   "chapter": "Atendimento",
+   "buttonLabel": "Começar o tour"
+  },
+  {
+   "order": 2,
+   "kind": "HOTSPOT",
+   "frame": "home",
+   "title": "Central de Atendimento",
+   "body": "Todos os WhatsApps da sua empresa em uma tela só, com vários atendentes usando o mesmo número.",
+   "chapter": "Atendimento",
+   "hotspot": {
+    "x": 280,
+    "y": 312,
+    "w": 400,
+    "h": 190
+   }
+  },
+  {
+   "order": 3,
+   "kind": "HOTSPOT",
+   "frame": "conversa",
+   "title": "Cada conversa vira um ticket",
+   "body": "Com protocolo, fila (Suporte, Financeiro, Comercial), atendente responsável e etiquetas. Nenhum cliente fica esquecido.",
+   "chapter": "Atendimento",
+   "hotspot": {
+    "x": 260,
+    "y": 266,
+    "w": 351,
+    "h": 82
+   }
+  },
+  {
+   "order": 4,
+   "kind": "HOTSPOT",
+   "frame": "conversa",
+   "title": "API Oficial da Meta",
+   "body": "Cada resposta sai assinada com o nome de quem atendeu, o histórico fica completo e o número não corre risco de banimento.",
+   "chapter": "Atendimento",
+   "hotspot": {
+    "x": 930,
+    "y": 153,
+    "w": 522,
+    "h": 56
+   }
+  },
+  {
+   "order": 5,
+   "kind": "HOTSPOT",
+   "frame": "conversa",
+   "title": "Respostas rápidas",
+   "body": "Digite / para usar mensagens prontas. Envie áudio, fotos, arquivos e cobrança por PIX sem sair da conversa.",
+   "chapter": "Atendimento",
+   "hotspot": {
+    "x": 994,
+    "y": 641,
+    "w": 422,
+    "h": 36
+   }
+  },
+  {
+   "order": 6,
+   "kind": "HOTSPOT",
+   "frame": "agentes",
+   "title": "Agentes de IA 24 horas",
+   "body": "A IA faz o pré-atendimento: responde dúvidas, qualifica o cliente e passa a conversa para a pessoa certa da equipe.",
+   "chapter": "Inteligência Artificial",
+   "hotspot": {
+    "x": 280,
+    "y": 208,
+    "w": 400,
+    "h": 166
+   }
+  },
+  {
+   "order": 7,
+   "kind": "HOTSPOT",
+   "frame": "agente-editar",
+   "title": "Treine a IA em português",
+   "body": "Você descreve como ela deve atender, do mesmo jeito que treinaria um funcionário novo. Sem programação.",
+   "chapter": "Inteligência Artificial",
+   "hotspot": {
+    "x": 409,
+    "y": 514,
+    "w": 718,
+    "h": 80
+   }
+  },
+  {
+   "order": 8,
+   "kind": "HOTSPOT",
+   "frame": "agente-editar",
+   "title": "Conhecimento e roteamento",
+   "body": "Suba catálogo, preços e PDFs, defina para qual fila vai cada assunto e conecte agenda, CRM e outras ferramentas.",
+   "chapter": "Inteligência Artificial",
+   "hotspot": {
+    "x": 412,
+    "y": 112,
+    "w": 708,
+    "h": 36
+   }
+  },
+  {
+   "order": 9,
+   "kind": "HOTSPOT",
+   "frame": "chatflow-lista",
+   "title": "Chatbots com menu",
+   "body": "Prefere um menu de opções? Crie um fluxo para cada canal, campanha ou horário de atendimento.",
+   "chapter": "Automação",
+   "hotspot": {
+    "x": 696,
+    "y": 220,
+    "w": 400,
+    "h": 166
+   }
+  },
+  {
+   "order": 10,
+   "kind": "HOTSPOT",
+   "frame": "chatflow-editor",
+   "title": "Editor visual de fluxos",
+   "body": "Arraste blocos de mensagem, botões, listas, PIX, agente de IA, n8n e agendamento. Tudo visual.",
+   "chapter": "Automação",
+   "hotspot": {
+    "x": 296,
+    "y": 195,
+    "w": 210,
+    "h": 440
+   }
+  },
+  {
+   "order": 11,
+   "kind": "HOTSPOT",
+   "frame": "kanban",
+   "title": "Kanban por etiqueta",
+   "body": "Veja em que etapa está cada cliente: novo, falando com a IA, em negociação ou urgente.",
+   "chapter": "Vendas e campanhas",
+   "hotspot": {
+    "x": 912,
+    "y": 267,
+    "w": 300,
+    "h": 395
+   }
+  },
+  {
+   "order": 12,
+   "kind": "HOTSPOT",
+   "frame": "campanhas",
+   "title": "Campanhas pela API Oficial",
+   "body": "Dispare mensagens para a sua base e acompanhe em tempo real quantas foram entregues.",
+   "chapter": "Vendas e campanhas",
+   "hotspot": {
+    "x": 1230,
+    "y": 262,
+    "w": 172,
+    "h": 360
+   }
+  },
+  {
+   "order": 13,
+   "kind": "HOTSPOT",
+   "frame": "dashboard",
+   "title": "Indicadores do atendimento",
+   "body": "Tempo médio de atendimento, de espera e de primeira resposta, com volume por fila, canal e atendente.",
+   "chapter": "Gestão",
+   "hotspot": {
+    "x": 280,
+    "y": 286,
+    "w": 1232,
+    "h": 166
+   }
+  },
+  {
+   "order": 14,
+   "kind": "HOTSPOT",
+   "frame": "dashboard",
+   "title": "Insights de IA",
+   "body": "Com um clique a IA lê as métricas do período e aponta onde o atendimento pode melhorar.",
+   "chapter": "Gestão",
+   "hotspot": {
+    "x": 280,
+    "y": 172,
+    "w": 1232,
+    "h": 90
+   }
+  },
+  {
+   "order": 15,
+   "kind": "CTA",
+   "frame": "dashboard",
+   "title": "Quer isso rodando na sua empresa?",
+   "body": "Fale com um especialista da NX Digital pelo WhatsApp. Mostramos a plataforma com o seu cenário e montamos o plano ideal.",
+   "chapter": "Gestão",
+   "cta": {
+    "type": "WHATSAPP",
+    "phone": "5548936181649",
+    "buttonLabel": "Falar no WhatsApp",
+    "message": "Olá! Sou {{nome}} da {{empresa}}. Acabei de ver o tour do NX Systems e quero falar com um especialista.",
+    "collect": [
+     "nome",
+     "empresa"
+    ]
+   }
+  }
+ ],
+ "variables": {
+  "empresa": "",
+  "nome": ""
+ },
+ "notes": "Coordenadas de hotspot em pixels CSS do frame (1536x695). As imagens estão em 2x (3072x1390). A pasta html/ guarda o snapshot HTML+CSS anonimizado de cada tela para o modo HTML futuro."
+}

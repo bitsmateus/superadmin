@@ -9,7 +9,9 @@ A especificação foi escrita para um projeto novo (Next.js 15 + Prisma + Auth.j
 | Monorepo pnpm (`apps/web`, `packages/shared`) | Repositório atual: front em `src/` (React 18 + Vite), API em `server/` (Fastify 4). Código compartilhado puro (variáveis, zoom do player, métricas) em `src/lib/demoStudio/` e `server/src/lib/demoStudio/` com testes no servidor. |
 | `apps/extension` | Pasta `extension/` na raiz (MV3, Vite + TS), no M4. |
 | Next.js App Router / Server Components | Páginas React no SPA (lazy), dados via `api` (`src/services/api.ts`). |
-| Prisma + migrations | SQL idempotente em `server/src/db/demoStudio.ts`, chamado por `runMigrations()` a cada boot. Tabelas `ds_*` (snake_case), ids `UUID` com `gen_random_uuid()`. |
+| Prisma + migrations | SQL idempotente em `server/src/db/demoStudio.ts`, chamado no boot logo depois do `runMigrations()` (à parte, para uma falha de outro módulo não deixar o Demo Studio sem tabela). Tabelas `ds_*` (snake_case), ids `UUID` com `gen_random_uuid()`. |
+| `prisma db seed` | `server/src/lib/demoStudio/seed.ts` roda sozinho no primeiro boot (lê `server/seed/demo-studio/`); a marca `seedTourNx` no workspace impede de rodar de novo. |
+| Upload multipart | No painel, JSON com a imagem em data URL base64 (como o resto do superadmin; `bodyLimit` de 20 MB). Multipart entra com a extensão (M4). |
 | Auth.js Credentials + tabela `User` | Login e JWT que já existem (`/api/auth/login`, `profiles`). Não há usuário separado do Demo Studio. |
 | Papéis ADMIN / EDITOR / SELLER | `profiles.role = 'admin'` → ADMIN. Os demais precisam da marca `demo_studio` em Equipe → Permissões; o papel dentro do módulo vem de `profiles.ds_role` (`EDITOR` padrão, `SELLER` restrito aos próprios links/leads — aplicado no M3). |
 | `Workspace` | Tabela `ds_workspaces` com uma linha "NX Digital" criada na migração. Todas as tabelas carregam `workspace_id` para não fechar a porta do multi-workspace. |

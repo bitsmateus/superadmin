@@ -77,6 +77,22 @@ const ClienteNxDetalhePage = React.lazy(() =>
 const DemoStudioPage = React.lazy(() =>
   import('./pages/DemoStudioPage').then((m) => ({ default: m.DemoStudioPage })),
 )
+const DemoListPage = React.lazy(() =>
+  import('./pages/DemoListPage').then((m) => ({ default: m.DemoListPage })),
+)
+const DemoEditorPage = React.lazy(() =>
+  import('./pages/DemoEditorPage').then((m) => ({ default: m.DemoEditorPage })),
+)
+const DemoPreviewPage = React.lazy(() =>
+  import('./pages/DemoPreviewPage').then((m) => ({ default: m.DemoPreviewPage })),
+)
+// Player do Demo Studio: chunk próprio e leve (o lead que abre o link não baixa o painel).
+const DemoPublicPage = React.lazy(() =>
+  import('./pages/DemoPublicPage').then((m) => ({ default: m.DemoPublicPage })),
+)
+const DemoPreviewFramePage = React.lazy(() =>
+  import('./pages/DemoPublicPage').then((m) => ({ default: m.DemoPreviewFramePage })),
+)
 const FinanceiroClientesGeralPage = React.lazy(() =>
   import('./pages/FinanceiroClientesGeralPage').then((m) => ({ default: m.FinanceiroClientesGeralPage })),
 )
@@ -219,6 +235,10 @@ export default function App() {
         <Route path="/novidades" element={<NovidadesPublicPage />} />
         {/* Portal do cliente de tráfego (módulo Clientes NX Digital) — só relatórios publicados. */}
         <Route path="/cliente/:token" element={<PortalClientePage />} />
+        {/* Demo Studio — player público (sem login) e o iframe da pré-visualização do rascunho (com login). */}
+        <Route path="/d/:slug" element={<DemoPublicPage />} />
+        <Route path="/e/:slug" element={<DemoPublicPage embed />} />
+        <Route path="/demo-studio/preview/:id" element={<ProtectedRoute><DemoPreviewFramePage /></ProtectedRoute>} />
 
         <Route
           element={
@@ -265,7 +285,9 @@ export default function App() {
           <Route path="/clientesnxdigital/estrategias" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
           {/* Demo Studio — demos interativas por link (tabelas ds_*, docs/demo-studio/). */}
           <Route path="/demo-studio" element={<DemoStudioPage secao="visao-geral" />} />
-          <Route path="/demo-studio/demos" element={<DemoStudioPage secao="demos" />} />
+          <Route path="/demo-studio/demos" element={<DemoListPage />} />
+          <Route path="/demo-studio/demos/:id" element={<DemoEditorPage />} />
+          <Route path="/demo-studio/demos/:id/preview" element={<DemoPreviewPage />} />
           <Route path="/demo-studio/exemplos" element={<DemoStudioPage secao="exemplos" />} />
           <Route path="/demo-studio/leads" element={<DemoStudioPage secao="leads" />} />
           <Route path="/demo-studio/links" element={<DemoStudioPage secao="links" />} />

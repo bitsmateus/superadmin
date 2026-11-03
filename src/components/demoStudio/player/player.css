@@ -1,0 +1,122 @@
+/* Player público do Demo Studio — portado de docs/demo-studio/reference/player/player-v1.html.
+   Tudo preso em .dsp para não vazar no painel. Desktop: a tela inteira aparece e o balão flutua ao lado do
+   destaque. Celular (≤ 760px): o palco dá zoom no destaque e o balão fica embaixo dele. */
+.dsp {
+  --bg: #eef2f8; --surface: #ffffff; --ink: #0f1b2d; --muted: #5b6b82; --line: #d8e0ec;
+  --accent: #2c6bc8; --accent-ink: #ffffff; --wa: #1fa855; --stage: #f3f5f9;
+  --shade: rgba(9, 20, 38, .42); --chrome: #e6ebf3; --chrome-ink: #6b7a90; --btn-dark: #0f1b2d;
+  --f-ui: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --r: 14px;
+  min-height: 100vh; min-height: 100dvh;
+  background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 15px;
+  -webkit-text-size-adjust: 100%;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: 14px; padding-bottom: 24px;
+}
+.dsp.dsp-embed { min-height: 0; padding-top: 0; padding-bottom: 0; background: transparent }
+@media (prefers-color-scheme: dark) {
+  .dsp {
+    --bg: #0b1220; --surface: #131c2e; --ink: #e8eef8; --muted: #9aa9c0; --line: #24314a;
+    --wa: #22a95a; --stage: #0f1828;
+    --shade: rgba(0, 0, 0, .55); --chrome: #1b2538; --chrome-ink: #8d9bb3; --btn-dark: #0b1220; color-scheme: dark;
+  }
+}
+.dsp *, .dsp *::before, .dsp *::after { box-sizing: border-box }
+.dsp [hidden] { display: none !important }
+.dsp button, .dsp a, .dsp input { font-family: inherit }
+.dsp :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px }
+
+.dsp .top { max-width: 1280px; margin: 0 auto 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
+.dsp .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; letter-spacing: -.01em; font-size: 17px; min-width: 0 }
+.dsp .brand .mark { font-style: italic; color: var(--accent); font-weight: 800; font-size: 20px; letter-spacing: -.04em }
+.dsp .brand small { font-weight: 500; color: var(--muted); font-size: 13px; letter-spacing: 0 }
+.dsp .top .spacer { flex: 1 }
+.dsp .count { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums }
+.dsp .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 999px; padding: 10px 16px; font-weight: 700; font-size: 14px; cursor: pointer; text-decoration: none; white-space: nowrap; touch-action: manipulation }
+.dsp .btn-wa { background: var(--wa); color: #fff }
+.dsp .btn-primary { background: var(--accent); color: var(--accent-ink) }
+.dsp .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line) }
+.dsp .btn-ghost:hover { color: var(--ink); border-color: var(--muted) }
+.dsp .btn:disabled { opacity: .55; cursor: default }
+
+.dsp .stage-wrap { max-width: 1280px; margin: 0 auto; position: relative }
+.dsp .window { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; box-shadow: 0 18px 50px -24px rgba(15, 27, 45, .35) }
+.dsp .chrome { display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 14px; background: var(--chrome); border-bottom: 1px solid var(--line) }
+.dsp .dots { display: flex; gap: 6px; flex: none }
+.dsp .dots i { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57 }
+.dsp .dots i:nth-child(2) { background: #febc2e }
+.dsp .dots i:nth-child(3) { background: #28c840 }
+.dsp .url { flex: 1; min-width: 0; max-width: 520px; margin: 0 auto; height: 24px; border-radius: 7px; background: var(--surface); color: var(--chrome-ink); font-size: 12px; display: flex; align-items: center; padding: 0 10px; gap: 6px; overflow: hidden; white-space: nowrap }
+.dsp .url span { overflow: hidden; text-overflow: ellipsis }
+.dsp .url svg { flex: none }
+.dsp .zoom { display: none; flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 7px; height: 24px; padding: 0 9px; font-size: 11.5px; font-weight: 700; cursor: pointer }
+
+.dsp .viewport { position: relative; overflow: hidden; background: var(--stage); touch-action: manipulation; user-select: none; -webkit-user-select: none }
+.dsp .canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform }
+.dsp .canvas.anim { transition: transform .45s cubic-bezier(.3, .7, .2, 1) }
+.dsp .canvas img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #fff; -webkit-user-drag: none; pointer-events: none; transition: opacity .18s }
+.dsp .canvas img.off { opacity: 0 }
+
+.dsp .spot { position: absolute; border-radius: 12px; box-shadow: 0 0 0 9999px var(--shade); cursor: pointer; -webkit-tap-highlight-color: transparent }
+.dsp .spot.anim { transition: left .45s cubic-bezier(.3, .7, .2, 1), top .45s cubic-bezier(.3, .7, .2, 1), width .45s cubic-bezier(.3, .7, .2, 1), height .45s cubic-bezier(.3, .7, .2, 1) }
+.dsp .spot::after { content: ""; position: absolute; inset: -4px; border-radius: 14px; border: 2.5px solid var(--accent); animation: dsp-pulse 1.6s ease-out infinite }
+.dsp .spot.hint::after { animation: dsp-shake .4s 2 }
+@keyframes dsp-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(44, 107, 200, .6); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent) }
+  100% { box-shadow: 0 0 0 14px rgba(44, 107, 200, 0); box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%, transparent) }
+}
+@keyframes dsp-shake { 25% { transform: translateX(-4px) } 75% { transform: translateX(4px) } }
+.dsp .tap { position: absolute; right: 10px; bottom: 10px; background: var(--btn-dark); color: #fff; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 999px; opacity: .9; pointer-events: none; display: none }
+
+.dsp .tip { position: absolute; z-index: 5; width: 330px; background: var(--accent); color: var(--accent-ink); border-radius: 14px; padding: 16px 18px 14px; box-shadow: 0 16px 40px -12px rgba(9, 20, 38, .5); transition: left .35s, top .35s, opacity .2s }
+.dsp .tip h3, .dsp .dock h3 { margin: 0 0 6px; font-size: 16px; font-weight: 800; letter-spacing: -.01em; text-wrap: balance }
+.dsp .tip p, .dsp .dock p { margin: 0; font-size: 13.5px; line-height: 1.5; opacity: .95 }
+.dsp .nav { display: flex; align-items: center; gap: 10px; margin-top: 14px }
+.dsp .nav .n { flex: 1; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; opacity: .85 }
+.dsp .back { background: transparent; border: 0; color: inherit; cursor: pointer; padding: 8px; border-radius: 8px; display: inline-flex; touch-action: manipulation }
+.dsp .back:disabled { opacity: .35; cursor: default }
+.dsp .next { background: var(--btn-dark); color: #fff; border: 0; border-radius: 9px; padding: 9px 16px; font-weight: 700; font-size: 13.5px; cursor: pointer; touch-action: manipulation }
+.dsp .tip .arrow { position: absolute; width: 14px; height: 14px; background: var(--accent); transform: rotate(45deg) }
+
+.dsp .card { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; background: var(--shade); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); z-index: 6 }
+.dsp .card .box { background: var(--surface); color: var(--ink); border-radius: 18px; padding: 28px 30px; max-width: 460px; width: 100%; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .45); max-height: 100%; overflow: auto }
+.dsp .box .eyebrow { font-size: 11.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent) }
+.dsp .box h2 { margin: 8px 0 10px; font-size: 26px; line-height: 1.15; letter-spacing: -.02em; text-wrap: balance }
+.dsp .box p { margin: 0 0 18px; color: var(--muted); line-height: 1.55 }
+.dsp .box .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center }
+.dsp .meta { font-size: 12.5px; color: var(--muted) }
+.dsp .form { display: grid; gap: 10px; margin-bottom: 16px }
+.dsp .form label { display: grid; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--muted) }
+.dsp .form input { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 10px; padding: 11px 12px; font-size: 16px; width: 100% }
+.dsp .form .consent { font-size: 12px; font-weight: 500; line-height: 1.45 }
+.dsp .form .erro { color: #d63c3c; font-size: 12.5px; font-weight: 600 }
+.dsp .phone { user-select: all; -webkit-user-select: all; font-weight: 700; color: var(--ink) }
+
+.dsp .progress { max-width: 1280px; margin: 12px auto 0; display: flex; gap: 4px }
+.dsp .progress button { flex: 1; height: 6px; border: 0; border-radius: 3px; background: var(--line); cursor: pointer; padding: 0 }
+.dsp .progress button.done { background: var(--accent) }
+.dsp .progress button.cur { background: var(--accent); opacity: .55 }
+.dsp .dock { display: none }
+
+@media (max-width: 760px) {
+  .dsp { padding-top: 10px; padding-bottom: 18px }
+  .dsp .top { gap: 10px; margin-bottom: 10px }
+  .dsp .top .count, .dsp .top .restart, .dsp .brand small { display: none }
+  .dsp .top .btn-wa { padding: 8px 13px; font-size: 13px }
+  .dsp .chrome { height: 34px; gap: 8px; padding: 0 10px }
+  .dsp .dots i { width: 9px; height: 9px }
+  .dsp .url { font-size: 11px }
+  .dsp .zoom { display: inline-block }
+  .dsp .tap { display: block }
+  .dsp .tip { display: none }
+  .dsp .dock { display: block; max-width: 1280px; margin: 12px auto 0; background: var(--accent); color: var(--accent-ink); border-radius: 14px; padding: 16px 16px 12px }
+  .dsp .dock p { font-size: 14.5px }
+  .dsp .next { padding: 11px 18px; font-size: 14.5px }
+  .dsp .card .box { padding: 22px 20px; border-radius: 16px }
+  .dsp .box h2 { font-size: 21px }
+  .dsp .box p { font-size: 14px; margin-bottom: 14px }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dsp .spot.anim, .dsp .canvas.anim, .dsp .tip { transition: none }
+  .dsp .spot::after { animation: none }
+}

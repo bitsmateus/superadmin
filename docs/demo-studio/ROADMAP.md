@@ -20,14 +20,15 @@ Referências: `docs/ESPECIFICACAO.md` (seções citadas entre parênteses) e `re
 **Aceite:** `npm run dev` (front) + `npm run dev` (server) → login com o admin → `/demo-studio` vazio com a barra lateral do módulo.
 
 ## M1 — Demos, frames, editor e player (núcleo)
-- [ ] CRUD de demos (§4.1) e grid em `/app/demos`.
-- [ ] Upload de frames por imagem (§4.2): sharp → WebP q78 + miniatura 480px; guardar width/height em px CSS (pedir pixel ratio no upload, padrão 2 quando a imagem tiver ≥ 2560px de largura).
-- [ ] Editor (§4.3, §5): lista de etapas com dnd-kit, canvas com react-rnd para hotspot, painel de propriedades, tipos HOTSPOT/MODAL/CTA, variáveis `{{empresa|padrão}}`.
-- [ ] Player público `/d/[slug]` (§7): portar o comportamento de `reference/player/player-v1.html` para um componente React cliente. Manter o algoritmo de zoom do celular idêntico.
-- [ ] Publicar/despublicar com `DemoVersion` (snapshot) e histórico com restaurar.
-- [ ] Pré-visualização do rascunho (`/app/demos/[id]/preview`) com alternância desktop/celular.
-- [ ] Seed do template "NX Systems — Tour completo" a partir de `reference/seed/` (§15).
-- [ ] Testes: unit do cálculo de zoom/posição do balão e das variáveis; e2e Playwright abrindo `/d/nx-systems-tour` em 1440×900 e 390×844, clicando todos os hotspots até o CTA.
+- [x] CRUD de demos (§4.1) e grid em `/demo-studio/demos` (inclui duplicar e "a partir de exemplo").
+- [x] Upload de frames por imagem (§4.2): sharp → WebP q78 + miniatura 480px; width/height em px CSS (pixel ratio no upload, padrão 2 quando ≥ 2560px). Upload em JSON base64 (padrão do superadmin); multipart entra com a extensão no M4.
+- [x] Editor (§4.3, §5): lista de etapas com dnd-kit, canvas com react-rnd para hotspot, painel de propriedades, tipos HOTSPOT/MODAL/CTA (+ LEAD_FORM só visual), variáveis `{{empresa|padrão}}`.
+- [x] Player público `/d/[slug]` (§7) portado de `reference/player/player-v1.html`; geometria em `src/lib/demoStudio/layout.ts`, idêntica à Fase 1. `/e/[slug]` já renderiza sem cabeçalho.
+- [x] Publicar/despublicar com `ds_demo_versions` (snapshot) e histórico com restaurar.
+- [x] Pré-visualização do rascunho (`/demo-studio/demos/:id/preview`) com alternância desktop/celular (iframe 390×844).
+- [x] Seed do template "NX Systems — Tour completo" a partir de `server/seed/demo-studio/` (§15), automático no primeiro boot.
+- [x] Testes unit do cálculo de zoom/posição do balão e das variáveis (`src/lib/demoStudio/*.test.ts`, rodam no `npm test` do servidor).
+- [ ] e2e Playwright em 1440×900 e 390×844 até o CTA — **pendente** (o superadmin não tem Playwright; o fluxo foi conferido à mão no navegador).
 
 **Aceite:** o tour da Fase 1 roda em `/d/nx-systems-tour` igual à referência, no desktop e no celular; consigo criar uma segunda demo do zero e publicar.
 

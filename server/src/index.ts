@@ -76,7 +76,7 @@ import { startReuniaoWebhook } from './jobs/reuniaoWebhook.js';
 import { startLeadAvisosPush } from './jobs/leadAvisosPush.js';
 import { comunicadosRoutes } from './routes/comunicados.js';
 import { demoStudioRoutes } from './routes/demoStudio.js';
-import { semearTourNx } from './lib/demoStudio/seed.js';
+import { restaurarArquivosDoSeed, semearTourNx } from './lib/demoStudio/seed.js';
 import { criarEstruturaDemoStudio } from './db/demoStudio.js';
 import { startComunicadosDisparo } from './lib/comunicados.js';
 import { startComunicadosSemanal } from './jobs/comunicadosSemanal.js';
@@ -228,6 +228,7 @@ async function main() {
   try {
     await criarEstruturaDemoStudio(pool);
     await semearTourNx();
+    await restaurarArquivosDoSeed();
   } catch (err) {
     console.error('[demo-studio] estrutura/seed falhou:', err);
   }

@@ -1,8 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { pool, queryOne, withTransaction } from '../../db.js';
+import { pool, query, queryOne, withTransaction } from '../../db.js';
 import { DS_WORKSPACE_ID } from '../../db/demoStudio.js';
 import { processarImagem } from './images.js';
+import { chaveComHash, storage } from './storage.js';
 import { codigoDeLink, publicar } from './snapshot.js';
 
 /**
@@ -104,4 +105,41 @@ export async function semearTourNx(): Promise<void> {
     `UPDATE ds_workspaces SET settings = settings || '{"seedTourNx": true}'::jsonb WHERE id = $1`,
     [DS_WORKSPACE_ID]
   );
+}
+
+/**
+ * Devolve ao storage as imagens do tour de exemplo que sumiram — roda a cada boot e não faz nada quando
+ * está tudo lá. Caso real: o seed rodou antes do volume /data existir no Easypanel; as imagens foram para
+ * o disco do container e se perderam no deploy seguinte, mas o banco continuou apontando para elas.
+ * O nome da imagem é o hash do conteúdo, então a mesma imagem volta com o mesmo nome que o banco espera;
+ * a miniatura é regerada e, se o nome mudar, o banco é atualizado.
+ */
+export async function restaurarArquivosDoSeed(): Promise<number> {
+  let seed: SeedDemo;
+  try {
+    seed = JSON.parse(await fs.readFile(path.join(PASTA, 'demo.json'), 'utf8')) as SeedDemo;
+  } catch {
+    return 0;
+  }
+  let restauradas = 0;
+  for (const f of seed.frames) {
+    const buf = await fs.readFile(path.join(PASTA, f.image));
+    const imagem = chaveComHash('frames', buf, 'webp');
+    const linhas = await query<{ id: string; thumb_path: string }>(`SELECT id, thumb_path FROM ds_frames WHERE image_path = $1`, [imagem]);
+    if (!linhas.length) continue;
+    const faltaImagem = !(await existe(imagem));
+    const faltaMiniatura = (await Promise.all(linhas.map((l) => existe(l.thumb_path)))).some((ok) => !ok);
+    if (!faltaImagem && !faltaMiniatura) continue;
+    const p = await processarImagem(buf, f.pixelRatio);
+    await query(`UPDATE ds_frames SET thumb_path = $2 WHERE image_path = $1 AND thumb_path <> $2`, [imagem, p.thumbPath]);
+    restauradas++;
+  }
+  if (restauradas) console.log(`[demo-studio] ${restauradas} imagem(ns) do tour de exemplo restaurada(s) no storage`);
+  return restauradas;
+}
+
+async function existe(chave: string): Promise<boolean> {
+  const a = await storage.get(chave);
+  a?.stream.destroy();
+  return !!a;
 }

@@ -53,13 +53,14 @@ Referências: `docs/ESPECIFICACAO.md` (seções citadas entre parênteses) e `re
 **Aceite:** como vendedor, crio link para "Ana / Pedal Bikes", abro no celular, termino a demo → lead aparece com sessão 100%, e o n8n recebe `session.completed` com assinatura válida.
 
 ## M4 — Extensão de captura
-- [ ] `apps/extension` MV3 (Vite + TS): popup (conta, destino, anonimizar, modo), service worker, content script injetado sob demanda (§6).
-- [ ] Anonimização ao vivo com regras do workspace + automáticas + MutationObserver (base: `reference/capture/capture-reference.js`).
-- [ ] Captura por clique (pointerdown) + atalho Alt+Shift+S + revisão antes de enviar.
-- [ ] Modo Imagem + HTML (snapshot e CSS deduplicado por hash).
-- [ ] `POST /api/ext/captures` criando frames e etapas HOTSPOT com o retângulo do clique.
-- [ ] Tela Configurações → Extensão (gerar token, link para baixar o zip, instruções de instalação).
-- [ ] Configurações → Anonimização (CRUD de regras + pré-visualização de texto).
+- [x] `extension/` MV3 (TS + esbuild): popup (conta, destino, anonimizar, modo), service worker, content script injetado sob demanda (§6). Permissões de host opcionais, pedidas só para o servidor e para o site capturado.
+- [x] Anonimização ao vivo com regras do workspace + automáticas + MutationObserver (`src/lib/demoStudio/anonimizar.ts`, idempotente — a referência entrava em loop com o observer).
+- [x] Captura por clique (pointerdown) + atalho Alt+Shift+S + revisão antes de enviar (telas no IndexedDB da extensão).
+- [x] Modo Imagem + HTML (snapshot limpo e CSS deduplicado por hash).
+- [x] Envio tela a tela em `POST /api/ext/demos/:id/screens` (JSON, como o resto do superadmin, em vez de um multipart único), criando frame + etapa HOTSPOT com o retângulo do clique.
+- [x] Tela Configurações → Extensão (gerar/revogar token, baixar o zip, instruções de instalação). O zip é gerado no `npm run build` (`public/nx-demo-capture.zip`).
+- [x] Configurações → Anonimização (CRUD de regras, automáticas liga/desliga + pré-visualização de texto).
+- [ ] Aceite com o NX Systems real: precisa carregar a extensão no seu Chrome (o navegador de testes daqui não carrega extensão). Conferido por partes: o content script compilado rodou numa página de teste e a API recebeu 6 telas simuladas.
 
 **Aceite:** capturo 6 telas do NX Systems com 5 cliques, os dados aparecem trocados nas imagens, e a demo abre no editor com 6 etapas e hotspots no lugar dos cliques.
 

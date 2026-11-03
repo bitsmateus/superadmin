@@ -367,6 +367,7 @@ export async function demoStudioLeadsRoutes(app: FastifyInstance) {
         ctaDefault: z.object({ phone: z.string().max(20), message: z.string().max(1000) }).partial(),
         privacyUrl: z.string().url().max(500).or(z.literal('')),
         consentText: z.string().max(500),
+        anonymizeAuto: z.object({ phone: z.boolean(), email: z.boolean(), cpf: z.boolean(), cnpj: z.boolean(), avatars: z.boolean() }).partial(),
       }).partial(),
       req.body,
       reply

@@ -183,7 +183,9 @@ function NovaDemoModal({ open, onClose, exemplos, onCriada }: {
               </label>
             ))}
           </div>
-          <p className="mt-2 text-xs text-foreground/45">Importar captura da extensão chega no M4.</p>
+          <p className="mt-2 text-xs text-foreground/45">
+            Para capturar as telas direto do sistema, use a extensão do Chrome (Configurações → Extensão): ela cria a demo e as etapas sozinha.
+          </p>
         </div>
       </form>
     </Modal>

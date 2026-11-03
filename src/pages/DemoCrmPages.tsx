@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Input, Textarea } from '@/components/ui/Input'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PainelDeLinks } from '@/components/demoStudio/links/PainelDeLinks'
+import { ConfigAnonimizacao, ConfigExtensao } from '@/components/demoStudio/config/ConfigExtensao'
 import { Painel } from '@/components/demoStudio/analytics/Analytics'
 import { downloadCsv } from '@/lib/csv'
 import { copyToClipboard } from '@/lib/clipboard'
@@ -366,16 +367,17 @@ export function DemoSettingsPage() {
     <>
       <TopBar compacto title="Configurações" subtitle="Demo Studio" breadcrumbs={[{ label: 'Demo Studio', to: '/demo-studio' }, { label: 'Configurações' }]} />
       <div className="space-y-4 px-4 pb-10 lg:px-6">
-        {acesso && acesso.role !== 'ADMIN' ? (
-          <EmptyState title="Só o administrador mexe aqui" description="Usuários, webhooks e o CTA padrão do Demo Studio são configurados por um administrador." />
+        {acesso?.role === 'SELLER' ? (
+          <EmptyState title="Nada para configurar por aqui" description="Usuários, extensão, anonimização e webhooks do Demo Studio ficam com editores e administradores." />
+        ) : acesso?.role === 'EDITOR' ? (
+          <ConfigExtensao />
         ) : acesso ? (
           <>
+            <ConfigExtensao />
+            <ConfigAnonimizacao />
             <ConfigUsuarios />
             <ConfigCta />
             <ConfigWebhooks />
-            <Painel titulo="Extensão e anonimização">
-              <p className="text-sm text-foreground/55">O token da extensão de captura e as regras de anonimização chegam no M4.</p>
-            </Painel>
           </>
         ) : null}
       </div>

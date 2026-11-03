@@ -11,3 +11,7 @@ dist
 # Demo Studio (arquivos das demos: frames, miniaturas, snapshots)
 /data/
 /server/data/
+
+# Extensão de captura do Demo Studio (gerados pelo npm run build:ext)
+/extension/dist/
+/public/nx-demo-capture.zip

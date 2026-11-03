@@ -1,0 +1,34 @@
+* { box-sizing: border-box }
+body { margin: 0; width: 360px; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: #0f1b2d; background: #fff }
+header { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #e3e8f0; font-weight: 700 }
+.marca { color: #2c6bc8; font-style: italic; font-weight: 800 }
+nav { margin-left: auto; display: flex; gap: 2px; background: #f1f4f9; border-radius: 8px; padding: 2px }
+nav button { border: 0; background: transparent; padding: 4px 10px; border-radius: 6px; font: inherit; font-weight: 600; color: #5b6b82; cursor: pointer }
+nav button.ativa { background: #fff; color: #0f1b2d; box-shadow: 0 1px 2px rgba(0,0,0,.08) }
+main { padding: 12px }
+label { display: block; font-size: 12px; font-weight: 600; color: #5b6b82; margin-bottom: 10px }
+input[type=text], input[type=url], input[type=password], select { display: block; width: 100%; margin-top: 4px; border: 1px solid #d8e0ec; border-radius: 8px; padding: 7px 9px; font: inherit; color: #0f1b2d }
+.linha { display: flex; gap: 8px; align-items: center; margin-bottom: 10px }
+.linha label { margin: 0; display: flex; gap: 6px; align-items: center; color: #0f1b2d; font-weight: 500 }
+button.b { border: 0; border-radius: 8px; padding: 9px 12px; font: inherit; font-weight: 700; cursor: pointer; width: 100% }
+.primario { background: #2c6bc8; color: #fff }
+.perigo { background: transparent; color: #d63c3c; }
+.neutro { background: #f1f4f9; color: #0f1b2d }
+button.b:disabled { opacity: .55; cursor: default }
+.pilha { display: grid; gap: 8px }
+.ok { color: #1a8a4a; font-weight: 600 }
+.erro { color: #d63c3c; font-weight: 600 }
+.dica { color: #5b6b82; font-size: 12px }
+.gravando { display: flex; gap: 8px; align-items: center; font-weight: 700; margin-bottom: 8px }
+.ponto { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; animation: b 1.2s infinite }
+@keyframes b { 50% { opacity: .3 } }
+.grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-height: 300px; overflow: auto; margin: 8px 0 }
+.tela { position: relative; border: 1px solid #d8e0ec; border-radius: 8px; overflow: hidden }
+.tela img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; object-position: top }
+.tela.fora { opacity: .3 }
+.tela span { position: absolute; left: 4px; top: 4px; background: rgba(15,27,45,.8); color: #fff; font-size: 11px; border-radius: 6px; padding: 1px 6px }
+.tela button { position: absolute; right: 4px; top: 4px; border: 0; background: rgba(15,27,45,.8); color: #fff; border-radius: 6px; cursor: pointer; font-size: 11px; padding: 1px 6px }
+.tela .clique { position: absolute; border: 2px solid #2c6bc8; border-radius: 4px; pointer-events: none }
+.barra { height: 8px; background: #eef2f8; border-radius: 99px; overflow: hidden; margin: 8px 0 }
+.barra div { height: 100%; background: #2c6bc8; transition: width .3s }
+kbd { border: 1px solid #d8e0ec; border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; font-size: 11px }

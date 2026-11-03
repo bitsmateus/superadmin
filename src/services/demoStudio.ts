@@ -312,6 +312,7 @@ export interface ConfigWorkspace {
   ctaDefault?: { phone?: string; message?: string }
   privacyUrl?: string
   consentText?: string
+  anonymizeAuto?: Partial<{ phone: boolean; email: boolean; cpf: boolean; cnpj: boolean; avatars: boolean }>
 }
 
 export type NovoLink =
@@ -339,6 +340,35 @@ export const crm = {
   testarWebhook: (id: string) => api.post<{ ok: boolean; status: number | null; body: string }>(`/api/ds/webhooks/${id}/test`),
   entregas: (id: string) => api.get<EntregaWebhook[]>(`/api/ds/webhooks/${id}/deliveries`),
 }
+
+export interface TokenDaExtensao {
+  id: string
+  name: string
+  createdAt: string
+  lastUsedAt: string | null
+  revokedAt: string | null
+}
+
+export interface RegraAnonimizacao {
+  id: string
+  find: string
+  replace: string
+  isRegex: boolean
+  order: number
+}
+
+export const extensao = {
+  tokens: () => api.get<TokenDaExtensao[]>('/api/ds/tokens'),
+  gerarToken: (name: string) => api.post<{ id: string; token: string }>('/api/ds/tokens', { name }),
+  revogarToken: (id: string) => api.delete(`/api/ds/tokens/${id}`),
+  regras: () => api.get<RegraAnonimizacao[]>('/api/ds/anonymize-rules'),
+  criarRegra: (r: { find: string; replace: string; isRegex: boolean }) => api.post<{ id: string }>('/api/ds/anonymize-rules', r),
+  editarRegra: (id: string, r: Partial<{ find: string; replace: string; isRegex: boolean }>) => api.patch(`/api/ds/anonymize-rules/${id}`, r),
+  apagarRegra: (id: string) => api.delete(`/api/ds/anonymize-rules/${id}`),
+}
+
+/** URL da API (a extensão fala direto com ela, não com o front). */
+export const URL_DA_API = API_URL || window.location.origin
 
 /** Endereço público de um link nomeado/personalizado. */
 export function urlDoLink(code: string, base: string | null | undefined): string {

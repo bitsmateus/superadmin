@@ -4,6 +4,7 @@ import { DS_WORKSPACE_ID } from '../db/demoStudio.js';
 import { exigir, papelDaRequisicao, papelNoModulo, validar, type Usuario } from '../lib/demoStudio/acesso.js';
 import { demoStudioAnalyticsRoutes } from './demoStudioAnalytics.js';
 import { demoStudioLeadsRoutes } from './demoStudioLeads.js';
+import { demoStudioExtRoutes } from './demoStudioExt.js';
 import { storage, tipoDoArquivo } from '../lib/demoStudio/storage.js';
 import { ErroImagem, bufferDoDataUrl, processarImagem } from '../lib/demoStudio/images.js';
 import * as S from '../lib/demoStudio/schemas.js';
@@ -98,6 +99,7 @@ export async function demoStudioRoutes(app: FastifyInstance) {
 
   await demoStudioAnalyticsRoutes(app);
   await demoStudioLeadsRoutes(app);
+  await demoStudioExtRoutes(app);
 
   /* ---------------------------------------------------------------- fundação (M0) */
 

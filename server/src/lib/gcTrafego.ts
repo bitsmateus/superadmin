@@ -66,6 +66,7 @@ interface CampanhaMeta { id: string; name?: string; objective?: string; effectiv
 type AnuncioMeta = MetaAd & { adset?: { name?: string } };
 interface InsightMeta {
   date_start: string; ad_id?: string; adset_id?: string; campaign_id?: string;
+  ad_name?: string; campaign_name?: string; objective?: string;
   spend?: string; impressions?: string; reach?: string; inline_link_clicks?: string;
   actions?: Action[]; action_values?: Action[];
 }
@@ -105,15 +106,35 @@ async function sincronizarCatalogo(conta: ContaTrafego, token: string): Promise<
 
 async function sincronizarInsights(conta: ContaTrafego, token: string, diasParaTras: number): Promise<number> {
   let linhas = 0;
+  const vistos = new Set<string>();
   for (const [since, until] of janelas(diasAtras(diasParaTras), diasAtras(0))) {
     const rows = await graphList<InsightMeta>(`/${conta.ad_account_id}/insights`, {
       level: 'ad',
       time_increment: '1',
       time_range: JSON.stringify({ since, until }),
-      fields: 'ad_id,adset_id,campaign_id,spend,impressions,reach,inline_link_clicks,actions,action_values',
+      fields: 'ad_id,ad_name,adset_id,campaign_id,campaign_name,objective,spend,impressions,reach,inline_link_clicks,actions,action_values',
     }, token);
     for (const r of rows) {
       if (!r.ad_id) continue;
+      // Campanha/anúncio arquivado ou excluído não volta no catálogo (/campaigns, /ads), mas o insight
+      // traz nome e objetivo: grava o mínimo pra a tabela não mostrar "excluída" sem nome. Não sobrescreve
+      // o que o catálogo já tem.
+      if (r.campaign_id && !vistos.has(r.campaign_id)) {
+        vistos.add(r.campaign_id);
+        await query(
+          `INSERT INTO gc_meta_campanhas (campaign_id, gc_cliente_id, ad_account_id, nome, objetivo, status)
+           VALUES ($1,$2,$3,$4,$5,'ARCHIVED') ON CONFLICT (campaign_id) DO NOTHING`,
+          [r.campaign_id, conta.gc_cliente_id, conta.ad_account_id, r.campaign_name ?? '', r.objective ?? ''],
+        );
+      }
+      if (!vistos.has(r.ad_id)) {
+        vistos.add(r.ad_id);
+        await query(
+          `INSERT INTO gc_meta_anuncios (ad_id, gc_cliente_id, ad_account_id, campaign_id, adset_id, nome, status)
+           VALUES ($1,$2,$3,$4,$5,$6,'ARCHIVED') ON CONFLICT (ad_id) DO NOTHING`,
+          [r.ad_id, conta.gc_cliente_id, conta.ad_account_id, r.campaign_id ?? null, r.adset_id ?? null, r.ad_name ?? ''],
+        );
+      }
       await query(
         `INSERT INTO gc_meta_insights_dia (dia, ad_id, gc_cliente_id, campaign_id, adset_id, gasto, impressoes, alcance,
            cliques_link, leads, conversas, compras, valor_compras, video_3s, synced_at)
@@ -153,7 +174,14 @@ export async function sincronizarConta(conta: ContaTrafego): Promise<{ ok: boole
        WHERE a.ad_account_id = $1 LIMIT 1`,
       [conta.ad_account_id],
     );
-    const linhas = await sincronizarInsights(conta, token, temHistorico ? DIAS_REGRAVAR : DIAS_HISTORICO);
+    // Anúncio com gasto nos 90 dias que não está no catálogo (arquivado/excluído antes de o sync guardar o
+    // nome pelo insight): uma rodada de 90 dias preenche e as próximas voltam a ser de 7.
+    const semNome = temHistorico && await queryOne(
+      `SELECT 1 FROM gc_meta_insights_dia i LEFT JOIN gc_meta_anuncios a ON a.ad_id = i.ad_id
+       WHERE i.gc_cliente_id = $1 AND i.dia >= $2 AND a.ad_id IS NULL LIMIT 1`,
+      [conta.gc_cliente_id, diasAtras(DIAS_HISTORICO)],
+    );
+    const linhas = await sincronizarInsights(conta, token, temHistorico && !semNome ? DIAS_REGRAVAR : DIAS_HISTORICO);
     await query(`UPDATE gc_trafego_contas SET ultimo_sync_em = now(), ultimo_erro = NULL WHERE id = $1`, [conta.id]);
     return { ok: true, linhas };
   } catch (err) {
@@ -238,11 +266,14 @@ export async function serieDoCliente(clienteId: string, de: string, ate: string)
 
 export async function campanhasDoCliente(clienteId: string, de: string, ate: string) {
   const rows = await query<LinhaSoma & { id: string; nome: string; status: string; objetivo: string; orcamento_dia: string | null }>(
-    `SELECT c.campaign_id AS id, c.nome, c.status, c.objetivo, c.orcamento_dia, s.*
-     FROM gc_meta_campanhas c
-     JOIN (SELECT campaign_id, ${COLUNAS_SOMA} FROM gc_meta_insights_dia
-           WHERE gc_cliente_id = $1 AND dia BETWEEN $2 AND $3 GROUP BY campaign_id) s ON s.campaign_id = c.campaign_id
-     WHERE c.gc_cliente_id = $1
+    // Parte do que GASTOU (insights), não do catálogo: campanha arquivada/excluída some do catálogo da Meta,
+    // mas o gasto dela está no total — sem isso a tabela não fecha com o número de cima.
+    `SELECT s.campaign_id AS id, COALESCE(NULLIF(c.nome, ''), 'Campanha arquivada ou excluída') AS nome,
+            COALESCE(c.status, 'ARCHIVED') AS status, COALESCE(c.objetivo, '') AS objetivo, c.orcamento_dia, s.*
+     FROM (SELECT campaign_id, ${COLUNAS_SOMA} FROM gc_meta_insights_dia
+           WHERE gc_cliente_id = $1 AND dia BETWEEN $2 AND $3 GROUP BY campaign_id) s
+     LEFT JOIN gc_meta_campanhas c ON c.campaign_id = s.campaign_id
+     WHERE s.gasto > 0 OR s.impressoes > 0
      ORDER BY s.gasto DESC`,
     [clienteId, de, ate],
   );
@@ -257,13 +288,15 @@ export async function anunciosDoCliente(clienteId: string, de: string, ate: stri
     id: string; nome: string; status: string; formato: string; thumbnail_url: string; titulo: string;
     texto: string; preview_url: string; conjunto_nome: string; campanha_nome: string | null;
   }>(
-    `SELECT a.ad_id AS id, a.nome, a.status, a.formato, a.thumbnail_url, a.titulo, a.texto, a.preview_url,
-            a.conjunto_nome, c.nome AS campanha_nome, s.*
-     FROM gc_meta_anuncios a
-     JOIN (SELECT ad_id, ${COLUNAS_SOMA} FROM gc_meta_insights_dia
-           WHERE gc_cliente_id = $1 AND dia BETWEEN $2 AND $3 GROUP BY ad_id) s ON s.ad_id = a.ad_id
-     LEFT JOIN gc_meta_campanhas c ON c.campaign_id = a.campaign_id
-     WHERE a.gc_cliente_id = $1 AND s.gasto > 0
+    `SELECT s.ad_id AS id, COALESCE(NULLIF(a.nome, ''), 'Anúncio arquivado ou excluído') AS nome,
+            COALESCE(a.status, 'ARCHIVED') AS status, COALESCE(a.formato, '') AS formato,
+            COALESCE(a.thumbnail_url, '') AS thumbnail_url, COALESCE(a.titulo, '') AS titulo, COALESCE(a.texto, '') AS texto,
+            COALESCE(a.preview_url, '') AS preview_url, COALESCE(a.conjunto_nome, '') AS conjunto_nome, c.nome AS campanha_nome, s.*
+     FROM (SELECT ad_id, MAX(campaign_id) AS campaign_id, ${COLUNAS_SOMA} FROM gc_meta_insights_dia
+           WHERE gc_cliente_id = $1 AND dia BETWEEN $2 AND $3 GROUP BY ad_id) s
+     LEFT JOIN gc_meta_anuncios a ON a.ad_id = s.ad_id
+     LEFT JOIN gc_meta_campanhas c ON c.campaign_id = COALESCE(a.campaign_id, s.campaign_id)
+     WHERE s.gasto > 0
      ORDER BY s.gasto DESC
      LIMIT $4`,
     [clienteId, de, ate, limite],

@@ -8,7 +8,8 @@ import { statusDoQuadro } from '../routes/leadBoards.js';
  * (uma linha por semana). Vale a quarta inteira depois das 09h — se o servidor estava fora às 09h,
  * o card sai quando ele voltar.
  *
- * A aba é a de Demandas cujo responsável tem "mateus" no nome/e-mail, ou a da env COMUNICADOS_DEMANDAS_PAGE.
+ * A aba é a crm-mateus (ou a da env COMUNICADOS_DEMANDAS_PAGE); sem ela, a chamada "Mateus" ou a que tem
+ * "mateus" no responsável.
  */
 
 const TZ = 'America/Sao_Paulo';
@@ -29,13 +30,15 @@ async function criarLembrete(dataHoje: string): Promise<boolean> {
   ))!;
   if (await queryOne('SELECT 1 FROM comunicado_lembretes WHERE semana = $1', [semana])) return false;
 
-  const pageId = (process.env.COMUNICADOS_DEMANDAS_PAGE || '').trim();
+  // A aba "Mateus" das Demandas tem o id crm-mateus (/demandas/crm-mateus). Se ela sumir ou mudar de id, cai
+  // na aba chamada "Mateus" e, por último, na que tem "mateus" no responsável.
+  const pageId = (process.env.COMUNICADOS_DEMANDAS_PAGE || 'crm-mateus').trim();
   const pagina = await queryOne<{ id: string }>(
-    pageId
-      ? `SELECT id FROM lead_pages WHERE id = $1`
-      : `SELECT id FROM lead_pages WHERE section = 'demandas' AND archived_at IS NULL AND responsavel ILIKE '%mateus%'
-         ORDER BY position LIMIT 1`,
-    pageId ? [pageId] : [],
+    `SELECT id FROM lead_pages
+     WHERE section = 'demandas' AND archived_at IS NULL
+       AND (id = $1 OR lower(trim(name)) = 'mateus' OR responsavel ILIKE '%mateus%')
+     ORDER BY (id = $1) DESC, (lower(trim(name)) = 'mateus') DESC, position LIMIT 1`,
+    [pageId],
   );
   if (!pagina) {
     console.warn('[comunicados] aba de Demandas do Mateus não encontrada — lembrete semanal não criado');

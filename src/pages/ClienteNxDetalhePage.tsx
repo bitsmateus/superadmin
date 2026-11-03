@@ -18,11 +18,12 @@ import { KanbanDemandas } from '@/components/gestaoClientes/KanbanDemandas'
 import { AbaRelatorios } from '@/components/gestaoClientes/AbaRelatorios'
 import { AbaTrafego } from '@/components/gestaoClientes/AbaTrafego'
 import { AbaConteudo } from '@/components/gestaoClientes/AbaConteudo'
+import { SocialDoCliente } from '@/components/gestaoClientes/SocialDoCliente'
 import { AssistenteIa } from '@/components/gestaoClientes/AssistenteIa'
 import { gestaoClientes, type GcClienteDetalhe } from '@/services/gestaoClientes'
 import type { Destino } from '@/lib/gcSaude'
 
-type Aba = 'visao' | 'trafego' | 'conteudo' | 'demandas' | 'planejamento' | 'briefing' | 'estrategias' | 'relatorios' | 'notas'
+type Aba = 'visao' | 'trafego' | 'conteudo' | 'social' | 'demandas' | 'planejamento' | 'briefing' | 'estrategias' | 'relatorios' | 'notas'
 
 /**
  * Detalhe do cliente de tráfego — Visão geral, Jornada e Histórico.
@@ -39,7 +40,7 @@ export function ClienteNxDetalhePage() {
   const [carregando, setCarregando] = React.useState(true)
   const [busca] = useSearchParams()
   const [aba, setAba] = React.useState<Aba>(
-    busca.get('aba') === 'relatorios' ? 'relatorios' : busca.get('aba') === 'trafego' ? 'trafego' : busca.get('aba') === 'conteudo' ? 'conteudo' : 'visao',
+    busca.get('aba') === 'relatorios' ? 'relatorios' : busca.get('aba') === 'trafego' ? 'trafego' : busca.get('aba') === 'conteudo' ? 'conteudo' : busca.get('aba') === 'social' ? 'social' : 'visao',
   )
   const [editando, setEditando] = React.useState(false)
   const [confirmandoExclusao, setConfirmandoExclusao] = React.useState(false)
@@ -188,6 +189,7 @@ export function ClienteNxDetalhePage() {
                 { value: 'visao', label: 'Visão geral' },
                 { value: 'trafego', label: 'Tráfego' },
                 { value: 'conteudo', label: 'Conteúdo' },
+                { value: 'social', label: 'Social media' },
                 { value: 'demandas', label: 'Demandas' },
                 { value: 'planejamento', label: 'Planejamento' },
                 { value: 'briefing', label: 'Briefing' },
@@ -240,6 +242,7 @@ export function ClienteNxDetalhePage() {
             )}
             {aba === 'trafego' && <AbaTrafego clienteId={id} />}
             {aba === 'conteudo' && <AbaConteudo clienteId={id} />}
+            {aba === 'social' && <SocialDoCliente clienteId={id} />}
             {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
             {aba === 'demandas' && <KanbanDemandas clienteId={id} />}
             {aba === 'briefing' && <AbaBriefing cliente={detalhe.cliente} onMudou={carregar} />}

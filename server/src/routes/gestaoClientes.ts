@@ -28,6 +28,7 @@ const CAMPOS_CLIENTE = [
   'nome_empresa', 'nome_contato', 'whatsapp_contato', 'email_contato', 'cnpj', 'cidade',
   'segmento', 'logo_url', 'responsavel_id', 'status', 'prioridade', 'fora_dos_totais',
   'data_inicio', 'observacoes_gerais', 'estrategia_usada', 'falta_acompanhar', 'cliente_externo_id',
+  'ultima_reuniao', 'proxima_reuniao',
 ] as const;
 
 const CAMPOS_SERVICO = [

@@ -284,6 +284,10 @@ export interface GcClienteLista {
   falta_acompanhar?: string
   /** A estratégia que está sendo usada neste cliente, em texto livre. */
   estrategia_usada?: string
+  /** Dia da última reunião com o cliente (YYYY-MM-DD). */
+  ultima_reuniao?: string | null
+  /** Próxima reunião marcada, com hora (ISO). */
+  proxima_reuniao?: string | null
   created_at: string
   /** Primeira etapa que ainda não foi concluída — null quando a jornada toda acabou. */
   etapa_atual: string | null
@@ -441,6 +445,8 @@ export type GcClienteEntrada = Partial<{
   observacoes_gerais: string
   falta_acompanhar: string
   estrategia_usada: string
+  ultima_reuniao: string | null
+  proxima_reuniao: string | null
   /** Só no cadastro: as etapas até o Go-live nascem "concluídas antes do módulo". */
   ja_em_andamento: boolean
   /** A ficha de cadastro (lead que fechou) vinculada a este cliente. */
@@ -881,6 +887,9 @@ export const gestaoClientes = {
     ),
 
   metricas: (clienteId: string) => api.get<GcMetrica[]>(`/api/gc/clientes/${clienteId}/metricas`),
+  /** Grava no mês o que o Meta tem (aba Tráfego). `atualizado` false = sem conta ou sem gasto no mês. */
+  metricasDoTrafego: (clienteId: string, periodo: string) =>
+    api.post<{ atualizado: boolean; valores: Record<string, number> }>(`/api/gc/clientes/${clienteId}/metricas/do-trafego`, { periodo }),
   /** Grava o mês inteiro de uma vez. Valor vazio apaga o lançamento (branco ≠ zero). */
   salvarMetricas: (dados: {
     gc_cliente_id: string

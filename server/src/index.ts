@@ -66,6 +66,7 @@ import { startAsaasSync } from './jobs/asaasSync.js';
 import { startRecorraiSync } from './jobs/recorraiSync.js';
 import { startMetaInsightsSync } from './jobs/metaInsightsSync.js';
 import { startGcTrafegoSync } from './jobs/gcTrafegoSync.js';
+import { startGcRelatorioSemanal } from './jobs/gcRelatorioSemanal.js';
 import { startTrafficDailyReport } from './jobs/trafficDailyReport.js';
 import { startLeadsDailyReport } from './jobs/leadsDailyReport.js';
 import { startTrafficAiReview } from './jobs/trafficAiReview.js';
@@ -226,6 +227,7 @@ async function main() {
   startRecorraiSync();
   startMetaInsightsSync();
   startGcTrafegoSync();
+  startGcRelatorioSemanal();
   startTrafficDailyReport();
   startLeadsDailyReport();
   startTrafficAiReview();

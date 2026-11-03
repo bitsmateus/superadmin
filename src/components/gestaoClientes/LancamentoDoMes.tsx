@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -114,6 +114,26 @@ export function LancamentoDoMes({
   const valoresAnteriores = doMes(metricas, limitesDoMes(somarMeses(periodo, -1)).inicio)
 
   const [avisos, setAvisos] = React.useState<string[] | null>(null)
+  const [puxando, setPuxando] = React.useState(false)
+
+  // Grava direto no servidor o que o Meta tem pro mês e recarrega: vendas e receita digitadas ficam.
+  const puxarDoTrafego = async () => {
+    setPuxando(true)
+    try {
+      const r = await gestaoClientes.metricasDoTrafego(clienteId, periodo)
+      if (!r.atualizado) {
+        toast.error('Sem números do Meta neste mês — confira se a conta está vinculada na aba Tráfego.')
+        return
+      }
+      toast.success(`Números de ${mesPorExtenso(periodo)} puxados do Tráfego`)
+      await carregar()
+      onSalvo?.()
+    } catch (err) {
+      toast.error('Falha ao puxar do Tráfego: ' + (err as Error).message)
+    } finally {
+      setPuxando(false)
+    }
+  }
 
   const salvar = async (ignorarAvisos = false) => {
     const valores = Object.fromEntries(
@@ -208,10 +228,25 @@ export function LancamentoDoMes({
     <div className="space-y-4">
       <section className="rounded-2xl border border-line p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-foreground">Valores de {mesPorExtenso(periodo).toLowerCase()}</p>
-          <Button onClick={() => void salvar()} loading={salvando}>
-            Salvar o mês
-          </Button>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Valores de {mesPorExtenso(periodo).toLowerCase()}</p>
+            <p className="mt-0.5 text-xs text-foreground/50">
+              Investimento, impressões, cliques, leads e conversas vêm da aba Tráfego toda segunda. Vendas e receita são à mão.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              loading={puxando}
+              leftIcon={<RefreshCw className="h-4 w-4" />}
+              onClick={() => void puxarDoTrafego()}
+            >
+              Puxar do Tráfego
+            </Button>
+            <Button onClick={() => void salvar()} loading={salvando}>
+              Salvar o mês
+            </Button>
+          </div>
         </div>
 
         {/* Os campos e o que eles geram ficam LADO A LADO e juntos: preencher à esquerda, ver o resultado

@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { diasAtras } from '../lib/metaInsights.js';
 import {
-  anunciosDoCliente, avaliarAlertasClientes, benchmarkDoSegmento, campanhasDoCliente, lerContaNaMeta, normalizarConta,
+  anunciosDoCliente, avaliarAlertasClientes, benchmarkDoSegmento, campanhasDoCliente, lerContaNaMeta, metricasDoMesPeloTrafego, normalizarConta,
   serieDoCliente, sincronizarConta, tokenDa, totaisDoCliente, totaisPorCliente, type ContaTrafego,
 } from '../lib/gcTrafego.js';
 import { podeUsarModulo } from './gestaoClientes.js';
@@ -263,4 +263,16 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
     await avaliarAlertasClientes();
     return { resultados };
   });
+
+  // POST /api/gc/clientes/:id/metricas/do-trafego — "Puxar do Tráfego": grava no lançamento do mês
+  // o que o Meta tem (investimento, impressões, cliques, leads, conversas). Vendas e receita ficam.
+  app.post<{ Params: { id: string }; Body: { periodo?: string } }>(
+    '/api/gc/clientes/:id/metricas/do-trafego',
+    autenticado,
+    async (req, reply) => {
+      const periodo = req.body?.periodo ?? '';
+      if (!/^\d{4}-\d{2}$/.test(periodo)) return reply.status(400).send({ message: 'periodo deve ser YYYY-MM' });
+      return metricasDoMesPeloTrafego(req.params.id, periodo);
+    },
+  );
 }

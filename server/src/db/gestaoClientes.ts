@@ -432,6 +432,9 @@ const TABELAS = [
   // totais (investimento, leads, risco...). É diferente de "encerrado", que é um cliente que saiu —
   // teste é cadastro que nunca foi cliente de verdade e não pode inflar a carteira.
   `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS fora_dos_totais BOOLEAN NOT NULL DEFAULT false`,
+  // Reuniões com o cliente, na Visão geral: quando foi a última (dia) e a próxima marcada (dia e hora).
+  `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS ultima_reuniao DATE`,
+  `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS proxima_reuniao TIMESTAMPTZ`,
 
   // Prints e arquivos colados no registro — mesmo formato dos anexos de lead_notes:
   // [{ id, name, type, size, dataUrl }]. Fica no banco (data URL) como o resto do projeto, em vez

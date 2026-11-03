@@ -438,3 +438,70 @@ export async function benchmarkDoSegmento(clienteId: string, de: string, ate: st
     cpm: media(totais.map((t) => t.cpm)),
   };
 }
+
+// ── Métricas do mês a partir do tráfego ──────────────────────────────────────
+
+/**
+ * As métricas do mês que o Meta sabe, gravadas no lançamento do mês (gc_metricas, fonte 'manual' —
+ * a mesma linha que a tela de Métricas e relatórios edita). Leads = leads de formulário + conversas,
+ * que é o "resultado" da aba Tráfego. Vendas e receita NÃO vêm daqui: quem sabe é o cliente/CRM, e o
+ * pixel de compra só cobre parte dos clientes; o que a equipe digitou nessas duas fica como está.
+ *
+ * Cliente sem conta vinculada ou sem nada no mês fica de fora — não apaga o que foi lançado à mão.
+ * Também abre o rascunho do relatório do mês (se ainda não há um), pro mês já aparecer pronto pra revisão.
+ */
+export async function metricasDoMesPeloTrafego(
+  clienteId: string,
+  periodo: string,
+): Promise<{ atualizado: boolean; valores: Record<string, number> }> {
+  const [ano, mes] = periodo.split('-').map(Number);
+  const inicio = `${periodo}-01`;
+  const fim = `${periodo}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`;
+  const conta = await queryOne('SELECT 1 FROM gc_trafego_contas WHERE gc_cliente_id = $1 AND ativo', [clienteId]);
+  if (!conta) return { atualizado: false, valores: {} };
+  const t = await totaisDoCliente(clienteId, inicio, fim);
+  if (t.gasto === 0 && t.impressoes === 0) return { atualizado: false, valores: {} };
+
+  const valores: Record<string, number> = {
+    investimento: Math.round(t.gasto * 100) / 100,
+    impressoes: t.impressoes,
+    cliques: t.cliques,
+    leads: t.leads + t.conversas,
+    conversas: t.conversas,
+  };
+  for (const [chave, valor] of Object.entries(valores)) {
+    await query(
+      `INSERT INTO gc_metricas (gc_cliente_id, periodo_inicio, periodo_fim, fonte, chave, valor)
+       VALUES ($1, $2, $3, 'manual', $4, $5)
+       ON CONFLICT (gc_cliente_id, periodo_inicio, periodo_fim, fonte, chave)
+       DO UPDATE SET valor = EXCLUDED.valor, updated_at = NOW()`,
+      [clienteId, inicio, fim, chave, valor],
+    );
+  }
+  await query(
+    `INSERT INTO gc_relatorios (gc_cliente_id, periodo_inicio, periodo_fim) VALUES ($1, $2, $3)
+     ON CONFLICT (gc_cliente_id, periodo_inicio, periodo_fim) DO NOTHING`,
+    [clienteId, inicio, fim],
+  );
+  return { atualizado: true, valores };
+}
+
+/** Roda o de cima pra todo cliente com conta do Meta ativa (o relatório semanal). */
+export async function metricasDoMesDeTodos(periodo: string): Promise<{ clientes: number; erros: number }> {
+  const clientes = await query<{ gc_cliente_id: string }>(
+    `SELECT DISTINCT t.gc_cliente_id FROM gc_trafego_contas t
+     JOIN gc_clientes c ON c.id = t.gc_cliente_id
+     WHERE t.ativo AND c.status <> 'encerrado'`,
+  );
+  let atualizados = 0;
+  let erros = 0;
+  for (const c of clientes) {
+    try {
+      if ((await metricasDoMesPeloTrafego(c.gc_cliente_id, periodo)).atualizado) atualizados++;
+    } catch (err) {
+      erros++;
+      console.error('[gc-relatorio] cliente', c.gc_cliente_id, err instanceof Error ? err.message : err);
+    }
+  }
+  return { clientes: atualizados, erros };
+}

@@ -1,6 +1,8 @@
 import { AnexosDaArea } from '@/components/gestaoClientes/AnexosDaArea'
 import * as React from 'react'
-import { ArrowRight, Pin, Plus, Route, Trash2 } from 'lucide-react'
+import { ArrowRight, CalendarClock, Pin, Plus, Route, Trash2 } from 'lucide-react'
+import { CampoData } from '@/components/gestaoClientes/CampoData'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/Input'
@@ -31,6 +33,95 @@ function dataBr(valor: string | null | undefined): string {
 function reais(valor: string | null): string {
   if (valor === null || valor === undefined || valor === '') return '—'
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+/** ISO do banco → valor do <input type="datetime-local"> no fuso de quem está vendo. */
+function paraCampoDataHora(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/**
+ * Reuniões com o cliente: quando foi a última e a próxima marcada (dia e hora). Cada campo salva
+ * sozinho ao mudar. "Marcar como feita" leva a próxima pra última e libera o campo pra marcar outra.
+ */
+function Reunioes({
+  clienteId, ultima, proxima, onMudou,
+}: {
+  clienteId: string
+  ultima: string | null
+  proxima: string | null
+  onMudou: () => Promise<void> | void
+}) {
+  const [proximaCampo, setProximaCampo] = React.useState(paraCampoDataHora(proxima))
+  const [salvando, setSalvando] = React.useState(false)
+  React.useEffect(() => setProximaCampo(paraCampoDataHora(proxima)), [proxima])
+
+  const salvar = async (dados: { ultima_reuniao?: string | null; proxima_reuniao?: string | null }) => {
+    setSalvando(true)
+    try {
+      await gestaoClientes.atualizar(clienteId, dados)
+      await onMudou()
+    } catch (err) {
+      toast.error('Falha ao salvar a reunião: ' + (err as Error).message)
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const proximaData = proxima ? new Date(proxima) : null
+  const passou = proximaData ? proximaData.getTime() < Date.now() : false
+
+  return (
+    <section className="rounded-xl border border-line p-4">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+        <CalendarClock className="h-4 w-4 text-accent" /> Reuniões
+      </h2>
+      <div className="space-y-3">
+        <CampoData
+          label="Última reunião"
+          value={ultima ? String(ultima).slice(0, 10) : null}
+          onChange={(v) => void salvar({ ultima_reuniao: v })}
+        />
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-foreground/70">Próxima reunião</label>
+          <input
+            type="datetime-local"
+            value={proximaCampo}
+            onChange={(e) => setProximaCampo(e.target.value)}
+            onBlur={() => {
+              const atual = paraCampoDataHora(proxima)
+              if (proximaCampo === atual) return
+              void salvar({ proxima_reuniao: proximaCampo ? new Date(proximaCampo).toISOString() : null })
+            }}
+            className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-foreground focus:border-accent/60 focus:outline-none"
+          />
+          {proximaData && (
+            <p className={cn('mt-1 text-[11px]', passou ? 'text-warning' : 'text-foreground/45')}>
+              {passou ? 'Essa data já passou — foi feita?' : `Marcada pra ${proximaData.toLocaleString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+            </p>
+          )}
+        </div>
+        {proximaData && (
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={salvando}
+            onClick={() => {
+              const p = (n: number) => String(n).padStart(2, '0')
+              const dia = `${proximaData.getFullYear()}-${p(proximaData.getMonth() + 1)}-${p(proximaData.getDate())}`
+              void salvar({ ultima_reuniao: dia, proxima_reuniao: null })
+            }}
+          >
+            Marcar como feita
+          </Button>
+        )}
+      </div>
+    </section>
+  )
 }
 
 /** Um dado do cadastro: rótulo pequeno em cima, valor embaixo. */
@@ -370,6 +461,13 @@ export function AbaVisaoGeral({
 
       <div className="space-y-4">
         <QuadroDeAvisos detalhe={detalhe} onVerNotas={onVerNotas} />
+
+        <Reunioes
+          clienteId={cliente.id}
+          ultima={cliente.ultima_reuniao ?? null}
+          proxima={cliente.proxima_reuniao ?? null}
+          onMudou={onMudou}
+        />
 
         <section className="rounded-xl border border-line p-4">
           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">

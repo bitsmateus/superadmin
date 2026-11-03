@@ -12,3 +12,10 @@
 - Seed do tour NX Systems roda sozinho no primeiro boot (marca `seedTourNx` no workspace) e publica com link "Site".
 - Decisão: a estrutura `ds_*` saiu do `runMigrations` e roda à parte no boot — num banco novo uma migração antiga de outro módulo (`gc_briefing`) falhou e levava o Demo Studio junto.
 - Verificado num Postgres real (PGlite): seed, fluxo completo da API (criar, enviar tela 2x, publicar v1/v2, restaurar, duplicar, exemplo, despublicar) e o player no navegador em 1440×900 e 375×812. Pendente: e2e Playwright automatizado.
+
+## M2 — Rastreamento e analytics (03/11/2026)
+- Coletor no player (`src/lib/demoStudio/coletor.ts`): visitante em localStorage + cookie, sessão de 30 min por demo e por visitante, lote a cada 5s e no pagehide via sendBeacon `text/plain` (sem preflight entre o domínio da demo e o da API), heartbeat só com a aba visível. Quem tem login do painel no navegador conta como interno.
+- `POST /api/t` (`server/src/lib/demoStudio/coleta.ts`): zod, 60 req/min por IP (primeiro X-Forwarded-For, porque atrás do proxy do Easypanel o `req.ip` é o do proxy), robôs e preview do WhatsApp ignorados, IP só como sha256 com `IP_SALT`, agregados na sessão. Job diário apaga heartbeat > 180 dias.
+- Métricas puras em `server/src/lib/demoStudio/metrics.ts` (§8.3) com testes sintéticos; telas de visão geral, analytics da demo (funil com a maior queda em vermelho), lista de sessões e linha do tempo. Gráficos sem biblioteca, no padrão do superadmin.
+- Aceite conferido no navegador com banco local: 3 visitantes (1 até o fim, 1 via `utm_source=instagram`, 1 no celular) → 3 views, 3 únicos, 33% e funil 3→2→1. Os testes pegaram 3 casos que foram corrigidos: sessão reaproveitada com visitante trocado, aba esquecida abrindo sessão só com heartbeat e visita logada somando etapas na sessão de um visitante.
+- Pendente para o deploy: definir `IP_SALT` no serviço da API. Leads e o selo "quente" chegam no M3.

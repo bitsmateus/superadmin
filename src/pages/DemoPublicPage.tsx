@@ -1,7 +1,8 @@
 import * as React from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { DemoPlayer } from '@/components/demoStudio/player/DemoPlayer'
-import { demoPublicada, demoStudio } from '@/services/demoStudio'
+import { DemoPlayer, type PlayerEvent } from '@/components/demoStudio/player/DemoPlayer'
+import { URL_COLETA, demoPublicada, demoStudio } from '@/services/demoStudio'
+import { criarColetor, type Coletor } from '@/lib/demoStudio/coletor'
 import type { PlayerDemo } from '@/lib/demoStudio/types'
 
 /** Fonte do player (a mesma da Fase 1). Carregada só nas páginas do player, uma vez. */
@@ -49,9 +50,29 @@ export function DemoPublicPage({ embed = false }: { embed?: boolean }) {
     if (demo) document.title = demo.name
   }, [demo])
 
+  // Analytics: uma sessão por visita (§8.1). Os eventos do player vão direto para a fila do coletor.
+  // Os efeitos do player (filho) rodam antes dos desta página: o step_view da 1ª etapa chega antes do
+  // coletor existir. Fica guardado aqui e é repassado assim que ele nasce.
+  const coletor = React.useRef<Coletor | null>(null)
+  const antesDoColetor = React.useRef<PlayerEvent[]>([])
+  React.useEffect(() => {
+    if (!demo) return
+    const c = criarColetor({ endpoint: URL_COLETA, demoId: demo.id, versionId: demo.versionId })
+    coletor.current = c
+    antesDoColetor.current.splice(0).forEach((e) => c.registrar(e))
+    return () => {
+      c.encerrar()
+      coletor.current = null
+    }
+  }, [demo])
+  const aoEvento = React.useCallback((e: PlayerEvent) => {
+    if (coletor.current) coletor.current.registrar(e)
+    else antesDoColetor.current.push(e)
+  }, [])
+
   if (demo === undefined) return <Aviso texto="Carregando o tour…" />
   if (demo === null) return <Aviso texto="Esta demo não está disponível. Confira o link com quem te enviou." />
-  return <DemoPlayer demo={demo} vars={vars} embed={embed} />
+  return <DemoPlayer demo={demo} vars={vars} embed={embed} onEvent={aoEvento} />
 }
 
 /** Rascunho no player, para o iframe da pré-visualização do editor (precisa de login). */

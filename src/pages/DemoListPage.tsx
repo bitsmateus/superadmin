@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Copy, Eye, MousePointerClick, Pencil, Plus, Trash2 } from 'lucide-react'
+import { BarChart3, Copy, Eye, MousePointerClick, Pencil, Plus, Trash2 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -99,6 +99,9 @@ export function DemoListPage() {
                     </Button>
                     <Button size="sm" variant="ghost" leftIcon={<Eye className="h-3.5 w-3.5" />} onClick={() => navigate(`/demo-studio/demos/${d.id}/preview`)}>
                       Ver
+                    </Button>
+                    <Button size="sm" variant="ghost" leftIcon={<BarChart3 className="h-3.5 w-3.5" />} onClick={() => navigate(`/demo-studio/demos/${d.id}/analytics`)}>
+                      Números
                     </Button>
                     {podeEditar && (
                       <Button size="sm" variant="ghost" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => duplicar(d)}>Duplicar</Button>

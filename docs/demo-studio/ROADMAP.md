@@ -33,11 +33,11 @@ Referências: `docs/ESPECIFICACAO.md` (seções citadas entre parênteses) e `re
 **Aceite:** o tour da Fase 1 roda em `/d/nx-systems-tour` igual à referência, no desktop e no celular; consigo criar uma segunda demo do zero e publicar.
 
 ## M2 — Rastreamento e analytics
-- [ ] Coletor no player (§8.1): visitorId/sessionId, fila de eventos, sendBeacon, heartbeat só com aba visível, exclusão de usuários internos e bots.
-- [ ] `POST /api/t` (§8.2) com zod, rate limit, ua-parser-js, ipHash, agregados na ViewSession.
-- [ ] `lib/metrics.ts` com as definições da §8.3 (testadas com dados sintéticos).
-- [ ] `/app` visão geral, `/app/demos/[id]/analytics` (KPIs, funil, série diária, dispositivos, canais), lista de sessões e `/app/sessoes/[id]` (linha do tempo).
-- [ ] Filtros de período e por demo/link/vendedor.
+- [x] Coletor no player (§8.1, `src/lib/demoStudio/coletor.ts`): visitorId/sessionId, fila de eventos, sendBeacon (text/plain), heartbeat só com aba visível, exclusão de usuários internos e bots.
+- [x] `POST /api/t` (§8.2) com zod, rate limit, ua-parser-js (v1, MIT), ipHash, agregados na `ds_view_sessions`. Lote só de heartbeat não abre sessão; sessão continuada por alguém logado vira interna.
+- [x] `server/src/lib/demoStudio/metrics.ts` com as definições da §8.3 (testadas com dados sintéticos, incluindo o cenário do aceite).
+- [x] `/demo-studio` visão geral, `/demo-studio/demos/:id/analytics` (KPIs, funil, série diária, dispositivos, canais), lista de sessões e `/demo-studio/sessoes/:id` (linha do tempo). Gráficos com div + Tailwind, padrão do superadmin (sem Recharts).
+- [x] Filtros de período e por demo/link/vendedor (vendedor SELLER fica preso aos próprios links no servidor).
 
 **Aceite:** abrir a demo em 3 navegadores diferentes (um até o fim) → dashboard mostra 3 views, 3 únicos, 33% de conclusão e funil coerente.
 

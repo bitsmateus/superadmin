@@ -16,7 +16,7 @@ A especificação foi escrita para um projeto novo (Next.js 15 + Prisma + Auth.j
 | Papéis ADMIN / EDITOR / SELLER | `profiles.role = 'admin'` → ADMIN. Os demais precisam da marca `demo_studio` em Equipe → Permissões; o papel dentro do módulo vem de `profiles.ds_role` (`EDITOR` padrão, `SELLER` restrito aos próprios links/leads — aplicado no M3). |
 | `Workspace` | Tabela `ds_workspaces` com uma linha "NX Digital" criada na migração. Todas as tabelas carregam `workspace_id` para não fechar a porta do multi-workspace. |
 | shadcn/ui | Componentes de `src/components/ui` e o tema do superadmin. Destaque do Demo Studio (player) `#2c6bc8`, configurável por demo. |
-| Recharts / dnd-kit / react-rnd / sharp / zod | Mesmas libs. `@dnd-kit` e `zod` já existem; `sharp` (servidor), `react-rnd` e gráficos entram no marco em que forem usados. |
+| Recharts / dnd-kit / react-rnd / sharp / zod | `@dnd-kit`, `react-rnd`, `zod` e `sharp` como na especificação. **Sem Recharts:** os gráficos seguem o padrão do superadmin (div + Tailwind, ver `components/analytics/ConversionFunnel.tsx`) para não pesar o bundle. `ua-parser-js` fica na v1 (MIT; a v2 é AGPL). |
 | Vitest + Playwright | `node --test` com `tsx` (padrão do servidor) para as regras puras. E2E com Playwright fica para quando o player existir (M1). |
 | `Dockerfile` standalone | Os dois Dockerfiles que já existem (front nginx + `server/Dockerfile`). O servidor ganha um volume em `/data`. |
 | GitHub Actions | Não existe CI hoje no superadmin; o que vale é rodar lint/build/testes antes do commit. |

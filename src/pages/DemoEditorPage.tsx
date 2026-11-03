@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Check, Copy, Eye, History, ImagePlus, Loader2, Settings2, Trash2, Upload } from 'lucide-react'
+import { BarChart3, Check, Copy, Eye, History, ImagePlus, Loader2, Settings2, Trash2, Upload } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -199,6 +199,7 @@ export function DemoEditorPage() {
             </span>
             {podeEditar && <Button size="sm" variant="ghost" leftIcon={<Settings2 className="h-4 w-4" />} onClick={() => setConfigAberta(true)}>Configurações</Button>}
             <Button size="sm" variant="ghost" leftIcon={<History className="h-4 w-4" />} onClick={() => setVersoesAberta(true)}>Versões</Button>
+            <Button size="sm" variant="ghost" leftIcon={<BarChart3 className="h-4 w-4" />} onClick={() => navigate(`/demo-studio/demos/${id}/analytics`)}>Analytics</Button>
             <Button size="sm" variant="outline" leftIcon={<Eye className="h-4 w-4" />} onClick={async () => { await descarregar(); navigate(`/demo-studio/demos/${id}/preview`) }}>
               Pré-visualizar
             </Button>

@@ -83,6 +83,15 @@ const DemoListPage = React.lazy(() =>
 const DemoEditorPage = React.lazy(() =>
   import('./pages/DemoEditorPage').then((m) => ({ default: m.DemoEditorPage })),
 )
+const DemoOverviewPage = React.lazy(() =>
+  import('./pages/DemoAnalyticsPages').then((m) => ({ default: m.DemoOverviewPage })),
+)
+const DemoAnalyticsPage = React.lazy(() =>
+  import('./pages/DemoAnalyticsPages').then((m) => ({ default: m.DemoAnalyticsPage })),
+)
+const DemoSessionPage = React.lazy(() =>
+  import('./pages/DemoAnalyticsPages').then((m) => ({ default: m.DemoSessionPage })),
+)
 const DemoPreviewPage = React.lazy(() =>
   import('./pages/DemoPreviewPage').then((m) => ({ default: m.DemoPreviewPage })),
 )
@@ -284,7 +293,9 @@ export default function App() {
           {/* A tela Estratégias saiu: quem tem o link antigo volta pra lista. */}
           <Route path="/clientesnxdigital/estrategias" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
           {/* Demo Studio — demos interativas por link (tabelas ds_*, docs/demo-studio/). */}
-          <Route path="/demo-studio" element={<DemoStudioPage secao="visao-geral" />} />
+          <Route path="/demo-studio" element={<DemoOverviewPage />} />
+          <Route path="/demo-studio/demos/:id/analytics" element={<DemoAnalyticsPage />} />
+          <Route path="/demo-studio/sessoes/:id" element={<DemoSessionPage />} />
           <Route path="/demo-studio/demos" element={<DemoListPage />} />
           <Route path="/demo-studio/demos/:id" element={<DemoEditorPage />} />
           <Route path="/demo-studio/demos/:id/preview" element={<DemoPreviewPage />} />

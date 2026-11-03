@@ -1,11 +1,12 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { ZodSchema } from 'zod';
+import { FastifyInstance } from 'fastify';
 import { query, queryOne, withTransaction } from '../db.js';
 import { DS_WORKSPACE_ID } from '../db/demoStudio.js';
-import { temMarcaDeMenu } from '../lib/acessoMenu.js';
+import { exigir, papelNoModulo, validar, type Usuario } from '../lib/demoStudio/acesso.js';
+import { demoStudioAnalyticsRoutes } from './demoStudioAnalytics.js';
 import { storage, tipoDoArquivo } from '../lib/demoStudio/storage.js';
 import { ErroImagem, bufferDoDataUrl, processarImagem } from '../lib/demoStudio/images.js';
 import * as S from '../lib/demoStudio/schemas.js';
+import { criarLimitador, ehRobo, gravarLote, hashDoIp, ipDoVisitante, loteDeEventos } from '../lib/demoStudio/coleta.js';
 import {
   despublicar,
   duplicarDemo,
@@ -21,41 +22,6 @@ import {
  * Rotas do Demo Studio (ver docs/demo-studio/ADAPTACAO.md): painel em /api/ds/*, público em
  * /api/public/ds/*, arquivos em /files/*. Erros no padrão do projeto: { message }.
  */
-
-type Papel = 'ADMIN' | 'EDITOR' | 'SELLER';
-type Usuario = { sub: string; role?: string };
-
-/** Papel dentro do módulo, ou null sem acesso. Admin do superadmin = ADMIN; os outros precisam da marca. */
-async function papelNoModulo(req: FastifyRequest): Promise<Papel | null> {
-  const { sub, role } = req.user as Usuario;
-  if (role === 'admin') return 'ADMIN';
-  if (!(await temMarcaDeMenu(sub, role, 'demo_studio'))) return null;
-  const p = await queryOne<{ ds_role: string | null }>('SELECT ds_role FROM profiles WHERE id = $1', [sub]);
-  return p?.ds_role === 'SELLER' ? 'SELLER' : 'EDITOR';
-}
-
-const PODE: Record<'ver' | 'editar' | 'admin', Papel[]> = {
-  ver: ['ADMIN', 'EDITOR', 'SELLER'],
-  editar: ['ADMIN', 'EDITOR'],
-  admin: ['ADMIN'],
-};
-
-function exigir(nivel: keyof typeof PODE) {
-  return async (req: FastifyRequest, reply: FastifyReply) => {
-    const papel = await papelNoModulo(req);
-    if (!papel) return reply.status(403).send({ message: 'Sem acesso ao Demo Studio. Peça a marca em Equipe → Permissões.' });
-    if (!PODE[nivel].includes(papel)) return reply.status(403).send({ message: 'Seu papel no Demo Studio não permite esta ação.' });
-  };
-}
-
-function validar<T>(schema: ZodSchema<T>, dados: unknown, reply: FastifyReply): T | undefined {
-  const r = schema.safeParse(dados ?? {});
-  if (!r.success) {
-    reply.status(400).send({ message: S.mensagemDoErro(r.error) });
-    return undefined;
-  }
-  return r.data;
-}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -128,6 +94,8 @@ export async function demoStudioRoutes(app: FastifyInstance) {
   const ver = { onRequest: [app.authenticate], preHandler: exigir('ver') };
   const editar = { onRequest: [app.authenticate], preHandler: exigir('editar') };
   const soAdmin = { onRequest: [app.authenticate], preHandler: exigir('admin') };
+
+  await demoStudioAnalyticsRoutes(app);
 
   /* ---------------------------------------------------------------- fundação (M0) */
 
@@ -483,6 +451,32 @@ export async function demoStudioRoutes(app: FastifyInstance) {
   });
 
   /* ---------------------------------------------------------------- público (sem login) */
+
+  // Coleta de eventos do player (§8.2). Chega como text/plain (sendBeacon entre domínios, sem preflight).
+  // Sempre 204, mesmo com lote inválido: o player não tem o que fazer com erro e não pode travar por isso.
+  const limiteColeta = criarLimitador(60, 60_000);
+  app.post('/api/t', { bodyLimit: 64 * 1024 }, async (req, reply) => {
+    const ip = ipDoVisitante(req.headers['x-forwarded-for'], req.ip);
+    if (!limiteColeta(ip)) return reply.status(429).send();
+    const ua = req.headers['user-agent'];
+    if (ehRobo(ua)) return reply.status(204).send();
+    let corpo: unknown = req.body;
+    if (typeof corpo === 'string') {
+      try {
+        corpo = JSON.parse(corpo);
+      } catch {
+        return reply.status(204).send();
+      }
+    }
+    const lote = loteDeEventos.safeParse(corpo);
+    if (!lote.success) return reply.status(204).send();
+    try {
+      await gravarLote(lote.data, { ua: ua!, ipHash: hashDoIp(ip) });
+    } catch (err) {
+      req.log.error({ err }, '[demo-studio] falha ao gravar eventos');
+    }
+    return reply.status(204).send();
+  });
 
   app.get<{ Params: { slug: string } }>('/api/public/ds/demos/:slug', async (req, reply) => {
     const snap = await versaoPublicada(req.params.slug);

@@ -6,6 +6,9 @@ import type { Caixa } from '@/lib/demoStudio/layout'
 
 const API_URL = import.meta.env.VITE_API_URL ?? ''
 
+/** Endpoint de coleta de eventos do player (§8.2). */
+export const URL_COLETA = `${API_URL}/api/t`
+
 /** URL pública de um arquivo do storage (frame, miniatura). */
 export function urlDoArquivo(chave: string | null | undefined): string {
   return chave ? `${API_URL}/files/${chave}` : ''
@@ -114,6 +117,108 @@ export const demoStudio = {
     api.patch<Etapa>(`/api/ds/steps/${stepId}`, dados),
   apagarEtapa: (stepId: string) => api.delete(`/api/ds/steps/${stepId}`),
   reordenar: (id: string, ids: string[]) => api.post<{ ok: true }>(`/api/ds/demos/${id}/steps/reorder`, { ids }),
+}
+
+/* ------------------------------------------------------------------ analytics (M2) */
+
+export interface FiltroAnalytics {
+  from: string
+  to: string
+  demoId?: string
+  linkId?: string
+  sellerId?: string
+}
+
+export interface ResumoAnalytics {
+  views: number
+  unicos: number
+  taxaConclusao: number
+  tempoMedioMs: number
+  engajamentoMedio: number
+  cliquesCta: number
+  sessoesComLead: number
+  conversaoLead: number
+}
+
+export interface Contagem {
+  chave: string
+  views: number
+  concluidas: number
+}
+
+export interface SessaoResumo {
+  id: string
+  startedAt: string
+  lastSeenAt: string
+  demo: { id: string; name: string }
+  lead: { id: string; name: string | null; company: string | null } | null
+  link: { id: string; label: string } | null
+  channel: string
+  device: string | null
+  browser: string | null
+  os: string | null
+  activeMs: number
+  stepsViewed: number
+  totalSteps: number
+  maxStepOrder: number
+  completed: boolean
+  ctaClicked: boolean
+}
+
+export interface VisaoGeral {
+  periodo: { de: string; ate: string }
+  resumo: ResumoAnalytics
+  leads: number
+  serie: { dia: string; views: number; unicos: number }[]
+  dispositivos: Contagem[]
+  canais: Contagem[]
+  demos: (Contagem & { nome: string })[]
+  aoVivo: number
+  recentes: SessaoResumo[]
+}
+
+export interface LinhaFunil {
+  order: number
+  title: string
+  kind: string
+  sessoes: number
+  pct: number
+  queda: number
+}
+
+export interface EventoDaSessao {
+  type: string
+  stepId: string | null
+  order: number | null
+  data: Record<string, unknown> | null
+  ts: string
+}
+
+export interface SessaoDetalhe extends SessaoResumo {
+  internal: boolean
+  utm: Record<string, string>
+  steps: { id: string; order: number; title: string; kind: string }[]
+  events: EventoDaSessao[]
+}
+
+export interface OpcoesDeFiltro {
+  links: { id: string; label: string; kind: string; demoId: string; demoName: string }[]
+  vendedores: { id: string; name: string }[]
+}
+
+function qs(f: object): string {
+  const p = new URLSearchParams()
+  Object.entries(f).forEach(([k, v]) => { if (v !== undefined && v !== '') p.set(k, String(v)) })
+  return p.toString()
+}
+
+export const analytics = {
+  visaoGeral: (f: FiltroAnalytics) => api.get<VisaoGeral>(`/api/ds/analytics?${qs(f)}`),
+  funil: (f: FiltroAnalytics & { demoId: string }) => api.get<LinhaFunil[]>(`/api/ds/analytics/funnel?${qs(f)}`),
+  filtros: () => api.get<OpcoesDeFiltro>('/api/ds/analytics/filters'),
+  sessoes: (f: FiltroAnalytics & { limit?: number; offset?: number }) =>
+    api.get<{ total: number; sessions: SessaoResumo[] }>(`/api/ds/sessions?${qs(f)}`),
+  sessao: (id: string) => api.get<SessaoDetalhe>(`/api/ds/sessions/${id}`),
 }
 
 /** Versão publicada, sem login (player público). */

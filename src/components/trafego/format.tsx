@@ -5,6 +5,10 @@ import type { LinhaTrafego } from '@/services/trafego'
 export const brl = (v: number | null | undefined): string =>
   v == null ? '—' : `R$ ${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(Math.round(v))}`
 
+/** Com centavos (R$ 2,49) — pra custo por resultado e valores pequenos, onde arredondar esconde a diferença. */
+export const brlExato = (v: number | null | undefined): string =>
+  v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
 export const num = (v: number | null | undefined): string =>
   v == null ? '—' : new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(v)
 

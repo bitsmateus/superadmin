@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/utils'
-import { brl, num, useCarregar, Estado, Painel, Vazio, diaCurto } from '@/components/trafego/format'
+import { brl, brlExato, num, useCarregar, Estado, Painel, Vazio, diaCurto } from '@/components/trafego/format'
 import { PainelIaTrafego } from '@/components/gestaoClientes/IaDoCliente'
 import {
   gcTrafego, type GcAlertaTrafego, type GcBenchmark, type GcCampanhaTrafego, type GcContaTrafego, type GcNivelAlerta, type GcTotaisTrafego,
@@ -122,7 +122,7 @@ function Kpi({ titulo, valor, detalhe, atual, anterior, menorMelhor }: {
 
 function Kpis({ atual, anterior, benchmark }: { atual: GcTotaisTrafego; anterior: GcTotaisTrafego; benchmark: GcBenchmark | null }) {
   const bench = benchmark && benchmark.custoResultado != null
-    ? ` · segmento: ${brl(benchmark.custoResultado)}`
+    ? ` · segmento: ${brlExato(benchmark.custoResultado)}`
     : ''
   const partes = [
     atual.leads > 0 && `${num(atual.leads)} leads`,
@@ -131,11 +131,11 @@ function Kpis({ atual, anterior, benchmark }: { atual: GcTotaisTrafego; anterior
   ].filter(Boolean).join(' · ')
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-      <Kpi titulo="Investimento" valor={brl(atual.gasto)} atual={atual.gasto} anterior={anterior.gasto} detalhe={`antes: ${brl(anterior.gasto)}`} />
+      <Kpi titulo="Investimento" valor={brlExato(atual.gasto)} atual={atual.gasto} anterior={anterior.gasto} detalhe={`antes: ${brlExato(anterior.gasto)}`} />
       <Kpi titulo="Resultados" valor={num(atual.resultados)} atual={atual.resultados} anterior={anterior.resultados} detalhe={partes || 'leads + conversas + compras'} />
-      <Kpi titulo="Custo por resultado" valor={brl(atual.custoResultado)} atual={atual.custoResultado} anterior={anterior.custoResultado} menorMelhor detalhe={`antes: ${brl(anterior.custoResultado)}${bench}`} />
+      <Kpi titulo="Custo por resultado" valor={brlExato(atual.custoResultado)} atual={atual.custoResultado} anterior={anterior.custoResultado} menorMelhor detalhe={`antes: ${brlExato(anterior.custoResultado)}${bench}`} />
       <Kpi titulo="CTR (link)" valor={pct(atual.ctr)} atual={atual.ctr} anterior={anterior.ctr} detalhe={`${num(atual.cliques)} cliques`} />
-      <Kpi titulo="CPM" valor={brl(atual.cpm)} atual={atual.cpm} anterior={anterior.cpm} menorMelhor detalhe={`${num(atual.impressoes)} impressões`} />
+      <Kpi titulo="CPM" valor={brlExato(atual.cpm)} atual={atual.cpm} anterior={anterior.cpm} menorMelhor detalhe={`${num(atual.impressoes)} impressões`} />
       {atual.roas != null || anterior.roas != null ? (
         <Kpi titulo="ROAS" valor={atual.roas == null ? '—' : `${atual.roas.toFixed(1).replace('.', ',')}x`} atual={atual.roas} anterior={anterior.roas} detalhe={`${brl(atual.valorCompras)} em vendas`} />
       ) : (
@@ -552,13 +552,13 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
                                 </span>
                               </td>
                               <td className="px-2 py-2"><StatusMeta status={c.status} /></td>
-                              <td className="px-2 py-2 text-right tabular-nums">{brl(c.gasto)}</td>
+                              <td className="px-2 py-2 text-right tabular-nums">{brlExato(c.gasto)}</td>
                               <td className="px-2 py-2 text-right tabular-nums">{num(c.impressoes)}</td>
                               <td className="px-2 py-2 text-right tabular-nums">{num(c.cliques)}</td>
                               <td className="px-2 py-2 text-right tabular-nums">{pct(c.ctr)}</td>
                               <td className="px-2 py-2 text-right font-medium tabular-nums">{num(c.resultados)}</td>
-                              <td className="px-2 py-2 text-right tabular-nums">{brl(c.custoResultado)}</td>
-                              <td className="px-4 py-2 text-right tabular-nums text-foreground/60">{brl(c.orcamentoDia)}</td>
+                              <td className="px-2 py-2 text-right tabular-nums">{brlExato(c.custoResultado)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums text-foreground/60">{brlExato(c.orcamentoDia)}</td>
                             </tr>
                           )
                         })}
@@ -610,12 +610,12 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
                               </div>
                             </div>
                           </td>
-                          <td className="px-2 py-2 text-right tabular-nums">{brl(a.gasto)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{brlExato(a.gasto)}</td>
                           <td className="px-2 py-2 text-right tabular-nums">{num(a.impressoes)}</td>
                           <td className="px-2 py-2 text-right tabular-nums">{num(a.cliques)}</td>
                           <td className="px-2 py-2 text-right tabular-nums">{pct(a.ctr)}</td>
                           <td className="px-2 py-2 text-right font-medium tabular-nums">{num(a.resultados)}</td>
-                          <td className="px-2 py-2 text-right tabular-nums">{brl(a.custoResultado)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{brlExato(a.custoResultado)}</td>
                           <td className={cn('px-4 py-2 text-right tabular-nums', a.frequencia != null && a.frequencia >= 3.5 && 'font-medium text-amber-600')}>
                             {a.frequencia == null ? '—' : a.frequencia.toFixed(1).replace('.', ',')}
                           </td>

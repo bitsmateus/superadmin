@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { pool, query, queryOne, withTransaction } from '../../db.js';
+import { assarMascaras, type Mascara } from './images.js';
 
 /**
  * Montagem do que o player recebe (rascunho ou versão publicada) e as operações que mexem na demo
@@ -16,6 +17,8 @@ export interface SnapshotFrame {
   width: number;
   height: number;
   displayUrl: string | null;
+  /** Só no rascunho (pré-visualização desenha por cima). Na versão publicada as máscaras já estão na imagem. */
+  masks?: Mascara[];
 }
 export interface SnapshotStep {
   id: string;
@@ -46,8 +49,12 @@ export interface Snapshot {
   consent?: { texto?: string; politicaUrl?: string };
 }
 
-/** Snapshot do rascunho atual. Só os frames usados por etapas entram (o player pré-carrega todos). */
-export async function montarSnapshot(demoId: string, db: Exec = pool): Promise<Snapshot | null> {
+/**
+ * Snapshot da demo atual. Só os frames usados por etapas entram (o player pré-carrega todos).
+ * `assar` (ao publicar): telas com máscara ganham uma imagem nova com a máscara gravada nos pixels, e é ela
+ * que vai para a versão pública. Sem `assar` (pré-visualização), as máscaras seguem à parte, por cima.
+ */
+export async function montarSnapshot(demoId: string, db: Exec = pool, opcoes: { assar?: boolean } = {}): Promise<Snapshot | null> {
   const { rows: demos } = await db.query(
     `SELECT id, name, slug, description, theme, settings FROM ds_demos WHERE id = $1`,
     [demoId]
@@ -62,8 +69,21 @@ export async function montarSnapshot(demoId: string, db: Exec = pool): Promise<S
   );
   const usados = [...new Set(steps.map((s) => s.frame_id as string))];
   const { rows: frames } = usados.length
-    ? await db.query(`SELECT id, image_path, width, height, display_url FROM ds_frames WHERE id = ANY($1)`, [usados])
+    ? await db.query(`SELECT id, image_path, width, height, display_url, masks, pixel_ratio FROM ds_frames WHERE id = ANY($1)`, [usados])
     : { rows: [] as Record<string, unknown>[] };
+  const telas: SnapshotFrame[] = [];
+  for (const f of frames) {
+    const masks = ((f.masks as Mascara[] | null) ?? []).filter(Boolean);
+    const base = {
+      id: f.id as string,
+      image: f.image_path as string,
+      width: f.width as number,
+      height: f.height as number,
+      displayUrl: (f.display_url as string | null) ?? null,
+    };
+    if (opcoes.assar) telas.push({ ...base, image: await assarMascaras(base.image, masks, Number(f.pixel_ratio) || 1) });
+    else telas.push(masks.length ? { ...base, masks } : base);
+  }
   return {
     id: demo.id,
     versionId: null,
@@ -74,13 +94,7 @@ export async function montarSnapshot(demoId: string, db: Exec = pool): Promise<S
     theme: demo.theme ?? {},
     settings: demo.settings ?? {},
     chapters: chapters.map((c) => c.name as string),
-    frames: frames.map((f) => ({
-      id: f.id as string,
-      image: f.image_path as string,
-      width: f.width as number,
-      height: f.height as number,
-      displayUrl: (f.display_url as string | null) ?? null,
-    })),
+    frames: telas,
     steps: steps.map((s, i) => ({
       id: s.id,
       order: i + 1,
@@ -112,7 +126,7 @@ export async function publicar(demoId: string, userId: string | null): Promise<{
   return withTransaction(async (c) => {
     // Trava a linha da demo: dois "Publicar" ao mesmo tempo não podem gerar o mesmo número.
     await c.query(`SELECT 1 FROM ds_demos WHERE id = $1 FOR UPDATE`, [demoId]);
-    const snap = await montarSnapshot(demoId, c);
+    const snap = await montarSnapshot(demoId, c, { assar: true });
     if (!snap) throw new Error('Demo não encontrada');
     const { rows } = await c.query(`SELECT COALESCE(MAX(number), 0) + 1 AS n FROM ds_demo_versions WHERE demo_id = $1`, [demoId]);
     const number = Number(rows[0].n);

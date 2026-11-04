@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { BarChart3, Check, Copy, Eye, History, Link2, ImagePlus, Loader2, Settings2, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, BarChart3, Check, Code2, Copy, Eye, History, Layers, Link2, ImagePlus, Loader2, Settings2, Trash2, Upload } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -13,7 +13,7 @@ import { ListaEtapas, TIPOS_DE_ETAPA, pendenciasDaEtapa } from '@/components/dem
 import { PainelEtapa } from '@/components/demoStudio/editor/PainelEtapa'
 import { copyToClipboard } from '@/lib/clipboard'
 import { dataHora } from '@/lib/demoStudio/format'
-import type { StepKind } from '@/lib/demoStudio/types'
+import type { Mascara, StepKind } from '@/lib/demoStudio/types'
 import {
   demoStudio,
   lerComoDataUrl,
@@ -26,7 +26,7 @@ import {
   type Versao,
 } from '@/services/demoStudio'
 
-type AlteracaoEtapa = Partial<Omit<Etapa, 'id' | 'order' | 'chapterId'>>
+type AlteracaoEtapa = Partial<Omit<Etapa, 'id' | 'order'>>
 
 /**
  * Editor de demo (§4.3): etapas à esquerda (arrastar reordena), canvas com o destaque no centro e
@@ -43,6 +43,8 @@ export function DemoEditorPage() {
   const [telasAberto, setTelasAberto] = React.useState<'trocar' | 'gerenciar' | null>(null)
   const [configAberta, setConfigAberta] = React.useState(false)
   const [versoesAberta, setVersoesAberta] = React.useState(false)
+  const [capitulosAberto, setCapitulosAberto] = React.useState(false)
+  const [incorporarAberto, setIncorporarAberto] = React.useState(false)
   const [publicando, setPublicando] = React.useState(false)
 
   const pendentes = React.useRef(new Map<string, { dados: AlteracaoEtapa; timer: ReturnType<typeof setTimeout> }>())
@@ -136,6 +138,32 @@ export function DemoEditorPage() {
     }
   }
 
+  /** Máscaras são da TELA (valem em todas as etapas que usam esse frame). */
+  const salvarMascaras = async (frameId: string, masks: Mascara[]) => {
+    setDemo((d) => (d ? { ...d, frames: d.frames.map((f) => (f.id === frameId ? { ...f, masks } : f)) } : d))
+    setSalvando((n) => n + 1)
+    try {
+      await demoStudio.editarFrame(frameId, { masks })
+    } catch (e) {
+      toast.error(`Não salvou a máscara: ${(e as Error).message}`)
+      carregar()
+    } finally {
+      setSalvando((n) => n - 1)
+    }
+  }
+
+  const novoCapitulo = async () => {
+    const nome = window.prompt('Nome do capítulo (ex.: Atendimento, Inteligência Artificial):')?.trim()
+    if (!nome) return
+    try {
+      const c = await demoStudio.criarCapitulo(id, nome)
+      setDemo((d) => (d ? { ...d, chapters: [...d.chapters, c] } : d))
+      if (etapa) mudarEtapa(etapa.id, { chapterId: c.id })
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
   const salvarDemo = async (dados: Parameters<typeof demoStudio.editar>[1]) => {
     try {
       await demoStudio.editar(id, dados)
@@ -201,6 +229,8 @@ export function DemoEditorPage() {
             <Button size="sm" variant="ghost" leftIcon={<History className="h-4 w-4" />} onClick={() => setVersoesAberta(true)}>Versões</Button>
             <Button size="sm" variant="ghost" leftIcon={<BarChart3 className="h-4 w-4" />} onClick={() => navigate(`/demo-studio/demos/${id}/analytics`)}>Analytics</Button>
             <Button size="sm" variant="ghost" leftIcon={<Link2 className="h-4 w-4" />} onClick={() => navigate(`/demo-studio/demos/${id}/links`)}>Links</Button>
+            {podeEditar && <Button size="sm" variant="ghost" leftIcon={<Layers className="h-4 w-4" />} onClick={() => setCapitulosAberto(true)}>Capítulos</Button>}
+            {publicada && <Button size="sm" variant="ghost" leftIcon={<Code2 className="h-4 w-4" />} onClick={() => setIncorporarAberto(true)}>Incorporar</Button>}
             <Button size="sm" variant="outline" leftIcon={<Eye className="h-4 w-4" />} onClick={async () => { await descarregar(); navigate(`/demo-studio/demos/${id}/preview`) }}>
               Pré-visualizar
             </Button>
@@ -262,6 +292,7 @@ export function DemoEditorPage() {
                   etapa={etapa}
                   frame={frames.get(etapa.frameId)!}
                   onHotspot={(h) => mudarEtapa(etapa.id, { hotspot: h })}
+                  onMascaras={(m) => salvarMascaras(etapa.frameId, m)}
                   somenteLeitura={!podeEditar}
                 />
               ) : (
@@ -276,6 +307,8 @@ export function DemoEditorPage() {
                   etapa={etapa}
                   frame={frames.get(etapa.frameId)}
                   onChange={(a) => mudarEtapa(etapa.id, a)}
+                  capitulos={demo.chapters}
+                  onNovoCapitulo={novoCapitulo}
                   onTrocarTela={() => setTelasAberto('trocar')}
                   onApagar={() => apagarEtapa(etapa.id)}
                   somenteLeitura={!podeEditar}
@@ -297,6 +330,8 @@ export function DemoEditorPage() {
         onMudou={carregar}
       />
       <ConfigDemoModal aberto={configAberta} demo={demo} onFechar={() => setConfigAberta(false)} onSalvar={salvarDemo} />
+      <CapitulosModal aberto={capitulosAberto} demo={demo} onFechar={() => setCapitulosAberto(false)} onMudou={carregar} />
+      <IncorporarModal aberto={incorporarAberto} slug={demo.slug} base={acesso?.publicBaseUrl} onFechar={() => setIncorporarAberto(false)} />
       <VersoesModal aberto={versoesAberta} demoId={id} podeEditar={podeEditar} onFechar={() => setVersoesAberta(false)} onRestaurada={carregar} />
     </>
   )
@@ -548,6 +583,97 @@ function VersoesModal({ aberto, demoId, podeEditar, onFechar, onRestaurada }: {
       <p className="mt-3 text-xs text-foreground/45">
         Precisa de uma demo nova a partir desta? <Link className="text-accent hover:underline" to="/demo-studio/demos">Duplique na lista de demos</Link>.
       </p>
+    </Modal>
+  )
+}
+
+/* ------------------------------------------------------------------ capítulos */
+
+function CapitulosModal({ aberto, demo, onFechar, onMudou }: {
+  aberto: boolean
+  demo: DemoCompleta
+  onFechar: () => void
+  onMudou: () => Promise<void> | void
+}) {
+  const [nome, setNome] = React.useState('')
+  const lista = [...demo.chapters].sort((a, b) => a.order - b.order)
+  const etapasPor = (capId: string) => demo.steps.filter((s) => s.chapterId === capId).length
+  const fazer = async (acao: () => Promise<unknown>) => {
+    try {
+      await acao()
+      await onMudou()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+  return (
+    <Modal open={aberto} onClose={onFechar} title="Capítulos"
+      description="Agrupam as etapas (Atendimento, IA, Campanhas…). Com 2 ou mais, o visitante pula entre eles pelo menu do player. Cada etapa escolhe o capítulo no painel ao lado.">
+      <ul className="divide-y divide-line">
+        {lista.map((c, i) => (
+          <li key={c.id} className="flex items-center gap-2 py-2">
+            <input
+              defaultValue={c.name}
+              className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-transparent px-2 text-sm"
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== c.name) fazer(() => demoStudio.editarCapitulo(c.id, { name: v })) }}
+              aria-label="Nome do capítulo"
+            />
+            <span className="w-16 text-right text-xs text-foreground/45">{etapasPor(c.id)} etapa(s)</span>
+            <button type="button" aria-label="Subir" disabled={i === 0} className="p-1 text-foreground/50 disabled:opacity-30" onClick={() => fazer(() => demoStudio.editarCapitulo(c.id, { order: c.order - 1 }))}>
+              <ArrowUp className="h-4 w-4" />
+            </button>
+            <button type="button" aria-label="Descer" disabled={i === lista.length - 1} className="p-1 text-foreground/50 disabled:opacity-30" onClick={() => fazer(() => demoStudio.editarCapitulo(c.id, { order: c.order + 1 }))}>
+              <ArrowDown className="h-4 w-4" />
+            </button>
+            <button type="button" aria-label="Apagar capítulo" className="p-1 text-foreground/40 hover:text-red-500"
+              onClick={() => window.confirm(`Apagar o capítulo "${c.name}"? As etapas continuam, só ficam sem capítulo.`) && fazer(() => demoStudio.apagarCapitulo(c.id))}>
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </li>
+        ))}
+        {!lista.length && <li className="py-3 text-sm text-foreground/50">Nenhum capítulo ainda.</li>}
+      </ul>
+      <div className="mt-3 flex items-end gap-2">
+        <div className="flex-1"><Input label="Novo capítulo" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Inteligência Artificial" /></div>
+        <Button size="sm" disabled={!nome.trim()} onClick={() => fazer(async () => { await demoStudio.criarCapitulo(demo.id, nome.trim()); setNome('') })}>Adicionar</Button>
+      </div>
+    </Modal>
+  )
+}
+
+/* ------------------------------------------------------------------ incorporação (§7.3) */
+
+/** Código para colar no site/LP: iframe responsivo e, opcionalmente, o script que ajusta a altura sozinho. */
+export function codigoDeIncorporacao(slug: string, base: string, altura: boolean): string {
+  const id = `nxdemo-${slug}`
+  const iframe = `<iframe id="${id}" src="${base}/e/${slug}" title="Tour interativo" style="width:100%;aspect-ratio:16/9;border:0" allow="fullscreen" loading="lazy"></iframe>`
+  if (!altura) return iframe
+  return `${iframe}
+<script>
+  window.addEventListener('message', function (e) {
+    if (e.origin !== '${base}' || !e.data || e.data.type !== 'nxdemo:height' || e.data.slug !== '${slug}') return;
+    var f = document.getElementById('${id}');
+    if (f) { f.style.aspectRatio = 'auto'; f.style.height = e.data.height + 'px'; }
+  });
+</script>`
+}
+
+function IncorporarModal({ aberto, slug, base, onFechar }: { aberto: boolean; slug: string; base?: string | null; onFechar: () => void }) {
+  const [altura, setAltura] = React.useState(true)
+  const origem = (base || window.location.origin).replace(/\/+$/, '')
+  const codigo = codigoDeIncorporacao(slug, origem, altura)
+  return (
+    <Modal open={aberto} onClose={onFechar} size="lg" title="Incorporar no site"
+      description="Cole este código no HTML do site ou da landing page. A versão incorporada não tem o cabeçalho e conta views normalmente.">
+      <label className="mb-2 flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={altura} onChange={(e) => setAltura(e.target.checked)} />
+        Ajustar a altura sozinho (recomendado: no celular o tour fica mais alto que 16:9)
+      </label>
+      <Textarea readOnly rows={altura ? 10 : 3} value={codigo} className="font-mono text-xs" onFocus={(e) => e.target.select()} />
+      <div className="mt-3 flex justify-end gap-2">
+        <a href={`${origem}/e/${slug}`} target="_blank" rel="noreferrer"><Button variant="ghost">Ver versão incorporada</Button></a>
+        <Button leftIcon={<Copy className="h-4 w-4" />} onClick={async () => { await copyToClipboard(codigo); toast.success('Código copiado') }}>Copiar código</Button>
+      </div>
     </Modal>
   )
 }

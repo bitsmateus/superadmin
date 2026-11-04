@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { CtaConfig, DemoSettings, DemoTheme, PlayerDemo, StepKind } from '@/lib/demoStudio/types'
+import type { CtaConfig, DemoSettings, DemoTheme, Mascara, PlayerDemo, StepKind } from '@/lib/demoStudio/types'
 import type { Caixa } from '@/lib/demoStudio/layout'
 
 /** API do Demo Studio (rotas /api/ds/* do servidor — ver docs/demo-studio/ADAPTACAO.md). */
@@ -50,6 +50,7 @@ export interface Frame {
   height: number
   pixelRatio: number
   displayUrl: string | null
+  masks: Mascara[]
   createdAt: string
 }
 
@@ -107,16 +108,20 @@ export const demoStudio = {
 
   enviarFrame: (id: string, dados: { dataUrl: string; name?: string; pixelRatio?: number; displayUrl?: string; createStep?: StepKind }) =>
     api.post<Frame>(`/api/ds/demos/${id}/frames`, dados),
-  editarFrame: (frameId: string, dados: { name?: string | null; displayUrl?: string | null }) =>
+  editarFrame: (frameId: string, dados: { name?: string | null; displayUrl?: string | null; masks?: Mascara[] }) =>
     api.patch<Frame>(`/api/ds/frames/${frameId}`, dados),
   apagarFrame: (frameId: string) => api.delete(`/api/ds/frames/${frameId}`),
 
   criarEtapa: (id: string, dados: { kind: StepKind; frameId: string; afterOrder?: number; hotspot?: Caixa | null }) =>
     api.post<Etapa>(`/api/ds/demos/${id}/steps`, dados),
-  editarEtapa: (stepId: string, dados: Partial<Omit<Etapa, 'id' | 'order' | 'chapterId'>>) =>
+  editarEtapa: (stepId: string, dados: Partial<Omit<Etapa, 'id' | 'order'>>) =>
     api.patch<Etapa>(`/api/ds/steps/${stepId}`, dados),
   apagarEtapa: (stepId: string) => api.delete(`/api/ds/steps/${stepId}`),
   reordenar: (id: string, ids: string[]) => api.post<{ ok: true }>(`/api/ds/demos/${id}/steps/reorder`, { ids }),
+
+  criarCapitulo: (id: string, name: string) => api.post<{ id: string; name: string; order: number }>(`/api/ds/demos/${id}/chapters`, { name }),
+  editarCapitulo: (capId: string, dados: { name?: string; order?: number }) => api.patch(`/api/ds/chapters/${capId}`, dados),
+  apagarCapitulo: (capId: string) => api.delete(`/api/ds/chapters/${capId}`),
 }
 
 /* ------------------------------------------------------------------ analytics (M2) */

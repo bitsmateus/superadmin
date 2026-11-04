@@ -50,6 +50,66 @@ export async function processarImagem(buf: Buffer, pixelRatio?: number): Promise
   };
 }
 
+export interface Mascara {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  type: 'blur' | 'cover';
+  text?: string;
+}
+
+const escaparXml = (s: string) => s.replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]!));
+
+/**
+ * "Assa" as máscaras na imagem (§4.2): gera uma WebP nova com o desfoque/cobertura gravados nos pixels.
+ * É o que vai para a versão publicada — sobreposição só no navegador deixaria o dado real na imagem pública.
+ * O desfoque reduz a região a ~1/14 e amplia de volta com blur: não dá para reverter e ler o texto.
+ * Coordenadas em px CSS do frame; convertidas para pixels da imagem pelo pixel ratio.
+ */
+export async function assarMascaras(imagePath: string, mascaras: Mascara[], pixelRatio: number): Promise<string> {
+  if (!mascaras.length) return imagePath;
+  const original = await storage.ler(imagePath);
+  if (!original) throw new Error(`Imagem não encontrada no storage: ${imagePath}`);
+  const meta = await sharp(original).metadata();
+  const W = meta.width ?? 0;
+  const H = meta.height ?? 0;
+  const camadas: sharp.OverlayOptions[] = [];
+  for (const m of mascaras) {
+    const left = Math.max(0, Math.min(Math.round(m.x * pixelRatio), W - 1));
+    const top = Math.max(0, Math.min(Math.round(m.y * pixelRatio), H - 1));
+    const width = Math.max(1, Math.min(Math.round(m.w * pixelRatio), W - left));
+    const height = Math.max(1, Math.min(Math.round(m.h * pixelRatio), H - top));
+    if (m.type === 'blur') {
+      // Reduz a ~1 pixel a cada 24 px CSS (até título grande vira mancha), amplia com blur forte e passa um
+      // véu claro por cima para cortar o contraste do que sobrar.
+      const fator = 24 * pixelRatio;
+      const pequeno = await sharp(original)
+        .extract({ left, top, width, height })
+        .resize(Math.max(1, Math.round(width / fator)), Math.max(1, Math.round(height / fator)), { fit: 'fill' })
+        .toBuffer();
+      const borrado = await sharp(pequeno).resize(width, height, { fit: 'fill', kernel: 'cubic' }).blur(Math.max(3, 8 * pixelRatio)).toBuffer();
+      camadas.push({ input: borrado, left, top });
+      camadas.push({
+        input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#e2e8f0" fill-opacity="0.55"/></svg>`),
+        left,
+        top,
+      });
+    } else {
+      const fonte = Math.round(Math.min(height * 0.45, 15 * pixelRatio));
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+        <rect width="100%" height="100%" rx="${Math.round(4 * pixelRatio)}" fill="#e2e8f0"/>
+        ${m.text ? `<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fonte}" fill="#475569">${escaparXml(m.text)}</text>` : ''}
+      </svg>`;
+      camadas.push({ input: Buffer.from(svg), left, top });
+    }
+  }
+  const final = await sharp(original).composite(camadas).webp({ quality: 78 }).toBuffer();
+  const chave = chaveComHash('frames', final, 'webp');
+  await storage.put(chave, final);
+  return chave;
+}
+
 /** Erro "do usuário" (vira 400 com a mensagem), diferente de falha do servidor. */
 export class ErroImagem extends Error {}
 

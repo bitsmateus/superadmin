@@ -63,6 +63,7 @@ export const enviarFrame = z.object({
 export const editarFrame = z.object({
   name: z.string().max(120).nullable(),
   displayUrl: z.string().max(300).nullable(),
+  masks: z.lazy(() => mascaras),
 }).partial();
 
 const tipoEtapa = z.enum(['HOTSPOT', 'MODAL', 'LEAD_FORM', 'CTA']);
@@ -87,8 +88,23 @@ export const editarEtapa = z
     buttonLabel: z.string().max(40).nullable(),
     cta: cta.nullable(),
     form: form.nullable(),
+    chapterId: z.string().uuid().nullable(),
   })
   .partial();
+
+export const capitulo = z.object({ name: z.string().trim().min(1, 'Dê um nome ao capítulo').max(60) });
+
+/** Máscara sobre a tela (§4.2): retângulo em px CSS do frame, desfoque ou cobertura com texto. */
+export const mascaras = z.array(
+  z.object({
+    x: z.number().finite().min(0),
+    y: z.number().finite().min(0),
+    w: z.number().finite().min(4),
+    h: z.number().finite().min(4),
+    type: z.enum(['blur', 'cover']),
+    text: z.string().max(80).optional(),
+  })
+).max(50);
 
 export const reordenar = z.object({ ids: z.array(z.string().uuid()).min(1).max(500) });
 

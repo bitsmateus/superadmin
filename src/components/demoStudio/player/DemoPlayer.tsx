@@ -26,6 +26,7 @@ export type PlayerEvent =
   | { t: 'cta_click'; cta: 'whatsapp' | 'url' | 'topo' }
   | { t: 'lead_submit'; fields: Record<string, string> }
   | { t: 'complete' }
+  | { t: 'chapter_open'; chapter: string }
 
 export interface DemoPlayerProps {
   demo: PlayerDemo
@@ -115,6 +116,24 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent, leadConhec
   const todas: Variaveis = { ...vars, ...lead }
   const marca = demo.theme.brandName || demo.name
   const telefone = demo.settings.ctaPhone || WHATSAPP_PADRAO
+  // Capítulos (§4.1): primeira etapa de cada um, na ordem em que aparecem no tour.
+  const capitulos = React.useMemo(() => {
+    const vistos = new Map<string, number>()
+    steps.forEach((s, i) => { if (s.chapter && !vistos.has(s.chapter)) vistos.set(s.chapter, i) })
+    return demo.chapters.filter((c) => vistos.has(c)).map((c) => ({ nome: c, inicio: vistos.get(c)! }))
+  }, [demo.chapters, steps])
+  const [menuCapitulos, setMenuCapitulos] = React.useState(false)
+  const raizRef = React.useRef<HTMLDivElement>(null)
+
+  // Incorporação (§7.3): avisa a página de fora da altura do conteúdo, para o iframe crescer junto.
+  React.useEffect(() => {
+    if (!embed || window.parent === window || !raizRef.current) return
+    const avisar = () => window.parent.postMessage({ type: 'nxdemo:height', slug: demo.slug, height: Math.ceil(raizRef.current!.getBoundingClientRect().height) }, '*')
+    const ro = new ResizeObserver(avisar)
+    ro.observe(raizRef.current)
+    avisar()
+    return () => ro.disconnect()
+  }, [embed, demo.slug])
   const [celular, setCelular] = React.useState(() => typeof window !== 'undefined' && ehCelular(window.innerWidth))
 
   // Pré-carrega todas as telas: a troca de etapa fica instantânea.
@@ -254,7 +273,7 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent, leadConhec
   )
 
   return (
-    <div className={embed ? 'dsp dsp-embed' : 'dsp'} style={accent ? ({ '--accent': accent } as React.CSSProperties) : undefined}>
+    <div ref={raizRef} className={embed ? 'dsp dsp-embed' : 'dsp'} style={accent ? ({ '--accent': accent } as React.CSSProperties) : undefined}>
       {!embed && (
         <header className="top">
           <div className="brand">
@@ -291,6 +310,38 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent, leadConhec
             <button className="zoom" type="button" hidden={!hotspot} onClick={() => { setAnim(true); setFull((f) => !f) }}>
               {full ? 'Aproximar' : 'Tela inteira'}
             </button>
+            {capitulos.length > 1 && (
+              <div className="caps">
+                <button
+                  type="button"
+                  className="caps-btn"
+                  aria-haspopup="menu"
+                  aria-expanded={menuCapitulos}
+                  onClick={() => setMenuCapitulos((m) => !m)}
+                >
+                  {etapaAtual?.chapter || 'Capítulos'} ▾
+                </button>
+                {menuCapitulos && (
+                  <div className="caps-menu" role="menu">
+                    {capitulos.map((c) => (
+                      <button
+                        key={c.nome}
+                        type="button"
+                        role="menuitem"
+                        className={c.nome === etapaAtual?.chapter ? 'atual' : ''}
+                        onClick={() => {
+                          setMenuCapitulos(false)
+                          onEventRef.current?.({ t: 'chapter_open', chapter: c.nome })
+                          ir(c.inicio)
+                        }}
+                      >
+                        {c.nome}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div
             className="viewport"
@@ -315,6 +366,16 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent, leadConhec
             >
               <img ref={(el) => { imgsRef.current[0] = el }} alt="" />
               <img ref={(el) => { imgsRef.current[1] = el }} alt="" className="off" />
+              {/* Rascunho: máscaras desenhadas por cima. Na versão publicada elas já vêm gravadas na imagem. */}
+              {frame.masks?.map((m, i) => (
+                <div
+                  key={i}
+                  className={m.type === 'blur' ? 'mask mask-blur' : 'mask mask-cover'}
+                  style={{ left: m.x, top: m.y, width: m.w, height: m.h }}
+                >
+                  {m.type === 'cover' && m.text}
+                </div>
+              ))}
             </div>
             <div
               ref={spotRef}

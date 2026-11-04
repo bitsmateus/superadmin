@@ -1,10 +1,12 @@
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { query, queryOne, withTransaction } from '../db.js';
 import { DS_WORKSPACE_ID } from '../db/demoStudio.js';
 import { exigir, papelDaRequisicao, papelNoModulo, validar, type Usuario } from '../lib/demoStudio/acesso.js';
 import { demoStudioAnalyticsRoutes } from './demoStudioAnalytics.js';
 import { demoStudioLeadsRoutes } from './demoStudioLeads.js';
 import { demoStudioExtRoutes } from './demoStudioExt.js';
+import { demoStudioOgRoutes } from './demoStudioOg.js';
 import { storage, tipoDoArquivo } from '../lib/demoStudio/storage.js';
 import { ErroImagem, bufferDoDataUrl, processarImagem } from '../lib/demoStudio/images.js';
 import * as S from '../lib/demoStudio/schemas.js';
@@ -57,6 +59,7 @@ function frameDaLinha(f: Record<string, any>) {
     height: f.height,
     pixelRatio: f.pixel_ratio,
     displayUrl: f.display_url,
+    masks: f.masks ?? [],
     createdAt: f.created_at,
   };
 }
@@ -100,6 +103,7 @@ export async function demoStudioRoutes(app: FastifyInstance) {
   await demoStudioAnalyticsRoutes(app);
   await demoStudioLeadsRoutes(app);
   await demoStudioExtRoutes(app);
+  await demoStudioOgRoutes(app);
 
   /* ---------------------------------------------------------------- fundação (M0) */
 
@@ -344,9 +348,10 @@ export async function demoStudioRoutes(app: FastifyInstance) {
     const f = await queryOne<Record<string, any>>(
       `UPDATE ds_frames SET
          name = CASE WHEN $2::boolean THEN $3 ELSE name END,
-         display_url = CASE WHEN $4::boolean THEN $5 ELSE display_url END
+         display_url = CASE WHEN $4::boolean THEN $5 ELSE display_url END,
+         masks = COALESCE($6::jsonb, masks)
        WHERE id = $1 RETURNING *`,
-      [req.params.id, 'name' in dados, dados.name ?? null, 'displayUrl' in dados, dados.displayUrl ?? null]
+      [req.params.id, 'name' in dados, dados.name ?? null, 'displayUrl' in dados, dados.displayUrl ?? null, dados.masks ? JSON.stringify(dados.masks) : null]
     );
     if (!f) return reply.status(404).send({ message: 'Tela não encontrada' });
     await tocarDemo(f.demo_id);
@@ -368,6 +373,51 @@ export async function demoStudioRoutes(app: FastifyInstance) {
     await query(`UPDATE ds_demos SET cover_frame_id = NULL WHERE cover_frame_id = $1`, [req.params.id]);
     await query('DELETE FROM ds_frames WHERE id = $1', [req.params.id]);
     await tocarDemo(f.demo_id);
+    return reply.status(204).send();
+  });
+
+  /* ---------------------------------------------------------------- capítulos (§4.1) */
+
+  app.post<{ Params: { id: string } }>('/api/ds/demos/:id/chapters', editar, async (req, reply) => {
+    const dados = validar(S.capitulo, req.body, reply);
+    if (!dados) return;
+    const demo = await queryOne('SELECT 1 FROM ds_demos WHERE id = $1', [req.params.id]);
+    if (!demo) return reply.status(404).send({ message: 'Demo não encontrada' });
+    const c = await queryOne(
+      `INSERT INTO ds_chapters (demo_id, name, "order")
+       VALUES ($1, $2, (SELECT COALESCE(MAX("order"), 0) + 1 FROM ds_chapters WHERE demo_id = $1)) RETURNING id, name, "order"`,
+      [req.params.id, dados.name]
+    );
+    await tocarDemo(req.params.id);
+    return reply.status(201).send(c);
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/ds/chapters/:id', editar, async (req, reply) => {
+    const dados = validar(S.capitulo.partial().extend({ order: z.number().int().min(1).optional() }), req.body, reply);
+    if (!dados) return;
+    const c = await queryOne<{ demo_id: string; order: number }>(`SELECT demo_id, "order" FROM ds_chapters WHERE id = $1`, [req.params.id]);
+    if (!c) return reply.status(404).send({ message: 'Capítulo não encontrado' });
+    if (dados.name) await query(`UPDATE ds_chapters SET name = $2 WHERE id = $1`, [req.params.id, dados.name]);
+    if (dados.order && dados.order !== c.order) {
+      // Troca de lugar com quem está na posição pedida.
+      await query(`UPDATE ds_chapters SET "order" = $3 WHERE demo_id = $1 AND "order" = $2`, [c.demo_id, dados.order, c.order]);
+      await query(`UPDATE ds_chapters SET "order" = $2 WHERE id = $1`, [req.params.id, dados.order]);
+    }
+    await tocarDemo(c.demo_id);
+    return { ok: true };
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/ds/chapters/:id', editar, async (req, reply) => {
+    const c = await queryOne<{ demo_id: string }>(`DELETE FROM ds_chapters WHERE id = $1 RETURNING demo_id`, [req.params.id]);
+    if (!c) return reply.status(404).send({ message: 'Capítulo não encontrado' });
+    // As etapas ficam sem capítulo (FK com ON DELETE SET NULL); a ordem dos que sobram é refeita.
+    await query(
+      `UPDATE ds_chapters c SET "order" = n.pos FROM (
+         SELECT id, ROW_NUMBER() OVER (ORDER BY "order") AS pos FROM ds_chapters WHERE demo_id = $1
+       ) n WHERE c.id = n.id`,
+      [c.demo_id]
+    );
+    await tocarDemo(c.demo_id);
     return reply.status(204).send();
   });
 
@@ -413,9 +463,13 @@ export async function demoStudioRoutes(app: FastifyInstance) {
       const ok = await queryOne('SELECT 1 FROM ds_frames WHERE id = $1 AND demo_id = $2', [dados.frameId, atual.demo_id]);
       if (!ok) return reply.status(400).send({ message: 'Tela não pertence a esta demo' });
     }
+    if (dados.chapterId) {
+      const ok = await queryOne('SELECT 1 FROM ds_chapters WHERE id = $1 AND demo_id = $2', [dados.chapterId, atual.demo_id]);
+      if (!ok) return reply.status(400).send({ message: 'Capítulo não pertence a esta demo' });
+    }
     const colunas: Record<string, string> = {
       kind: 'kind', frameId: 'frame_id', hotspot: 'hotspot', title: 'title', body: 'body',
-      placement: 'placement', buttonLabel: 'button_label', cta: 'cta', form: 'form',
+      placement: 'placement', buttonLabel: 'button_label', cta: 'cta', form: 'form', chapterId: 'chapter_id',
     };
     const sets: string[] = [];
     const valores: unknown[] = [req.params.id];

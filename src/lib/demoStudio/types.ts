@@ -37,6 +37,18 @@ export interface PlayerFrame {
   width: number
   height: number
   displayUrl: string | null
+  /** Só no rascunho: na versão publicada as máscaras já vêm gravadas na imagem. */
+  masks?: Mascara[]
+}
+
+/** Máscara sobre a tela (§4.2), em px CSS do frame. */
+export interface Mascara {
+  x: number
+  y: number
+  w: number
+  h: number
+  type: 'blur' | 'cover'
+  text?: string
 }
 
 export interface PlayerStep {

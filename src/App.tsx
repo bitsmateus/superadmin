@@ -77,6 +77,9 @@ const ClienteNxDetalhePage = React.lazy(() =>
 const DemoStudioPage = React.lazy(() =>
   import('./pages/DemoStudioPage').then((m) => ({ default: m.DemoStudioPage })),
 )
+const DemoExemplosPage = React.lazy(() =>
+  import('./pages/DemoExemplosPage').then((m) => ({ default: m.DemoExemplosPage })),
+)
 const DemoListPage = React.lazy(() =>
   import('./pages/DemoListPage').then((m) => ({ default: m.DemoListPage })),
 )
@@ -315,7 +318,7 @@ export default function App() {
           <Route path="/demo-studio/demos" element={<DemoListPage />} />
           <Route path="/demo-studio/demos/:id" element={<DemoEditorPage />} />
           <Route path="/demo-studio/demos/:id/preview" element={<DemoPreviewPage />} />
-          <Route path="/demo-studio/exemplos" element={<DemoStudioPage secao="exemplos" />} />
+          <Route path="/demo-studio/exemplos" element={<DemoExemplosPage />} />
           <Route path="/demo-studio/leads" element={<DemoLeadsPage />} />
           <Route path="/demo-studio/leads/:id" element={<DemoLeadPage />} />
           <Route path="/demo-studio/links" element={<DemoLinksPage />} />

@@ -42,4 +42,4 @@ Erros seguem o padrão do superadmin: `{ message }` com status HTTP.
 - O front (nginx) atende o painel e o player. `demo.gruponxdigital.com` entra como **domínio extra do serviço do front** no Easypanel; o link público fica `https://demo.gruponxdigital.com/d/<slug>`.
 - O servidor guarda as imagens em `STORAGE_DIR` (padrão `/data` em produção, `./data` em dev) e as serve em `/files/*` pelo domínio da API. Precisa de **volume montado em `/data`** no serviço da API.
 - Variáveis novas no servidor: `STORAGE_DIR`, `IP_SALT`, `PUBLIC_BASE_URL` (ex.: `https://demo.gruponxdigital.com`), `DEFAULT_WHATSAPP` (padrão `5548936181649`).
-- Open Graph do link no WhatsApp (§7.1): como o player é SPA, as meta tags por demo serão servidas pela API num endpoint de preview (detalhado no M5).
+- Open Graph do link no WhatsApp (§7.1): como o player é SPA, o `nginx.conf` do front desvia só os robôs de preview (WhatsApp, Facebook, LinkedIn…) de `/d`, `/l` e `/e` para `/api/public/ds/og/*` na API. O endereço da API entra no build pelo `VITE_API_URL`; sem ele, o bloco é removido e o nginx fica como antes. O `nginx -t` no Dockerfile barra o build se a config quebrar.

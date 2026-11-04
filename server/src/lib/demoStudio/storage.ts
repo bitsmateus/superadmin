@@ -13,6 +13,8 @@ export interface Storage {
   put(key: string, data: Buffer): Promise<void>;
   /** Stream do arquivo, ou null se não existe (ou se a chave tenta sair da raiz). */
   get(key: string): Promise<{ stream: ReadStream; size: number } | null>;
+  /** O arquivo inteiro em memória (para reprocessar imagem). */
+  ler(key: string): Promise<Buffer | null>;
   delete(key: string): Promise<void>;
 }
 
@@ -54,6 +56,16 @@ export class LocalDiskStorage implements Storage {
       const stat = await fs.stat(alvo);
       if (!stat.isFile()) return null;
       return { stream: createReadStream(alvo), size: stat.size };
+    } catch {
+      return null;
+    }
+  }
+
+  async ler(key: string): Promise<Buffer | null> {
+    const alvo = resolverChave(this.raiz, key);
+    if (!alvo) return null;
+    try {
+      return await fs.readFile(alvo);
     } catch {
       return null;
     }

@@ -65,11 +65,12 @@ Referências: `docs/ESPECIFICACAO.md` (seções citadas entre parênteses) e `re
 **Aceite:** capturo 6 telas do NX Systems com 5 cliques, os dados aparecem trocados nas imagens, e a demo abre no editor com 6 etapas e hotspots no lugar dos cliques.
 
 ## M5 — Exemplos, capítulos e incorporação
-- [ ] Capítulos (§4.1) no editor e menu de capítulos no player (evento `chapter_open`).
-- [ ] Templates: marcar demo como exemplo + segmento; galeria `/app/exemplos`; "Usar este exemplo" (duplica com frames por referência).
-- [ ] Embed `/e/[slug]` + gerador do código iframe + ajuste de altura via postMessage.
-- [ ] Open Graph por demo (imagem = frame de capa).
-- [ ] Máscaras de desfoque/cobertura sobre imagens (§4.2) com "assar" ao publicar.
+- [x] Capítulos (§4.1) no editor (escolher na etapa, criar, renomear, reordenar, apagar) e menu de capítulos no player, na barra do navegador falso (evento `chapter_open`).
+- [x] Templates: marcar demo como exemplo + segmento; galeria `/demo-studio/exemplos` por segmento; "Usar este exemplo" (duplica com frames por referência).
+- [x] Embed `/e/:slug` + gerador do código iframe no editor ("Incorporar") + ajuste de altura via postMessage (`nxdemo:height`).
+- [x] Open Graph por demo: o nginx do front desvia só os robôs de preview para `/api/public/ds/og/*`; imagem 1200×630 JPEG da capa da versão publicada. Bloco ativado no build só com `VITE_API_URL`, com `nginx -t` no Dockerfile.
+- [x] Máscaras de desfoque/cobertura sobre as telas (§4.2): desenhadas no editor (valem para a tela em todas as etapas), por cima na pré-visualização e gravadas numa imagem nova ao publicar — a versão pública não leva a imagem original nem a lista de máscaras.
+- [ ] Preview no WhatsApp real: conferir depois do deploy (o nginx não roda aqui; o build barra config inválida).
 
 **Aceite:** a galeria mostra pelo menos o template NX; duplico, troco textos para "clínica", publico e incorporo numa página HTML de teste.
 

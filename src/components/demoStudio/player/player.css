@@ -49,6 +49,15 @@
 .dsp .url { flex: 1; min-width: 0; max-width: 520px; margin: 0 auto; height: 24px; border-radius: 7px; background: var(--surface); color: var(--chrome-ink); font-size: 12px; display: flex; align-items: center; padding: 0 10px; gap: 6px; overflow: hidden; white-space: nowrap }
 .dsp .url span { overflow: hidden; text-overflow: ellipsis }
 .dsp .url svg { flex: none }
+.dsp .caps { position: relative; flex: none }
+.dsp .caps-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 7px; height: 24px; padding: 0 9px; font-size: 11.5px; font-weight: 700; cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.dsp .caps-menu { position: absolute; right: 0; top: 30px; z-index: 8; min-width: 200px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 16px 40px -12px rgba(9, 20, 38, .45); display: grid }
+.dsp .caps-menu button { text-align: left; border: 0; background: transparent; color: var(--ink); padding: 8px 10px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer }
+.dsp .caps-menu button:hover, .dsp .caps-menu button.atual { background: var(--bg) }
+.dsp .caps-menu button.atual { color: var(--accent) }
+.dsp .canvas .mask { position: absolute; border-radius: 4px; pointer-events: none }
+.dsp .canvas .mask-blur { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: rgba(226, 232, 240, .35) }
+.dsp .canvas .mask-cover { background: #e2e8f0; color: #475569; display: grid; place-items: center; font: 600 13px system-ui, sans-serif; overflow: hidden }
 .dsp .zoom { display: none; flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 7px; height: 24px; padding: 0 9px; font-size: 11.5px; font-weight: 700; cursor: pointer }
 
 .dsp .viewport { position: relative; overflow: hidden; background: var(--stage); touch-action: manipulation; user-select: none; -webkit-user-select: none }

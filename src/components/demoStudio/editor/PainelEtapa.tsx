@@ -7,7 +7,7 @@ import type { Etapa, Frame } from '@/services/demoStudio'
 import { urlDoArquivo } from '@/services/demoStudio'
 import { TIPOS_DE_ETAPA } from './ListaEtapas'
 
-type Alteracao = Partial<Omit<Etapa, 'id' | 'order' | 'chapterId'>>
+type Alteracao = Partial<Omit<Etapa, 'id' | 'order'>>
 
 const CAMPOS_DO_FORM = [
   { key: 'nome', label: 'Seu nome' },
@@ -22,10 +22,12 @@ const rotuloCampo = 'mb-1.5 block text-xs font-medium text-foreground/70'
 const selectCls = 'h-9 w-full rounded-lg border border-line bg-transparent px-2 text-sm'
 
 /** Painel de propriedades da etapa selecionada (§4.3). Cada mudança vai direto pro onChange (salvo com debounce). */
-export function PainelEtapa({ etapa, frame, onChange, onTrocarTela, onApagar, somenteLeitura }: {
+export function PainelEtapa({ etapa, frame, capitulos, onChange, onNovoCapitulo, onTrocarTela, onApagar, somenteLeitura }: {
   etapa: Etapa
   frame?: Frame
+  capitulos: { id: string; name: string }[]
   onChange: (a: Alteracao) => void
+  onNovoCapitulo: () => void
   onTrocarTela: () => void
   onApagar: () => void
   somenteLeitura?: boolean
@@ -64,6 +66,18 @@ export function PainelEtapa({ etapa, frame, onChange, onTrocarTela, onApagar, so
           <span className="min-w-0 flex-1 truncate text-xs text-foreground/55">{frame?.name || frame?.displayUrl || 'Tela'}</span>
           <Button size="sm" variant="outline" type="button" onClick={onTrocarTela}>Trocar</Button>
         </div>
+      </div>
+
+      <div>
+        <label className={rotuloCampo} htmlFor="ds-cap">Capítulo</label>
+        <div className="flex gap-2">
+          <select id="ds-cap" className={selectCls} value={etapa.chapterId ?? ''} onChange={(e) => onChange({ chapterId: e.target.value || null })}>
+            <option value="">Sem capítulo</option>
+            {capitulos.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <Button size="sm" variant="outline" type="button" onClick={onNovoCapitulo}>Novo</Button>
+        </div>
+        <p className="mt-1 text-[11px] text-foreground/40">Com 2 ou mais capítulos, o visitante pula entre eles pelo menu do player.</p>
       </div>
 
       <Input label="Título" value={etapa.title} maxLength={120} onChange={(e) => onChange({ title: e.target.value })} />

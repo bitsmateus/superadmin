@@ -88,6 +88,40 @@ type FichaStatus = {
 }
 
 /**
+ * Caixa de editar uma atualização: cresce com o texto (de ~8 linhas até 60% da tela, aí rola), em
+ * vez das 3 linhas fixas em que não dava pra ver nem digitar. Ctrl+Enter salva, Esc cancela.
+ */
+function AreaDeEdicao({ value, onChange, onSalvar, onCancelar }: {
+  value: string; onChange: (v: string) => void; onSalvar: () => void; onCancelar: () => void
+}) {
+  const ref = React.useRef<HTMLTextAreaElement>(null)
+  React.useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(Math.max(el.scrollHeight + 2, 200), window.innerHeight * 0.6)}px`
+  }, [value])
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [])
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); onSalvar() }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancelar() }
+      }}
+      className="block w-full resize-y rounded-lg border border-accent/40 bg-surface px-4 py-3 text-[15px] leading-relaxed text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+    />
+  )
+}
+
+/**
  * Verde = essa venda já tem contrato gerado (clique abre ele na aba Contrato). Vermelho = ainda
  * não tem — o clique leva pra aba Contrato, onde ele é criado. Mesma lógica de cor da ficha, pra
  * bater o olho e saber o que falta sem abrir nada.
@@ -1030,14 +1064,18 @@ function UpdatesPane({ leadRowId, pageId }: { leadRowId: string; pageId?: string
                           </div>
                           {editingNoteId === n.id ? (
                             <div className="mt-2 space-y-2">
-                              <textarea
+                              <AreaDeEdicao
                                 value={editingText}
-                                onChange={(e) => setEditingText(e.target.value)}
-                                rows={3}
-                                autoFocus
-                                className="w-full resize-y rounded-lg border border-accent/40 bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+                                onChange={setEditingText}
+                                onSalvar={() => {
+                                  if (!editingText.trim()) return
+                                  leadNotesService.updateNote(n.id, editingText)
+                                  setEditingNoteId(null)
+                                }}
+                                onCancelar={() => setEditingNoteId(null)}
                               />
                               <div className="flex items-center justify-end gap-2">
+                                <span className="mr-auto text-[11px] text-foreground/40">Ctrl+Enter salva · Esc cancela</span>
                                 <button
                                   type="button"
                                   onClick={() => setEditingNoteId(null)}

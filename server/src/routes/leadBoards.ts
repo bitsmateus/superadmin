@@ -11,6 +11,7 @@ import { ehDoFinanceiro, podeVerMetricasDoCloser } from '../lib/acessoMenu.js';
 import { podeVerFinanceiro } from '../lib/financeiro.js';
 import { propagarAssinaturaDaVenda } from '../lib/contractSignal.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
+import { avisarAgendamentoNoGrupo } from '../jobs/avisoAgendamento.js';
 import { enviarBoasVindasLead, listarTemplatesAprovados } from '../lib/leadWelcome.js';
 import { findMatchingClientId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
 import { normalizaNome } from '../lib/normalizaNome.js';
@@ -1640,8 +1641,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         const month = (row.fechamento || row.created_at || '').slice(0, 7) || new Date().toISOString().slice(0, 7);
         void createCommissionStub(row.nome, row.sdr, month, id);
       }
-      // Lead criada já dentro de "Reunião agendada" no CRM do Arthur também espelha pro closer.
-      void syncEspelhoReuniaoAgendada(id);
+      // Lead criada já dentro de "Reunião agendada" no CRM do Arthur também espelha pro closer (e avisa no grupo LEADS).
+      void syncEspelhoReuniaoAgendada(id)
+        .then(async () => avisarAgendamentoNoGrupo(id, await getActorName(sub)))
+        .catch((err) => console.error('[aviso-agendamento] erro', err));
       void syncCopiaDaIa(id);
       return reply.status(201).send(leadRow);
     }
@@ -1826,7 +1829,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       );
       // ...e chegar em "Reunião agendada" (pelo Status ou arrastando de quadro) cria a cópia.
       if ('status' in patch || 'board_id' in patch) {
-        void syncEspelhoReuniaoAgendada(req.params.id);
+        // Depois do espelho, avisa no grupo LEADS ("Agendou ✅"; uma vez por lead e horário).
+        void syncEspelhoReuniaoAgendada(req.params.id)
+          .then(async () => avisarAgendamentoNoGrupo(req.params.id, await getActorName(sub)))
+          .catch((err) => console.error('[aviso-agendamento] erro', err));
       }
       // Foi a IA Luiza que agendou (SDR "IA Luiza"): a lead ganha a cópia no CRM IA LUIZA (ou perde, se desmarcar).
       if ('sdr' in patch || 'status' in patch || 'board_id' in patch) {

@@ -6,6 +6,7 @@ import {
 } from './leadBoards.js';
 import { saoAbasJuntas } from '../lib/abasJuntas.js';
 import { preencherSdrDaAba } from '../lib/sdrDaAba.js';
+import { avisarAgendamentoNoGrupo } from '../jobs/avisoAgendamento.js';
 import { agendamentoParaIso } from '../lib/reuniaoResultado.js';
 import { criarNotificacao, lerNotificacaoDaIntegracao } from '../lib/notificacoes.js';
 import { CANAL_DA_LUIZA } from '../lib/resumoAgendamentos.js';
@@ -375,6 +376,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
       await espelharSeReuniaoAgendada(r.id);
       await syncCopiaDaIa(r.id);
       await canalDaLuiza(r.id);
+      await avisarAgendamentoNoGrupo(r.id, ATOR);
     }
     const card = await buscarCard(r.id);
     const resposta = {
@@ -503,6 +505,7 @@ export async function integracaoRoutes(app: FastifyInstance) {
     // SDR virou "IA Luiza" num CRM de outro SDR: ganha a cópia no CRM IA LUIZA (ou perde, se desmarcar).
     if (moveu || 'status' in campos || 'sdr' in campos) await syncCopiaDaIa(id);
     if (moveu || 'status' in campos || 'sdr' in campos) await canalDaLuiza(id);
+    if (moveu || 'status' in campos) await avisarAgendamentoNoGrupo(id, ATOR);
 
     const final = await buscarCard(id);
     return cardParaApi(final ?? depois, opcoes);

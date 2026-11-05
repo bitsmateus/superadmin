@@ -4,6 +4,7 @@ import { criarEstruturaGestaoClientes } from './db/gestaoClientes.js';
 import { CONVERSAO_ORIGEM } from './lib/integracaoCards.js';
 import { ROTINAS_INICIAIS } from './lib/rotina.js';
 import { CANAL_DA_LUIZA } from './lib/resumoAgendamentos.js';
+import { AVISO_DESDE, chaveDoAviso, SQL_AGENDADAS_DESDE, SQL_EM_REUNIAO_AGENDADA } from './lib/avisoAgendamento.js';
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -2121,6 +2122,38 @@ END; $$`);
       [CANAL_DA_LUIZA]
     );
     if (r.rowCount) console.log(`[db] agendado por: ${r.rowCount} reunião(ões) da IA Luiza marcadas como ${CANAL_DA_LUIZA}`);
+  }
+
+  // "Agendou ✅" no grupo LEADS (jobs/avisoAgendamento.ts): um aviso por lead e horário. Na primeira subida, as
+  // reuniões que já estão agendadas entram como avisadas, pra mexer nelas depois não mandar aviso de agendamento velho —
+  // menos as marcadas desde AVISO_DESDE, que saem uma vez logo depois da subida (avisarAgendamentosDaEstreia).
+  {
+    const { rows: [{ existia }] } = await pool.query<{ existia: boolean }>(
+      `SELECT to_regclass('agendamento_avisos') IS NOT NULL AS existia`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS agendamento_avisos (
+      chave TEXT NOT NULL,
+      agendamento TEXT NOT NULL,
+      enviado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (chave, agendamento)
+    )`);
+    if (!existia) {
+      const { rows } = await pool.query<{
+        id: string; telefone: string; espelho_origem_id: string | null; copia_ia_origem_id: string | null; agendamento: string;
+      }>(
+        `SELECT r.id, r.telefone, r.espelho_origem_id, r.copia_ia_origem_id, r.agendamento
+         FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+         WHERE r.deleted_at IS NULL AND NOT lb.is_vendas AND ${SQL_EM_REUNIAO_AGENDADA}`);
+      const { rows: estreia } = await pool.query<{
+        id: string; telefone: string; espelho_origem_id: string | null; copia_ia_origem_id: string | null;
+      }>(SQL_AGENDADAS_DESDE, [AVISO_DESDE]);
+      const vaoSair = new Set(estreia.map(chaveDoAviso));
+      const velhas = rows.filter((r) => !vaoSair.has(chaveDoAviso(r)));
+      await pool.query(
+        `INSERT INTO agendamento_avisos (chave, agendamento)
+         SELECT * FROM unnest($1::text[], $2::text[]) ON CONFLICT DO NOTHING`,
+        [velhas.map(chaveDoAviso), velhas.map((r) => (r.agendamento ?? '').slice(0, 16))]
+      );
+    }
   }
 
   // Rotina do dia (checklist do botão "Rotina" no CRM do SDR e do closer, ver routes/rotina.ts e lib/rotina.ts). A

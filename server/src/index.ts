@@ -27,6 +27,7 @@ import { automationRoutes } from './routes/automation.js';
 import { chatbotFlowRoutes } from './routes/chatbotFlow.js';
 import { leadBoardRoutes, juntarEspelhosRepetidos } from './routes/leadBoards.js';
 import { integracaoRoutes } from './routes/integracao.js';
+import { avisarAgendamentosDaEstreia } from './jobs/avisoAgendamento.js';
 import { leadPageRoutes } from './routes/leadPages.js';
 import { commercialMonthRoutes } from './routes/commercialMonths.js';
 import { contractRoutes } from './routes/contracts.js';
@@ -265,6 +266,8 @@ async function main() {
       .then((n) => { if (n) console.log(`[espelho] ${n} card(s) repetido(s) do closer juntado(s)`); })
       .catch((err) => console.error('[espelho] erro ao juntar cards repetidos do closer:', err));
   }, 10_000);
+  // Os agendamentos de antes do "Agendou ✅" existir (desde o dia em que ele entrou) saem uma vez no grupo LEADS.
+  setTimeout(() => void avisarAgendamentosDaEstreia(), 20_000);
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

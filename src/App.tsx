@@ -223,6 +223,12 @@ const AcouguePage = React.lazy(() =>
     default: m.AcouguePage,
   })),
 )
+// Tabloide automático do Mercado Nunes — mesmo login do açougue.
+const TabloidePage = React.lazy(() =>
+  import('./pages/TabloidePage').then((m) => ({
+    default: m.TabloidePage,
+  })),
+)
 
 // Enge Services — avisos de garantia por e-mail, com login próprio (como o açougue).
 const EngeEnvioPage = React.lazy(() =>
@@ -247,6 +253,7 @@ export default function App() {
         <Route path="/laundry/:token" element={<LaundryPortalPage />} />
         <Route path="/mercadonunes" element={<MercadoNunesPage />} />
         <Route path="/mercadonunes/acougue" element={<AcouguePage />} />
+        <Route path="/mercadonunes/tabloide" element={<TabloidePage />} />
         <Route path="/engeenvio" element={<EngeEnvioPage />} />
         <Route path="/engeenvio/ciente/:token" element={<EngeCientePage />} />
         <Route path="/pendencias/:token" element={<PendenciasPublicPage />} />

@@ -944,6 +944,9 @@ export function MercadoNunesPage() {
           <a href="/mercadonunes/acougue" style={{ ...botaoSecundario, whiteSpace: 'nowrap', textDecoration: 'none' }}>
             🥩 Açougue
           </a>
+          <a href="/mercadonunes/tabloide" style={{ ...botaoSecundario, whiteSpace: 'nowrap', textDecoration: 'none' }}>
+            🗞️ Tabloide
+          </a>
           <button
             type="button"
             onClick={() => setMenuLayoutsAberto(true)}

@@ -137,11 +137,23 @@ export function AcouguePage() {
 
 // ── Moldura comum (cabeçalho com a logo) ──────────────────────────────────────
 
-function Moldura({ children, direita }: { children: React.ReactNode; direita?: React.ReactNode }) {
+export function Moldura({
+  children,
+  direita,
+  titulo = 'Açougue — rateio do boi',
+  subtitulo = 'Quanto cada corte custa de verdade depois da desossa — e por quanto vender.',
+  largura = 1180,
+}: {
+  children: React.ReactNode
+  direita?: React.ReactNode
+  titulo?: string
+  subtitulo?: string
+  largura?: number
+}) {
   return (
     <div style={{ minHeight: '100vh', background: '#F4F1EC', color: '#2A2622' }}>
       <header style={{ background: '#fff', borderBottom: '3px solid #C1503F', padding: '14px 20px' }}>
-        <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ maxWidth: largura, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <img
             src={LOGO_SRC}
             alt="Nunes Supermercado"
@@ -151,22 +163,30 @@ function Moldura({ children, direita }: { children: React.ReactNode; direita?: R
             }}
           />
           <div style={{ flex: 1, minWidth: 180 }}>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#C1503F', margin: 0 }}>Açougue — rateio do boi</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#C1503F', margin: 0 }}>{titulo}</h1>
             <p style={{ fontSize: 13, color: '#7A716A', margin: 0 }}>
-              Quanto cada corte custa de verdade depois da desossa — e por quanto vender.
+              {subtitulo}
             </p>
           </div>
           {direita}
         </div>
       </header>
-      <main style={{ maxWidth: 1180, margin: '0 auto', padding: 20 }}>{children}</main>
+      <main style={{ maxWidth: largura, margin: '0 auto', padding: 20 }}>{children}</main>
     </div>
   )
 }
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
-function TelaLogin({ onEntrar }: { onEntrar: (u: AcougueUsuario) => void }) {
+export function TelaLogin({
+  onEntrar,
+  titulo,
+  subtitulo,
+}: {
+  onEntrar: (u: AcougueUsuario) => void
+  titulo?: string
+  subtitulo?: string
+}) {
   const [temUsuario, setTemUsuario] = React.useState<boolean | null>(null)
   const [email, setEmail] = React.useState('')
   const [nome, setNome] = React.useState('')
@@ -199,7 +219,7 @@ function TelaLogin({ onEntrar }: { onEntrar: (u: AcougueUsuario) => void }) {
   }
 
   return (
-    <Moldura>
+    <Moldura titulo={titulo} subtitulo={subtitulo}>
       <form
         onSubmit={enviar}
         style={{
@@ -220,7 +240,7 @@ function TelaLogin({ onEntrar }: { onEntrar: (u: AcougueUsuario) => void }) {
         <p style={{ fontSize: 12, color: '#9A928B', margin: 0 }}>
           {primeiroAcesso
             ? 'Ninguém tem acesso ainda. Crie o primeiro e-mail e senha desta ferramenta.'
-            : 'Use o e-mail e a senha do açougue (não é o login do painel).'}
+            : 'Use o e-mail e a senha do Mercado Nunes (o mesmo do açougue, não é o login do painel).'}
         </p>
         {primeiroAcesso && (
           <Campo label="Seu nome">

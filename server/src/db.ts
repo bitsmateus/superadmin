@@ -1756,6 +1756,47 @@ END; $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
 
+  // ── Tabloide do Mercado Nunes (/mercadonunes/tabloide) ─────────────────────────────
+  // Catálogo de produtos com foto: cada produto ganha foto uma vez e é reaproveitado em todo
+  // tabloide. A foto fica no banco (BYTEA, WebP recortado ~30 KB) — nada de volume de disco pra
+  // sumir em deploy. `original` guarda a foto como chegou, pra dar pra refazer o recorte.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_produtos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL,
+    detalhe TEXT NOT NULL DEFAULT '',
+    marca TEXT NOT NULL DEFAULT '',
+    ean TEXT UNIQUE,
+    busca TEXT NOT NULL DEFAULT '',
+    foto BYTEA,
+    foto_original BYTEA,
+    fundo_removido BOOLEAN NOT NULL DEFAULT false,
+    foto_versao INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS mn_produtos_busca_idx ON mn_produtos (busca)`);
+  // Tabloides montados (histórico): o conteúdo inteiro em JSONB (lista, modelo, formato…), pra
+  // duplicar o da semana passada e só trocar os preços.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_tabloides (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    titulo TEXT NOT NULL DEFAULT '',
+    dados JSONB NOT NULL DEFAULT '{}',
+    criado_por TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  // Linha única: dados fixos do rodapé e qual cliente do painel NX é o Mercado Nunes (pra publicar
+  // no Instagram dele pelo Social media). gc_cliente_id vazio = acha sozinho pelo nome.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_tabloide_config (
+    id BOOLEAN PRIMARY KEY DEFAULT true CHECK (id),
+    endereco TEXT NOT NULL DEFAULT '',
+    whatsapp TEXT NOT NULL DEFAULT '',
+    aviso TEXT NOT NULL DEFAULT 'Ofertas válidas enquanto durarem os estoques. Imagens meramente ilustrativas.',
+    gc_cliente_id UUID,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`INSERT INTO mn_tabloide_config (id) VALUES (true) ON CONFLICT DO NOTHING`);
+
   // ── Enge Services (/engeenvio) — avisos de garantia por e-mail ─────────────────────
   // Mesma ideia do açougue: login PRÓPRIO, separado de `profiles`. A Enge cadastra os
   // empreendimentos que administra, as garantias de cada um e agenda em que dia cada aviso sai

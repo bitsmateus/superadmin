@@ -134,6 +134,12 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent, leadConhec
     avisar()
     return () => ro.disconnect()
   }, [embed, demo.slug])
+  // Iframe num site com formulário próprio (?cta=site): o botão final avisa a página de fora
+  // ({ type: 'nxdemo:cta' }) em vez de abrir o WhatsApp; quem leva ao WhatsApp é o formulário do site.
+  const ctaNoSite = React.useMemo(
+    () => embed && typeof window !== 'undefined' && window.parent !== window && new URLSearchParams(window.location.search).get('cta') === 'site',
+    [embed],
+  )
   const [celular, setCelular] = React.useState(() => typeof window !== 'undefined' && ehCelular(window.innerWidth))
 
   // Pré-carrega todas as telas: a troca de etapa fica instantânea.
@@ -344,9 +350,13 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent, leadConhec
             )}
           </div>
           <div
-            className="viewport"
+            className={temCartao ? 'viewport com-cartao' : 'viewport'}
             ref={vpRef}
-            style={{ height: geo ? geo.vh : undefined, aspectRatio: geo ? undefined : `${frame.width} / ${frame.height}` }}
+            style={{
+              height: geo ? geo.vh : undefined,
+              aspectRatio: geo ? undefined : `${frame.width} / ${frame.height}`,
+              ...(geo ? { '--vh': `${geo.vh}px` } : {}),
+            } as React.CSSProperties}
             onClick={dica}
             onTouchStart={(e) => { toqueX.current = e.touches[0].clientX }}
             onTouchEnd={(e) => {
@@ -413,8 +423,13 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent, leadConhec
                       onEventRef.current?.({ t: 'lead_submit', fields: campos })
                     }}
                     onCampo={(chave, valor) => setLead((l) => ({ ...l, [chave]: valor }))}
+                    ctaNoSite={ctaNoSite}
                     onCta={(tipo) => {
                       onEventRef.current?.({ t: 'cta_click', cta: tipo })
+                      if (ctaNoSite) {
+                        window.parent.postMessage({ type: 'nxdemo:cta', slug: demo.slug }, '*')
+                        return
+                      }
                       // Nome/empresa digitados no cartão final também identificam o lead (§3).
                       const campos = Object.fromEntries((step.cta?.collect ?? []).map((k) => [k, (todas[k] ?? '').trim()]).filter(([, v]) => v))
                       if (tipo === 'whatsapp' && Object.keys(campos).length) enviarLead?.(campos, 'cta').catch(() => undefined)
@@ -498,11 +513,31 @@ interface CartaoProps {
   onLead: (campos: Record<string, string>) => void
   onCampo: (chave: string, valor: string) => void
   onCta: (tipo: 'whatsapp' | 'url') => void
+  /** Botão final avisa o site que incorporou a demo (sem campos, sem WhatsApp direto). */
+  ctaNoSite?: boolean
   enviarLead?: DemoPlayerProps['enviarLead']
   consentimento?: DemoPlayerProps['consentimento']
 }
 
 const ROTULO_CAMPO: Record<string, string> = { nome: 'Seu nome', empresa: 'Empresa' }
+
+/** Linhas do texto que começam com "- " (ou "• ", "✓ ") viram itens com check; o resto continua parágrafo. */
+function separarLista(texto: string): { texto: string; itens: string[] } {
+  const linhas: string[] = []
+  const itens: string[] = []
+  texto.split('\n').forEach((l) => {
+    const m = l.trim().match(/^(?:-|•|✓)\s+(.+)$/)
+    if (m) itens.push(m[1])
+    else linhas.push(l)
+  })
+  return { texto: linhas.join('\n').trim(), itens }
+}
+
+const Check = () => (
+  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </svg>
+)
 const EXEMPLO_CAMPO: Record<string, string> = { nome: 'Ex.: Ana Souza', empresa: 'Ex.: Pedal Bikes', whatsapp: '(48) 99999-0000', email: 'voce@empresa.com.br' }
 const AUTOCOMPLETE: Record<string, string> = { nome: 'name', empresa: 'organization', whatsapp: 'tel', email: 'email', cargo: 'organization-title' }
 
@@ -541,12 +576,21 @@ function Cartao(p: CartaoProps) {
     cta.message || p.demo.settings.ctaMessage || `Olá! Sou {{nome}} da {{empresa}}. Acabei de ver o tour do ${p.marca} e quero falar com um especialista.`,
     p.vars,
   )
+  const { texto: paragrafo, itens } = separarLista(p.corpo)
+  const noSite = !!p.ctaNoSite
   return (
-    <>
+    <div className="fim">
       <div className="eyebrow">Fim do tour</div>
       <h2>{p.titulo}</h2>
-      <p><Texto texto={p.corpo} /></p>
-      {cta.type === 'WHATSAPP' && coletar.length > 0 && (
+      {paragrafo && <p><Texto texto={paragrafo} /></p>}
+      {itens.length > 0 && (
+        <ul className="checks">
+          {itens.map((t, i) => (
+            <li key={i}><span className="ok"><Check /></span><span><Texto texto={t} /></span></li>
+          ))}
+        </ul>
+      )}
+      {!noSite && cta.type === 'WHATSAPP' && coletar.length > 0 && (
         <div className="form">
           {coletar.map((chave) => (
             <label key={chave} htmlFor={`dsp-${chave}`}>
@@ -562,8 +606,12 @@ function Cartao(p: CartaoProps) {
           ))}
         </div>
       )}
-      <div className="row">
-        {cta.type === 'URL' ? (
+      <div className="row cta-row">
+        {noSite ? (
+          <button className="btn btn-wa" type="button" onClick={() => p.onCta('whatsapp')}>
+            {cta.buttonLabel || 'Falar com especialista'}
+          </button>
+        ) : cta.type === 'URL' ? (
           <a className="btn btn-primary" href={cta.url || '#'} target="_blank" rel="noopener noreferrer" onClick={() => p.onCta('url')}>
             {cta.buttonLabel || 'Saiba mais'}
           </a>
@@ -574,12 +622,12 @@ function Cartao(p: CartaoProps) {
         )}
         <button className="btn btn-ghost" type="button" onClick={p.onRever}>Ver de novo</button>
       </div>
-      {cta.type === 'WHATSAPP' && (
+      {!noSite && cta.type === 'WHATSAPP' && (
         <p className="meta" style={{ margin: '14px 0 0' }}>
           Ou chame no <span className="phone">{formatarTelefone(telefone)}</span>
         </p>
       )}
-    </>
+    </div>
   )
 }
 

@@ -99,6 +99,11 @@
 .dsp .form input { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 10px; padding: 11px 12px; font-size: 16px; width: 100% }
 .dsp .form .consent { font-size: 12px; font-weight: 500; line-height: 1.45 }
 .dsp .form .erro { color: #d63c3c; font-size: 12.5px; font-weight: 600 }
+.dsp .box .checks { list-style: none; margin: 0 0 22px; padding: 14px 16px; display: grid; gap: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px }
+.dsp .box .checks li { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.4; font-weight: 600; color: var(--ink) }
+.dsp .box .checks .ok { flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 0; border-radius: 50%; background: var(--wa); color: #fff }
+.dsp .box .cta-row .btn { padding: 13px 22px; font-size: 15px }
+.dsp .box .cta-row .btn-wa { box-shadow: 0 10px 22px -10px rgba(31, 168, 85, .7) }
 .dsp .phone { user-select: all; -webkit-user-select: all; font-weight: 700; color: var(--ink) }
 
 .dsp .progress { max-width: 1280px; margin: 12px auto 0; display: flex; gap: 4px }
@@ -124,6 +129,15 @@
   .dsp .card .box { padding: 22px 20px; border-radius: 16px }
   .dsp .box h2 { font-size: 21px }
   .dsp .box p { font-size: 14px; margin-bottom: 14px }
+  .dsp .card { padding: 10px }
+  /* Cartão (abertura, formulário, fim) no celular: o palco cresce até caber o cartão inteiro, sem rolagem escondida. */
+  .dsp .viewport.com-cartao { height: auto !important }
+  .dsp .viewport.com-cartao .card { position: relative; inset: auto; min-height: var(--vh, 280px) }
+  .dsp .viewport.com-cartao .card .box { max-height: none }
+  .dsp .box .checks { padding: 12px 13px; gap: 9px; margin-bottom: 18px }
+  .dsp .box .checks li { font-size: 13.5px }
+  .dsp .box .cta-row { flex-direction: column; align-items: stretch; gap: 8px }
+  .dsp .box .cta-row .btn { width: 100%; padding: 14px 18px }
 }
 @media (prefers-reduced-motion: reduce) {
   .dsp .spot.anim, .dsp .canvas.anim, .dsp .tip { transition: none }

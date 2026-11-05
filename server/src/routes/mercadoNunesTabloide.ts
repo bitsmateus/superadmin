@@ -9,6 +9,7 @@ import { contaDoCliente } from '../lib/gcSocialPublicar.js';
 import { baixarFoto, buscarPorEan, eanValido } from '../lib/tabloide/ean.js';
 import { DADOS_VAZIOS, FORMATOS, MODELOS, precoNumero, type DadosTabloide, type ItemTabloide } from '../lib/tabloide/layout.js';
 import { normalizar, semelhanca } from '../lib/tabloide/busca.js';
+import { testarConexao } from '../lib/tabloide/conexao.js';
 import { prepararFoto, removeBgDisponivel, type ModoRecorte } from '../lib/tabloide/recorte.js';
 import { MAX_PAGINAS_VIDEO, renderizarImagens, renderizarPdf, renderizarVideo } from '../lib/tabloide/render.js';
 
@@ -467,6 +468,11 @@ ${lista}`;
       return { ok: false, motivo: (err as Error).message, cliente: cliente.nome };
     }
   });
+
+  // Confere tudo que a publicação usa, sem publicar nada.
+  app.post<{ Body: { base_url?: string } }>(`${BASE}/tabloides/instagram/testar`, async (req) =>
+    testarConexao(await clienteDoMercado(), String(req.body?.base_url ?? '')),
+  );
 
   app.post<{
     Body: {

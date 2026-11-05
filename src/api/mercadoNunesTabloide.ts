@@ -102,6 +102,11 @@ export const tabloideApi = {
   baixarVideo: (id: string) => req<Blob>(`/tabloides/video/${id}/arquivo`, {}, true),
   legenda: (dados: DadosTabloide) => req<{ legenda: string }>('/tabloides/legenda', json({ dados })),
   instagram: () => req<{ ok: boolean; username?: string; cliente?: string; motivo?: string }>('/tabloides/instagram'),
+  testarConexao: () =>
+    req<{ itens: { nome: string; status: 'ok' | 'aviso' | 'erro'; detalhe: string }[]; podePublicar: boolean }>(
+      '/tabloides/instagram/testar',
+      json({ base_url: API_URL || window.location.origin }),
+    ),
   publicar: (p: {
     dados: DadosTabloide
     formato: 'feed' | 'story' | 'reels'

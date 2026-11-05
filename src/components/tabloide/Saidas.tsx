@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { baixarArquivo, tabloideApi } from '@/api/mercadoNunesTabloide'
 import type { DadosTabloide } from '../../../server/src/lib/tabloide/layout'
 import { Modal, btnPrimario, btnSecundario, inputCls } from './EscolherFoto'
+import { PreviaTabloide } from './Previa'
 
 export interface VideoPronto {
   id: string
@@ -133,6 +134,8 @@ export function ModalPublicar({
   const [gerandoLegenda, setGerandoLegenda] = React.useState(false)
   const [enviando, setEnviando] = React.useState(false)
   const [feito, setFeito] = React.useState<string | null>(null)
+  const [etapa, setEtapa] = React.useState<'editar' | 'revisar'>('editar')
+  const [teste, setTeste] = React.useState<Teste | null | 'testando'>(null)
 
   React.useEffect(() => {
     tabloideApi
@@ -153,6 +156,20 @@ export function ModalPublicar({
     }
   }
 
+  const testar = async () => {
+    setTeste('testando')
+    try {
+      setTeste(await tabloideApi.testarConexao())
+    } catch (e) {
+      setTeste({ itens: [{ nome: 'Servidor', status: 'erro', detalhe: (e as Error).message }], podePublicar: false })
+    }
+  }
+
+  const irRevisar = () => {
+    if (formato === 'reels' && !videoOk) return toast.error('Gere o vídeo antes de publicar o Reels.')
+    if (quando === 'agendar' && new Date(dataHora).getTime() < Date.now() + 60_000) return toast.error('Escolha um horário pelo menos 1 minuto à frente.')
+    setEtapa('revisar')
+  }
   const publicar = async () => {
     if (formato === 'reels' && !videoOk) return toast.error('Gere o vídeo antes de publicar o Reels.')
     setEnviando(true)
@@ -187,17 +204,67 @@ export function ModalPublicar({
             Fechar
           </button>
         </div>
+      ) : etapa === 'revisar' ? (
+        <div className="flex flex-col gap-4">
+          <p className="rounded-lg bg-[#FCEFEC] px-3 py-2 text-sm text-[#2A2622]">
+            Confira como vai ficar. Nada foi publicado ainda.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-[220px_1fr]">
+            <div className="max-h-[52vh] overflow-y-auto rounded-lg bg-[#EDE8E1] p-2">
+              {formato === 'reels' && video ? (
+                <video src={video.url} controls muted playsInline className="w-full rounded-md bg-black" />
+              ) : (
+                <PreviaTabloide dados={{ ...dados, formato: formato === 'story' ? 'story' : 'feed' }} largura={200} />
+              )}
+            </div>
+            <div className="flex flex-col gap-3 text-sm">
+              <ResumoLinha rotulo="Onde">
+                Instagram @{conta?.username}
+                {formato !== 'story' && facebook ? ' + página do Facebook' : ''}
+              </ResumoLinha>
+              <ResumoLinha rotulo="Como">
+                {formato === 'feed' ? 'Post no feed (carrossel se tiver mais de uma página)' : formato === 'story' ? 'Story (uma por página)' : 'Reels (vídeo)'}
+              </ResumoLinha>
+              <ResumoLinha rotulo="Quando">
+                {quando === 'agora' ? 'Agora (sai em até 1 minuto)' : new Date(dataHora).toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' })}
+              </ResumoLinha>
+              {formato !== 'story' && (
+                <ResumoLinha rotulo="Legenda">
+                  {legenda.trim() ? (
+                    <span className="whitespace-pre-wrap">{legenda}</span>
+                  ) : (
+                    <span className="text-amber-700">Sem legenda. Volte se quiser escrever uma.</span>
+                  )}
+                </ResumoLinha>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-between gap-2">
+            <button className={btnSecundario} onClick={() => setEtapa('editar')} disabled={enviando}>
+              ← Voltar e editar
+            </button>
+            <button className={btnPrimario} disabled={enviando} onClick={publicar}>
+              {enviando ? 'Enviando…' : quando === 'agendar' ? '✅ Confirmar agendamento' : '✅ Postar agora'}
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="flex flex-col gap-4">
-          {conta === null ? (
-            <p className="text-sm text-[#9A928B]">Conferindo o Instagram do mercado…</p>
-          ) : conta.ok ? (
-            <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
-              Publica em <b>@{conta.username}</b>.
-            </p>
-          ) : (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{conta.motivo}</p>
-          )}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#E7E1D9] bg-[#FBF9F6] px-3 py-2">
+            {conta === null ? (
+              <span className="text-sm text-[#9A928B]">Conferindo o Instagram do mercado…</span>
+            ) : conta.ok ? (
+              <span className="text-sm text-green-800">
+                Publica em <b>@{conta.username}</b>
+              </span>
+            ) : (
+              <span className="text-sm text-amber-800">{conta.motivo}</span>
+            )}
+            <button className={btnSecundario} onClick={() => void testar()} disabled={teste === 'testando'}>
+              {teste === 'testando' ? 'Testando…' : '🔌 Testar conexão'}
+            </button>
+          </div>
+          {teste && teste !== 'testando' && <ResultadoTeste teste={teste} />}
 
           <div>
             <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[#7A716A]">Como</div>
@@ -269,8 +336,8 @@ export function ModalPublicar({
             <button className={btnSecundario} onClick={onFechar}>
               Cancelar
             </button>
-            <button className={btnPrimario} disabled={enviando || !conta?.ok} onClick={publicar}>
-              {enviando ? 'Enviando…' : quando === 'agendar' ? 'Agendar' : 'Publicar agora'}
+            <button className={btnPrimario} disabled={!conta?.ok} onClick={irRevisar}>
+              Revisar e postar →
             </button>
           </div>
         </div>
@@ -317,5 +384,37 @@ export function ModalLegenda({ dados, onFechar }: { dados: DadosTabloide; onFech
         </div>
       )}
     </Modal>
+  )
+}
+
+type Teste = { itens: { nome: string; status: 'ok' | 'aviso' | 'erro'; detalhe: string }[]; podePublicar: boolean }
+
+function ResultadoTeste({ teste }: { teste: Teste }) {
+  const icone = { ok: '✅', aviso: '⚠️', erro: '❌' } as const
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${teste.podePublicar ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+      <div className={`mb-1 text-sm font-bold ${teste.podePublicar ? 'text-green-800' : 'text-red-700'}`}>
+        {teste.podePublicar ? 'Conexão ok: dá pra publicar.' : 'Tem coisa impedindo a publicação:'}
+      </div>
+      <ul className="flex flex-col gap-0.5 text-xs">
+        {teste.itens.map((i) => (
+          <li key={i.nome} className="flex gap-1.5">
+            <span>{icone[i.status]}</span>
+            <span>
+              <b className="text-[#2A2622]">{i.nome}:</b> <span className="text-[#5A524B]">{i.detalhe}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ResumoLinha({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-bold uppercase tracking-wide text-[#7A716A]">{rotulo}</div>
+      <div className="text-[#2A2622]">{children}</div>
+    </div>
   )
 }

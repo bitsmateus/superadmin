@@ -177,7 +177,23 @@ export interface GcSocialProducao {
   prazo: string | null
   /** Imagens de referência da copy/arte. */
   anexos?: { id: string; name: string; type: string; size: number; dataUrl: string }[]
+  /** Postagem agendada mais recente (não cancelada), se houver. */
+  agendamento?: GcSocialAgendamento | null
   created_at: string
+}
+
+export type GcRedeSocial = 'instagram' | 'facebook'
+
+export interface GcSocialAgendamento {
+  id: string
+  redes: GcRedeSocial[]
+  formato: 'feed' | 'reels' | 'story'
+  legenda: string
+  agendado_para: string
+  status: 'agendado' | 'publicando' | 'publicado' | 'erro'
+  erro: string | null
+  resultado: Partial<Record<GcRedeSocial, { ok: boolean; link?: string; erro?: string }>>
+  publicado_em: string | null
 }
 
 /** O que o link público do briefing entrega pro cliente. As senhas nunca vêm: só "já tem uma salva". */
@@ -1035,6 +1051,13 @@ export const gestaoClientes = {
     titulo: string; descricao: string; status: GcSocialStatus; editor_id: string | null; prazo: string | null
   }>) => api.patch<GcSocialProducao>(`/api/gc/social/producao/${id}`, dados),
   excluirSocialProducao: (id: string) => api.delete(`/api/gc/social/producao/${id}`),
+  /** Agenda (ou reagenda) a postagem do card. base_url é o endereço da API, de onde a Meta baixa a mídia. */
+  agendarPostagem: (id: string, dados: { redes: GcRedeSocial[]; formato: string; legenda: string; agendado_para: string }) =>
+    api.post<GcSocialProducao>(`/api/gc/social/producao/${id}/agendar`, {
+      ...dados,
+      base_url: (import.meta.env.VITE_API_URL as string | undefined) || window.location.origin,
+    }),
+  cancelarAgendamento: (id: string) => api.delete<GcSocialProducao>(`/api/gc/social/agendamentos/${id}`),
   /** PDF de apresentação das artes (capa + uma página por imagem). */
   pdfDoSocial: (clienteId: string, dados: { periodo: string; itens: { id: string; titulo: string; texto: string }[] }) =>
     api.postForBlob(`/api/gc/clientes/${clienteId}/social/pdf`, dados),

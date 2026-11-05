@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { pool, query, queryOne, withTransaction } from '../db.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlSocialPdf, type ItemPdfSocial } from '../lib/gcSocialPdf.js';
+import { contaDoCliente, midiaPublica } from '../lib/gcSocialPublicar.js';
 import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
 import { validarMetricas } from '../lib/gcValidacao.js';
 import { garantirRecorrentes, sincronizarRotinaAutomatica } from '../lib/gcRecorrentes.js';
@@ -31,6 +32,12 @@ const CAMPOS_CLIENTE = [
   'data_inicio', 'observacoes_gerais', 'estrategia_usada', 'falta_acompanhar', 'cliente_externo_id',
   'ultima_reuniao', 'proxima_reuniao',
 ] as const;
+
+/** O agendamento de postagem mais recente (não cancelado) de um card do Social media, como JSON. */
+const SQL_AGENDAMENTO_DO_CARD = `(SELECT row_to_json(x) FROM (
+    SELECT a.id, a.redes, a.formato, a.legenda, a.agendado_para, a.status, a.erro, a.resultado, a.publicado_em
+    FROM gc_social_agendamentos a WHERE a.gc_producao_id = d.id AND a.status <> 'cancelado'
+    ORDER BY a.created_at DESC LIMIT 1) x) AS agendamento`;
 
 const CAMPOS_SERVICO = [
   'tipo', 'descricao_plano', 'investimento_previsto_mensal', 'data_inicio', 'data_renovacao', 'status',
@@ -2318,7 +2325,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       [req.params.id]
     );
     const producao = await query(
-      `SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome, d.anexos,
+      `SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome, d.anexos, ${SQL_AGENDAMENTO_DO_CARD},
               to_char(d.prazo, 'YYYY-MM-DD') AS prazo, d.created_at, d.updated_at
        FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id
        WHERE d.gc_cliente_id = $1 ORDER BY d.created_at DESC`,
@@ -2359,7 +2366,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   });
 
   const SELECT_PRODUCAO = `
-    SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome, d.anexos,
+    SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome, d.anexos, ${SQL_AGENDAMENTO_DO_CARD},
            to_char(d.prazo, 'YYYY-MM-DD') AS prazo, d.created_at, d.updated_at
     FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id`;
 
@@ -2398,6 +2405,83 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     const r = await queryOne('DELETE FROM gc_social_producao WHERE id = $1 RETURNING id', [req.params.id]);
     if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
     return reply.status(204).send();
+  });
+
+  // ------------------------------------------------------------------ postagem agendada (Instagram / Facebook)
+  // POST /api/gc/social/producao/:id/agendar — agenda (ou reagenda) a postagem do card. Data no passado ou
+  // "agora" = sai na próxima rodada do job (em até 1 minuto). Confere antes o que dá pra conferir sem
+  // publicar: Instagram vinculado, mídia anexada e vídeo quando é Reels.
+  app.post<{
+    Params: { id: string };
+    Body: { redes?: string[]; formato?: string; legenda?: string; agendado_para?: string; base_url?: string };
+  }>('/api/gc/social/producao/:id/agendar', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const b = req.body ?? {};
+    const redes = [...new Set((b.redes ?? []).filter((r) => r === 'instagram' || r === 'facebook'))];
+    if (redes.length === 0) return reply.status(400).send({ message: 'Escolha Instagram e/ou Facebook' });
+    const formato = ['feed', 'reels', 'story'].includes(String(b.formato)) ? String(b.formato) : 'feed';
+    if (formato === 'story' && redes.includes('facebook')) {
+      return reply.status(400).send({ message: 'Story pela API só no Instagram. Desmarque o Facebook.' });
+    }
+    const quando = b.agendado_para ? new Date(b.agendado_para) : new Date();
+    if (Number.isNaN(quando.getTime())) return reply.status(400).send({ message: 'Data e hora inválidas' });
+    const baseUrl = String(process.env.SOCIAL_MIDIA_BASE_URL || b.base_url || '').trim().replace(/\/+$/, '');
+    if (!/^https:\/\//.test(baseUrl)) {
+      return reply.status(400).send({ message: 'A Meta só baixa mídia de endereço https público (configure SOCIAL_MIDIA_BASE_URL no servidor).' });
+    }
+    const card = await queryOne<{ gc_cliente_id: string; anexos: { type?: string }[] }>(
+      'SELECT gc_cliente_id, anexos FROM gc_social_producao WHERE id = $1',
+      [req.params.id]
+    );
+    if (!card) return reply.status(404).send({ message: 'Demanda não encontrada' });
+    const midias = (card.anexos ?? []).filter((a) => /^(image|video)\//.test(String(a.type ?? '')));
+    if (midias.length === 0) return reply.status(400).send({ message: 'Anexe a arte (imagem ou vídeo) no card antes de agendar' });
+    if (formato === 'reels' && !midias.some((a) => String(a.type).startsWith('video/'))) {
+      return reply.status(400).send({ message: 'Reels precisa de um vídeo anexado no card' });
+    }
+    try {
+      await contaDoCliente(card.gc_cliente_id);
+    } catch (err) {
+      return reply.status(400).send({ message: (err as Error).message });
+    }
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE gc_social_agendamentos SET status = 'cancelado', updated_at = NOW()
+         WHERE gc_producao_id = $1 AND status = 'agendado'`,
+        [req.params.id]
+      );
+      await client.query(
+        `INSERT INTO gc_social_agendamentos
+           (gc_producao_id, gc_cliente_id, redes, formato, legenda, agendado_para, midia_token, base_url, criado_por)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [req.params.id, card.gc_cliente_id, redes, formato, String(b.legenda ?? '').slice(0, 2200), quando.toISOString(),
+          crypto.randomBytes(24).toString('hex'), baseUrl, sub]
+      );
+    }).catch((err: Error) => {
+      // O índice de "um ativo por card" barra reagendar enquanto ele está sendo publicado.
+      throw Object.assign(new Error(/gc_social_agendamentos_ativo/.test(err.message)
+        ? 'Esse post está sendo publicado agora. Espere terminar.' : err.message), { statusCode: 409 });
+    });
+    return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
+  });
+
+  // DELETE /api/gc/social/agendamentos/:id — cancela um agendamento que ainda não saiu.
+  app.delete<{ Params: { id: string } }>('/api/gc/social/agendamentos/:id', autenticado, async (req, reply) => {
+    const r = await queryOne<{ gc_producao_id: string }>(
+      `UPDATE gc_social_agendamentos SET status = 'cancelado', updated_at = NOW()
+       WHERE id = $1 AND status IN ('agendado','erro') RETURNING gc_producao_id`,
+      [req.params.id]
+    );
+    if (!r) return reply.status(409).send({ message: 'Esse agendamento já foi publicado ou está publicando' });
+    return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [r.gc_producao_id]);
+  });
+
+  // GET /api/public/social-midia/:token/:arquivo — a mídia que a Meta baixa pra publicar. Sem login: o
+  // token do agendamento (aleatório, 48 hex) é a chave, e só vale enquanto o agendamento está ativo.
+  app.get<{ Params: { token: string; arquivo: string } }>('/api/public/social-midia/:token/:arquivo', async (req, reply) => {
+    const m = await midiaPublica(req.params.token, req.params.arquivo).catch(() => null);
+    if (!m) return reply.status(404).send({ message: 'Mídia não encontrada' });
+    return reply.header('Content-Type', m.tipo).header('Cache-Control', 'no-store').send(m.corpo);
   });
 
   // POST /api/gc/social/producao/:id/anexos — anexa UM arquivo (imagem de referência da copy). Um por

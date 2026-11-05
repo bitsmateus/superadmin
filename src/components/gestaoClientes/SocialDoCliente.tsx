@@ -2,7 +2,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { DndContext, DragOverlay, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import {
-  CalendarClock, ExternalLink, FileDown, FileText, FolderOpen, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, UserRound, X,
+  CalendarClock, ExternalLink, FileDown, FileText, FolderOpen, Link2, Loader2, Paperclip, Pencil, Plus, Send, Trash2, UserRound, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/Modal'
 import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import { useKanbanSensors } from '@/hooks/useKanbanSensors'
 import {
-  gestaoClientes, type GcSocialMaterial, type GcSocialProducao, type GcSocialStatus,
+  gestaoClientes, type GcRedeSocial, type GcSocialAgendamento, type GcSocialMaterial, type GcSocialProducao, type GcSocialStatus,
 } from '@/services/gestaoClientes'
 import { cn } from '@/lib/utils'
 
@@ -130,6 +130,20 @@ function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
           <span className="truncate">{p.editor_nome ?? 'Sem editor'}</span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
+          {p.agendamento && (
+            <span
+              className={cn(
+                'flex items-center gap-0.5',
+                p.agendamento.status === 'publicado' ? 'text-success' : p.agendamento.status === 'erro' ? 'font-medium text-danger' : 'text-accent',
+              )}
+              title={p.agendamento.status === 'erro' ? p.agendamento.erro ?? 'Erro ao publicar' : 'Postagem'}
+            >
+              <Send className="h-3 w-3" />
+              {p.agendamento.status === 'publicado' ? 'publicado'
+                : p.agendamento.status === 'erro' ? 'erro'
+                  : new Date(p.agendamento.agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
           {(p.anexos?.length ?? 0) > 0 && (
             <span className="flex items-center gap-0.5 text-foreground/45" title="Imagens de referência">
               <Paperclip className="h-3 w-3" /> {p.anexos!.length}
@@ -265,6 +279,185 @@ function ReferenciasDaArte({ demanda, onMudou }: { demanda: GcSocialProducao; on
         >
           <img src={ampliada} alt="" className="max-h-full max-w-full object-contain" />
         </button>
+      )}
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ postagem agendada
+
+const FORMATOS_POST: { valor: GcSocialAgendamento['formato']; rotulo: string }[] = [
+  { valor: 'feed', rotulo: 'Feed (foto ou carrossel)' },
+  { valor: 'reels', rotulo: 'Reels' },
+  { valor: 'story', rotulo: 'Story (só Instagram)' },
+]
+
+/** Valor do <input type="datetime-local"> pra uma data (no fuso de quem está vendo). */
+function campoDataHora(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** A legenda que a IA já escreveu nos detalhes ("Legenda: ..."), pra não digitar de novo. */
+function legendaDosDetalhes(descricao: string): string {
+  const m = descricao.match(/legenda:\s*\n?([\s\S]+)$/i)
+  return m ? m[1].trim() : ''
+}
+
+const dataHoraBr = (iso: string) =>
+  new Date(iso).toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+
+/**
+ * "Publicação" no card: agenda o post no Instagram e/ou na página do Facebook com as mídias anexadas.
+ * Quem publica é o servidor, na hora marcada (a API do Instagram não tem agendamento próprio).
+ */
+function PublicacaoDoCard({ demanda, onMudou }: { demanda: GcSocialProducao; onMudou: (d: GcSocialProducao) => void }) {
+  const ag = demanda.agendamento ?? null
+  const [editando, setEditando] = React.useState(false)
+  const [salvando, setSalvando] = React.useState(false)
+  const [redes, setRedes] = React.useState<GcRedeSocial[]>(['instagram'])
+  const [formato, setFormato] = React.useState<GcSocialAgendamento['formato']>('feed')
+  const [quando, setQuando] = React.useState('')
+  const [legenda, setLegenda] = React.useState('')
+  const temMidia = (demanda.anexos ?? []).some((a) => /^(image|video)\//.test(a.type))
+
+  const abrirForm = () => {
+    const proxima = new Date(Date.now() + 60 * 60_000)
+    proxima.setMinutes(0, 0, 0)
+    setRedes(ag?.redes ?? ['instagram'])
+    setFormato(ag?.formato ?? ((demanda.anexos ?? []).some((a) => a.type.startsWith('video/')) ? 'reels' : 'feed'))
+    setQuando(ag && ag.status !== 'publicado' ? campoDataHora(new Date(ag.agendado_para)) : campoDataHora(proxima))
+    setLegenda(ag?.legenda || legendaDosDetalhes(demanda.descricao))
+    setEditando(true)
+  }
+
+  const agendar = async (agora: boolean) => {
+    if (redes.length === 0) return toast.error('Escolha Instagram e/ou Facebook')
+    if (!agora && !quando) return toast.error('Escolha a data e a hora')
+    setSalvando(true)
+    try {
+      const r = await gestaoClientes.agendarPostagem(demanda.id, {
+        redes, formato, legenda, agendado_para: agora ? new Date().toISOString() : new Date(quando).toISOString(),
+      })
+      onMudou(r)
+      setEditando(false)
+      toast.success(agora ? 'Publicando em até 1 minuto' : 'Postagem agendada')
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const cancelar = async () => {
+    if (!ag || !window.confirm('Cancelar este agendamento?')) return
+    try {
+      onMudou(await gestaoClientes.cancelarAgendamento(ag.id))
+    } catch (err) {
+      toast.error((err as Error).message)
+    }
+  }
+
+  const alternarRede = (r: GcRedeSocial) => setRedes((x) => (x.includes(r) ? x.filter((y) => y !== r) : [...x, r]))
+  const nomeRede = (r: GcRedeSocial) => (r === 'instagram' ? 'Instagram' : 'Facebook')
+
+  return (
+    <div className="rounded-xl border border-line p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <Send className="h-4 w-4 text-accent" /> Publicação
+        </p>
+        {!editando && (!ag || ag.status === 'publicado' || ag.status === 'erro') && (
+          <Button size="sm" variant="secondary" disabled={!temMidia} title={temMidia ? undefined : 'Anexe a arte primeiro'} leftIcon={<CalendarClock className="h-3.5 w-3.5" />} onClick={abrirForm}>
+            {ag?.status === 'erro' ? 'Tentar de novo' : ag?.status === 'publicado' ? 'Agendar outra' : 'Agendar postagem'}
+          </Button>
+        )}
+      </div>
+
+      {!editando && !ag && (
+        <p className="text-xs text-foreground/45">
+          {temMidia ? 'Agende o post no Instagram e/ou Facebook com as imagens anexadas acima.' : 'Anexe a arte (imagem ou vídeo) pra poder agendar.'}
+        </p>
+      )}
+
+      {!editando && ag && (
+        <div className="space-y-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn(
+              'rounded-full px-2 py-0.5 text-xs font-medium',
+              ag.status === 'publicado' ? 'bg-success/15 text-success'
+                : ag.status === 'erro' ? 'bg-danger/10 text-danger'
+                  : 'bg-accent/10 text-accent',
+            )}>
+              {ag.status === 'agendado' ? 'Agendado' : ag.status === 'publicando' ? 'Publicando…' : ag.status === 'publicado' ? 'Publicado' : 'Erro ao publicar'}
+            </span>
+            <span className="text-foreground/70">
+              {ag.status === 'publicado' && ag.publicado_em ? dataHoraBr(ag.publicado_em) : dataHoraBr(ag.agendado_para)}
+              {' · '}{ag.redes.map(nomeRede).join(' + ')} · {FORMATOS_POST.find((f) => f.valor === ag.formato)?.rotulo.split(' ')[0]}
+            </span>
+          </div>
+          {ag.redes.map((r) => ag.resultado?.[r]?.link && (
+            <a key={r} href={ag.resultado[r]!.link} target="_blank" rel="noopener noreferrer" className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
+              <ExternalLink className="h-3 w-3" /> Ver no {nomeRede(r)}
+            </a>
+          ))}
+          {ag.erro && <p className="rounded-lg bg-danger/5 px-2.5 py-1.5 text-xs text-danger">{ag.erro}</p>}
+          {ag.status === 'agendado' && (
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={abrirForm}>Alterar</Button>
+              <Button size="sm" variant="ghost" onClick={() => void cancelar()}>Cancelar agendamento</Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {editando && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {(['instagram', 'facebook'] as GcRedeSocial[]).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => alternarRede(r)}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs transition-colors',
+                  redes.includes(r) ? 'border-accent bg-accent/10 font-medium text-accent' : 'border-line text-foreground/55 hover:text-foreground',
+                )}
+              >
+                {nomeRede(r)}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select
+              label="Formato"
+              options={FORMATOS_POST.map((f) => ({ value: f.valor, label: f.rotulo }))}
+              value={formato}
+              onChange={(e) => setFormato(e.target.value as GcSocialAgendamento['formato'])}
+            />
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-foreground/70">Data e hora</label>
+              <input
+                type="datetime-local"
+                value={quando}
+                min={campoDataHora(new Date())}
+                onChange={(e) => setQuando(e.target.value)}
+                className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-foreground focus:border-accent/60 focus:outline-none"
+              />
+            </div>
+          </div>
+          {formato !== 'story' && (
+            <Textarea label="Legenda" rows={5} value={legenda} onChange={(e) => setLegenda(e.target.value)} placeholder="Texto que vai junto do post, com hashtags." />
+          )}
+          <p className="text-[11px] text-foreground/45">
+            Vai com as mídias anexadas no card, na ordem. Mais de uma imagem no Feed vira carrossel (até 10).
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setEditando(false)}>Cancelar</Button>
+            <Button variant="secondary" size="sm" loading={salvando} onClick={() => void agendar(true)}>Publicar agora</Button>
+            <Button size="sm" loading={salvando} leftIcon={<CalendarClock className="h-3.5 w-3.5" />} onClick={() => void agendar(false)}>Agendar</Button>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -919,6 +1112,13 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
               <p className="text-sm text-foreground/45">Sem detalhes da arte. Clique em Editar pra escrever.</p>
             )}
             <ReferenciasDaArte
+              demanda={vendo}
+              onMudou={(atualizada) => {
+                setVendo(atualizada)
+                setProducao((lista) => lista.map((p) => (p.id === atualizada.id ? atualizada : p)))
+              }}
+            />
+            <PublicacaoDoCard
               demanda={vendo}
               onMudou={(atualizada) => {
                 setVendo(atualizada)

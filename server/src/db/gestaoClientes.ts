@@ -557,6 +557,31 @@ const TABELAS = [
   `CREATE INDEX IF NOT EXISTS gc_social_producao_cliente_idx ON gc_social_producao (gc_cliente_id, status)`,
   // Imagens de referência de cada copy/arte: [{ id, name, type, size, dataUrl }], mesmo formato dos anexos das notas.
   `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS anexos JSONB NOT NULL DEFAULT '[]'`,
+  // Postagem agendada de um card (Instagram e/ou página do Facebook). Quem publica é o job
+  // gcSocialAgendamentos (a API do Instagram não agenda). midia_token libera as mídias numa URL pública
+  // pra Meta baixar; base_url é o endereço da API que a tela usou (a Meta precisa alcançá-lo).
+  `CREATE TABLE IF NOT EXISTS gc_social_agendamentos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_producao_id UUID NOT NULL REFERENCES gc_social_producao(id) ON DELETE CASCADE,
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    redes TEXT[] NOT NULL,
+    formato TEXT NOT NULL DEFAULT 'feed' CHECK (formato IN ('feed','reels','story')),
+    legenda TEXT NOT NULL DEFAULT '',
+    agendado_para TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL DEFAULT 'agendado' CHECK (status IN ('agendado','publicando','publicado','erro','cancelado')),
+    erro TEXT,
+    resultado JSONB NOT NULL DEFAULT '{}',
+    midia_token TEXT NOT NULL UNIQUE,
+    base_url TEXT NOT NULL,
+    criado_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    publicado_em TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_social_agendamentos_fila_idx ON gc_social_agendamentos (status, agendado_para)`,
+  // Um agendamento ativo por card: reagendar cancela o anterior.
+  `CREATE UNIQUE INDEX IF NOT EXISTS gc_social_agendamentos_ativo
+     ON gc_social_agendamentos (gc_producao_id) WHERE status IN ('agendado','publicando')`,
   // ---------------------------------------------------------------- briefing do cliente
   `CREATE TABLE IF NOT EXISTS gc_briefing (
     gc_cliente_id UUID PRIMARY KEY REFERENCES gc_clientes(id) ON DELETE CASCADE,

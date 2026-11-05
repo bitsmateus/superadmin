@@ -67,6 +67,7 @@ import { startRecorraiSync } from './jobs/recorraiSync.js';
 import { startMetaInsightsSync } from './jobs/metaInsightsSync.js';
 import { startGcTrafegoSync } from './jobs/gcTrafegoSync.js';
 import { startGcRelatorioSemanal } from './jobs/gcRelatorioSemanal.js';
+import { startGcSocialAgendamentos } from './jobs/gcSocialAgendamentos.js';
 import { startTrafficDailyReport } from './jobs/trafficDailyReport.js';
 import { startLeadsDailyReport } from './jobs/leadsDailyReport.js';
 import { startTrafficAiReview } from './jobs/trafficAiReview.js';
@@ -244,6 +245,7 @@ async function main() {
   startMetaInsightsSync();
   startGcTrafegoSync();
   startGcRelatorioSemanal();
+  startGcSocialAgendamentos();
   startTrafficDailyReport();
   startLeadsDailyReport();
   startTrafficAiReview();

@@ -1796,6 +1796,13 @@ END; $$`);
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`INSERT INTO mn_tabloide_config (id) VALUES (true) ON CONFLICT DO NOTHING`);
+  // Layouts (templates) do tabloide: o conteúdo inteiro salvo com um nome, pra começar o próximo dele.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_tabloide_layouts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL UNIQUE,
+    dados JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
 
   // ── Enge Services (/engeenvio) — avisos de garantia por e-mail ─────────────────────
   // Mesma ideia do açougue: login PRÓPRIO, separado de `profiles`. A Enge cadastra os

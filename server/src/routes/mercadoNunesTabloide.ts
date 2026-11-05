@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import sharp from 'sharp';
 import { query, queryOne, withTransaction } from '../db.js';
 import { chamarClaude } from '../lib/gcIa.js';
@@ -15,8 +15,7 @@ import { MAX_PAGINAS_VIDEO, renderizarImagens, renderizarPdf, renderizarVideo } 
 /**
  * Tabloide automático do Mercado Nunes (/mercadonunes/tabloide).
  *
- * Usa o mesmo login do açougue (mn_acougue_usuarios, token com scope 'acougue'): é o acesso do
- * pessoal do mercado, separado do painel. Só a foto dos produtos é pública (entra na prévia via <img>).
+ * Página pública, sem login (igual ao gerador de cartazes): quem tem o link usa.
  */
 
 const BASE = '/api/public/mercadonunes';
@@ -120,21 +119,9 @@ function limparVideos() {
 }
 
 export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
-  async function auth(req: FastifyRequest, reply: FastifyReply) {
-    try {
-      await req.jwtVerify();
-    } catch {
-      return reply.status(401).send({ message: 'Sessão expirada — entre de novo.' });
-    }
-    if ((req.user as { scope?: string }).scope !== 'acougue') {
-      return reply.status(403).send({ message: 'Este login não tem acesso ao tabloide.' });
-    }
-  }
-  const quem = (req: FastifyRequest) => (req.user as { email?: string })?.email ?? null;
-
   // ── Catálogo ──────────────────────────────────────────────────────────────
 
-  app.get<{ Querystring: { q?: string; limite?: string } }>(`${BASE}/produtos`, { preHandler: auth }, async (req) => {
+  app.get<{ Querystring: { q?: string; limite?: string } }>(`${BASE}/produtos`, async (req) => {
     const q = normalizar(req.query.q ?? '');
     const limite = Math.min(500, Number(req.query.limite) || 200);
     if (!q) {
@@ -178,7 +165,6 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   app.post<{ Body: { nome?: string; detalhe?: string; marca?: string; ean?: string; foto?: string; modo?: ModoRecorte } }>(
     `${BASE}/produtos`,
-    { preHandler: auth },
     async (req, reply) => {
       const b = req.body ?? {};
       const nome = texto(b.nome, 80).trim();
@@ -202,7 +188,6 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string }; Body: { nome?: string; detalhe?: string; marca?: string; ean?: string | null } }>(
     `${BASE}/produtos/:id`,
-    { preHandler: auth },
     async (req, reply) => {
       const atual = await queryOne<ProdutoLinha>(`SELECT ${COLUNAS} FROM mn_produtos WHERE id = $1`, [req.params.id]);
       if (!atual) return reply.status(404).send({ message: 'Produto não encontrado.' });
@@ -225,7 +210,6 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string }; Body: { foto?: string; modo?: ModoRecorte } }>(
     `${BASE}/produtos/:id/foto`,
-    { preHandler: auth },
     async (req, reply) => {
       const modo: ModoRecorte = ['auto', 'sem', 'removebg'].includes(String(req.body?.modo)) ? (req.body!.modo as ModoRecorte) : 'auto';
       let entrada = dataUrlParaBuffer(req.body?.foto);
@@ -246,7 +230,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     },
   );
 
-  app.delete<{ Params: { id: string } }>(`${BASE}/produtos/:id`, { preHandler: auth }, async (req) => {
+  app.delete<{ Params: { id: string } }>(`${BASE}/produtos/:id`, async (req) => {
     await query('DELETE FROM mn_produtos WHERE id = $1', [req.params.id]);
     return { ok: true };
   });
@@ -254,7 +238,6 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
   /** Acha no catálogo o produto de cada linha colada (por código de barras ou pelo nome). */
   app.post<{ Body: { itens?: { nome?: string; detalhe?: string; ean?: string }[] } }>(
     `${BASE}/produtos/combinar`,
-    { preHandler: auth },
     async (req) => {
       const itens = (req.body?.itens ?? []).slice(0, 120);
       const todos = await query<ProdutoLinha & { busca: string }>(`SELECT ${COLUNAS}, busca FROM mn_produtos`);
@@ -278,7 +261,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
   const limpar = ({ busca: _b, ...p }: ProdutoLinha & { busca: string }) => p;
 
   /** Código de barras → produto no catálogo (com foto). Se ainda não existe, busca nas bases e cadastra. */
-  app.post<{ Body: { ean?: string; nome?: string; detalhe?: string } }>(`${BASE}/produtos/ean`, { preHandler: auth }, async (req, reply) => {
+  app.post<{ Body: { ean?: string; nome?: string; detalhe?: string } }>(`${BASE}/produtos/ean`, async (req, reply) => {
     const ean = String(req.body?.ean ?? '').replace(/\D/g, '');
     if (!eanValido(ean)) return reply.status(400).send({ message: 'Código de barras inválido (confira os números).' });
     const ja = await queryOne<ProdutoLinha>(`SELECT ${COLUNAS} FROM mn_produtos WHERE ean = $1`, [ean]);
@@ -305,14 +288,14 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   // ── Configuração (rodapé fixo + cliente do Instagram) ─────────────────────
 
-  app.get(`${BASE}/tabloide/config`, { preHandler: auth }, async () => {
+  app.get(`${BASE}/tabloide/config`, async () => {
     const cfg = await queryOne<{ endereco: string; whatsapp: string; aviso: string }>(
       'SELECT endereco, whatsapp, aviso FROM mn_tabloide_config WHERE id = true',
     );
     return { ...cfg, removeBg: removeBgDisponivel(), cosmos: !!process.env.COSMOS_TOKEN, ia: !!process.env.ANTHROPIC_API_KEY };
   });
 
-  app.patch<{ Body: { endereco?: string; whatsapp?: string; aviso?: string } }>(`${BASE}/tabloide/config`, { preHandler: auth }, async (req) => {
+  app.patch<{ Body: { endereco?: string; whatsapp?: string; aviso?: string } }>(`${BASE}/tabloide/config`, async (req) => {
     const b = req.body ?? {};
     return queryOne(
       `UPDATE mn_tabloide_config SET
@@ -324,21 +307,21 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   // ── Tabloides salvos ──────────────────────────────────────────────────────
 
-  app.get(`${BASE}/tabloides`, { preHandler: auth }, async () => ({
+  app.get(`${BASE}/tabloides`, async () => ({
     tabloides: await query(
       `SELECT id, titulo, dados, criado_por, created_at, updated_at FROM mn_tabloides ORDER BY updated_at DESC LIMIT 60`,
     ),
   }));
 
-  app.post<{ Body: { titulo?: string; dados?: unknown } }>(`${BASE}/tabloides`, { preHandler: auth }, async (req, reply) => {
+  app.post<{ Body: { titulo?: string; dados?: unknown } }>(`${BASE}/tabloides`, async (req, reply) => {
     const r = await queryOne(
       `INSERT INTO mn_tabloides (titulo, dados, criado_por) VALUES ($1, $2::jsonb, $3) RETURNING id, titulo, dados, criado_por, created_at, updated_at`,
-      [texto(req.body?.titulo, 120), JSON.stringify(req.body?.dados ?? {}), quem(req)],
+      [texto(req.body?.titulo, 120), JSON.stringify(req.body?.dados ?? {}), null],
     );
     return reply.status(201).send(r);
   });
 
-  app.patch<{ Params: { id: string }; Body: { titulo?: string; dados?: unknown } }>(`${BASE}/tabloides/:id`, { preHandler: auth }, async (req, reply) => {
+  app.patch<{ Params: { id: string }; Body: { titulo?: string; dados?: unknown } }>(`${BASE}/tabloides/:id`, async (req, reply) => {
     const r = await queryOne(
       `UPDATE mn_tabloides SET titulo = COALESCE($2, titulo), dados = COALESCE($3::jsonb, dados), updated_at = NOW()
        WHERE id = $1 RETURNING id, titulo, dados, criado_por, created_at, updated_at`,
@@ -348,8 +331,33 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     return r;
   });
 
-  app.delete<{ Params: { id: string } }>(`${BASE}/tabloides/:id`, { preHandler: auth }, async (req) => {
+  app.delete<{ Params: { id: string } }>(`${BASE}/tabloides/:id`, async (req) => {
     await query('DELETE FROM mn_tabloides WHERE id = $1', [req.params.id]);
+    return { ok: true };
+  });
+
+  // ── Layouts (templates) ───────────────────────────────────────────────────
+  // Um tabloide salvo como modelo pra reaproveitar: visual (modelo, formato, textos, rodapé) e,
+  // se quiser, os produtos.
+
+  app.get(`${BASE}/tabloide/layouts`, async () => ({
+    layouts: await query('SELECT id, nome, dados, created_at FROM mn_tabloide_layouts ORDER BY nome ASC'),
+  }));
+
+  app.post<{ Body: { nome?: string; dados?: unknown } }>(`${BASE}/tabloide/layouts`, async (req, reply) => {
+    const nome = texto(req.body?.nome, 80).trim();
+    if (!nome) return reply.status(400).send({ message: 'Dê um nome pro layout.' });
+    const r = await queryOne(
+      `INSERT INTO mn_tabloide_layouts (nome, dados) VALUES ($1, $2::jsonb)
+       ON CONFLICT (nome) DO UPDATE SET dados = EXCLUDED.dados, created_at = NOW()
+       RETURNING id, nome, dados, created_at`,
+      [nome, JSON.stringify(req.body?.dados ?? {})],
+    );
+    return reply.status(201).send(r);
+  });
+
+  app.delete<{ Params: { id: string } }>(`${BASE}/tabloide/layouts/:id`, async (req) => {
+    await query('DELETE FROM mn_tabloide_layouts WHERE id = $1', [req.params.id]);
     return { ok: true };
   });
 
@@ -357,7 +365,6 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   app.post<{ Body: { dados?: Partial<DadosTabloide>; saida?: 'png' | 'pdf' } }>(
     `${BASE}/tabloides/exportar`,
-    { preHandler: auth },
     async (req, reply) => {
       const dados = await prepararDados(req.body?.dados);
       if (!dados.itens.length) return reply.status(400).send({ message: 'Coloque pelo menos um produto.' });
@@ -380,7 +387,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     },
   );
 
-  app.post<{ Body: { dados?: Partial<DadosTabloide> } }>(`${BASE}/tabloides/video`, { preHandler: auth }, async (req, reply) => {
+  app.post<{ Body: { dados?: Partial<DadosTabloide> } }>(`${BASE}/tabloides/video`, async (req, reply) => {
     limparVideos();
     if ([...videos.values()].filter((j) => j.status === 'gerando').length >= 2) {
       return reply.status(429).send({ message: 'Já tem vídeo sendo gerado. Espere terminar.' });
@@ -406,13 +413,13 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     return reply.status(202).send({ id, paginasNoVideo: MAX_PAGINAS_VIDEO });
   });
 
-  app.get<{ Params: { id: string } }>(`${BASE}/tabloides/video/:id`, { preHandler: auth }, async (req, reply) => {
+  app.get<{ Params: { id: string } }>(`${BASE}/tabloides/video/:id`, async (req, reply) => {
     const j = videos.get(req.params.id);
     if (!j) return reply.status(404).send({ message: 'Vídeo não encontrado (passou de 30 minutos?). Gere de novo.' });
     return { status: j.status, progresso: j.progresso, erro: j.erro, tamanho: j.arquivo?.length ?? 0 };
   });
 
-  app.get<{ Params: { id: string } }>(`${BASE}/tabloides/video/:id/arquivo`, { preHandler: auth }, async (req, reply) => {
+  app.get<{ Params: { id: string } }>(`${BASE}/tabloides/video/:id/arquivo`, async (req, reply) => {
     const j = videos.get(req.params.id);
     if (!j?.arquivo) return reply.status(404).send({ message: 'Vídeo não encontrado.' });
     return reply.header('Content-Type', 'video/mp4').header('Content-Disposition', `attachment; filename="${j.nome}"`).send(j.arquivo);
@@ -420,7 +427,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   // ── Legenda com IA ────────────────────────────────────────────────────────
 
-  app.post<{ Body: { dados?: Partial<DadosTabloide> } }>(`${BASE}/tabloides/legenda`, { preHandler: auth }, async (req, reply) => {
+  app.post<{ Body: { dados?: Partial<DadosTabloide> } }>(`${BASE}/tabloides/legenda`, async (req, reply) => {
     const d = await prepararDados(req.body?.dados);
     if (!d.itens.length) return reply.status(400).send({ message: 'Coloque pelo menos um produto.' });
     const lista = d.itens
@@ -450,7 +457,7 @@ ${lista}`;
 
   // ── Publicar no Instagram (via Social media do cliente no painel NX) ──────
 
-  app.get(`${BASE}/tabloides/instagram`, { preHandler: auth }, async () => {
+  app.get(`${BASE}/tabloides/instagram`, async () => {
     const cliente = await clienteDoMercado();
     if (!cliente) return { ok: false, motivo: 'O Mercado Nunes ainda não está ligado a um cliente do painel NX. Peça para a NX configurar.' };
     try {
@@ -471,7 +478,7 @@ ${lista}`;
       base_url?: string;
       video_id?: string;
     };
-  }>(`${BASE}/tabloides/publicar`, { preHandler: auth }, async (req, reply) => {
+  }>(`${BASE}/tabloides/publicar`, async (req, reply) => {
     const b = req.body ?? {};
     const cliente = await clienteDoMercado();
     if (!cliente) return reply.status(400).send({ message: 'O Mercado Nunes ainda não está ligado a um cliente do painel NX.' });
@@ -512,7 +519,7 @@ ${lista}`;
       const { rows } = await client.query<{ id: string }>(
         `INSERT INTO gc_social_producao (gc_cliente_id, titulo, descricao, status, anexos)
          VALUES ($1, $2, $3, 'em_producao', $4::jsonb) RETURNING id`,
-        [cliente.id, titulo.slice(0, 200), `Gerado no tabloide do Mercado Nunes por ${quem(req) ?? 'mercado'}.\n\nLegenda:\n${legenda}`, JSON.stringify(anexos)],
+        [cliente.id, titulo.slice(0, 200), `Gerado no tabloide do Mercado Nunes.\n\nLegenda:\n${legenda}`, JSON.stringify(anexos)],
       );
       await client.query(
         `INSERT INTO gc_social_agendamentos

@@ -8,6 +8,23 @@ import { documentoDaPagina, montarPaginas, type DadosTabloide } from '../../../s
 
 export const LOGO_TABLOIDE = '/assets/mercadonunes-logo.jpg'
 
+/** Miniatura da primeira página (cartões de Templates). */
+export function MiniaturaTabloide({ dados, largura }: { dados: DadosTabloide; largura: number }) {
+  const pagina = React.useMemo(() => montarPaginas(dados, `${window.location.origin}${LOGO_TABLOIDE}`)[0], [dados])
+  const escala = largura / pagina.w
+  return (
+    <div className="overflow-hidden rounded-md shadow" style={{ width: pagina.w * escala, height: pagina.h * escala }}>
+      <iframe
+        title="Miniatura"
+        srcDoc={documentoDaPagina(dados, pagina)}
+        sandbox="allow-same-origin"
+        loading="lazy"
+        style={{ width: pagina.w, height: pagina.h, border: 0, transform: `scale(${escala})`, transformOrigin: '0 0', pointerEvents: 'none' }}
+      />
+    </div>
+  )
+}
+
 export function PreviaTabloide({ dados, largura }: { dados: DadosTabloide; largura: number }) {
   const [atual, setAtual] = React.useState(dados)
   React.useEffect(() => {

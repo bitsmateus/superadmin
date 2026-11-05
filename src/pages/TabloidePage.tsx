@@ -12,18 +12,18 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { acougueApi, acougueToken, AcougueSemSessao, type AcougueUsuario } from '@/api/acougue'
 import {
   baixarArquivo,
   fotoDoProduto,
   tabloideApi,
   type ConfigTabloide,
+  type LayoutTabloide,
   type ProdutoCatalogo,
   type TabloideSalvo,
 } from '@/api/mercadoNunesTabloide'
-import { Moldura, TelaLogin } from '@/pages/AcouguePage'
-import { PreviaTabloide } from '@/components/tabloide/Previa'
-import { EscolherFoto, XADREZ, btnPrimario, btnSecundario, inputCls } from '@/components/tabloide/EscolherFoto'
+import { Moldura } from '@/pages/AcouguePage'
+import { MiniaturaTabloide, PreviaTabloide } from '@/components/tabloide/Previa'
+import { EscolherFoto, Modal, XADREZ, btnPrimario, btnSecundario, inputCls } from '@/components/tabloide/EscolherFoto'
 import { CatalogoProdutos } from '@/components/tabloide/CatalogoProdutos'
 import { ModalLegenda, ModalPublicar, ModalVideo, type VideoPronto } from '@/components/tabloide/Saidas'
 import {
@@ -64,41 +64,10 @@ const lerRascunho = (): { dados: DadosTabloide; idSalvo: string | null } | null 
 }
 
 export function TabloidePage() {
-  const [usuario, setUsuario] = React.useState<AcougueUsuario | null>(null)
-  const [carregando, setCarregando] = React.useState(true)
-
-  React.useEffect(() => {
-    if (!acougueToken.get()) {
-      setCarregando(false)
-      return
-    }
-    acougueApi
-      .me()
-      .then(setUsuario)
-      .catch(() => acougueToken.clear())
-      .finally(() => setCarregando(false))
-  }, [])
-
-  if (carregando) {
-    return (
-      <Moldura titulo={TITULO} subtitulo={SUBTITULO}>
-        <p style={{ color: '#7A716A', textAlign: 'center', padding: 40 }}>Carregando…</p>
-      </Moldura>
-    )
-  }
-  if (!usuario) return <TelaLogin onEntrar={setUsuario} titulo={TITULO} subtitulo={SUBTITULO} />
-  return (
-    <Editor
-      usuario={usuario}
-      onSair={() => {
-        acougueToken.clear()
-        setUsuario(null)
-      }}
-    />
-  )
+  return <Editor />
 }
 
-type Aba = 'montar' | 'catalogo' | 'historico'
+type Aba = 'montar' | 'catalogo' | 'historico' | 'templates'
 
 /** As fontes do tabloide também na página (miniaturas dos modelos), não só dentro da prévia. */
 function useFontesDoTabloide() {
@@ -112,7 +81,7 @@ function useFontesDoTabloide() {
   }, [])
 }
 
-function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => void }) {
+function Editor() {
   useFontesDoTabloide()
   const inicial = React.useMemo(lerRascunho, [])
   const [aba, setAba] = React.useState<Aba>('montar')
@@ -120,21 +89,9 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
   const [idSalvo, setIdSalvo] = React.useState<string | null>(inicial?.idSalvo ?? null)
   const [config, setConfig] = React.useState<ConfigTabloide | null>(null)
   const [video, setVideo] = React.useState<VideoPronto | null>(null)
-  const [modal, setModal] = React.useState<null | 'video' | 'publicar' | 'legenda'>(null)
+  const [modal, setModal] = React.useState<null | 'video' | 'publicar' | 'legenda' | 'layout'>(null)
   const [formatoPublicar, setFormatoPublicar] = React.useState<'feed' | 'story' | 'reels'>('feed')
   const [ocupado, setOcupado] = React.useState<string | null>(null)
-
-  const sessaoCaiu = React.useCallback(
-    (e: unknown) => {
-      if (e instanceof AcougueSemSessao) {
-        toast.error(e.message)
-        onSair()
-        return true
-      }
-      return false
-    },
-    [onSair],
-  )
 
   React.useEffect(() => {
     tabloideApi
@@ -149,8 +106,8 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
           aviso: d.aviso || c.aviso,
         }))
       })
-      .catch((e) => sessaoCaiu(e) || toast.error((e as Error).message))
-  }, [sessaoCaiu])
+      .catch((e: Error) => toast.error(e.message))
+  }, [])
 
   React.useEffect(() => {
     try {
@@ -172,7 +129,7 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
       else setIdSalvo((await tabloideApi.criarTabloide(titulo, dados)).id)
       if (!silencioso) toast.success('Tabloide salvo no histórico.')
     } catch (e) {
-      if (!sessaoCaiu(e)) toast.error((e as Error).message)
+      toast.error((e as Error).message)
     }
   }
 
@@ -193,7 +150,7 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
         toast.success(arquivos.length > 1 ? `${arquivos.length} imagens baixadas.` : 'Imagem baixada.')
       }
     } catch (e) {
-      if (!sessaoCaiu(e)) toast.error((e as Error).message)
+      toast.error((e as Error).message)
     } finally {
       setOcupado(null)
     }
@@ -214,6 +171,30 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
     toast.success(copia ? 'Cópia aberta. Troque os preços e salve.' : 'Tabloide aberto.')
   }
 
+  /** Visual = modelo, formato e textos do layout com os MEUS produtos; com produtos = tabloide novo igual ao layout. */
+  const usarLayout = (l: LayoutTabloide, comProdutos: boolean) => {
+    const v = { ...DADOS_VAZIOS(), ...l.dados }
+    if (comProdutos) {
+      setDados(v)
+      setIdSalvo(null)
+    } else {
+      setDados((d) => ({
+        ...d,
+        modeloId: v.modeloId,
+        formato: v.formato,
+        porPagina: v.porPagina,
+        titulo: v.titulo,
+        subtitulo: v.subtitulo,
+        endereco: v.endereco || d.endereco,
+        whatsapp: v.whatsapp || d.whatsapp,
+        aviso: v.aviso || d.aviso,
+      }))
+    }
+    setVideo(null)
+    setAba('montar')
+    toast.success(`Layout "${l.nome}" aplicado.`)
+  }
+
   return (
     <Moldura
       titulo={TITULO}
@@ -224,10 +205,6 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
           <Link to="/mercadonunes" className={btnSecundario}>
             Plaquinhas
           </Link>
-          <span className="hidden text-[#7A716A] sm:inline">{usuario.nome || usuario.email}</span>
-          <button onClick={onSair} className={btnSecundario}>
-            Sair
-          </button>
         </div>
       }
     >
@@ -237,6 +214,7 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
             ['montar', 'Montar tabloide'],
             ['catalogo', 'Catálogo de produtos'],
             ['historico', 'Histórico'],
+            ['templates', 'Templates'],
           ] as const
         ).map(([id, nome]) => (
           <button
@@ -250,11 +228,12 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
       </div>
 
       {aba === 'catalogo' && <CatalogoProdutos removeBg={!!config?.removeBg} />}
-      {aba === 'historico' && <Historico onAbrir={abrir} sessaoCaiu={sessaoCaiu} />}
+      {aba === 'historico' && <Historico onAbrir={abrir} />}
+      {aba === 'templates' && <Templates temProdutos={dados.itens.length > 0} onUsar={usarLayout} />}
       {aba === 'montar' && (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_440px]">
           <div className="flex min-w-0 flex-col gap-4">
-            <ListaDeOfertas dados={dados} setDados={setDados} sessaoCaiu={sessaoCaiu} />
+            <ListaDeOfertas dados={dados} setDados={setDados} />
             <ModeloEFormato dados={dados} muda={muda} />
             <Textos dados={dados} muda={muda} config={config} setConfig={setConfig} />
           </div>
@@ -292,6 +271,9 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
                 <button className={btnSecundario} onClick={() => void salvar()}>
                   💾 {idSalvo ? 'Salvar' : 'Salvar no histórico'}
                 </button>
+                <button className={btnSecundario} onClick={() => setModal('layout')}>
+                  ⭐ Salvar como layout
+                </button>
               </div>
               <button className="mt-2 w-full text-center text-xs font-semibold text-[#7A716A] hover:underline" onClick={novo}>
                 Começar um tabloide novo
@@ -327,6 +309,16 @@ function Editor({ usuario, onSair }: { usuario: AcougueUsuario; onSair: () => vo
         />
       )}
       {modal === 'legenda' && <ModalLegenda dados={dados} onFechar={() => setModal(null)} />}
+      {modal === 'layout' && (
+        <SalvarLayout
+          dados={dados}
+          onFechar={() => setModal(null)}
+          onSalvo={() => {
+            setModal(null)
+            setAba('templates')
+          }}
+        />
+      )}
     </Moldura>
   )
 }
@@ -363,11 +355,9 @@ function Bloco({ titulo, dica, children, direita }: { titulo: string; dica?: str
 function ListaDeOfertas({
   dados,
   setDados,
-  sessaoCaiu,
 }: {
   dados: DadosTabloide
   setDados: React.Dispatch<React.SetStateAction<DadosTabloide>>
-  sessaoCaiu: (e: unknown) => boolean
 }) {
   const [texto, setTexto] = React.useState('')
   const [lendo, setLendo] = React.useState(false)
@@ -411,7 +401,7 @@ function ListaDeOfertas({
         { duration: 6000 },
       )
     } catch (e) {
-      if (!sessaoCaiu(e)) toast.error((e as Error).message)
+      toast.error((e as Error).message)
     } finally {
       setLendo(false)
     }
@@ -429,7 +419,7 @@ function ListaDeOfertas({
       ])
       setEan('')
     } catch (e) {
-      if (!sessaoCaiu(e)) toast.error((e as Error).message)
+      toast.error((e as Error).message)
     }
   }
 
@@ -735,14 +725,14 @@ function Textos({
 
 // ── Histórico ───────────────────────────────────────────────────────────────
 
-function Historico({ onAbrir, sessaoCaiu }: { onAbrir: (t: TabloideSalvo, copia: boolean) => void; sessaoCaiu: (e: unknown) => boolean }) {
+function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) => void }) {
   const [lista, setLista] = React.useState<TabloideSalvo[] | null>(null)
   const carregar = React.useCallback(() => {
     tabloideApi
       .tabloides()
       .then((r) => setLista(r.tabloides))
-      .catch((e) => sessaoCaiu(e) || toast.error((e as Error).message))
-  }, [sessaoCaiu])
+      .catch((e: Error) => toast.error(e.message))
+  }, [])
   React.useEffect(carregar, [carregar])
 
   const remover = async (t: TabloideSalvo) => {
@@ -782,6 +772,119 @@ function Historico({ onAbrir, sessaoCaiu }: { onAbrir: (t: TabloideSalvo, copia:
                   Duplicar
                 </button>
                 <button className="ml-auto text-xs font-semibold text-red-600 hover:underline" onClick={() => void remover(t)}>
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Templates (layouts salvos) ──────────────────────────────────────────────
+
+function SalvarLayout({ dados, onFechar, onSalvo }: { dados: DadosTabloide; onFechar: () => void; onSalvo: () => void }) {
+  const [nome, setNome] = React.useState(dados.titulo || modeloPorId(dados.modeloId).nome)
+  const [comProdutos, setComProdutos] = React.useState(true)
+  const [salvando, setSalvando] = React.useState(false)
+  const salvar = async () => {
+    if (!nome.trim()) return toast.error('Dê um nome pro layout.')
+    setSalvando(true)
+    try {
+      await tabloideApi.salvarLayout(nome.trim(), comProdutos ? dados : { ...dados, itens: [] })
+      toast.success('Layout salvo. Ele aparece em Templates.')
+      onSalvo()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setSalvando(false)
+    }
+  }
+  return (
+    <Modal titulo="Salvar como layout" onFechar={onFechar} largura={460}>
+      <div className="flex flex-col gap-3">
+        <label className="text-xs font-semibold text-[#7A716A]">
+          Nome do layout
+          <input
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            maxLength={80}
+            className={inputCls}
+            autoFocus
+            onKeyDown={(e) => e.key === 'Enter' && void salvar()}
+          />
+        </label>
+        <p className="text-xs text-[#9A928B]">
+          Guarda o modelo, o formato, os textos e o rodapé. Se já existir um layout com esse nome, ele é substituído.
+        </p>
+        <label className="flex items-center gap-2 text-sm text-[#2A2622]">
+          <input type="checkbox" checked={comProdutos} onChange={(e) => setComProdutos(e.target.checked)} />
+          Guardar também a lista de produtos ({dados.itens.length})
+        </label>
+        <div className="flex justify-end gap-2">
+          <button className={btnSecundario} onClick={onFechar}>
+            Cancelar
+          </button>
+          <button className={btnPrimario} onClick={() => void salvar()} disabled={salvando}>
+            {salvando ? 'Salvando…' : 'Salvar layout'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function Templates({ temProdutos, onUsar }: { temProdutos: boolean; onUsar: (l: LayoutTabloide, comProdutos: boolean) => void }) {
+  const [lista, setLista] = React.useState<LayoutTabloide[] | null>(null)
+  const carregar = React.useCallback(() => {
+    tabloideApi
+      .layouts()
+      .then((r) => setLista(r.layouts))
+      .catch((e: Error) => toast.error(e.message))
+  }, [])
+  React.useEffect(carregar, [carregar])
+
+  const remover = async (l: LayoutTabloide) => {
+    if (!window.confirm(`Excluir o layout "${l.nome}"?`)) return
+    await tabloideApi.removerLayout(l.id).catch((e: Error) => toast.error(e.message))
+    carregar()
+  }
+
+  if (lista === null) return <p className="p-6 text-center text-sm text-[#9A928B]">Carregando…</p>
+  if (!lista.length) {
+    return (
+      <p className="rounded-xl bg-white p-8 text-center text-sm text-[#7A716A]">
+        Nenhum layout salvo ainda. Monte um tabloide e clique em <b>⭐ Salvar como layout</b>: ele aparece aqui para usar de novo.
+      </p>
+    )
+  }
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {lista.map((l) => {
+        const d = { ...DADOS_VAZIOS(), ...l.dados }
+        const n = d.itens.length
+        return (
+          <div key={l.id} className="flex flex-col overflow-hidden rounded-xl bg-white shadow-sm">
+            <div className="flex justify-center bg-[#EDE8E1] p-3">
+              <MiniaturaTabloide dados={d} largura={220} />
+            </div>
+            <div className="flex flex-1 flex-col gap-1 p-3">
+              <div className="text-sm font-bold text-[#2A2622]">{l.nome}</div>
+              <div className="text-xs text-[#7A716A]">
+                {modeloPorId(d.modeloId).nome} · {FORMATOS[d.formato]?.nome} · {n ? `${n} produto${n > 1 ? 's' : ''}` : 'sem produtos'}
+              </div>
+              <div className="mt-2 flex flex-col gap-1.5">
+                <button className={btnPrimario} onClick={() => onUsar(l, false)} title="Troca o visual e mantém os produtos que você já colocou">
+                  {temProdutos ? 'Usar com meus produtos' : 'Usar este layout'}
+                </button>
+                {n > 0 && (
+                  <button className={btnSecundario} onClick={() => onUsar(l, true)} title="Começa um tabloide novo igual a este, com os produtos dele">
+                    Usar com os produtos dele
+                  </button>
+                )}
+                <button className="text-xs font-semibold text-red-600 hover:underline" onClick={() => void remover(l)}>
                   Excluir
                 </button>
               </div>

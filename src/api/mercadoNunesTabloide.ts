@@ -1,9 +1,7 @@
-import { acougueToken, AcougueSemSessao } from '@/api/acougue'
 import type { DadosTabloide } from '../../server/src/lib/tabloide/layout'
 
 /**
- * Cliente da API do tabloide (/mercadonunes/tabloide). Usa o MESMO login do açougue (é o acesso do
- * pessoal do mercado): o token fica em `acougue_token`, separado do painel.
+ * Cliente da API do tabloide (/mercadonunes/tabloide). Página pública, sem login.
  */
 
 export const API_URL = import.meta.env.VITE_API_URL ?? ''
@@ -39,24 +37,25 @@ export interface ConfigTabloide {
   ia: boolean
 }
 
+export interface LayoutTabloide {
+  id: string
+  nome: string
+  dados: DadosTabloide
+  created_at: string
+}
+
 export type ModoRecorte = 'auto' | 'sem' | 'removebg'
 
 export const fotoDoProduto = (p: Pick<ProdutoCatalogo, 'id' | 'foto_versao' | 'tem_foto'>): string | null =>
   p.tem_foto ? `${BASE}/produtos/${p.id}/foto?v=${p.foto_versao}` : null
 
 async function req<T>(path: string, options: RequestInit = {}, comoBlob = false): Promise<T> {
-  const token = acougueToken.get()
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
       ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   })
-  if (res.status === 401 || res.status === 403) {
-    const corpo = await res.json().catch(() => ({}))
-    throw new AcougueSemSessao((corpo as { message?: string }).message ?? 'Sessão expirada — entre de novo.')
-  }
   if (!res.ok) {
     const corpo = await res.json().catch(() => ({}))
     throw new Error((corpo as { message?: string }).message ?? `Erro ${res.status}`)
@@ -89,6 +88,10 @@ export const tabloideApi = {
   salvarTabloide: (id: string, titulo: string, dados: DadosTabloide) =>
     req<TabloideSalvo>(`/tabloides/${id}`, { method: 'PATCH', body: JSON.stringify({ titulo, dados }) }),
   removerTabloide: (id: string) => req<{ ok: true }>(`/tabloides/${id}`, { method: 'DELETE' }),
+
+  layouts: () => req<{ layouts: LayoutTabloide[] }>('/tabloide/layouts'),
+  salvarLayout: (nome: string, dados: DadosTabloide) => req<LayoutTabloide>('/tabloide/layouts', json({ nome, dados })),
+  removerLayout: (id: string) => req<{ ok: true }>(`/tabloide/layouts/${id}`, { method: 'DELETE' }),
 
   exportarPng: (dados: DadosTabloide) =>
     req<{ arquivos: { nome: string; dataUrl: string }[] }>('/tabloides/exportar', json({ dados, saida: 'png' })),

@@ -2662,15 +2662,25 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ message: `Sem arte final anexada: ${semArte.map((x) => `"${x.titulo}"`).join(', ')}` });
     }
     const movidas = await marcarComCliente(req.params.id, ids, sub);
-    let link = await queryOne<{ token: string }>('SELECT token FROM gc_links_publicos WHERE gc_cliente_id = $1 AND ativo', [req.params.id]);
-    if (!link) {
-      link = await queryOne<{ token: string }>(
-        'INSERT INTO gc_links_publicos (gc_cliente_id, token) VALUES ($1, $2) RETURNING token',
-        [req.params.id, crypto.randomBytes(24).toString('base64url')]
-      );
-      await registrarEvento(req.params.id, 'Link do portal gerado', 'Pra aprovação das artes', sub);
-    }
-    return { enviadas: movidas.length, token: link!.token };
+    return { enviadas: movidas.length, token: await tokenDoPortal(req.params.id, sub) };
+  });
+
+  /** O token do link do portal do cliente; cria um se ainda não houver (nunca revoga o atual). */
+  async function tokenDoPortal(clienteId: string, sub: string): Promise<string> {
+    const atual = await queryOne<{ token: string }>('SELECT token FROM gc_links_publicos WHERE gc_cliente_id = $1 AND ativo', [clienteId]);
+    if (atual) return atual.token;
+    const novo = await queryOne<{ token: string }>(
+      'INSERT INTO gc_links_publicos (gc_cliente_id, token) VALUES ($1, $2) RETURNING token',
+      [clienteId, crypto.randomBytes(24).toString('base64url')]
+    );
+    await registrarEvento(clienteId, 'Link do portal gerado', 'Pra aprovação das artes', sub);
+    return novo!.token;
+  }
+
+  // GET /api/gc/clientes/:id/social/link-aprovacao — o link do portal (aba das artes), sem mexer em nenhuma arte.
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/social/link-aprovacao', autenticado, async (req) => {
+    const { sub } = req.user as { sub: string };
+    return { token: await tokenDoPortal(req.params.id, sub) };
   });
 
   // PUT /api/gc/clientes/:id/social/config — gestor de tráfego que recebe o aviso e pasta do Drive das artes aprovadas.

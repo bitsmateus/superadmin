@@ -426,6 +426,21 @@ function ProximoPasso({ demanda, clienteId, onMover, onMudou }: {
     }
   }
 
+  /** Só copia o link do portal, sem mexer na arte (pra artes já aprovadas). */
+  const copiarLink = async () => {
+    try {
+      const url = enderecoDoPortal((await gestaoClientes.linkDeAprovacao(clienteId)).token, 'artes')
+      toast.success((await copiar(url)) ? 'Link do portal copiado' : `Link do portal: ${url}`)
+    } catch (err) {
+      toast.error((err as Error).message)
+    }
+  }
+  const botaoLink = (
+    <Button size="sm" variant="ghost" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => void copiarLink()}>
+      Copiar link do portal
+    </Button>
+  )
+
   switch (demanda.status) {
     case 'para_producao':
       return <Button size="sm" variant="secondary" onClick={() => onMover('em_producao')}>Começar a criar</Button>
@@ -451,9 +466,14 @@ function ProximoPasso({ demanda, clienteId, onMover, onMudou }: {
         </div>
       )
     case 'aprovado':
-      return <Button size="sm" variant="secondary" onClick={() => onMover('trafego')}>Já está no tráfego</Button>
+      return (
+        <div className="flex flex-wrap gap-2">
+          {botaoLink}
+          <Button size="sm" variant="secondary" onClick={() => onMover('trafego')}>Já está no tráfego</Button>
+        </div>
+      )
     default:
-      return null
+      return botaoLink
   }
 }
 

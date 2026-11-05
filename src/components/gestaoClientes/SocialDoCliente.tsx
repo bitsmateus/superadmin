@@ -24,48 +24,79 @@ const dataBr = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
 const hojeISO = () => new Date().toISOString().slice(0, 10)
 type Coluna = (typeof ETAPAS_ARTE)[number]
 
-/** A coluna do quadro — é o alvo onde o card é solto. O "+" sobe uma arte pronta direto nesta etapa. */
-function ColunaProducao({ col, total, onSubirArte, acao, children }: {
-  col: Coluna; total: number; onSubirArte: (arquivos: File[]) => void; acao?: React.ReactNode; children: React.ReactNode
+/**
+ * A coluna do quadro — é o alvo onde o card é solto. Embaixo dela: "Nova demanda" (abre o formulário já
+ * nesta etapa) e "Subir artes" (várias de uma vez, cada arquivo vira um card separado). Arrastar arquivos
+ * do computador pra coluna faz o mesmo.
+ */
+function ColunaProducao({ col, total, onSubirArte, onNova, acao, children }: {
+  col: Coluna; total: number; onSubirArte: (arquivos: File[]) => void; onNova: () => void; acao?: React.ReactNode; children: React.ReactNode
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${col.valor}`, data: { status: col.valor } })
   const input = React.useRef<HTMLInputElement>(null)
+  const [arquivoPorCima, setArquivoPorCima] = React.useState(false)
+  const temArquivo = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
   return (
     <div
       ref={setNodeRef}
-      className={cn('flex min-w-0 flex-col rounded-2xl border bg-elevate/[0.025] transition-colors', isOver ? 'border-accent/60 bg-accent/[0.04]' : 'border-line')}
+      onDragOver={(e) => { if (temArquivo(e)) { e.preventDefault(); setArquivoPorCima(true) } }}
+      onDragLeave={() => setArquivoPorCima(false)}
+      onDrop={(e) => {
+        if (!temArquivo(e)) return
+        e.preventDefault()
+        setArquivoPorCima(false)
+        onSubirArte(Array.from(e.dataTransfer.files))
+      }}
+      className={cn(
+        'flex min-w-0 flex-col rounded-2xl border bg-elevate/[0.025] transition-colors',
+        isOver || arquivoPorCima ? 'border-accent/60 bg-accent/[0.04]' : 'border-line',
+      )}
     >
       <header className="flex items-center justify-between gap-1 px-3 py-2.5">
         <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground" title={col.ajuda}>
           <span className={cn('h-2 w-2 shrink-0 rounded-full', col.cor)} />
           <span className="truncate">{col.titulo}</span>
         </h3>
-        <span className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => input.current?.click()}
-            className="rounded-md p-1 text-foreground/35 hover:bg-elevate/[0.06] hover:text-accent"
-            title={`Subir arte pronta direto em ${col.titulo}`}
-            aria-label={`Subir arte pronta em ${col.titulo}`}
-          >
-            <ImagePlus className="h-3.5 w-3.5" />
-          </button>
-          <span className="rounded-full bg-elevate/[0.06] px-2 text-xs tabular-nums text-foreground/55">{total}</span>
-        </span>
-        <input
-          ref={input}
-          type="file"
-          multiple
-          accept="image/*,video/*"
-          className="hidden"
-          onChange={(e) => {
-            onSubirArte(Array.from(e.target.files ?? []))
-            e.target.value = ''
-          }}
-        />
+        <span className="shrink-0 rounded-full bg-elevate/[0.06] px-2 text-xs tabular-nums text-foreground/55">{total}</span>
       </header>
       {acao && <div className="px-2 pb-1.5">{acao}</div>}
-      <div className="min-h-[80px] flex-1 space-y-1.5 px-2 pb-2">{children}</div>
+      <div className="min-h-[60px] flex-1 space-y-1.5 px-2 pb-1.5">
+        {children}
+        {arquivoPorCima && (
+          <p className="rounded-xl border-2 border-dashed border-accent/60 px-3 py-4 text-center text-xs font-medium text-accent">
+            Solte pra criar um card por arquivo
+          </p>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-1 px-2 pb-2">
+        <button
+          type="button"
+          onClick={onNova}
+          className="flex h-8 items-center justify-center gap-1 whitespace-nowrap rounded-lg text-xs text-foreground/50 hover:bg-elevate/[0.06] hover:text-accent"
+          title={`Nova demanda já em ${col.titulo}`}
+        >
+          <Plus className="h-3.5 w-3.5 shrink-0" /> Nova
+        </button>
+        <button
+          type="button"
+          onClick={() => input.current?.click()}
+          className="flex h-8 items-center justify-center gap-1 whitespace-nowrap rounded-lg text-xs text-foreground/50 hover:bg-elevate/[0.06] hover:text-accent"
+          title={`Subir uma ou várias artes prontas em ${col.titulo} (cada arquivo vira um card)`}
+        >
+          <ImagePlus className="h-3.5 w-3.5 shrink-0" /> Subir artes
+        </button>
+      </div>
+      <input
+        ref={input}
+        type="file"
+        multiple
+        accept="image/*,video/*"
+        className="hidden"
+        onChange={(e) => {
+          onSubirArte(Array.from(e.target.files ?? []))
+          e.target.value = ''
+        }}
+      />
     </div>
   )
 }
@@ -337,18 +368,53 @@ function ModalPdfArtes({ aberto, onFechar, clienteId, demandas, periodo, onMudou
 
 // ------------------------------------------------------------------ enviar pro cliente aprovar
 
+function LinkDoPortal({ link }: { link: string }) {
+  const mensagem = `Oi! As artes novas estão prontas pra você aprovar. É só abrir o link, olhar cada uma e tocar em Aprovar ou Pedir ajuste: ${link}`
+  return (
+    <div className="space-y-2 rounded-xl border border-accent/30 bg-accent/[0.03] p-3">
+      <p className="text-xs font-semibold text-foreground/70">Link de aprovação do cliente (é sempre o mesmo)</p>
+      <div className="flex gap-2">
+        <input readOnly value={link} className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-sm text-foreground" onFocus={(e) => e.target.select()} />
+        <Button size="sm" variant="secondary" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => void copiar(link).then((ok) => (ok ? toast.success('Link copiado') : toast.error('Não deu pra copiar: selecione o link e copie')))}>
+          Copiar
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <a
+          href={`https://wa.me/?text=${encodeURIComponent(mensagem)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#25D366] px-3 text-xs font-medium text-white hover:opacity-90"
+        >
+          <MessageCircle className="h-3.5 w-3.5" /> Abrir no WhatsApp com a mensagem
+        </a>
+        <Button variant="ghost" size="sm" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => void copiar(mensagem).then(() => toast.success('Mensagem copiada'))}>
+          Copiar a mensagem
+        </Button>
+        <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 px-2 text-xs text-accent hover:underline">
+          <ExternalLink className="h-3.5 w-3.5" /> Ver como o cliente vê
+        </a>
+      </div>
+    </div>
+  )
+}
+
 function ModalEnviarAprovacao({ aberto, onFechar, clienteId, demandas, onMudou }: {
   aberto: boolean; onFechar: () => void; clienteId: string; demandas: GcSocialProducao[]; onMudou: () => void
 }) {
-  const candidatas = demandas.filter((d) => imagensFinais(d).length > 0 && ['em_producao', 'revisao', 'com_cliente'].includes(d.status))
+  const candidatas = demandas.filter((d) => imagensFinais(d).length > 0 && ['para_producao', 'em_producao', 'revisao', 'com_cliente'].includes(d.status))
+  const aprovadas = demandas.filter((d) => d.status === 'aprovado' || d.status === 'trafego')
   const [marcados, setMarcados] = React.useState<Set<string>>(new Set())
   const [enviando, setEnviando] = React.useState(false)
   const [link, setLink] = React.useState('')
 
+  // Ao abrir: já busca o link do portal (cria se o cliente ainda não tiver) e marca as que estão em revisão.
   React.useEffect(() => {
     if (!aberto) return
-    setLink('')
     setMarcados(new Set(candidatas.filter((d) => d.status === 'revisao').map((d) => d.id)))
+    gestaoClientes.linkDeAprovacao(clienteId)
+      .then((r) => setLink(enderecoDoPortal(r.token, 'artes')))
+      .catch((err: Error) => toast.error('Falha ao buscar o link: ' + err.message))
   }, [aberto]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const enviar = async () => {
@@ -358,9 +424,10 @@ function ModalEnviarAprovacao({ aberto, onFechar, clienteId, demandas, onMudou }
       const r = await gestaoClientes.enviarParaAprovacao(clienteId, [...marcados])
       const url = enderecoDoPortal(r.token, 'artes')
       setLink(url)
-      await copiar(url)
+      const ok = await copiar(url)
+      setMarcados(new Set())
       onMudou()
-      toast.success(`${r.enviadas} arte${r.enviadas === 1 ? '' : 's'} no portal do cliente. Link copiado.`)
+      toast.success(`${r.enviadas} arte${r.enviadas === 1 ? '' : 's'} no portal do cliente.${ok ? ' Link copiado.' : ''}`)
     } catch (err) {
       toast.error((err as Error).message)
     } finally {
@@ -368,7 +435,7 @@ function ModalEnviarAprovacao({ aberto, onFechar, clienteId, demandas, onMudou }
     }
   }
 
-  const mensagem = `Oi! As artes novas estão prontas pra você aprovar. É só abrir o link, olhar cada uma e tocar em Aprovar ou Pedir ajuste: ${link}`
+  const etapa = (d: GcSocialProducao) => ETAPAS_ARTE.find((e) => e.valor === d.status)?.titulo
 
   return (
     <Modal
@@ -378,79 +445,76 @@ function ModalEnviarAprovacao({ aberto, onFechar, clienteId, demandas, onMudou }
       title="Enviar pro cliente aprovar"
       description="As artes marcadas vão pro portal do cliente. Ele aprova ou pede ajuste em cada uma, e o quadro muda sozinho."
       footer={
-        link ? (
-          <div className="flex justify-end"><Button onClick={onFechar}>Pronto</Button></div>
-        ) : (
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-foreground/50">{marcados.size} marcada{marcados.size === 1 ? '' : 's'}</span>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={onFechar}>Cancelar</Button>
-              <Button loading={enviando} disabled={marcados.size === 0} leftIcon={<Send className="h-4 w-4" />} onClick={() => void enviar()}>Enviar e copiar link</Button>
-            </div>
-          </div>
-        )
-      }
-    >
-      {link ? (
-        <div className="space-y-3">
-          <p className="text-sm text-foreground/75">Mande este link pro cliente (já está copiado):</p>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-foreground/50">{marcados.size} marcada{marcados.size === 1 ? '' : 's'}</span>
           <div className="flex gap-2">
-            <input readOnly value={link} className="h-10 min-w-0 flex-1 rounded-lg border border-line bg-elevate/[0.03] px-3 text-sm text-foreground" onFocus={(e) => e.target.select()} />
-            <Button variant="secondary" leftIcon={<Copy className="h-4 w-4" />} onClick={() => void copiar(link).then(() => toast.success('Copiado'))}>Copiar</Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(mensagem)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#25D366] px-3 text-sm font-medium text-white hover:opacity-90"
-            >
-              <MessageCircle className="h-4 w-4" /> Abrir no WhatsApp com a mensagem
-            </a>
-            <Button variant="ghost" size="sm" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => void copiar(mensagem).then(() => toast.success('Mensagem copiada'))}>
-              Copiar a mensagem
-            </Button>
-            <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-1 px-2 text-sm text-accent hover:underline">
-              <ExternalLink className="h-3.5 w-3.5" /> Ver como o cliente vê
-            </a>
+            <Button variant="ghost" onClick={onFechar}>Fechar</Button>
+            <Button loading={enviando} disabled={marcados.size === 0} leftIcon={<Send className="h-4 w-4" />} onClick={() => void enviar()}>Enviar e copiar link</Button>
           </div>
         </div>
-      ) : candidatas.length === 0 ? (
-        <p className="py-6 text-center text-sm text-foreground/55">
-          Nenhuma arte com arte final em criação ou revisão neste mês. Anexe a arte final no card primeiro.
-        </p>
-      ) : (
-        <ul className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-          {candidatas.map((d) => {
-            const marcado = marcados.has(d.id)
-            return (
-              <li key={d.id}>
-                <label className={cn('flex cursor-pointer items-center gap-3 rounded-xl border p-2.5', marcado ? 'border-accent/40 bg-accent/[0.03]' : 'border-line')}>
-                  <input
-                    type="checkbox"
-                    checked={marcado}
-                    onChange={() => setMarcados((s) => { const n = new Set(s); if (n.has(d.id)) n.delete(d.id); else n.add(d.id); return n })}
-                    className="h-4 w-4 shrink-0 accent-[#4F8EF7]"
-                  />
-                  <img src={imagensFinais(d)[0].dataUrl} alt="" className="h-14 w-12 shrink-0 rounded-md object-cover" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-foreground">{d.titulo}</span>
-                    <span className="flex flex-wrap items-center gap-2 text-[11px] text-foreground/50">
-                      {ETAPAS_ARTE.find((e) => e.valor === d.status)?.titulo}
-                      {d.revisao_ia && (
-                        <span className={d.revisao_ia.ok ? 'text-success' : 'text-warning'}>
-                          {d.revisao_ia.ok ? '· IA ok' : `· IA apontou ${d.revisao_ia.problemas.length} ponto(s)`}
+      }
+    >
+      <div className="space-y-4">
+        {link ? <LinkDoPortal link={link} /> : <p className="flex items-center gap-1.5 text-xs text-foreground/50"><Loader2 className="h-3 w-3 animate-spin" /> Buscando o link…</p>}
+
+        {candidatas.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-line px-4 py-5 text-center text-sm text-foreground/55">
+            Nenhuma arte pra mandar neste mês: as que têm arte final já estão aprovadas, ou falta anexar a arte final no card.
+          </p>
+        ) : (
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-foreground/70">Mandar pra aprovação</p>
+            <ul className="max-h-[40vh] space-y-2 overflow-y-auto pr-1">
+              {candidatas.map((d) => {
+                const marcado = marcados.has(d.id)
+                return (
+                  <li key={d.id}>
+                    <label className={cn('flex cursor-pointer items-center gap-3 rounded-xl border p-2.5', marcado ? 'border-accent/40 bg-accent/[0.03]' : 'border-line')}>
+                      <input
+                        type="checkbox"
+                        checked={marcado}
+                        onChange={() => setMarcados((x) => { const n = new Set(x); if (n.has(d.id)) n.delete(d.id); else n.add(d.id); return n })}
+                        className="h-4 w-4 shrink-0 accent-[#4F8EF7]"
+                      />
+                      <img src={imagensFinais(d)[0].dataUrl} alt="" className="h-14 w-12 shrink-0 rounded-md object-cover" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-foreground">{d.titulo}</span>
+                        <span className="flex flex-wrap items-center gap-2 text-[11px] text-foreground/50">
+                          {etapa(d)}
+                          {d.revisao_ia && (
+                            <span className={d.revisao_ia.ok ? 'text-success' : 'text-warning'}>
+                              {d.revisao_ia.ok ? '· IA ok' : `· IA apontou ${d.revisao_ia.problemas.length} ponto(s)`}
+                            </span>
+                          )}
+                          {d.status === 'com_cliente' && <span>· já está com o cliente (reenviar)</span>}
                         </span>
-                      )}
-                      {d.status === 'com_cliente' && <span>· reenviar</span>}
-                    </span>
-                  </span>
-                </label>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+                      </span>
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+
+        {aprovadas.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-foreground/70">Já aprovadas neste mês ({aprovadas.length}) · aparecem no portal como aprovadas</p>
+            <ul className="space-y-1.5">
+              {aprovadas.map((d) => {
+                const capa = imagensFinais(d)[0]
+                return (
+                  <li key={d.id} className="flex items-center gap-3 rounded-xl border border-line p-2 opacity-80">
+                    {capa ? <img src={capa.dataUrl} alt="" className="h-10 w-9 shrink-0 rounded-md object-cover" /> : <span className="h-10 w-9 shrink-0 rounded-md bg-elevate/[0.06]" />}
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">{d.titulo}</span>
+                    <span className="shrink-0 text-[11px] text-success">✓ {d.aprovado_por || 'Aprovada'} · {etapa(d)}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+      </div>
     </Modal>
   )
 }
@@ -580,21 +644,26 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
 
   /** O "+" da coluna: cada imagem vira um card já naquela etapa, com a imagem como arte final. */
   const subirArtePronta = async (status: GcSocialStatus, arquivos: File[]) => {
-    if (arquivos.length === 0) return
-    const t = toast.loading('Subindo arte…')
+    const midias = arquivos.filter((a) => /^(image|video)\//.test(a.type))
+    if (midias.length < arquivos.length) toast.error('Só imagem ou vídeo vira card de arte; os outros arquivos foram ignorados')
+    if (midias.length === 0) return
+    const t = toast.loading(midias.length > 1 ? `Subindo ${midias.length} artes…` : 'Subindo arte…')
+    let feitas = 0
     try {
-      for (const arquivo of arquivos) {
+      for (const arquivo of midias) {
         if (arquivo.size > MAX_BYTES) {
           toast.error(`"${arquivo.name}" passa de 5MB`)
           continue
         }
+        if (midias.length > 1) toast.loading(`Subindo ${feitas + 1} de ${midias.length}…`, { id: t })
         const titulo = `Arte: ${arquivo.name.replace(/\.\w+$/, '').replace(/[-_]+/g, ' ').trim() || 'imagem'}`
         const criado = await gestaoClientes.criarSocialProducao(clienteId, { titulo, status, mes: mes ?? mesDeHoje() })
         const { name, type, size, dataUrl } = await lerArquivo(arquivo)
         await gestaoClientes.anexarNaProducao(criado.id, { name, type, size, dataUrl, papel: 'final' })
+        feitas++
       }
       await carregar()
-      toast.success('Arte adicionada', { id: t })
+      toast.success(feitas === 1 ? '1 card criado' : `${feitas} cards criados, um por arquivo`, { id: t })
     } catch (err) {
       toast.error('Falha ao subir: ' + (err as Error).message, { id: t })
     }
@@ -625,9 +694,12 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
     }
   }
 
+  // Trava síncrona: dois cliques rápidos em Salvar chegam antes do botão ficar "carregando" e criavam 2 cards.
+  const salvandoRef = React.useRef(false)
   const salvarProducao = async () => {
-    if (!form) return
+    if (!form || salvandoRef.current) return
     if (!form.titulo.trim()) return toast.error('Dê um título à demanda')
+    salvandoRef.current = true
     setSalvando(true)
     try {
       const dados = {
@@ -640,6 +712,7 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
     } catch (err) {
       toast.error('Falha ao salvar: ' + (err as Error).message)
     } finally {
+      salvandoRef.current = false
       setSalvando(false)
     }
   }
@@ -732,6 +805,10 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
                   col={col}
                   total={itens.length}
                   onSubirArte={(fs) => void subirArtePronta(col.valor, fs)}
+                  onNova={() => {
+                    setIdeia('')
+                    setForm({ titulo: '', descricao: '', status: col.valor, editor: '', prazo: '', mes: mes ?? mesDeHoje() })
+                  }}
                   acao={col.valor === 'trafego' ? (
                     <Button size="sm" className="w-full" leftIcon={<Send className="h-3.5 w-3.5" />} onClick={() => setPostarAberto(true)}>
                       Postar todas
@@ -739,7 +816,7 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
                   ) : undefined}
                 >
                   {itens.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-xs text-foreground/35">Arraste um card pra cá</p>
+                    <p className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-xs text-foreground/35">Arraste um card ou arquivos pra cá</p>
                   )}
                   {itens.map((p) => (
                     <CartaoArrastavel key={p.id} id={p.id}>
@@ -937,6 +1014,18 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
                 Excluir
               </Button>
               <Button variant="ghost" onClick={() => setVendoId(null)}>Fechar</Button>
+              <Button
+                variant="secondary"
+                leftIcon={<Plus className="h-4 w-4" />}
+                title={`Criar outra demanda em ${ETAPAS_ARTE.find((e) => e.valor === vendo.status)?.titulo}`}
+                onClick={() => {
+                  setVendoId(null)
+                  setIdeia('')
+                  setForm({ titulo: '', descricao: '', status: vendo.status, editor: vendo.editor_id ?? '', prazo: '', mes: vendo.mes })
+                }}
+              >
+                Nova demanda
+              </Button>
               <Button variant="secondary" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => editar(vendo)}>Editar</Button>
             </div>
           )

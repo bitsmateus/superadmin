@@ -1110,6 +1110,7 @@ export const gestaoClientes = {
   /** Manda as artes pro cliente aprovar no portal. Devolve o token do link do portal. */
   enviarParaAprovacao: (clienteId: string, ids: string[]) =>
     api.post<{ enviadas: number; token: string }>(`/api/gc/clientes/${clienteId}/social/enviar-aprovacao`, { ids }),
+  linkDeAprovacao: (clienteId: string) => api.get<{ token: string }>(`/api/gc/clientes/${clienteId}/social/link-aprovacao`),
   vistoNoTrafego: (id: string) => api.post(`/api/gc/social/producao/${id}/visto-trafego`, {}),
   comentarNaArte: (id: string, texto: string) => api.post<GcSocialProducao>(`/api/gc/social/producao/${id}/comentario`, { texto }),
   ligarAnuncios: (id: string, adIds: string[]) => api.put<GcSocialProducao>(`/api/gc/social/producao/${id}/anuncios`, { ad_ids: adIds }),

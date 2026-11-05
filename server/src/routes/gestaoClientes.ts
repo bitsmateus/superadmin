@@ -4,6 +4,12 @@ import { pool, query, queryOne, withTransaction } from '../db.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlSocialPdf, type ItemPdfSocial } from '../lib/gcSocialPdf.js';
 import { contaDoCliente, midiaPublica } from '../lib/gcSocialPublicar.js';
+import { avisarMudanca, carimbosDaEtapa, ehEtapa, ehMes, imagensFinais, registrarEventoArte, NOME_ETAPA, type Etapa } from '../lib/gcSocialFluxo.js';
+import { aoAprovar } from '../lib/gcSocialIa.js';
+import { driveConfigurado } from '../lib/gcDrive.js';
+import { anunciosDoCliente } from '../lib/gcTrafego.js';
+import { diasAtras } from '../lib/metaInsights.js';
+import { desempenhoDasArtes } from '../lib/gcSocialDesempenho.js';
 import { montarHtmlRelatorio, type GcSnapshot } from '../lib/gcRelatorioHtml.js';
 import { validarMetricas } from '../lib/gcValidacao.js';
 import { garantirRecorrentes, sincronizarRotinaAutomatica } from '../lib/gcRecorrentes.js';
@@ -2299,7 +2305,16 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   // ------------------------------------------------------------------ social media
   // A designer anexa fotos/arquivos e links (Drive etc.) por cliente e acompanha a produção: o que falta produzir,
   // o que está em produção e qual editor está editando.
-  const STATUS_PRODUCAO = ['para_producao', 'em_producao', 'pronto'];
+  // Um card de produção como a tela usa: dados, etapa, carimbos da aprovação, IA, desempenho e o histórico.
+  const SELECT_PRODUCAO = `
+    SELECT d.id, d.gc_cliente_id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome, d.anexos, ${SQL_AGENDAMENTO_DO_CARD},
+           to_char(d.prazo, 'YYYY-MM-DD') AS prazo, d.mes, d.ajuste_pedido, d.enviado_cliente_em, d.aprovado_em, d.aprovado_por,
+           d.trafego_em, d.visto_trafego_em, d.revisao_ia, d.copy_anuncio, d.ad_ids, d.drive_link, d.drive_enviado_em,
+           d.criado_por, cp.name AS criado_por_nome, d.created_at, d.updated_at,
+           COALESCE((SELECT jsonb_agg(jsonb_build_object('id', ev.id, 'tipo', ev.tipo, 'texto', ev.texto, 'autor_nome', ev.autor_nome,
+                       'created_at', ev.created_at) ORDER BY ev.created_at)
+                     FROM gc_social_eventos ev WHERE ev.gc_producao_id = d.id), '[]'::jsonb) AS eventos
+    FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id LEFT JOIN profiles cp ON cp.id = d.criado_por`;
 
   // Resumo de TODOS os clientes: a lista da aba. Sem os arquivos (são pesados), só as contagens e os editores.
   app.get('/api/gc/social/resumo', autenticado, async () => {
@@ -2308,7 +2323,9 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
               (SELECT count(*) FROM gc_social_materiais m WHERE m.gc_cliente_id = c.id)::int AS materiais,
               (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status = 'para_producao')::int AS para_producao,
               (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status = 'em_producao')::int AS em_producao,
-              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status = 'pronto')::int AS prontas,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status IN ('revisao','com_cliente'))::int AS em_aprovacao,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status IN ('aprovado','trafego'))::int AS prontas,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.ajuste_pedido)::int AS ajustes,
               COALESCE((SELECT array_agg(DISTINCT pr.name) FROM gc_social_producao p JOIN profiles pr ON pr.id = p.editor_id
                         WHERE p.gc_cliente_id = c.id AND p.status = 'em_producao'), '{}') AS editores
        FROM gc_clientes c
@@ -2324,14 +2341,16 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
        WHERE m.gc_cliente_id = $1 ORDER BY m.created_at DESC`,
       [req.params.id]
     );
-    const producao = await query(
-      `SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome, d.anexos, ${SQL_AGENDAMENTO_DO_CARD},
-              to_char(d.prazo, 'YYYY-MM-DD') AS prazo, d.created_at, d.updated_at
-       FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id
-       WHERE d.gc_cliente_id = $1 ORDER BY d.created_at DESC`,
-      [req.params.id]
+    const producao = await query(`${SELECT_PRODUCAO} WHERE d.gc_cliente_id = $1 ORDER BY d.created_at DESC`, [req.params.id]);
+    const config = await queryOne<{ gestor_trafego_id: string | null; drive_pasta_artes: string }>(
+      'SELECT gestor_trafego_id, drive_pasta_artes FROM gc_clientes WHERE id = $1', [req.params.id]
     );
-    return { materiais, producao };
+    return {
+      materiais, producao,
+      gestor_trafego_id: config?.gestor_trafego_id ?? null,
+      drive_pasta_artes: config?.drive_pasta_artes ?? '',
+      drive_configurado: driveConfigurado(),
+    };
   });
 
   app.post<{
@@ -2365,39 +2384,53 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
-  const SELECT_PRODUCAO = `
-    SELECT d.id, d.titulo, d.descricao, d.status, d.editor_id, e.name AS editor_nome, d.anexos, ${SQL_AGENDAMENTO_DO_CARD},
-           to_char(d.prazo, 'YYYY-MM-DD') AS prazo, d.created_at, d.updated_at
-    FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id`;
-
   app.post<{
     Params: { id: string };
-    Body: { titulo?: string; descricao?: string; status?: string; editor_id?: string | null; prazo?: string | null };
+    Body: { titulo?: string; descricao?: string; status?: string; editor_id?: string | null; prazo?: string | null; mes?: string };
   }>('/api/gc/clientes/:id/social/producao', autenticado, async (req, reply) => {
     const { sub } = req.user as { sub: string };
     const b = req.body ?? {};
     const titulo = String(b.titulo ?? '').trim().slice(0, 200);
     if (!titulo) return reply.status(400).send({ message: 'Dê um título à demanda de produção' });
-    const status = STATUS_PRODUCAO.includes(String(b.status)) ? String(b.status) : 'para_producao';
+    const status: Etapa = ehEtapa(b.status) ? b.status : 'para_producao';
     const criado = await queryOne<{ id: string }>(
-      `INSERT INTO gc_social_producao (gc_cliente_id, titulo, descricao, status, editor_id, prazo, criado_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [req.params.id, titulo, String(b.descricao ?? ''), status, b.editor_id || null, b.prazo || null, sub]
+      `INSERT INTO gc_social_producao (gc_cliente_id, titulo, descricao, status, editor_id, prazo, criado_por, mes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7, COALESCE($8, to_char(NOW() AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM'))) RETURNING id`,
+      [req.params.id, titulo, String(b.descricao ?? ''), status, b.editor_id || null, b.prazo || null, sub, ehMes(b.mes) ? b.mes : null]
     );
+    const carimbos = carimbosDaEtapa(status);
+    if (carimbos.length) await query(`UPDATE gc_social_producao SET ${carimbos.join(', ')} WHERE id = $1`, [criado!.id]);
     return reply.status(201).send(await queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [criado!.id]));
   });
 
   app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>('/api/gc/social/producao/:id', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
     const corpo = { ...(req.body ?? {}) };
     if (corpo.titulo !== undefined && !String(corpo.titulo).trim()) {
       return reply.status(400).send({ message: 'Dê um título à demanda de produção' });
     }
-    if (corpo.status !== undefined && !STATUS_PRODUCAO.includes(String(corpo.status))) delete corpo.status;
-    const { sets, params } = montarUpdate(['titulo', 'descricao', 'status', 'editor_id', 'prazo'], corpo);
+    if (corpo.status !== undefined && !ehEtapa(corpo.status)) delete corpo.status;
+    if (corpo.mes !== undefined && !ehMes(corpo.mes)) delete corpo.mes;
+    const antes = await queryOne<{ status: Etapa }>('SELECT status FROM gc_social_producao WHERE id = $1', [req.params.id]);
+    if (!antes) return reply.status(404).send({ message: 'Demanda não encontrada' });
+    const { sets, params } = montarUpdate(['titulo', 'descricao', 'status', 'editor_id', 'prazo', 'mes'], corpo);
     if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
+    const novaEtapa = ehEtapa(corpo.status) && corpo.status !== antes.status ? (corpo.status as Etapa) : null;
+    if (novaEtapa) {
+      sets.push(...carimbosDaEtapa(novaEtapa));
+      // Aprovado pela equipe (sem passar pelo portal): fica registrado quem marcou.
+      if (novaEtapa === 'aprovado' || novaEtapa === 'trafego') {
+        sets.push(`aprovado_por = CASE WHEN aprovado_por = '' THEN 'Equipe' ELSE aprovado_por END`);
+      }
+    }
     params.push(req.params.id);
-    const r = await queryOne(`UPDATE gc_social_producao SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${params.length} RETURNING id`, params);
-    if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
+    await query(`UPDATE gc_social_producao SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${params.length}`, params);
+    if (novaEtapa) {
+      const nome = (await queryOne<{ name: string }>('SELECT name FROM profiles WHERE id = $1', [sub]))?.name ?? '';
+      await registrarEventoArte(req.params.id, 'etapa', `${NOME_ETAPA[antes.status] ?? antes.status} → ${NOME_ETAPA[novaEtapa]}`, { id: sub, nome });
+      void avisarMudanca(req.params.id, novaEtapa, sub);
+      if (novaEtapa === 'aprovado' || novaEtapa === 'trafego') void aoAprovar(req.params.id);
+    }
     return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
   });
 
@@ -2429,12 +2462,12 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     if (!/^https:\/\//.test(baseUrl)) {
       return reply.status(400).send({ message: 'A Meta só baixa mídia de endereço https público (configure SOCIAL_MIDIA_BASE_URL no servidor).' });
     }
-    const card = await queryOne<{ gc_cliente_id: string; anexos: { type?: string }[] }>(
+    const card = await queryOne<{ gc_cliente_id: string; anexos: { type?: string; papel?: string }[] }>(
       'SELECT gc_cliente_id, anexos FROM gc_social_producao WHERE id = $1',
       [req.params.id]
     );
     if (!card) return reply.status(404).send({ message: 'Demanda não encontrada' });
-    const midias = (card.anexos ?? []).filter((a) => /^(image|video)\//.test(String(a.type ?? '')));
+    const midias = (card.anexos ?? []).filter((a) => a.papel !== 'referencia' && /^(image|video)\//.test(String(a.type ?? '')));
     if (midias.length === 0) return reply.status(400).send({ message: 'Anexe a arte (imagem ou vídeo) no card antes de agendar' });
     if (formato === 'reels' && !midias.some((a) => String(a.type).startsWith('video/'))) {
       return reply.status(400).send({ message: 'Reels precisa de um vídeo anexado no card' });
@@ -2486,7 +2519,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
 
   // POST /api/gc/social/producao/:id/anexos — anexa UM arquivo (imagem de referência da copy). Um por
   // chamada, somado no banco: mandar a lista inteira a cada foto estouraria o limite do corpo.
-  app.post<{ Params: { id: string }; Body: { name?: string; type?: string; size?: number; dataUrl?: string } }>(
+  app.post<{ Params: { id: string }; Body: { name?: string; type?: string; size?: number; dataUrl?: string; papel?: string } }>(
     '/api/gc/social/producao/:id/anexos',
     autenticado,
     async (req, reply) => {
@@ -2496,7 +2529,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       if (dataUrl.length > 7 * 1024 * 1024) return reply.status(400).send({ message: 'Arquivo passa de 5MB' });
       const anexo = {
         id: crypto.randomUUID(), name: String(b.name ?? 'arquivo').slice(0, 200), type: String(b.type ?? '').slice(0, 100),
-        size: Number(b.size) || 0, dataUrl,
+        size: Number(b.size) || 0, dataUrl, papel: b.papel === 'referencia' ? 'referencia' : 'final',
       };
       const r = await queryOne(
         `UPDATE gc_social_producao SET anexos = anexos || $2::jsonb, updated_at = NOW()
@@ -2504,6 +2537,27 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         [req.params.id, JSON.stringify([anexo])]
       );
       if (!r) return reply.status(404).send({ message: 'Demanda não encontrada ou com 30 anexos' });
+      return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
+    }
+  );
+
+  // PATCH /api/gc/social/producao/:id/anexos/:anexo — { papel: 'final' | 'referencia' }: move a imagem entre
+  // "Arte final" e "Imagens de referência".
+  app.patch<{ Params: { id: string; anexo: string }; Body: { papel?: string } }>(
+    '/api/gc/social/producao/:id/anexos/:anexo',
+    autenticado,
+    async (req, reply) => {
+      const papel = req.body?.papel === 'referencia' ? 'referencia' : 'final';
+      const r = await queryOne(
+        `UPDATE gc_social_producao
+         SET anexos = (SELECT COALESCE(jsonb_agg(CASE WHEN t.a->>'id' = $2 THEN t.a || jsonb_build_object('papel', $3::text) ELSE t.a END
+                                                 ORDER BY t.ord), '[]'::jsonb)
+                       FROM jsonb_array_elements(anexos) WITH ORDINALITY AS t(a, ord)),
+             updated_at = NOW()
+         WHERE id = $1 RETURNING id`,
+        [req.params.id, req.params.anexo, papel]
+      );
+      if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
       return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
     }
   );
@@ -2528,7 +2582,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   // por imagem anexada). Título e texto vêm da tela, que deixa editar antes; as imagens vêm do banco.
   app.post<{
     Params: { id: string };
-    Body: { periodo?: string; itens?: { id: string; titulo?: string; texto?: string }[] };
+    Body: { periodo?: string; itens?: { id: string; titulo?: string; texto?: string }[]; marcar_enviado?: boolean };
   }>('/api/gc/clientes/:id/social/pdf', autenticado, async (req, reply) => {
     const pedidos = (req.body?.itens ?? []).filter((x) => x && typeof x.id === 'string').slice(0, 60);
     if (pedidos.length === 0) return reply.status(400).send({ message: 'Escolha ao menos uma arte' });
@@ -2543,8 +2597,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     for (const p of pedidos) {
       const l = porId.get(p.id);
       if (!l) continue;
-      for (const a of l.anexos ?? []) {
-        if (!String(a.type ?? '').startsWith('image/') || !/^data:image\//.test(String(a.dataUrl ?? ''))) continue;
+      for (const a of imagensFinais(l.anexos)) {
+        if (!/^data:image\//.test(String(a.dataUrl ?? ''))) continue;
         itens.push({
           titulo: String(p.titulo ?? l.titulo).slice(0, 120),
           texto: String(p.texto ?? '').slice(0, 900),
@@ -2552,12 +2606,17 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         });
       }
     }
-    if (itens.length === 0) return reply.status(400).send({ message: 'As artes escolhidas não têm imagem anexada' });
+    if (itens.length === 0) return reply.status(400).send({ message: 'As artes escolhidas não têm arte final anexada' });
     try {
       const pdf = await renderFullHtmlToPdf(
         montarHtmlSocialPdf({ cliente: cliente.nome_empresa, periodo: String(req.body?.periodo ?? '').slice(0, 80), itens }),
         { width: '1280px', height: '720px', esperarRede: true },
       );
+      // O PDF vai pro cliente: as artes que ainda estavam em criação/revisão passam pra "Com o cliente".
+      if (req.body?.marcar_enviado) {
+        const { sub } = req.user as { sub: string };
+        await marcarComCliente(req.params.id, linhas.map((l) => l.id), sub);
+      }
       return reply
         .header('Content-Type', 'application/pdf')
         .header('Content-Disposition', 'attachment; filename="social-media.pdf"')
@@ -2566,6 +2625,105 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       app.log.error({ err }, 'falha ao gerar o PDF do social media');
       return reply.status(500).send({ message: 'Não foi possível gerar o PDF' });
     }
+  });
+
+  /** Manda pro cliente aprovar: as artes ainda não aprovadas viram "Com o cliente" (as aprovadas ficam como estão). */
+  async function marcarComCliente(clienteId: string, ids: string[], sub: string): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const movidas = await query<{ id: string; antes: Etapa }>(
+      `UPDATE gc_social_producao d SET status = 'com_cliente', ${carimbosDaEtapa('com_cliente').join(', ')}, updated_at = NOW()
+       FROM (SELECT id, status AS antes FROM gc_social_producao WHERE gc_cliente_id = $1 AND id = ANY($2::uuid[])
+             AND status IN ('para_producao','em_producao','revisao','com_cliente')) x
+       WHERE d.id = x.id RETURNING d.id, x.antes`,
+      [clienteId, ids]
+    );
+    const nome = (await queryOne<{ name: string }>('SELECT name FROM profiles WHERE id = $1', [sub]))?.name ?? '';
+    for (const m of movidas) {
+      await registrarEventoArte(
+        m.id, 'etapa', m.antes === 'com_cliente' ? 'Reenviada ao cliente' : `${NOME_ETAPA[m.antes]} → ${NOME_ETAPA.com_cliente}`, { id: sub, nome },
+      );
+    }
+    return movidas.map((m) => m.id);
+  }
+
+  // POST /api/gc/clientes/:id/social/enviar-aprovacao — { ids }: manda as artes pro cliente aprovar no portal.
+  // Garante o link do portal (cria se não houver) e devolve o token pra a equipe mandar o endereço no WhatsApp.
+  app.post<{ Params: { id: string }; Body: { ids?: string[] } }>('/api/gc/clientes/:id/social/enviar-aprovacao', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const ids = (req.body?.ids ?? []).filter((x) => typeof x === 'string').slice(0, 100);
+    if (ids.length === 0) return reply.status(400).send({ message: 'Escolha ao menos uma arte' });
+    const semArte = await query<{ titulo: string }>(
+      `SELECT titulo FROM gc_social_producao WHERE gc_cliente_id = $1 AND id = ANY($2::uuid[])
+         AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(anexos) a
+                         WHERE COALESCE(a->>'papel', 'final') = 'final' AND a->>'type' LIKE 'image/%')`,
+      [req.params.id, ids]
+    );
+    if (semArte.length) {
+      return reply.status(400).send({ message: `Sem arte final anexada: ${semArte.map((x) => `"${x.titulo}"`).join(', ')}` });
+    }
+    const movidas = await marcarComCliente(req.params.id, ids, sub);
+    let link = await queryOne<{ token: string }>('SELECT token FROM gc_links_publicos WHERE gc_cliente_id = $1 AND ativo', [req.params.id]);
+    if (!link) {
+      link = await queryOne<{ token: string }>(
+        'INSERT INTO gc_links_publicos (gc_cliente_id, token) VALUES ($1, $2) RETURNING token',
+        [req.params.id, crypto.randomBytes(24).toString('base64url')]
+      );
+      await registrarEvento(req.params.id, 'Link do portal gerado', 'Pra aprovação das artes', sub);
+    }
+    return { enviadas: movidas.length, token: link!.token };
+  });
+
+  // PUT /api/gc/clientes/:id/social/config — gestor de tráfego que recebe o aviso e pasta do Drive das artes aprovadas.
+  app.put<{ Params: { id: string }; Body: { gestor_trafego_id?: string | null; drive_pasta_artes?: string } }>(
+    '/api/gc/clientes/:id/social/config',
+    autenticado,
+    async (req) => {
+      const corpo: Record<string, unknown> = {};
+      if (req.body?.gestor_trafego_id !== undefined) corpo.gestor_trafego_id = req.body.gestor_trafego_id || null;
+      if (req.body?.drive_pasta_artes !== undefined) corpo.drive_pasta_artes = String(req.body.drive_pasta_artes).trim().slice(0, 500);
+      const { sets, params } = montarUpdate(['gestor_trafego_id', 'drive_pasta_artes'], corpo);
+      if (sets.length) {
+        params.push(req.params.id);
+        await query(`UPDATE gc_clientes SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+      }
+      return queryOne('SELECT gestor_trafego_id, drive_pasta_artes FROM gc_clientes WHERE id = $1', [req.params.id]);
+    }
+  );
+
+  // POST /api/gc/social/producao/:id/visto-trafego — o gestor de tráfego já viu a arte aprovada (tira o "nova").
+  app.post<{ Params: { id: string } }>('/api/gc/social/producao/:id/visto-trafego', autenticado, async (req) => {
+    await query('UPDATE gc_social_producao SET visto_trafego_em = COALESCE(visto_trafego_em, NOW()) WHERE id = $1', [req.params.id]);
+    return { ok: true };
+  });
+
+  // POST /api/gc/social/producao/:id/comentario — anotação da equipe no histórico da arte.
+  app.post<{ Params: { id: string }; Body: { texto?: string } }>('/api/gc/social/producao/:id/comentario', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const texto = String(req.body?.texto ?? '').trim();
+    if (!texto) return reply.status(400).send({ message: 'Escreva o comentário' });
+    const nome = (await queryOne<{ name: string }>('SELECT name FROM profiles WHERE id = $1', [sub]))?.name ?? '';
+    await registrarEventoArte(req.params.id, 'comentario', texto, { id: sub, nome });
+    return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
+  });
+
+  // PUT /api/gc/social/producao/:id/anuncios — { ad_ids }: os anúncios da Meta que usam esta arte (pro desempenho).
+  app.put<{ Params: { id: string }; Body: { ad_ids?: string[] } }>('/api/gc/social/producao/:id/anuncios', autenticado, async (req, reply) => {
+    const ids = [...new Set((req.body?.ad_ids ?? []).map(String).filter((x) => /^\d{3,30}$/.test(x)))].slice(0, 30);
+    const r = await queryOne('UPDATE gc_social_producao SET ad_ids = $2, updated_at = NOW() WHERE id = $1 RETURNING id', [req.params.id, ids]);
+    if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
+    return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
+  });
+
+  // GET /api/gc/clientes/:id/social/anuncios — anúncios da conta nos últimos 90 dias, pra ligar a arte ao anúncio.
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/social/anuncios', autenticado, async (req) => {
+    return (await anunciosDoCliente(req.params.id, diasAtras(90), diasAtras(0), 60)).map((a) => ({
+      id: a.id, nome: a.nome, status: a.status, thumbnail: a.thumbnail, campanha: a.campanha, gasto: a.gasto,
+    }));
+  });
+
+  // GET /api/gc/clientes/:id/social/desempenho — números de cada arte ligada a anúncios, desde que entrou no tráfego.
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/social/desempenho', autenticado, async (req) => {
+    return desempenhoDasArtes(req.params.id);
   });
 
   // ------------------------------------------------------------------ briefing do cliente

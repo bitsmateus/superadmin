@@ -142,7 +142,8 @@ export interface GcDemanda {
   coluna_desde: string
 }
 
-export type GcSocialStatus = 'para_producao' | 'em_producao' | 'pronto'
+/** Etapas da arte: pedido → em criação → revisão interna → com o cliente → aprovado → no tráfego. */
+export type GcSocialStatus = 'para_producao' | 'em_producao' | 'revisao' | 'com_cliente' | 'aprovado' | 'trafego'
 
 export interface GcSocialResumo {
   id: string
@@ -153,9 +154,37 @@ export interface GcSocialResumo {
   materiais: number
   para_producao: number
   em_producao: number
+  em_aprovacao: number
   prontas: number
+  ajustes: number
   editores: string[]
 }
+
+/** Anexo de um card: 'final' é a arte pronta (vai pro cliente, PDF, tráfego e postagem); sem papel = final. */
+export interface GcSocialAnexo {
+  id: string; name: string; type: string; size: number; dataUrl: string; papel?: 'final' | 'referencia'
+}
+
+export interface GcSocialEvento {
+  id: string
+  tipo: 'ajuste_cliente' | 'aprovado_cliente' | 'checklist_ia' | 'comentario' | 'etapa'
+  texto: string
+  autor_nome: string
+  created_at: string
+}
+
+export interface GcSocialRevisaoIa {
+  ok: boolean; resumo: string; problemas: { gravidade: 'alta' | 'media' | 'baixa'; texto: string }[]; feito_em: string
+}
+
+export interface GcSocialCopy { opcoes: { texto: string; titulo: string; descricao: string }[]; feito_em: string }
+
+export interface GcSocialDesempenho {
+  id: string; titulo: string; mes: string; ad_ids: string[]
+  gasto: number; impressoes: number; cliques: number; resultados: number; ctr: number | null; custoResultado: number | null
+}
+
+export interface GcSocialAnuncio { id: string; nome: string; status: string; thumbnail: string; campanha: string; gasto: number }
 
 export interface GcSocialMaterial {
   id: string
@@ -175,11 +204,47 @@ export interface GcSocialProducao {
   editor_id: string | null
   editor_nome: string | null
   prazo: string | null
-  /** Imagens de referência da copy/arte. */
-  anexos?: { id: string; name: string; type: string; size: number; dataUrl: string }[]
+  /** Arte final e imagens de referência (ver `papel`). */
+  anexos?: GcSocialAnexo[]
   /** Postagem agendada mais recente (não cancelada), se houver. */
   agendamento?: GcSocialAgendamento | null
+  /** Mês da arte (YYYY-MM). */
+  mes: string
+  ajuste_pedido: boolean
+  enviado_cliente_em: string | null
+  aprovado_em: string | null
+  aprovado_por: string
+  trafego_em: string | null
+  visto_trafego_em: string | null
+  revisao_ia: GcSocialRevisaoIa | null
+  copy_anuncio: GcSocialCopy | null
+  ad_ids: string[]
+  drive_link: string
+  drive_enviado_em: string | null
+  criado_por: string | null
+  criado_por_nome: string | null
+  eventos: GcSocialEvento[]
   created_at: string
+}
+
+export interface GcSocialDoCliente {
+  materiais: GcSocialMaterial[]
+  producao: GcSocialProducao[]
+  gestor_trafego_id: string | null
+  drive_pasta_artes: string
+  drive_configurado: boolean
+}
+
+/** O que o portal do cliente mostra de cada arte. */
+export interface GcArtePortal {
+  id: string
+  titulo: string
+  mes: string
+  situacao: 'aguardando' | 'ajuste' | 'aprovado'
+  aprovado_em: string | null
+  aprovado_por: string
+  imagens: { id: string; name: string }[]
+  comentarios: { tipo: string; texto: string; autor_nome: string; created_at: string }[]
 }
 
 export type GcRedeSocial = 'instagram' | 'facebook'
@@ -1039,16 +1104,42 @@ export const gestaoClientes = {
 
   // Social media
   socialResumo: () => api.get<GcSocialResumo[]>('/api/gc/social/resumo'),
-  social: (clienteId: string) =>
-    api.get<{ materiais: GcSocialMaterial[]; producao: GcSocialProducao[] }>(`/api/gc/clientes/${clienteId}/social`),
+  social: (clienteId: string) => api.get<GcSocialDoCliente>(`/api/gc/clientes/${clienteId}/social`),
+  configSocial: (clienteId: string, dados: { gestor_trafego_id?: string | null; drive_pasta_artes?: string }) =>
+    api.put<{ gestor_trafego_id: string | null; drive_pasta_artes: string }>(`/api/gc/clientes/${clienteId}/social/config`, dados),
+  /** Manda as artes pro cliente aprovar no portal. Devolve o token do link do portal. */
+  enviarParaAprovacao: (clienteId: string, ids: string[]) =>
+    api.post<{ enviadas: number; token: string }>(`/api/gc/clientes/${clienteId}/social/enviar-aprovacao`, { ids }),
+  vistoNoTrafego: (id: string) => api.post(`/api/gc/social/producao/${id}/visto-trafego`, {}),
+  comentarNaArte: (id: string, texto: string) => api.post<GcSocialProducao>(`/api/gc/social/producao/${id}/comentario`, { texto }),
+  ligarAnuncios: (id: string, adIds: string[]) => api.put<GcSocialProducao>(`/api/gc/social/producao/${id}/anuncios`, { ad_ids: adIds }),
+  anunciosParaArte: (clienteId: string) => api.get<GcSocialAnuncio[]>(`/api/gc/clientes/${clienteId}/social/anuncios`),
+  desempenhoDasArtes: (clienteId: string) => api.get<GcSocialDesempenho[]>(`/api/gc/clientes/${clienteId}/social/desempenho`),
+  papelDoAnexo: (id: string, anexoId: string, papel: 'final' | 'referencia') =>
+    api.patch<GcSocialProducao>(`/api/gc/social/producao/${id}/anexos/${anexoId}`, { papel }),
+  enviarArteProDrive: (id: string) => api.post<{ link: string; enviados: number }>(`/api/gc/social/producao/${id}/drive`, {}),
+  // IA do fluxo das artes
+  iaPedidoDaArte: (clienteId: string, ideia: string) =>
+    api.post<{ titulo: string; descricao: string }>(`/api/gc/clientes/${clienteId}/social/ia/pedido`, { ideia }),
+  iaRevisarArte: (id: string) => api.post<GcSocialRevisaoIa>(`/api/gc/social/producao/${id}/ia/revisao`, {}),
+  iaCopyDaArte: (id: string) => api.post<GcSocialCopy>(`/api/gc/social/producao/${id}/ia/copy`, {}),
+  iaLegenda: (id: string, instrucao = '') => api.post<{ legenda: string }>(`/api/gc/social/producao/${id}/ia/legenda`, { instrucao }),
+  iaChecklistDoAjuste: (id: string) => api.post<{ checklist: string }>(`/api/gc/social/producao/${id}/ia/checklist`, {}),
+  iaAprendizados: (clienteId: string) => api.post<{ texto: string }>(`/api/gc/clientes/${clienteId}/social/ia/aprendizados`, {}),
+  // Portal do cliente: aprovação das artes (sem login, pelo token)
+  artesDoPortal: (token: string) => api.get<{ artes: GcArtePortal[] }>(`/api/public/cliente/${encodeURIComponent(token)}/artes`),
+  aprovarArtePortal: (token: string, id: string, nome: string) =>
+    api.post(`/api/public/cliente/${encodeURIComponent(token)}/artes/${id}/aprovar`, { nome }),
+  ajusteArtePortal: (token: string, id: string, nome: string, comentario: string) =>
+    api.post(`/api/public/cliente/${encodeURIComponent(token)}/artes/${id}/ajuste`, { nome, comentario }),
   criarSocialMaterial: (clienteId: string, dados: { tipo: 'arquivo' | 'link'; titulo?: string; url?: string; anexo?: GcSocialMaterial['anexo'] }) =>
     api.post<GcSocialMaterial>(`/api/gc/clientes/${clienteId}/social/materiais`, dados),
   excluirSocialMaterial: (id: string) => api.delete(`/api/gc/social/materiais/${id}`),
   criarSocialProducao: (clienteId: string, dados: {
-    titulo: string; descricao?: string; status?: GcSocialStatus; editor_id?: string | null; prazo?: string | null
+    titulo: string; descricao?: string; status?: GcSocialStatus; editor_id?: string | null; prazo?: string | null; mes?: string
   }) => api.post<GcSocialProducao>(`/api/gc/clientes/${clienteId}/social/producao`, dados),
   atualizarSocialProducao: (id: string, dados: Partial<{
-    titulo: string; descricao: string; status: GcSocialStatus; editor_id: string | null; prazo: string | null
+    titulo: string; descricao: string; status: GcSocialStatus; editor_id: string | null; prazo: string | null; mes: string
   }>) => api.patch<GcSocialProducao>(`/api/gc/social/producao/${id}`, dados),
   excluirSocialProducao: (id: string) => api.delete(`/api/gc/social/producao/${id}`),
   /** Agenda (ou reagenda) a postagem do card. base_url é o endereço da API, de onde a Meta baixa a mídia. */
@@ -1059,9 +1150,9 @@ export const gestaoClientes = {
     }),
   cancelarAgendamento: (id: string) => api.delete<GcSocialProducao>(`/api/gc/social/agendamentos/${id}`),
   /** PDF de apresentação das artes (capa + uma página por imagem). */
-  pdfDoSocial: (clienteId: string, dados: { periodo: string; itens: { id: string; titulo: string; texto: string }[] }) =>
+  pdfDoSocial: (clienteId: string, dados: { periodo: string; itens: { id: string; titulo: string; texto: string }[]; marcar_enviado?: boolean }) =>
     api.postForBlob(`/api/gc/clientes/${clienteId}/social/pdf`, dados),
-  anexarNaProducao: (id: string, anexo: { name: string; type: string; size: number; dataUrl: string }) =>
+  anexarNaProducao: (id: string, anexo: { name: string; type: string; size: number; dataUrl: string; papel?: 'final' | 'referencia' }) =>
     api.post<GcSocialProducao>(`/api/gc/social/producao/${id}/anexos`, anexo),
   removerAnexoDaProducao: (id: string, anexoId: string) =>
     api.delete<GcSocialProducao>(`/api/gc/social/producao/${id}/anexos/${anexoId}`),

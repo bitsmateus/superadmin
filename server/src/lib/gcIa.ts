@@ -14,6 +14,16 @@ const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 
 export interface MensagemIa { role: 'user' | 'assistant'; content: string }
 
+/** Bloco de conteúdo da API (texto ou imagem em base64), pra quando a IA precisa OLHAR a arte. */
+export type BlocoIa =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'; data: string } };
+
+/** Uma pergunta só, com imagens junto do texto. */
+export async function chamarClaudeComImagens(sistema: string, blocos: BlocoIa[], maxTokens = 4000): Promise<string> {
+  return chamarClaude(sistema, [{ role: 'user', content: blocos as unknown as string }], maxTokens);
+}
+
 export async function chamarClaude(sistema: string, mensagens: MensagemIa[], maxTokens = 8000): Promise<string> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY não configurada no servidor.');

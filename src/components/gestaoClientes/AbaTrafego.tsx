@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/utils'
 import { brl, brlExato, num, useCarregar, Estado, Painel, Vazio, diaCurto } from '@/components/trafego/format'
 import { PainelIaTrafego } from '@/components/gestaoClientes/IaDoCliente'
+import { ArtesAprovadasTrafego } from '@/components/gestaoClientes/social/ArtesAprovadasTrafego'
 import {
   gcTrafego, type GcAlertaTrafego, type GcBenchmark, type GcCampanhaTrafego, type GcContaTrafego, type GcNivelAlerta, type GcTotaisTrafego,
 } from '@/services/gcTrafego'
@@ -435,6 +436,7 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
 
   return (
     <div className="space-y-4">
+      <ArtesAprovadasTrafego clienteId={clienteId} />
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1 rounded-lg bg-elevate/[0.04] p-1">
           {PERIODOS.map((p) => (

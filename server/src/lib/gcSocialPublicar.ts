@@ -21,7 +21,7 @@ const GRAPH = `https://graph.facebook.com/${VERSION}`;
 export type RedeSocial = 'instagram' | 'facebook';
 export type FormatoPost = 'feed' | 'reels' | 'story';
 
-interface Anexo { id: string; name: string; type: string; dataUrl: string }
+interface Anexo { id: string; name: string; type: string; dataUrl: string; papel?: string }
 
 interface Agendamento {
   id: string; gc_cliente_id: string; gc_producao_id: string; redes: RedeSocial[]; formato: FormatoPost;
@@ -164,7 +164,7 @@ async function midiasDoAgendamento(ag: Agendamento): Promise<Midia[]> {
   const p = await queryOne<{ anexos: Anexo[] }>('SELECT anexos FROM gc_social_producao WHERE id = $1', [ag.gc_producao_id]);
   const base = ag.base_url.replace(/\/+$/, '');
   return (p?.anexos ?? [])
-    .filter((a) => /^(image|video)\//.test(a.type))
+    .filter((a) => a.papel !== 'referencia' && /^(image|video)\//.test(a.type))
     .map((a) => {
       const video = a.type.startsWith('video/');
       return { video, url: `${base}/api/public/social-midia/${ag.midia_token}/${a.id}.${video ? 'mp4' : 'jpg'}` };
@@ -205,9 +205,13 @@ export async function publicarAgendamento(id: string): Promise<void> {
      WHERE id = $1`,
     [id, falhas.length === 0 ? 'publicado' : 'erro', erro, JSON.stringify(resultado), algumOk],
   );
-  // Publicou: o card vai pra "Pronto" sozinho.
+  // Publicou: o card vai pra última etapa sozinho (se ainda não estava lá).
   if (algumOk) {
-    await query(`UPDATE gc_social_producao SET status = 'pronto', updated_at = NOW() WHERE id = $1`, [ag.gc_producao_id]);
+    await query(
+      `UPDATE gc_social_producao SET status = 'trafego', trafego_em = COALESCE(trafego_em, NOW()), updated_at = NOW()
+       WHERE id = $1 AND status <> 'trafego'`,
+      [ag.gc_producao_id],
+    );
   }
 }
 

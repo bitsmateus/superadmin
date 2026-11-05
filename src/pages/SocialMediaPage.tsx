@@ -25,8 +25,8 @@ export function SocialMediaPage() {
 
   const visiveis = (lista ?? []).filter((c) => c.nome_empresa.toLowerCase().includes(busca.trim().toLowerCase()))
   const totais = (lista ?? []).reduce(
-    (t, c) => ({ para: t.para + c.para_producao, em: t.em + c.em_producao }),
-    { para: 0, em: 0 },
+    (t, c) => ({ para: t.para + c.para_producao, em: t.em + c.em_producao, cliente: t.cliente + (c.em_aprovacao ?? 0) }),
+    { para: 0, em: 0, cliente: 0 },
   )
 
   return (
@@ -54,8 +54,9 @@ export function SocialMediaPage() {
           </div>
           {lista && (
             <p className="text-xs text-foreground/55">
-              <strong className="text-foreground">{totais.para}</strong> para produzir ·{' '}
-              <strong className="text-foreground">{totais.em}</strong> em produção
+              <strong className="text-foreground">{totais.para}</strong> pedidos ·{' '}
+              <strong className="text-foreground">{totais.em}</strong> em criação ·{' '}
+              <strong className="text-foreground">{totais.cliente}</strong> esperando aprovação
             </p>
           )}
         </div>
@@ -71,9 +72,9 @@ export function SocialMediaPage() {
             {/* Cabeçalho da lista (só de tablet pra cima). */}
             <div className="hidden grid-cols-[minmax(0,2fr)_90px_90px_90px_minmax(0,1.4fr)_110px] items-center gap-3 border-b border-line bg-elevate/[0.03] px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-foreground/45 md:grid">
               <span>Cliente</span>
-              <span className="text-center">Para produzir</span>
-              <span className="text-center">Em produção</span>
-              <span className="text-center">Prontas</span>
+              <span className="text-center">Pedidos</span>
+              <span className="text-center">Em criação</span>
+              <span className="text-center">Aprovadas</span>
               <span>Editando</span>
               <span className="text-right">Arquivos/links</span>
             </div>
@@ -93,9 +94,9 @@ export function SocialMediaPage() {
                       </span>
                     </span>
                     {[
-                      { n: c.para_producao, rotulo: 'para produzir', cor: 'text-warning' },
-                      { n: c.em_producao, rotulo: 'em produção', cor: 'text-accent' },
-                      { n: c.prontas, rotulo: 'prontas', cor: 'text-success' },
+                      { n: c.para_producao, rotulo: 'pedidos', cor: 'text-warning' },
+                      { n: c.em_producao, rotulo: 'em criação', cor: 'text-accent' },
+                      { n: c.prontas, rotulo: 'aprovadas', cor: 'text-success' },
                     ].map((x) => (
                       <span key={x.rotulo} className="text-center">
                         <span className={cn('block text-base font-semibold tabular-nums', x.n > 0 ? x.cor : 'text-foreground/25')}>{x.n}</span>

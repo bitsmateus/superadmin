@@ -582,6 +582,53 @@ const TABELAS = [
   // Um agendamento ativo por card: reagendar cancela o anterior.
   `CREATE UNIQUE INDEX IF NOT EXISTS gc_social_agendamentos_ativo
      ON gc_social_agendamentos (gc_producao_id) WHERE status IN ('agendado','publicando')`,
+  // Fluxo de criação em 6 etapas: pedido → criação → revisão interna → com o cliente → aprovado → no tráfego.
+  // O antigo "pronto" (entregue ou aprovado) vira "aprovado". Só troca a regra uma vez (quando ainda não tem 'trafego').
+  `DO $$ BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_constraint WHERE conname = 'gc_social_producao_status_check'
+         AND pg_get_constraintdef(oid) LIKE '%trafego%'
+     ) THEN
+       ALTER TABLE gc_social_producao DROP CONSTRAINT IF EXISTS gc_social_producao_status_check;
+       UPDATE gc_social_producao SET status = 'aprovado' WHERE status = 'pronto';
+       ALTER TABLE gc_social_producao ADD CONSTRAINT gc_social_producao_status_check
+         CHECK (status IN ('para_producao','em_producao','revisao','com_cliente','aprovado','trafego'));
+     END IF;
+   END $$`,
+  `ALTER TABLE gc_social_producao ALTER COLUMN status SET DEFAULT 'para_producao'`,
+  // Mês da arte (YYYY-MM): a equipe trabalha por mês, e a arte de dezembro pode ser criada em novembro.
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS mes TEXT`,
+  `UPDATE gc_social_producao SET mes = to_char(created_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') WHERE mes IS NULL`,
+  `ALTER TABLE gc_social_producao ALTER COLUMN mes SET DEFAULT to_char(NOW() AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM')`,
+  `CREATE INDEX IF NOT EXISTS gc_social_producao_mes_idx ON gc_social_producao (gc_cliente_id, mes)`,
+  // Aprovação do cliente (pelo portal) e entrega pro tráfego.
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS ajuste_pedido BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS enviado_cliente_em TIMESTAMPTZ`,
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS aprovado_em TIMESTAMPTZ`,
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS aprovado_por TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS trafego_em TIMESTAMPTZ`,
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS visto_trafego_em TIMESTAMPTZ`,
+  // IA: revisão da arte antes do cliente e as opções de copy do anúncio.
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS revisao_ia JSONB`,
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS copy_anuncio JSONB`,
+  // Desempenho: os anúncios da Meta que usam esta arte. Drive: onde a arte foi parar.
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS ad_ids TEXT[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS drive_link TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS drive_enviado_em TIMESTAMPTZ`,
+  // O que aconteceu com cada arte: comentário do cliente, aprovação, checklist da IA, mudança de etapa.
+  `CREATE TABLE IF NOT EXISTS gc_social_eventos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_producao_id UUID NOT NULL REFERENCES gc_social_producao(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL CHECK (tipo IN ('ajuste_cliente','aprovado_cliente','checklist_ia','comentario','etapa')),
+    texto TEXT NOT NULL DEFAULT '',
+    autor_nome TEXT NOT NULL DEFAULT '',
+    autor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_social_eventos_producao_idx ON gc_social_eventos (gc_producao_id, created_at)`,
+  // Quem recebe o aviso de arte aprovada, e a pasta do Drive onde as artes aprovadas são salvas.
+  `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS gestor_trafego_id UUID REFERENCES profiles(id) ON DELETE SET NULL`,
+  `ALTER TABLE gc_clientes ADD COLUMN IF NOT EXISTS drive_pasta_artes TEXT NOT NULL DEFAULT ''`,
   // ---------------------------------------------------------------- briefing do cliente
   `CREATE TABLE IF NOT EXISTS gc_briefing (
     gc_cliente_id UUID PRIMARY KEY REFERENCES gc_clientes(id) ON DELETE CASCADE,

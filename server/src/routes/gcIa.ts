@@ -5,6 +5,9 @@ import {
   instagramPeloTrafego, perfisDisponiveis, postsDoCliente, sincronizarInstagram, tokenDoTrafego, tokenInstagram, vincularInstagram,
 } from '../lib/gcInstagram.js';
 import { podeUsarModulo } from './gestaoClientes.js';
+import {
+  aprendizados, checklistDoAjuste, enviarArteProDrive, gerarCopy, gerarLegenda, gerarPedido, revisarArte,
+} from '../lib/gcSocialIa.js';
 
 /**
  * IA e Instagram dos clientes NX Digital: análise de tráfego, ideias de conteúdo (roteiros e
@@ -146,4 +149,49 @@ export async function gcIaRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>('/api/gc/clientes/:id/instagram/sincronizar', autenticado, async (req) => {
     return sincronizarInstagram(req.params.id);
   });
+
+  // ------------------------------------------------------------------ IA no fluxo das artes (social media)
+  /** Erro com statusCode (400/404) volta como está; o resto vira 500 com a mensagem. */
+  const responder = async <T>(reply: FastifyReply, fn: () => Promise<T>) => {
+    try {
+      return await fn();
+    } catch (err) {
+      const e = err as Error & { statusCode?: number };
+      return reply.status(e.statusCode ?? 500).send({ message: e.message });
+    }
+  };
+
+  // POST /api/gc/clientes/:id/social/ia/pedido — { ideia } → { titulo, descricao } pronto pra designer.
+  app.post<{ Params: { id: string }; Body: { ideia?: string } }>('/api/gc/clientes/:id/social/ia/pedido', autenticado, async (req, reply) => {
+    const ideia = String(req.body?.ideia ?? '').trim().slice(0, 1500);
+    if (!ideia) return reply.status(400).send({ message: 'Escreva a ideia da arte' });
+    return responder(reply, () => gerarPedido(req.params.id, ideia));
+  });
+
+  app.post<{ Params: { id: string } }>('/api/gc/social/producao/:id/ia/revisao', autenticado, async (req, reply) =>
+    responder(reply, () => revisarArte(req.params.id)));
+
+  app.post<{ Params: { id: string } }>('/api/gc/social/producao/:id/ia/copy', autenticado, async (req, reply) =>
+    responder(reply, () => gerarCopy(req.params.id)));
+
+  app.post<{ Params: { id: string }; Body: { instrucao?: string } }>('/api/gc/social/producao/:id/ia/legenda', autenticado, async (req, reply) =>
+    responder(reply, async () => ({ legenda: await gerarLegenda(req.params.id, String(req.body?.instrucao ?? '').slice(0, 500)) })));
+
+  // POST /api/gc/social/producao/:id/ia/checklist — refaz o checklist do último ajuste pedido pelo cliente.
+  app.post<{ Params: { id: string } }>('/api/gc/social/producao/:id/ia/checklist', autenticado, async (req, reply) =>
+    responder(reply, async () => {
+      const ultimo = await queryOne<{ texto: string }>(
+        `SELECT texto FROM gc_social_eventos WHERE gc_producao_id = $1 AND tipo = 'ajuste_cliente' ORDER BY created_at DESC LIMIT 1`,
+        [req.params.id]
+      );
+      if (!ultimo) throw Object.assign(new Error('O cliente ainda não pediu ajuste nesta arte'), { statusCode: 400 });
+      return { checklist: await checklistDoAjuste(req.params.id, ultimo.texto) };
+    }));
+
+  app.post<{ Params: { id: string } }>('/api/gc/clientes/:id/social/ia/aprendizados', autenticado, async (req, reply) =>
+    responder(reply, async () => ({ texto: await aprendizados(req.params.id) })));
+
+  // POST /api/gc/social/producao/:id/drive — manda a arte final pra pasta do Drive do cliente (subpasta do mês).
+  app.post<{ Params: { id: string } }>('/api/gc/social/producao/:id/drive', autenticado, async (req, reply) =>
+    responder(reply, () => enviarArteProDrive(req.params.id)));
 }

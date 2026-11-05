@@ -1,13 +1,14 @@
 import * as React from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import {
-  BarChart3, CircleDollarSign, ClipboardList, Clock, FileDown, Flag, Info, Loader2, MessageSquare, Phone,
+  BarChart3, CircleDollarSign, Palette, ClipboardList, Clock, FileDown, Flag, Info, Loader2, MessageSquare, Phone,
   ShoppingBag, SlidersHorizontal, StickyNote, TrendingUp, Users, Wallet,
 } from 'lucide-react'
 import { gestaoClientes, HORIZONTES, type GcSnapshot } from '@/services/gestaoClientes'
 import { formatarMetrica, mesAtual, mesPorExtenso } from '@/lib/gcMetricas'
 import { BRIEFING_MODELO, comModeloDoBriefing } from '@/lib/gcBriefingModelo'
 import logoNx from '@/assets/logo-nx.jpg'
+import { ArtesDoPortal, useArtesDoPortal } from '@/components/gestaoClientes/ArtesDoPortal'
 import { cn } from '@/lib/utils'
 
 type Portal = Awaited<ReturnType<typeof gestaoClientes.portal>>
@@ -561,9 +562,10 @@ function NotasDoCliente({ notas, token }: { notas: NotaPortal[]; token: string }
   )
 }
 
-type AbaPortal = 'plano' | 'briefing' | 'relatorios' | 'notas'
+type AbaPortal = 'artes' | 'plano' | 'briefing' | 'relatorios' | 'notas'
 
 const ABAS_DO_PORTAL: { id: AbaPortal; label: string; icone: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'artes', label: 'Artes para aprovar', icone: Palette },
   { id: 'plano', label: 'Planejamento', icone: Flag },
   { id: 'briefing', label: 'Briefing', icone: ClipboardList },
   { id: 'relatorios', label: 'Métricas e relatórios', icone: BarChart3 },
@@ -587,7 +589,9 @@ export function PortalClientePage() {
   const [erro, setErro] = React.useState('')
   const [carregando, setCarregando] = React.useState(true)
   // Null = o cliente ainda não escolheu: abre a primeira aba que já tem conteúdo.
-  const [aba, setAba] = React.useState<AbaPortal | null>(null)
+  const [busca] = useSearchParams()
+  const [aba, setAba] = React.useState<AbaPortal | null>(busca.get('aba') === 'artes' ? 'artes' : null)
+  const { artes, carregar: recarregarArtes } = useArtesDoPortal(token)
 
   React.useEffect(() => {
     gestaoClientes
@@ -614,7 +618,7 @@ export function PortalClientePage() {
     URL.revokeObjectURL(url)
   }
 
-  if (carregando) {
+  if (carregando || artes === null) {
     return (
       <div className="flex min-h-screen items-center justify-center gap-2 text-sm text-foreground/60">
         <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
@@ -652,13 +656,17 @@ export function PortalClientePage() {
     (dados.briefing.perguntas.some((p) => p.resposta.trim()) ||
       dados.briefing.contas.some((c) => c.valor || c.obs) ||
       Object.values(dados.briefing.dados).some(Boolean))
+  const artesPendentes = (artes ?? []).filter((a) => a.situacao === 'aguardando').length
   const temConteudo: Record<AbaPortal, boolean> = {
+    artes: artesPendentes > 0,
     plano: !!dados.planejamento_texto,
     briefing: temBriefing,
     relatorios: ordenados.length > 0,
     notas: notas.length > 0,
   }
   const abaAberta: AbaPortal = aba ?? ABAS_DO_PORTAL.find((a) => temConteudo[a.id])?.id ?? 'plano'
+  // A aba de artes só aparece quando a equipe já mandou alguma arte pro cliente.
+  const abas = ABAS_DO_PORTAL.filter((a) => a.id !== 'artes' || (artes ?? []).length > 0)
 
   return (
     <div
@@ -700,9 +708,9 @@ export function PortalClientePage() {
         <nav
           role="tablist"
           aria-label="O que você quer ver"
-          className="grid grid-cols-2 gap-1.5 rounded-2xl border border-line bg-surface p-1.5 shadow-sm sm:grid-cols-4"
+          className={cn('grid grid-cols-2 gap-1.5 rounded-2xl border border-line bg-surface p-1.5 shadow-sm', abas.length === 5 ? 'sm:grid-cols-5' : 'sm:grid-cols-4')}
         >
-          {ABAS_DO_PORTAL.map((a) => (
+          {abas.map((a) => (
             <button
               key={a.id}
               type="button"
@@ -716,9 +724,16 @@ export function PortalClientePage() {
             >
               <a.icone className="h-4 w-4 shrink-0" />
               {a.label}
+              {a.id === 'artes' && artesPendentes > 0 && (
+                <span className={cn('rounded-full px-1.5 text-[10px] font-semibold', abaAberta === 'artes' ? 'bg-white text-accent' : 'bg-accent text-white')}>
+                  {artesPendentes}
+                </span>
+              )}
             </button>
           ))}
         </nav>
+
+        {abaAberta === 'artes' && <ArtesDoPortal token={token} artes={artes ?? []} onMudou={recarregarArtes} />}
 
         {abaAberta === 'plano' &&
           (dados.planejamento_texto ? (

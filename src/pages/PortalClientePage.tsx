@@ -591,7 +591,7 @@ export function PortalClientePage() {
   // Null = o cliente ainda não escolheu: abre a primeira aba que já tem conteúdo.
   const [busca] = useSearchParams()
   const [aba, setAba] = React.useState<AbaPortal | null>(busca.get('aba') === 'artes' ? 'artes' : null)
-  const { artes, carregar: recarregarArtes } = useArtesDoPortal(token)
+  const { artes, erro: erroArtes, carregar: recarregarArtes } = useArtesDoPortal(token)
 
   React.useEffect(() => {
     gestaoClientes
@@ -666,7 +666,8 @@ export function PortalClientePage() {
   }
   const abaAberta: AbaPortal = aba ?? ABAS_DO_PORTAL.find((a) => temConteudo[a.id])?.id ?? 'plano'
   // A aba de artes só aparece quando a equipe já mandou alguma arte pro cliente.
-  const abas = ABAS_DO_PORTAL.filter((a) => a.id !== 'artes' || (artes ?? []).length > 0)
+  // A aba de artes aparece quando já tem arte, quando o link abriu direto nela ou quando deu erro ao carregar.
+  const abas = ABAS_DO_PORTAL.filter((a) => a.id !== 'artes' || (artes ?? []).length > 0 || abaAberta === 'artes' || !!erroArtes)
 
   return (
     <div
@@ -733,7 +734,7 @@ export function PortalClientePage() {
           ))}
         </nav>
 
-        {abaAberta === 'artes' && <ArtesDoPortal token={token} artes={artes ?? []} onMudou={recarregarArtes} />}
+        {abaAberta === 'artes' && <ArtesDoPortal token={token} artes={artes ?? []} erro={erroArtes} onMudou={recarregarArtes} />}
 
         {abaAberta === 'plano' &&
           (dados.planejamento_texto ? (

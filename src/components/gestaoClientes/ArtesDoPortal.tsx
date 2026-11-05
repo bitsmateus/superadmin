@@ -27,11 +27,15 @@ const urlImagem = (token: string, arte: string, img: string, original = false) =
 /** Quantas artes esperam resposta (pra a aba abrir primeiro e mostrar o número). */
 export function useArtesDoPortal(token: string) {
   const [artes, setArtes] = React.useState<GcArtePortal[] | null>(null)
+  const [erro, setErro] = React.useState('')
   const carregar = React.useCallback(() => {
-    gestaoClientes.artesDoPortal(token).then((r) => setArtes(r.artes)).catch(() => setArtes([]))
+    gestaoClientes.artesDoPortal(token)
+      .then((r) => { setArtes(r.artes); setErro('') })
+      // Falhou: não finge que está vazio (o cliente acharia que não tem nada pra aprovar).
+      .catch((err: Error) => { setArtes([]); setErro(err.message || 'Falha ao carregar') })
   }, [token])
   React.useEffect(() => { carregar() }, [carregar])
-  return { artes, carregar }
+  return { artes, erro, carregar }
 }
 
 function CartaoArte({ arte, token, nome, pedirNome, onMudou }: {
@@ -171,7 +175,7 @@ function CartaoArte({ arte, token, nome, pedirNome, onMudou }: {
   )
 }
 
-export function ArtesDoPortal({ token, artes, onMudou }: { token: string; artes: GcArtePortal[]; onMudou: () => void }) {
+export function ArtesDoPortal({ token, artes, erro, onMudou }: { token: string; artes: GcArtePortal[]; erro?: string; onMudou: () => void }) {
   const [nome, setNome] = React.useState(lerNome)
   const meses = [...new Set(artes.map((a) => a.mes))].sort().reverse()
   const pendentesPorMes = (m: string) => artes.filter((a) => a.mes === m && a.situacao === 'aguardando').length
@@ -192,6 +196,17 @@ export function ArtesDoPortal({ token, artes, onMudou }: { token: string; artes:
     campoNome.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     campoNome.current?.focus()
     return null
+  }
+
+  if (erro) {
+    return (
+      <section className="rounded-3xl border border-line bg-surface px-5 py-10 text-center shadow-sm">
+        <ImageIcon className="mx-auto mb-3 h-8 w-8 text-danger/60" />
+        <h2 className="text-base font-semibold text-foreground">Não foi possível carregar as artes</h2>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-foreground/55">{erro}</p>
+        <button type="button" onClick={onMudou} className="mt-4 h-10 rounded-xl bg-accent px-4 text-sm font-semibold text-white">Tentar de novo</button>
+      </section>
+    )
   }
 
   if (artes.length === 0) {

@@ -368,33 +368,64 @@ function ModalPdfArtes({ aberto, onFechar, clienteId, demandas, periodo, onMudou
 
 // ------------------------------------------------------------------ enviar pro cliente aprovar
 
-function LinkDoPortal({ link }: { link: string }) {
+/**
+ * O link do portal com Copiar / WhatsApp / Ver como o cliente vê. Se ainda tem arte marcada e não enviada,
+ * cada botão ENVIA primeiro (`antes`): senão o cliente abre o link e não vê nada.
+ */
+function LinkDoPortal({ link, pendentes, antes }: { link: string; pendentes: number; antes: () => Promise<boolean> }) {
   const mensagem = `Oi! As artes novas estão prontas pra você aprovar. É só abrir o link, olhar cada uma e tocar em Aprovar ou Pedir ajuste: ${link}`
+  const comEnvio = async (acao: () => void | Promise<void>) => {
+    if (!(await antes())) return
+    await acao()
+  }
+  /** Abre a aba já no clique (o navegador bloqueia janela aberta depois de um await) e só depois envia. */
+  const abrir = (url: string) => {
+    const janela = window.open('about:blank', '_blank')
+    void antes().then((ok) => {
+      if (!janela) return
+      if (ok) janela.location.href = url
+      else janela.close()
+    })
+  }
+  const sufixo = pendentes > 0 ? ' (envia as marcadas)' : ''
   return (
     <div className="space-y-2 rounded-xl border border-accent/30 bg-accent/[0.03] p-3">
       <p className="text-xs font-semibold text-foreground/70">Link de aprovação do cliente (é sempre o mesmo)</p>
       <div className="flex gap-2">
         <input readOnly value={link} className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-sm text-foreground" onFocus={(e) => e.target.select()} />
-        <Button size="sm" variant="secondary" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => void copiar(link).then((ok) => (ok ? toast.success('Link copiado') : toast.error('Não deu pra copiar: selecione o link e copie')))}>
-          Copiar
+        <Button
+          size="sm"
+          variant="secondary"
+          leftIcon={<Copy className="h-3.5 w-3.5" />}
+          onClick={() => void comEnvio(async () => {
+            const ok = await copiar(link)
+            if (ok) toast.success('Link copiado')
+            else toast.error('Não deu pra copiar: selecione o link e copie')
+          })}
+        >
+          Copiar{sufixo}
         </Button>
       </div>
       <div className="flex flex-wrap gap-2">
-        <a
-          href={`https://wa.me/?text=${encodeURIComponent(mensagem)}`}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
+          onClick={() => abrir(`https://wa.me/?text=${encodeURIComponent(mensagem)}`)}
           className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#25D366] px-3 text-xs font-medium text-white hover:opacity-90"
         >
-          <MessageCircle className="h-3.5 w-3.5" /> Abrir no WhatsApp com a mensagem
-        </a>
-        <Button variant="ghost" size="sm" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => void copiar(mensagem).then(() => toast.success('Mensagem copiada'))}>
+          <MessageCircle className="h-3.5 w-3.5" /> Abrir no WhatsApp com a mensagem{sufixo}
+        </button>
+        <Button variant="ghost" size="sm" leftIcon={<Copy className="h-3.5 w-3.5" />} onClick={() => void comEnvio(async () => { await copiar(mensagem); toast.success('Mensagem copiada') })}>
           Copiar a mensagem
         </Button>
-        <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 px-2 text-xs text-accent hover:underline">
+        <button type="button" onClick={() => abrir(link)} className="inline-flex h-8 items-center gap-1 px-2 text-xs text-accent hover:underline">
           <ExternalLink className="h-3.5 w-3.5" /> Ver como o cliente vê
-        </a>
+        </button>
       </div>
+      <p className={cn('text-[11px]', pendentes > 0 ? 'font-medium text-warning' : 'text-foreground/45')}>
+        {pendentes > 0
+          ? `${pendentes} arte${pendentes === 1 ? ' marcada ainda não foi enviada' : 's marcadas ainda não foram enviadas'}: o cliente só vê depois do envio. Qualquer botão acima já envia antes.`
+          : 'O cliente vê no link as artes que estão "Com o cliente" e as aprovadas.'}
+      </p>
     </div>
   )
 }
@@ -417,8 +448,11 @@ function ModalEnviarAprovacao({ aberto, onFechar, clienteId, demandas, onMudou }
       .catch((err: Error) => toast.error('Falha ao buscar o link: ' + err.message))
   }, [aberto]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const enviar = async () => {
-    if (marcados.size === 0) return toast.error('Marque ao menos uma arte')
+  const enviar = async (): Promise<boolean> => {
+    if (marcados.size === 0) {
+      toast.error('Marque ao menos uma arte')
+      return false
+    }
     setEnviando(true)
     try {
       const r = await gestaoClientes.enviarParaAprovacao(clienteId, [...marcados])
@@ -428,8 +462,10 @@ function ModalEnviarAprovacao({ aberto, onFechar, clienteId, demandas, onMudou }
       setMarcados(new Set())
       onMudou()
       toast.success(`${r.enviadas} arte${r.enviadas === 1 ? '' : 's'} no portal do cliente.${ok ? ' Link copiado.' : ''}`)
+      return true
     } catch (err) {
       toast.error((err as Error).message)
+      return false
     } finally {
       setEnviando(false)
     }
@@ -455,7 +491,7 @@ function ModalEnviarAprovacao({ aberto, onFechar, clienteId, demandas, onMudou }
       }
     >
       <div className="space-y-4">
-        {link ? <LinkDoPortal link={link} /> : <p className="flex items-center gap-1.5 text-xs text-foreground/50"><Loader2 className="h-3 w-3 animate-spin" /> Buscando o link…</p>}
+        {link ? <LinkDoPortal link={link} pendentes={marcados.size} antes={async () => (marcados.size > 0 ? enviar() : true)} /> : <p className="flex items-center gap-1.5 text-xs text-foreground/50"><Loader2 className="h-3 w-3 animate-spin" /> Buscando o link…</p>}
 
         {candidatas.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line px-4 py-5 text-center text-sm text-foreground/55">

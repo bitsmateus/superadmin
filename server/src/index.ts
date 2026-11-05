@@ -15,7 +15,6 @@ import { relatorioComercialRoutes } from './routes/relatorioComercial.js';
 import { trafegoRoutes } from './routes/trafego.js';
 import { gcTrafegoRoutes } from './routes/gcTrafego.js';
 import { gcIaRoutes } from './routes/gcIa.js';
-import { gcAprovacaoPublicaRoutes } from './routes/gcAprovacaoPublica.js';
 import { settingsRoutes } from './routes/settings.js';
 import { ticketRoutes } from './routes/tickets.js';
 import { analyticsRoutes } from './routes/analytics.js';
@@ -164,7 +163,6 @@ async function main() {
   await app.register(trafegoRoutes);
   await app.register(gcTrafegoRoutes);
   await app.register(gcIaRoutes);
-  await app.register(gcAprovacaoPublicaRoutes);
   await app.register(settingsRoutes);
   await app.register(ticketRoutes);
   await app.register(analyticsRoutes);

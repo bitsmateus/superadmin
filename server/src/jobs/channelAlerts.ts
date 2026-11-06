@@ -24,6 +24,11 @@ async function copyToAlertGroup(text: string) {
  */
 const INTERVAL_MS = 3 * 60 * 1000; // 3 min
 
+/** Leituras seguidas de "desconectado" exigidas antes de registrar/avisar a queda. */
+const DOWN_CONFIRMATIONS = Math.max(1, Number(process.env.CHANNEL_DOWN_CONFIRMATIONS) || 2);
+/** channel_key → nº de leituras seguidas de "desconectado" ainda não confirmadas. */
+const pendingDown = new Map<string, number>();
+
 export function startChannelAlerts() {
   if (process.env.CHANNEL_ALERTS === 'off') {
     console.log('[channelAlerts] desativado (CHANNEL_ALERTS=off)');
@@ -107,6 +112,22 @@ async function runOnce() {
     const cfg = cfgByKey.get(ch.channel_key);
     const eff = ch.effective_status;
     const prev = cfg?.last_status ?? null;
+
+    // Leituras transitórias/incertas não mudam nada: "unknown" (provedor não respondeu) e
+    // "connecting" (sessão reiniciando). Assim um canal já caído que oscila
+    // desconectado → unknown → desconectado NÃO gera um aviso novo de queda.
+    if (eff === 'unknown' || eff === 'connecting') continue;
+
+    // Debounce: só considera queda depois de N leituras seguidas de "desconectado"
+    // (N × 3 min). Uma leitura ruim isolada não avisa cliente nem grupo.
+    if (eff === 'disconnected' && prev !== 'disconnected') {
+      const n = (pendingDown.get(ch.channel_key) ?? 0) + 1;
+      if (n < DOWN_CONFIRMATIONS) {
+        pendingDown.set(ch.channel_key, n);
+        continue;
+      }
+    }
+    pendingDown.delete(ch.channel_key);
 
     // 1) Rastreio (TODOS os canais): grava transição + histórico de queda/retorno.
     if (eff !== prev) {

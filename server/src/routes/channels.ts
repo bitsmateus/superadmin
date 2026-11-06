@@ -218,7 +218,11 @@ export async function reconcileChannels(): Promise<{
       await mapPool(uazapiServers, 6, async (sv) => {
         const base = (sv.url ?? '').replace(/\/$/, '');
         try {
-          const r = await fetchJson(`${base}/instance/all`, { Accept: 'application/json', admintoken: sv.token ?? '' });
+          const r = await fetchJson(
+            `${base}/instance/all`,
+            { Accept: 'application/json', admintoken: sv.token ?? '' },
+            20_000,
+          );
           if (!r.ok) {
             providerErrors.push(`UAZAPI ${base}: HTTP ${r.status}`);
             return;
@@ -245,7 +249,12 @@ export async function reconcileChannels(): Promise<{
       const list: { name: string; number: string | null; status: ChannelStatus }[] = [];
       if (!evoOn) return list;
       try {
-        const r = await fetchJson(`${evoBase}/instance/fetchInstances`, { Accept: 'application/json', apikey: evoKey });
+        // fetchInstances com muitas instâncias é lento — 8s dava timeout e virava "queda em massa".
+        const r = await fetchJson(
+          `${evoBase}/instance/fetchInstances`,
+          { Accept: 'application/json', apikey: evoKey },
+          25_000,
+        );
         if (!r.ok) {
           providerErrors.push(`Evolution: HTTP ${r.status}`);
         } else {
@@ -309,19 +318,30 @@ export async function reconcileChannels(): Promise<{
   }
 
   // 3) Reconcilia o status real nos canais da NX.
+  // Se a consulta ao provedor FALHOU nesta rodada, o canal fica "unknown" em vez de cair
+  // no status salvo da NX (que costuma estar desatualizado e dizia "DISCONNECTED") — era
+  // isso que gerava "queda em massa" falsa quando a Evolution/UAZAPI demorava a responder.
+  const evoFailed = evoOn && providerErrors.some((e) => e.startsWith('Evolution'));
+  const uazapiFailed = providerErrors.some((e) => e.startsWith('UAZAPI'));
   const uazapiStatusByToken = new Map(uazapiInstances.map((i) => [i.token, i.status]));
   const evoStatusByName = new Map(evoInstances.map((i) => [i.name, i.status]));
   for (const c of channels) {
-    if (c.type === 'uazapi' && c.token_api && uazapiStatusByToken.has(c.token_api)) {
-      c.real_status = uazapiStatusByToken.get(c.token_api)!;
-      c.divergent = c.real_status !== c.nx_status;
-      c.effective_status = c.real_status;
+    if (c.type === 'uazapi' && c.token_api) {
+      if (uazapiStatusByToken.has(c.token_api)) {
+        c.real_status = uazapiStatusByToken.get(c.token_api)!;
+        c.divergent = c.real_status !== c.nx_status;
+        c.effective_status = c.real_status;
+      } else if (uazapiFailed) {
+        c.effective_status = 'unknown';
+      }
     } else if (c.type === 'evo') {
       const key = c.waba_id || c.name;
       if (key && evoStatusByName.has(key)) {
         c.real_status = evoStatusByName.get(key)!;
         c.divergent = c.real_status !== c.nx_status;
         c.effective_status = c.real_status;
+      } else if (evoFailed) {
+        c.effective_status = 'unknown';
       }
     }
   }

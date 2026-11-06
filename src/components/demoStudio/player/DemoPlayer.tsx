@@ -279,7 +279,7 @@ export function DemoPlayer({ demo, vars = {}, embed = false, onEvent, leadConhec
   )
 
   return (
-    <div ref={raizRef} className={embed ? 'dsp dsp-embed' : 'dsp'} style={accent ? ({ '--accent': accent } as React.CSSProperties) : undefined}>
+    <div ref={raizRef} className={['dsp', embed && 'dsp-embed', ctaNoSite && 'dsp-claro'].filter(Boolean).join(' ')} style={accent ? ({ '--accent': accent } as React.CSSProperties) : undefined}>
       {!embed && (
         <header className="top">
           <div className="brand">
@@ -608,7 +608,7 @@ function Cartao(p: CartaoProps) {
       )}
       <div className="row cta-row">
         {noSite ? (
-          <button className="btn btn-wa" type="button" onClick={() => p.onCta('whatsapp')}>
+          <button className="btn btn-primary" type="button" onClick={() => p.onCta('whatsapp')}>
             {cta.buttonLabel || 'Falar com especialista'}
           </button>
         ) : cta.type === 'URL' ? (

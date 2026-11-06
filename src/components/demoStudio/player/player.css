@@ -15,7 +15,8 @@
 }
 .dsp.dsp-embed { min-height: 0; padding-top: 0; padding-bottom: 0; background: transparent }
 @media (prefers-color-scheme: dark) {
-  .dsp {
+  /* .dsp-claro: iframe num site claro (?cta=site) fica sempre no tema claro, combinando com a página. */
+  .dsp:not(.dsp-claro) {
     --bg: #0b1220; --surface: #131c2e; --ink: #e8eef8; --muted: #9aa9c0; --line: #24314a;
     --wa: #22a95a; --stage: #0f1828;
     --shade: rgba(0, 0, 0, .55); --chrome: #1b2538; --chrome-ink: #8d9bb3; --btn-dark: #0b1220; color-scheme: dark;
@@ -101,9 +102,10 @@
 .dsp .form .erro { color: #d63c3c; font-size: 12.5px; font-weight: 600 }
 .dsp .box .checks { list-style: none; margin: 0 0 22px; padding: 14px 16px; display: grid; gap: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px }
 .dsp .box .checks li { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.4; font-weight: 600; color: var(--ink) }
-.dsp .box .checks .ok { flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 0; border-radius: 50%; background: var(--wa); color: #fff }
+.dsp .box .checks .ok { flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 0; border-radius: 50%; background: var(--accent); color: var(--accent-ink) }
 .dsp .box .cta-row .btn { padding: 13px 22px; font-size: 15px }
 .dsp .box .cta-row .btn-wa { box-shadow: 0 10px 22px -10px rgba(31, 168, 85, .7) }
+.dsp .box .cta-row .btn-primary { box-shadow: 0 10px 22px -10px color-mix(in srgb, var(--accent) 75%, transparent) }
 .dsp .phone { user-select: all; -webkit-user-select: all; font-weight: 700; color: var(--ink) }
 
 .dsp .progress { max-width: 1280px; margin: 12px auto 0; display: flex; gap: 4px }

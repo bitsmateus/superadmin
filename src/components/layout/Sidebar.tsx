@@ -421,13 +421,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     : []
   const hasVendasBoard = leadBoards.some((b) => b.isVendas)
   const hasContratoBoard = leadBoards.some((b) => b.isContrato)
-  // Financeiro (Vendas, Contrato, Contas a Pagar, Clientes Geral): SÓ Ian e Mateus — não existe marcação que libere.
+  // Financeiro (Vendas, Contrato): SÓ Ian e Mateus — não existe marcação que libere.
   const visibleFinanceiroItems = seeFinancials
     ? [
         ...(hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
         ...(hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),
-        { to: '/financeiro/contas-a-pagar', label: 'Contas a Pagar', icon: Wallet },
-        { to: '/financeiro/clientes-geral', label: 'CLIENTES GERAL', icon: Users },
       ]
     : []
   // Cada grupo já sai na ordem que ESSA pessoa montou arrastando (ver useMenuArrastavel).
@@ -500,7 +498,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     [suporteOrdenado, comercialOrdenado, demandasOrdenado, financeiroOrdenado, secundariosOrdenados, arquivadosOrdenados],
   )
   const pinnedKeys = profile?.pinnedMenu ?? []
-  const pinnedItems = React.useMemo(() => {
+  const pinnedNaOrdemDoPin = React.useMemo(() => {
     const vistos = new Set<string>()
     return pinnedKeys
       .map((key) => pinnableItems.find((item) => chaveComparavel(chaveDoItem(item)) === chaveComparavel(key)))
@@ -512,6 +510,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         return true
       })
   }, [pinnedKeys, pinnableItems])
+  // Os fixados também se arrastam pra cima e pra baixo: a ordem fica no perfil, como a dos outros grupos.
+  const pinnedItems = ordenar('fixados', pinnedNaOrdemDoPin)
   const isPinned = React.useCallback(
     (key: string) => pinnedKeys.some((k) => chaveComparavel(k) === chaveComparavel(key)),
     [pinnedKeys],
@@ -559,18 +559,21 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             {pinnedItems.map((item) => {
               const Icon = item.icon
               const key = chaveDoItem(item)
+              const drag = arrastar('fixados', pinnedItems, item)
               return (
                 <NavLink
                   key={`pinned-${key}`}
                   to={item.to}
                   end={'end' in item ? (item.end as boolean | undefined) : undefined}
                   onClick={closeOnMobile}
+                  {...drag.handlers}
                   className={({ isActive }) =>
                     cn(
                       'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm ring-1 transition-colors',
                       isActive
                         ? 'bg-amber-500/15 text-foreground ring-amber-500/40'
                         : 'bg-amber-500/[0.06] text-foreground/80 ring-amber-500/20 hover:bg-amber-500/10',
+                      drag.classe,
                     )
                   }
                 >

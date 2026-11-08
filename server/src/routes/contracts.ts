@@ -1,4 +1,5 @@
 import { ehDoFinanceiro } from '../lib/acessoMenu.js';
+import { avisarContratoAssinado } from '../lib/avisoContratoAssinado.js';
 import { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { restrictedBoardFilter } from './leadBoards.js';
@@ -169,6 +170,8 @@ export async function contractRoutes(app: FastifyInstance) {
       if (req.body.status === 'assinado' && contract.client_id) {
         await advanceClientToBriefing(contract.client_id);
       }
+      // "Fulano assinou o contrato!" no grupo SUPORTE GERAL (uma vez por contrato).
+      if (req.body.status === 'assinado') void avisarContratoAssinado(contract.id);
       // Assinar (ou desmarcar) reflete na venda e nas comissões dela — um clique só pro mesmo fato.
       if (req.body.status !== undefined) {
         void propagarContratoAssinado(contract.id, req.body.status === 'assinado');

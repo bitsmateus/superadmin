@@ -1,4 +1,5 @@
 import { query, queryOne } from '../db.js';
+import { avisarContratoAssinado } from '../lib/avisoContratoAssinado.js';
 import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
 import { propagarContratoAssinado } from '../lib/contractSignal.js';
 
@@ -178,6 +179,7 @@ export async function verificarContratosPendentes(opts: { dryRun?: boolean } = {
     );
     if (c.client_id) await advanceClientToBriefing(c.client_id);
     await propagarContratoAssinado(c.id, true);
+    await avisarContratoAssinado(c.id);
     console.log('[autentique-sync] contrato marcado como assinado:', c.id, '(documento', c.autentique_document_id + ')');
   }
 }

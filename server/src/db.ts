@@ -1094,6 +1094,27 @@ END; $$`);
   // principal da aba Contrato.
   await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS pdf_data TEXT`);
   await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS pdf_filename TEXT`);
+  // Aviso "assinou o contrato" no grupo SUPORTE GERAL (lib/avisoContratoAssinado.ts): um por contrato. Na primeira
+  // subida, os que já estão assinados entram como avisados, pra desmarcar e marcar de novo não avisar coisa velha —
+  // menos o último da Seguir Transportes (Danilo), que o dono pediu pra sair no grupo na estreia do aviso
+  // (avisarAssinadosSemAviso, logo depois da subida).
+  {
+    const { rows: [{ existia }] } = await pool.query<{ existia: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'contracts' AND column_name = 'aviso_assinatura_em') AS existia`);
+    if (!existia) {
+      await pool.query(`ALTER TABLE contracts ADD COLUMN aviso_assinatura_em TIMESTAMPTZ`);
+      await pool.query(
+        `UPDATE contracts SET aviso_assinatura_em = COALESCE(signed_at, NOW())
+         WHERE status = 'assinado' AND id IS DISTINCT FROM (
+           SELECT ct.id FROM contracts ct
+           LEFT JOIN clients c ON c.id = ct.client_id
+           LEFT JOIN lead_rows l ON l.id = ct.venda_lead_id
+           WHERE ct.status = 'assinado' AND concat_ws(' ', c.company, c.name, l.empresa, l.nome) ILIKE '%seguir%'
+           ORDER BY ct.signed_at DESC NULLS LAST LIMIT 1)`
+      );
+    }
+  }
 
   // "Deslogar" alguém de Equipe: como o JWT é stateless (sem sessão guardada), não dá pra apagar
   // um token específico — em vez disso, guarda A PARTIR DE QUANDO todo token dessa pessoa vira

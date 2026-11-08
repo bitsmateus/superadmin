@@ -1,5 +1,6 @@
 import { query, queryOne } from '../db.js';
 import { advanceClientToBriefing } from './briefingHandoff.js';
+import { avisarContratoAssinado } from './avisoContratoAssinado.js';
 
 /**
  * Fecha a corrente do contrato: assinou -> a VENDA fica com "Contrato assinado" -> e os
@@ -85,6 +86,7 @@ export async function propagarAssinaturaDaVenda(vendaLeadId: string, assinado: b
         [assinado ? 'assinado' : 'pendente', c.id]
       );
       if (assinado && c.client_id) await advanceClientToBriefing(c.client_id);
+      if (assinado) await avisarContratoAssinado(c.id);
     }
   } catch (err) {
     console.error('[contrato] falha ao propagar a assinatura da venda pro contrato', vendaLeadId, err);

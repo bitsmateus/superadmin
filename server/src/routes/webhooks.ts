@@ -1,4 +1,5 @@
 import { enviarBoasVindasLead } from '../lib/leadWelcome.js';
+import { avisarContratoAssinado } from '../lib/avisoContratoAssinado.js';
 import { nichoDoFormulario } from '../lib/trafegoNicho.js';
 import { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
@@ -114,6 +115,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       await advanceClientToBriefing(contract.client_id);
     }
     await propagarContratoAssinado(contract.id, true);
+    await avisarContratoAssinado(contract.id);
 
     return reply.status(200).send({ ok: true, matched: true });
     });

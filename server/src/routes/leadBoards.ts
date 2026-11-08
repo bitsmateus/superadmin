@@ -379,6 +379,40 @@ export async function logLeadEvent(
   );
 }
 
+/**
+ * Demandas (CRM IAN e os pipes de cliente): marcar a etiqueta "Finalizado" leva o card pra coluna "Feito" da
+ * mesma aba — o status vira "Feito" e, se a aba tem o quadro "Feito", o card vai pra ele (como arrastar).
+ * Sem a coluna "Feito" na aba, não faz nada.
+ */
+async function finalizadoVaiProFeito(leadRowId: string, actorName: string): Promise<void> {
+  try {
+    const r = await queryOne<{ etiqueta: string | null; status: string | null; board_id: string; page: string }>(
+      `SELECT r.etiqueta, r.status, r.board_id, lb.page
+       FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id JOIN lead_pages lp ON lp.id = lb.page
+       WHERE r.id = $1 AND r.deleted_at IS NULL AND lp.section = 'demandas'`,
+      [leadRowId]
+    );
+    if (!r || normalizaNome(r.etiqueta ?? '') !== 'finalizado') return;
+    const [etiquetaFeito] = (await query<{ name: string }>(
+      `SELECT name FROM lead_labels WHERE field = 'status' AND (page_id = $1 OR page_id IS NULL)
+       ORDER BY page_id NULLS LAST, position`,
+      [r.page]
+    )).filter((l) => normalizaNome(l.name) === 'feito');
+    const [quadroFeito] = (await query<{ id: string; name: string }>(
+      'SELECT id, name FROM lead_boards WHERE page = $1 ORDER BY position', [r.page]
+    )).filter((b) => normalizaNome(b.name) === 'feito');
+    if (!etiquetaFeito && !quadroFeito) return;
+    const status = etiquetaFeito?.name ?? quadroFeito!.name;
+    const boardId = quadroFeito?.id ?? r.board_id;
+    if (r.status === status && boardId === r.board_id) return;
+    // Como ator, pro histórico de coluna (lead_board_history) registrar quem marcou.
+    await queryAsActor(actorName, 'UPDATE lead_rows SET status = $2, board_id = $3 WHERE id = $1', [leadRowId, status, boardId]);
+    if (r.status !== status) await logLeadEvent(leadRowId, 'status', r.status ?? '', status, actorName);
+  } catch (err) {
+    console.error('[demandas] erro ao levar o card Finalizado pro Feito', leadRowId, err);
+  }
+}
+
 /** Campos rastreados na linha do tempo — chave da coluna ↔ tipo de evento gravado. */
 const TRACKED_FIELDS: Record<string, string> = {
   status: 'status',
@@ -1840,6 +1874,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         void syncCopiaDaIa(req.params.id);
       }
       // Corrigir nome/empresa/telefone/SDR do lead atualiza a linha dele na aba Vendas também...
+      // Demandas: etiqueta "Finalizado" leva o card pra coluna "Feito".
+      if ('etiqueta' in patch) void getActorName(sub).then((actorName) => finalizadoVaiProFeito(req.params.id, actorName));
       void propagarVenda(req.params.id, patch);
       // ...e editar direto na aba Vendas (nome ou "Contrato assinado") atualiza a Comissão SDR.
       void propagarComissao(req.params.id, patch);

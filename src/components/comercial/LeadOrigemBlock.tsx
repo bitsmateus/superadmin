@@ -3,6 +3,7 @@ import {
   MINIMO_DETALHE_MOTIVO, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS,
   juntarMotivo, origemEhOutros, rotuloDaOrigem, separarMotivo, textoDaOrigemOutros,
 } from '@/lib/regraDoStatus'
+import { textoDeVerdade } from '@/lib/textoDeVerdade'
 import * as React from 'react'
 import { ExternalLink, Megaphone } from 'lucide-react'
 import { api } from '@/services/api'
@@ -34,10 +35,10 @@ export function MotivoComOutro({ valor, onChange }: { valor: string; motivos?: s
   const [tentou, setTentou] = React.useState(false)
   React.useEffect(() => { const s = separarMotivo(valor); setMotivo(s.motivo); setDetalhe(s.detalhe); setTentou(false) }, [valor])
   const naLista = (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(motivo)
-  const curto = detalhe.trim().length < MINIMO_DETALHE_MOTIVO
+  const curto = !textoDeVerdade(detalhe, MINIMO_DETALHE_MOTIVO)
   const salvar = (m: string, d: string) => {
     if (!m) { onChange(''); return }
-    if (d.trim().length >= MINIMO_DETALHE_MOTIVO) onChange(juntarMotivo(m, d))
+    if (textoDeVerdade(d, MINIMO_DETALHE_MOTIVO)) onChange(juntarMotivo(m, d))
   }
   return (
     <div className="block text-[11px] text-foreground/40">
@@ -61,7 +62,7 @@ export function MotivoComOutro({ valor, onChange }: { valor: string; motivos?: s
             placeholder="Detalhe a desqualificação"
             className={cn('mt-1 w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none', tentou && curto && 'ring-1 ring-warning/50')}
           />
-          {tentou && curto && <span className="text-[11px] text-warning">Detalhe um pouco mais (mínimo de {MINIMO_DETALHE_MOTIVO} caracteres) pra salvar.</span>}
+          {tentou && curto && <span className="text-[11px] text-warning">Detalhe com palavras (mínimo de {MINIMO_DETALHE_MOTIVO} letras) pra salvar. Ex.: achou caro, fechou com outro sistema.</span>}
         </>
       )}
     </div>

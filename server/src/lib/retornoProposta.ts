@@ -1,5 +1,6 @@
 import { normalizaNome } from './normalizaNome.js';
 import { MINIMO_DETALHE_MOTIVO, MOTIVOS_DESQUALIFICACAO } from './trafegoNicho.js';
+import { textoDeVerdade } from './textoDeVerdade.js';
 import { agendamentoLegivel, agendamentoParaDate, dateParaAgendamento } from './reuniaoResultado.js';
 
 /**
@@ -100,8 +101,8 @@ export function validarRetorno(
   };
 
   if (resultado === 'retornou') {
-    if (observacao.length < MINIMO_OBSERVACAO_RETORNO) {
-      return { erro: `Escreva o que foi conversado (mínimo ${MINIMO_OBSERVACAO_RETORNO} caracteres).` };
+    if (!textoDeVerdade(observacao, MINIMO_OBSERVACAO_RETORNO)) {
+      return { erro: `Escreva o que foi conversado, com palavras (mínimo ${MINIMO_OBSERVACAO_RETORNO} letras).` };
     }
     const desfecho = texto(b, 'desfecho') as Desfecho;
     if (!(DESFECHOS as readonly string[]).includes(desfecho)) return { erro: 'Escolha como ficou: fechou, ainda negociando ou perdeu.' };
@@ -114,7 +115,7 @@ export function validarRetorno(
       const motivo = texto(b, 'motivo');
       const detalhe = texto(b, 'motivo_detalhe');
       if (!(MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(motivo)) return { erro: 'Escolha o motivo da perda.' };
-      if (detalhe.length < MINIMO_DETALHE_MOTIVO) return { erro: `Detalhe o motivo (mínimo ${MINIMO_DETALHE_MOTIVO} caracteres).` };
+      if (!textoDeVerdade(detalhe, MINIMO_DETALHE_MOTIVO)) return { erro: `Detalhe o motivo, com palavras (mínimo ${MINIMO_DETALHE_MOTIVO} letras).` };
       return { ok: { ...base, desfecho, motivoPerda: `${motivo}: ${detalhe}` } };
     }
     // Fechou: o Vendido exige MRR, implementação e origem — vêm do popup (preenchidos com o que o card já tem).
@@ -128,8 +129,8 @@ export function validarRetorno(
   }
 
   if (resultado === 'sem_resposta') {
-    if (observacao.length < MINIMO_OBSERVACAO_TENTATIVA) {
-      return { erro: `Diga por onde tentou (mínimo ${MINIMO_OBSERVACAO_TENTATIVA} caracteres).` };
+    if (!textoDeVerdade(observacao, MINIMO_OBSERVACAO_TENTATIVA)) {
+      return { erro: `Diga por onde tentou, com palavras (mínimo ${MINIMO_OBSERVACAO_TENTATIVA} letras).` };
     }
     const n = novoRetorno(b, agora);
     if ('erro' in n) return n;
@@ -141,7 +142,7 @@ export function validarRetorno(
   if (historico.adiamentos >= MAXIMO_ADIAMENTOS) {
     return { erro: `Esse retorno já foi adiado ${MAXIMO_ADIAMENTOS} vezes: agora é retornar ou registrar a tentativa.` };
   }
-  if (observacao.length < MINIMO_MOTIVO_ADIAR) return { erro: `Diga por que vai adiar (mínimo ${MINIMO_MOTIVO_ADIAR} caracteres).` };
+  if (!textoDeVerdade(observacao, MINIMO_MOTIVO_ADIAR)) return { erro: `Diga por que vai adiar, com palavras (mínimo ${MINIMO_MOTIVO_ADIAR} letras).` };
   const n = novoRetorno(b, agora);
   if ('erro' in n) return n;
   return { ok: { ...base, retornarNovo: n.valor } };

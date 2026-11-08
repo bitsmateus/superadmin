@@ -1,4 +1,5 @@
 import { MINIMO_DETALHE_MOTIVO, MOTIVOS_DESQUALIFICACAO } from '../lib/trafegoNicho.js';
+import { textoDeVerdade } from '../lib/textoDeVerdade.js';
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import type { PoolClient } from 'pg';
@@ -239,16 +240,16 @@ async function faltaDadoDoStatus(
   const SO_ORIGEM = { campos: ['origem'], mensagem: 'Pra mover o lead pra essa etapa, informe a origem do lead.' };
 
   if (atual.cobra_motivo && (novo.includes('disparoemmassa') || novo.includes('perdido') || novo.includes('desqualificad'))) {
-    // Motivo da lista + detalhe escrito (mínimo 10 caracteres), salvo como "<Motivo>: <detalhe>".
+    // Motivo da lista + detalhe escrito com palavras (mínimo 10 letras, textoDeVerdade), salvo como "<Motivo>: <detalhe>".
     const motivo = final('motivo_desqualificacao');
     const i = motivo.indexOf(':');
     const nome = (i >= 0 ? motivo.slice(0, i) : motivo).trim();
     const detalhe = i >= 0 ? motivo.slice(i + 1).trim() : '';
-    const valido = (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(nome) && detalhe.length >= MINIMO_DETALHE_MOTIVO;
+    const valido = (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(nome) && textoDeVerdade(detalhe, MINIMO_DETALHE_MOTIVO);
     if (valido) return pedeOrigem ? SO_ORIGEM : null;
     return {
       campos: ['motivo_desqualificacao', ...(pedeOrigem ? ['origem'] : [])],
-      mensagem: 'Pra tirar esse lead do funil, escolha o motivo da desqualificação e detalhe o porquê (mínimo de 10 caracteres)'
+      mensagem: 'Pra tirar esse lead do funil, escolha o motivo da desqualificação e detalhe o porquê com palavras (mínimo de 10 letras)'
         + (pedeOrigem ? ', e informe a origem do lead.' : '.'),
     };
   }

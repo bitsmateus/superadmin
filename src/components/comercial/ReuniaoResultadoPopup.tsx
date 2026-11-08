@@ -14,6 +14,7 @@ import {
 } from '@/services/reunioes'
 import { motivoValido } from '@/lib/regraDoStatus'
 import { cn } from '@/lib/utils'
+import { contarLetras, textoDeVerdade } from '@/lib/textoDeVerdade'
 import { useTelaTravada } from '@/lib/telaTravada'
 
 const INTERVALO_MS = 90_000
@@ -148,7 +149,7 @@ function NaoCompareceu({ enviando, onVoltar, onConcluir }: {
   const [outro, setOutro] = React.useState('')
   const [obs, setObs] = React.useState('')
   const [tentou, setTentou] = React.useState(false)
-  const falta = !motivo ? 'Escolha o motivo.' : motivo === 'Outro' && outro.trim().length < 5 ? 'Escreva o motivo (mínimo 5 caracteres).' : ''
+  const falta = !motivo ? 'Escolha o motivo.' : motivo === 'Outro' && !textoDeVerdade(outro, 5) ? 'Escreva o motivo com palavras. Ex.: esqueceu da reunião.' : ''
   return (
     <div className="mt-5 space-y-3">
       <p className="text-sm font-medium text-foreground">Por que o lead não compareceu?</p>
@@ -236,7 +237,10 @@ function CompareceuNaFicha({ reuniao, contador, enviando, onConcluir }: {
   const pedeRetorno = /proposta/i.test(etapa)
   const pedeMotivo = /perdido|desqualificado/i.test(etapa)
   const itens: { ok: boolean; rotulo: string }[] = [
-    { ok: resumo.trim().length >= MINIMO_RESUMO, rotulo: `Resumo (${resumo.trim().length}/${MINIMO_RESUMO})` },
+    {
+      ok: textoDeVerdade(resumo, MINIMO_RESUMO),
+      rotulo: contarLetras(resumo) >= MINIMO_RESUMO ? 'Resumo (escreva com palavras)' : `Resumo (${contarLetras(resumo)}/${MINIMO_RESUMO} letras)`,
+    },
     { ok: !!row.numeroAtendentes.trim(), rotulo: 'Nº atendentes' },
     { ok: /\d/.test(row.valorImplementacao), rotulo: 'Valor Implementação' },
     { ok: /\d/.test(row.valorMrr), rotulo: 'Valor MRR' },

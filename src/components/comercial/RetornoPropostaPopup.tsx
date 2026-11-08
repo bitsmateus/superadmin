@@ -17,6 +17,7 @@ import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { useTelaTravada } from '@/lib/telaTravada'
 import { timeAgo } from '@/lib/time'
 import { cn } from '@/lib/utils'
+import { contarLetras, textoDeVerdade } from '@/lib/textoDeVerdade'
 
 const INTERVALO_MS = 60_000
 const campoCls = 'w-full rounded-md border border-line bg-card px-2.5 py-2 text-sm text-foreground outline-none focus:border-accent/60'
@@ -229,11 +230,11 @@ function Retornou({ atual, enviando, onVoltar, onConcluir }: Form) {
   const [tentou, setTentou] = React.useState(false)
   const origemFinal = origem === 'outros' ? `${PREFIXO_ORIGEM_OUTROS}${origemOutros.trim()}` : origem
 
-  const falta = obs.trim().length < MINIMO_OBSERVACAO_RETORNO ? `Escreva o que foi conversado (mínimo ${MINIMO_OBSERVACAO_RETORNO} caracteres).`
+  const falta = !textoDeVerdade(obs, MINIMO_OBSERVACAO_RETORNO) ? `Escreva o que foi conversado, com palavras (mínimo ${MINIMO_OBSERVACAO_RETORNO} letras; pontos e espaços não contam).`
     : !desfecho ? 'Escolha como ficou.'
     : desfecho === 'negociando' && !noFuturo(data, hora) ? 'O próximo retorno tem que ser no futuro.'
     : desfecho === 'perdeu' && !motivo ? 'Escolha o motivo da perda.'
-    : desfecho === 'perdeu' && detalhe.trim().length < MINIMO_DETALHE_MOTIVO ? `Detalhe o motivo (mínimo ${MINIMO_DETALHE_MOTIVO} caracteres).`
+    : desfecho === 'perdeu' && !textoDeVerdade(detalhe, MINIMO_DETALHE_MOTIVO) ? `Detalhe o motivo com palavras (mínimo ${MINIMO_DETALHE_MOTIVO} letras). Ex.: achou caro, fechou com outro sistema.`
     : desfecho === 'fechou' && !/\d/.test(mrr) ? 'Informe o valor MRR fechado.'
     : desfecho === 'fechou' && !/\d/.test(impl) ? 'Informe o valor de implementação (R$ 0,00 também vale).'
     : desfecho === 'fechou' && (!origem || (origem === 'outros' && origemOutros.trim().length < MINIMO_OUTRO)) ? 'Informe a origem do lead.'
@@ -242,7 +243,7 @@ function Retornou({ atual, enviando, onVoltar, onConcluir }: Form) {
   return (
     <div className="mt-5 space-y-3">
       <label className="block text-xs text-foreground/50">
-        O que foi conversado ({obs.trim().length}/{MINIMO_OBSERVACAO_RETORNO})
+        O que foi conversado ({contarLetras(obs)}/{MINIMO_OBSERVACAO_RETORNO} letras)
         <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} autoFocus
           placeholder="Ex.: falei com ele, quer ajustar o plano pra 3 atendentes…" className={cn(campoCls, 'mt-0.5 resize-y')} />
       </label>
@@ -314,7 +315,7 @@ function SemResposta({ atual, enviando, onVoltar, onConcluir }: Form) {
   const ehAUltima = atual.tentativas + 1 >= TENTATIVAS_PRA_FOLLOW_UP
   const [followUp, setFollowUp] = React.useState(true)
   const [tentou, setTentou] = React.useState(false)
-  const falta = obs.trim().length < MINIMO_OBSERVACAO_TENTATIVA ? `Diga por onde tentou (mínimo ${MINIMO_OBSERVACAO_TENTATIVA} caracteres).`
+  const falta = !textoDeVerdade(obs, MINIMO_OBSERVACAO_TENTATIVA) ? `Diga por onde tentou, com palavras (mínimo ${MINIMO_OBSERVACAO_TENTATIVA} letras). Ex.: mandei no WhatsApp e liguei 2x.`
     : !noFuturo(data, hora) ? 'O próximo retorno tem que ser no futuro.' : ''
   return (
     <div className="mt-5 space-y-3">
@@ -346,7 +347,7 @@ function Adiar({ atual, enviando, onVoltar, onConcluir }: Form) {
   const [data, setData] = React.useState(sugestao.data)
   const [hora, setHora] = React.useState(sugestao.hora)
   const [tentou, setTentou] = React.useState(false)
-  const falta = obs.trim().length < MINIMO_MOTIVO_ADIAR ? `Diga por que vai adiar (mínimo ${MINIMO_MOTIVO_ADIAR} caracteres).`
+  const falta = !textoDeVerdade(obs, MINIMO_MOTIVO_ADIAR) ? `Diga por que vai adiar, com palavras (mínimo ${MINIMO_MOTIVO_ADIAR} letras). Ex.: cliente pediu pra falar na quinta.`
     : !noFuturo(data, hora) ? 'O novo horário tem que ser no futuro.' : ''
   return (
     <div className="mt-5 space-y-3">

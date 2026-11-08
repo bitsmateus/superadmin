@@ -1,5 +1,6 @@
 import { normalizaNome } from './normalizaNome.js';
 import { MINIMO_DETALHE_MOTIVO, MOTIVOS_DESQUALIFICACAO } from './trafegoNicho.js';
+import { textoDeVerdade } from './textoDeVerdade.js';
 
 /**
  * Resultado da reunião (popup obrigatório). Funções puras: o "Agendamento" do card é texto local de Brasília
@@ -207,7 +208,7 @@ function motivoDeDesqualificacaoValido(v: string): boolean {
   const i = (v ?? '').indexOf(':');
   const nome = (i >= 0 ? v.slice(0, i) : v).trim();
   const detalhe = i >= 0 ? v.slice(i + 1).trim() : '';
-  return (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(nome) && detalhe.length >= MINIMO_DETALHE_MOTIVO;
+  return (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(nome) && textoDeVerdade(detalhe, MINIMO_DETALHE_MOTIVO);
 }
 
 /** Valida o pedido do popup contra o que o card tem agora no banco. Devolve o erro (texto) ou os dados. */
@@ -226,14 +227,14 @@ export function validarResultado(
     const resumo = texto('resumo');
     const etapa = ETAPAS_COMPARECEU.find((e) => normalizaNome(e) === normalizaNome(texto('proxima_etapa')));
     const falta: string[] = [];
-    if (resumo.length < MINIMO_RESUMO) falta.push(`resumo da reunião (mínimo ${MINIMO_RESUMO} caracteres)`);
+    if (!textoDeVerdade(resumo, MINIMO_RESUMO)) falta.push(`resumo da reunião, com palavras (mínimo ${MINIMO_RESUMO} letras)`);
     if (!card.numero_atendentes?.trim()) falta.push('nº de atendentes');
     if (!temDigito(card.valor_implementacao)) falta.push('valor de implementação');
     if (!temDigito(card.valor_mrr)) falta.push('valor MRR');
     if (!etapa) falta.push('próxima etapa');
     if (etapa && /proposta/i.test(etapa) && !agendamentoParaDate(card.retornar)) falta.push('data de retorno ("Retornar")');
     if (etapa && /perdido|desqualificado/i.test(etapa) && !motivoDeDesqualificacaoValido(card.motivo_desqualificacao)) {
-      falta.push(`motivo (da lista, com detalhe de ${MINIMO_DETALHE_MOTIVO}+ caracteres)`);
+      falta.push(`motivo (da lista, com detalhe escrito com palavras, ${MINIMO_DETALHE_MOTIVO}+ letras)`);
     }
     if (falta.length) return { erro: `Falta preencher: ${falta.join(', ')}.` };
     const motivo = /perdido|desqualificado/i.test(etapa!) ? card.motivo_desqualificacao.trim() : null;
@@ -246,7 +247,7 @@ export function validarResultado(
     let motivo: string = escolhido;
     if (escolhido === 'Outro') {
       const outro = texto('motivo_outro');
-      if (outro.length < 5) return { erro: 'Em "Outro", escreva o motivo (mínimo 5 caracteres).' };
+      if (!textoDeVerdade(outro, 5)) return { erro: 'Em "Outro", escreva o motivo com palavras (ex.: esqueceu da reunião).' };
       motivo = `Outro: ${outro}`;
     }
     return { ok: { resultado, resumo: texto('resumo'), proximaEtapa: 'Reunião não comparecida', motivo, agendamentoNovo: null } };

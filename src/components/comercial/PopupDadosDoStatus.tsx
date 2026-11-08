@@ -7,6 +7,7 @@ import {
   CANAIS_DE_AGENDAMENTO, MINIMO_DETALHE_MOTIVO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, textoDoAgendadoOutro, MINIMO_OUTRO, MOTIVOS_DESQUALIFICACAO, ORIGENS_DO_LEAD, PREFIXO_ORIGEM_OUTROS, campoOk,
   SDR_IA, juntarMotivo, origemEhOutros, rotuloDaOrigem, separarMotivo, textoDaOrigemOutros, type CampoDoPopup,
 } from '@/lib/regraDoStatus'
+import { textoDeVerdade } from '@/lib/textoDeVerdade'
 import { prettifyCurrencyRaw, sanitizeCurrencyRaw } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
@@ -93,7 +94,7 @@ export function PopupDadosDoStatus() {
   const pronto = atual.campos.every((c) => campoOk(c, valorFinal(c)))
   // O botão libera quando tudo foi escolhido — o tamanho do detalhe do motivo só é cobrado ao tentar confirmar.
   const podeTentar = atual.campos.every((c) => (c === 'motivoDesqualificacao' ? !!texto[c] && !!outro.trim() : campoOk(c, valorFinal(c))))
-  const detalheCurto = atual.campos.includes('motivoDesqualificacao') && outro.trim().length < MINIMO_DETALHE_MOTIVO
+  const detalheCurto = atual.campos.includes('motivoDesqualificacao') && !textoDeVerdade(outro, MINIMO_DETALHE_MOTIVO)
   const fechar = (resposta: RespostaDoPedido | null) => {
     atual.responder(resposta)
     setFila((f) => f.slice(1))
@@ -218,7 +219,7 @@ export function PopupDadosDoStatus() {
                       )}
                     />
                     {tentou && detalheCurto && (
-                      <span className="mt-1 block text-xs text-warning">Detalhe um pouco mais (mínimo de {MINIMO_DETALHE_MOTIVO} caracteres).</span>
+                      <span className="mt-1 block text-xs text-warning">Detalhe com palavras (mínimo de {MINIMO_DETALHE_MOTIVO} letras). Ex.: achou caro, fechou com outro sistema.</span>
                     )}
                   </>
                 )}

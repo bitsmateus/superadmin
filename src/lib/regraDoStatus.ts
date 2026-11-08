@@ -1,3 +1,5 @@
+import { textoDeVerdade } from '@/lib/textoDeVerdade'
+
 /**
  * Regra dos CRMs do Arthur e do Luis (inclui o Closer): pra MUDAR o lead pra "Reunião agendada" é obrigatório ter
  * data e horário do agendamento, e pra "Proposta enviada" é obrigatório ter data e horário em "Retornar". O
@@ -106,10 +108,10 @@ export function statusExigeMotivo(statusOuQuadro: string): boolean {
   return n.includes('disparoemmassa') || n.includes('perdido') || n.includes('desqualificad')
 }
 
-/** Motivo preenchido de verdade: um da lista E o detalhe escrito (mínimo 10 letras). */
+/** Motivo preenchido de verdade: um da lista E o detalhe escrito com palavras (mínimo 10 letras, ver textoDeVerdade). */
 export function motivoValido(valor: string | null | undefined): boolean {
   const { motivo, detalhe } = separarMotivo(valor)
-  return (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(motivo) && detalhe.length >= MINIMO_DETALHE_MOTIVO
+  return (MOTIVOS_DESQUALIFICACAO as readonly string[]).includes(motivo) && textoDeVerdade(detalhe, MINIMO_DETALHE_MOTIVO)
 }
 
 function normaliza(s: string): string {

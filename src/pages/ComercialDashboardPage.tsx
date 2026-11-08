@@ -1,6 +1,5 @@
 import * as React from 'react'
-import { Link } from 'react-router-dom'
-import { CalendarRange, Loader2, TrendingUp } from 'lucide-react'
+import { CalendarRange, Loader2 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Input } from '@/components/ui/Input'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
@@ -160,21 +159,12 @@ export function ComercialDashboardPage() {
                   </>
                 )}
                 <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} />
-                <Link
-                  to="/comercial-dashboard-mensal"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20"
-                >
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  Painel do Mês
-                </Link>
               </div>
             </div>
 
-            {/* O painel de dinheiro/metas é sempre de um MÊS inteiro — investimento, leads gerados e
-                meta não existem "por dia". Ele segue o mês do fim do período escolhido: em "Hoje" e
-                "Mês atual" mostra o mês corrente; em "Mês anterior" (ou num período personalizado)
-                mostra o mês daquela data. */}
-            <PainelMetricasMes monthId={to.slice(0, 7)} rows={pageRows} boards={boards} />
+            {/* Resultado do período do filtro (investimento = gasto do Meta no período); as metas são do mês do
+                fim do período. */}
+            <PainelMetricasMes from={from} to={to} rows={pageRows} boards={boards} />
 
             <LeadTodayPanel rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
             <LeadTodayBySdr rows={rows} boards={boards} onOpenLead={setOpenLeadId} />

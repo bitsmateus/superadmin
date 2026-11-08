@@ -1,10 +1,10 @@
 import * as React from 'react'
-import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  ArrowRight, CalendarDays, ChevronDown, DollarSign, Link2, Pencil, Target, TrendingUp, Users, Zap,
+  CalendarDays, ChevronDown, DollarSign, Link2, Pencil, Target, TrendingUp, Users, Zap,
 } from 'lucide-react'
 import { api } from '@/services/api'
+import { trafegoService } from '@/services/trafego'
 import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { MILESTONE_NO_SHOW, MILESTONE_VENDIDO } from '@/components/comercial/LeadDashboardView'
 import { GraficoBarras, GraficoFunil, GraficoMeta, GraficoRosca, type FatiaGrafico } from '@/components/comercial/charts'
@@ -25,6 +25,11 @@ function rotuloMes(id: string): string {
   const [y, m] = id.split('-').map(Number)
   return `${MESES[m - 1] ?? id}/${y}`
 }
+/** "08/11" ou "01/11 a 05/11" — o período escolhido no filtro, quando não é um mês inteiro. */
+function rotuloPeriodo(from: string, to: string): string {
+  const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
+  return from === to ? dm(from) : `${dm(from)} a ${dm(to)}`
+}
 function limitesDoMes(id: string): { from: string; to: string } {
   const [y, m] = id.split('-').map(Number)
   const dia = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -38,16 +43,20 @@ const soNumero = (cents: number) => Math.round(cents / 100).toLocaleString('pt-B
 const pct = (r: number) => `${(r * 100).toFixed(1)}%`
 
 /**
- * Painel do mês do Dashboard Comercial: quanto entrou de lead, quanto virou reunião, quanto virou
- * venda e quanto isso deu de dinheiro — com as metas do lado, pra saber se o mês está no caminho.
+ * Painel do Dashboard Comercial: quanto entrou de lead, quanto virou reunião, quanto virou venda e quanto isso deu
+ * de dinheiro no PERÍODO do filtro (Hoje, Mês atual, Mês anterior, Personalizado) — com as metas do mês do lado, pra
+ * saber se o mês está no caminho. O investimento é o gasto real do Meta no período (meta_ad_insights_daily); os
+ * custos fora do tráfego e os leads digitados são do mês, então só entram quando o período é o mês inteiro.
  *
  * Os números calculados saem dos mesmos lugares do resto do app (leva de leads criada no mês,
  * marcos do funil, linhas da aba Vendas), então batem com as Métricas por SDR e com o Painel do
  * Mês. O que é digitado — investimento, leads gerados, custos fora do tráfego, permanência e as
  * metas — fica no registro do mês e é editável aqui mesmo.
  */
-export function PainelMetricasMes({ monthId, rows, boards }: {
-  monthId: string
+export function PainelMetricasMes({ from, to, rows, boards }: {
+  /** Período do filtro (AAAA-MM-DD). As metas são do mês do fim do período. */
+  from: string
+  to: string
   /** Leads de todas as abas (já sem as cópias do espelho). */
   rows: LeadRow[]
   boards: LeadBoard[]
@@ -56,13 +65,27 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
   const months = useCommercialMonths()
   const sdrLabels = useLeadLabels('sdr')
   const [editando, setEditando] = React.useState(false)
+  const monthId = to.slice(0, 7)
+  const limites = limitesDoMes(monthId)
+  const mesInteiro = from === limites.from && to === limites.to
+  const titulo = mesInteiro ? rotuloMes(monthId) : rotuloPeriodo(from, to)
+
+  // Gasto do Meta no período (em reais). null = carregando, sem acesso ou Meta não configurado.
+  const [gastoMeta, setGastoMeta] = React.useState<number | null>(null)
+  React.useEffect(() => {
+    let vivo = true
+    setGastoMeta(null)
+    trafegoService.resumo(from, to)
+      .then((r) => { if (vivo) setGastoMeta(r.configurado || r.atual.gasto > 0 ? r.atual.gasto : null) })
+      .catch(() => { if (vivo) setGastoMeta(null) })
+    return () => { vivo = false }
+  }, [from, to])
 
   const month = months.find((m) => m.id === monthId) ?? null
   const milestoneById = React.useMemo(() => new Map(milestones.map((m) => [m.id, m])), [milestones])
   const vendasBoard = React.useMemo(() => boards.find((b) => b.isVendas), [boards])
 
-  const dados = React.useMemo(() => {
-    const { from, to } = limitesDoMes(monthId)
+  const calcular = React.useCallback((from: string, to: string, inteiro: boolean, gastoReais: number | null) => {
     // A leva do mês = leads de verdade criados no período. Ficam de fora as linhas do quadro VENDAS: são o
     // REGISTRO da venda (a cópia do lead que virou cliente, ou uma venda avulsa), não um lead novo — contá-las
     // somava duas vezes quem vendeu e punha venda de indicação como "lead". Lead sem SDR marcado ENTRA: é lead
@@ -90,14 +113,17 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
     const implCents = vendasDoMes.reduce((s, r) => s + parseBRLCents(r.valorImplementacao), 0)
     const entrouCents = mrrCents + implCents
 
-    const investimentoCents = parseBRLCents(month?.investimentoTrafego ?? '0')
-    const extrasCents = parseBRLCents(month?.custosExtras ?? '0')
+    // Gasto real do Meta no período; sem ele, o investimento guardado no mês só vale pro mês inteiro.
+    const investimentoCents = gastoReais !== null
+      ? Math.round(gastoReais * 100)
+      : inteiro ? parseBRLCents(month?.investimentoTrafego ?? '0') : 0
+    const extrasCents = inteiro ? parseBRLCents(month?.custosExtras ?? '0') : 0
     const custoTotalCents = investimentoCents + extrasCents
     // Leads do mês: vale o número DIGITADO (o que o tráfego entregou, que é o que casa com o
     // investimento); sem ele preenchido, usa o que o CRM tem — melhor um número real do que zero.
     // Um só, usado no CPL, no funil e na meta: antes a meta olhava só o digitado e mostrava 0 de
     // 400 com o CRM cheio de lead.
-    const leadsGerados = month?.leadsGerados || leva.length
+    const leadsGerados = (inteiro && month?.leadsGerados) || leva.length
     const permanencia = month?.permanenciaMedia ?? 0
 
     const vendas = vendasDoMes.length
@@ -132,7 +158,13 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
       taxaNoShow: comDesfecho > 0 ? noShow.length / comDesfecho : 0,
       taxaReuniaoVenda: compareceram.length > 0 ? vendasFunil.length / compareceram.length : 0,
     }
-  }, [monthId, rows, milestoneById, vendasBoard, month])
+  }, [rows, boards, milestoneById, vendasBoard, month])
+  const dados = React.useMemo(() => calcular(from, to, mesInteiro, gastoMeta), [calcular, from, to, mesInteiro, gastoMeta])
+  // As metas são do mês: comparam com o mês inteiro, seja qual for o período do filtro.
+  const doMes = React.useMemo(
+    () => (mesInteiro ? dados : calcular(limites.from, limites.to, true, null)),
+    [calcular, mesInteiro, dados, limites.from, limites.to],
+  )
 
   const roiProjetado = dados.custoTotalCents > 0
     ? (dados.projetadaCents - dados.custoTotalCents) / dados.custoTotalCents
@@ -185,7 +217,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
             <TrendingUp className="h-4 w-4" />
           </span>
-          <span className="text-sm font-semibold text-foreground">Resultado de {rotuloMes(monthId)}</span>
+          <span className="text-sm font-semibold text-foreground">Resultado de {titulo}</span>
           <button
             type="button"
             onClick={() => setEditando((v) => !v)}
@@ -196,32 +228,25 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             <ChevronDown className={cn('h-3 w-3 transition-transform', editando && 'rotate-180')} />
           </button>
           <BotaoLinkPublico monthId={monthId} />
-          <Link
-            to="/comercial-dashboard-mensal"
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10"
-          >
-            Painel do Mês completo
-            <ArrowRight className="h-3 w-3" />
-          </Link>
         </div>
 
         {editando && <EditorDoMes month={month} />}
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           <Kpi titulo="Investimento" valor={money(dados.custoTotalCents)}
-            nota={dados.extrasCents > 0 ? `${money(dados.investimentoCents)} tráfego + ${money(dados.extrasCents)} outros` : 'tráfego'} />
+            nota={dados.extrasCents > 0 ? `${money(dados.investimentoCents)} tráfego + ${money(dados.extrasCents)} outros` : 'tráfego (Meta)'} />
           <Kpi titulo="CPL" valor={money(dados.cplCents)} nota="custo por lead" />
           <Kpi titulo="CAC" valor={money(dados.cacCents)} nota="custo por venda do funil" editavel onEditar={() => setEditando(true)} />
           <Kpi titulo="ROI / ROAS" valor={pct(dados.roi)} nota={`ROAS ${dados.roas.toFixed(1)}x · receita ÷ custo`}
             tom={dados.roi >= 0 ? 'bom' : 'ruim'} />
           <Kpi titulo="Total de leads" valor={String(dados.leadsGerados)}
-            nota={month.leadsGerados ? `${dados.leva.length} no CRM` : 'contados no CRM'} />
+            nota={mesInteiro && month.leadsGerados ? `${dados.leva.length} no CRM` : 'contados no CRM'} />
           <Kpi titulo="Agendamentos" valor={String(dados.agendados.length)} nota={`${pct(dados.taxaLeadAgend)} dos leads`} />
           <Kpi titulo="Vendas" valor={String(dados.vendas)} nota={`${dados.vendasFunil.length} pelo funil`} tom="bom" />
           <Kpi titulo="Reuniões realizadas" valor={String(dados.compareceram.length)} nota={`${pct(dados.taxaComparecimento)} de comparecimento`} />
           <Kpi titulo="No-shows" valor={String(dados.noShow.length)} nota={pct(dados.taxaNoShow)} tom={dados.noShow.length ? 'ruim' : undefined} />
           <Kpi titulo="Reunião → venda" valor={pct(dados.taxaReuniaoVenda)} nota="fechamento" />
-          <Kpi titulo="Receita do mês" valor={money(dados.entrouCents)} nota="MRR + implementação" tom="bom" />
+          <Kpi titulo="Receita" valor={money(dados.entrouCents)} nota="MRR + implementação" tom="bom" />
           <Kpi titulo="MRR novo" valor={money(dados.mrrCents)} nota="recorrente conquistado" />
           <Kpi titulo="Ticket médio" valor={money(dados.ticketCents)} nota="por venda" />
           <Kpi titulo="Receita projetada" valor={money(dados.projetadaCents)}
@@ -238,9 +263,9 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
           Metas de {rotuloMes(monthId)}
           {metaReceitaCents > 0 && (
             <span className="ml-auto text-xs font-normal text-foreground/45">
-              {money(dados.entrouCents)} de {money(metaReceitaCents)}
-              {dados.entrouCents < metaReceitaCents
-                ? ` — faltam ${money(metaReceitaCents - dados.entrouCents)}`
+              {money(doMes.entrouCents)} de {money(metaReceitaCents)}
+              {doMes.entrouCents < metaReceitaCents
+                ? ` — faltam ${money(metaReceitaCents - doMes.entrouCents)}`
                 : ' — meta batida'}
             </span>
           )}
@@ -250,31 +275,31 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
               as partes (9k de MRR + 16k de implementação = 25k, sempre). */}
           <GraficoMeta
             titulo="Receita total"
-            realizado={dados.entrouCents}
+            realizado={doMes.entrouCents}
             meta={metaReceitaCents}
-            rotuloRealizado={soNumero(dados.entrouCents)}
+            rotuloRealizado={soNumero(doMes.entrouCents)}
             rotuloMeta={formatBRLCompact(metaReceitaCents)}
             cor="var(--viz-2)"
           />
           <GraficoMeta
             titulo="MRR novo"
-            realizado={dados.mrrCents}
+            realizado={doMes.mrrCents}
             meta={parseBRLCents(month.metaMrr)}
-            rotuloRealizado={soNumero(dados.mrrCents)}
+            rotuloRealizado={soNumero(doMes.mrrCents)}
             rotuloMeta={formatBRLCompact(parseBRLCents(month.metaMrr))}
             cor="var(--viz-1)"
           />
           <GraficoMeta
             titulo="Implementação"
-            realizado={dados.implCents}
+            realizado={doMes.implCents}
             meta={parseBRLCents(month.metaImpl)}
-            rotuloRealizado={soNumero(dados.implCents)}
+            rotuloRealizado={soNumero(doMes.implCents)}
             rotuloMeta={formatBRLCompact(parseBRLCents(month.metaImpl))}
             cor="var(--viz-3)"
           />
-          <GraficoMeta titulo="Vendas" realizado={dados.vendas} meta={month.metaVendas} cor="var(--viz-2)" />
-          <GraficoMeta titulo="Leads" realizado={dados.leadsGerados} meta={month.metaLeads} cor="var(--viz-1)" />
-          <GraficoMeta titulo="Agendamentos" realizado={dados.agendados.length} meta={month.metaAgendamentos} cor="var(--viz-3)" />
+          <GraficoMeta titulo="Vendas" realizado={doMes.vendas} meta={month.metaVendas} cor="var(--viz-2)" />
+          <GraficoMeta titulo="Leads" realizado={doMes.leadsGerados} meta={month.metaLeads} cor="var(--viz-1)" />
+          <GraficoMeta titulo="Agendamentos" realizado={doMes.agendados.length} meta={month.metaAgendamentos} cor="var(--viz-3)" />
         </div>
       </div>
 
@@ -301,7 +326,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             venda pelo funil. Os {dados.noShow.length} no-shows ficam fora das reuniões realizadas.
           </p>
           <p className="mt-1 text-[11px] text-foreground/45">
-            No CRM, {dados.leva.length} leads criados neste mês: <strong className="font-semibold text-foreground/65">{dados.doMeta} vieram do Meta Ads</strong>{' '}
+            No CRM, {dados.leva.length} leads criados no período: <strong className="font-semibold text-foreground/65">{dados.doMeta} vieram do Meta Ads</strong>{' '}
             (é o número que bate com o Gerenciador de Anúncios) e {dados.leva.length - dados.doMeta} foram cadastrados à mão.
           </p>
         </div>
@@ -317,7 +342,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             fatias={fatiasSdr}
             total={String(dados.vendas)}
             rotuloTotal="vendas"
-            vazio="Nenhuma venda registrada neste mês"
+            vazio="Nenhuma venda registrada no período"
           />
         </div>
       </div>
@@ -329,7 +354,7 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
               <DollarSign className="h-4 w-4" />
             </span>
-            Receita do mês
+            Receita do período
           </div>
           <GraficoBarras
             itens={[
@@ -346,12 +371,12 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
         </div>
 
         <div className="rounded-2xl bg-card p-4 shadow-sm">
-          <div className="mb-3 text-sm font-semibold text-foreground">Veredito do mês</div>
+          <div className="mb-3 text-sm font-semibold text-foreground">Veredito do período</div>
           {veredito ? (
             <div className="space-y-3 text-sm">
               <p className="text-foreground/70">
                 ROI projetado: <span className={cn('font-semibold', veredito.roiTom)}>{veredito.roi}</span>
-                {' · '}cada R$ 1 investido devolveu {money(dados.custoTotalCents > 0 ? dados.entrouCents / (dados.custoTotalCents / 100) : 0)} no primeiro mês.
+                {' · '}cada R$ 1 investido devolveu {money(dados.custoTotalCents > 0 ? dados.entrouCents / (dados.custoTotalCents / 100) : 0)} no período.
               </p>
               <p className="rounded-xl bg-elevate/[0.04] p-3 text-foreground/70">{veredito.gargalo}</p>
               <ul className="space-y-1.5 text-xs text-foreground/55">
@@ -362,14 +387,14 @@ export function PainelMetricasMes({ monthId, rows, boards }: {
                 </li>
                 <li>
                   {dados.vendas - dados.vendasFunil.length > 0
-                    ? `${dados.vendas - dados.vendasFunil.length} venda(s) do mês não vieram do funil de leads.`
-                    : 'Todas as vendas do mês vieram do funil.'}
+                    ? `${dados.vendas - dados.vendasFunil.length} venda(s) do período não vieram do funil de leads.`
+                    : 'Todas as vendas do período vieram do funil.'}
                 </li>
               </ul>
             </div>
           ) : (
             <p className="py-6 text-center text-xs text-foreground/40">
-              Preencha investimento e leads gerados do mês pra ver o veredito.
+              Sem leads no período pra dar o veredito.
             </p>
           )}
         </div>

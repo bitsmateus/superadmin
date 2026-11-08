@@ -1512,9 +1512,6 @@ END; $$`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS asaas_last_sync_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS asaas_sync_since DATE`);
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS relatorio_token TEXT`);
-  // Comprovante de pagamento das contas a pagar (separado do boleto) — ver schema.sql.
-  await pool.query(`ALTER TABLE payables_entries ADD COLUMN IF NOT EXISTS comprovante_data TEXT`);
-  await pool.query(`ALTER TABLE payables_entries ADD COLUMN IF NOT EXISTS comprovante_filename TEXT`);
   // Empresa do grupo que atende o cliente (Clientes Geral) — ver schema.sql.
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS unidade TEXT`);
   await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS cnpj TEXT`);
@@ -1531,80 +1528,9 @@ END; $$`);
      WHERE cnpj IS NULL AND COALESCE(ficha_cadastro->>'cnpj', '') <> ''`
   );
 
-  // Contas a Pagar (Financeiro) — board estilo Monday, lista contínua de grupos criados à mão
-  // (ex.: "Abril 2026", "Folha de pagamento"), sem filtro de mês. Ver comentário em schema.sql.
-  await pool.query(`CREATE TABLE IF NOT EXISTS payables_groups (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    color TEXT NOT NULL DEFAULT '#4F8EF7',
-    position INT NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await pool.query(`CREATE TABLE IF NOT EXISTS payables_entries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    group_id UUID NOT NULL REFERENCES payables_groups(id) ON DELETE CASCADE,
-    elemento TEXT NOT NULL DEFAULT '',
-    previsto_cents INT NOT NULL DEFAULT 0,
-    comissao_cents INT,
-    real_cents INT,
-    status TEXT NOT NULL DEFAULT 'a_pagar' CHECK (status IN ('a_pagar', 'agendado', 'pago')),
-    data DATE,
-    boleto_data TEXT,
-    boleto_filename TEXT,
-    notas TEXT NOT NULL DEFAULT '',
-    position INT NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS payables_entries_group_idx ON payables_entries(group_id)`);
-  // Descrição mais longa (à parte de Notas) + categoria Fixo/Variável — as duas vivem "dentro" da
-  // célula Elemento na UI, não são coluna própria da tabela.
-  await pool.query(`ALTER TABLE payables_entries ADD COLUMN IF NOT EXISTS descricao TEXT NOT NULL DEFAULT ''`);
-  await pool.query(`ALTER TABLE payables_entries ADD COLUMN IF NOT EXISTS categoria TEXT`);
-  await pool.query(`DO $$ BEGIN
-    IF NOT EXISTS (
-      SELECT 1 FROM pg_constraint WHERE conname = 'payables_entries_categoria_check'
-    ) THEN
-      ALTER TABLE payables_entries ADD CONSTRAINT payables_entries_categoria_check
-        CHECK (categoria IN ('fixo', 'variavel'));
-    END IF;
-  END $$`);
-  // Mês do grupo ('YYYY-MM') — separa Contas a Pagar por mês com totais, igual o resto do
-  // Financeiro. Grupos criados antes desse campo existir são retroativamente colocados no mês
-  // corrente, pra não sumirem da visão filtrada por mês.
-  await pool.query(`ALTER TABLE payables_groups ADD COLUMN IF NOT EXISTS month TEXT`);
-  await pool.query(`UPDATE payables_groups SET month = to_char(NOW(), 'YYYY-MM') WHERE month IS NULL`);
-  await pool.query(`DO $$ BEGIN
-    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
-      DROP TRIGGER IF EXISTS notify_payables_groups ON payables_groups;
-      CREATE TRIGGER notify_payables_groups AFTER INSERT OR UPDATE OR DELETE ON payables_groups
-        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
-      DROP TRIGGER IF EXISTS notify_payables_entries ON payables_entries;
-      CREATE TRIGGER notify_payables_entries AFTER INSERT OR UPDATE OR DELETE ON payables_entries
-        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
-    END IF;
-  END $$`);
-
-  // Catálogo de itens Fixos padrão — auto-preenche um grupo novo quando a pessoa entra num mês
-  // que ainda não tem nenhum grupo (POST /api/payables-groups/ensure-month), sem precisar
-  // duplicar manualmente todo mês. Ver comentário em schema.sql.
-  await pool.query(`CREATE TABLE IF NOT EXISTS payables_fixed_catalog (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nome TEXT NOT NULL,
-    valor_cents INT NOT NULL DEFAULT 0,
-    ativo BOOLEAN NOT NULL DEFAULT true,
-    position INT NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await pool.query(`DO $$ BEGIN
-    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_db_change') THEN
-      DROP TRIGGER IF EXISTS notify_payables_fixed_catalog ON payables_fixed_catalog;
-      CREATE TRIGGER notify_payables_fixed_catalog AFTER INSERT OR UPDATE OR DELETE ON payables_fixed_catalog
-        FOR EACH ROW EXECUTE FUNCTION notify_db_change();
-    END IF;
-  END $$`);
+  // A aba Contas a Pagar (Financeiro) foi removida em 08/11/2026 a pedido do dono, com os dados: grupos, contas
+  // (boletos e comprovantes) e o catálogo de contas fixas saem do banco de vez.
+  await pool.query(`DROP TABLE IF EXISTS payables_entries, payables_groups, payables_fixed_catalog CASCADE`);
 
   // Disparo em massa (portal "Laundry" e futuros clientes que precisem do mesmo self-service) —
   // link fixo por cliente (clients.mass_campaign_token, não expira/consome como o de template),

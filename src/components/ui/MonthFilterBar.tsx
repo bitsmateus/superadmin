@@ -4,7 +4,7 @@ import { monthLabelPt, type MonthFilter } from '@/hooks/useMonthFilter'
 
 /** Barra de mês/período — pills de mês (com "x" pra tirar da barra, sem apagar nada do mês) +
  * "Adicionar mês" (o mês seguinte ao último pill) + "Personalizado" com data de/até livre. Usada
- * no Painel do Mês, na aba Contrato, nas Métricas por SDR e em Contas a Pagar. */
+ * no Painel do Mês, na aba Contrato, e nas Métricas por SDR. */
 export function MonthFilterBar({ filter }: { filter: MonthFilter }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-line bg-card p-2.5">

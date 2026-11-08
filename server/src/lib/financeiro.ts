@@ -16,7 +16,6 @@ export function podeVerFinanceiro(userId: string | undefined | null, role: strin
 
 /** Tabelas que são só do Financeiro: nem a lista nem os avisos em tempo real chegam a mais ninguém. */
 export const TABELAS_DO_FINANCEIRO = new Set<string>([
-  'payables_groups', 'payables_entries', 'payables_fixed_catalog',
   'commission_entries', 'commission_types',
   'contracts', 'contract_templates',
   'commercial_months',

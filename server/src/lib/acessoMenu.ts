@@ -3,7 +3,7 @@ import { restrictedBoardFilter } from '../routes/leadBoards.js';
 
 import { podeVerFinanceiro } from './financeiro.js';
 
-/** Financeiro (Vendas, Contrato, Contas a Pagar, Clientes Geral, comissões, Asaas): SÓ Ian e Mateus (ver financeiro.ts). */
+/** Financeiro (Vendas, Contrato, comissões, Asaas): SÓ Ian e Mateus (ver financeiro.ts). */
 export function ehDoFinanceiro(userId: string | undefined, role: string | undefined): boolean {
   return podeVerFinanceiro(userId, role);
 }

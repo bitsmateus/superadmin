@@ -60,7 +60,7 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   { key: 'nxdigital_trafego', label: 'Tráfego', path: '/clientesnxdigital/trafego', group: 'nxdigital' },
   { key: 'nxdigital_demandas', label: 'Kanban demandas', path: '/clientesnxdigital/demandas', group: 'nxdigital' },
   { key: 'nxdigital_socialmedia', label: 'Social media', path: '/clientesnxdigital/socialmedia', group: 'nxdigital' },
-  // Tela que não é aba: marca própria. (O Financeiro inteiro — Vendas, Contrato, Contas a Pagar, Clientes Geral —
+  // Tela que não é aba: marca própria. (O Financeiro inteiro — Vendas, Contrato —
   // NÃO está aqui de propósito: é só de administrador e não dá pra liberar pra ninguém.)
   { key: 'comercial_dashboard', label: 'Dashboard Comercial', path: '/comercial-dashboard', group: 'outros', fixo: true },
   // Demo Studio (demos interativas por link): uma marca para o módulo inteiro. O que cada um faz lá dentro

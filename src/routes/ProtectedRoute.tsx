@@ -49,7 +49,7 @@ function liberadoParaRestrito(path: string, c: Contexto): boolean | 'carregando'
     return aba[2] ? abas.some((p) => p.id === aba[2]) : abas.length > 0
   }
 
-  // Financeiro inteiro (Vendas, Contrato, Contas a Pagar, Clientes Geral, painel financeiro): só administrador.
+  // Financeiro inteiro (Vendas, Contrato, painel financeiro): só administrador.
   if (casa(path, '/financeiro')) return false
 
   // Cópia de uma tela do Suporte: vale a marca da tela de origem

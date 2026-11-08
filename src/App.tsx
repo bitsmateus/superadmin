@@ -120,12 +120,6 @@ const DemoSettingsPage = React.lazy(() =>
 const DemoPreviewFramePage = React.lazy(() =>
   import('./pages/DemoPublicPage').then((m) => ({ default: m.DemoPreviewFramePage })),
 )
-const FinanceiroClientesGeralPage = React.lazy(() =>
-  import('./pages/FinanceiroClientesGeralPage').then((m) => ({ default: m.FinanceiroClientesGeralPage })),
-)
-const FinanceiroContasPagarPage = React.lazy(() =>
-  import('./pages/FinanceiroContasPagarPage').then((m) => ({ default: m.FinanceiroContasPagarPage })),
-)
 const TrafegoPage = React.lazy(() =>
   import('./pages/TrafegoPage').then((m) => ({ default: m.TrafegoPage })),
 )
@@ -305,8 +299,6 @@ export default function App() {
           <Route path="/financeiro/contrato" element={<FinanceiroContratoPage />} />
           {/* Gestão Interna virou parte de Vendas — mesma tela, mesmo período, só num lugar. */}
           <Route path="/financeiro/gestao-interna" element={<Navigate to="/financeiro/vendas" replace />} />
-          <Route path="/financeiro/contas-a-pagar" element={<FinanceiroContasPagarPage />} />
-          <Route path="/financeiro/clientes-geral" element={<FinanceiroClientesGeralPage />} />
           {/* Clientes NX Digital — módulo de gestão dos clientes de tráfego (tabelas gc_*). */}
           {/* A raiz só redireciona: assim a trava por aba (ProtectedRoute) vale pra ela também. */}
           <Route path="/clientesnxdigital" element={<Navigate to="/clientesnxdigital/clientes" replace />} />

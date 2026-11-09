@@ -21,7 +21,7 @@ export function Layout() {
   useAsaasAutoSync()
   useTicketNotifications()
   usePushSubscription()
-  // Visual novo (vidro) só nas telas do menu Suporte — ver lib/visualNovo.ts.
+  // Visual novo (vidro) em todas as telas internas — ver lib/visualNovo.ts.
   useVisualNovo(useLocation().pathname)
 
   // Aberto por padrão no desktop, fechado no celular/tablet.

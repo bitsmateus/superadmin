@@ -333,8 +333,9 @@ function KanbanColumn({
       )}
     >
       <div
+        data-col-head=""
         className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white"
-        style={{ backgroundColor: col.color }}
+        style={{ backgroundColor: col.color, '--col': col.color } as React.CSSProperties}
       >
         <span className="truncate">{col.label}</span>
         {(totalMrr > 0 || totalImplementacao > 0) && (

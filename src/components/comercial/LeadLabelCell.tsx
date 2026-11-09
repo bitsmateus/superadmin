@@ -110,7 +110,10 @@ export function LeadLabelCell({ field, value, onChange, required, pageId, classN
             : 'text-foreground/30',
           className,
         )}
-        style={value && (current || !aceitaTextoLivre) ? { backgroundColor: current?.color ?? '#9CA3AF' } : undefined}
+        data-label-chip={value && (current || !aceitaTextoLivre) ? '' : undefined}
+        style={value && (current || !aceitaTextoLivre)
+          ? ({ backgroundColor: current?.color ?? '#9CA3AF', '--chip': current?.color ?? '#9CA3AF' } as React.CSSProperties)
+          : undefined}
       >
         {value ? value : required ? 'Obrigatório' : (placeholder ?? 'Selecionar…')}
       </button>

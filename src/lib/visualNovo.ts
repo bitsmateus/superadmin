@@ -1,24 +1,16 @@
 import * as React from 'react'
 
 /**
- * Telas que já usam o visual novo (styles/visualNovo.css): o menu Suporte. As outras seguem com o
- * visual de sempre até chegar a vez delas — é só incluir o caminho aqui.
- * `/visao/<id>` são as cópias ("Duplicar") de itens do Suporte; `/tarefas` é a aba dentro do Pipeline.
+ * Visual novo (styles/visualNovo.css) em todas as telas internas — as que abrem dentro do Layout,
+ * com o menu lateral. As páginas públicas que os clientes abrem (portal, NPS, relatórios, ficha,
+ * demos…) ficam fora do Layout e seguem com o visual delas.
+ *
+ * Pra tirar uma tela específica do visual novo, inclua o caminho em ROTAS_SEM_VISUAL_NOVO.
  */
-const ROTAS_VISUAL_NOVO = [
-  '/pipeline',
-  '/tarefas',
-  '/clients',
-  '/followups',
-  '/agenda',
-  '/canais',
-  '/tenants',
-  '/comunicados',
-  '/visao',
-]
+const ROTAS_SEM_VISUAL_NOVO: string[] = []
 
 export function usaVisualNovo(pathname: string): boolean {
-  return ROTAS_VISUAL_NOVO.some((r) => pathname === r || pathname.startsWith(`${r}/`))
+  return !ROTAS_SEM_VISUAL_NOVO.some((r) => pathname === r || pathname.startsWith(`${r}/`))
 }
 
 /** Liga/desliga <html data-skin="novo"> conforme a rota (antes de pintar, pra não piscar). */
@@ -29,6 +21,7 @@ export function useVisualNovo(pathname: string) {
     else delete root.dataset.skin
   }, [pathname])
 
+  // Saindo do Layout (login, páginas públicas): volta ao visual de sempre.
   React.useEffect(
     () => () => {
       delete document.documentElement.dataset.skin

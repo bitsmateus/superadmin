@@ -270,3 +270,46 @@
 }
 /* No claro, o escurecido atrás da janela fica um pouco mais leve. */
 [data-skin='novo'][data-theme='light'] .bg-black\/70 { background-color: rgba(15, 23, 42, 0.45); }
+
+/* ---------- Kanban do Comercial: cabeçalho de vidro com ponto da cor da coluna ---------- */
+[data-skin='novo'] [data-col-head] {
+  background: transparent !important;
+  color: rgb(var(--foreground-rgb));
+  padding-top: 12px;
+  padding-bottom: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+[data-skin='novo'] [data-col-head] button { color: rgb(var(--foreground-rgb) / 0.8); }
+[data-skin='novo'] [data-col-head]::before {
+  content: '';
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--col);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--col) 22%, transparent);
+  margin-right: 4px;
+}
+[data-skin='novo'] [data-col-head] .bg-white\/25 {
+  background: rgb(var(--foreground-rgb) / 0.1);
+  color: rgb(var(--foreground-rgb) / 0.8);
+}
+[data-skin='novo'] [data-col-head] .text-white\/85 { color: rgb(var(--foreground-rgb) / 0.7); }
+
+/* ---------- Etiquetas: pílula translúcida na cor da etiqueta ---------- */
+[data-skin='novo'] { --vn-chip-mix: white; --vn-chip-text: 55%; }
+[data-skin='novo'][data-theme='light'] { --vn-chip-mix: black; --vn-chip-text: 62%; }
+[data-skin='novo'] [data-label-chip] {
+  background: color-mix(in srgb, var(--chip) 20%, transparent) !important;
+  color: color-mix(in srgb, var(--chip) var(--vn-chip-text), var(--vn-chip-mix));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip) 40%, transparent);
+  border-radius: 999px;
+}
+[data-skin='novo'] td [data-label-chip] {
+  min-height: 26px;
+  margin: 4px 6px;
+  width: calc(100% - 12px);
+  padding-top: 2px;
+  padding-bottom: 2px;
+}

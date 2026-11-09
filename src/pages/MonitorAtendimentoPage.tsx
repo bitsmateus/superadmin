@@ -895,7 +895,7 @@ function ModalConfig({ dados, onClose, onSalvo }: { dados: PainelMonitor; onClos
               </div>
             </Campo>
           ) : null}
-          <Campo label="Ignorar estes contatos ou grupos" hint="Um por linha: número, ID do grupo ou nome exato (ex.: grupos internos da equipe).">
+          <Campo label="Ignorar estes contatos ou grupos" hint="Um por linha: número, ID do grupo ou parte do nome, sem se preocupar com acento ou maiúscula (ex.: “suporte geral” pega “SUPORTE GERAL NX”).">
             <Textarea rows={3} value={ignorarTexto} onChange={(e) => setIgnorarTexto(e.target.value)} />
           </Campo>
         </section>

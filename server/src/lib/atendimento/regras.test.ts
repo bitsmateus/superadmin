@@ -161,3 +161,16 @@ test('formatarDuracao e estaIgnorado', () => {
   assert.equal(estaIgnorado(['Equipe NX interno'], { nome: 'equipe nx interno' }), true);
   assert.equal(estaIgnorado(['5511999990000'], { numero: '5511888880000' }), false);
 });
+
+test('ignorar por trecho do nome, sem acento nem maiúscula', () => {
+  const lista = ['SUPORTE GERAL', 'monitoramento', 'mercado nunes', 'isabel'];
+  for (const nome of ['SUPORTE GERAL NX', 'Suporte Geral | Grupo NX', 'Monitoramento de Canais', 'Mercado Nunes - Tabloide', 'Isabel', 'Isabela Souza', 'Grupo Monitoramento NX']) {
+    assert.equal(estaIgnorado(lista, { nome }), true, nome);
+  }
+  for (const nome of ['Lassane TI - NX', 'Mercado Bom Preço', 'Suporte Lassane', 'Anabel']) {
+    assert.equal(estaIgnorado(lista, { nome }), false, nome);
+  }
+  assert.equal(estaIgnorado(['Mônitoramento'], { nome: 'monitoramento' }), true);
+  assert.equal(estaIgnorado(['ab'], { nome: 'ab cd' }), false); // curto demais
+  assert.equal(estaIgnorado(['120363409254876877@g.us'], { numero: '120363409254876877' }), true);
+});

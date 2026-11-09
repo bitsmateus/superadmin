@@ -443,15 +443,29 @@ export function formatarDuracao(min: number): string {
   return h ? `${d}d ${h}h` : `${d} ${d === 1 ? 'dia' : 'dias'}`;
 }
 
-/** O contato deve ser ignorado? Compara número/id do grupo (só dígitos) e nome exato. */
+/** Nome para comparar: sem acento, minúsculo, só letras/números e um espaço entre as palavras. */
+const nomeComparavel = (s: string) =>
+  normalizar(s)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+/**
+ * O contato deve ser ignorado? Cada item da lista é um número / id de grupo (8+ dígitos, compara só os
+ * dígitos) ou um TRECHO do nome, sem diferenciar acento e maiúscula: "mercado nunes" pega
+ * "Mercado Nunes - Suporte" e "SUPORTE GERAL" pega "Suporte Geral NX".
+ */
 export function estaIgnorado(ignorar: string[], contato: { numero?: string | null; nome?: string | null }): boolean {
   if (!ignorar.length) return false;
   const dig = (s: string) => s.replace(/\D/g, '');
   const numero = dig(contato.numero ?? '');
-  const nome = (contato.nome ?? '').trim().toLowerCase();
+  const nome = ` ${nomeComparavel(contato.nome ?? '')} `;
   return ignorar.some((i) => {
     const d = dig(i);
-    if (d && numero && d.length >= 8 && (numero === d || numero.endsWith(d) || d.endsWith(numero))) return true;
-    return !!nome && i.trim().toLowerCase() === nome;
+    const ehNumero = d.length >= 8 && !/[a-z]/i.test(i.replace(/@(g\.us|c\.us|s\.whatsapp\.net)/gi, ''));
+    if (ehNumero) return !!numero && (numero === d || numero.endsWith(d) || d.endsWith(numero));
+    const trecho = nomeComparavel(i);
+    // O trecho tem de começar no início de uma palavra ("isabel" pega "Isabela", mas "bel" não pega
+    // "Isabel"); mínimo de 3 letras para não ignorar demais.
+    return trecho.length >= 3 && nome.trim().length > 0 && nome.includes(` ${trecho}`);
   });
 }

@@ -382,15 +382,26 @@ function textoDaNota(r: LinhaTicket): string {
   return `${r.nivel >= 2 ? '🚨' : '⚠️'} Monitor de Atendimento: ${base[r.situacao] ?? r.situacao}.`;
 }
 
+/**
+ * Vale avisar no grupo? Só fora do prazo e só quando alguém precisa agir. Em GRUPO, "cliente parou de
+ * falar" não avisa: a conversa de grupo não se encerra e o silêncio ali é normal (fica só no painel).
+ */
+export function precisaDeAviso(r: Pick<LinhaTicket, 'situacao' | 'nivel' | 'is_group'>): boolean {
+  if (r.situacao === 'ok' || r.nivel < 1) return false;
+  if (r.is_group && r.situacao === 'cliente_parou') return false;
+  return true;
+}
+
 export async function alertar(cfg: ConfigMonitor, agora = Date.now()): Promise<number> {
   if (!dentroDoHorario(agora, cfg.horario)) return 0;
   const abertos = await query<LinhaTicket>(`SELECT * FROM atd_tickets WHERE closed_at IS NULL AND ignorado = false`);
   const novos = abertos.filter((r) => {
-    if (r.situacao === 'ok' || r.nivel < 1) return false;
+    if (!precisaDeAviso(r)) return false;
     const jaAvisado = r.alerta_chave === chaveDoAlerta(r) ? r.alerta_nivel : 0;
     return r.nivel > jaAvisado;
   });
-  const longos = abertos.filter((r) => r.aberto_longo && !r.aberto_longo_avisado);
+  // Grupo fica aberto para sempre por natureza: "aberto há dias" só vale para conversa privada.
+  const longos = abertos.filter((r) => r.aberto_longo && !r.aberto_longo_avisado && !r.is_group);
   if (!novos.length && !longos.length) return 0;
 
   novos.sort((a, b) => b.nivel - a.nivel || b.decorrido_min / Math.max(1, b.prazo_min) - a.decorrido_min / Math.max(1, a.prazo_min));
@@ -544,7 +555,7 @@ export function inicioDeHoje(agora = Date.now()): Date {
 export async function montarResumo(cfg: ConfigMonitor, agora = Date.now()): Promise<string> {
   const hoje = inicioDeHoje(agora);
   const abertos = await query<LinhaTicket>(`SELECT * FROM atd_tickets WHERE closed_at IS NULL AND ignorado = false`);
-  const conta = (s: Situacao) => abertos.filter((r) => r.situacao === s && r.nivel >= 1).length;
+  const conta = (s: Situacao) => abertos.filter((r) => r.situacao === s && precisaDeAviso(r)).length;
   const tot = await queryOne<{ alertas: string; finalizados: string; auto: string }>(
     `SELECT COUNT(*) FILTER (WHERE tipo IN ('alerta','escalado')) AS alertas,
             COUNT(*) FILTER (WHERE tipo IN ('finalizado','finalizado_painel','auto_encerrado')) AS finalizados,
@@ -565,7 +576,7 @@ export async function montarResumo(cfg: ConfigMonitor, agora = Date.now()): Prom
   linhas.push(
     `Abertos agora: *${abertos.length}* (${((n) => `${n} ${n === 1 ? 'grupo' : 'grupos'}`)(abertos.filter((r) => r.is_group).length)})\n` +
       `⏱️ Sem resposta: ${conta('sem_resposta')} · 🤝 Promessas: ${conta('promessa')} · 📥 Fila: ${conta('fila')}\n` +
-      `💤 Cliente parou: ${conta('cliente_parou')} · 📅 Há +${cfg.prazos.abertoDias} dias: ${abertos.filter((r) => r.aberto_longo).length}`,
+      `💤 Cliente parou: ${conta('cliente_parou')} · 📅 Há +${cfg.prazos.abertoDias} dias: ${abertos.filter((r) => r.aberto_longo && !r.is_group).length}`,
   );
   linhas.push(
     `Hoje: ${Number(tot?.finalizados ?? 0)} finalizados` +
@@ -581,7 +592,7 @@ export async function montarResumo(cfg: ConfigMonitor, agora = Date.now()): Prom
     );
   }
   const pendentes = abertos
-    .filter((r) => r.situacao !== 'ok' && r.nivel >= 1)
+    .filter(precisaDeAviso)
     .sort((a, b) => b.nivel - a.nivel || b.decorrido_min - a.decorrido_min)
     .slice(0, 10);
   if (pendentes.length) {

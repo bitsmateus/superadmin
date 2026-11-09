@@ -67,7 +67,7 @@ function ticketParaTela(cfg: ConfigMonitor, r: LinhaTicket & { cliente_nome?: st
     decorridoMin: r.decorrido_min,
     prazoMin: r.prazo_min,
     nivel: r.nivel,
-    abertoLongo: r.aberto_longo,
+    abertoLongo: r.aberto_longo && !r.is_group,
     abertoEm: iso(r.nx_created_at),
     ultimaDe: r.ultima_de,
     ultimaAt: iso(r.ultima_at),
@@ -119,7 +119,7 @@ export async function monitorAtendimentoRoutes(app: FastifyInstance) {
       grupoDestino: grupo,
       tickets: rows.map((r) => ticketParaTela(cfg, r)),
       contagens,
-      abertoLongo: ativos.filter((r) => r.aberto_longo).length,
+      abertoLongo: ativos.filter((r) => r.aberto_longo && !r.is_group).length,
       ranking: { hoje: rankHoje, semana: rankSemana },
     };
   });

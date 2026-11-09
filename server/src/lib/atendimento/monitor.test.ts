@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { montarMensagemDeAlertas, type LinhaTicket } from './monitor.js';
+import { montarMensagemDeAlertas, precisaDeAviso, type LinhaTicket } from './monitor.js';
 import { CONFIG_PADRAO } from './regras.js';
 
 const linha = (p: Partial<LinhaTicket>): LinhaTicket =>
@@ -37,4 +37,12 @@ test('mensagem de alertas: corta em 15 itens', () => {
   const txt = montarMensagemDeAlertas(CONFIG_PADRAO, muitos, []);
   assert.match(txt, /e mais 5 no painel/);
   assert.doesNotMatch(txt, /C19/);
+});
+
+test('só avisa quando alguém precisa agir: grupo calado não vira alerta', () => {
+  assert.equal(precisaDeAviso({ situacao: 'cliente_parou', nivel: 2, is_group: true }), false);
+  assert.equal(precisaDeAviso({ situacao: 'cliente_parou', nivel: 1, is_group: false }), true);
+  assert.equal(precisaDeAviso({ situacao: 'sem_resposta', nivel: 1, is_group: true }), true);
+  assert.equal(precisaDeAviso({ situacao: 'promessa', nivel: 0, is_group: false }), false);
+  assert.equal(precisaDeAviso({ situacao: 'ok', nivel: 2, is_group: false }), false);
 });

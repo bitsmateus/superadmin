@@ -63,7 +63,8 @@ export interface ConfigMonitor {
 
 export const CONFIG_PADRAO: ConfigMonitor = {
   ativo: true,
-  prazos: { semRespostaMin: 15, promessaMin: 120, clienteParouHoras: 24, filaMin: 10, abertoDias: 3 },
+  // Só avisa a partir de 2h (pedido do Mateus em 09/11/2026: 15 e 30 min geravam alerta demais).
+  prazos: { semRespostaMin: 120, promessaMin: 120, clienteParouHoras: 24, filaMin: 120, abertoDias: 3 },
   escalarEm: 2,
   horario: { inicio: '08:00', fim: '18:00', dias: [1, 2, 3, 4, 5] },
   grupoId: '',
@@ -292,6 +293,33 @@ export function ehAgradecimento(body: string, tipo = 'chat'): boolean {
   return t.split(/\s+/).every((p) => AGRADECIMENTOS.has(p));
 }
 
+const RETORNOS_DO_CLIENTE = [
+  /\bvou (retornar|voltar|verificar|ver|testar|conferir|olhar|analisar|checar|tentar|reiniciar|providenciar|mandar|enviar|passar|falar com|conversar com|consultar|confirmar|pensar)\b/,
+  /\b(vou|irei) (te |lhe )?(retornar|avisar|chamar|mandar|enviar|falar|responder|confirmar)\b/,
+  /\b(ja|logo|depois|mais tarde|amanha|daqui a pouco|em seguida|em breve) (eu )?(te |lhe )?(retorno|volto|aviso|falo|chamo|mando|envio|passo|respondo|confirmo|vejo|testo)\b/,
+  /\b(te|lhe|vos) (retorno|aviso|chamo|mando|envio|passo|confirmo|respondo)\b/,
+  /\bretorno (em seguida|ja|logo|depois|mais tarde|amanha|em breve)\b/,
+  /\bassim que (eu )?(testar|ver|verificar|puder|conseguir|tiver|chegar|souber|olhar)\b/,
+  /\bqualquer coisa (eu )?(te |lhe )?(chamo|aviso|falo|retorno|mando|grito)\b/,
+  /\b(ja|logo) volto\b/,
+];
+
+/** O CLIENTE disse que volta depois ("já vou retornar", "vou testar e te falo", "assim que puder te aviso")? */
+export function ehRetornoDoCliente(body: string): boolean {
+  const t = normalizar(body).replace(/\s+/g, ' ').trim();
+  if (!t || t.length > 400) return false;
+  if (/\?\s*$/.test(t)) return false; // pergunta ("vou ver onde?") continua pedindo resposta
+  if (/\bnao (vou|consigo|consegui|deu|da|funciona)\b/.test(t)) return false;
+  return RETORNOS_DO_CLIENTE.some((r) => r.test(t));
+}
+
+/** Mensagem curtinha de complemento ("também", "tá", "rs") — não abre espera depois de um "vou retornar". */
+function ehComplementoCurto(body: string, tipo: string): boolean {
+  if (!['chat', 'conversation', 'extendedTextMessage', 'text'].includes(tipo)) return false;
+  const t = body.trim();
+  return t.length > 0 && t.length <= 25 && !t.includes('?') && t.split(/\s+/).length <= 3;
+}
+
 export interface ResumoConversa {
   ultimaDe: 'cliente' | 'atendente' | null;
   /** Quando o cliente começou a esperar (1ª msg dele depois da última do atendente). */
@@ -321,6 +349,7 @@ export function resumirConversa(cruas: Mensagem[], horario: ConfigMonitor['horar
   let primeiraRespostaMin: number | null = null;
   let esperaDesde: number | null = null;
   let soAgradeceu = true; // desde a última msg do atendente, o cliente só agradeceu?
+  let clienteVaiRetornar = false; // o cliente disse que volta depois ("já vou retornar")
 
   for (const m of msgs) {
     if (m.fromMe) {
@@ -329,15 +358,26 @@ export function resumirConversa(cruas: Mensagem[], horario: ConfigMonitor['horar
       ultimaAtendente = m;
       esperaDesde = null;
       soAgradeceu = true;
+      clienteVaiRetornar = false;
       ultimaAt = m.ts;
     } else {
       if (primeiraCliente === null) primeiraCliente = m.ts;
       ultimaCliente = m;
       ultimaAt = m.ts;
       const agradeceu = ehAgradecimento(m.body, m.tipo);
-      if (!agradeceu) soAgradeceu = false;
-      // Só começa a esperar com uma mensagem que pede algo (um "ok" sozinho não abre espera).
-      if (esperaDesde === null && !agradeceu) esperaDesde = m.ts;
+      if (ehRetornoDoCliente(m.body)) {
+        // "Já vou retornar", "vou testar e te falo": a bola está com o cliente, ninguém precisa ficar em cima.
+        clienteVaiRetornar = true;
+        esperaDesde = null;
+        soAgradeceu = true;
+      } else if (agradeceu || (clienteVaiRetornar && ehComplementoCurto(m.body, m.tipo))) {
+        // "ok", "obrigado" ou um "também" logo depois do "vou retornar": não abre espera.
+      } else {
+        soAgradeceu = false;
+        clienteVaiRetornar = false;
+        // Só começa a esperar com uma mensagem que pede algo (um "ok" sozinho não abre espera).
+        if (esperaDesde === null) esperaDesde = m.ts;
+      }
     }
   }
 
@@ -347,7 +387,7 @@ export function resumirConversa(cruas: Mensagem[], horario: ConfigMonitor['horar
     const tsCl = ultimaCliente?.ts ?? -1;
     ultimaDe = tsCl > tsAt ? 'cliente' : 'atendente';
   }
-  const clienteEncerrou = ultimaDe === 'cliente' && esperaDesde === null && soAgradeceu && !!ultimaAtendente;
+  const clienteEncerrou = ultimaDe === 'cliente' && esperaDesde === null && soAgradeceu && (!!ultimaAtendente || clienteVaiRetornar);
 
   return {
     ultimaDe,

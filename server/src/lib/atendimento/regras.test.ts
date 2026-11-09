@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CONFIG_PADRAO, classificar, dentroDoHorario, ehAgradecimento, ehPromessa, estaIgnorado, formatarDuracao,
+  CONFIG_PADRAO, classificar, dentroDoHorario, ehAgradecimento, ehPromessa, ehRetornoDoCliente, estaIgnorado, formatarDuracao,
   lerMensagem, minutosUteis, normalizarConfig, proximaAbertura, resumirConversa, semAssinatura,
   type Mensagem,
 } from './regras.js';
@@ -9,7 +9,43 @@ import {
 // 2026-11-09 é segunda-feira. Brasília = UTC-3, então 08:00 local = 11:00Z.
 const br = (dataHora: string) => Date.parse(`${dataHora}:00-03:00`);
 const H = CONFIG_PADRAO.horario;
-const cfg = CONFIG_PADRAO;
+// Os testes de relógio usam prazos curtos (15 min sem resposta, 10 na fila) para ficarem legíveis.
+const cfg = normalizarConfig({ prazos: { semRespostaMin: 15, promessaMin: 120, clienteParouHoras: 24, filaMin: 10, abertoDias: 3 } });
+
+test('padrão: nenhum alerta antes de 2h', () => {
+  const p = CONFIG_PADRAO.prazos;
+  assert.ok(p.semRespostaMin >= 120 && p.promessaMin >= 120 && p.filaMin >= 120);
+});
+
+test('cliente disse que vai retornar: ninguém precisa ficar em cima', () => {
+  for (const t of ['Já vou retornar em seguida tem um menino que queria uma hupi', 'vou testar e te falo', 'Depois te chamo', 'assim que eu puder te aviso', 'Vou ver com meu sócio', 'qualquer coisa te chamo', 'já volto', 'Te mando o print mais tarde']) {
+    assert.equal(ehRetornoDoCliente(t), true, t);
+  }
+  for (const t of ['vou ver onde?', 'não vou conseguir testar hoje, ainda não funciona', 'o bot não responde', 'aguardo o retorno de vocês']) {
+    assert.equal(ehRetornoDoCliente(t), false, t);
+  }
+  // Conversa real (ShopBike): atendente respondeu, cliente disse que volta e mandou um "também".
+  const r = resumirConversa(
+    [
+      cli('2026-11-09T10:13', 'e fica na ultima mensagem'),
+      atd('2026-11-09T10:29', 'Adriano! Verificamos... Sobre os áudios, consegue me mandar o número de 2 ou 3 atendimentos?'),
+      cli('2026-11-09T10:31', 'Já vou retornar em seguida tem um menino que queria uma hupi'),
+      cli('2026-11-09T10:31', 'também'),
+    ],
+    H,
+  );
+  assert.equal(r.esperaDesde, null);
+  assert.equal(r.clienteEncerrou, true);
+  const c = classificar(aberto, r, cfg, br('2026-11-09T11:03'));
+  assert.equal(c.situacao, 'cliente_parou');
+  assert.equal(c.nivel, 0);
+  // Se depois ele manda um pedido de verdade, aí sim volta a esperar.
+  const depois = resumirConversa(
+    [atd('2026-11-09T10:29', 'Pode me mandar?'), cli('2026-11-09T10:31', 'Já vou retornar'), cli('2026-11-09T10:50', 'pronto, mandei os números dos atendimentos acima')],
+    H,
+  );
+  assert.equal(depois.esperaDesde, br('2026-11-09T10:50'));
+});
 
 let seq = 0;
 const cli = (quando: string, body: string, tipo = 'conversation'): Mensagem => ({ id: `c${++seq}`, fromMe: false, ts: br(quando), userId: null, body, tipo });

@@ -38,6 +38,9 @@ export interface DadosTabloide {
   itens: ItemTabloide[]
   endereco: string
   whatsapp: string
+  /** Segunda loja (opcional). */
+  endereco2?: string
+  whatsapp2?: string
   aviso: string
 }
 
@@ -373,6 +376,16 @@ html,body{background:transparent}
 `
 }
 
+/** Linhas do rodapé: uma por loja (endereço + WhatsApp). */
+function linhasDoRodape(d: DadosTabloide): string[] {
+  return [
+    { e: d.endereco?.trim() ?? '', w: d.whatsapp?.trim() ?? '' },
+    { e: d.endereco2?.trim() ?? '', w: d.whatsapp2?.trim() ?? '' },
+  ]
+    .filter((l) => l.e || l.w)
+    .map((l) => (l.e ? `<span>${ICONE_LOCAL}${esc(l.e)}</span>` : '') + (l.w ? `<span>${ICONE_WHATS}${esc(l.w)}</span>` : ''))
+}
+
 const ICONE_WHATS =
   '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.8 14.2c-.2.7-1.4 1.3-2 1.4-.5.1-1.2.1-1.9-.1a17 17 0 0 1-1.7-.6 13.3 13.3 0 0 1-5.1-4.5c-.4-.5-1-1.5-1-2.8s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .6l-.4.6-.3.4c-.1.1-.3.3-.1.5.1.3.6 1 1.3 1.6.9.8 1.6 1 1.9 1.2.2.1.4.1.5-.1l.7-.9c.2-.2.3-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.2.1.8-.1 1.4z"/></svg>'
 const ICONE_LOCAL =
@@ -450,8 +463,9 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
   const modelo = modeloPorId(dados.modeloId)
   const md = medidas(dados.formato)
   const paginas = paginar(dados.itens, dados.formato, dados.porPagina)
-  const temRodape = !!(dados.endereco || dados.whatsapp || dados.aviso)
-  const rodH = temRodape ? md.rodH : 0
+  const linhasRodape = linhasDoRodape(dados)
+  const temRodape = !!(linhasRodape.length || dados.aviso)
+  const rodH = temRodape ? Math.round(md.rodH * (1 + 0.42 * Math.max(0, linhasRodape.length - 1))) : 0
   const areaW = md.w - md.padX * 2
   const areaH = md.h - md.padTop - md.padBot - md.topoH - rodH - md.gap * (temRodape ? 2 : 1)
   const titulo = dados.titulo || modelo.tituloPadrao
@@ -486,7 +500,7 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
 </div>
 <div class="grade" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);gap:${gapG}px">${cards}</div>
 ${temRodape ? `<div class="rodape" style="height:${rodH}px;font-size:${(md.hu * 1.15).toFixed(0)}px">
-  <div class="linha">${dados.endereco ? `<span>${ICONE_LOCAL}${esc(dados.endereco)}</span>` : ''}${dados.whatsapp ? `<span>${ICONE_WHATS}${esc(dados.whatsapp)}</span>` : ''}</div>
+  ${linhasRodape.map((l) => `<div class="linha">${l}</div>`).join('')}
   ${dados.aviso ? `<div class="aviso" style="font-size:${(md.hu * 0.82).toFixed(0)}px">${esc(dados.aviso)}</div>` : ''}
 </div>` : ''}
 ${npag}
@@ -519,5 +533,7 @@ export const DADOS_VAZIOS = (): DadosTabloide => ({
   itens: [],
   endereco: '',
   whatsapp: '',
+  endereco2: '',
+  whatsapp2: '',
   aviso: 'Ofertas válidas enquanto durarem os estoques. Imagens meramente ilustrativas.',
 })

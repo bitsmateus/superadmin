@@ -31,6 +31,8 @@ export interface TabloideSalvo {
 export interface ConfigTabloide {
   endereco: string
   whatsapp: string
+  endereco2: string
+  whatsapp2: string
   aviso: string
   removeBg: boolean
   cosmos: boolean
@@ -80,7 +82,7 @@ export const tabloideApi = {
     req<{ produto: ProdutoCatalogo; fonte: string; aviso: string | null }>('/produtos/ean', json({ ean, nome, detalhe })),
 
   config: () => req<ConfigTabloide>('/tabloide/config'),
-  salvarConfig: (c: Partial<Pick<ConfigTabloide, 'endereco' | 'whatsapp' | 'aviso'>>) =>
+  salvarConfig: (c: Partial<Pick<ConfigTabloide, 'endereco' | 'whatsapp' | 'endereco2' | 'whatsapp2' | 'aviso'>>) =>
     req<ConfigTabloide>('/tabloide/config', { method: 'PATCH', body: JSON.stringify(c) }),
 
   tabloides: () => req<{ tabloides: TabloideSalvo[] }>('/tabloides'),

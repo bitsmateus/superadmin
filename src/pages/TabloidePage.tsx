@@ -98,12 +98,14 @@ function Editor() {
       .config()
       .then((c) => {
         setConfig(c)
-        // Rodapé vazio no rascunho = usa o padrão salvo do mercado.
+        // Rodapé é fixo: o padrão salvo do mercado vale por cima do rascunho.
         setDados((d) => ({
           ...d,
-          endereco: d.endereco || c.endereco,
-          whatsapp: d.whatsapp || c.whatsapp,
-          aviso: d.aviso || c.aviso,
+          endereco: c.endereco || d.endereco,
+          whatsapp: c.whatsapp || d.whatsapp,
+          endereco2: c.endereco2 || d.endereco2 || '',
+          whatsapp2: c.whatsapp2 || d.whatsapp2 || '',
+          aviso: c.aviso || d.aviso,
         }))
       })
       .catch((e: Error) => toast.error(e.message))
@@ -158,7 +160,14 @@ function Editor() {
 
   const novo = () => {
     if (dados.itens.length && !window.confirm('Começar um tabloide novo? O atual continua no histórico se você salvou.')) return
-    setDados({ ...DADOS_VAZIOS(), endereco: config?.endereco ?? '', whatsapp: config?.whatsapp ?? '', aviso: config?.aviso ?? DADOS_VAZIOS().aviso })
+    setDados({
+      ...DADOS_VAZIOS(),
+      endereco: config?.endereco ?? '',
+      whatsapp: config?.whatsapp ?? '',
+      endereco2: config?.endereco2 ?? '',
+      whatsapp2: config?.whatsapp2 ?? '',
+      aviso: config?.aviso ?? DADOS_VAZIOS().aviso,
+    })
     setIdSalvo(null)
     setVideo(null)
   }
@@ -187,6 +196,8 @@ function Editor() {
         subtitulo: v.subtitulo,
         endereco: v.endereco || d.endereco,
         whatsapp: v.whatsapp || d.whatsapp,
+        endereco2: v.endereco2 || d.endereco2,
+        whatsapp2: v.whatsapp2 || d.whatsapp2,
         aviso: v.aviso || d.aviso,
       }))
     }
@@ -676,9 +687,15 @@ function Textos({
   const semRodape = !!config && !dados.endereco && !dados.whatsapp
   const [editandoRodape, setEditandoRodape] = React.useState(false)
   const [salvandoRodape, setSalvandoRodape] = React.useState(false)
-  const [rascunho, setRascunho] = React.useState({ endereco: '', whatsapp: '', aviso: '' })
+  const [rascunho, setRascunho] = React.useState({ endereco: '', whatsapp: '', endereco2: '', whatsapp2: '', aviso: '' })
   const abrirEdicao = () => {
-    setRascunho({ endereco: dados.endereco, whatsapp: dados.whatsapp, aviso: dados.aviso })
+    setRascunho({
+      endereco: dados.endereco,
+      whatsapp: dados.whatsapp,
+      endereco2: dados.endereco2 ?? '',
+      whatsapp2: dados.whatsapp2 ?? '',
+      aviso: dados.aviso,
+    })
     setEditandoRodape(true)
   }
   React.useEffect(() => {
@@ -687,14 +704,20 @@ function Textos({
   }, [semRodape])
 
   const salvarPadrao = async () => {
-    const r = { endereco: rascunho.endereco.trim(), whatsapp: rascunho.whatsapp.trim(), aviso: rascunho.aviso.trim() }
+    const r = {
+      endereco: rascunho.endereco.trim(),
+      whatsapp: rascunho.whatsapp.trim(),
+      endereco2: rascunho.endereco2.trim(),
+      whatsapp2: rascunho.whatsapp2.trim(),
+      aviso: rascunho.aviso.trim(),
+    }
     setSalvandoRodape(true)
     try {
       const c = await tabloideApi.salvarConfig(r)
       if (config) setConfig({ ...config, ...c })
       muda(r)
       setEditandoRodape(false)
-      toast.success('Endereço, WhatsApp e aviso salvos.')
+      toast.success('Lojas e aviso salvos.')
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -726,12 +749,20 @@ function Textos({
         {editandoRodape ? (
           <>
             <label className={rotulo}>
-              Endereço
+              Endereço (loja 1)
               <input value={rascunho.endereco} onChange={(e) => setRascunho({ ...rascunho, endereco: e.target.value })} placeholder="Rua..., 123 - Centro" maxLength={120} className={inputCls} />
             </label>
             <label className={rotulo}>
-              WhatsApp
+              WhatsApp (loja 1)
               <input value={rascunho.whatsapp} onChange={(e) => setRascunho({ ...rascunho, whatsapp: e.target.value })} placeholder="(00) 90000-0000" maxLength={40} className={inputCls} />
+            </label>
+            <label className={rotulo}>
+              Endereço (loja 2, opcional)
+              <input value={rascunho.endereco2} onChange={(e) => setRascunho({ ...rascunho, endereco2: e.target.value })} placeholder="Av..., 456 - Centro" maxLength={120} className={inputCls} />
+            </label>
+            <label className={rotulo}>
+              WhatsApp (loja 2)
+              <input value={rascunho.whatsapp2} onChange={(e) => setRascunho({ ...rascunho, whatsapp2: e.target.value })} placeholder="(00) 90000-0000" maxLength={40} className={inputCls} />
             </label>
             <label className={`${rotulo} sm:col-span-2`}>
               Aviso no rodapé
@@ -749,10 +780,10 @@ function Textos({
         ) : (
           <div className="flex items-start justify-between gap-3 rounded-lg border border-[#E6E0DA] bg-[#FAF7F4] px-3 py-2.5 sm:col-span-2">
             <dl className="grid min-w-0 flex-1 gap-1 text-sm sm:grid-cols-[110px_1fr]">
-              <dt className={rotulo}>Endereço</dt>
-              <dd className="truncate text-[#3A332E]">{dados.endereco || '—'}</dd>
-              <dt className={rotulo}>WhatsApp</dt>
-              <dd className="truncate text-[#3A332E]">{dados.whatsapp || '—'}</dd>
+              <dt className={rotulo}>Loja 1</dt>
+              <dd className="text-[#3A332E]">{[dados.endereco, dados.whatsapp].filter(Boolean).join(' · ') || '—'}</dd>
+              <dt className={rotulo}>Loja 2</dt>
+              <dd className="text-[#3A332E]">{[dados.endereco2, dados.whatsapp2].filter(Boolean).join(' · ') || '—'}</dd>
               <dt className={rotulo}>Aviso no rodapé</dt>
               <dd className="text-[#3A332E]">{dados.aviso || '—'}</dd>
             </dl>

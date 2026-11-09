@@ -1751,6 +1751,19 @@ END; $$`);
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`INSERT INTO mn_tabloide_config (id) VALUES (true) ON CONFLICT DO NOTHING`);
+  // Segunda loja no rodapé. Na primeira vez que a coluna é criada, já grava as duas lojas do Nunes.
+  const temLoja2 = await pool.query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'mn_tabloide_config' AND column_name = 'endereco2'`,
+  );
+  if (!temLoja2.rowCount) {
+    await pool.query(`ALTER TABLE mn_tabloide_config
+      ADD COLUMN IF NOT EXISTS endereco2 TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS whatsapp2 TEXT NOT NULL DEFAULT ''`);
+    await pool.query(`UPDATE mn_tabloide_config SET
+      endereco = 'R. Miguel Inácio Faraco, 373 - Vila Moema, Tubarão - SC', whatsapp = '(48) 3660-0425',
+      endereco2 = 'Av. Pedro Zapelini, 1870 - Centro, Tubarão - SC', whatsapp2 = '(48) 3622-2168',
+      updated_at = NOW() WHERE id = true`);
+  }
   // Layouts (templates) do tabloide: o conteúdo inteiro salvo com um nome, pra começar o próximo dele.
   await pool.query(`CREATE TABLE IF NOT EXISTS mn_tabloide_layouts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

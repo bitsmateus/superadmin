@@ -96,6 +96,8 @@ async function prepararDados(bruto: Partial<DadosTabloide> | undefined): Promise
     itens,
     endereco: texto(d.endereco, 120),
     whatsapp: texto(d.whatsapp, 40),
+    endereco2: texto(d.endereco2, 120),
+    whatsapp2: texto(d.whatsapp2, 40),
     aviso: texto(d.aviso, 160),
   };
 }
@@ -290,19 +292,21 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
   // ── Configuração (rodapé fixo + cliente do Instagram) ─────────────────────
 
   app.get(`${BASE}/tabloide/config`, async () => {
-    const cfg = await queryOne<{ endereco: string; whatsapp: string; aviso: string }>(
-      'SELECT endereco, whatsapp, aviso FROM mn_tabloide_config WHERE id = true',
+    const cfg = await queryOne<{ endereco: string; whatsapp: string; endereco2: string; whatsapp2: string; aviso: string }>(
+      'SELECT endereco, whatsapp, endereco2, whatsapp2, aviso FROM mn_tabloide_config WHERE id = true',
     );
     return { ...cfg, removeBg: removeBgDisponivel(), cosmos: !!process.env.COSMOS_TOKEN, ia: !!process.env.ANTHROPIC_API_KEY };
   });
 
-  app.patch<{ Body: { endereco?: string; whatsapp?: string; aviso?: string } }>(`${BASE}/tabloide/config`, async (req) => {
+  app.patch<{ Body: { endereco?: string; whatsapp?: string; endereco2?: string; whatsapp2?: string; aviso?: string } }>(`${BASE}/tabloide/config`, async (req) => {
     const b = req.body ?? {};
+    const campo = (v: unknown, max: number) => (v !== undefined ? texto(v, max) : null);
     return queryOne(
       `UPDATE mn_tabloide_config SET
-         endereco = COALESCE($1, endereco), whatsapp = COALESCE($2, whatsapp), aviso = COALESCE($3, aviso), updated_at = NOW()
-       WHERE id = true RETURNING endereco, whatsapp, aviso`,
-      [b.endereco !== undefined ? texto(b.endereco, 120) : null, b.whatsapp !== undefined ? texto(b.whatsapp, 40) : null, b.aviso !== undefined ? texto(b.aviso, 160) : null],
+         endereco = COALESCE($1, endereco), whatsapp = COALESCE($2, whatsapp), aviso = COALESCE($3, aviso),
+         endereco2 = COALESCE($4, endereco2), whatsapp2 = COALESCE($5, whatsapp2), updated_at = NOW()
+       WHERE id = true RETURNING endereco, whatsapp, endereco2, whatsapp2, aviso`,
+      [campo(b.endereco, 120), campo(b.whatsapp, 40), campo(b.aviso, 160), campo(b.endereco2, 120), campo(b.whatsapp2, 40)],
     );
   });
 
@@ -445,7 +449,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
       'termine chamando para vir à loja e com o endereço/WhatsApp se houver; 3 a 6 hashtags locais e de mercado. ' +
       'Pode usar emojis com moderação. No máximo 900 caracteres. Responda só com a legenda, sem aspas e sem comentários.';
     const pedido = `Tabloide: ${d.titulo || MODELOS.find((m) => m.id === d.modeloId)?.tituloPadrao}
-${d.subtitulo ? `Chamada: ${d.subtitulo}\n` : ''}${d.validade ? `Validade: ${d.validade}\n` : ''}${d.endereco ? `Endereço: ${d.endereco}\n` : ''}${d.whatsapp ? `WhatsApp: ${d.whatsapp}\n` : ''}
+${d.subtitulo ? `Chamada: ${d.subtitulo}\n` : ''}${d.validade ? `Validade: ${d.validade}\n` : ''}${d.endereco ? `Endereço: ${d.endereco}\n` : ''}${d.whatsapp ? `WhatsApp: ${d.whatsapp}\n` : ''}${d.endereco2 ? `Endereço (2ª loja): ${d.endereco2}\n` : ''}${d.whatsapp2 ? `WhatsApp (2ª loja): ${d.whatsapp2}\n` : ''}
 Ofertas:
 ${lista}`;
     try {

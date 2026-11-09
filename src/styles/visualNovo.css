@@ -1,0 +1,211 @@
+/*
+ * Visual novo (vidro translúcido, pílulas, fonte Urbanist) — no azul de sempre do painel.
+ *
+ * Só vale com <html data-skin="novo">, que o Layout liga nas telas do menu Suporte (ver
+ * lib/visualNovo.ts). Fora delas nada aqui se aplica e a tela fica exatamente como era.
+ * É só CSS: os componentes, os dados e as funções são os mesmos.
+ */
+
+[data-skin='novo'] {
+  --bg-rgb: 13 16 23;
+  --surface-rgb: 21 25 33;
+  --card-rgb: 26 31 41;
+  --sidebar-rgb: 18 21 29;
+  --foreground-rgb: 240 243 248;
+  --elevate-rgb: 255 255 255;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-soft: rgba(255, 255, 255, 0.06);
+  --focus-ring-bg: #0d1017;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
+
+  --vn-glass: rgba(18, 22, 30, 0.58);
+  --vn-glass-strong: rgba(22, 27, 36, 0.9);
+  --vn-rim: rgba(255, 255, 255, 0.14);
+  --vn-blur: blur(22px) saturate(150%);
+  --vn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 30px 60px -30px rgba(0, 0, 0, 0.6);
+  --vn-shadow-pop: 0 24px 60px -18px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  --vn-r-card: 22px;
+  --vn-r-tile: 16px;
+
+  /* O azul do painel (#4F8EF7 / #6BA0F9, o mesmo do tailwind.config.js). */
+  --vn-accent: 79 142 247;
+  --vn-accent-hover: 107 160 249;
+  --vn-on-accent: #ffffff;
+
+  --vn-card: rgba(26, 31, 41, 0.72);
+  --vn-tablist-bg: rgba(255, 255, 255, 0.06);
+  --vn-tab-on-bg: rgba(240, 243, 248, 0.94);
+  --vn-tab-on-fg: #10141c;
+  --vn-selection: rgba(79, 142, 247, 0.35);
+  --vn-page-bg: #0d1017;
+  --vn-page-image:
+    radial-gradient(1200px 520px at 78% -8%, rgba(79, 142, 247, 0.28), transparent 62%),
+    radial-gradient(900px 600px at 8% 0%, rgba(140, 120, 255, 0.14), transparent 60%),
+    radial-gradient(1000px 700px at 50% 115%, rgba(56, 189, 248, 0.08), transparent 60%),
+    linear-gradient(180deg, #1a2130 0%, #121722 38%, #0d1017 100%);
+}
+
+/* ---------- Modo claro: vidro branco sobre fundo claro ---------- */
+[data-skin='novo'][data-theme='light'] {
+  --bg-rgb: 236 240 247;
+  --surface-rgb: 255 255 255;
+  --card-rgb: 255 255 255;
+  --sidebar-rgb: 248 250 253;
+  --foreground-rgb: 16 22 34;
+  --elevate-rgb: 16 22 34;
+  --line: rgba(16, 22, 34, 0.1);
+  --line-soft: rgba(16, 22, 34, 0.06);
+  --focus-ring-bg: #f3f6fb;
+  --scrollbar-thumb: rgba(16, 22, 34, 0.16);
+  --scrollbar-thumb-hover: rgba(16, 22, 34, 0.28);
+
+  --vn-glass: rgba(255, 255, 255, 0.58);
+  --vn-glass-strong: rgba(250, 252, 255, 0.95);
+  --vn-rim: rgba(255, 255, 255, 0.8);
+  --vn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 24px 50px -32px rgba(20, 35, 70, 0.4);
+  --vn-shadow-pop: 0 24px 60px -18px rgba(20, 35, 70, 0.35), 0 2px 6px rgba(20, 35, 70, 0.08);
+  --vn-card: rgba(255, 255, 255, 0.74);
+  --vn-tablist-bg: rgba(16, 22, 34, 0.06);
+  --vn-tab-on-bg: #10141c;
+  --vn-tab-on-fg: #f5f7fb;
+  --vn-selection: rgba(79, 142, 247, 0.3);
+  --vn-page-bg: #ecf0f7;
+  --vn-page-image:
+    radial-gradient(1200px 520px at 78% -8%, rgba(79, 142, 247, 0.2), transparent 62%),
+    radial-gradient(900px 600px at 8% 0%, rgba(140, 120, 255, 0.12), transparent 60%),
+    radial-gradient(1000px 700px at 50% 115%, rgba(56, 189, 248, 0.1), transparent 60%),
+    linear-gradient(180deg, #f2f5fb 0%, #ecf0f7 40%, #e7ecf5 100%);
+}
+
+/* ---------- Fundo em degradê e fonte ---------- */
+[data-skin='novo'] body {
+  font-family: 'Urbanist', 'Roboto', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-feature-settings: normal;
+  letter-spacing: 0.005em;
+  background-color: var(--vn-page-bg);
+  background-image: var(--vn-page-image);
+  background-attachment: fixed;
+}
+[data-skin='novo'] .font-sans { font-family: inherit; }
+[data-skin='novo'] ::selection { background: var(--vn-selection); color: inherit; }
+
+/* Fundo das telas transparente pra o degradê aparecer por trás do vidro. */
+[data-skin='novo'] .bg-bg { background-color: transparent; }
+[data-skin='novo'] .min-h-screen.bg-bg { background: transparent; }
+
+/* ---------- Vidro ---------- */
+[data-skin='novo'] .bg-surface,
+[data-skin='novo'] .bg-sidebar {
+  background-color: var(--vn-glass);
+  -webkit-backdrop-filter: var(--vn-blur);
+  backdrop-filter: var(--vn-blur);
+}
+[data-skin='novo'] .bg-card { background-color: var(--vn-card); }
+
+/* Diálogos e menus: vidro mais opaco pra leitura. */
+[data-skin='novo'] [role='dialog'],
+[data-skin='novo'] [role='menu'],
+[data-skin='novo'] [role='listbox'] {
+  border-radius: var(--vn-r-card);
+  box-shadow: var(--vn-shadow-pop);
+}
+[data-skin='novo'] [role='dialog'].bg-surface,
+[data-skin='novo'] [role='dialog'] .bg-surface,
+[data-skin='novo'] [role='menu'],
+[data-skin='novo'] [role='listbox'] {
+  background-color: var(--vn-glass-strong);
+}
+
+/* ---------- Cantos mais arredondados ---------- */
+[data-skin='novo'] .rounded-md { border-radius: 10px; }
+[data-skin='novo'] .rounded-lg { border-radius: 14px; }
+[data-skin='novo'] .rounded-xl { border-radius: 18px; }
+[data-skin='novo'] .rounded-2xl { border-radius: var(--vn-r-card); }
+
+/* ---------- Botão principal: pílula azul ---------- */
+[data-skin='novo'] .btn-primary {
+  background: rgb(var(--vn-accent));
+  color: var(--vn-on-accent);
+  border-radius: 999px;
+  box-shadow: 0 10px 24px -12px rgba(79, 142, 247, 0.6);
+}
+[data-skin='novo'] .btn-primary:hover { background: rgb(var(--vn-accent-hover)); }
+[data-skin='novo'] .shadow-glow { box-shadow: 0 0 0 1px rgba(79, 142, 247, 0.4), 0 8px 24px -8px rgba(79, 142, 247, 0.4); }
+[data-skin='novo'] .shadow-ringSoft { box-shadow: 0 0 0 4px rgba(79, 142, 247, 0.15); }
+
+/* ---------- Menu lateral vira um painel flutuante de vidro ---------- */
+[data-skin='novo'] aside.w-\[220px\] {
+  top: 12px;
+  left: 12px;
+  height: calc(100vh - 24px);
+  border: 1px solid var(--vn-rim);
+  border-radius: var(--vn-r-card);
+  box-shadow: var(--vn-shadow);
+  overflow: hidden;
+}
+@media (min-width: 1024px) {
+  [data-skin='novo'] main.lg\:pl-\[220px\] { padding-left: 244px; }
+}
+[data-skin='novo'] aside.w-\[220px\] a,
+[data-skin='novo'] aside.w-\[220px\] button { border-radius: 999px; }
+
+/* ---------- Cabeçalho da página: barra de vidro solta ---------- */
+[data-skin='novo'] header.sticky.top-0 {
+  margin: 12px 12px 0;
+  border: 1px solid var(--vn-rim);
+  border-radius: var(--vn-r-card);
+  background: var(--vn-glass);
+  -webkit-backdrop-filter: var(--vn-blur);
+  backdrop-filter: var(--vn-blur);
+  box-shadow: var(--vn-shadow);
+  top: 12px;
+}
+[data-skin='novo'] header.sticky.top-0 h1 {
+  font-size: 1.5rem;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Abas em pílula ---------- */
+[data-skin='novo'] [role='tablist'] {
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+  background: var(--vn-tablist-bg);
+  border-color: var(--vn-rim);
+}
+[data-skin='novo'] [role='tab'] { border-radius: 999px; }
+[data-skin='novo'] [role='tab'][aria-selected='true'] {
+  background: var(--vn-tab-on-bg);
+  color: var(--vn-tab-on-fg);
+}
+
+/* ---------- Campos ---------- */
+[data-skin='novo'] input:not([type='checkbox']):not([type='radio']):not([type='range']),
+[data-skin='novo'] select,
+[data-skin='novo'] textarea {
+  border-radius: 12px;
+}
+[data-skin='novo'] input[type='search'],
+[data-skin='novo'] input[placeholder*='esquis'] { border-radius: 999px; }
+
+/* ---------- Avisos (sonner) ---------- */
+[data-skin='novo'] [data-sonner-toast] {
+  border-radius: 16px !important;
+  -webkit-backdrop-filter: var(--vn-blur);
+  backdrop-filter: var(--vn-blur);
+}
+
+/* ---------- Kanban: colunas de vidro ---------- */
+[data-skin='novo'] [data-kanban-col] {
+  background: var(--vn-glass);
+  -webkit-backdrop-filter: var(--vn-blur);
+  backdrop-filter: var(--vn-blur);
+  border-color: var(--vn-rim);
+  border-radius: var(--vn-r-card);
+  box-shadow: var(--vn-shadow);
+}
+[data-skin='novo'] [data-kanban-col] > header { padding-top: 12px; padding-bottom: 10px; }
+[data-skin='novo'] [data-kanban-col] li { border-radius: var(--vn-r-tile); }

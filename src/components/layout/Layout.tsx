@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { PageFallback } from './PageFallback'
@@ -12,6 +12,7 @@ import { ReuniaoResultadoPopup } from '@/components/comercial/ReuniaoResultadoPo
 import { RetornoPropostaPopup } from '@/components/comercial/RetornoPropostaPopup'
 import { PopupDeNotificacoes } from '@/components/notificacoes/PopupDeNotificacoes'
 import { LembreteDeNotificacoes } from '@/components/notificacoes/LembreteDeNotificacoes'
+import { useVisualNovo } from '@/lib/visualNovo'
 
 const isDesktop = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -20,6 +21,8 @@ export function Layout() {
   useAsaasAutoSync()
   useTicketNotifications()
   usePushSubscription()
+  // Visual novo (vidro) só nas telas do menu Suporte — ver lib/visualNovo.ts.
+  useVisualNovo(useLocation().pathname)
 
   // Aberto por padrão no desktop, fechado no celular/tablet.
   const [open, setOpen] = React.useState(isDesktop)

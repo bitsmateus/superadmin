@@ -8,6 +8,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { applyStoredTheme } from './hooks/useTheme'
 import { registerServiceWorker } from './lib/registerServiceWorker'
 import './index.css'
+import './styles/visualNovo.css'
 
 // Aplica tema salvo ANTES do React renderizar — evita flash de tema errado.
 applyStoredTheme()

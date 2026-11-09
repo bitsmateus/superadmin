@@ -672,13 +672,33 @@ function Textos({
     else if (d) muda({ validade: `Válido a partir de ${dataCurta(d)}` })
   }
 
+  // Endereço, WhatsApp e aviso ficam fixos (salvos como padrão); só mudam pelo "Editar".
+  const semRodape = !!config && !dados.endereco && !dados.whatsapp
+  const [editandoRodape, setEditandoRodape] = React.useState(false)
+  const [salvandoRodape, setSalvandoRodape] = React.useState(false)
+  const [rascunho, setRascunho] = React.useState({ endereco: '', whatsapp: '', aviso: '' })
+  const abrirEdicao = () => {
+    setRascunho({ endereco: dados.endereco, whatsapp: dados.whatsapp, aviso: dados.aviso })
+    setEditandoRodape(true)
+  }
+  React.useEffect(() => {
+    if (semRodape && !editandoRodape) abrirEdicao()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [semRodape])
+
   const salvarPadrao = async () => {
+    const r = { endereco: rascunho.endereco.trim(), whatsapp: rascunho.whatsapp.trim(), aviso: rascunho.aviso.trim() }
+    setSalvandoRodape(true)
     try {
-      const c = await tabloideApi.salvarConfig({ endereco: dados.endereco, whatsapp: dados.whatsapp, aviso: dados.aviso })
+      const c = await tabloideApi.salvarConfig(r)
       if (config) setConfig({ ...config, ...c })
-      toast.success('Rodapé salvo como padrão.')
+      muda(r)
+      setEditandoRodape(false)
+      toast.success('Endereço, WhatsApp e aviso salvos.')
     } catch (e) {
       toast.error((e as Error).message)
+    } finally {
+      setSalvandoRodape(false)
     }
   }
 
@@ -703,22 +723,45 @@ function Textos({
             <input value={dados.validade} onChange={(e) => muda({ validade: e.target.value })} placeholder="Válido de 06/11 a 09/11" maxLength={80} className={`${inputCls} min-w-[200px] flex-1`} />
           </div>
         </div>
-        <label className={rotulo}>
-          Endereço
-          <input value={dados.endereco} onChange={(e) => muda({ endereco: e.target.value })} placeholder="Rua..., 123 - Centro" maxLength={120} className={inputCls} />
-        </label>
-        <label className={rotulo}>
-          WhatsApp
-          <input value={dados.whatsapp} onChange={(e) => muda({ whatsapp: e.target.value })} placeholder="(00) 90000-0000" maxLength={40} className={inputCls} />
-        </label>
-        <label className={`${rotulo} sm:col-span-2`}>
-          Aviso no rodapé
-          <input value={dados.aviso} onChange={(e) => muda({ aviso: e.target.value })} maxLength={160} className={inputCls} />
-        </label>
+        {editandoRodape ? (
+          <>
+            <label className={rotulo}>
+              Endereço
+              <input value={rascunho.endereco} onChange={(e) => setRascunho({ ...rascunho, endereco: e.target.value })} placeholder="Rua..., 123 - Centro" maxLength={120} className={inputCls} />
+            </label>
+            <label className={rotulo}>
+              WhatsApp
+              <input value={rascunho.whatsapp} onChange={(e) => setRascunho({ ...rascunho, whatsapp: e.target.value })} placeholder="(00) 90000-0000" maxLength={40} className={inputCls} />
+            </label>
+            <label className={`${rotulo} sm:col-span-2`}>
+              Aviso no rodapé
+              <input value={rascunho.aviso} onChange={(e) => setRascunho({ ...rascunho, aviso: e.target.value })} maxLength={160} className={inputCls} />
+            </label>
+            <div className="flex gap-2 sm:col-span-2">
+              <button disabled={salvandoRodape} className="rounded-lg bg-[#C1503F] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#A8422F] disabled:opacity-60" onClick={() => void salvarPadrao()}>
+                {salvandoRodape ? 'Salvando…' : 'Salvar'}
+              </button>
+              <button className="rounded-lg border border-[#E6E0DA] px-3 py-1.5 text-xs font-semibold text-[#7A716A] hover:bg-[#F6F2EE]" onClick={() => setEditandoRodape(false)}>
+                Cancelar
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-[#E6E0DA] bg-[#FAF7F4] px-3 py-2.5 sm:col-span-2">
+            <dl className="grid min-w-0 flex-1 gap-1 text-sm sm:grid-cols-[110px_1fr]">
+              <dt className={rotulo}>Endereço</dt>
+              <dd className="truncate text-[#3A332E]">{dados.endereco || '—'}</dd>
+              <dt className={rotulo}>WhatsApp</dt>
+              <dd className="truncate text-[#3A332E]">{dados.whatsapp || '—'}</dd>
+              <dt className={rotulo}>Aviso no rodapé</dt>
+              <dd className="text-[#3A332E]">{dados.aviso || '—'}</dd>
+            </dl>
+            <button className="shrink-0 text-xs font-semibold text-[#C1503F] hover:underline" onClick={abrirEdicao}>
+              Editar
+            </button>
+          </div>
+        )}
       </div>
-      <button className="mt-2 text-xs font-semibold text-[#C1503F] hover:underline" onClick={() => void salvarPadrao()}>
-        Usar este endereço, WhatsApp e aviso como padrão
-      </button>
     </Bloco>
   )
 }

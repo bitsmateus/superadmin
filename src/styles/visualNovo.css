@@ -209,3 +209,64 @@
 }
 [data-skin='novo'] [data-kanban-col] > header { padding-top: 12px; padding-bottom: 10px; }
 [data-skin='novo'] [data-kanban-col] li { border-radius: var(--vn-r-tile); }
+
+/* ---------- Letra mais encorpada e textos secundários mais fortes ----------
+ * A Urbanist em 400 fica fina, e os tons apagados (text-foreground/40 etc.) somem no vidro.
+ * Sobe um degrau de peso e reforça a opacidade de cada tom, mantendo a hierarquia. */
+[data-skin='novo'] body { font-weight: 500; -webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto; }
+[data-skin='novo'] .font-normal { font-weight: 500; }
+[data-skin='novo'] .font-medium { font-weight: 600; }
+[data-skin='novo'] .font-semibold { font-weight: 700; }
+[data-skin='novo'] .font-bold { font-weight: 800; }
+[data-skin='novo'] .antialiased { -webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto; }
+[data-skin='novo'] .text-foreground\/15 { color: rgb(var(--foreground-rgb) / 0.35); }
+[data-skin='novo'] .text-foreground\/20 { color: rgb(var(--foreground-rgb) / 0.4); }
+[data-skin='novo'] .text-foreground\/25 { color: rgb(var(--foreground-rgb) / 0.45); }
+[data-skin='novo'] .text-foreground\/30 { color: rgb(var(--foreground-rgb) / 0.52); }
+[data-skin='novo'] .text-foreground\/35 { color: rgb(var(--foreground-rgb) / 0.56); }
+[data-skin='novo'] .text-foreground\/40 { color: rgb(var(--foreground-rgb) / 0.62); }
+[data-skin='novo'] .text-foreground\/45 { color: rgb(var(--foreground-rgb) / 0.66); }
+[data-skin='novo'] .text-foreground\/50 { color: rgb(var(--foreground-rgb) / 0.7); }
+[data-skin='novo'] .text-foreground\/55 { color: rgb(var(--foreground-rgb) / 0.74); }
+[data-skin='novo'] .text-foreground\/60 { color: rgb(var(--foreground-rgb) / 0.78); }
+[data-skin='novo'] .text-foreground\/65 { color: rgb(var(--foreground-rgb) / 0.82); }
+[data-skin='novo'] .text-foreground\/70 { color: rgb(var(--foreground-rgb) / 0.86); }
+[data-skin='novo'] .text-foreground\/75 { color: rgb(var(--foreground-rgb) / 0.88); }
+[data-skin='novo'] .text-foreground\/80 { color: rgb(var(--foreground-rgb) / 0.91); }
+[data-skin='novo'] .text-foreground\/85 { color: rgb(var(--foreground-rgb) / 0.93); }
+[data-skin='novo'] .text-foreground\/90 { color: rgb(var(--foreground-rgb) / 0.95); }
+
+/* ---------- Gavetas e janelas: fundo sólido ----------
+ * Elas usam .bg-card, que no visual novo é semitransparente; por cima do escurecido (bg-black/70)
+ * isso virava um cinza apagado, pior no tema claro. Aqui o fundo é sólido e os blocos de dentro
+ * ganham um tom levemente diferente, com borda, pra separar sem sumir. */
+[data-skin='novo'] {
+  --vn-dialog: #161b25;
+  --vn-dialog-card: rgba(255, 255, 255, 0.045);
+}
+[data-skin='novo'][data-theme='light'] {
+  --vn-dialog: #ffffff;
+  --vn-dialog-card: #f5f7fc;
+  --line: rgba(16, 22, 34, 0.12);
+  --vn-page-bg: #f1f4fa;
+  --vn-page-image:
+    radial-gradient(1200px 520px at 78% -8%, rgba(79, 142, 247, 0.16), transparent 62%),
+    radial-gradient(900px 600px at 8% 0%, rgba(140, 120, 255, 0.08), transparent 60%),
+    linear-gradient(180deg, #f6f8fc 0%, #f1f4fa 45%, #edf1f8 100%);
+  --vn-card: rgba(255, 255, 255, 0.86);
+  --vn-glass: rgba(255, 255, 255, 0.72);
+}
+[data-skin='novo'] [role='dialog'].bg-card,
+[data-skin='novo'] [role='dialog'].bg-surface {
+  background-color: var(--vn-dialog);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+[data-skin='novo'] [role='dialog'] .bg-card {
+  background-color: var(--vn-dialog-card);
+}
+[data-skin='novo'][data-theme='light'] [role='dialog'] .bg-card {
+  border-color: rgba(16, 22, 34, 0.1);
+}
+/* No claro, o escurecido atrás da janela fica um pouco mais leve. */
+[data-skin='novo'][data-theme='light'] .bg-black\/70 { background-color: rgba(15, 23, 42, 0.45); }

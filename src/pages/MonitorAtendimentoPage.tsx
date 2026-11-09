@@ -903,7 +903,7 @@ function ModalConfig({ dados, onClose, onSalvo }: { dados: PainelMonitor; onClos
         <details className="rounded-xl border border-line p-3">
           <summary className="cursor-pointer text-sm font-semibold">Avançado</summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <Campo label="Link do ticket" hint="{id} vira o número do ticket">
+            <Campo label="Link do atendimento" hint="Vai no fim de cada alerta e no botão Abrir. Se a NX passar a abrir o ticket direto, use {id} (ex.: …/atendimento/{id}).">
               <Input value={c.linkTicket} onChange={(e) => set('linkTicket', e.target.value)} />
             </Campo>
             <Campo label="URL da API" hint="Vazio = a do grupo de suporte">

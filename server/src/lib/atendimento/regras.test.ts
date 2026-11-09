@@ -174,3 +174,9 @@ test('ignorar por trecho do nome, sem acento nem maiúscula', () => {
   assert.equal(estaIgnorado(['ab'], { nome: 'ab cd' }), false); // curto demais
   assert.equal(estaIgnorado(['120363409254876877@g.us'], { numero: '120363409254876877' }), true);
 });
+
+test('link do atendimento: o padrão antigo por ticket vira o link geral', () => {
+  assert.equal(normalizarConfig({}).linkTicket, 'https://app.nxsystems.com.br/atendimento');
+  assert.equal(normalizarConfig({ linkTicket: 'https://app.nxsystems.com.br/atendimento/{id}' }).linkTicket, 'https://app.nxsystems.com.br/atendimento');
+  assert.equal(normalizarConfig({ linkTicket: 'https://outro.exemplo/t/{id}' }).linkTicket, 'https://outro.exemplo/t/{id}');
+});

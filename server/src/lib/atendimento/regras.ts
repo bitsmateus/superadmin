@@ -55,7 +55,7 @@ export interface ConfigMonitor {
   ignorar: string[];
   /** Só estas filas (ids). Vazio = todas. */
   filas: number[];
-  /** Link do ticket na ferramenta; {id} vira o id do ticket. */
+  /** Link da ferramenta de atendimento. Se tiver {id}, vira o link de cada ticket (a NX hoje não abre o ticket direto). */
   linkTicket: string;
   /** Credencial da API da NX. Vazia = a mesma do grupo de suporte. */
   credencial: { apiId: string; token: string; baseUrl: string };
@@ -79,9 +79,11 @@ export const CONFIG_PADRAO: ConfigMonitor = {
   },
   ignorar: [],
   filas: [],
-  linkTicket: 'https://app.nxsystems.com.br/atendimento/{id}',
+  linkTicket: 'https://app.nxsystems.com.br/atendimento',
   credencial: { apiId: '', token: '', baseUrl: '' },
 };
+
+const LINK_TICKET_ANTIGO = 'https://app.nxsystems.com.br/atendimento/{id}';
 
 const num = (v: unknown, padrao: number, min = 0, max = 100_000) => {
   const n = Number(v);
@@ -129,7 +131,9 @@ export function normalizarConfig(bruto: unknown): ConfigMonitor {
       ? [...new Set((b.ignorar as unknown[]).map((x) => String(x ?? '').trim()).filter(Boolean))].slice(0, 500)
       : [],
     filas: Array.isArray(b.filas) ? [...new Set((b.filas as unknown[]).map(Number).filter((n) => Number.isInteger(n) && n > 0))] : [],
-    linkTicket: texto(b.linkTicket, P.linkTicket, 300).trim() || P.linkTicket,
+    // O padrão antigo (/atendimento/{id}) não abre o ticket na NX: vira o link geral do atendimento.
+    linkTicket:
+      ((l) => (!l || l === LINK_TICKET_ANTIGO ? P.linkTicket : l))(texto(b.linkTicket, P.linkTicket, 300).trim()),
     credencial: {
       apiId: texto(c.apiId, '', 200).trim(),
       token: texto(c.token, '', 2000).trim(),

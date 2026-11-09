@@ -24,7 +24,11 @@ test('mensagem de alertas: agrupa por situação, escalados primeiro, com link',
   assert.ok(txt.indexOf('ESCALADO') < txt.indexOf('Cliente sem resposta'));
   assert.match(txt, /\*Lassane \(grupo\)\* · Jean · há 2h10/);
   assert.match(txt, /_"Vou verificar"_/);
-  assert.match(txt, /https:\/\/app\.nxsystems\.com\.br\/atendimento\/10/);
+  // A NX não abre o ticket direto: número em cada item e um link só, o do atendimento, no fim.
+  assert.match(txt, /· Suporte · #10\n/);
+  assert.doesNotMatch(txt, /atendimento\/10/);
+  assert.equal(txt.match(/https:\/\/app\.nxsystems\.com\.br\/atendimento/g)?.length, 1);
+  assert.match(txt, /🔗 https:\/\/app\.nxsystems\.com\.br\/atendimento$/);
   assert.match(txt, /Abertos há mais de 3 dias/);
 });
 

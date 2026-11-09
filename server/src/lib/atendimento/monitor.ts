@@ -329,10 +329,14 @@ function linhaDoAlerta(cfg: ConfigMonitor, r: LinhaTicket): string {
   return (
     `• *${nomeDoContato(r)}* · ${quem} · há ${tempo}` +
     (r.queue_name ? ` · ${r.queue_name}` : '') +
+    ` · #${r.ticket_id}` +
     (trecho ? `\n   _"${trecho}"_` : '') +
-    `\n   ${linkDoTicket(cfg, r.ticket_id)}`
+    (linkPorTicket(cfg) ? `\n   ${linkDoTicket(cfg, r.ticket_id)}` : '')
   );
 }
+
+/** O link configurado abre cada ticket ({id})? Se não, vai um link só, no fim da mensagem. */
+const linkPorTicket = (cfg: ConfigMonitor) => cfg.linkTicket.includes('{id}');
 
 /** Texto da mensagem de alertas do ciclo (exportado para os testes de formato). */
 export function montarMensagemDeAlertas(cfg: ConfigMonitor, novos: LinhaTicket[], longos: LinhaTicket[]): string {
@@ -358,9 +362,12 @@ export function montarMensagemDeAlertas(cfg: ConfigMonitor, novos: LinhaTicket[]
   }
   if (longos.length) {
     partes.push(`📅 *Abertos há mais de ${cfg.prazos.abertoDias} dias*`);
-    for (const r of longos) if (usados++ < MAX) partes.push(`• *${nomeDoContato(r)}* · ${r.user_name || 'sem atendente'}\n   ${linkDoTicket(cfg, r.ticket_id)}`);
+    for (const r of longos)
+      if (usados++ < MAX)
+        partes.push(`• *${nomeDoContato(r)}* · ${r.user_name || 'sem atendente'} · #${r.ticket_id}${linkPorTicket(cfg) ? `\n   ${linkDoTicket(cfg, r.ticket_id)}` : ''}`);
   }
   if (usados > MAX) partes.push(`… e mais ${usados - MAX} no painel do superadmin (Suporte › Monitor de Atendimento).`);
+  if (!linkPorTicket(cfg)) partes.push(`🔗 ${cfg.linkTicket}`);
   return partes.join('\n\n');
 }
 

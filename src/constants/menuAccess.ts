@@ -53,6 +53,9 @@ export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
   // Comunicados (changelog público + disparo aos clientes): marca própria, fora das páginas arquiváveis do
   // Suporte. Ver e editar segue esta marca; disparar é só do administrador (trava no servidor).
   { key: 'comunicados', label: 'Comunicados', path: '/comunicados', group: 'suporte', fixo: true },
+  // Monitor de Atendimento (tickets do atendimento da NX + alertas no grupo): marca própria. Mudar a
+  // configuração é de administrador/supervisor (trava no servidor).
+  { key: 'monitor_atendimento', label: 'Monitor de Atendimento', path: '/atendimento', group: 'suporte', fixo: true },
   // Grupo NX DIGITAL (gestão dos clientes de tráfego): uma chave POR aba, marcadas uma a uma como o
   // resto do menu. As telas de detalhe do cliente (/clientesnxdigital/clientes/<id>) valem pela chave de
   // Clientes.

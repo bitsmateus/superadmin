@@ -2237,6 +2237,80 @@ END; $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
 
+  // ── Monitor de Atendimento (jobs/monitorAtendimento.ts) ─────────────────────────────────────────────
+  // Config em settings (prazos, horário, grupo, IA...). Uma linha por ticket do atendimento da NX que o
+  // monitor já viu aberto: a situação calculada, o relógio e o que já foi avisado. Ticket que some da lista
+  // de abertos/pendentes ganha closed_at (fica para o ranking).
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS atendimento_monitor JSONB`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS atd_tickets (
+    ticket_id BIGINT PRIMARY KEY,
+    status TEXT NOT NULL,
+    user_id BIGINT,
+    user_name TEXT,
+    queue_id BIGINT,
+    queue_name TEXT,
+    is_group BOOLEAN NOT NULL DEFAULT false,
+    contato_nome TEXT,
+    contato_numero TEXT,
+    client_id UUID,
+    last_message_at TIMESTAMPTZ,
+    nx_created_at TIMESTAMPTZ,
+    pendente_desde TIMESTAMPTZ,
+    ultima_de TEXT,
+    espera_desde TIMESTAMPTZ,
+    ultima_atendente_at TIMESTAMPTZ,
+    ultima_atendente_msg_id TEXT,
+    ultimo_texto_atendente TEXT,
+    ultima_cliente_at TIMESTAMPTZ,
+    ultimo_texto_cliente TEXT,
+    ultima_at TIMESTAMPTZ,
+    cliente_encerrou BOOLEAN NOT NULL DEFAULT false,
+    primeira_resposta_min INT,
+    classe_ia TEXT,
+    classe_ia_msg_id TEXT,
+    situacao TEXT NOT NULL DEFAULT 'ok',
+    situacao_desde TIMESTAMPTZ,
+    decorrido_min INT NOT NULL DEFAULT 0,
+    prazo_min INT NOT NULL DEFAULT 0,
+    nivel INT NOT NULL DEFAULT 0,
+    aberto_longo BOOLEAN NOT NULL DEFAULT false,
+    alerta_chave TEXT,
+    alerta_nivel INT NOT NULL DEFAULT 0,
+    alerta_em TIMESTAMPTZ,
+    aberto_longo_avisado BOOLEAN NOT NULL DEFAULT false,
+    followup_em TIMESTAMPTZ,
+    ignorado BOOLEAN NOT NULL DEFAULT false,
+    erro TEXT,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    synced_at TIMESTAMPTZ,
+    closed_at TIMESTAMPTZ,
+    closed_by TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS atd_tickets_abertos_idx ON atd_tickets(situacao) WHERE closed_at IS NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS atd_tickets_closed_idx ON atd_tickets(closed_at)`);
+  // Histórico de cada alerta/ação (para o ranking, o resumo e a auditoria do que o monitor fez).
+  await pool.query(`CREATE TABLE IF NOT EXISTS atd_eventos (
+    id BIGSERIAL PRIMARY KEY,
+    ticket_id BIGINT NOT NULL,
+    tipo TEXT NOT NULL,
+    situacao TEXT,
+    nivel INT,
+    user_id BIGINT,
+    user_name TEXT,
+    detalhe TEXT,
+    autor TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS atd_eventos_data_idx ON atd_eventos(created_at)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS atd_eventos_ticket_idx ON atd_eventos(ticket_id)`);
+  // Uma linha por dia em que o resumo saiu (não repete se o servidor reiniciar).
+  await pool.query(`CREATE TABLE IF NOT EXISTS atd_resumos (
+    dia DATE PRIMARY KEY,
+    enviado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    texto TEXT
+  )`);
+
   console.log('[db] migrations applied');
 }
 

@@ -79,11 +79,13 @@ import { startEngeEnvioDispatch } from './jobs/engeEnvioDispatch.js';
 import { startReuniaoWebhook } from './jobs/reuniaoWebhook.js';
 import { startLeadAvisosPush } from './jobs/leadAvisosPush.js';
 import { comunicadosRoutes } from './routes/comunicados.js';
+import { monitorAtendimentoRoutes } from './routes/monitorAtendimento.js';
 import { demoStudioRoutes } from './routes/demoStudio.js';
 import { restaurarArquivosDoSeed, semearTourNx } from './lib/demoStudio/seed.js';
 import { criarEstruturaDemoStudio } from './db/demoStudio.js';
 import { startComunicadosDisparo } from './lib/comunicados.js';
 import { startComunicadosSemanal } from './jobs/comunicadosSemanal.js';
+import { startMonitorAtendimento } from './jobs/monitorAtendimento.js';
 import { startDemoStudioLimpeza } from './jobs/demoStudioLimpeza.js';
 import { startDemoStudioWebhooks } from './lib/demoStudio/webhooks.js';
 
@@ -206,6 +208,7 @@ async function main() {
   await app.register(rotinaRoutes);
   await app.register(comunicadosRoutes);
   await app.register(demoStudioRoutes);
+  await app.register(monitorAtendimentoRoutes);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -261,6 +264,7 @@ async function main() {
   startLeadAvisosPush();
   startComunicadosDisparo();
   startComunicadosSemanal();
+  startMonitorAtendimento();
   startDemoStudioLimpeza();
   startDemoStudioWebhooks();
   // Uma vez por subida: o mesmo lead em mais de um card aberto do CRM LUIS CLOSER vira um card só.

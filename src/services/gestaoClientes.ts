@@ -143,7 +143,44 @@ export interface GcDemanda {
 }
 
 /** Etapas da arte: pedido → em criação → revisão interna → com o cliente → aprovado → no tráfego. */
-export type GcSocialStatus = 'para_producao' | 'em_producao' | 'revisao' | 'com_cliente' | 'aprovado' | 'trafego'
+/** As 5 etapas do mês de social media de um cliente, na ordem. */
+export type GcEtapaSocial = 'reuniao' | 'copy' | 'criativos' | 'aprovacao' | 'agendamento'
+
+export const ETAPAS_SOCIAL: { valor: GcEtapaSocial; label: string; ajuda: string; auto?: string }[] = [
+  { valor: 'reuniao', label: 'Reunião', ajuda: 'Agendamento de reunião — Stefane e gestor' },
+  { valor: 'copy', label: 'Copy', ajuda: 'Criação de copy — copys e roteiros de vídeo', auto: 'marca sozinha quando o mês tem artes no Social media' },
+  { valor: 'criativos', label: 'Criativos', ajuda: 'Criativos finalizados / enviados para aprovação', auto: 'marca sozinha quando todas as artes do mês foram pro cliente' },
+  { valor: 'aprovacao', label: 'Aprovação', ajuda: 'Aprovação dos criativos', auto: 'marca sozinha quando o cliente aprova todas as artes do mês' },
+  { valor: 'agendamento', label: 'Agendamento', ajuda: 'Agendamento de publicação — reels / story / feed', auto: 'marca sozinha quando todas as artes aprovadas estão agendadas ou publicadas' },
+]
+
+export interface GcEtapaSocialEstado {
+  /** Feito de um jeito ou de outro (à mão ou pelo Social media). */
+  feito: boolean
+  manual: boolean
+  auto: boolean
+  feito_em: string | null
+  feito_por_nome: string | null
+  data: string | null
+  obs: string
+}
+
+export interface GcChecklistSocialCliente {
+  id: string
+  nome_empresa: string
+  logo_url: string | null
+  segmento: string
+  status: GcStatusCliente
+  gestor_nome: string | null
+  responsavel_nome: string | null
+  artes: {
+    total: number; para_producao: number; em_producao: number; revisao: number; com_cliente: number
+    aprovado: number; trafego: number; aprovadas_sem_agendamento: number; agendadas: number; publicadas: number
+  }
+  etapas: Record<GcEtapaSocial, GcEtapaSocialEstado>
+}
+
+export type GcSocialStatus ='para_producao' | 'em_producao' | 'revisao' | 'com_cliente' | 'aprovado' | 'trafego'
 
 export interface GcSocialResumo {
   id: string
@@ -1101,6 +1138,14 @@ export const gestaoClientes = {
     api.post<{ ok: boolean; logo_url: string }>(`/api/public/briefing-nx/${encodeURIComponent(token)}/arquivo`, { anexo, logo: true }),
   excluirArquivoBriefing: (token: string, id: string) =>
     api.delete(`/api/public/briefing-nx/${encodeURIComponent(token)}/arquivo/${id}`),
+
+  // Demandas social (checklist do mês)
+  checklistSocial: (mes: string, clienteId?: string) =>
+    api.get<GcChecklistSocialCliente[]>(
+      `/api/gc/social/checklist?mes=${mes}${clienteId ? `&cliente_id=${clienteId}` : ''}`,
+    ),
+  salvarEtapaSocial: (clienteId: string, mes: string, etapa: GcEtapaSocial, dados: { feito?: boolean; data?: string | null; obs?: string }) =>
+    api.put<GcChecklistSocialCliente>(`/api/gc/social/checklist/${clienteId}/${mes}/${etapa}`, dados),
 
   // Social media
   socialResumo: () => api.get<GcSocialResumo[]>('/api/gc/social/resumo'),

@@ -2302,6 +2302,159 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
+  // ------------------------------------------------------------------ demandas social (checklist do mês)
+  // Cada cliente tem, por mês, 5 etapas: reunião (Stefane + gestor) → copy/roteiros → criativos enviados pra
+  // aprovação → aprovação → agendamento das publicações. Da copy em diante a etapa se marca SOZINHA olhando as
+  // artes do mês no Social media; a equipe também pode marcar à mão (ex.: copy feita fora da plataforma).
+  const ETAPAS_SOCIAL = ['reuniao', 'copy', 'criativos', 'aprovacao', 'agendamento'] as const;
+  type EtapaSocial = (typeof ETAPAS_SOCIAL)[number];
+
+  type ArtesDoMes = {
+    total: number; para_producao: number; em_producao: number; revisao: number; com_cliente: number;
+    aprovado: number; trafego: number; aprovadas_sem_agendamento: number; agendadas: number; publicadas: number;
+  };
+
+  /** O que o Social media diz de cada etapa. A reunião não tem como saber sozinha: é sempre marcada à mão. */
+  function etapasAutomaticas(a: ArtesDoMes): Record<EtapaSocial, boolean> {
+    const enviadas = a.com_cliente + a.aprovado + a.trafego;
+    const aprovadas = a.aprovado + a.trafego;
+    return {
+      reuniao: false,
+      copy: a.total > 0,
+      criativos: a.total > 0 && enviadas === a.total,
+      aprovacao: a.total > 0 && aprovadas === a.total,
+      agendamento: a.agendadas + a.publicadas > 0 && a.aprovadas_sem_agendamento === 0 && aprovadas === a.total,
+    };
+  }
+
+  async function checklistDoMes(mes: string, clienteId?: string) {
+    const params: unknown[] = [mes];
+    let filtro = `c.status <> 'encerrado'`;
+    if (clienteId) {
+      params.push(clienteId);
+      filtro = `c.id = $2`;
+    }
+    const clientes = await query<{
+      id: string; nome_empresa: string; logo_url: string | null; segmento: string; status: string;
+      gestor_nome: string | null; responsavel_nome: string | null; artes: ArtesDoMes;
+    }>(
+      `SELECT c.id, c.nome_empresa, c.logo_url, c.segmento, c.status, g.name AS gestor_nome, r.name AS responsavel_nome,
+              (SELECT jsonb_build_object(
+                 'total', count(*),
+                 'para_producao', count(*) FILTER (WHERE p.status = 'para_producao'),
+                 'em_producao', count(*) FILTER (WHERE p.status = 'em_producao'),
+                 'revisao', count(*) FILTER (WHERE p.status = 'revisao'),
+                 'com_cliente', count(*) FILTER (WHERE p.status = 'com_cliente'),
+                 'aprovado', count(*) FILTER (WHERE p.status = 'aprovado'),
+                 'trafego', count(*) FILTER (WHERE p.status = 'trafego'),
+                 'aprovadas_sem_agendamento', count(*) FILTER (WHERE p.status = 'aprovado' AND NOT EXISTS (
+                     SELECT 1 FROM gc_social_agendamentos s WHERE s.gc_producao_id = p.id AND s.status IN ('agendado','publicando','publicado'))),
+                 'agendadas', count(*) FILTER (WHERE EXISTS (
+                     SELECT 1 FROM gc_social_agendamentos s WHERE s.gc_producao_id = p.id AND s.status IN ('agendado','publicando'))),
+                 'publicadas', count(*) FILTER (WHERE EXISTS (
+                     SELECT 1 FROM gc_social_agendamentos s WHERE s.gc_producao_id = p.id AND s.status = 'publicado')))
+               FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.mes = $1) AS artes
+       FROM gc_clientes c
+       LEFT JOIN profiles g ON g.id = c.gestor_trafego_id
+       LEFT JOIN profiles r ON r.id = c.responsavel_id
+       WHERE ${filtro}
+       ORDER BY c.nome_empresa`,
+      params
+    );
+    const marcas = await query<{
+      gc_cliente_id: string; etapa: EtapaSocial; feito: boolean; feito_em: string | null; feito_por_nome: string | null;
+      data: string | null; obs: string;
+    }>(
+      `SELECT k.gc_cliente_id, k.etapa, k.feito, k.feito_em, p.name AS feito_por_nome, to_char(k.data, 'YYYY-MM-DD') AS data, k.obs
+       FROM gc_social_checklist k LEFT JOIN profiles p ON p.id = k.feito_por
+       WHERE k.mes = $1 ${clienteId ? 'AND k.gc_cliente_id = $2' : ''}`,
+      params
+    );
+    const porCliente = new Map<string, Map<string, (typeof marcas)[number]>>();
+    for (const m of marcas) {
+      if (!porCliente.has(m.gc_cliente_id)) porCliente.set(m.gc_cliente_id, new Map());
+      porCliente.get(m.gc_cliente_id)!.set(m.etapa, m);
+    }
+    return clientes.map((c) => {
+      const auto = etapasAutomaticas(c.artes);
+      const salvas = porCliente.get(c.id);
+      const etapas = Object.fromEntries(
+        ETAPAS_SOCIAL.map((e) => {
+          const m = salvas?.get(e);
+          return [e, {
+            feito: Boolean(m?.feito) || auto[e],
+            manual: Boolean(m?.feito),
+            auto: auto[e],
+            feito_em: m?.feito_em ?? null,
+            feito_por_nome: m?.feito_por_nome ?? null,
+            data: m?.data ?? null,
+            obs: m?.obs ?? '',
+          }];
+        })
+      );
+      return { ...c, etapas };
+    });
+  }
+
+  // GET /api/gc/social/checklist?mes=YYYY-MM[&cliente_id=] — o checklist do mês de todos os clientes (ou de um).
+  app.get<{ Querystring: { mes?: string; cliente_id?: string } }>('/api/gc/social/checklist', autenticado, async (req, reply) => {
+    const mes = req.query.mes;
+    if (!ehMes(mes)) return reply.status(400).send({ message: 'Mês inválido (use AAAA-MM)' });
+    return checklistDoMes(mes, req.query.cliente_id || undefined);
+  });
+
+  // PUT /api/gc/social/checklist/:clienteId/:mes/:etapa — marca/desmarca a etapa, ou guarda a data e a observação.
+  // Marcar a reunião como feita registra a reunião no histórico do cliente (uma vez por mês).
+  app.put<{
+    Params: { clienteId: string; mes: string; etapa: string };
+    Body: { feito?: boolean; data?: string | null; obs?: string };
+  }>('/api/gc/social/checklist/:clienteId/:mes/:etapa', autenticado, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const { clienteId, mes, etapa } = req.params;
+    if (!ehMes(mes)) return reply.status(400).send({ message: 'Mês inválido (use AAAA-MM)' });
+    if (!(ETAPAS_SOCIAL as readonly string[]).includes(etapa)) return reply.status(400).send({ message: 'Etapa inválida' });
+    const cliente = await queryOne<{ id: string }>('SELECT id FROM gc_clientes WHERE id = $1', [clienteId]);
+    if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+    const b = req.body ?? {};
+    const data = b.data === null || b.data === '' ? null : b.data;
+    if (data !== undefined && data !== null && !/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+      return reply.status(400).send({ message: 'Data inválida' });
+    }
+    const antes = await queryOne<{ feito: boolean }>(
+      'SELECT feito FROM gc_social_checklist WHERE gc_cliente_id = $1 AND mes = $2 AND etapa = $3', [clienteId, mes, etapa]
+    );
+    await query(
+      `INSERT INTO gc_social_checklist (gc_cliente_id, mes, etapa, feito, feito_em, feito_por, data, obs)
+       VALUES ($1, $2, $3, COALESCE($4, false), CASE WHEN $4 THEN NOW() END, CASE WHEN $4 THEN $5::uuid END, $6, COALESCE($7, ''))
+       ON CONFLICT (gc_cliente_id, mes, etapa) DO UPDATE SET
+         feito = COALESCE($4, gc_social_checklist.feito),
+         feito_em = CASE WHEN $4 IS NULL THEN gc_social_checklist.feito_em WHEN $4 THEN NOW() ELSE NULL END,
+         feito_por = CASE WHEN $4 IS NULL THEN gc_social_checklist.feito_por WHEN $4 THEN $5::uuid ELSE NULL END,
+         data = CASE WHEN $8 THEN $6::date ELSE gc_social_checklist.data END,
+         obs = COALESCE($7, gc_social_checklist.obs),
+         updated_at = NOW()`,
+      [clienteId, mes, etapa, typeof b.feito === 'boolean' ? b.feito : null, sub, data ?? null,
+        typeof b.obs === 'string' ? b.obs.slice(0, 2000) : null, data !== undefined]
+    );
+    if (etapa === 'reuniao' && b.feito === true && !antes?.feito) {
+      const [ano, m] = mes.split('-');
+      const ja = await queryOne(
+        `SELECT 1 FROM gc_historico WHERE gc_cliente_id = $1 AND tipo = 'reuniao' AND titulo = $2`,
+        [clienteId, `Reunião de social media — ${m}/${ano}`]
+      );
+      if (!ja) {
+        await query(
+          `INSERT INTO gc_historico (gc_cliente_id, tipo, reuniao_tipo, titulo, descricao, autor_id)
+           VALUES ($1, 'reuniao', 'alinhamento', $2, $3, $4)`,
+          [clienteId, `Reunião de social media — ${m}/${ano}`,
+            'Planejamento do conteúdo do mês com a social media e o gestor (marcado em Demandas social).', sub]
+        );
+      }
+    }
+    const [linha] = await checklistDoMes(mes, clienteId);
+    return linha;
+  });
+
   // ------------------------------------------------------------------ social media
   // A designer anexa fotos/arquivos e links (Drive etc.) por cliente e acompanha a produção: o que falta produzir,
   // o que está em produção e qual editor está editando.

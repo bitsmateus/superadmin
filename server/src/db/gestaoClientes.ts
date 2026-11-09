@@ -766,6 +766,22 @@ const TABELAS = [
     synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS gc_instagram_posts_cliente_idx ON gc_instagram_posts (gc_cliente_id, publicado_em DESC)`,
+  // ---------------------------------------------------------------- demandas social (checklist do mês)
+  // Uma linha por cliente + mês + etapa (reuniao, copy, criativos, aprovacao, agendamento). Guarda só o que a
+  // equipe marcou à mão; o que vem do Social media (artes do mês) é calculado na leitura, não fica salvo.
+  `CREATE TABLE IF NOT EXISTS gc_social_checklist (
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    mes TEXT NOT NULL,
+    etapa TEXT NOT NULL CHECK (etapa IN ('reuniao','copy','criativos','aprovacao','agendamento')),
+    feito BOOLEAN NOT NULL DEFAULT false,
+    feito_em TIMESTAMPTZ,
+    feito_por UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    data DATE,
+    obs TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (gc_cliente_id, mes, etapa)
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_social_checklist_mes_idx ON gc_social_checklist (mes)`,
 ];
 
 /** As 9 etapas padrão da jornada, com o checklist inicial de cada uma. */

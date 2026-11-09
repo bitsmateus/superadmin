@@ -74,6 +74,9 @@ const TrafegoNxPage = React.lazy(() =>
 const DemandasNxPage = React.lazy(() =>
   import('./pages/DemandasNxPage').then((m) => ({ default: m.DemandasNxPage })),
 )
+const DemandasSocialPage = React.lazy(() =>
+  import('./pages/DemandasSocialPage').then((m) => ({ default: m.DemandasSocialPage })),
+)
 const ClienteNxDetalhePage = React.lazy(() =>
   import('./pages/ClienteNxDetalhePage').then((m) => ({ default: m.ClienteNxDetalhePage })),
 )
@@ -309,6 +312,7 @@ export default function App() {
           <Route path="/clientesnxdigital/clientes" element={<ClientesNxDigitalPage />} />
           <Route path="/clientesnxdigital/clientes/:id" element={<ClienteNxDetalhePage />} />
           <Route path="/clientesnxdigital/demandas" element={<DemandasNxPage />} />
+          <Route path="/clientesnxdigital/demandassocial" element={<DemandasSocialPage />} />
           <Route path="/clientesnxdigital/socialmedia" element={<SocialMediaPage />} />
           <Route path="/clientesnxdigital/socialmedia/:id" element={<SocialMediaClientePage />} />
           <Route path="/clientesnxdigital/trafego" element={<TrafegoNxPage />} />

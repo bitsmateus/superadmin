@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils'
 import { DetalheDaArte } from './social/DetalheDaArte'
 import { ModalPostarTodas } from './social/ModalPostarTodas'
+import { ChecklistSocialDoCliente } from './ChecklistSocial'
 
 const dataBr = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
 const hojeISO = () => new Date().toISOString().slice(0, 10)
@@ -640,6 +641,8 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
   const producaoNoPeriodo = doMes(mes)
   const rotuloPeriodo = mes ? nomeDoMes(mes) : ''
   const ajustes = producaoNoPeriodo.filter((p) => p.ajuste_pedido).length
+  // Muda quando alguma arte do mês muda de etapa ou de agendamento: a faixa "Demandas do mês" busca de novo.
+  const versaoDoMes = producaoNoPeriodo.map((p) => `${p.id}:${p.status}:${p.agendamento?.status ?? ''}`).join('|')
   const paraRevisar = producaoNoPeriodo.filter((p) => p.status === 'revisao').length
 
   const trocarCard = React.useCallback((atualizada: GcSocialProducao) => {
@@ -797,6 +800,8 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
 
   return (
     <div className="space-y-5">
+      {/* ------------------------------------------------------------ checklist do mês (aba Demandas social) */}
+      {mes && <ChecklistSocialDoCliente clienteId={clienteId} mes={mes} versao={versaoDoMes} />}
       {/* ------------------------------------------------------------ produção */}
       <section>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

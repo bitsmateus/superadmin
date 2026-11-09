@@ -428,6 +428,14 @@ END $$`);
       ON CONFLICT (user_id, menu_key) DO NOTHING`);
     await pool.query(`INSERT INTO menu_access_migracoes (nome) VALUES ('nxdigital_socialmedia')`);
   }
+  // Demandas social (checklist do mês por cliente): aba nova do NX DIGITAL. Quem já tem Social media ganha ela. Uma vez só.
+  const demandasSocialFeita = await pool.query(`SELECT 1 FROM menu_access_migracoes WHERE nome = 'nxdigital_demandas_social'`);
+  if (demandasSocialFeita.rowCount === 0) {
+    await pool.query(`INSERT INTO user_menu_access (user_id, menu_key)
+      SELECT user_id, 'nxdigital_demandas_social' FROM user_menu_access WHERE menu_key = 'nxdigital_socialmedia'
+      ON CONFLICT (user_id, menu_key) DO NOTHING`);
+    await pool.query(`INSERT INTO menu_access_migracoes (nome) VALUES ('nxdigital_demandas_social')`);
+  }
   // Tráfego voltou a ser aba do NX DIGITAL (painel da carteira). Quem já tem Clientes ganha ela. Uma vez só.
   const trafegoNxFeita = await pool.query(`SELECT 1 FROM menu_access_migracoes WHERE nome = 'nxdigital_trafego_painel'`);
   if (trafegoNxFeita.rowCount === 0) {

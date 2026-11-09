@@ -20,6 +20,7 @@ import {
   Lightbulb,
   LifeBuoy,
   ListTodo,
+  ListChecks,
   LogOut,
   MessageCircle,
   MessageSquare,
@@ -157,6 +158,7 @@ const SUB_ABAS_CLIENTES_NX = [
   { to: '/clientesnxdigital/trafego', label: 'Tráfego', icon: Activity },
   { to: '/clientesnxdigital/demandas', label: 'Kanban demandas', icon: KanbanSquare },
   { to: '/clientesnxdigital/socialmedia', label: 'Social media', icon: Palette },
+  { to: '/clientesnxdigital/demandassocial', label: 'Demandas social', icon: ListChecks },
 ]
 
 /** As sub-abas do Demo Studio (demos interativas por link — docs/demo-studio/). */

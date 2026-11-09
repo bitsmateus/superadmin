@@ -7,6 +7,7 @@ import { SinoDeNotificacoes } from '@/components/notificacoes/SinoDeNotificacoes
 const labels: Record<string, string> = {
   '': 'Dashboard',
   tenants: 'Tenants',
+  atendimento: 'Monitor de Atendimento',
   clients: 'Clientes',
   pipeline: 'Pipeline',
   financeiro: 'Financeiro',

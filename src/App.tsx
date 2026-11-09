@@ -31,6 +31,9 @@ const PipelinePage = React.lazy(() =>
 const ArchivedClientsPage = React.lazy(() =>
   import('./pages/ArchivedClientsPage').then((m) => ({ default: m.ArchivedClientsPage })),
 )
+const MonitorAtendimentoPage = React.lazy(() =>
+  import('./pages/MonitorAtendimentoPage').then((m) => ({ default: m.MonitorAtendimentoPage })),
+)
 const CanaisPage = React.lazy(() =>
   import('./pages/CanaisPage').then((m) => ({ default: m.CanaisPage })),
 )
@@ -285,6 +288,7 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/canais" element={<CanaisPage />} />
+          <Route path="/atendimento" element={<MonitorAtendimentoPage />} />
           <Route path="/comunicados" element={<ComunicadosPage />} />
           <Route path="/comercial" element={<Navigate to="/comercial/novos_leads" replace />} />
           <Route path="/comercial-dashboard" element={<ComercialDashboardPage />} />

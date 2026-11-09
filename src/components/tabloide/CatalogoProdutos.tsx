@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { fotoDoProduto, lerImagem, tabloideApi, type ModoRecorte, type ProdutoCatalogo } from '@/api/mercadoNunesTabloide'
+import { BiparEmMassa } from './BiparEmMassa'
 import { Modal, MiniFoto, NovoProduto, XADREZ, btnPrimario, btnSecundario, inputCls } from './EscolherFoto'
 
 /**
@@ -10,6 +11,7 @@ export function CatalogoProdutos({ removeBg }: { removeBg: boolean }) {
   const [q, setQ] = React.useState('')
   const [produtos, setProdutos] = React.useState<ProdutoCatalogo[] | null>(null)
   const [novo, setNovo] = React.useState(false)
+  const [bipando, setBipando] = React.useState(false)
   const [editando, setEditando] = React.useState<ProdutoCatalogo | null>(null)
 
   const carregar = React.useCallback(() => {
@@ -30,6 +32,9 @@ export function CatalogoProdutos({ removeBg }: { removeBg: boolean }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nome ou código de barras…" className={`${inputCls} max-w-md flex-1`} />
+        <button className={btnSecundario} onClick={() => setBipando(true)}>
+          Bipar em massa
+        </button>
         <button className={btnPrimario} onClick={() => setNovo(true)}>
           + Novo produto
         </button>
@@ -69,6 +74,14 @@ export function CatalogoProdutos({ removeBg }: { removeBg: boolean }) {
             }}
           />
         </Modal>
+      )}
+      {bipando && (
+        <BiparEmMassa
+          onFechar={() => {
+            setBipando(false)
+            carregar()
+          }}
+        />
       )}
       {editando && (
         <EditarProduto

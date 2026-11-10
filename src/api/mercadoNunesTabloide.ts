@@ -41,6 +41,7 @@ export interface ConfigTabloide {
 
 export interface FundoSalvo {
   id: string
+  nome: string
   miniatura: string
   created_at: string
 }
@@ -103,7 +104,9 @@ export const tabloideApi = {
 
   fundos: () => req<{ fundos: FundoSalvo[] }>('/tabloide/fundos'),
   fundo: (id: string) => req<{ imagem: string }>(`/tabloide/fundos/${id}`),
-  salvarFundo: (imagem: string, miniatura: string) => req<FundoSalvo>('/tabloide/fundos', json({ imagem, miniatura })),
+  salvarFundo: (imagem: string, miniatura: string, nome: string) => req<FundoSalvo>('/tabloide/fundos', json({ imagem, miniatura, nome })),
+  renomearFundo: (id: string, nome: string) =>
+    req<FundoSalvo>(`/tabloide/fundos/${id}`, { method: 'PATCH', body: JSON.stringify({ nome }) }),
   removerFundo: (id: string) => req<{ ok: true }>(`/tabloide/fundos/${id}`, { method: 'DELETE' }),
 
   exportarPng: (dados: DadosTabloide) =>

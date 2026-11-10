@@ -816,7 +816,8 @@ function FotoDeFundo({ dados, muda }: { dados: DadosTabloide; muda: (p: Partial<
       const imagem = await lerFundo(arquivo)
       muda({ fundoUrl: imagem })
       const miniatura = await lerFundo(imagem, 240, 0.7)
-      const f = await tabloideApi.salvarFundo(imagem, miniatura)
+      const nomeArquivo = arquivo.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 60)
+      const f = await tabloideApi.salvarFundo(imagem, miniatura, nomeArquivo || `Foto ${salvos.length + 1}`)
       setSalvos((l) => [f, ...l])
       toast.success('Foto aplicada e salva nas suas fotos de fundo.')
     } catch (e) {
@@ -849,19 +850,56 @@ function FotoDeFundo({ dados, muda }: { dados: DadosTabloide; muda: (p: Partial<
     }
   }
 
+  const [renomeando, setRenomeando] = React.useState<{ id: string; nome: string } | null>(null)
+  const salvarNome = async () => {
+    if (!renomeando) return
+    const { id, nome } = renomeando
+    setRenomeando(null)
+    const atual = salvos.find((x) => x.id === id)
+    if (!atual || atual.nome === nome.trim()) return
+    try {
+      const f = await tabloideApi.renomearFundo(id, nome)
+      setSalvos((l) => l.map((x) => (x.id === id ? f : x)))
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
   const galeria = salvos.length > 0 && (
     <div className="mt-2">
-      <div className="mb-1 text-[11px] font-semibold text-[#7A716A]">Fotos salvas (clique pra usar)</div>
+      <div className="mb-1 text-[11px] font-semibold text-[#7A716A]">Fotos salvas (clique na foto pra usar, no nome pra renomear)</div>
       <div className="flex flex-wrap gap-2">
         {salvos.map((f) => (
-          <div key={f.id} className="group relative">
+          <div key={f.id} className="group relative w-20">
             <button
               onClick={() => void usarSalvo(f)}
               disabled={abrindo === f.id}
               title="Usar esta foto"
-              className="block h-14 w-14 overflow-hidden rounded-md border-2 border-[#E7E1D9] hover:border-[#C1503F] disabled:opacity-50"
+              className="block h-16 w-20 overflow-hidden rounded-md border-2 border-[#E7E1D9] hover:border-[#C1503F] disabled:opacity-50"
               style={{ background: `center/cover no-repeat url(${f.miniatura})` }}
             />
+            {renomeando?.id === f.id ? (
+              <input
+                autoFocus
+                value={renomeando.nome}
+                maxLength={60}
+                onChange={(e) => setRenomeando({ id: f.id, nome: e.target.value })}
+                onBlur={() => void salvarNome()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void salvarNome()
+                  if (e.key === 'Escape') setRenomeando(null)
+                }}
+                className="mt-0.5 w-full rounded border border-[#C1503F] px-1 py-0.5 text-[11px] text-[#2A2622] outline-none"
+              />
+            ) : (
+              <button
+                onClick={() => setRenomeando({ id: f.id, nome: f.nome })}
+                title="Renomear"
+                className={`mt-0.5 block w-full truncate rounded px-0.5 text-left text-[11px] hover:bg-[#F6F2EE] ${f.nome ? 'text-[#5A524B]' : 'italic text-[#B0A79F]'}`}
+              >
+                {f.nome || 'Sem nome ✎'}
+              </button>
+            )}
             <button
               onClick={() => void removerSalvo(f)}
               title="Tirar das fotos salvas"

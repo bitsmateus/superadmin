@@ -1793,6 +1793,7 @@ END; $$`);
     miniatura TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  await pool.query(`ALTER TABLE mn_tabloide_fundos ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
   await pool.query(`CREATE TABLE IF NOT EXISTS mn_tabloide_layouts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nome TEXT NOT NULL UNIQUE,

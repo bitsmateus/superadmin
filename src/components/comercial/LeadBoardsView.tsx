@@ -47,6 +47,7 @@ import { SinoDeNotificacoes } from '@/components/notificacoes/SinoDeNotificacoes
 import { BotaoRotina } from '@/components/comercial/RotinaBotao'
 import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
+import { DashboardDoSuporte } from '@/components/comercial/DashboardDoSuporte'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
@@ -1830,6 +1831,8 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
               <LigacoesPainel pagina={page} pessoa={sdrLock ?? undefined} />
             ) : view === 'dashboard' && page === 'crm-luis-closer' ? (
               <CloserMetricsGrid rows={visibleRows} boards={boards} onOpenLead={setOpenLeadId} />
+            ) : view === 'dashboard' && crmDoSuporte ? (
+              <DashboardDoSuporte rows={visibleRows} boards={boards} onOpenLead={setOpenLeadId} />
             ) : view === 'dashboard' ? (
               <LeadDashboardView rows={dashboardRows} boards={boards} onOpenLead={setOpenLeadId} sdrTabLabel={sdrLock ? 'Minhas métricas' : undefined} onlySdr={!!sdrLock} />
             ) : view === 'kanban' ? (

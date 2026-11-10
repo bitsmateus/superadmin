@@ -15,6 +15,7 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   baixarArquivo,
   fotoDoProduto,
+  lerFundo,
   tabloideApi,
   type ConfigTabloide,
   type LayoutTabloide,
@@ -194,6 +195,8 @@ function Editor() {
         porPagina: v.porPagina,
         titulo: v.titulo,
         subtitulo: v.subtitulo,
+        fundoUrl: v.fundoUrl ?? '',
+        fundoEscurecer: v.fundoEscurecer ?? 25,
         endereco: v.endereco || d.endereco,
         whatsapp: v.whatsapp || d.whatsapp,
         endereco2: v.endereco2 || d.endereco2,
@@ -653,7 +656,71 @@ function ModeloEFormato({ dados, muda }: { dados: DadosTabloide; muda: (p: Parti
           </select>
         </label>
       </div>
+
+      <FotoDeFundo dados={dados} muda={muda} />
     </Bloco>
+  )
+}
+
+function FotoDeFundo({ dados, muda }: { dados: DadosTabloide; muda: (p: Partial<DadosTabloide>) => void }) {
+  const entrada = React.useRef<HTMLInputElement>(null)
+  const [lendo, setLendo] = React.useState(false)
+  const escurecer = dados.fundoEscurecer ?? 25
+
+  const escolher = async (arquivo: File | undefined) => {
+    if (!arquivo) return
+    setLendo(true)
+    try {
+      muda({ fundoUrl: await lerFundo(arquivo) })
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setLendo(false)
+      if (entrada.current) entrada.current.value = ''
+    }
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[#7A716A]">Foto de fundo (opcional)</div>
+      <input ref={entrada} type="file" accept="image/*" className="hidden" onChange={(e) => void escolher(e.target.files?.[0])} />
+      {dados.fundoUrl ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[#E7E1D9] bg-white p-2">
+          <div className="relative h-16 w-16 flex-none overflow-hidden rounded-md" style={{ background: `center/cover no-repeat url(${dados.fundoUrl})` }}>
+            <div className="absolute inset-0" style={{ background: `rgba(0,0,0,${escurecer / 100})` }} />
+          </div>
+          <label className="min-w-[180px] flex-1 text-xs font-semibold text-[#7A716A]">
+            Escurecer a foto: {escurecer}%
+            <input
+              type="range"
+              min={0}
+              max={80}
+              step={5}
+              value={escurecer}
+              onChange={(e) => muda({ fundoEscurecer: Number(e.target.value) })}
+              className="mt-1 block w-full accent-[#C1503F]"
+            />
+          </label>
+          <div className="flex gap-2">
+            <button className={btnSecundario} disabled={lendo} onClick={() => entrada.current?.click()}>
+              Trocar
+            </button>
+            <button className={btnSecundario} onClick={() => muda({ fundoUrl: '' })}>
+              Tirar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          disabled={lendo}
+          onClick={() => entrada.current?.click()}
+          className="w-full rounded-lg border-2 border-dashed border-[#E7E1D9] bg-white px-3 py-3 text-sm font-semibold text-[#7A716A] hover:border-[#C1503F] hover:text-[#C1503F] disabled:opacity-60"
+        >
+          {lendo ? 'Lendo a foto…' : '+ Adicionar foto de fundo'}
+        </button>
+      )}
+      <p className="mt-1 text-[11px] text-[#9A928B]">A foto cobre o fundo do modelo. As cores do título, dos preços e do rodapé continuam as do modelo.</p>
+    </div>
   )
 }
 

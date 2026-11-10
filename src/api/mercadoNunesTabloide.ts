@@ -147,6 +147,32 @@ export function lerImagem(arquivo: File, max = 1600): Promise<string> {
   })
 }
 
+/** Foto de fundo: sempre vira JPEG de até 1920px, pra caber no rascunho e no histórico. */
+export function lerFundo(arquivo: File, max = 1920): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(arquivo)
+    const img = new Image()
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Esse arquivo não é uma imagem.'))
+    }
+    img.onload = () => {
+      const escala = Math.min(1, max / Math.max(img.width, img.height))
+      const c = document.createElement('canvas')
+      c.width = Math.round(img.width * escala)
+      c.height = Math.round(img.height * escala)
+      const ctx = c.getContext('2d')
+      if (!ctx) return reject(new Error('Não consegui ler a imagem.'))
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, c.width, c.height)
+      ctx.drawImage(img, 0, 0, c.width, c.height)
+      URL.revokeObjectURL(url)
+      resolve(c.toDataURL('image/jpeg', 0.82))
+    }
+    img.src = url
+  })
+}
+
 export function baixarArquivo(conteudo: Blob | string, nome: string): void {
   const url = typeof conteudo === 'string' ? conteudo : URL.createObjectURL(conteudo)
   const a = document.createElement('a')

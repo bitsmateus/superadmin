@@ -7,7 +7,7 @@ import { query, queryOne, withTransaction } from '../db.js';
 import { chamarClaude } from '../lib/gcIa.js';
 import { contaDoCliente } from '../lib/gcSocialPublicar.js';
 import { baixarFoto, buscarPorEan, eanValido } from '../lib/tabloide/ean.js';
-import { DADOS_VAZIOS, FORMATOS, MODELOS, precoNumero, type DadosTabloide, type ItemTabloide } from '../lib/tabloide/layout.js';
+import { DADOS_VAZIOS, FORMATOS, MODELOS, fundoValido, precoNumero, type DadosTabloide, type ItemTabloide } from '../lib/tabloide/layout.js';
 import { normalizar, semelhanca } from '../lib/tabloide/busca.js';
 import { testarConexao } from '../lib/tabloide/conexao.js';
 import { prepararFoto, removeBgDisponivel, type ModoRecorte } from '../lib/tabloide/recorte.js';
@@ -99,6 +99,8 @@ async function prepararDados(bruto: Partial<DadosTabloide> | undefined): Promise
     endereco2: texto(d.endereco2, 120),
     whatsapp2: texto(d.whatsapp2, 40),
     aviso: texto(d.aviso, 160),
+    fundoUrl: typeof d.fundoUrl === 'string' && d.fundoUrl.length <= 4 * 1024 * 1024 ? fundoValido(d.fundoUrl) : '',
+    fundoEscurecer: Math.max(0, Math.min(80, Number(d.fundoEscurecer ?? 25) || 0)),
   };
 }
 

@@ -42,7 +42,15 @@ export interface DadosTabloide {
   endereco2?: string
   whatsapp2?: string
   aviso: string
+  /** Foto de fundo enviada pelo usuário (data URL). Vazio = fundo do modelo. */
+  fundoUrl?: string
+  /** Quanto escurecer a foto de fundo, 0 a 80 (%). */
+  fundoEscurecer?: number
 }
+
+/** Só aceita data URL de imagem em base64 (vai dentro de url() no CSS). */
+export const fundoValido = (u: unknown): string =>
+  typeof u === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(u) ? u : ''
 
 export interface Modelo {
   id: string
@@ -329,6 +337,8 @@ html,body{background:transparent}
 .pg{position:relative;overflow:hidden;background:${m.fundo};font-family:'Poppins',system-ui,sans-serif;display:flex;flex-direction:column}
 .pg>.fundo{position:absolute;inset:0;background:${m.padrao}}
 .pg>.fundo::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,transparent 40%,rgba(0,0,0,.22))}
+.pg>.fundo.foto{background-size:cover;background-position:center;background-repeat:no-repeat}
+.pg>.fundo.foto::after{background:rgba(0,0,0,var(--escuro,0))}
 .topo{position:relative;display:flex;align-items:center;gap:var(--gap)}
 .topo.empilhado{flex-direction:column;justify-content:center;gap:calc(var(--hu)*.5)}
 .topo.empilhado .cab{flex:none;width:100%}
@@ -373,6 +383,8 @@ html,body{background:transparent}
 .anim .card{animation:entra .55s cubic-bezier(.2,.9,.3,1.1) both;animation-delay:var(--d)}
 .anim .card .preco{animation:pulsa .5s ease-in-out both;animation-delay:calc(var(--d) + .5s)}
 .anim>.fundo{animation:gira var(--dur) linear both;transform-origin:50% 18%;inset:-30%}
+.anim>.fundo.foto{animation:zoom var(--dur) linear both;transform-origin:50% 50%;inset:0}
+@keyframes zoom{from{transform:scale(1)}to{transform:scale(1.08)}}
 `
 }
 
@@ -463,6 +475,8 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
   const modelo = modeloPorId(dados.modeloId)
   const md = medidas(dados.formato)
   const paginas = paginar(dados.itens, dados.formato, dados.porPagina)
+  const fundoFoto = fundoValido(dados.fundoUrl)
+  const escuro = (Math.max(0, Math.min(80, Number(dados.fundoEscurecer ?? 25) || 0)) / 100).toFixed(2)
   const linhasRodape = linhasDoRodape(dados)
   const temRodape = !!(linhasRodape.length || dados.aviso)
   const rodH = temRodape ? Math.round(md.rodH * (1 + 0.42 * Math.max(0, linhasRodape.length - 1))) : 0
@@ -489,7 +503,7 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
     const cards = itens.map((it, i) => card(it, u, 0.6 + i * 0.14)).join('')
     const npag = paginas.length > 1 ? `<div class="npag">${idx + 1}/${paginas.length}</div>` : ''
     const html = `<div class="pg${opcoes.animado ? ' anim' : ''}" style="width:${md.w}px;height:${md.h}px;padding:${md.padTop}px ${md.padX}px ${md.padBot}px;gap:${md.gap}px;--hu:${md.hu}px;--gap:${md.gap}px;--drod:${(0.6 + itens.length * 0.14).toFixed(2)}s;--dur:${dur.total.toFixed(2)}s">
-<div class="fundo"></div>
+${fundoFoto ? `<div class="fundo foto" style="background-image:url(${fundoFoto});--escuro:${escuro}"></div>` : '<div class="fundo"></div>'}
 <div class="topo${md.empilhado ? ' empilhado' : ''}" style="height:${md.topoH}px">
   ${logoUrl ? `<div class="logo" style="height:${logoH.toFixed(0)}px"><img src="${esc(logoUrl)}" alt=""></div>` : ''}
   <div class="cab">
@@ -535,5 +549,7 @@ export const DADOS_VAZIOS = (): DadosTabloide => ({
   whatsapp: '',
   endereco2: '',
   whatsapp2: '',
+  fundoUrl: '',
+  fundoEscurecer: 25,
   aviso: 'Ofertas válidas enquanto durarem os estoques. Imagens meramente ilustrativas.',
 })

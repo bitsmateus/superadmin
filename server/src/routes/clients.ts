@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne, ehNomeDeColuna } from '../db.js';
+import { sincronizarClientesNoCrm } from '../jobs/clientesNoCrm.js';
 import { ehDoFinanceiro } from '../lib/acessoMenu.js';
 import { limparClienteParaQuemNaoEFinanceiro, podeVerFinanceiro } from '../lib/financeiro.js';
 import { findMatchingLeadRowId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
@@ -330,6 +331,8 @@ export async function clientRoutes(app: FastifyInstance) {
       if ('delivery_date' in patch) {
         await syncDeliveryMeetingCalendar(updated, sub).catch((err) => console.error('[calendarSync] clients (entrega):', err));
       }
+      // Etapa ou responsável de entrega mudou: o card no CRM do Jean/João acompanha na hora (jobs/clientesNoCrm.ts).
+      if ('stage' in patch || 'responsavel_entrega' in patch) void sincronizarClientesNoCrm(req.params.id);
 
       return podeVerFinanceiro(sub, role) ? updated : limparClienteParaQuemNaoEFinanceiro(updated as unknown as Record<string, unknown>);
     }

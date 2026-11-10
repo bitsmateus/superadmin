@@ -30,6 +30,7 @@ import { leadBoardRoutes, juntarEspelhosRepetidos } from './routes/leadBoards.js
 import { integracaoRoutes } from './routes/integracao.js';
 import { avisarAgendamentosDaEstreia } from './jobs/avisoAgendamento.js';
 import { avisarAssinadosSemAviso } from './lib/avisoContratoAssinado.js';
+import { startClientesNoCrm } from './jobs/clientesNoCrm.js';
 import { leadPageRoutes } from './routes/leadPages.js';
 import { commercialMonthRoutes } from './routes/commercialMonths.js';
 import { contractRoutes } from './routes/contracts.js';
@@ -277,6 +278,8 @@ async function main() {
   setTimeout(() => void avisarAgendamentosDaEstreia(), 20_000);
   // Contrato assinado que ainda não saiu no grupo SUPORTE GERAL (envio que falhou, ou o da estreia do aviso).
   setTimeout(() => void avisarAssinadosSemAviso(), 25_000);
+  // Cliente do Pipeline do Jean/João: card no CRM dele (e anda junto com a etapa e o responsável).
+  startClientesNoCrm();
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Server running on port ${PORT}`);
 }

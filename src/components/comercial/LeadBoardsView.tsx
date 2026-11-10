@@ -50,6 +50,7 @@ import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
+import { NovaDemandaModal } from '@/components/comercial/NovaDemandaModal'
 import { LigacoesPainel, PAGINAS_COM_LIGACOES } from '@/components/comercial/LigacoesPainel'
 import { TelefoneAcoes } from '@/components/comercial/TelefoneAcoes'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
@@ -406,6 +407,8 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
             <Copy className="h-3.5 w-3.5" />
             Duplicar aba
           </button>
+          {/* CRM do Jean/João (dentro do Pipeline): sem bloco de notas e sem voltar pro menu Demandas. */}
+          {!noPipeline && (
           <button
             type="button"
             onClick={toggleNotas}
@@ -415,7 +418,8 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
             <StickyNote className="h-3.5 w-3.5" />
             {isNotas ? 'Voltar a ser quadro normal' : 'Marcar como bloco de notas'}
           </button>
-          {currentSection === 'demandas' && (
+          )}
+          {currentSection === 'demandas' && !noPipeline && (
             <button
               type="button"
               onClick={togglePipeline}
@@ -1587,7 +1591,14 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   }
   const handleSharedScroll = (e: React.UIEvent<HTMLDivElement>) => syncScroll(e.currentTarget.scrollLeft, e.currentTarget)
 
+  // CRM do Jean/João: card novo nasce pelo formulário (Telefone, Tipo e "Finalizar até" obrigatórios).
+  const [novaDemandaEm, setNovaDemandaEm] = React.useState<LeadBoard | null>(null)
   const handleCreateRow = (boardId: string) => {
+    if (crmDoSuporte) {
+      const quadro = boards.find((b) => b.id === boardId)
+      if (quadro) setNovaDemandaEm(quadro)
+      return
+    }
     // Aba travada num SDR (CRM Luis/Arthur) — lead criado aqui já nasce com o SDR certo, já que a
     // coluna nem aparece pra escolher manualmente. Sem isso, o lead ficava "Sem SDR" nos
     // dashboards (o funil por SDR conta pelo campo, não por em qual aba o lead está).
@@ -1676,7 +1687,8 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
             : isDemandas ? { label: 'Demandas', to: '/demandas' } : { label: 'Comercial', to: '/comercial' },
           { label: tituloDaTela ?? title },
         ]}
-        rightSlot={isDemandas ? (
+        // CRM do Jean/João: sem "Vincular pessoa", compromisso do dia e "Organizar com IA".
+        rightSlot={crmDoSuporte ? undefined : isDemandas ? (
           <DemandaTopo pageId={page} pageName={title} responsavel={currentPage?.responsavel ?? ''} isAdmin={isAdmin} />
         ) : isAdmin && PAGINAS_COM_SININHO.has(page) ? (
           // Admin dentro do CRM do Arthur ou do Luis: o sininho daquele usuário, só pra olhar, e a rotina dele.
@@ -1810,7 +1822,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
               <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} sdrLock={sdrLock ?? undefined} modoDemanda={hideIanMateusCols} />
             ) : (
               <>
-                {!kanbanIan && <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} closer={page === 'crm-luis-closer'} />}
+                {!kanbanIan && <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} closer={page === 'crm-luis-closer'} suporte={crmDoSuporte} />}
                 <div className="flex-1">
                   {visibleBoards.map((board) => (
                     <BoardGroup
@@ -1907,6 +1919,9 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
         </React.Suspense>
       )}
       <LeadTrashModal open={trashModalOpen} onClose={() => setTrashModalOpen(false)} boards={boards} />
+      {novaDemandaEm && (
+        <NovaDemandaModal board={novaDemandaEm} onClose={() => setNovaDemandaEm(null)} onCriada={setFocusRowId} />
+      )}
       <LeadDetailModal leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} modoSimples={hideIanMateusCols} />
       <PageActivityLogModal
         open={logOpen}

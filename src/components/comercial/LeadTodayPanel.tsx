@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, CalendarCheck2, Clock, FileText, ChevronRight } from 'lucide-react'
+import { AlertTriangle, CalendarCheck2, Clock, FileText, ChevronRight, HelpCircle, ListTodo, PlayCircle } from 'lucide-react'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadActivity } from '@/hooks/useLeadActivity'
 import { todayKey, classifyLeadToday, propostaParada, DIAS_PROPOSTA_PARADA } from '@/lib/leadDates'
@@ -84,6 +84,8 @@ export interface LeadTodayPanelProps {
   onOpenLead: (id: string) => void
   /** CRM do closer: o 1º card vira "Propostas paradas" (o Luis não trabalha com Primeiro contato/Dia de contato). */
   closer?: boolean
+  /** CRM do Jean/João (aba de Demandas dentro do Pipeline): os quatro cards são os do suporte (ver PainelDoSuporte). */
+  suporte?: boolean
 }
 
 function boardIdsNamed(boards: LeadBoard[], name: string): Set<string> {
@@ -105,7 +107,56 @@ function boardIdsNamed(boards: LeadBoard[], name: string): Set<string> {
  *   é sobre a data de retorno, não importa onde o lead está agora.
  * - No closer, o 1º card é "Propostas paradas": Proposta enviada/Follow up sem movimento há 3+ dias e sem retorno
  *   marcado pra frente (ver propostaParada). */
-export function LeadTodayPanel({ rows, boards, onOpenLead, closer = false }: LeadTodayPanelProps) {
+export function LeadTodayPanel({ rows, boards, onOpenLead, closer = false, suporte = false }: LeadTodayPanelProps) {
+  if (suporte) return <PainelDoSuporte rows={rows} boards={boards} onOpenLead={onOpenLead} />
+  return <PainelDoComercial rows={rows} boards={boards} onOpenLead={onOpenLead} closer={closer} />
+}
+
+const normalizar = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/**
+ * CRM do Jean/João: o que importa pro suporte.
+ * - Demandas pendentes / Fazendo: quem está nesses quadros.
+ * - Precisa finalizar hoje: "Finalizar até" hoje ou já vencido, e o card ainda não foi pra Finalizado/Vendas do mês.
+ * - Sem info: card em aberto sem telefone, sem tipo ou sem "Finalizar até".
+ */
+function PainelDoSuporte({ rows, boards, onOpenLead }: Pick<LeadTodayPanelProps, 'rows' | 'boards' | 'onOpenLead'>) {
+  const today = React.useMemo(() => todayKey(), [])
+  const groups = React.useMemo(() => {
+    const nomeDoQuadro = new Map(boards.map((b) => [b.id, normalizar(b.name)]))
+    const pendentes: LeadRow[] = []
+    const fazendo: LeadRow[] = []
+    const hoje: LeadRow[] = []
+    const semInfo: LeadRow[] = []
+    for (const r of rows) {
+      const quadro = nomeDoQuadro.get(r.boardId) ?? ''
+      if (quadro === 'demandaspendentes') pendentes.push(r)
+      if (quadro === 'fazendo') fazendo.push(r)
+      const fechado = quadro === 'finalizado' || quadro.startsWith('vendasdomes')
+      if (fechado) continue
+      const dia = /^\d{4}-\d{2}-\d{2}/.test(r.agendamento) ? r.agendamento.slice(0, 10) : ''
+      if (dia && dia <= today) hoje.push(r)
+      if (!r.telefone.trim() || !r.tipo.trim() || !dia) semInfo.push(r)
+    }
+    return { pendentes, fazendo, hoje, semInfo }
+  }, [rows, boards, today])
+
+  const cards: StatCard[] = [
+    { key: 'pendentes', icon: <ListTodo className="h-4 w-4" />, label: 'Demandas pendentes', tone: 'text-warning bg-warning/10', matches: groups.pendentes },
+    { key: 'fazendo', icon: <PlayCircle className="h-4 w-4" />, label: 'Fazendo', tone: 'text-accent bg-accent/10', matches: groups.fazendo },
+    { key: 'hoje', icon: <AlertTriangle className="h-4 w-4" />, label: 'Precisa finalizar hoje', tone: 'text-danger bg-danger/10', matches: groups.hoje },
+    { key: 'sem-info', icon: <HelpCircle className="h-4 w-4" />, label: 'Sem info', tone: 'text-foreground/60 bg-elevate/[0.08]', matches: groups.semInfo },
+  ]
+  return (
+    <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {cards.map((c) => (
+        <TodayStatCard key={c.key} card={c} boards={boards} onOpenLead={onOpenLead} />
+      ))}
+    </div>
+  )
+}
+
+function PainelDoComercial({ rows, boards, onOpenLead, closer = false }: Omit<LeadTodayPanelProps, 'suporte'>) {
   const today = React.useMemo(() => todayKey(), [])
   const activity = useLeadActivity()
   const activityById = React.useMemo(

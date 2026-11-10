@@ -55,6 +55,7 @@ import { CANAIS_DE_AGENDAMENTO, MINIMO_OUTRO, PREFIXO_AGENDADO_OUTRO, agendadoEh
 import { leadBoardsService } from '@/services/leadBoards'
 import { LeadOrigemBlock } from '@/components/comercial/LeadOrigemBlock'
 import { TelefoneOuGrupo } from '@/components/comercial/TelefoneOuGrupo'
+import { vendasDoMesPorUltimo } from '@/lib/crmDoSuporte'
 import { canonicalNoteLeadId, leadNotesService } from '@/services/leadNotes'
 import { leadEventsService } from '@/services/leadEvents'
 import { leadLabelsService } from '@/services/leadLabels'
@@ -344,7 +345,7 @@ function LeadDetailModalInner({
                 onChange={(e) => leadBoardsService.updateRow(row.id, { boardId: e.target.value })}
                 className="w-full rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground outline-none"
               >
-                {boards.filter((b) => b.page === board?.page).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {(suporte ? vendasDoMesPorUltimo(boards.filter((b) => b.page === board?.page)) : boards.filter((b) => b.page === board?.page)).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </FieldRow>
 

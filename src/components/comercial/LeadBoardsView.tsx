@@ -51,6 +51,7 @@ import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { NovaDemandaModal } from '@/components/comercial/NovaDemandaModal'
+import { vendasDoMesPorUltimo } from '@/lib/crmDoSuporte'
 import { TelefoneOuGrupo } from '@/components/comercial/TelefoneOuGrupo'
 import { LigacoesPainel, PAGINAS_COM_LIGACOES } from '@/components/comercial/LigacoesPainel'
 import { TelefoneAcoes } from '@/components/comercial/TelefoneAcoes'
@@ -1458,7 +1459,11 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
 
   const booted = useLeadBoardsBooted()
   const allBoards = useLeadBoards()
-  const boards = React.useMemo(() => allBoards.filter((b) => b.page === page), [allBoards, page])
+  const boards = React.useMemo(() => {
+    const daAba = allBoards.filter((b) => b.page === page)
+    // CRM do Jean/João: "Vendas do mês" é sempre o último quadro (quadro criado depois entra antes dele).
+    return crmDoSuporte ? vendasDoMesPorUltimo(daAba) : daAba
+  }, [allBoards, page, crmDoSuporte])
   // Quadros de cada aba travada num SDR (CRM Luis/Arthur) — usado só em abas SEM trava (ex.: Novos
   // Leads): quando alguém marca o SDR ali, o lead pula sozinho pro quadro de MESMO NOME na aba
   // daquele SDR (ex.: "Leads Novos" em Novos Leads → "Leads Novos" em CRM Luis).

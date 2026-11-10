@@ -51,6 +51,7 @@ import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { NovaDemandaModal } from '@/components/comercial/NovaDemandaModal'
+import { TelefoneOuGrupo } from '@/components/comercial/TelefoneOuGrupo'
 import { LigacoesPainel, PAGINAS_COM_LIGACOES } from '@/components/comercial/LigacoesPainel'
 import { TelefoneAcoes } from '@/components/comercial/TelefoneAcoes'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
@@ -1293,6 +1294,14 @@ function BoardGroup({
                           retornado={row.retornado}
                           onChange={(patch) => applyFieldChange(row, patch)}
                           className="bg-transparent px-2.5 py-1.5 text-sm text-foreground"
+                        />
+                      ) : col.key === 'telefone' && crmDoSuporte ? (
+                        // CRM do Jean/João: número OU "grupo" (um dos dois é obrigatório).
+                        <TelefoneOuGrupo
+                          value={row.telefone}
+                          onSave={(next) => leadBoardsService.updateRow(row.id, { telefone: next })}
+                          className="pr-1"
+                          campoClassName="px-2.5 py-1.5"
                         />
                       ) : col.key === 'telefone' ? (
                         <div className="flex items-center">

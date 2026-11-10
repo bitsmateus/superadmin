@@ -33,12 +33,14 @@ export function NovaDemandaModal({ board, onClose, onCriada }: {
   const [nome, setNome] = React.useState('')
   const [empresa, setEmpresa] = React.useState('')
   const [telefone, setTelefone] = React.useState('')
+  // O cliente chamou num número ou no grupo do WhatsApp: um dos dois.
+  const [peloGrupo, setPeloGrupo] = React.useState(false)
   const [tipo, setTipo] = React.useState('')
   const [finalizar, setFinalizar] = React.useState('')
   const [tentou, setTentou] = React.useState(false)
 
   const falta = !nome.trim() ? 'Escreva o nome.'
-    : !telefoneDaDemandaOk(telefone) ? 'Telefone: o número com DDD, ou "grupo" se a demanda veio pelo grupo.'
+    : !peloGrupo && !telefoneDaDemandaOk(telefone) ? 'Telefone: o número com DDD, ou marque "Grupo" se a demanda veio pelo grupo.'
     : !tipo ? 'Escolha o tipo.'
     : !/^\d{4}-\d{2}-\d{2}/.test(finalizar) ? 'Escolha a data de "Finalizar até".'
     : ''
@@ -49,7 +51,7 @@ export function NovaDemandaModal({ board, onClose, onCriada }: {
     const row = leadBoardsService.createRow(board.id, {
       nome: nome.trim(),
       empresa: empresa.trim(),
-      telefone: /^grupo$/i.test(telefone.trim()) ? 'grupo' : telefone.trim(),
+      telefone: peloGrupo || /^grupo$/i.test(telefone.trim()) ? 'grupo' : telefone.trim(),
       tipo,
       agendamento: finalizar,
       // O Status acompanha o quadro em que o card nasce (é por ele que o card muda de quadro depois).
@@ -75,12 +77,25 @@ export function NovaDemandaModal({ board, onClose, onCriada }: {
       <div className="space-y-3">
         <Input label="Nome *" value={nome} onChange={(e) => setNome(e.target.value)} autoFocus />
         <Input label="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
-        <Input
-          label="Telefone *"
-          value={telefone}
-          onChange={(e) => setTelefone(e.target.value)}
-          placeholder='Número com DDD, ou "grupo"'
-        />
+        <div>
+          <p className="mb-1.5 text-xs font-medium text-foreground/70">Telefone *</p>
+          <div className="mb-2 inline-flex overflow-hidden rounded-lg border border-line text-xs font-medium">
+            {([['numero', 'Número'], ['grupo', 'Grupo']] as const).map(([v, r]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setPeloGrupo(v === 'grupo')}
+                className={(v === 'grupo') === peloGrupo ? 'bg-accent/10 px-3 py-1.5 text-accent' : 'px-3 py-1.5 text-foreground/55 hover:bg-elevate/[0.04]'}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          {!peloGrupo && (
+            <Input aria-label="Telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="Número com DDD" />
+          )}
+          {peloGrupo && <p className="text-xs text-foreground/50">A demanda veio pelo grupo do WhatsApp.</p>}
+        </div>
         <Select
           label="Tipo *"
           value={tipo}

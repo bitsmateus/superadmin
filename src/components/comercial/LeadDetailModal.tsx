@@ -54,6 +54,7 @@ import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { CANAIS_DE_AGENDAMENTO, MINIMO_OUTRO, PREFIXO_AGENDADO_OUTRO, agendadoEhOutro, quadroDoStatus, rotuloDaOrigem, textoDoAgendadoOutro } from '@/lib/regraDoStatus'
 import { leadBoardsService } from '@/services/leadBoards'
 import { LeadOrigemBlock } from '@/components/comercial/LeadOrigemBlock'
+import { TelefoneOuGrupo } from '@/components/comercial/TelefoneOuGrupo'
 import { canonicalNoteLeadId, leadNotesService } from '@/services/leadNotes'
 import { leadEventsService } from '@/services/leadEvents'
 import { leadLabelsService } from '@/services/leadLabels'
@@ -371,12 +372,20 @@ function LeadDetailModalInner({
               </>
             )}
             <FieldRow icon={<Phone className="h-3.5 w-3.5" />} label="Telefone" required={!modoSimples}>
+              {suporte ? (
+                <TelefoneOuGrupo
+                  value={row.telefone}
+                  onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })}
+                  campoClassName="rounded-md px-2 py-1.5"
+                />
+              ) : (
               <div className="flex items-center gap-1">
                 <div className="min-w-0 flex-1">
                   <BoxedField value={row.telefone} onSave={(v) => leadBoardsService.updateRow(row.id, { telefone: v })} required={!modoSimples} />
                 </div>
                 <TelefoneAcoes telefone={row.telefone} />
               </div>
+              )}
             </FieldRow>
             {!modoSimples && (
               <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Tipo" required={suporte}>

@@ -849,6 +849,33 @@ function ModalConfig({ dados, onClose, onSalvo }: { dados: PainelMonitor; onClos
               label={`Abertos há mais de ${c.prazos.abertoDias} dias`}
             />
             <Chave checked={c.avisos.resumo} onChange={(v) => set('avisos', { ...c.avisos, resumo: v })} label="Resumo diário" />
+            <Chave
+              checked={c.avisos.carga.ativo}
+              onChange={(v) => set('avisos', { ...c.avisos, carga: { ...c.avisos.carga, ativo: v } })}
+              label="Abertos e pendentes de cada atendente, quando tiver muitos"
+              hint="Conversas privadas (grupos não contam)."
+            />
+            {c.avisos.carga.ativo && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Campo label="Avisar a partir de (atendimentos)" hint="Total de abertos + pendentes">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={c.avisos.carga.limite}
+                    onChange={(e) => set('avisos', { ...c.avisos, carga: { ...c.avisos.carga, limite: Number(e.target.value) } })}
+                  />
+                </Campo>
+                <Campo label="No máximo 1 aviso a cada (horas)">
+                  <Input
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    value={c.avisos.carga.intervaloHoras}
+                    onChange={(e) => set('avisos', { ...c.avisos, carga: { ...c.avisos.carga, intervaloHoras: Number(e.target.value) } })}
+                  />
+                </Campo>
+              </div>
+            )}
           </div>
           <Chave
             checked={c.notaNoTicket}

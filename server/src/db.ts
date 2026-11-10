@@ -2344,6 +2344,8 @@ END; $$`);
   // monitor já viu aberto: a situação calculada, o relógio e o que já foi avisado. Ticket que some da lista
   // de abertos/pendentes ganha closed_at (fica para o ranking).
   await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS atendimento_monitor JSONB`);
+  // Quando saiu o último resumo de carga por atendente (no máx. 1 a cada N horas, sobrevive a reinício).
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS atendimento_carga_em TIMESTAMPTZ`);
   await pool.query(`CREATE TABLE IF NOT EXISTS atd_tickets (
     ticket_id BIGINT PRIMARY KEY,
     status TEXT NOT NULL,

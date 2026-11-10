@@ -21,7 +21,12 @@ export interface ConfigMonitor {
   notaNoTicket: boolean
   resumoHora: string
   /** O que vai para o grupo. O resto fica só no painel. */
-  avisos: { situacoes: Situacao[]; abertoLongo: boolean; resumo: boolean }
+  avisos: {
+    situacoes: Situacao[]
+    abertoLongo: boolean
+    resumo: boolean
+    carga: { ativo: boolean; limite: number; intervaloHoras: number }
+  }
   ia: boolean
   followupMensagem: string
   autoEncerrar: { ativo: boolean; horasDepoisDoAlerta: number; mensagem: string }

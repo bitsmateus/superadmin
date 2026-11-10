@@ -51,7 +51,13 @@ export interface ConfigMonitor {
    * O que vai para o grupo do WhatsApp. O resto continua no painel, só não notifica.
    * Padrão (pedido do Mateus em 10/11/2026): só "vou verificar" e sumiu.
    */
-  avisos: { situacoes: Situacao[]; abertoLongo: boolean; resumo: boolean };
+  avisos: {
+    situacoes: Situacao[];
+    abertoLongo: boolean;
+    resumo: boolean;
+    /** Quantos abertos/pendentes cada atendente tem, só quando o total passa do limite (no máx. 1 a cada N horas). */
+    carga: { ativo: boolean; limite: number; intervaloHoras: number };
+  };
   /** Classificar a última mensagem do atendente com IA (promessa x resolvido). Sem chave da Anthropic, cai nas palavras-chave. */
   ia: boolean;
   followupMensagem: string;
@@ -75,7 +81,7 @@ export const CONFIG_PADRAO: ConfigMonitor = {
   grupoId: '',
   notaNoTicket: false,
   resumoHora: '18:00',
-  avisos: { situacoes: ['promessa'], abertoLongo: false, resumo: false },
+  avisos: { situacoes: ['promessa'], abertoLongo: false, resumo: false, carga: { ativo: true, limite: 15, intervaloHoras: 2 } },
   ia: true,
   followupMensagem: 'Oi! Passando para saber: conseguiu resolver? Se ainda precisar de algo, é só me chamar por aqui. 😊',
   autoEncerrar: {
@@ -107,6 +113,7 @@ export function normalizarConfig(bruto: unknown): ConfigMonitor {
   const a = (b.autoEncerrar ?? {}) as Record<string, unknown>;
   const c = (b.credencial ?? {}) as Record<string, unknown>;
   const av = (b.avisos ?? {}) as Record<string, unknown>;
+  const cg = (av.carga ?? {}) as Record<string, unknown>;
   const P = CONFIG_PADRAO;
   const avisaveis = SITUACOES.filter((x) => x !== 'ok');
   const dias = Array.isArray(h.dias)
@@ -135,6 +142,11 @@ export function normalizarConfig(bruto: unknown): ConfigMonitor {
         : [...P.avisos.situacoes],
       abertoLongo: typeof av.abertoLongo === 'boolean' ? av.abertoLongo : P.avisos.abertoLongo,
       resumo: typeof av.resumo === 'boolean' ? av.resumo : P.avisos.resumo,
+      carga: {
+        ativo: typeof cg.ativo === 'boolean' ? cg.ativo : P.avisos.carga.ativo,
+        limite: num(cg.limite, P.avisos.carga.limite, 1, 10_000),
+        intervaloHoras: num(cg.intervaloHoras, P.avisos.carga.intervaloHoras, 0.5, 72),
+      },
     },
     ia: typeof b.ia === 'boolean' ? b.ia : P.ia,
     followupMensagem: texto(b.followupMensagem, P.followupMensagem).trim() || P.followupMensagem,

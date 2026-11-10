@@ -13,6 +13,7 @@ import { classificarComIa, iaDisponivel } from './ia.js';
  *   2. alertar: manda no grupo do suporte o que estourou o prazo (e o que escalou), em UMA mensagem por ciclo;
  *   3. autoEncerrar: (opcional) finaliza quem ficou calado depois do alerta de "cliente parou";
  *   4. resumoDiario: no horário marcado, o resumo do dia no grupo.
+ *   5. avisarCarga: quando o total de abertos/pendentes passa do limite, quantos tem cada atendente.
  */
 
 // ─── Config ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -456,6 +457,69 @@ export async function alertar(cfg: ConfigMonitor, agora = Date.now()): Promise<n
   return paraOGrupo.length + longosNoGrupo.length;
 }
 
+// ─── 2b. Carga por atendente (quando tem muito atendimento aberto) ─────────────────────────────────────────
+
+export interface CargaAtendente {
+  atendente: string;
+  abertos: number;
+  pendentes: number;
+}
+
+/**
+ * Abertos e pendentes por atendente. Grupo não conta: a conversa de grupo fica aberta para sempre e
+ * inflaria o número sem ninguém precisar agir.
+ */
+export function calcularCarga(linhas: Pick<LinhaTicket, 'status' | 'user_name' | 'is_group'>[]): { total: number; porAtendente: CargaAtendente[] } {
+  const mapa = new Map<string, CargaAtendente>();
+  let total = 0;
+  for (const r of linhas) {
+    if (r.is_group) continue;
+    const nome = r.user_name?.trim() || 'Sem atendente (fila)';
+    const c = mapa.get(nome) ?? { atendente: nome, abertos: 0, pendentes: 0 };
+    if (r.status === 'pending') c.pendentes++;
+    else c.abertos++;
+    mapa.set(nome, c);
+    total++;
+  }
+  const porAtendente = [...mapa.values()].sort((a, b) => b.abertos + b.pendentes - (a.abertos + a.pendentes) || a.atendente.localeCompare(b.atendente));
+  return { total, porAtendente };
+}
+
+/** Vale mandar o resumo de carga agora? Total no limite ou acima e o último foi há mais de `intervaloHoras`. */
+export function deveAvisarCarga(cfg: ConfigMonitor, total: number, ultimoEnvio: Date | null, agora = Date.now()): boolean {
+  const c = cfg.avisos.carga;
+  if (!c.ativo || total < c.limite) return false;
+  return !ultimoEnvio || agora - ultimoEnvio.getTime() >= c.intervaloHoras * 3600_000;
+}
+
+export function montarMensagemDeCarga(cfg: ConfigMonitor, carga: { total: number; porAtendente: CargaAtendente[] }): string {
+  const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+  const linhas = carga.porAtendente.map((c) => {
+    const partes = [c.abertos ? plural(c.abertos, 'aberto', 'abertos') : '', c.pendentes ? plural(c.pendentes, 'pendente', 'pendentes') : ''].filter(Boolean);
+    return `• *${c.atendente}*: ${partes.join(' · ')}`;
+  });
+  return [
+    `📊 *Monitor de Atendimento* — ${plural(carga.total, 'atendimento aberto/pendente', 'atendimentos abertos/pendentes')}`,
+    linhas.join('\n'),
+    `🔗 ${cfg.linkTicket.replace('{id}', '')}`,
+  ].join('\n\n');
+}
+
+export async function avisarCarga(cfg: ConfigMonitor, agora = Date.now()): Promise<boolean> {
+  if (!cfg.avisos.carga.ativo || !dentroDoHorario(agora, cfg.horario)) return false;
+  const abertos = await query<LinhaTicket>(`SELECT status, user_name, is_group FROM atd_tickets WHERE closed_at IS NULL AND ignorado = false`);
+  const carga = calcularCarga(abertos);
+  const row = await queryOne<{ atendimento_carga_em: Date | null }>('SELECT atendimento_carga_em FROM settings WHERE id = true');
+  if (!deveAvisarCarga(cfg, carga.total, row?.atendimento_carga_em ?? null, agora)) return false;
+  const envio = await mandarNoGrupo(cfg, montarMensagemDeCarga(cfg, carga));
+  if (!envio.ok && envio.reason !== 'not_configured') {
+    console.warn('[monitorAtendimento] resumo de carga falhou', envio.reason ?? envio.status, envio.detail ?? '');
+    return false;
+  }
+  await query('UPDATE settings SET atendimento_carga_em = $1 WHERE id = true', [new Date(agora)]);
+  return true;
+}
+
 // ─── 3. Encerramento automático ─────────────────────────────────────────────────────────────────────────────
 
 export async function autoEncerrar(cfg: ConfigMonitor, agora = Date.now()): Promise<number> {
@@ -651,6 +715,7 @@ export async function rodarCiclo(opcoes: { forcar?: boolean } = {}): Promise<Est
     let alertas = 0;
     if (cfg.ativo) {
       alertas = await alertar(cfg);
+      await avisarCarga(cfg);
       await autoEncerrar(cfg);
       await resumoDiario(cfg);
     }

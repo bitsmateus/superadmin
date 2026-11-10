@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filtrarAvisosDoGrupo, montarMensagemDeAlertas, precisaDeAviso, type LinhaTicket } from './monitor.js';
+import { calcularCarga, deveAvisarCarga, filtrarAvisosDoGrupo, montarMensagemDeAlertas, montarMensagemDeCarga, precisaDeAviso, type LinhaTicket } from './monitor.js';
 import { CONFIG_PADRAO, normalizarConfig } from './regras.js';
 
 const linha = (p: Partial<LinhaTicket>): LinhaTicket =>
@@ -63,10 +63,40 @@ test('padrão: só "vou verificar" e sumiu vai para o grupo, o resto fica no pai
 });
 
 test('config salva sem "avisos" assume o padrão; lista inválida é filtrada', () => {
-  assert.deepEqual(normalizarConfig({ resumoHora: '18:00' }).avisos, { situacoes: ['promessa'], abertoLongo: false, resumo: false });
+  assert.deepEqual(normalizarConfig({ resumoHora: '18:00' }).avisos, CONFIG_PADRAO.avisos);
   assert.deepEqual(normalizarConfig({ avisos: { situacoes: ['fila', 'ok', 'xx', 'promessa'], resumo: true } }).avisos, {
     situacoes: ['promessa', 'fila'],
     abertoLongo: false,
     resumo: true,
+    carga: CONFIG_PADRAO.avisos.carga,
   });
+});
+
+test('carga: abertos e pendentes por atendente, sem contar grupo', () => {
+  const c = calcularCarga([
+    { status: 'open', user_name: 'Jean', is_group: false },
+    { status: 'open', user_name: 'Jean', is_group: false },
+    { status: 'pending', user_name: 'Jean', is_group: false },
+    { status: 'open', user_name: 'João', is_group: false },
+    { status: 'pending', user_name: null, is_group: false },
+    { status: 'open', user_name: 'João', is_group: true },
+  ]);
+  assert.equal(c.total, 5);
+  assert.deepEqual(c.porAtendente[0], { atendente: 'Jean', abertos: 2, pendentes: 1 });
+  const txt = montarMensagemDeCarga(CONFIG_PADRAO, c);
+  assert.match(txt, /5 atendimentos abertos\/pendentes/);
+  assert.match(txt, /• \*Jean\*: 2 abertos · 1 pendente/);
+  assert.match(txt, /• \*João\*: 1 aberto\n/);
+  assert.match(txt, /• \*Sem atendente \(fila\)\*: 1 pendente/);
+});
+
+test('carga: só avisa quando passa do limite, e no máximo 1 vez a cada intervalo', () => {
+  const agora = Date.parse('2026-11-10T14:00:00Z');
+  const lim = CONFIG_PADRAO.avisos.carga.limite;
+  assert.equal(deveAvisarCarga(CONFIG_PADRAO, lim - 1, null, agora), false);
+  assert.equal(deveAvisarCarga(CONFIG_PADRAO, lim, null, agora), true);
+  assert.equal(deveAvisarCarga(CONFIG_PADRAO, lim + 5, new Date(agora - 3600_000), agora), false);
+  assert.equal(deveAvisarCarga(CONFIG_PADRAO, lim + 5, new Date(agora - 2 * 3600_000), agora), true);
+  const desligado = { ...CONFIG_PADRAO, avisos: { ...CONFIG_PADRAO.avisos, carga: { ...CONFIG_PADRAO.avisos.carga, ativo: false } } };
+  assert.equal(deveAvisarCarga(desligado, 999, null, agora), false);
 });

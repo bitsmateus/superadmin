@@ -156,6 +156,7 @@ export async function monitorAtendimentoRoutes(app: FastifyInstance) {
       ...cfg.avisos.situacoes.map((x) => ROTULO_SITUACAO[x]),
       ...(cfg.avisos.abertoLongo ? [`abertos há mais de ${cfg.prazos.abertoDias} dias`] : []),
       ...(cfg.avisos.resumo && cfg.resumoHora ? [`o resumo das ${cfg.resumoHora}`] : []),
+      ...(cfg.avisos.carga.ativo ? [`abertos/pendentes por atendente quando passar de ${cfg.avisos.carga.limite}`] : []),
     ];
     return `✅ *Monitor de Atendimento* — teste\n${
       itens.length ? `Vão chegar neste grupo: ${itens.join(', ')}. O resto fica só no painel.` : 'Nenhum aviso ligado: tudo fica só no painel.'

@@ -1139,6 +1139,21 @@ END; $$`);
   // Aba marcada is_notas vira um bloco de notas simples (sem quadros/kanban/métricas/SDR/filtro) —
   // uma nota por dia, com formatação básica (negrito etc.), pra alguém anotar o que precisa fazer.
   await pool.query(`ALTER TABLE lead_pages ADD COLUMN IF NOT EXISTS is_notas BOOLEAN NOT NULL DEFAULT false`);
+  // Aba de Demandas que mora dentro do Pipeline do Suporte (sub-aba ao lado de Pipeline/Tarefas) e sai do menu
+  // Demandas. Continua sendo de Demandas pra tudo o mais (acesso, regras, relatórios). Na primeira subida, os CRMs
+  // do Jean e do João vão pra lá.
+  {
+    const { rows: [{ existia }] } = await pool.query<{ existia: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'lead_pages' AND column_name = 'no_pipeline') AS existia`);
+    if (!existia) {
+      await pool.query(`ALTER TABLE lead_pages ADD COLUMN no_pipeline BOOLEAN NOT NULL DEFAULT false`);
+      await pool.query(
+        `UPDATE lead_pages SET no_pipeline = true
+         WHERE section = 'demandas' AND lower(translate(trim(name), 'ãÃ', 'aA')) IN ('jean', 'joao')`
+      );
+    }
+  }
   await pool.query(`CREATE TABLE IF NOT EXISTS page_notes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     page_id TEXT NOT NULL REFERENCES lead_pages(id) ON DELETE CASCADE,

@@ -130,7 +130,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
   );
 
   // PATCH /api/lead-pages/:id — admin only, renomear/reordenar/marcar como bloco de notas
-  app.patch<{ Params: { id: string }; Body: { name?: string; position?: number; isNotas?: boolean; responsavel?: string } }>(
+  app.patch<{ Params: { id: string }; Body: { name?: string; position?: number; isNotas?: boolean; responsavel?: string; noPipeline?: boolean } }>(
     '/api/lead-pages/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
@@ -143,6 +143,7 @@ export async function leadPageRoutes(app: FastifyInstance) {
       if (req.body.name !== undefined) { sets.push(`name = $${i++}`); params.push(req.body.name.trim()); }
       if (req.body.position !== undefined) { sets.push(`position = $${i++}`); params.push(req.body.position); }
       if (req.body.isNotas !== undefined) { sets.push(`is_notas = $${i++}`); params.push(req.body.isNotas); }
+      if (req.body.noPipeline !== undefined) { sets.push(`no_pipeline = $${i++}`); params.push(req.body.noPipeline === true); }
       if (req.body.responsavel !== undefined) { sets.push(`responsavel = $${i++}`); params.push(String(req.body.responsavel).trim()); }
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
 

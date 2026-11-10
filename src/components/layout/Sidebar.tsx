@@ -421,7 +421,8 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   // não existe uma chave de permissão própria pra Demandas.
   const demandasItems = canSee('/comercial')
     ? leadPages
-        .filter((p) => p.section === 'demandas')
+        // As que moram no Pipeline do Suporte (CRM do Jean/João) aparecem lá, como sub-aba, e não aqui.
+        .filter((p) => p.section === 'demandas' && !p.noPipeline)
         .map((p) => ({ to: `/demandas/${p.id}`, label: p.name, icon: ListTodo }))
     : []
   const hasVendasBoard = leadBoards.some((b) => b.isVendas)

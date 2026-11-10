@@ -25,6 +25,8 @@ export interface LeadPage {
   section: LeadPageSection
   /** Pessoa vinculada à aba (Demandas): nome||email, igual ao responsável dos eventos da agenda. */
   responsavel: string
+  /** Aba de Demandas que aparece como sub-aba do Pipeline do Suporte (/pipeline/crm/:id), fora do menu Demandas. */
+  noPipeline: boolean
 }
 
 export interface LeadBoard {

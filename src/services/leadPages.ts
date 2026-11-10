@@ -4,12 +4,12 @@ import type { LeadPage, LeadPageSection } from '@/types/leadBoard'
 
 type PageRow = {
   id: string; name: string; position: number; archived_at: string | null; created_at: string
-  is_notas: boolean; section?: LeadPageSection; responsavel?: string | null
+  is_notas: boolean; section?: LeadPageSection; responsavel?: string | null; no_pipeline?: boolean
 }
 function rowToPage(r: PageRow): LeadPage {
   return {
     id: r.id, name: r.name, position: r.position, archivedAt: r.archived_at, isNotas: r.is_notas,
-    section: r.section ?? 'comercial', responsavel: r.responsavel ?? '',
+    section: r.section ?? 'comercial', responsavel: r.responsavel ?? '', noPipeline: r.no_pipeline === true,
   }
 }
 
@@ -89,6 +89,16 @@ export const leadPagesService = {
   async setIsNotas(id: string, isNotas: boolean): Promise<void> {
     try {
       await api.patch(`/api/lead-pages/${id}`, { isNotas })
+      await reloadPages()
+    } catch (err) {
+      toast.error('Falha ao atualizar a aba: ' + (err as Error).message)
+    }
+  },
+
+  /** Leva a aba de Demandas pra dentro do Pipeline do Suporte (sub-aba) ou de volta pro menu Demandas. */
+  async setNoPipeline(id: string, noPipeline: boolean): Promise<void> {
+    try {
+      await api.patch(`/api/lead-pages/${id}`, { noPipeline })
       await reloadPages()
     } catch (err) {
       toast.error('Falha ao atualizar a aba: ' + (err as Error).message)

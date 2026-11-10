@@ -31,6 +31,9 @@ const casa = (path: string, base: string) => path === base || path.startsWith(ba
 function liberadoParaRestrito(path: string, c: Contexto): boolean | 'carregando' {
   // Telas com marca (Suporte, NX Digital, Agenda, Dashboard Comercial)
   if (path === '/') return c.allowed.has('dashboard')
+  // CRM do suporte dentro do Pipeline (aba de Demandas): vale a aba liberada, como em /demandas/:id.
+  const crm = path.match(/^\/pipeline\/crm\/([^/]+)\/?$/)
+  if (crm) return c.pagesBooted ? c.pages.some((p) => p.id === crm[1]) : 'carregando'
   const item = MENU_ACCESS_ITEMS
     .filter((i) => i.path !== '/' && casa(path, i.path))
     .sort((a, b) => b.path.length - a.path.length)[0]
@@ -71,7 +74,7 @@ function primeiroLiberado(c: Contexto): string | null {
   if (item) return item.path
   const financeiras = new Set(c.boards.filter((b) => b.isVendas || b.isContrato).map((b) => b.page))
   const aba = c.pages.find((p) => !financeiras.has(p.id))
-  if (aba) return `/${aba.section === 'demandas' ? 'demandas' : 'comercial'}/${aba.id}`
+  if (aba) return aba.noPipeline ? `/pipeline/crm/${aba.id}` : `/${aba.section === 'demandas' ? 'demandas' : 'comercial'}/${aba.id}`
   return null
 }
 

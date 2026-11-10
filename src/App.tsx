@@ -284,6 +284,7 @@ export default function App() {
         >
           <Route index element={<DashboardPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
+          <Route path="/pipeline/crm/:pageId" element={<ComercialPage />} />
           <Route path="/canais" element={<CanaisPage />} />
           <Route path="/atendimento" element={<MonitorAtendimentoPage />} />
           <Route path="/comunicados" element={<ComunicadosPage />} />

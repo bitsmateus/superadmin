@@ -9,6 +9,7 @@ import { AbasJuntasView } from '@/components/comercial/AbasJuntasView'
 import { ABAS_JUNTAS, abaDeFora } from '@/lib/abasJuntas'
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
+import { PipelineSectionTabs } from '@/components/support/PipelineSectionTabs'
 
 /** Tela do Comercial E de Demandas pra uma aba dinâmica (Novos Leads, CRM NX Luis, CRM NX
  * Arthur, ou qualquer outra que um admin tenha criado/duplicado — ver lead_pages.section). Uma
@@ -16,8 +17,10 @@ import { useLeadBoards } from '@/hooks/useLeadBoards'
 export function ComercialPage() {
   const { pageId } = useParams<{ pageId: string }>()
   const location = useLocation()
-  const basePath = location.pathname.startsWith('/demandas') ? '/demandas' : '/comercial'
-  const section = basePath === '/demandas' ? 'demandas' : 'comercial'
+  // /pipeline/crm/:id = aba de Demandas que mora no Pipeline do Suporte (lead_pages.no_pipeline).
+  const noPipeline = location.pathname.startsWith('/pipeline/crm')
+  const basePath = noPipeline ? '/pipeline/crm' : location.pathname.startsWith('/demandas') ? '/demandas' : '/comercial'
+  const section = basePath === '/comercial' ? 'comercial' : 'demandas'
   const booted = useLeadPagesBooted()
   const pages = useLeadPages()
   const boards = useLeadBoards()
@@ -43,7 +46,12 @@ export function ComercialPage() {
     )
   }
 
-  const exists = pages.some((p) => p.id === pageId)
+  const aba = pages.find((p) => p.id === pageId)
+  // Aba que mora no Pipeline abre lá (link antigo de /demandas); e /pipeline/crm só abre as que moram lá.
+  if (aba && !noPipeline && aba.noPipeline) return <Navigate to={`/pipeline/crm/${aba.id}`} replace />
+  if (aba && noPipeline && !aba.noPipeline) return <Navigate to={`/demandas/${aba.id}`} replace />
+  if (!aba && noPipeline) return <Navigate to="/pipeline" replace />
+  const exists = !!aba
   if (!exists) {
     // Aba não existe (ou foi arquivada) — manda pra primeira disponível do MESMO menu (Comercial
     // e Demandas compartilham essa tela, mas não as abas uma da outra).
@@ -64,5 +72,13 @@ export function ComercialPage() {
 
   if (ABAS_JUNTAS[pageId as string]) return <AbasJuntasView pageId={pageId as string} />
 
+  if (noPipeline) {
+    return (
+      <>
+        <PipelineSectionTabs />
+        <LeadBoardsView page={pageId as string} />
+      </>
+    )
+  }
   return <LeadBoardsView page={pageId as string} />
 }

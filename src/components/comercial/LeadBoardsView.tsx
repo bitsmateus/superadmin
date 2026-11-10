@@ -24,6 +24,7 @@ import {
   Pencil,
   Plus,
   Rows3,
+  Columns3,
   ScrollText,
   Search,
   StickyNote,
@@ -276,6 +277,7 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
   const currentPage = pages.find((p) => p.id === pageId)
   const isNotas = currentPage?.isNotas ?? false
   const currentSection = currentPage?.section ?? 'comercial'
+  const noPipeline = currentPage?.noPipeline ?? false
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [duplicateOpen, setDuplicateOpen] = React.useState(false)
@@ -337,9 +339,22 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
       await leadPagesService.archive(pageId)
       toast.success(`"${pageName}" arquivada.`)
       setOpen(false)
-      navigate(currentSection === 'demandas' ? '/demandas' : '/comercial')
+      navigate(noPipeline ? '/pipeline' : currentSection === 'demandas' ? '/demandas' : '/comercial')
     } catch (err) {
       toast.error('Falha ao arquivar: ' + (err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Aba de Demandas: mora no menu Demandas ou dentro do Pipeline do Suporte (sub-aba ao lado de Tarefas).
+  const togglePipeline = async () => {
+    setBusy(true)
+    try {
+      await leadPagesService.setNoPipeline(pageId, !noPipeline)
+      toast.success(noPipeline ? `"${pageName}" voltou pro menu Demandas.` : `"${pageName}" agora fica dentro do Pipeline.`)
+      setOpen(false)
+      navigate(noPipeline ? `/demandas/${pageId}` : `/pipeline/crm/${pageId}`)
     } finally {
       setBusy(false)
     }
@@ -391,6 +406,17 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
             <StickyNote className="h-3.5 w-3.5" />
             {isNotas ? 'Voltar a ser quadro normal' : 'Marcar como bloco de notas'}
           </button>
+          {currentSection === 'demandas' && (
+            <button
+              type="button"
+              onClick={togglePipeline}
+              disabled={busy}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04] disabled:opacity-50"
+            >
+              <Columns3 className="h-3.5 w-3.5" />
+              {noPipeline ? 'Voltar pro menu Demandas' : 'Mover pra dentro do Pipeline'}
+            </button>
+          )}
           <button
             type="button"
             onClick={archive}
@@ -1393,7 +1419,8 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   const currentPage = allPages.find((p) => p.id === page)
   const title = currentPage?.name ?? '...'
   const isDemandas = currentPage?.section === 'demandas'
-  const subtitle = isDemandas ? 'Demandas · quadros do cliente' : 'Comercial · quadros de captação de leads'
+  const subtitle = currentPage?.noPipeline ? 'Suporte · CRM do time'
+    : isDemandas ? 'Demandas · quadros do cliente' : 'Comercial · quadros de captação de leads'
   const sdrLabelsForLock = useLeadLabels('sdr')
   const sdrLock = React.useMemo(() => sdrLockForPageName(title, sdrLabelsForLock), [title, sdrLabelsForLock])
   const hideIanMateusCols = React.useMemo(() => isIanMateusPage(title) || isIanMateusPage(page), [title, page])
@@ -1632,7 +1659,8 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
         titleAddon={aoLadoDoTitulo}
         breadcrumbs={[
           { label: 'Grupo NX Digital', to: '/' },
-          isDemandas ? { label: 'Demandas', to: '/demandas' } : { label: 'Comercial', to: '/comercial' },
+          currentPage?.noPipeline ? { label: 'Pipeline', to: '/pipeline' }
+            : isDemandas ? { label: 'Demandas', to: '/demandas' } : { label: 'Comercial', to: '/comercial' },
           { label: tituloDaTela ?? title },
         ]}
         rightSlot={isDemandas ? (

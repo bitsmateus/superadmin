@@ -43,6 +43,7 @@ import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { api } from '@/services/api'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useAuth } from '@/hooks/useAuth'
+import { useLeadPages } from '@/hooks/useLeadPages'
 import { useLeadBoards, useLeadRow } from '@/hooks/useLeadBoards'
 import { useContracts } from '@/hooks/useContracts'
 import { useLeadNotes } from '@/hooks/useLeadNotes'
@@ -224,6 +225,10 @@ function LeadDetailModalInner({
   const row = useLeadRow(leadRowId)
   const boards = useLeadBoards()
   const board = boards.find((b) => b.id === row?.boardId)
+  // CRM do Jean/João (aba de Demandas dentro do Pipeline): ficha do suporte — Grupo, Empresa, Telefone, Tipo, Status,
+  // "Finalizar até" e as Atualizações. Nada do Comercial (origem, dia de contato, ligação, SDR, retorno, valores…).
+  const pages = useLeadPages()
+  const suporte = pages.find((p) => p.id === board?.page)?.noPipeline === true
 
   // Contrato dessa venda. O vínculo (contracts.venda_lead_id) tanto pode apontar pra linha da aba
   // Vendas quanto pro lead de origem no CRM — a modal pode ter sido aberta por qualquer um dos
@@ -252,14 +257,14 @@ function LeadDetailModalInner({
 
   const [ficha, setFicha] = React.useState<FichaStatus | null>(null)
   React.useEffect(() => {
-    if (!leadRowId || modoSimples) return
+    if (!leadRowId || modoSimples || suporte) return
     let cancelled = false
     setFicha(null)
     api.get<FichaStatus>(`/api/lead-rows/${leadRowId}/ficha-status`)
       .then((res) => { if (!cancelled) setFicha(res) })
       .catch(() => { if (!cancelled) setFicha({ status: 'erro', clientId: null }) })
     return () => { cancelled = true }
-  }, [leadRowId, modoSimples])
+  }, [leadRowId, modoSimples, suporte])
 
   if (!leadRowId || !row) return null
 
@@ -284,11 +289,11 @@ function LeadDetailModalInner({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            {!modoSimples && <FichaCadastroButton ficha={ficha} onOpenClient={onOpenFichaClient} />}
+            {!modoSimples && !suporte && <FichaCadastroButton ficha={ficha} onOpenClient={onOpenFichaClient} />}
             {mostrarContrato && (
               <VerContratoButton contratoId={contratoDaVenda?.id ?? null} assinado={!!contratoDaVenda?.assinado} />
             )}
-            {!modoSimples && (
+            {!modoSimples && !suporte && (
               <a
                 href="https://gruponxdigital.com/planos"
                 target="_blank"
@@ -342,19 +347,21 @@ function LeadDetailModalInner({
               </select>
             </FieldRow>
 
-            <LeadOrigemBlock
-              leadRowId={row.id}
-              nicho={row.nicho}
-              motivoDesqualificacao={row.motivoDesqualificacao}
-              origem={row.origem}
-              mostrarSemAnuncio={!modoSimples}
-              onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
-            />
+            {!suporte && (
+              <LeadOrigemBlock
+                leadRowId={row.id}
+                nicho={row.nicho}
+                motivoDesqualificacao={row.motivoDesqualificacao}
+                origem={row.origem}
+                mostrarSemAnuncio={!modoSimples}
+                onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
+              />
+            )}
 
             <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Empresa">
               <BoxedField value={row.empresa} onSave={(v) => leadBoardsService.updateRow(row.id, { empresa: v })} />
             </FieldRow>
-            {!modoSimples && (
+            {!modoSimples && !suporte && (
               <>
                 {!!row.ticketNx && (
                   <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Ticket NX">
@@ -372,10 +379,12 @@ function LeadDetailModalInner({
               </div>
             </FieldRow>
             {!modoSimples && (
+              <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Tipo" required={suporte}>
+                <LeadLabelCell field="tipo" value={row.tipo} onChange={(v) => leadBoardsService.updateRow(row.id, { tipo: v })} required={suporte} pageId={board?.page} />
+              </FieldRow>
+            )}
+            {!modoSimples && !suporte && (
               <>
-                <FieldRow icon={<Circle className="h-3.5 w-3.5" />} label="Tipo">
-                  <LeadLabelCell field="tipo" value={row.tipo} onChange={(v) => leadBoardsService.updateRow(row.id, { tipo: v })} pageId={board?.page} />
-                </FieldRow>
                 <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Dia de contato" required>
                   <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} required pageId={board?.page} />
                 </FieldRow>
@@ -404,32 +413,34 @@ function LeadDetailModalInner({
               />
               </div>
             </FieldRow>
-            {!modoSimples && (
+            {!modoSimples && !suporte && (
               <FieldRow icon={<UserCircle2 className="h-3.5 w-3.5" />} label="SDR">
                 <LeadLabelCell field="sdr" value={row.sdr} onChange={(v) => leadBoardsService.updateRow(row.id, { sdr: v })} />
               </FieldRow>
             )}
-            <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Agendamento">
+            <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label={suporte ? 'Finalizar até' : 'Agendamento'} required={suporte}>
               <AgendamentoField
                 value={row.agendamento}
                 onChange={(next) => leadBoardsService.updateRow(row.id, { agendamento: next })}
                 className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
               />
             </FieldRow>
-            {!modoSimples && (
+            {!modoSimples && !suporte && (
               <FieldRow icon={<PhoneCall className="h-3.5 w-3.5" />} label="Agendado por">
                 <AgendadoPorField valor={row.agendadoPor} onChange={(v) => leadBoardsService.updateRow(row.id, { agendadoPor: v })} />
               </FieldRow>
             )}
-            <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label={modoSimples ? 'Finalizar' : 'Retornar'}>
-              <RetornarField
-                value={row.retornar}
-                retornado={row.retornado}
-                onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
-                className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
-              />
-            </FieldRow>
-            {!modoSimples && (
+            {!suporte && (
+              <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label={modoSimples ? 'Finalizar' : 'Retornar'}>
+                <RetornarField
+                  value={row.retornar}
+                  retornado={row.retornado}
+                  onChange={(patch) => leadBoardsService.updateRow(row.id, patch)}
+                  className="rounded-md bg-elevate/[0.05] px-2 py-1.5 text-sm text-foreground"
+                />
+              </FieldRow>
+            )}
+            {!modoSimples && !suporte && (
               <>
                 <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Dor do cliente">
                   <BoxedField value={row.dorCliente} onSave={(v) => leadBoardsService.updateRow(row.id, { dorCliente: v })} />

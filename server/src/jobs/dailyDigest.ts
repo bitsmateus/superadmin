@@ -43,6 +43,24 @@ function spTime(iso: string): string {
   }).format(new Date(iso));
 }
 
+/** Etapas antes da configuração: o briefing ainda é a pendência. Da configuração em diante, não é mais. */
+const ETAPAS_ANTES_DA_CONFIGURACAO = ['lead', 'welcome', 'contract', 'briefing'];
+const ETAPAS_EM_CONFIGURACAO = ['setup_start', 'setup'];
+const MAX_LINHAS = 20;
+
+/** Dia (AAAA-MM-DD, em São Paulo) da data da entrega. Gravada como "AAAA-MM-DDTHH:MM" no horário de Brasília (sem
+ * fuso): o dia é o começo do texto. Com fuso (ISO), converte. */
+function diaDaEntrega(v: string): string {
+  if (/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?)?$/.test(v)) return v.slice(0, 10);
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '' : spDateStr(d);
+}
+
+/** Lista com no máximo MAX_LINHAS linhas; o resto vira "+N outros". */
+function limitar(linhas: string[]): string[] {
+  return linhas.length > MAX_LINHAS ? [...linhas.slice(0, MAX_LINHAS), `• _+${linhas.length - MAX_LINHAS} outros_`] : linhas;
+}
+
 type ReminderRow = { title: string; due_at: string | null; company: string | null; resp: string | null };
 type FollowUp = { dayNumber?: number; scheduledFor?: string; sentAt?: string };
 type ClientRow = {
@@ -55,7 +73,7 @@ type ClientRow = {
   followups: FollowUp[] | null;
 };
 
-async function buildDigest(): Promise<string> {
+async function buildDigest(titulo = 'Bom dia! Demandas do suporte'): Promise<string> {
   const now = new Date();
   const todayStr = spDateStr(now);
   const weekEndStr = spDateStr(new Date(now.getTime() + 7 * 86400000));
@@ -68,7 +86,9 @@ async function buildDigest(): Promise<string> {
      FROM reminders r
      LEFT JOIN clients c ON c.id = r.client_id
      LEFT JOIN profiles p ON p.id = r.user_id
-     WHERE r.completed_at IS NULL`
+     WHERE r.completed_at IS NULL
+       -- Tarefa de cliente cancelado ou arquivado não é mais demanda do dia.
+       AND (r.client_id IS NULL OR (c.archived_at IS NULL AND c.stage <> 'churned'))`
   );
 
   const overdue: ReminderRow[] = [];
@@ -87,8 +107,9 @@ async function buildDigest(): Promise<string> {
   today.sort(byDue);
   week.sort(byDue);
 
+  // Vencida diz de quando é: "venceu 07/11" ajuda a ver o que está parado há mais tempo.
   const rLine = (r: ReminderRow) =>
-    `• ${r.title}${r.company ? ` — ${r.company}` : ''}${r.resp ? ` (${r.resp})` : ''}`;
+    `• ${r.title}${r.company ? ` — ${r.company}` : ''}${r.resp ? ` (${r.resp})` : ''} · venceu ${spDateStr(new Date(r.due_at!)).slice(5).split('-').reverse().join('/')}`;
   const rLineTime = (r: ReminderRow) =>
     `• ${spTime(r.due_at!)} — ${r.title}${r.company ? ` — ${r.company}` : ''}${r.resp ? ` (${r.resp})` : ''}`;
 
@@ -103,16 +124,18 @@ async function buildDigest(): Promise<string> {
   const followLines: string[] = [];
   for (const c of clients) {
     const co = (c.company && c.company.trim()) || c.name;
-    if (c.briefing_status === 'sent') {
+    // O briefing só é pendência antes da configuração: cliente que já passou dela (com o status do briefing
+    // esquecido em "enviado") não volta a aparecer como "aguardando briefing".
+    const antesDaConfiguracao = ETAPAS_ANTES_DA_CONFIGURACAO.includes(c.stage);
+    if (antesDaConfiguracao && c.briefing_status === 'sent') {
       pipeline.push(`• Aguardando preenchimento do briefing — ${co} (enviar mensagem)`);
-    } else if (
-      c.briefing_status === 'filled' &&
-      !['setup', 'delivery', 'delivered', 'active'].includes(c.stage)
-    ) {
+    } else if (antesDaConfiguracao && (c.briefing_status === 'filled' || c.briefing_status === 'approved')) {
       pipeline.push(`• Briefing preenchido — iniciar configuração — ${co}`);
-    } else if (c.stage === 'setup') {
+    } else if (ETAPAS_EM_CONFIGURACAO.includes(c.stage)) {
       pipeline.push(`• Em configuração — ${co}`);
-    } else if (c.stage === 'delivery' && c.delivery_date && spDateStr(new Date(c.delivery_date)) === todayStr) {
+    } else if (c.stage === 'setup_done') {
+      pipeline.push(`• Configuração pronta — marcar a entrega — ${co}`);
+    } else if (c.stage === 'delivery' && c.delivery_date && diaDaEntrega(c.delivery_date) === todayStr) {
       pipeline.push(`• Reunião de entrega hoje — ${co}`);
     }
 
@@ -131,12 +154,12 @@ async function buildDigest(): Promise<string> {
     }
   }
 
-  const out: string[] = [`☀️ *Bom dia! Demandas do suporte — ${todayStr.split('-').reverse().join('/')}*`];
-  if (overdue.length) out.push('', `🔴 *Vencidas (${overdue.length})*`, ...overdue.map(rLine));
-  if (today.length) out.push('', `⭐ *Para hoje (${today.length})*`, ...today.map(rLineTime));
-  if (week.length) out.push('', `📅 *Próximos dias (${week.length})*`, ...week.map(rLineTime));
-  if (pipeline.length) out.push('', `🔧 *Pipeline (${pipeline.length})*`, ...pipeline.slice(0, 20));
-  if (followLines.length) out.push('', `💬 *Follow-ups vencidos (${followLines.length})*`, ...followLines.slice(0, 20));
+  const out: string[] = [`☀️ *${titulo} — ${todayStr.split('-').reverse().join('/')}*`];
+  if (overdue.length) out.push('', `🔴 *Vencidas (${overdue.length})*`, ...limitar(overdue.map(rLine)));
+  if (today.length) out.push('', `⭐ *Para hoje (${today.length})*`, ...limitar(today.map(rLineTime)));
+  if (week.length) out.push('', `📅 *Próximos dias (${week.length})*`, ...limitar(week.map(rLineTime)));
+  if (pipeline.length) out.push('', `🔧 *Pipeline (${pipeline.length})*`, ...limitar(pipeline));
+  if (followLines.length) out.push('', `💬 *Follow-ups vencidos (${followLines.length})*`, ...limitar(followLines));
   if (!overdue.length && !today.length && !week.length && !pipeline.length && !followLines.length) {
     out.push('', 'Nenhuma demanda pendente. Bom dia de trabalho! ✅');
   }
@@ -164,7 +187,10 @@ async function maybeRunBriefingReminders(now: Date): Promise<void> {
      FROM clients
      WHERE briefing_status = 'sent'
        AND briefing_number IS NOT NULL AND briefing_number <> ''
-       AND archived_at IS NULL`
+       AND archived_at IS NULL
+       -- Cliente que já passou pra configuração não recebe mais cobrança de briefing (status esquecido em "enviado").
+       AND stage = ANY($1)`,
+    [ETAPAS_ANTES_DA_CONFIGURACAO]
   );
 
   let sent = 0;
@@ -189,10 +215,34 @@ async function maybeRunBriefingReminders(now: Date): Promise<void> {
   if (sent > 0) console.log(`[briefing] cobranças enviadas (${slotKey}):`, sent);
 }
 
+/**
+ * Uma vez só (traffic_report_log): na primeira subida com o resumo corrigido (Pipeline sem cliente que já passou do
+ * briefing, sem tarefa de cliente cancelado), manda o resumo de agora no grupo. Fora de 7h–21h não manda (o das 7h
+ * já vem certo).
+ */
+async function reenviarResumoCorrigido(): Promise<void> {
+  try {
+    const row = await queryOne<{ support_group: Record<string, unknown> | null }>('SELECT support_group FROM settings WHERE id = true');
+    const g = (row?.support_group ?? {}) as Record<string, unknown>;
+    if (!g.apiId || !g.token || !g.groupId || g.digestEnabled === false) return;
+    const reservou = await query(
+      `INSERT INTO traffic_report_log (dia, kind) VALUES ('2026-11-10'::date, 'digest_corrigido') ON CONFLICT DO NOTHING RETURNING dia`
+    );
+    if (!reservou.length) return;
+    const { hour } = spHourMin(new Date());
+    if (hour < 7 || hour > 21) return;
+    const res = await sendSupportGroupMessage(await buildDigest('Demandas do suporte (corrigido)'));
+    if (!res.ok) console.warn('[digest] falha ao reenviar o resumo corrigido', res);
+  } catch (err) {
+    console.error('[digest] erro ao reenviar o resumo corrigido', err);
+  }
+}
+
 let ticking = false;
 
 /** Inicia o agendador do digest diário (checa a cada minuto). */
 export function startDailyDigest(): void {
+  setTimeout(() => void reenviarResumoCorrigido(), 40_000);
   setInterval(async () => {
     if (ticking) return;
     ticking = true;

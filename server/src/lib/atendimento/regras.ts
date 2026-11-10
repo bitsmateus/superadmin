@@ -47,6 +47,11 @@ export interface ConfigMonitor {
   notaNoTicket: boolean;
   /** Hora do resumo diário no grupo ("" = sem resumo). */
   resumoHora: string;
+  /**
+   * O que vai para o grupo do WhatsApp. O resto continua no painel, só não notifica.
+   * Padrão (pedido do Mateus em 10/11/2026): só "vou verificar" e sumiu.
+   */
+  avisos: { situacoes: Situacao[]; abertoLongo: boolean; resumo: boolean };
   /** Classificar a última mensagem do atendente com IA (promessa x resolvido). Sem chave da Anthropic, cai nas palavras-chave. */
   ia: boolean;
   followupMensagem: string;
@@ -70,6 +75,7 @@ export const CONFIG_PADRAO: ConfigMonitor = {
   grupoId: '',
   notaNoTicket: false,
   resumoHora: '18:00',
+  avisos: { situacoes: ['promessa'], abertoLongo: false, resumo: false },
   ia: true,
   followupMensagem: 'Oi! Passando para saber: conseguiu resolver? Se ainda precisar de algo, é só me chamar por aqui. 😊',
   autoEncerrar: {
@@ -100,7 +106,9 @@ export function normalizarConfig(bruto: unknown): ConfigMonitor {
   const h = (b.horario ?? {}) as Record<string, unknown>;
   const a = (b.autoEncerrar ?? {}) as Record<string, unknown>;
   const c = (b.credencial ?? {}) as Record<string, unknown>;
+  const av = (b.avisos ?? {}) as Record<string, unknown>;
   const P = CONFIG_PADRAO;
+  const avisaveis = SITUACOES.filter((x) => x !== 'ok');
   const dias = Array.isArray(h.dias)
     ? [...new Set((h.dias as unknown[]).map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort()
     : P.horario.dias;
@@ -121,6 +129,13 @@ export function normalizarConfig(bruto: unknown): ConfigMonitor {
     grupoId: texto(b.grupoId, P.grupoId, 120).trim(),
     notaNoTicket: typeof b.notaNoTicket === 'boolean' ? b.notaNoTicket : P.notaNoTicket,
     resumoHora: b.resumoHora === '' ? '' : hhmm(b.resumoHora, P.resumoHora),
+    avisos: {
+      situacoes: Array.isArray(av.situacoes)
+        ? avisaveis.filter((x) => (av.situacoes as unknown[]).includes(x))
+        : [...P.avisos.situacoes],
+      abertoLongo: typeof av.abertoLongo === 'boolean' ? av.abertoLongo : P.avisos.abertoLongo,
+      resumo: typeof av.resumo === 'boolean' ? av.resumo : P.avisos.resumo,
+    },
     ia: typeof b.ia === 'boolean' ? b.ia : P.ia,
     followupMensagem: texto(b.followupMensagem, P.followupMensagem).trim() || P.followupMensagem,
     autoEncerrar: {

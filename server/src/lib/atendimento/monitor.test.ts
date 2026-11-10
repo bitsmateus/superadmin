@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { montarMensagemDeAlertas, precisaDeAviso, type LinhaTicket } from './monitor.js';
-import { CONFIG_PADRAO } from './regras.js';
+import { filtrarAvisosDoGrupo, montarMensagemDeAlertas, precisaDeAviso, type LinhaTicket } from './monitor.js';
+import { CONFIG_PADRAO, normalizarConfig } from './regras.js';
 
 const linha = (p: Partial<LinhaTicket>): LinhaTicket =>
   ({
@@ -45,4 +45,28 @@ test('só avisa quando alguém precisa agir: grupo calado não vira alerta', () 
   assert.equal(precisaDeAviso({ situacao: 'sem_resposta', nivel: 1, is_group: true }), true);
   assert.equal(precisaDeAviso({ situacao: 'promessa', nivel: 0, is_group: false }), false);
   assert.equal(precisaDeAviso({ situacao: 'ok', nivel: 2, is_group: false }), false);
+});
+
+test('padrão: só "vou verificar" e sumiu vai para o grupo, o resto fica no painel', () => {
+  const novos = [
+    linha({ ticket_id: '1', situacao: 'sem_resposta' }),
+    linha({ ticket_id: '2', situacao: 'promessa' }),
+    linha({ ticket_id: '3', situacao: 'fila' }),
+    linha({ ticket_id: '4', situacao: 'cliente_parou' }),
+    linha({ ticket_id: '5', situacao: 'promessa', nivel: 2 }),
+  ];
+  const longos = [linha({ ticket_id: '6', aberto_longo: true })];
+  const { paraOGrupo, longosNoGrupo } = filtrarAvisosDoGrupo(CONFIG_PADRAO, novos, longos);
+  assert.deepEqual(paraOGrupo.map((r) => r.ticket_id), ['2', '5']);
+  assert.deepEqual(longosNoGrupo, []);
+  assert.equal(CONFIG_PADRAO.avisos.resumo, false);
+});
+
+test('config salva sem "avisos" assume o padrão; lista inválida é filtrada', () => {
+  assert.deepEqual(normalizarConfig({ resumoHora: '18:00' }).avisos, { situacoes: ['promessa'], abertoLongo: false, resumo: false });
+  assert.deepEqual(normalizarConfig({ avisos: { situacoes: ['fila', 'ok', 'xx', 'promessa'], resumo: true } }).avisos, {
+    situacoes: ['promessa', 'fila'],
+    abertoLongo: false,
+    resumo: true,
+  });
 });

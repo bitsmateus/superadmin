@@ -392,6 +392,14 @@ export function precisaDeAviso(r: Pick<LinhaTicket, 'situacao' | 'nivel' | 'is_g
   return true;
 }
 
+/** Dos alertas novos do ciclo, quais vão para o grupo (conforme cfg.avisos). */
+export function filtrarAvisosDoGrupo<T extends Pick<LinhaTicket, 'situacao'>>(cfg: ConfigMonitor, novos: T[], longos: T[]) {
+  return {
+    paraOGrupo: novos.filter((r) => cfg.avisos.situacoes.includes(r.situacao)),
+    longosNoGrupo: cfg.avisos.abertoLongo ? longos : [],
+  };
+}
+
 export async function alertar(cfg: ConfigMonitor, agora = Date.now()): Promise<number> {
   if (!dentroDoHorario(agora, cfg.horario)) return 0;
   const abertos = await query<LinhaTicket>(`SELECT * FROM atd_tickets WHERE closed_at IS NULL AND ignorado = false`);
@@ -405,12 +413,17 @@ export async function alertar(cfg: ConfigMonitor, agora = Date.now()): Promise<n
   if (!novos.length && !longos.length) return 0;
 
   novos.sort((a, b) => b.nivel - a.nivel || b.decorrido_min / Math.max(1, b.prazo_min) - a.decorrido_min / Math.max(1, a.prazo_min));
-  const texto = montarMensagemDeAlertas(cfg, novos, longos);
-  const envio = await mandarNoGrupo(cfg, texto);
-  if (!envio.ok) {
-    console.warn('[monitorAtendimento] alerta no grupo falhou', envio.reason ?? envio.status, envio.detail ?? '');
-    // Sem grupo configurado não adianta tentar de novo a cada ciclo: marca como avisado mesmo assim.
-    if (envio.reason !== 'not_configured') return 0;
+  // Só o que está ligado em cfg.avisos vai para o grupo; o resto é marcado como visto em silêncio
+  // (continua no painel e no ranking, só não notifica).
+  const { paraOGrupo, longosNoGrupo } = filtrarAvisosDoGrupo(cfg, novos, longos);
+  if (paraOGrupo.length || longosNoGrupo.length) {
+    const texto = montarMensagemDeAlertas(cfg, paraOGrupo, longosNoGrupo);
+    const envio = await mandarNoGrupo(cfg, texto);
+    if (!envio.ok) {
+      console.warn('[monitorAtendimento] alerta no grupo falhou', envio.reason ?? envio.status, envio.detail ?? '');
+      // Sem grupo configurado não adianta tentar de novo a cada ciclo: marca como avisado mesmo assim.
+      if (envio.reason !== 'not_configured') return 0;
+    }
   }
 
   const cred = cfg.notaNoTicket ? await resolverCredencial(cfg) : null;
@@ -440,7 +453,7 @@ export async function alertar(cfg: ConfigMonitor, agora = Date.now()): Promise<n
     await query(`UPDATE atd_tickets SET aberto_longo_avisado = true WHERE ticket_id = $1`, [r.ticket_id]);
     await registrarEvento({ ticketId: r.ticket_id, tipo: 'aberto_longo', userId: r.user_id, userName: r.user_name, autor: 'monitor' });
   }
-  return novos.length + longos.length;
+  return paraOGrupo.length + longosNoGrupo.length;
 }
 
 // ─── 3. Encerramento automático ─────────────────────────────────────────────────────────────────────────────
@@ -609,7 +622,7 @@ export async function montarResumo(cfg: ConfigMonitor, agora = Date.now()): Prom
 }
 
 export async function resumoDiario(cfg: ConfigMonitor, agora = Date.now()): Promise<boolean> {
-  if (!cfg.resumoHora) return false;
+  if (!cfg.resumoHora || !cfg.avisos.resumo) return false;
   const { data, hora } = agoraBrasilia(agora);
   const diaSemana = new Date(`${data}T12:00:00-03:00`).getUTCDay();
   if (!cfg.horario.dias.includes(diaSemana) || hora < cfg.resumoHora) return false;

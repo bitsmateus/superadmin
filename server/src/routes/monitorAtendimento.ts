@@ -151,12 +151,23 @@ export async function monitorAtendimentoRoutes(app: FastifyInstance) {
     return rodarCiclo({ forcar: true });
   });
 
+  const textoDoTeste = (cfg: ConfigMonitor) => {
+    const itens = [
+      ...cfg.avisos.situacoes.map((x) => ROTULO_SITUACAO[x]),
+      ...(cfg.avisos.abertoLongo ? [`abertos há mais de ${cfg.prazos.abertoDias} dias`] : []),
+      ...(cfg.avisos.resumo && cfg.resumoHora ? [`o resumo das ${cfg.resumoHora}`] : []),
+    ];
+    return `✅ *Monitor de Atendimento* — teste\n${
+      itens.length ? `Vão chegar neste grupo: ${itens.join(', ')}. O resto fica só no painel.` : 'Nenhum aviso ligado: tudo fica só no painel.'
+    }`;
+  };
+
   app.post('/api/atendimento-monitor/teste-grupo', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await podeVer(req, reply)) || !podeConfigurar(req, reply)) return;
     const cfg = await carregarConfig();
     const r = await mandarNoGrupo(
       cfg,
-      `✅ *Monitor de Atendimento* — teste\nOs alertas de atendimento (cliente sem resposta, "vou verificar" e sumiu, cliente parou, fila e abertos há dias) e o resumo das ${cfg.resumoHora || '—'} vão chegar neste grupo.`,
+      textoDoTeste(cfg),
     );
     if (!r.ok) return reply.status(400).send({ message: r.reason === 'not_configured' ? 'Grupo do suporte não configurado (Configurações › Grupo de suporte).' : `Falhou: ${r.status ?? ''} ${r.detail ?? ''}`.trim() });
     return { ok: true };

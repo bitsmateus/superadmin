@@ -830,6 +830,26 @@ function ModalConfig({ dados, onClose, onSalvo }: { dados: PainelMonitor; onClos
           <Campo label="ID do grupo do WhatsApp" hint={dados.grupoDestino ? `Vazio = grupo do suporte (${dados.grupoDestino})` : 'Vazio = grupo do suporte em Configurações'}>
             <Input value={c.grupoId} onChange={(e) => set('grupoId', e.target.value)} placeholder="Grupo do suporte" />
           </Campo>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">O que avisa no grupo</p>
+            <p className="text-xs text-foreground/50">Desmarcado = fica só no painel, sem notificação.</p>
+            {(['promessa', 'sem_resposta', 'fila', 'cliente_parou'] as const).map((s) => (
+              <Chave
+                key={s}
+                checked={c.avisos.situacoes.includes(s)}
+                onChange={(v) =>
+                  set('avisos', { ...c.avisos, situacoes: v ? [...c.avisos.situacoes, s] : c.avisos.situacoes.filter((x) => x !== s) })
+                }
+                label={ROTULO_SITUACAO[s]}
+              />
+            ))}
+            <Chave
+              checked={c.avisos.abertoLongo}
+              onChange={(v) => set('avisos', { ...c.avisos, abertoLongo: v })}
+              label={`Abertos há mais de ${c.prazos.abertoDias} dias`}
+            />
+            <Chave checked={c.avisos.resumo} onChange={(v) => set('avisos', { ...c.avisos, resumo: v })} label="Resumo diário" />
+          </div>
           <Chave
             checked={c.notaNoTicket}
             onChange={(v) => set('notaNoTicket', v)}

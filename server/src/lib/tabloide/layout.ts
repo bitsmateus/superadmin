@@ -50,6 +50,10 @@ export interface DadosTabloide {
   ocultarLogo?: boolean
   ocultarTextos?: boolean
   ocultarRodape?: boolean
+  /** Fontes escolhidas (ids de FONTES_TITULO/PRECO/TEXTO). Vazio = a padrão. */
+  fonteTitulo?: string
+  fontePreco?: string
+  fonteTexto?: string
 }
 
 /** Só aceita data URL de imagem em base64 (vai dentro de url() no CSS). */
@@ -330,15 +334,103 @@ export function escolherGrade(itens: ItemTabloide[], areaW: number, areaH: numbe
 export const esc = (s: string): string =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string)
 
-const FONTES =
-  '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
-  '<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Poppins:wght@500;600;700;800&display=block" rel="stylesheet">'
+// ── Fontes ──────────────────────────────────────────────────────────────────
+
+export interface Fonte {
+  id: string
+  nome: string
+  /** Nome da família no CSS. */
+  familia: string
+  /** Parâmetro do Google Fonts (family=...). */
+  google: string
+  /** Largura média de uma letra maiúscula em "em" (pra caber o título/preço). */
+  larg: number
+  /** Peso a usar quando a família tem vários. */
+  peso?: number
+  /** Fonte cursiva: não fica bonita toda em maiúsculas. */
+  cursiva?: boolean
+}
+
+export const FONTES_TITULO: Fonte[] = [
+  { id: 'anton', nome: 'Anton', familia: 'Anton', google: 'Anton', larg: 0.47 },
+  { id: 'bebas', nome: 'Bebas Neue', familia: 'Bebas Neue', google: 'Bebas+Neue', larg: 0.42 },
+  { id: 'oswald', nome: 'Oswald', familia: 'Oswald', google: 'Oswald:wght@700', larg: 0.5, peso: 700 },
+  { id: 'passion', nome: 'Passion One', familia: 'Passion One', google: 'Passion+One:wght@700', larg: 0.5, peso: 700 },
+  { id: 'lilita', nome: 'Lilita One', familia: 'Lilita One', google: 'Lilita+One', larg: 0.56 },
+  { id: 'titan', nome: 'Titan One', familia: 'Titan One', google: 'Titan+One', larg: 0.7 },
+  { id: 'luckiest', nome: 'Luckiest Guy', familia: 'Luckiest Guy', google: 'Luckiest+Guy', larg: 0.68 },
+  { id: 'bungee', nome: 'Bungee', familia: 'Bungee', google: 'Bungee', larg: 0.74 },
+  { id: 'alfa', nome: 'Alfa Slab One', familia: 'Alfa Slab One', google: 'Alfa+Slab+One', larg: 0.72 },
+  { id: 'righteous', nome: 'Righteous', familia: 'Righteous', google: 'Righteous', larg: 0.64 },
+  { id: 'bowlby', nome: 'Bowlby One', familia: 'Bowlby One SC', google: 'Bowlby+One+SC', larg: 0.8 },
+  { id: 'lobster', nome: 'Lobster', familia: 'Lobster', google: 'Lobster', larg: 0.5, cursiva: true },
+  { id: 'pacifico', nome: 'Pacifico', familia: 'Pacifico', google: 'Pacifico', larg: 0.62, cursiva: true },
+  { id: 'kaushan', nome: 'Kaushan Script', familia: 'Kaushan Script', google: 'Kaushan+Script', larg: 0.55, cursiva: true },
+]
+
+export const FONTES_PRECO: Fonte[] = [
+  { id: 'archivo', nome: 'Archivo Black', familia: 'Archivo Black', google: 'Archivo+Black', larg: 0.7 },
+  { id: 'anton', nome: 'Anton', familia: 'Anton', google: 'Anton', larg: 0.47 },
+  { id: 'bebas', nome: 'Bebas Neue', familia: 'Bebas Neue', google: 'Bebas+Neue', larg: 0.42 },
+  { id: 'oswald', nome: 'Oswald', familia: 'Oswald', google: 'Oswald:wght@700', larg: 0.5, peso: 700 },
+  { id: 'montserrat', nome: 'Montserrat', familia: 'Montserrat', google: 'Montserrat:wght@900', larg: 0.72, peso: 900 },
+  { id: 'rubik', nome: 'Rubik', familia: 'Rubik', google: 'Rubik:wght@900', larg: 0.68, peso: 900 },
+  { id: 'lilita', nome: 'Lilita One', familia: 'Lilita One', google: 'Lilita+One', larg: 0.56 },
+  { id: 'titan', nome: 'Titan One', familia: 'Titan One', google: 'Titan+One', larg: 0.7 },
+  { id: 'bungee', nome: 'Bungee', familia: 'Bungee', google: 'Bungee', larg: 0.74 },
+  { id: 'alfa', nome: 'Alfa Slab One', familia: 'Alfa Slab One', google: 'Alfa+Slab+One', larg: 0.72 },
+]
+
+export const FONTES_TEXTO: Fonte[] = [
+  { id: 'poppins', nome: 'Poppins', familia: 'Poppins', google: 'Poppins:wght@500;600;700;800', larg: 0.65 },
+  { id: 'montserrat', nome: 'Montserrat', familia: 'Montserrat', google: 'Montserrat:wght@500;600;700;800', larg: 0.68 },
+  { id: 'nunito', nome: 'Nunito', familia: 'Nunito', google: 'Nunito:wght@500;600;700;800', larg: 0.6 },
+  { id: 'rubik', nome: 'Rubik', familia: 'Rubik', google: 'Rubik:wght@500;600;700;800', larg: 0.62 },
+  { id: 'barlow', nome: 'Barlow', familia: 'Barlow', google: 'Barlow:wght@500;600;700;800', larg: 0.58 },
+  { id: 'robotocond', nome: 'Roboto Condensed', familia: 'Roboto Condensed', google: 'Roboto+Condensed:wght@500;600;700;800', larg: 0.5 },
+  { id: 'oswald', nome: 'Oswald', familia: 'Oswald', google: 'Oswald:wght@500;600;700', larg: 0.5 },
+  { id: 'fredoka', nome: 'Fredoka', familia: 'Fredoka', google: 'Fredoka:wght@500;600;700', larg: 0.6 },
+  { id: 'baloo', nome: 'Baloo 2', familia: 'Baloo 2', google: 'Baloo+2:wght@500;600;700;800', larg: 0.6 },
+]
+
+const achar = (lista: Fonte[], id: string | undefined) => lista.find((f) => f.id === id) ?? lista[0]
+
+export function fontesDe(d: Pick<DadosTabloide, 'fonteTitulo' | 'fontePreco' | 'fonteTexto'>) {
+  return { titulo: achar(FONTES_TITULO, d.fonteTitulo), preco: achar(FONTES_PRECO, d.fontePreco), texto: achar(FONTES_TEXTO, d.fonteTexto) }
+}
+
+/** Link do Google Fonts com as famílias pedidas (sem repetir). */
+export function linkGoogleFonts(fontes: Fonte[], display: 'block' | 'swap' = 'block'): string {
+  const familias = [...new Set(fontes.map((f) => f.google))].map((g) => `family=${g}`).join('&')
+  return `https://fonts.googleapis.com/css2?${familias}&display=${display}`
+}
+
+const fontesDoc = (d: DadosTabloide): string => {
+  const f = fontesDe(d)
+  return (
+    '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+    `<link href="${linkGoogleFonts([f.titulo, f.preco, f.texto, FONTES_TEXTO[0]])}" rel="stylesheet">`
+  )
+}
+
+/** Variáveis de fonte da página (o CSS usa var(--f-...)). */
+const varsFonte = (d: DadosTabloide): string => {
+  const f = fontesDe(d)
+  const fam = (x: Fonte, reserva: string) => `'${x.familia}',${reserva}`
+  // Preço: fontes largas encolhem pra caber no card, estreitas crescem um pouco.
+  const escPreco = Math.max(0.78, Math.min(1.2, 0.7 / f.preco.larg))
+  return (
+    `--f-titulo:${fam(f.titulo, 'Impact,sans-serif')};--p-titulo:${f.titulo.peso ?? 400};--c-titulo:${f.titulo.cursiva ? 'none' : 'uppercase'};` +
+    `--f-preco:${fam(f.preco, 'Impact,sans-serif')};--p-preco:${f.preco.peso ?? 400};--e-preco:${escPreco.toFixed(2)};` +
+    `--f-texto:${fam(f.texto, 'system-ui,sans-serif')}`
+  )
+}
 
 function css(m: Modelo): string {
   return `
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:transparent}
-.pg{position:relative;overflow:hidden;background:${m.fundo};font-family:'Poppins',system-ui,sans-serif;display:flex;flex-direction:column}
+.pg{position:relative;overflow:hidden;background:${m.fundo};font-family:var(--f-texto,'Poppins',system-ui,sans-serif);display:flex;flex-direction:column}
 .pg>.fundo{position:absolute;inset:0;background:${m.padrao}}
 .pg>.fundo::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,transparent 40%,rgba(0,0,0,.22))}
 .pg>.fundo.foto{background-size:cover;background-position:center;background-repeat:no-repeat}
@@ -349,13 +441,13 @@ html,body{background:transparent}
 .logo{flex:none;background:#fff;border-radius:calc(var(--hu)*1.2);padding:calc(var(--hu)*.7);box-shadow:0 calc(var(--hu)*.4) calc(var(--hu)*1.2) rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center}
 .logo img{display:block;height:100%;width:auto;object-fit:contain}
 .cab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center}
-.titulo{font-family:'Anton',Impact,sans-serif;color:${m.titulo};line-height:.95;letter-spacing:.01em;text-transform:uppercase;text-shadow:0 calc(var(--hu)*.45) 0 ${m.tituloSombra},0 calc(var(--hu)*.8) calc(var(--hu)*1.4) rgba(0,0,0,.25)}
+.titulo{font-family:var(--f-titulo,'Anton',Impact,sans-serif);font-weight:var(--p-titulo,400);color:${m.titulo};line-height:.95;letter-spacing:.01em;text-transform:var(--c-titulo,uppercase);text-shadow:0 calc(var(--hu)*.45) 0 ${m.tituloSombra},0 calc(var(--hu)*.8) calc(var(--hu)*1.4) rgba(0,0,0,.25)}
 .sub{color:${m.sub};font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-top:calc(var(--hu)*.6)}
 .validade{display:inline-block;margin-top:calc(var(--hu)*.9);background:${m.validadeBg};color:${m.validadeTexto};font-weight:800;border-radius:999px;padding:calc(var(--hu)*.35) calc(var(--hu)*1.6);text-transform:uppercase;letter-spacing:.03em;box-shadow:0 calc(var(--hu)*.3) 0 rgba(0,0,0,.18)}
 .grade{position:relative;flex:1;display:grid;grid-auto-flow:row dense;min-height:0}
 .card{position:relative;background:${m.card};border:calc(var(--u)*.22) solid ${m.cardBorda};border-radius:calc(var(--u)*1.1);display:flex;flex-direction:column;align-items:center;padding:calc(var(--u)*.7) calc(var(--u)*.6) calc(var(--u)*.6);box-shadow:0 calc(var(--u)*.35) calc(var(--u)*.9) rgba(0,0,0,.28);min-width:0;min-height:0}
 .card.dest{grid-column:span 2;grid-row:span 2}
-.faixa{position:absolute;top:calc(var(--u)*-.2);left:50%;transform:translate(-50%,-45%) rotate(-2deg);background:${m.faixaBg};color:${m.faixaTexto};font-family:'Anton',Impact,sans-serif;font-size:calc(var(--u)*1.05);padding:calc(var(--u)*.12) calc(var(--u)*.9);border-radius:calc(var(--u)*.4);white-space:nowrap;letter-spacing:.04em;box-shadow:0 calc(var(--u)*.2) calc(var(--u)*.5) rgba(0,0,0,.3);z-index:2}
+.faixa{position:absolute;top:calc(var(--u)*-.2);left:50%;transform:translate(-50%,-45%) rotate(-2deg);background:${m.faixaBg};color:${m.faixaTexto};font-family:var(--f-titulo,'Anton',Impact,sans-serif);font-weight:var(--p-titulo,400);font-size:calc(var(--u)*1.05);padding:calc(var(--u)*.12) calc(var(--u)*.9);border-radius:calc(var(--u)*.4);white-space:nowrap;letter-spacing:.04em;box-shadow:0 calc(var(--u)*.2) calc(var(--u)*.5) rgba(0,0,0,.3);z-index:2}
 .foto{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
 .foto img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 calc(var(--u)*.25) calc(var(--u)*.35) rgba(0,0,0,.25))}
 .foto .semfoto{width:42%;max-height:80%;fill:${m.precoBg};opacity:.22}
@@ -364,12 +456,12 @@ html,body{background:transparent}
 .precos{display:flex;flex-direction:column;align-items:center;margin-top:calc(var(--u)*.3)}
 .de{color:${m.de};font-weight:700;font-size:calc(var(--u)*.78);line-height:1}
 .de s{text-decoration-thickness:calc(var(--u)*.1)}
-.preco{display:flex;align-items:flex-start;background:${m.precoBg};color:${m.precoTexto};border-radius:calc(var(--u)*.55);padding:calc(var(--u)*.18) calc(var(--u)*.55) calc(var(--u)*.12);transform:rotate(-2deg);margin-top:calc(var(--u)*.2);box-shadow:0 calc(var(--u)*.18) 0 rgba(0,0,0,.18);font-family:'Archivo Black',Impact,sans-serif;line-height:1}
-.preco .rs{font-size:calc(var(--u)*.85);margin-top:calc(var(--u)*.35);margin-right:calc(var(--u)*.12)}
-.preco .int{font-size:calc(var(--u)*2.9);letter-spacing:-.03em}
+.preco{display:flex;align-items:flex-start;background:${m.precoBg};color:${m.precoTexto};border-radius:calc(var(--u)*.55);padding:calc(var(--u)*.18) calc(var(--u)*.55) calc(var(--u)*.12);transform:rotate(-2deg);margin-top:calc(var(--u)*.2);box-shadow:0 calc(var(--u)*.18) 0 rgba(0,0,0,.18);font-family:var(--f-preco,'Archivo Black',Impact,sans-serif);font-weight:var(--p-preco,400);line-height:1}
+.preco .rs{font-size:calc(var(--u)*.85*var(--e-preco,1));margin-top:calc(var(--u)*.35);margin-right:calc(var(--u)*.12)}
+.preco .int{font-size:calc(var(--u)*2.9*var(--e-preco,1));letter-spacing:-.03em}
 .preco .dir{display:flex;flex-direction:column;align-items:flex-start;margin-left:calc(var(--u)*.06)}
-.preco .cent{font-size:calc(var(--u)*1.3);margin-top:calc(var(--u)*.22)}
-.preco .un{font-family:'Poppins',sans-serif;font-weight:800;font-size:calc(var(--u)*.7);text-transform:uppercase;margin-top:calc(var(--u)*.05)}
+.preco .cent{font-size:calc(var(--u)*1.3*var(--e-preco,1));margin-top:calc(var(--u)*.22)}
+.preco .un{font-family:var(--f-texto,'Poppins',sans-serif);font-weight:800;font-size:calc(var(--u)*.7);text-transform:uppercase;margin-top:calc(var(--u)*.05)}
 .rodape{position:relative;background:${m.rodapeBg};color:${m.rodapeTexto};display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border-radius:calc(var(--hu)*1.1);padding:calc(var(--hu)*.7) calc(var(--hu)*1.2)}
 .rodape .linha{display:flex;align-items:center;justify-content:center;gap:calc(var(--hu)*1.4);font-weight:700;flex-wrap:wrap}
 .rodape .linha span{display:inline-flex;align-items:center;gap:calc(var(--hu)*.45)}
@@ -495,12 +587,14 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
   // Título cabe na largura: uma linha se der pra ficar grande, senão quebra em duas.
   const larguraTitulo = md.empilhado || !comLogo ? md.w - md.padX * 2 : md.w - md.padX * 2 - logoH * 1.25 - md.gap
   const maxTitulo = md.hu * (md.empilhado ? 6.4 : 6.2)
-  const umaLinha = larguraTitulo / (Math.max(titulo.length, 4) * 0.47)
+  const fTitulo = fontesDe(dados).titulo
+  const umaLinha = larguraTitulo / (Math.max(titulo.length, 4) * fTitulo.larg)
   const metade = Math.max(...quebraEmDuas(titulo).map((l) => l.length), 4)
   const tamTitulo = umaLinha >= maxTitulo * 0.62 || !titulo.includes(' ')
     ? Math.min(maxTitulo, umaLinha)
-    : Math.min(maxTitulo * 0.8, larguraTitulo / (metade * 0.47))
+    : Math.min(maxTitulo * 0.8, larguraTitulo / (metade * fTitulo.larg))
 
+  const vars = varsFonte(dados)
   return paginas.map((itens, idx) => {
     const { cols, rows } = escolherGrade(itens, areaW, areaH)
     const gapG = Math.round(md.gap * (cols >= 4 ? 0.8 : 1))
@@ -510,7 +604,7 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
     const dur = duracaoPagina(itens.length)
     const cards = itens.map((it, i) => card(it, u, 0.6 + i * 0.14)).join('')
     const npag = paginas.length > 1 ? `<div class="npag">${idx + 1}/${paginas.length}</div>` : ''
-    const html = `<div class="pg${opcoes.animado ? ' anim' : ''}" style="width:${md.w}px;height:${md.h}px;padding:${md.padTop}px ${md.padX}px ${md.padBot}px;gap:${md.gap}px;--hu:${md.hu}px;--gap:${md.gap}px;--drod:${(0.6 + itens.length * 0.14).toFixed(2)}s;--dur:${dur.total.toFixed(2)}s">
+    const html = `<div class="pg${opcoes.animado ? ' anim' : ''}" style="width:${md.w}px;height:${md.h}px;padding:${md.padTop}px ${md.padX}px ${md.padBot}px;gap:${md.gap}px;--hu:${md.hu}px;--gap:${md.gap}px;--drod:${(0.6 + itens.length * 0.14).toFixed(2)}s;--dur:${dur.total.toFixed(2)}s;${vars}">
 ${fundoFoto ? `<div class="fundo foto" style="background-image:url(${fundoFoto});--escuro:${escuro}"></div>` : '<div class="fundo"></div>'}
 ${temTopo ? `<div class="topo${md.empilhado ? ' empilhado' : ''}" style="height:${topoH}px${comTextos ? '' : ';justify-content:center'}">
   ${comLogo ? `<div class="logo" style="height:${logoH.toFixed(0)}px"><img src="${esc(logoUrl)}" alt=""></div>` : ''}
@@ -533,14 +627,14 @@ ${npag}
 
 /** Documento HTML completo com UMA página (é o que a prévia põe no iframe e o servidor fotografa). */
 export function documentoDaPagina(dados: DadosTabloide, pagina: PaginaMontada): string {
-  return `<!doctype html><html><head><meta charset="utf-8">${FONTES}<style>${css(modeloPorId(dados.modeloId))}
+  return `<!doctype html><html><head><meta charset="utf-8">${fontesDoc(dados)}<style>${css(modeloPorId(dados.modeloId))}
 html,body{width:${pagina.w}px;height:${pagina.h}px;overflow:hidden}</style></head><body>${pagina.html}</body></html>`
 }
 
 /** Documento com todas as páginas uma embaixo da outra, uma por folha (PDF). */
 export function documentoCompleto(dados: DadosTabloide, paginas: PaginaMontada[]): string {
   const { w, h } = paginas[0] ?? { w: 1080, h: 1350 }
-  return `<!doctype html><html><head><meta charset="utf-8">${FONTES}<style>${css(modeloPorId(dados.modeloId))}
+  return `<!doctype html><html><head><meta charset="utf-8">${fontesDoc(dados)}<style>${css(modeloPorId(dados.modeloId))}
 html,body{width:${w}px}
 .pg{break-after:page;page-break-after:always}</style></head><body>${paginas.map((p) => p.html).join('')}</body></html>`
 }

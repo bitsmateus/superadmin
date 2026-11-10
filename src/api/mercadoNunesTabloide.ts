@@ -39,6 +39,12 @@ export interface ConfigTabloide {
   ia: boolean
 }
 
+export interface FundoSalvo {
+  id: string
+  miniatura: string
+  created_at: string
+}
+
 export interface LayoutTabloide {
   id: string
   nome: string
@@ -95,6 +101,11 @@ export const tabloideApi = {
   salvarLayout: (nome: string, dados: DadosTabloide) => req<LayoutTabloide>('/tabloide/layouts', json({ nome, dados })),
   removerLayout: (id: string) => req<{ ok: true }>(`/tabloide/layouts/${id}`, { method: 'DELETE' }),
 
+  fundos: () => req<{ fundos: FundoSalvo[] }>('/tabloide/fundos'),
+  fundo: (id: string) => req<{ imagem: string }>(`/tabloide/fundos/${id}`),
+  salvarFundo: (imagem: string, miniatura: string) => req<FundoSalvo>('/tabloide/fundos', json({ imagem, miniatura })),
+  removerFundo: (id: string) => req<{ ok: true }>(`/tabloide/fundos/${id}`, { method: 'DELETE' }),
+
   exportarPng: (dados: DadosTabloide) =>
     req<{ arquivos: { nome: string; dataUrl: string }[] }>('/tabloides/exportar', json({ dados, saida: 'png' })),
   exportarPdf: (dados: DadosTabloide) => req<Blob>('/tabloides/exportar', json({ dados, saida: 'pdf' }), true),
@@ -148,9 +159,9 @@ export function lerImagem(arquivo: File, max = 1600): Promise<string> {
 }
 
 /** Foto de fundo: sempre vira JPEG de até 1920px, pra caber no rascunho e no histórico. */
-export function lerFundo(arquivo: File, max = 1920): Promise<string> {
+export function lerFundo(arquivo: File | string, max = 1920, qualidade = 0.82): Promise<string> {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(arquivo)
+    const url = typeof arquivo === 'string' ? arquivo : URL.createObjectURL(arquivo)
     const img = new Image()
     img.onerror = () => {
       URL.revokeObjectURL(url)
@@ -167,7 +178,7 @@ export function lerFundo(arquivo: File, max = 1920): Promise<string> {
       ctx.fillRect(0, 0, c.width, c.height)
       ctx.drawImage(img, 0, 0, c.width, c.height)
       URL.revokeObjectURL(url)
-      resolve(c.toDataURL('image/jpeg', 0.82))
+      resolve(c.toDataURL('image/jpeg', qualidade))
     }
     img.src = url
   })

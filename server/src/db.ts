@@ -1786,6 +1786,13 @@ END; $$`);
       updated_at = NOW() WHERE id = true`);
   }
   // Layouts (templates) do tabloide: o conteúdo inteiro salvo com um nome, pra começar o próximo dele.
+  // Fotos de fundo que o mercado subiu, pra reusar em outros tabloides.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_tabloide_fundos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    imagem TEXT NOT NULL,
+    miniatura TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS mn_tabloide_layouts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nome TEXT NOT NULL UNIQUE,

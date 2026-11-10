@@ -104,6 +104,9 @@ async function prepararDados(bruto: Partial<DadosTabloide> | undefined): Promise
     ocultarLogo: d.ocultarLogo === true,
     ocultarTextos: d.ocultarTextos === true,
     ocultarRodape: d.ocultarRodape === true,
+    fonteTitulo: texto(d.fonteTitulo, 30),
+    fontePreco: texto(d.fontePreco, 30),
+    fonteTexto: texto(d.fonteTexto, 30),
   };
 }
 
@@ -368,6 +371,36 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>(`${BASE}/tabloide/layouts/:id`, async (req) => {
     await query('DELETE FROM mn_tabloide_layouts WHERE id = $1', [req.params.id]);
+    return { ok: true };
+  });
+
+  // ── Fotos de fundo salvas ─────────────────────────────────────────────────
+
+  app.get(`${BASE}/tabloide/fundos`, async () => ({
+    fundos: await query('SELECT id, miniatura, created_at FROM mn_tabloide_fundos ORDER BY created_at DESC LIMIT 60'),
+  }));
+
+  app.get<{ Params: { id: string } }>(`${BASE}/tabloide/fundos/:id`, async (req, reply) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return reply.status(404).send({ message: 'Foto não encontrada.' });
+    const r = await queryOne<{ imagem: string }>('SELECT imagem FROM mn_tabloide_fundos WHERE id = $1', [req.params.id]);
+    if (!r) return reply.status(404).send({ message: 'Foto não encontrada.' });
+    return r;
+  });
+
+  app.post<{ Body: { imagem?: string; miniatura?: string } }>(`${BASE}/tabloide/fundos`, async (req, reply) => {
+    const imagem = String(req.body?.imagem ?? '');
+    const miniatura = String(req.body?.miniatura ?? '');
+    if (imagem.length > 4 * 1024 * 1024 || !fundoValido(imagem)) return reply.status(400).send({ message: 'Foto inválida ou grande demais.' });
+    if (miniatura.length > 200 * 1024 || !fundoValido(miniatura)) return reply.status(400).send({ message: 'Miniatura inválida.' });
+    const r = await queryOne(
+      'INSERT INTO mn_tabloide_fundos (imagem, miniatura) VALUES ($1, $2) RETURNING id, miniatura, created_at',
+      [imagem, miniatura],
+    );
+    return reply.status(201).send(r);
+  });
+
+  app.delete<{ Params: { id: string } }>(`${BASE}/tabloide/fundos/:id`, async (req) => {
+    if (/^[0-9a-f-]{36}$/i.test(req.params.id)) await query('DELETE FROM mn_tabloide_fundos WHERE id = $1', [req.params.id]);
     return { ok: true };
   });
 

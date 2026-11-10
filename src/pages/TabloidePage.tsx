@@ -18,6 +18,7 @@ import {
   lerFundo,
   tabloideApi,
   type ConfigTabloide,
+  type FundoSalvo,
   type LayoutTabloide,
   type ProdutoCatalogo,
   type TabloideSalvo,
@@ -29,9 +30,15 @@ import { CatalogoProdutos } from '@/components/tabloide/CatalogoProdutos'
 import { ModalLegenda, ModalPublicar, ModalVideo, type VideoPronto } from '@/components/tabloide/Saidas'
 import {
   DADOS_VAZIOS,
+  FONTES_PRECO,
+  FONTES_TEXTO,
+  FONTES_TITULO,
   FORMATOS,
   MODELOS,
+  fontesDe,
   lerLista,
+  linkGoogleFonts,
+  type Fonte,
   modeloPorId,
   paginar,
   type DadosTabloide,
@@ -77,7 +84,8 @@ function useFontesDoTabloide() {
     const l = document.createElement('link')
     l.id = 'fontes-tabloide'
     l.rel = 'stylesheet'
-    l.href = 'https://fonts.googleapis.com/css2?family=Anton&display=swap'
+    // Todas as fontes do catálogo, pra mostrar a amostra de cada uma no seletor.
+    l.href = linkGoogleFonts([...FONTES_TITULO, ...FONTES_PRECO, ...FONTES_TEXTO], 'swap')
     document.head.appendChild(l)
   }, [])
 }
@@ -200,6 +208,9 @@ function Editor() {
         ocultarLogo: !!v.ocultarLogo,
         ocultarTextos: !!v.ocultarTextos,
         ocultarRodape: !!v.ocultarRodape,
+        fonteTitulo: v.fonteTitulo,
+        fontePreco: v.fontePreco,
+        fonteTexto: v.fonteTexto,
         endereco: v.endereco || d.endereco,
         whatsapp: v.whatsapp || d.whatsapp,
         endereco2: v.endereco2 || d.endereco2,
@@ -660,9 +671,91 @@ function ModeloEFormato({ dados, muda }: { dados: DadosTabloide; muda: (p: Parti
         </label>
       </div>
 
+      <Fontes dados={dados} muda={muda} />
       <FotoDeFundo dados={dados} muda={muda} />
       <OQueAparece dados={dados} muda={muda} />
     </Bloco>
+  )
+}
+
+/** Combinações prontas de título + preço + texto. */
+const COMBOS_FONTE: { nome: string; titulo: string; preco: string; texto: string }[] = [
+  { nome: 'Clássico', titulo: 'anton', preco: 'archivo', texto: 'poppins' },
+  { nome: 'Moderno', titulo: 'bebas', preco: 'montserrat', texto: 'montserrat' },
+  { nome: 'Divertido', titulo: 'luckiest', preco: 'titan', texto: 'fredoka' },
+  { nome: 'Gordinho', titulo: 'lilita', preco: 'lilita', texto: 'baloo' },
+  { nome: 'Impacto', titulo: 'bowlby', preco: 'rubik', texto: 'rubik' },
+  { nome: 'Elegante', titulo: 'lobster', preco: 'alfa', texto: 'nunito' },
+]
+
+function Fontes({ dados, muda }: { dados: DadosTabloide; muda: (p: Partial<DadosTabloide>) => void }) {
+  const atual = fontesDe(dados)
+  const modelo = modeloPorId(dados.modeloId)
+  const amostra = (f: Fonte, texto: string, tam: number) => (
+    <span
+      style={{
+        fontFamily: `'${f.familia}', Impact, sans-serif`,
+        fontWeight: f.peso ?? 400,
+        fontSize: tam,
+        textTransform: f.cursiva ? 'none' : 'uppercase',
+        lineHeight: 1.1,
+      }}
+      className="block truncate"
+    >
+      {texto}
+    </span>
+  )
+  const grade = (lista: Fonte[], escolhida: Fonte, chave: 'fonteTitulo' | 'fontePreco', texto: string, tam: number) => (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+      {lista.map((f) => (
+        <button
+          key={f.id}
+          onClick={() => muda({ [chave]: f.id })}
+          className={`rounded-lg border-2 px-2 py-1.5 text-left ${escolhida.id === f.id ? 'border-[#C1503F] bg-[#FCEFEC]' : 'border-[#E7E1D9] bg-white hover:border-[#D9CFC6]'}`}
+        >
+          <span style={{ color: chave === 'fontePreco' ? modelo.precoBg : '#2A2622' }}>{amostra(f, texto, tam)}</span>
+          <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#9A928B]">{f.nome}</span>
+        </button>
+      ))}
+    </div>
+  )
+  return (
+    <div className="mt-4">
+      <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[#7A716A]">Fontes</div>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {COMBOS_FONTE.map((c) => {
+          const ativo = atual.titulo.id === c.titulo && atual.preco.id === c.preco && atual.texto.id === c.texto
+          return (
+            <button
+              key={c.nome}
+              onClick={() => muda({ fonteTitulo: c.titulo, fontePreco: c.preco, fonteTexto: c.texto })}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${ativo ? 'border-[#C1503F] bg-[#C1503F] text-white' : 'border-[#E7E1D9] bg-white text-[#5A524B] hover:border-[#C1503F]'}`}
+            >
+              {c.nome}
+            </button>
+          )
+        })}
+      </div>
+      <div className="mb-1 text-[11px] font-semibold text-[#7A716A]">Título</div>
+      {grade(FONTES_TITULO, atual.titulo, 'fonteTitulo', 'Oferta', 20)}
+      <div className="mb-1 mt-3 text-[11px] font-semibold text-[#7A716A]">Preço</div>
+      {grade(FONTES_PRECO, atual.preco, 'fontePreco', 'R$ 9,99', 20)}
+      <label className="mt-3 block text-[11px] font-semibold text-[#7A716A]">
+        Nomes dos produtos e textos
+        <select
+          value={atual.texto.id}
+          onChange={(e) => muda({ fonteTexto: e.target.value })}
+          className={`${inputCls} mt-1`}
+          style={{ fontFamily: `'${atual.texto.familia}', sans-serif`, fontWeight: 700 }}
+        >
+          {FONTES_TEXTO.map((f) => (
+            <option key={f.id} value={f.id} style={{ fontFamily: `'${f.familia}', sans-serif` }}>
+              {f.nome}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
   )
 }
 
@@ -702,13 +795,30 @@ function OQueAparece({ dados, muda }: { dados: DadosTabloide; muda: (p: Partial<
 function FotoDeFundo({ dados, muda }: { dados: DadosTabloide; muda: (p: Partial<DadosTabloide>) => void }) {
   const entrada = React.useRef<HTMLInputElement>(null)
   const [lendo, setLendo] = React.useState(false)
+  const [salvos, setSalvos] = React.useState<FundoSalvo[]>([])
+  const [abrindo, setAbrindo] = React.useState<string | null>(null)
   const escurecer = dados.fundoEscurecer ?? 25
 
+  React.useEffect(() => {
+    tabloideApi
+      .fundos()
+      .then((r) => setSalvos(r.fundos))
+      .catch(() => {
+        /* sem galeria: ainda dá pra subir foto */
+      })
+  }, [])
+
+  // Toda foto que sobe já fica salva na galeria, pra usar em outro tabloide.
   const escolher = async (arquivo: File | undefined) => {
     if (!arquivo) return
     setLendo(true)
     try {
-      muda({ fundoUrl: await lerFundo(arquivo) })
+      const imagem = await lerFundo(arquivo)
+      muda({ fundoUrl: imagem })
+      const miniatura = await lerFundo(imagem, 240, 0.7)
+      const f = await tabloideApi.salvarFundo(imagem, miniatura)
+      setSalvos((l) => [f, ...l])
+      toast.success('Foto aplicada e salva nas suas fotos de fundo.')
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -716,6 +826,54 @@ function FotoDeFundo({ dados, muda }: { dados: DadosTabloide; muda: (p: Partial<
       if (entrada.current) entrada.current.value = ''
     }
   }
+
+  const usarSalvo = async (f: FundoSalvo) => {
+    setAbrindo(f.id)
+    try {
+      const { imagem } = await tabloideApi.fundo(f.id)
+      muda({ fundoUrl: imagem })
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setAbrindo(null)
+    }
+  }
+
+  const removerSalvo = async (f: FundoSalvo) => {
+    if (!window.confirm('Tirar essa foto das fotos salvas? Os tabloides que já usam ela não mudam.')) return
+    try {
+      await tabloideApi.removerFundo(f.id)
+      setSalvos((l) => l.filter((x) => x.id !== f.id))
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  const galeria = salvos.length > 0 && (
+    <div className="mt-2">
+      <div className="mb-1 text-[11px] font-semibold text-[#7A716A]">Fotos salvas (clique pra usar)</div>
+      <div className="flex flex-wrap gap-2">
+        {salvos.map((f) => (
+          <div key={f.id} className="group relative">
+            <button
+              onClick={() => void usarSalvo(f)}
+              disabled={abrindo === f.id}
+              title="Usar esta foto"
+              className="block h-14 w-14 overflow-hidden rounded-md border-2 border-[#E7E1D9] hover:border-[#C1503F] disabled:opacity-50"
+              style={{ background: `center/cover no-repeat url(${f.miniatura})` }}
+            />
+            <button
+              onClick={() => void removerSalvo(f)}
+              title="Tirar das fotos salvas"
+              className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-[#2A2622] text-xs leading-none text-white group-hover:flex"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
     <div className="mt-4">
@@ -756,7 +914,10 @@ function FotoDeFundo({ dados, muda }: { dados: DadosTabloide; muda: (p: Partial<
           {lendo ? 'Lendo a foto…' : '+ Adicionar foto de fundo'}
         </button>
       )}
-      <p className="mt-1 text-[11px] text-[#9A928B]">A foto cobre o fundo do modelo. As cores do título, dos preços e do rodapé continuam as do modelo.</p>
+      {galeria}
+      <p className="mt-1 text-[11px] text-[#9A928B]">
+        A foto cobre o fundo do modelo e fica salva aqui pra usar de novo. As cores do título, dos preços e do rodapé continuam as do modelo.
+      </p>
     </div>
   )
 }

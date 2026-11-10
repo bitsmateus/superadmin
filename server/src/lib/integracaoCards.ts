@@ -144,6 +144,7 @@ export interface PatchValidado {
   nota?: NotaDaAutomacao; // descricao/email -> Atualização do card
   coluna?: string; // nome da coluna de destino
   boardId?: string; // id da coluna de destino
+  quadro?: string; // id/slug ou nome do quadro de destino (mover de quadro; exige "coluna")
   etiquetas?: unknown; // pedido bruto {"Disparo":"D7"}; resolvido na rota contra as etiquetas da aba
   erro?: string;
 }
@@ -169,6 +170,9 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
     if (chave === 'coluna') {
       if (typeof valor !== 'string' || !valor.trim()) return { ...out, erro: '"coluna" deve ser um texto não vazio.' };
       out.coluna = valor;
+    } else if (chave === 'quadro') {
+      if (typeof valor !== 'string' || !valor.trim()) return { ...out, erro: '"quadro" deve ser o id (slug) ou o nome do quadro.' };
+      out.quadro = valor.trim();
     } else if (chave === 'board_id' || chave === 'coluna_id') {
       if (typeof valor !== 'string' || !/^[0-9a-f-]{36}$/i.test(valor)) return { ...out, erro: `"${chave}" deve ser um UUID.` };
       out.boardId = valor;
@@ -217,9 +221,10 @@ export function validarPatchIntegracao(body: unknown): PatchValidado {
   }
 
   if (out.coluna && out.boardId) return { ...out, erro: 'Envie "coluna" OU "board_id", não os dois.' };
+  if (out.quadro && out.boardId) return { ...out, erro: 'Pra mudar de quadro, envie "quadro" + "coluna" (nome), não "board_id".' };
   // Marcar opt-out sem dizer o status da régua encerra a régua: ninguém pode continuar recebendo.
   if (out.campos.optout === true && !('regua_status' in out.campos)) out.campos.regua_status = 'optout';
-  if (!Object.keys(out.campos).length && !out.coluna && !out.boardId && !out.etiquetas && !textoDaNota(out.nota)) return { ...out, erro: 'Nada para atualizar.' };
+  if (!Object.keys(out.campos).length && !out.coluna && !out.boardId && !out.quadro && !out.etiquetas && !textoDaNota(out.nota)) return { ...out, erro: 'Nada para atualizar.' };
   return out;
 }
 

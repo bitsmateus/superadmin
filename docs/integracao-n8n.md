@@ -18,7 +18,7 @@ Gerar uma chave: `openssl rand -hex 32`. Para trocar, mude a variável e reinici
 - `entrou_coluna_em` é `null` nos cards que já existiam antes desta funcionalidade (sem backfill). `entrou_depois` ignora esses cards.
 - **Venda e comissão nunca pela API.** Ela recusa (403) mover card para colunas de Vendas/Contrato e não chama a lógica de venda/comissão da tela.
 - Mover para "Reunião agendada" no CRM do Arthur **cria o espelho no CRM do Luis (closer)**, como na tela (`espelharSeReuniaoAgendada`). Só cria/restaura a cópia; edições posteriores não são propagadas para a cópia.
-- Mover por nome (`coluna`) só procura dentro do quadro do próprio card. Para outro quadro use `board_id`.
+- Mover por nome (`coluna`) só procura dentro do quadro do próprio card. Para outro quadro, mande `quadro` + `coluna` (ver "Mover para outro quadro") ou `board_id`.
 - O PATCH não cria evento na Agenda (Google Calendar) ao mudar `agendamento`.
 - Marcar `optout: true` sem informar `regua_status` grava `regua_status = "optout"`.
 
@@ -43,7 +43,7 @@ Achar por telefone (com/sem 55, com/sem o 9):
 curl -H "x-api-key: $KEY" "$API/api/integracao/cards/telefone/11987654321"
 ```
 
-Atualizar (qualquer subconjunto de: `etiquetas`, `coluna` | `board_id`, `status`, `agendamento`, `retornar`, `dor_cliente` (ou `dor`), `numero_atendentes` (ou `atendentes`), `valor_mrr` (`mrr`), `valor_implementacao` (`implementacao`), `sdr`, `regua` (`disparo`|`proposta`|`""`), `regua_etapa`, `regua_ultimo_envio_em`, `regua_status` (`ativa`|`respondeu`|`encerrada`|`optout`), `optout`):
+Atualizar (qualquer subconjunto de: `etiquetas`, `quadro` + `coluna` | `coluna` | `board_id`, `status`, `agendamento`, `retornar`, `dor_cliente` (ou `dor`), `numero_atendentes` (ou `atendentes`), `valor_mrr` (`mrr`), `valor_implementacao` (`implementacao`), `sdr`, `regua` (`disparo`|`proposta`|`""`), `regua_etapa`, `regua_ultimo_envio_em`, `regua_status` (`ativa`|`respondeu`|`encerrada`|`optout`), `optout`):
 ```bash
 # régua enviada
 curl -X PATCH -H "x-api-key: $KEY" -H "content-type: application/json" \
@@ -57,6 +57,21 @@ curl -X PATCH -H "x-api-key: $KEY" -H "content-type: application/json" \
 # pediu para sair
 curl -X PATCH -H "x-api-key: $KEY" -H "content-type: application/json" \
   "$API/api/integracao/cards/$ID" -d '{"optout":true}'
+```
+
+### Mover para outro quadro (`quadro`)
+
+No mesmo PATCH, `"quadro"` (id/slug como em `quadro_id`, ex. `crm-ia-luiza`, ou o nome do quadro, igual ao POST) leva o card para outro quadro:
+- `quadro` diferente do atual exige `coluna` (nome, procurada no quadro de destino sem diferenciar maiúscula/acento). Sem `coluna`, coluna inexistente ou quadro inexistente -> `400` com a mensagem (a de coluna lista as colunas do quadro);
+- é o **mesmo card** (mesmo `id`): histórico, Atualizações, telefone, nome, empresa, origem, `dor_cliente`, `numero_atendentes` e as etiquetas (inclusive `Tipo`) continuam no card. As etiquetas são do card, não da aba: a resposta mostra as colunas que o quadro de destino tem, e voltar para um quadro que tem a coluna mostra o valor de novo;
+- `entrou_coluna_em` vira agora, o card vai para o fim da coluna e o Status acompanha a coluna (a não ser que venha `status`), como ao mover pela tela;
+- `sdr` no mesmo PATCH troca o SDR (a etiqueta `SDR` é esse mesmo campo);
+- fica registrado nas Atualizações: "Card movido de <quadro antigo> / <coluna antiga> para <quadro novo> / <coluna nova> (integração)", além da linha do tempo e do histórico de coluna;
+- valem os mesmos efeitos da tela e do PATCH por coluna (espelho do closer em "Reunião agendada", aviso no grupo LEADS etc.). Não move para Vendas/Contrato (`403`);
+- `quadro` igual ao atual (ou ausente): o PATCH funciona exatamente como antes. `quadro` junto com `board_id` dá `400`.
+
+```bash
+curl -X PATCH -H "x-api-key: $KEY" -H "content-type: application/json"   "$API/api/integracao/cards/$ID" -d '{"quadro":"crm-ia-luiza","coluna":"Primeiro contato","sdr":"Luiza"}'
 ```
 
 Anotação no log do card (texto puro; `autor` opcional, padrão "Automação"):

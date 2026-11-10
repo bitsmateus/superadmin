@@ -187,3 +187,16 @@ test('validarPatchIntegracao: aceita descricao, empresa, nome, origem, email e r
   assert.deepEqual(validarPatchIntegracao({ origem: 'tiktok' }).campos, { origem: 'outros: tiktok' });
   assert.match(validarPatchIntegracao({ nome: '  ' }).erro ?? '', /nome/);
 });
+
+test('validarPatchIntegracao: quadro (mover de quadro)', () => {
+  const ok = validarPatchIntegracao({ quadro: 'crm-ia-luiza', coluna: 'Primeiro contato', sdr: 'Luiza' });
+  assert.equal(ok.erro, undefined);
+  assert.equal(ok.quadro, 'crm-ia-luiza');
+  assert.equal(ok.coluna, 'Primeiro contato');
+  assert.equal(ok.campos.sdr, 'Luiza');
+  // Só "quadro" já é pedido (a rota decide: igual ao atual = nada muda; diferente sem coluna = 400).
+  assert.equal(validarPatchIntegracao({ quadro: 'crm-arthur' }).erro, undefined);
+  assert.match(validarPatchIntegracao({ quadro: '' }).erro ?? '', /quadro/);
+  assert.match(validarPatchIntegracao({ quadro: 123 }).erro ?? '', /quadro/);
+  assert.match(validarPatchIntegracao({ quadro: 'crm-arthur', board_id: '00000000-0000-0000-0000-000000000000' }).erro ?? '', /board_id/);
+});

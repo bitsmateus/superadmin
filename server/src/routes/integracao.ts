@@ -407,7 +407,21 @@ export async function integracaoRoutes(app: FastifyInstance) {
     );
     if (!atual) return reply.status(404).send({ message: 'Card não encontrado.' });
 
-    // Resolve a coluna de destino. Por nome, só dentro do quadro do próprio card; por board_id, qualquer uma.
+    // "quadro" diferente do atual = mudar de quadro: a "coluna" (nome) passa a ser obrigatória e é procurada no quadro
+    // de destino. Igual ao atual (ou ausente), nada muda no comportamento de antes.
+    let quadroNovo: { id: string; nome: string } | null = null;
+    if (v.quadro !== undefined) {
+      const q = await acharQuadro(v.quadro);
+      if (q.erro) return reply.status(400).send({ message: q.erro });
+      if (q.id !== atual.page) {
+        if (!v.coluna) {
+          return reply.status(400).send({ message: 'Pra mudar de quadro, "coluna" é obrigatória (ex.: {"quadro":"crm-ia-luiza","coluna":"Primeiro contato"}).' });
+        }
+        quadroNovo = { id: q.id!, nome: q.nome ?? q.id! };
+      }
+    }
+
+    // Resolve a coluna de destino. Por nome, dentro do quadro do próprio card (ou do "quadro" pedido); por board_id, qualquer uma.
     let destino: string | null = null;
     let paginaFinal = atual.page; // aba cujas etiquetas valem (muda se o card for pra outro quadro)
     if (v.coluna || v.boardId) {
@@ -417,11 +431,15 @@ export async function integracaoRoutes(app: FastifyInstance) {
       if (v.boardId) {
         destino = v.boardId;
       } else {
-        const doQuadro = await query<{ id: string; name: string; page: string }>(
-          'SELECT id, name, page FROM lead_boards WHERE page = $1',
-          [atual.page]
+        const doQuadro = await query<{ id: string; name: string; page: string; is_vendas: boolean; is_contrato: boolean }>(
+          'SELECT id, name, page, is_vendas, is_contrato FROM lead_boards WHERE page = $1 ORDER BY position, created_at',
+          [quadroNovo?.id ?? atual.page]
         );
         const ids = colunasQueCasam(doQuadro, v.coluna!);
+        if (!ids.length && quadroNovo) {
+          const colunas = doQuadro.filter((c) => !c.is_vendas && !c.is_contrato).map((c) => c.name).join(', ');
+          return reply.status(400).send({ message: `Coluna "${v.coluna}" não existe no quadro "${quadroNovo.nome}". Colunas: ${colunas || '(nenhuma)'}.` });
+        }
         if (!ids.length) return reply.status(404).send({ message: `Coluna "${v.coluna}" não encontrada no quadro do card.` });
         if (ids.length > 1) return reply.status(409).send({ message: `Nome de coluna ambíguo ("${v.coluna}"); use board_id.` });
         destino = ids[0];
@@ -480,8 +498,22 @@ export async function integracaoRoutes(app: FastifyInstance) {
     const depois = await buscarCard(id);
     if (!depois) return reply.status(404).send({ message: 'Card não encontrado.' });
     if (moveu) {
-      const antes = await queryOne<{ name: string }>('SELECT name FROM lead_boards WHERE id = $1', [atual.board_id]);
+      const antes = await queryOne<{ name: string; quadro: string }>(
+        'SELECT lb.name, lp.name AS quadro FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1',
+        [atual.board_id]
+      );
       await logLeadEvent(id, 'board', antes?.name ?? null, depois.coluna, 'Automação').catch(() => undefined);
+      // Mudou de quadro: fica registrado nas Atualizações do card (no histórico da original, se for cópia).
+      if (depois.quadro_id !== atual.page) {
+        const canonico = await idCanonicoDasNotas(id);
+        await query(
+          `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments) VALUES ($1, NULL, $2, $3, '[]')`,
+          [canonico, 'Automação', textoParaHtml(
+            `Card movido de ${antes?.quadro ?? '?'} / ${antes?.name ?? '?'} para ${depois.quadro} / ${depois.coluna} (integração)`
+          )]
+        );
+        await sincronizarContagemNotas(canonico);
+      }
     }
     for (const tipo of CAMPOS_NA_LINHA_DO_TEMPO) {
       if (!(tipo in campos)) continue;

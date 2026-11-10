@@ -2161,6 +2161,52 @@ END; $$`);
     if (r.rowCount) console.log(`[db] agendado por: ${r.rowCount} reunião(ões) da IA Luiza marcadas como ${CANAL_DA_LUIZA}`);
   }
 
+  // CRM do Jean e do João (abas de Demandas dentro do Pipeline): os quadros e as opções de Tipo que o suporte usa.
+  // Uma vez só (traffic_report_log). Aba com um quadro só (ex.: "JEAN") tem ele renomeado pra "Demandas pendentes",
+  // com os cards dentro; os outros quadros entram depois. Nada é apagado.
+  {
+    const { rows: reservou } = await pool.query(
+      `INSERT INTO traffic_report_log (dia, kind) VALUES ('2026-11-10'::date, 'crm_suporte_quadros') ON CONFLICT DO NOTHING RETURNING dia`);
+    if (reservou.length) {
+      const QUADROS: [string, string][] = [
+        ['Demandas pendentes', '#F59E0B'], ['Fazendo', '#3B82F6'], ['Finalizado', '#22C55E'], ['Vendas do mês', '#A855F7'],
+      ];
+      const TIPOS: [string, string][] = [
+        ['API OFICIAL', '#16A34A'], ['API COMUM', '#2563EB'], ['IA BÁSICA', '#9333EA'], ['IA AVANÇADA', '#DB2777'],
+        ['API COMUM + IA BÁSICA', '#0891B2'], ['API COMUM + IA AVANÇADA', '#7C3AED'],
+        ['API OFICIAL + IA BÁSICA', '#059669'], ['API OFICIAL + IA AVANÇADA', '#C026D3'],
+      ];
+      const { rows: abas } = await pool.query<{ id: string }>(
+        `SELECT id FROM lead_pages WHERE no_pipeline AND section = 'demandas' AND archived_at IS NULL`);
+      for (const { id: page } of abas) {
+        const { rows: quadros } = await pool.query<{ id: string; name: string }>(
+          'SELECT id, name FROM lead_boards WHERE page = $1 ORDER BY position, created_at', [page]);
+        const nomes = new Set(quadros.map((q) => q.name.trim().toLowerCase()));
+        if (quadros.length === 1 && !QUADROS.some(([n]) => nomes.has(n.toLowerCase()))) {
+          await pool.query('UPDATE lead_boards SET name = $2, color = $3, position = 0 WHERE id = $1', [quadros[0].id, QUADROS[0][0], QUADROS[0][1]]);
+          await pool.query(`UPDATE lead_rows SET status = $2 WHERE board_id = $1`, [quadros[0].id, QUADROS[0][0]]);
+          nomes.clear();
+          nomes.add(QUADROS[0][0].toLowerCase());
+        }
+        for (const [i, [nome, cor]] of QUADROS.entries()) {
+          if (!nomes.has(nome.toLowerCase())) {
+            await pool.query('INSERT INTO lead_boards (name, page, position, color) VALUES ($1,$2,$3,$4)', [nome, page, i, cor]);
+          }
+          await pool.query(
+            `INSERT INTO lead_labels (field, name, color, position, page_id) SELECT 'status', $1, $2, $3, $4
+             WHERE NOT EXISTS (SELECT 1 FROM lead_labels WHERE field = 'status' AND page_id = $4 AND lower(name) = lower($1))`,
+            [nome, cor, i, page]);
+        }
+        for (const [i, [nome, cor]] of TIPOS.entries()) {
+          await pool.query(
+            `INSERT INTO lead_labels (field, name, color, position, page_id) SELECT 'tipo', $1, $2, $3, $4
+             WHERE NOT EXISTS (SELECT 1 FROM lead_labels WHERE field = 'tipo' AND page_id = $4 AND lower(name) = lower($1))`,
+            [nome, cor, 100 + i, page]);
+        }
+      }
+    }
+  }
+
   // "Agendou ✅" no grupo LEADS (jobs/avisoAgendamento.ts): um aviso por lead e horário. Na primeira subida, as
   // reuniões que já estão agendadas entram como avisadas, pra mexer nelas depois não mandar aviso de agendamento velho —
   // menos as marcadas desde AVISO_DESDE, que saem uma vez logo depois da subida (avisarAgendamentosDaEstreia).

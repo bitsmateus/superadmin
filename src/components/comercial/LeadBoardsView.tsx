@@ -146,6 +146,10 @@ const IAN_MATEUS_HIDDEN_COLUMN_KEYS = new Set<string>([
   'tipo', 'diaContato', 'ligacao', 'sdr', 'dorCliente', 'numeroAtendentes', 'valorMrr', 'valorImplementacao',
 ])
 
+/** CRM do time do suporte (Jean, João: aba de Demandas dentro do Pipeline, lead_pages.no_pipeline): só o que eles
+ * usam. Sem Lig., SDR, Dor do cliente, Retornar, nº de atendentes e valores; o Agendamento vira "Finalizar até". */
+const CRM_SUPORTE_COLUMN_KEYS = new Set<string>(['nome', 'empresa', 'telefone', 'tipo', 'status', 'agendamento'])
+
 /** true pra aba do Ian OU do Mateus (ex.: "CRM Ian", "CRM Mateus") — casa pelo nome, como
  * sdrLockForPageName já faz, pra sobreviver a uma renomeação de id. Usa \b (palavra inteira) pra
  * não confundir "ian" com um pedaço de outra palavra qualquer (ex.: "diante"). */
@@ -162,8 +166,13 @@ function columnsForSdrLock(
   hideIanMateusCols = false,
   boardName = '',
   crmArthurLuis = false,
+  crmDoSuporte = false,
 ): ColumnDef[] {
   if (isVendas) return COLUMNS.filter((c) => VENDAS_COLUMN_KEYS.has(c.key))
+  if (crmDoSuporte) {
+    return COLUMNS.filter((c) => CRM_SUPORTE_COLUMN_KEYS.has(c.key))
+      .map((c) => (c.key === 'agendamento' ? { ...c, label: 'Finalizar até' } : c))
+  }
   // Cadência (D1, D3… / D7, D14…): uma coluna ao lado do Status, só em "Follow-up Propostas" e em "Disparo em
   // massa" e só nos CRMs normais do Arthur e do Luis. Nos demais quadros e abas ela nem existe.
   const nomeQuadro = boardName.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -894,6 +903,7 @@ interface BoardGroupProps {
   hideIanMateusCols: boolean
   /** Aba CRM do Arthur ou do Luis (não o Closer): é onde existem as colunas de cadência. */
   crmArthurLuis: boolean
+  crmDoSuporte: boolean
 }
 
 function BoardGroup({
@@ -901,7 +911,7 @@ function BoardGroup({
   onTableScroll,
   selectedIds, onToggleRow, onToggleAll,
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
-  columnWidths, onResizeColumn, sdrLock, sdrPageBoards, hideIanMateusCols, crmArthurLuis,
+  columnWidths, onResizeColumn, sdrLock, sdrPageBoards, hideIanMateusCols, crmArthurLuis, crmDoSuporte,
 }: BoardGroupProps) {
   // Quadro nasce fechado — só mostra os leads quando a pessoa abre de propósito. Exceto em "Novos
   // Leads": ali entra já aberto, sem precisar clicar, pedido específico dessa aba.
@@ -921,7 +931,7 @@ function BoardGroup({
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
   }
   // No CRM do Luis Closer a coluna que se chama SDR nos outros CRMs aparece como Closer.
-  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name, crmArthurLuis).map((c) =>
+  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name, crmArthurLuis, crmDoSuporte).map((c) =>
     board.page === 'crm-luis-closer' && c.key === 'sdr' ? { ...c, label: 'Closer' }
       : hideIanMateusCols && c.key === 'retornar' ? { ...c, label: 'Finalizar' }
       : c,
@@ -1424,6 +1434,8 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   const sdrLabelsForLock = useLeadLabels('sdr')
   const sdrLock = React.useMemo(() => sdrLockForPageName(title, sdrLabelsForLock), [title, sdrLabelsForLock])
   const hideIanMateusCols = React.useMemo(() => isIanMateusPage(title) || isIanMateusPage(page), [title, page])
+  // CRM do Jean/João (dentro do Pipeline): colunas próprias, só em lista, sem filtro de SDR.
+  const crmDoSuporte = currentPage?.noPipeline === true
   // CRM do Arthur ou do Luis "normais" (o Closer tem outra rotina): é onde ficam as colunas de cadência. Casa também
   // pelo id da aba, que já existe antes de o nome carregar.
   const crmArthurLuis = React.useMemo(() => {
@@ -1484,9 +1496,9 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   // A barra de rolagem fixa vale pra todos os quadros: usa a largura do mais largo (os de cadência têm uma coluna a mais).
   const tableWidth = React.useMemo(() => {
     const larguraDe = (nome: string) =>
-      columnsForSdrLock(sdrLock, false, hideIanMateusCols, nome, crmArthurLuis).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
+      columnsForSdrLock(sdrLock, false, hideIanMateusCols, nome, crmArthurLuis, crmDoSuporte).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
     return CHECKBOX_COL_WIDTH + Math.max(larguraDe(''), ...boards.map((b) => larguraDe(b.name)))
-  }, [columnWidths, sdrLock, hideIanMateusCols, crmArthurLuis, boards])
+  }, [columnWidths, sdrLock, hideIanMateusCols, crmArthurLuis, crmDoSuporte, boards])
 
   // Arrastar um lead perto da borda de cima/baixo da tela rola a página sozinha — sem isso, pra
   // mover um lead pra um quadro fora da área visível era preciso soltar, rolar manualmente e
@@ -1631,11 +1643,12 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   // CRM IAN: só em Kanban (sem lista, sem Dashboard, sem a troca Lista/Kanban, sem SDR, Filtro nem os quadrinhos
   // de status do dia).
   const kanbanIan = page === 'crm-ian'
-  const view: 'list' | 'kanban' | 'dashboard' = soLista ? 'list' : kanbanIan ? 'kanban' : viewEscolhida
+  const view: 'list' | 'kanban' | 'dashboard' = soLista ? 'list' : kanbanIan ? 'kanban'
+    : crmDoSuporte && viewEscolhida === 'kanban' ? 'list' : viewEscolhida
   React.useEffect(() => {
-    if (soLista || kanbanIan) setSdrFilter(null)
+    if (soLista || kanbanIan || crmDoSuporte) setSdrFilter(null)
     if (kanbanIan) setFilterRules([])
-  }, [soLista, kanbanIan])
+  }, [soLista, kanbanIan, crmDoSuporte])
   const VIEW_LABEL: Record<'list' | 'kanban' | 'dashboard', string> = {
     list: 'lista', kanban: 'Kanban', dashboard: sdrLock ? 'Minhas métricas' : 'Dashboard',
   }
@@ -1728,6 +1741,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                   Ligações
                 </ToolbarButton>
               )}
+              {!crmDoSuporte && (
               <div className="inline-flex overflow-hidden rounded-lg border border-line">
                 <button
                   type="button"
@@ -1754,7 +1768,11 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                   Kanban
                 </button>
               </div>
-              <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />
+              )}
+              {crmDoSuporte && view === 'dashboard' && (
+                <ToolbarButton icon={<ListTodo className="h-3.5 w-3.5" />} onClick={() => changeView('list')}>Lista</ToolbarButton>
+              )}
+              {!crmDoSuporte && <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />}
               </>
               )}
               {!kanbanIan && (
@@ -1824,6 +1842,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                       sdrPageBoards={sdrPageBoards}
                       hideIanMateusCols={hideIanMateusCols}
                       crmArthurLuis={crmArthurLuis}
+                      crmDoSuporte={crmDoSuporte}
                     />
                   ))}
                   {/* Criar quadro é só do admin — o usuário trabalha nos quadros que já existem no CRM dele. */}

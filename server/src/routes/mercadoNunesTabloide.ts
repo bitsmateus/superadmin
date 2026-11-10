@@ -101,6 +101,9 @@ async function prepararDados(bruto: Partial<DadosTabloide> | undefined): Promise
     aviso: texto(d.aviso, 160),
     fundoUrl: typeof d.fundoUrl === 'string' && d.fundoUrl.length <= 4 * 1024 * 1024 ? fundoValido(d.fundoUrl) : '',
     fundoEscurecer: Math.max(0, Math.min(80, Number(d.fundoEscurecer ?? 25) || 0)),
+    ocultarLogo: d.ocultarLogo === true,
+    ocultarTextos: d.ocultarTextos === true,
+    ocultarRodape: d.ocultarRodape === true,
   };
 }
 

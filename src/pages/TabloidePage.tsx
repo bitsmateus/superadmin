@@ -197,6 +197,9 @@ function Editor() {
         subtitulo: v.subtitulo,
         fundoUrl: v.fundoUrl ?? '',
         fundoEscurecer: v.fundoEscurecer ?? 25,
+        ocultarLogo: !!v.ocultarLogo,
+        ocultarTextos: !!v.ocultarTextos,
+        ocultarRodape: !!v.ocultarRodape,
         endereco: v.endereco || d.endereco,
         whatsapp: v.whatsapp || d.whatsapp,
         endereco2: v.endereco2 || d.endereco2,
@@ -658,7 +661,41 @@ function ModeloEFormato({ dados, muda }: { dados: DadosTabloide; muda: (p: Parti
       </div>
 
       <FotoDeFundo dados={dados} muda={muda} />
+      <OQueAparece dados={dados} muda={muda} />
     </Bloco>
+  )
+}
+
+function OQueAparece({ dados, muda }: { dados: DadosTabloide; muda: (p: Partial<DadosTabloide>) => void }) {
+  const partes = [
+    { chave: 'ocultarLogo', nome: 'Logo' },
+    { chave: 'ocultarTextos', nome: 'Título, chamada e validade' },
+    { chave: 'ocultarRodape', nome: 'Rodapé (lojas e aviso)' },
+  ] as const
+  const soProdutos = partes.every((p) => dados[p.chave])
+  return (
+    <div className="mt-4">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="text-xs font-bold uppercase tracking-wide text-[#7A716A]">O que aparece na arte</div>
+        <button
+          className="text-xs font-semibold text-[#C1503F] hover:underline"
+          onClick={() => muda(soProdutos ? { ocultarLogo: false, ocultarTextos: false, ocultarRodape: false } : { ocultarLogo: true, ocultarTextos: true, ocultarRodape: true })}
+        >
+          {soProdutos ? 'Mostrar tudo de novo' : 'Deixar só os produtos'}
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {partes.map((p) => (
+          <label
+            key={p.chave}
+            className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${dados[p.chave] ? 'border-[#E7E1D9] bg-white text-[#9A928B]' : 'border-[#C1503F] bg-[#FCEFEC] text-[#2A2622]'}`}
+          >
+            <input type="checkbox" checked={!dados[p.chave]} onChange={(e) => muda({ [p.chave]: !e.target.checked })} className="accent-[#C1503F]" />
+            {p.nome}
+          </label>
+        ))}
+      </div>
+    </div>
   )
 }
 

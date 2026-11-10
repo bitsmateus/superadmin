@@ -46,6 +46,10 @@ export interface DadosTabloide {
   fundoUrl?: string
   /** Quanto escurecer a foto de fundo, 0 a 80 (%). */
   fundoEscurecer?: number
+  /** Esconder partes da arte (pra deixar só os produtos). */
+  ocultarLogo?: boolean
+  ocultarTextos?: boolean
+  ocultarRodape?: boolean
 }
 
 /** Só aceita data URL de imagem em base64 (vai dentro de url() no CSS). */
@@ -477,15 +481,19 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
   const paginas = paginar(dados.itens, dados.formato, dados.porPagina)
   const fundoFoto = fundoValido(dados.fundoUrl)
   const escuro = (Math.max(0, Math.min(80, Number(dados.fundoEscurecer ?? 25) || 0)) / 100).toFixed(2)
-  const linhasRodape = linhasDoRodape(dados)
-  const temRodape = !!(linhasRodape.length || dados.aviso)
+  const linhasRodape = dados.ocultarRodape ? [] : linhasDoRodape(dados)
+  const temRodape = !dados.ocultarRodape && !!(linhasRodape.length || dados.aviso)
+  const comLogo = !!logoUrl && !dados.ocultarLogo
+  const comTextos = !dados.ocultarTextos
+  const temTopo = comLogo || comTextos
+  const topoH = temTopo ? md.topoH : 0
   const rodH = temRodape ? Math.round(md.rodH * (1 + 0.42 * Math.max(0, linhasRodape.length - 1))) : 0
   const areaW = md.w - md.padX * 2
-  const areaH = md.h - md.padTop - md.padBot - md.topoH - rodH - md.gap * (temRodape ? 2 : 1)
+  const areaH = md.h - md.padTop - md.padBot - topoH - rodH - md.gap * ((temTopo ? 1 : 0) + (temRodape ? 1 : 0))
   const titulo = dados.titulo || modelo.tituloPadrao
   const logoH = md.empilhado ? md.topoH * 0.3 : md.topoH * 0.72
   // Título cabe na largura: uma linha se der pra ficar grande, senão quebra em duas.
-  const larguraTitulo = md.empilhado ? md.w - md.padX * 2 : md.w - md.padX * 2 - logoH * 1.25 - md.gap
+  const larguraTitulo = md.empilhado || !comLogo ? md.w - md.padX * 2 : md.w - md.padX * 2 - logoH * 1.25 - md.gap
   const maxTitulo = md.hu * (md.empilhado ? 6.4 : 6.2)
   const umaLinha = larguraTitulo / (Math.max(titulo.length, 4) * 0.47)
   const metade = Math.max(...quebraEmDuas(titulo).map((l) => l.length), 4)
@@ -504,14 +512,14 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
     const npag = paginas.length > 1 ? `<div class="npag">${idx + 1}/${paginas.length}</div>` : ''
     const html = `<div class="pg${opcoes.animado ? ' anim' : ''}" style="width:${md.w}px;height:${md.h}px;padding:${md.padTop}px ${md.padX}px ${md.padBot}px;gap:${md.gap}px;--hu:${md.hu}px;--gap:${md.gap}px;--drod:${(0.6 + itens.length * 0.14).toFixed(2)}s;--dur:${dur.total.toFixed(2)}s">
 ${fundoFoto ? `<div class="fundo foto" style="background-image:url(${fundoFoto});--escuro:${escuro}"></div>` : '<div class="fundo"></div>'}
-<div class="topo${md.empilhado ? ' empilhado' : ''}" style="height:${md.topoH}px">
-  ${logoUrl ? `<div class="logo" style="height:${logoH.toFixed(0)}px"><img src="${esc(logoUrl)}" alt=""></div>` : ''}
-  <div class="cab">
+${temTopo ? `<div class="topo${md.empilhado ? ' empilhado' : ''}" style="height:${topoH}px${comTextos ? '' : ';justify-content:center'}">
+  ${comLogo ? `<div class="logo" style="height:${logoH.toFixed(0)}px"><img src="${esc(logoUrl)}" alt=""></div>` : ''}
+  ${comTextos ? `<div class="cab">
     <div class="titulo" style="font-size:${tamTitulo.toFixed(0)}px">${esc(titulo)}</div>
     ${dados.subtitulo ? `<div class="sub" style="font-size:${(md.hu * 1.5).toFixed(0)}px">${esc(dados.subtitulo)}</div>` : ''}
     ${dados.validade ? `<div class="validade" style="font-size:${(md.hu * 1.25).toFixed(0)}px">${esc(dados.validade)}</div>` : ''}
-  </div>
-</div>
+  </div>` : ''}
+</div>` : ''}
 <div class="grade" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);gap:${gapG}px">${cards}</div>
 ${temRodape ? `<div class="rodape" style="height:${rodH}px;font-size:${(md.hu * 1.15).toFixed(0)}px">
   ${linhasRodape.map((l) => `<div class="linha">${l}</div>`).join('')}

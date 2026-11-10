@@ -700,12 +700,15 @@ function PipelinePanel({
   )
 }
 
-/** Quem pode receber tarefa: Ian, Mateus, Jean e João (pelo primeiro nome). Tarefa do Jean ou do João também vira
- * card no CRM dele (ver criarCardDaTarefa no servidor); a do Ian ou do Mateus fica só em Tarefas. */
-const RESPONSAVEIS_DA_TAREFA = new Set(['ian', 'mateus', 'jean', 'joao'])
-function podeReceberTarefa(m: TeamMember): boolean {
+/** Quem pode receber tarefa, nesta ordem no seletor: Jean, João, Mateus e Ian (pelo primeiro nome). Tarefa do Jean ou
+ * do João também vira card no CRM dele (ver criarCardDaTarefa no servidor); a do Ian ou do Mateus fica só em Tarefas. */
+const RESPONSAVEIS_DA_TAREFA = ['jean', 'joao', 'mateus', 'ian']
+function ordemDoResponsavel(m: TeamMember): number {
   const primeiro = teamMemberLabel(m).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/\s+/)[0]
-  return RESPONSAVEIS_DA_TAREFA.has(primeiro)
+  return RESPONSAVEIS_DA_TAREFA.indexOf(primeiro)
+}
+function podeReceberTarefa(m: TeamMember): boolean {
+  return ordemDoResponsavel(m) >= 0
 }
 
 // ── Modal de criar/editar ─────────────────────────────────────────────────────
@@ -733,7 +736,10 @@ function TaskModal({
     initial?.dueAt ? toLocalInput(initial.dueAt) : toLocalInput(new Date().toISOString()),
   )
   // Responsáveis permitidos; numa tarefa antiga de outra pessoa, ela continua na lista pra não sumir do campo.
-  const responsaveis = team.filter((m) => podeReceberTarefa(m) || m.id === initial?.userId)
+  // Tarefa antiga de quem não está na lista: o nome dele vem por último.
+  const responsaveis = team
+    .filter((m) => podeReceberTarefa(m) || m.id === initial?.userId)
+    .sort((a, b) => (ordemDoResponsavel(a) + 99) % 99 - (ordemDoResponsavel(b) + 99) % 99)
   const [assignee, setAssignee] = React.useState(
     initial?.userId || (responsaveis.some((m) => m.id === defaultAssignee) ? defaultAssignee ?? '' : ''),
   )

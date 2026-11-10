@@ -446,8 +446,8 @@ html,body{background:transparent}
 .validade{display:inline-block;margin-top:calc(var(--hu)*.9);background:${m.validadeBg};color:${m.validadeTexto};font-weight:800;border-radius:999px;padding:calc(var(--hu)*.35) calc(var(--hu)*1.6);text-transform:uppercase;letter-spacing:.03em;box-shadow:0 calc(var(--hu)*.3) 0 rgba(0,0,0,.18)}
 .grade{position:relative;flex:1;display:grid;grid-auto-flow:row dense;min-height:0}
 .card{position:relative;background:${m.card};border:calc(var(--u)*.22) solid ${m.cardBorda};border-radius:calc(var(--u)*1.1);display:flex;flex-direction:column;align-items:center;padding:calc(var(--u)*.7) calc(var(--u)*.6) calc(var(--u)*.6);box-shadow:0 calc(var(--u)*.35) calc(var(--u)*.9) rgba(0,0,0,.28);min-width:0;min-height:0}
-.card.dest{grid-column:span 2;grid-row:span 2}
-.faixa{position:absolute;top:calc(var(--u)*-.2);left:50%;transform:translate(-50%,-45%) rotate(-2deg);background:${m.faixaBg};color:${m.faixaTexto};font-family:var(--f-titulo,'Anton',Impact,sans-serif);font-weight:var(--p-titulo,400);font-size:calc(var(--u)*1.05);padding:calc(var(--u)*.12) calc(var(--u)*.9);border-radius:calc(var(--u)*.4);white-space:nowrap;letter-spacing:.04em;box-shadow:0 calc(var(--u)*.2) calc(var(--u)*.5) rgba(0,0,0,.3);z-index:2}
+.card.dest{grid-column:span 2;grid-row:span 2;padding-top:calc(var(--u)*1.3)}
+.faixa{position:absolute;top:calc(var(--u)*-.2);left:50%;transform:translate(-50%,-22%) rotate(-2deg);background:${m.faixaBg};color:${m.faixaTexto};font-family:var(--f-titulo,'Anton',Impact,sans-serif);font-weight:var(--p-titulo,400);font-size:calc(var(--u)*1.05);padding:calc(var(--u)*.12) calc(var(--u)*.9);border-radius:calc(var(--u)*.4);white-space:nowrap;letter-spacing:.04em;box-shadow:0 calc(var(--u)*.2) calc(var(--u)*.5) rgba(0,0,0,.3);z-index:2}
 .foto{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
 .foto img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 calc(var(--u)*.25) calc(var(--u)*.35) rgba(0,0,0,.25))}
 .foto .semfoto{width:42%;max-height:80%;fill:${m.precoBg};opacity:.22}
@@ -463,8 +463,12 @@ html,body{background:transparent}
 .preco .cent{font-size:calc(var(--u)*1.3*var(--e-preco,1));margin-top:calc(var(--u)*.22)}
 .preco .un{font-family:var(--f-texto,'Poppins',sans-serif);font-weight:800;font-size:calc(var(--u)*.7);text-transform:uppercase;margin-top:calc(var(--u)*.05)}
 .rodape{position:relative;background:${m.rodapeBg};color:${m.rodapeTexto};display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border-radius:calc(var(--hu)*1.1);padding:calc(var(--hu)*.7) calc(var(--hu)*1.2)}
-.rodape .linha{display:flex;align-items:center;justify-content:center;gap:calc(var(--hu)*1.4);font-weight:700;flex-wrap:wrap}
-.rodape .linha span{display:inline-flex;align-items:center;gap:calc(var(--hu)*.45)}
+.rodape .lojas{display:grid;grid-template-columns:auto auto;align-items:center;justify-content:center;column-gap:1.4em;row-gap:.25em;font-weight:700;max-width:100%}
+.rodape .lojas>span{display:inline-flex;align-items:center;gap:.4em;white-space:nowrap;min-width:0}
+.rodape .lojas>.end{justify-content:flex-start}
+.rodape .lojas>.tel{justify-content:flex-start}
+.rodape .lojas.uma{grid-template-columns:auto}
+.rodape .lojas.uma>span{justify-content:center}
 .rodape svg{width:1.1em;height:1.1em;fill:currentColor}
 .rodape .aviso{opacity:.85;font-weight:500;margin-top:calc(var(--hu)*.25)}
 .npag{position:absolute;right:calc(var(--hu)*1.4);bottom:calc(var(--hu)*.6);color:${m.rodapeTexto};opacity:.7;font-weight:700;font-size:calc(var(--hu)*1.1)}
@@ -484,14 +488,41 @@ html,body{background:transparent}
 `
 }
 
-/** Linhas do rodapé: uma por loja (endereço + WhatsApp). */
-function linhasDoRodape(d: DadosTabloide): string[] {
+/** Rodapé: uma linha por loja, endereço numa coluna e WhatsApp na outra (alinhados entre as lojas). */
+function lojasDoRodape(d: DadosTabloide): { e: string; w: string }[] {
   return [
     { e: d.endereco?.trim() ?? '', w: d.whatsapp?.trim() ?? '' },
     { e: d.endereco2?.trim() ?? '', w: d.whatsapp2?.trim() ?? '' },
-  ]
-    .filter((l) => l.e || l.w)
-    .map((l) => (l.e ? `<span>${ICONE_LOCAL}${esc(l.e)}</span>` : '') + (l.w ? `<span>${ICONE_WHATS}${esc(l.w)}</span>` : ''))
+  ].filter((l) => l.e || l.w)
+}
+
+function htmlDasLojas(lojas: { e: string; w: string }[]): string {
+  if (!lojas.length) return ''
+  const temEnd = lojas.some((l) => l.e)
+  const temTel = lojas.some((l) => l.w)
+  const duas = temEnd && temTel
+  const celulas = lojas
+    .map((l) =>
+      [
+        temEnd ? `<span class="end">${l.e ? `${ICONE_LOCAL}${esc(l.e)}` : ''}</span>` : '',
+        temTel ? `<span class="tel">${l.w ? `${ICONE_WHATS}${esc(l.w)}` : ''}</span>` : '',
+      ].join(''),
+    )
+    .join('')
+  return `<div class="lojas${duas ? '' : ' uma'}">${celulas}</div>`
+}
+
+/**
+ * Tamanho da letra do rodapé para cada loja caber numa linha só (endereço + telefone).
+ * Largura média de um caractere em negrito ≈ 0,6 da letra; ícones e espaços ≈ 4 letras.
+ */
+export function tamanhoDoRodape(lojas: { e: string; w: string }[], larguraUtil: number, hu: number): number {
+  const maxE = Math.max(0, ...lojas.map((l) => l.e.length))
+  const maxW = Math.max(0, ...lojas.map((l) => l.w.length))
+  const extras = (maxE ? 1.6 : 0) + (maxW ? 1.6 : 0) + (maxE && maxW ? 1.4 : 0)
+  const letras = (maxE + maxW) * 0.57 + extras
+  if (!letras) return hu * 1.15
+  return Math.max(hu * 0.7, Math.min(hu * 1.15, larguraUtil / letras))
 }
 
 const ICONE_WHATS =
@@ -573,14 +604,15 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
   const paginas = paginar(dados.itens, dados.formato, dados.porPagina)
   const fundoFoto = fundoValido(dados.fundoUrl)
   const escuro = (Math.max(0, Math.min(80, Number(dados.fundoEscurecer ?? 25) || 0)) / 100).toFixed(2)
-  const linhasRodape = dados.ocultarRodape ? [] : linhasDoRodape(dados)
-  const temRodape = !dados.ocultarRodape && !!(linhasRodape.length || dados.aviso)
+  const lojasRodape = dados.ocultarRodape ? [] : lojasDoRodape(dados)
+  const temRodape = !dados.ocultarRodape && !!(lojasRodape.length || dados.aviso)
   const comLogo = !!logoUrl && !dados.ocultarLogo
   const comTextos = !dados.ocultarTextos
   const temTopo = comLogo || comTextos
   const topoH = temTopo ? md.topoH : 0
-  const rodH = temRodape ? Math.round(md.rodH * (1 + 0.42 * Math.max(0, linhasRodape.length - 1))) : 0
+  const rodH = temRodape ? Math.round(md.rodH * (1 + 0.42 * Math.max(0, lojasRodape.length - 1))) : 0
   const areaW = md.w - md.padX * 2
+  const fRodape = tamanhoDoRodape(lojasRodape, areaW - md.hu * 2.4, md.hu)
   const areaH = md.h - md.padTop - md.padBot - topoH - rodH - md.gap * ((temTopo ? 1 : 0) + (temRodape ? 1 : 0))
   const titulo = dados.titulo || modelo.tituloPadrao
   const logoH = md.empilhado ? md.topoH * 0.3 : md.topoH * 0.72
@@ -615,8 +647,8 @@ ${temTopo ? `<div class="topo${md.empilhado ? ' empilhado' : ''}" style="height:
   </div>` : ''}
 </div>` : ''}
 <div class="grade" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);gap:${gapG}px">${cards}</div>
-${temRodape ? `<div class="rodape" style="height:${rodH}px;font-size:${(md.hu * 1.15).toFixed(0)}px">
-  ${linhasRodape.map((l) => `<div class="linha">${l}</div>`).join('')}
+${temRodape ? `<div class="rodape" style="height:${rodH}px;font-size:${fRodape.toFixed(1)}px">
+  ${htmlDasLojas(lojasRodape)}
   ${dados.aviso ? `<div class="aviso" style="font-size:${(md.hu * 0.82).toFixed(0)}px">${esc(dados.aviso)}</div>` : ''}
 </div>` : ''}
 ${npag}

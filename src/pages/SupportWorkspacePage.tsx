@@ -700,6 +700,14 @@ function PipelinePanel({
   )
 }
 
+/** Quem pode receber tarefa: Ian, Mateus, Jean e João (pelo primeiro nome). Tarefa do Jean ou do João também vira
+ * card no CRM dele (ver criarCardDaTarefa no servidor); a do Ian ou do Mateus fica só em Tarefas. */
+const RESPONSAVEIS_DA_TAREFA = new Set(['ian', 'mateus', 'jean', 'joao'])
+function podeReceberTarefa(m: TeamMember): boolean {
+  const primeiro = teamMemberLabel(m).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/\s+/)[0]
+  return RESPONSAVEIS_DA_TAREFA.has(primeiro)
+}
+
 // ── Modal de criar/editar ─────────────────────────────────────────────────────
 function TaskModal({
   initial,
@@ -724,7 +732,11 @@ function TaskModal({
   const [due, setDue] = React.useState(
     initial?.dueAt ? toLocalInput(initial.dueAt) : toLocalInput(new Date().toISOString()),
   )
-  const [assignee, setAssignee] = React.useState(initial?.userId || defaultAssignee || '')
+  // Responsáveis permitidos; numa tarefa antiga de outra pessoa, ela continua na lista pra não sumir do campo.
+  const responsaveis = team.filter((m) => podeReceberTarefa(m) || m.id === initial?.userId)
+  const [assignee, setAssignee] = React.useState(
+    initial?.userId || (responsaveis.some((m) => m.id === defaultAssignee) ? defaultAssignee ?? '' : ''),
+  )
   const [priority, setPriority] = React.useState<ReminderPriority>(initial?.priority ?? 'normal')
   // Tarefa nova nasce na primeira coluna do quadro (hoje "A Fazer").
   const [status, setStatus] = React.useState<ReminderStatus>(
@@ -807,7 +819,7 @@ function TaskModal({
           <Field label="Responsável *">
             <Select value={assignee} onChange={setAssignee}>
               <option value="">— Selecionar —</option>
-              {team.map((m) => (
+              {responsaveis.map((m) => (
                 <option key={m.id} value={m.id}>
                   {teamMemberLabel(m)}
                 </option>

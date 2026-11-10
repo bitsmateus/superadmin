@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne, ehNomeDeColuna } from '../db.js';
 import { syncScheduledMeeting } from '../lib/calendarSync.js';
+import { sincronizarContagemNotas } from './leadBoards.js';
 
 /** Campos de uma tarefa (reminders) que o PATCH aceita. O nome do campo vai pro SQL, então nunca sai direto do
  * corpo do pedido. */
@@ -16,6 +17,71 @@ interface ReminderRow {
   notes: string | null;
   kind: string | null;
   calendar_event_id: string | null;
+}
+
+const semAcento = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/** "2026-11-12T14:00:00Z" -> "2026-11-12T11:00" (horário de Brasília, o formato do campo no card). */
+function dataDoCard(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d);
+  const v = (t: string) => p.find((x) => x.type === t)?.value ?? '00';
+  return `${v('year')}-${v('month')}-${v('day')}T${v('hour') === '24' ? '00' : v('hour')}:${v('minute')}`;
+}
+
+/**
+ * Tarefa do Jean ou do João também vira card no CRM dele (aba de Demandas dentro do Pipeline com o mesmo primeiro
+ * nome do responsável), no primeiro quadro ("Demandas pendentes"): nome = título da tarefa, empresa e telefone do
+ * cliente, "Finalizar até" = prazo. A tarefa continua em Tarefas. Uma vez por tarefa (reminders.crm_card_id); a do
+ * Ian ou do Mateus (sem CRM próprio) fica só em Tarefas. Nunca lança: falhar aqui não desfaz a tarefa.
+ */
+async function criarCardDaTarefa(reminderId: string): Promise<void> {
+  try {
+    const t = await queryOne<{ title: string; due_at: string | null; responsavel: string | null; company: string | null; nome_cliente: string | null; phone: string | null }>(
+      `SELECT r.title, r.due_at, p.name AS responsavel, c.company, c.name AS nome_cliente, c.phone
+       FROM reminders r JOIN profiles p ON p.id = r.user_id LEFT JOIN clients c ON c.id = r.client_id
+       WHERE r.id = $1 AND r.crm_card_id IS NULL AND r.completed_at IS NULL`,
+      [reminderId]
+    );
+    if (!t?.responsavel) return;
+    const primeiro = semAcento(t.responsavel).split(/\s+/)[0];
+    const abas = await query<{ id: string; name: string }>(
+      `SELECT id, name FROM lead_pages WHERE no_pipeline AND section = 'demandas' AND archived_at IS NULL`
+    );
+    const aba = abas.find((a) => semAcento(a.name).split(/\s+/)[0] === primeiro);
+    if (!aba) return;
+    const quadro = await queryOne<{ id: string; name: string }>(
+      `SELECT id, name FROM lead_boards WHERE page = $1 AND NOT is_vendas AND NOT is_contrato ORDER BY position, created_at LIMIT 1`,
+      [aba.id]
+    );
+    if (!quadro) return;
+    const [{ max }] = await query<{ max: number | null }>('SELECT MAX(position) AS max FROM lead_rows WHERE board_id = $1', [quadro.id]);
+    // Reserva o vínculo na mesma ida: duas edições ao mesmo tempo não criam dois cards.
+    const [card] = await query<{ id: string }>(
+      `WITH novo AS (
+         INSERT INTO lead_rows (board_id, nome, empresa, telefone, status, agendamento, position)
+         SELECT $2, $3, $4, $5, $6, $7, $8
+         WHERE EXISTS (SELECT 1 FROM reminders WHERE id = $1 AND crm_card_id IS NULL)
+         RETURNING id
+       )
+       UPDATE reminders SET crm_card_id = novo.id FROM novo WHERE reminders.id = $1 AND reminders.crm_card_id IS NULL
+       RETURNING novo.id`,
+      [reminderId, quadro.id, t.title, (t.company?.trim() || t.nome_cliente?.trim() || ''), t.phone ?? '', quadro.name,
+        dataDoCard(t.due_at), (max ?? -1) + 1]
+    );
+    if (!card) return;
+    await query(
+      `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments) VALUES ($1, NULL, 'Tarefas', $2, '[]')`,
+      [card.id, '<p>Card criado a partir da tarefa do Suporte (continua em Tarefas).</p>']
+    );
+    await sincronizarContagemNotas(card.id);
+  } catch (err) {
+    console.error('[tarefas] erro ao criar o card no CRM do responsável', reminderId, err);
+  }
 }
 
 /** Reunião de briefing (reminders.kind = 'meeting', ver BriefingMeeting.tsx) agendada/reagendada
@@ -359,6 +425,8 @@ export async function ticketRoutes(app: FastifyInstance) {
       if (rem.kind === 'meeting') {
         await syncBriefingMeetingCalendar(rem).catch((err) => console.error('[calendarSync] reminders (criar):', err));
       }
+      // Do Jean ou do João: também vira card no CRM dele.
+      await criarCardDaTarefa(rem.id);
       return reply.status(201).send(rem);
     }
   );
@@ -398,6 +466,8 @@ export async function ticketRoutes(app: FastifyInstance) {
       if (rem.kind === 'meeting' && 'due_at' in patch) {
         await syncBriefingMeetingCalendar(rem).catch((err) => console.error('[calendarSync] reminders (editar):', err));
       }
+      // Passou pro Jean ou pro João: ganha o card no CRM dele (se ainda não tem).
+      if ('user_id' in patch) await criarCardDaTarefa(rem.id);
 
       if (statusChange) {
         const actor = await queryOne<{ name: string | null; email: string }>('SELECT name, email FROM profiles WHERE id = $1', [sub]);

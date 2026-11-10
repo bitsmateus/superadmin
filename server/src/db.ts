@@ -2161,6 +2161,10 @@ END; $$`);
     if (r.rowCount) console.log(`[db] agendado por: ${r.rowCount} reunião(ões) da IA Luiza marcadas como ${CANAL_DA_LUIZA}`);
   }
 
+  // Tarefa do Jean/João vira card no CRM dele (routes/tickets.ts, criarCardDaTarefa): o card criado fica ligado à tarefa,
+  // pra não nascer de novo a cada edição.
+  await pool.query(`ALTER TABLE reminders ADD COLUMN IF NOT EXISTS crm_card_id UUID REFERENCES lead_rows(id) ON DELETE SET NULL`);
+
   // CRM do Jean e do João (abas de Demandas dentro do Pipeline): os quadros e as opções de Tipo que o suporte usa.
   // Uma vez só (traffic_report_log). Aba com um quadro só (ex.: "JEAN") tem ele renomeado pra "Demandas pendentes",
   // com os cards dentro; os outros quadros entram depois. Nada é apagado.

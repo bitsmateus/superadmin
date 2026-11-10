@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
-import { query, queryOne } from '../db.js';
+import { query, queryOne, ehNomeDeColuna } from '../db.js';
 import { ehDoFinanceiro } from '../lib/acessoMenu.js';
 import { limparClienteParaQuemNaoEFinanceiro, podeVerFinanceiro } from '../lib/financeiro.js';
 import { findMatchingLeadRowId, MIN_LEN, normalizeName, phoneKey } from '../lib/leadMatch.js';
@@ -307,6 +307,8 @@ export async function clientRoutes(app: FastifyInstance) {
       let i = 1;
 
       for (const [key, val] of Object.entries(patch)) {
+
+        if (!ehNomeDeColuna(key)) continue;
         sets.push(`${key} = $${i++}`);
         // Stringify JSON fields
         if (val !== null && typeof val === 'object') {

@@ -17,6 +17,12 @@ pool.on('error', (err) => {
   console.error('Unexpected error on idle pg client', err);
 });
 
+/** Nome de coluna seguro pra ir direto no SQL (UPDATE ... SET <coluna> = $n): só minúsculas, números e "_".
+ * As rotas de PATCH montam o SET com as chaves do corpo do pedido; sem isto, uma chave inventada virava SQL. */
+export function ehNomeDeColuna(chave: string): boolean {
+  return /^[a-z_][a-z0-9_]{0,62}$/.test(chave);
+}
+
 export async function query<T = Record<string, unknown>>(
   sql: string,
   params?: unknown[]

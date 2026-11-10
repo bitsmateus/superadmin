@@ -3,7 +3,7 @@ import { textoDeVerdade } from '../lib/textoDeVerdade.js';
 import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import type { PoolClient } from 'pg';
-import { query, queryOne, queryAsActor, withTransaction } from '../db.js';
+import { query, queryOne, queryAsActor, withTransaction, ehNomeDeColuna } from '../db.js';
 import { chaveTelefone, mesmoTelefone } from '../lib/integracaoCards.js';
 import { allowedPageIds } from './leadPages.js';
 import { comAbasJuntas, saoAbasJuntas } from '../lib/abasJuntas.js';
@@ -1477,6 +1477,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const params: unknown[] = [];
       let i = 1;
       for (const [key, val] of Object.entries(patch)) {
+        if (!ehNomeDeColuna(key)) continue;
         sets.push(`${key} = $${i++}`);
         params.push(val);
       }
@@ -1790,6 +1791,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const params: unknown[] = [];
       let i = 1;
       for (const [key, val] of Object.entries(patch)) {
+        if (!ehNomeDeColuna(key)) continue;
         sets.push(`${key} = $${i++}`);
         params.push(val);
       }

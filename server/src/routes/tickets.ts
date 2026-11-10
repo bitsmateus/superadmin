@@ -1,6 +1,12 @@
 import { FastifyInstance } from 'fastify';
-import { query, queryOne } from '../db.js';
+import { query, queryOne, ehNomeDeColuna } from '../db.js';
 import { syncScheduledMeeting } from '../lib/calendarSync.js';
+
+/** Campos de uma tarefa (reminders) que o PATCH aceita. O nome do campo vai pro SQL, então nunca sai direto do
+ * corpo do pedido. */
+const CAMPOS_EDITAVEIS_DA_TAREFA = new Set([
+  'user_id', 'client_id', 'title', 'notes', 'due_at', 'completed_at', 'kind', 'status', 'priority',
+]);
 
 interface ReminderRow {
   id: string;
@@ -54,6 +60,7 @@ export async function ticketRoutes(app: FastifyInstance) {
       const params: unknown[] = [];
       let i = 1;
       for (const [key, val] of Object.entries(patch)) {
+        if (!ehNomeDeColuna(key)) continue;
         sets.push(`${key} = $${i++}`);
         params.push(val !== null && typeof val === 'object' ? JSON.stringify(val) : val);
       }
@@ -152,6 +159,7 @@ export async function ticketRoutes(app: FastifyInstance) {
       const params: unknown[] = [];
       let i = 1;
       for (const [key, val] of Object.entries(patch)) {
+        if (!ehNomeDeColuna(key)) continue;
         sets.push(`${key} = $${i++}`);
         params.push(val);
       }
@@ -251,6 +259,7 @@ export async function ticketRoutes(app: FastifyInstance) {
       const params: unknown[] = [];
       let i = 1;
       for (const [key, val] of Object.entries(patch)) {
+        if (!ehNomeDeColuna(key)) continue;
         sets.push(`${key} = $${i++}`);
         params.push(val !== null && typeof val === 'object' ? JSON.stringify(val) : val);
       }
@@ -295,6 +304,7 @@ export async function ticketRoutes(app: FastifyInstance) {
       const params: unknown[] = [];
       let i = 1;
       for (const [key, val] of Object.entries(patch)) {
+        if (!ehNomeDeColuna(key)) continue;
         sets.push(`${key} = $${i++}`);
         params.push(val);
       }
@@ -373,9 +383,11 @@ export async function ticketRoutes(app: FastifyInstance) {
       const params: unknown[] = [];
       let i = 1;
       for (const [key, val] of Object.entries(patch)) {
+        if (!CAMPOS_EDITAVEIS_DA_TAREFA.has(key)) continue;
         sets.push(`${key} = $${i++}`);
         params.push(val);
       }
+      if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       params.push(req.params.id);
       const [rem] = await query<ReminderRow>(
         `UPDATE reminders SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
@@ -512,6 +524,7 @@ export async function ticketRoutes(app: FastifyInstance) {
       const params: unknown[] = [];
       let i = 1;
       for (const [key, val] of Object.entries(patch)) {
+        if (!ehNomeDeColuna(key)) continue;
         sets.push(`${key} = $${i++}`);
         params.push(val);
       }

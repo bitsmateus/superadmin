@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { query } from '../db.js';
+import { query, ehNomeDeColuna } from '../db.js';
 
 export async function leadLabelRoutes(app: FastifyInstance) {
   // GET /api/lead-labels?field=status
@@ -54,6 +54,7 @@ export async function leadLabelRoutes(app: FastifyInstance) {
       const params: unknown[] = [];
       let i = 1;
       for (const [key, val] of Object.entries(patch)) {
+        if (!ehNomeDeColuna(key)) continue;
         sets.push(`${key} = $${i++}`);
         params.push(val);
       }

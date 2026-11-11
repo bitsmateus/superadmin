@@ -241,7 +241,7 @@ export function ClienteNxDetalhePage() {
               <AbaPlanejamento clienteId={id} cliente={detalhe.cliente} onMudou={carregar} />
             )}
             {aba === 'trafego' && <AbaTrafego clienteId={id} />}
-            {aba === 'conteudo' && <AbaConteudo clienteId={id} />}
+            {aba === 'conteudo' && <AbaConteudo clienteId={id} clienteNome={nome} />}
             {aba === 'social' && <SocialDoCliente clienteId={id} />}
             {aba === 'relatorios' && <AbaRelatorios detalhe={detalhe} />}
             {aba === 'demandas' && <KanbanDemandas clienteId={id} />}

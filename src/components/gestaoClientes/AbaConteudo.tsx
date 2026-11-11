@@ -152,7 +152,7 @@ function ModalInstagram({ aberto, onFechar, clienteId, onMudou }: { aberto: bool
  * Aba Conteúdo do cliente: o Instagram (o que mais deu alcance/engajamento) e a IA que transforma
  * isso em roteiros de Reels e artes prontos — com botão pra mandar direto pro kanban de Social media.
  */
-export function AbaConteudo({ clienteId }: { clienteId: string }) {
+export function AbaConteudo({ clienteId, clienteNome }: { clienteId: string; clienteNome?: string }) {
   const [dias, setDias] = React.useState(90)
   const { dados, erro, carregando, recarregar } = useCarregar(() => gcIa.instagram(clienteId, dias), [clienteId, dias])
   const [ordem, setOrdem] = React.useState<Ordem>('alcance')
@@ -310,7 +310,7 @@ export function AbaConteudo({ clienteId }: { clienteId: string }) {
         )}
       </Estado>
 
-      <PainelIaConteudo clienteId={clienteId} />
+      <PainelIaConteudo clienteId={clienteId} clienteNome={clienteNome} />
       <IdeiasCriativoDoTrafego clienteId={clienteId} />
 
       <ModalInstagram aberto={modal} onFechar={() => setModal(false)} clienteId={clienteId} onMudou={recarregar} />

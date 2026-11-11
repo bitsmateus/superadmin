@@ -1,7 +1,9 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { guardaDoCliente, sqlSoDoGestor, type UsuarioGc } from '../lib/gcAcesso.js';
-import { conversar, gerarAnalise, ultimaAnalise, type MensagemIa } from '../lib/gcIa.js';
+import { conversar, gerarAnalise, normalizarIdeias, ultimaAnalise, type MensagemIa } from '../lib/gcIa.js';
+import { montarHtmlRoteirosPdf, nomeArquivoRoteiros } from '../lib/gcRoteirosPdf.js';
+import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import {
   instagramPeloTrafego, perfisDisponiveis, postsDoCliente, sincronizarInstagram, tokenDoTrafego, tokenInstagram, vincularInstagram,
 } from '../lib/gcInstagram.js';
@@ -42,6 +44,28 @@ export async function gcIaRoutes(app: FastifyInstance) {
     if (!TIPOS.includes(req.params.tipo as Tipo)) return reply.status(400).send({ message: 'Tipo inválido' });
     const ultima = await ultimaAnalise(req.params.id, req.params.tipo as Tipo);
     return { analise: ultima, gerando: gerando.has(`${req.params.id}|${req.params.tipo}`), iaConfigurada: !!process.env.ANTHROPIC_API_KEY };
+  });
+
+  // POST /api/gc/clientes/:id/ia/conteudo/pdf — PDF com os roteiros de vídeo da última geração.
+  app.post<{ Params: { id: string } }>('/api/gc/clientes/:id/ia/conteudo/pdf', autenticado, async (req, reply) => {
+    const cliente = await queryOne<{ nome_empresa: string }>('SELECT nome_empresa FROM gc_clientes WHERE id = $1', [req.params.id]);
+    if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+    const ultima = await ultimaAnalise(req.params.id, 'conteudo');
+    const roteiros = ultima ? normalizarIdeias((ultima.conteudo ?? {}) as Record<string, unknown>).roteiros_video : [];
+    if (!roteiros.length) return reply.status(400).send({ message: 'Ainda não há roteiros de vídeo gerados para este cliente.' });
+    const geradoEm = new Date(ultima!.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    try {
+      const pdf = await renderFullHtmlToPdf(montarHtmlRoteirosPdf({ cliente: cliente.nome_empresa, geradoEm, roteiros }));
+      const nome = nomeArquivoRoteiros(cliente.nome_empresa);
+      const ascii = nome.normalize('NFD').replace(/[^\x20-\x7E]/g, '').replace(/"/g, '');
+      return reply
+        .header('Content-Type', 'application/pdf')
+        .header('Content-Disposition', `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(nome)}`)
+        .send(pdf);
+    } catch (err) {
+      console.error('[gcIa] PDF dos roteiros falhou', err);
+      return reply.status(500).send({ message: 'Não consegui gerar o PDF agora. Tente de novo em instantes.' });
+    }
   });
 
   app.post<{ Params: { id: string; tipo: string }; Body: { pedido?: string; videos?: number; artes?: number } }>(

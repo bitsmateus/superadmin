@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronDown, Clapperboard, Image as ImageIcon, Lightbulb, Minus, Plus, Send, Sparkles } from 'lucide-react'
+import { ChevronDown, Clapperboard, FileDown, Image as ImageIcon, Lightbulb, Minus, Plus, Send, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -309,7 +309,7 @@ type AbaIdeias = 'videos' | 'artes' | 'padroes'
  * linha (título, formato e gancho); o roteiro inteiro só abre no clique. A equipe escolhe quantos
  * vídeos e quantas artes quer antes de gerar.
  */
-export function PainelIaConteudo({ clienteId }: { clienteId: string }) {
+export function PainelIaConteudo({ clienteId, clienteNome }: { clienteId: string; clienteNome?: string }) {
   const { analise, carregando, gerando, configurada, gerar } = useAnalise<GcIdeiasConteudoIa>(clienteId, 'conteudo')
   const a = analise?.conteudo
   const [pedido, setPedido] = React.useState('')
@@ -317,6 +317,24 @@ export function PainelIaConteudo({ clienteId }: { clienteId: string }) {
   const [artes, setArtes] = React.useState(3)
   const [aba, setAba] = React.useState<AbaIdeias>('videos')
   const [aberto, setAberto] = React.useState<string | null>(null)
+  const [baixando, setBaixando] = React.useState(false)
+
+  const baixarPdf = async () => {
+    setBaixando(true)
+    try {
+      const blob = await gcIa.pdfRoteiros(clienteId)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Roteiros - ${(clienteNome || 'cliente').replace(/[\\/:*?"<>|]+/g, ' ').trim()}.pdf`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error('Falha ao gerar o PDF: ' + (err as Error).message)
+    } finally {
+      setBaixando(false)
+    }
+  }
 
   // Nova geração: volta pra primeira aba que tem algo e fecha o que estava aberto.
   React.useEffect(() => {
@@ -362,6 +380,11 @@ export function PainelIaConteudo({ clienteId }: { clienteId: string }) {
               >
                 {gerando ? 'Gerando…' : a ? 'Gerar de novo' : 'Gerar'}
               </Button>
+              {!!a?.roteiros_video.length && (
+                <Button variant="secondary" loading={baixando} leftIcon={<FileDown className="h-4 w-4" />} onClick={() => void baixarPdf()}>
+                  Baixar PDF dos roteiros
+                </Button>
+              )}
             </div>
           </div>
         )}

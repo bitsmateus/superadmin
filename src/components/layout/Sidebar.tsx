@@ -500,8 +500,11 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       ...financeiroOrdenado,
       ...secundariosOrdenados,
       ...arquivadosOrdenados,
+      // Abas do NX DIGITAL também fixam. No topo levam "· NX" pra não confundir com Tráfego/Demandas de outros grupos.
+      ...SUB_ABAS_CLIENTES_NX.filter((sub) => canSee(sub.to)).map((sub) => ({ ...sub, label: `${sub.label} · NX` })),
     ],
-    [suporteOrdenado, comercialOrdenado, demandasOrdenado, financeiroOrdenado, secundariosOrdenados, arquivadosOrdenados],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [suporteOrdenado, comercialOrdenado, demandasOrdenado, financeiroOrdenado, secundariosOrdenados, arquivadosOrdenados, profile?.menuAccess, profile?.role],
   )
   const pinnedKeys = profile?.pinnedMenu ?? []
   const pinnedNaOrdemDoPin = React.useMemo(() => {
@@ -983,6 +986,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                     )}
                   />
                   <span className="truncate">{sub.label}</span>
+                  <PinToggle pinned={isPinned(sub.to)} onToggle={() => togglePin(sub.to)} className="ml-auto" />
                 </>
               )}
             </NavLink>

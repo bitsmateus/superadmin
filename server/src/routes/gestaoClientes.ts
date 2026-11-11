@@ -40,6 +40,14 @@ const CAMPOS_CLIENTE = [
   'ultima_reuniao', 'proxima_reuniao',
 ] as const;
 
+/**
+ * Colunas de texto do cliente que são NOT NULL DEFAULT '': campo apagado na tela tem que gravar ''.
+ * Mandar NULL nelas quebrava o "Editar cliente" (só salvava com tudo preenchido).
+ */
+const TEXTOS_DO_CLIENTE = new Set([
+  'nome_contato', 'whatsapp_contato', 'email_contato', 'cidade', 'segmento', 'observacoes_gerais', 'falta_acompanhar', 'estrategia_usada',
+]);
+
 /** O agendamento de postagem mais recente (não cancelado) de um card do Social media, como JSON. */
 const SQL_AGENDAMENTO_DO_CARD = `(SELECT row_to_json(x) FROM (
     SELECT a.id, a.redes, a.formato, a.legenda, a.agendado_para, a.status, a.erro, a.resultado, a.publicado_em
@@ -71,7 +79,8 @@ function limparFunil(bruto: unknown): Record<string, Record<string, number | nul
 function montarUpdate(
   permitidos: readonly string[],
   body: Record<string, unknown>,
-  inicioEm = 1
+  inicioEm = 1,
+  textos: ReadonlySet<string> = new Set()
 ): { sets: string[]; params: unknown[] } {
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -81,7 +90,7 @@ function montarUpdate(
     // Campo de data/UUID vazio na tela significa "sem valor", não string vazia: o Postgres
     // recusaria '' num DATE/UUID.
     sets.push(`${campo} = $${i++}`);
-    params.push(body[campo] === '' ? null : body[campo]);
+    params.push(body[campo] === '' && !textos.has(campo) ? null : body[campo]);
   }
   return { sets, params };
 }
@@ -258,6 +267,7 @@ function pivotMetricas(parametro: string): string {
  */
 const SQL_CLIENTES = `
   SELECT c.*, p.name AS responsavel_nome,
+    (SELECT g.name FROM profiles g WHERE g.id = c.gestor_trafego_id) AS gestor_trafego_nome,
     (SELECT j.nome FROM gc_cliente_jornada j
       WHERE j.gc_cliente_id = c.id AND j.status <> 'concluida'
       ORDER BY j.ordem, j.created_at LIMIT 1) AS etapa_atual,
@@ -594,7 +604,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
 
     const criado = await withTransaction(async (client) => {
       const campos = [...CAMPOS_CLIENTE.filter((c) => body[c] !== undefined), ...(body.gestor_trafego_id ? ['gestor_trafego_id'] : [])];
-      const valores = campos.map((c) => (body[c] === '' ? null : body[c]));
+      const valores = campos.map((c) => (body[c] === '' && !TEXTOS_DO_CLIENTE.has(c) ? null : body[c]));
       const { rows } = await client.query(
         `INSERT INTO gc_clientes (${campos.join(', ')})
          VALUES (${campos.map((_, i) => `$${i + 1}`).join(', ')})
@@ -639,7 +649,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         return reply.status(403).send({ message: 'Só o administrador pode trocar o gestor de tráfego do cliente.' });
       }
       if (trocaGestor) corpo.gestor_trafego_id = corpo.gestor_trafego_id || null;
-      const { sets, params } = montarUpdate([...CAMPOS_CLIENTE, ...(trocaGestor ? ['gestor_trafego_id'] : [])], corpo);
+      const { sets, params } = montarUpdate([...CAMPOS_CLIENTE, ...(trocaGestor ? ['gestor_trafego_id'] : [])], corpo, 1, TEXTOS_DO_CLIENTE);
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       params.push(req.params.id);
       const atualizado = await queryOne(

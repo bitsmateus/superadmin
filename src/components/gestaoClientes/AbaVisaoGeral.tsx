@@ -372,6 +372,7 @@ export function AbaVisaoGeral({
     { rotulo: 'Cidade', valor: cliente.cidade },
     { rotulo: 'Segmento', valor: cliente.segmento },
     { rotulo: 'Responsável', valor: cliente.responsavel_nome },
+    { rotulo: 'Gestor de tráfego', valor: cliente.gestor_trafego_nome },
     { rotulo: 'Início', valor: cliente.data_inicio ? dataBr(cliente.data_inicio) : null },
   ]
 
@@ -413,9 +414,9 @@ export function AbaVisaoGeral({
         <section className="rounded-xl border border-line p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-foreground">Cadastro</h2>
-            {camposDoCadastro.some((c) => !c.valor) && onEditar && (
+            {onEditar && (
               <Button variant="secondary" size="sm" onClick={onEditar}>
-                Completar cadastro
+                {camposDoCadastro.some((c) => !c.valor) ? 'Completar cadastro' : 'Editar cadastro'}
               </Button>
             )}
           </div>

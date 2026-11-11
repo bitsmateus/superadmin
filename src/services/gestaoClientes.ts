@@ -395,6 +395,7 @@ export interface GcClienteLista {
   responsavel_id: string | null
   /** Quem não é admin só vê os clientes em que é o gestor de tráfego. */
   gestor_trafego_id: string | null
+  gestor_trafego_nome?: string | null
   responsavel_nome: string | null
   status: GcStatusCliente
   prioridade: GcPrioridade

@@ -11,6 +11,11 @@ export interface GcTotaisTrafego {
   resultados: number; custoResultado: number | null; ctr: number | null; cpm: number | null; roas: number | null
 }
 
+/** Registro manual do que foi mudado no tráfego do cliente ("Última edição"). */
+export interface GcEdicaoTrafego {
+  id: string; texto: string; created_at: string; autor_id: string | null; autor_nome: string | null
+}
+
 export type GcNivelAlerta = 'critico' | 'atencao' | 'oportunidade'
 
 export interface GcAlertaTrafego {
@@ -83,6 +88,9 @@ export const gcTrafego = {
   desvincularConta: (contaId: string) => api.delete(`/api/gc/trafego/contas/${contaId}`),
   salvarPrevisto: (id: string, valor: number | null) =>
     api.put<{ previstoMes: number | null }>(`/api/gc/clientes/${id}/trafego/previsto`, { valor }),
+  edicoes: (id: string) => api.get<GcEdicaoTrafego[]>(`/api/gc/clientes/${id}/trafego/edicoes`),
+  registrarEdicao: (id: string, texto: string) => api.post<GcEdicaoTrafego>(`/api/gc/clientes/${id}/trafego/edicoes`, { texto }),
+  excluirEdicao: (edicaoId: string) => api.delete(`/api/gc/trafego/edicoes/${edicaoId}`),
   sincronizar: (id: string) =>
     api.post<{ resultados: { conta: string; ok: boolean; linhas: number; erro?: string }[] }>(`/api/gc/clientes/${id}/trafego/sincronizar`),
 }

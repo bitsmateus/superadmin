@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { brl, brlExato, num, useCarregar, Estado, Painel, Vazio, diaCurto } from '@/components/trafego/format'
 import { PainelIaTrafego } from '@/components/gestaoClientes/IaDoCliente'
 import { ArtesAprovadasTrafego } from '@/components/gestaoClientes/social/ArtesAprovadasTrafego'
+import { UltimaEdicaoTrafego } from '@/components/gestaoClientes/UltimaEdicaoTrafego'
 import {
   gcTrafego, type GcAlertaTrafego, type GcBenchmark, type GcCampanhaTrafego, type GcContaTrafego, type GcNivelAlerta, type GcTotaisTrafego,
 } from '@/services/gcTrafego'
@@ -499,6 +500,7 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
             )}
 
             <Kpis atual={dados.totais.atual} anterior={dados.totais.anterior} benchmark={dados.benchmark} />
+            <UltimaEdicaoTrafego clienteId={clienteId} />
             <VerbaDoMes clienteId={clienteId} ritmo={dados.ritmo} onSalvou={recarregar} />
             {dados.benchmark && dados.benchmark.custoResultado != null && dados.totais.atual.custoResultado != null && (
               <p className="text-xs text-foreground/50">

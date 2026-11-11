@@ -720,6 +720,16 @@ const TABELAS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS gc_trafego_alertas_aberto_uniq
      ON gc_trafego_alertas (gc_cliente_id, regra, entidade_id) WHERE resolved_at IS NULL`,
+  // "Última edição" da aba Tráfego: o que foi mudado nas campanhas do cliente, registrado à mão pelo
+  // gestor depois de cada mexida. A mais recente aparece em destaque; as anteriores ficam no histórico.
+  `CREATE TABLE IF NOT EXISTS gc_trafego_edicoes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    texto TEXT NOT NULL,
+    autor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_trafego_edicoes_cliente_idx ON gc_trafego_edicoes (gc_cliente_id, created_at DESC)`,
 
   // ---------------------------------------------------------------- IA e conteúdo (Instagram)
   // O que a IA gerou pro cliente: análise do tráfego (todo dia ou à mão) e ideias de conteúdo

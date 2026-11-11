@@ -160,6 +160,41 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
     },
   );
 
+  // ------------------------------------------------------------------ última edição do tráfego
+  // GET/POST /api/gc/clientes/:id/trafego/edicoes — o que foi mudado nas campanhas (registro manual),
+  // da mais recente para a mais antiga. DELETE só para quem escreveu ou admin.
+  const CAMPOS_EDICAO = `e.id, e.texto, e.created_at, e.autor_id, p.name AS autor_nome`;
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/trafego/edicoes', autenticado, async (req) =>
+    query(
+      `SELECT ${CAMPOS_EDICAO} FROM gc_trafego_edicoes e LEFT JOIN profiles p ON p.id = e.autor_id
+       WHERE e.gc_cliente_id = $1 ORDER BY e.created_at DESC LIMIT 500`,
+      [req.params.id],
+    ),
+  );
+
+  app.post<{ Params: { id: string }; Body: { texto?: string } }>('/api/gc/clientes/:id/trafego/edicoes', autenticado, async (req, reply) => {
+    const texto = String(req.body?.texto ?? '').trim();
+    if (!texto) return reply.status(400).send({ message: 'Escreva o que foi alterado no tráfego.' });
+    if (texto.length > 5000) return reply.status(400).send({ message: 'Texto muito longo (máx. 5.000 caracteres).' });
+    const cliente = await queryOne('SELECT 1 FROM gc_clientes WHERE id = $1', [req.params.id]);
+    if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+    const { sub } = req.user as { sub: string };
+    const nova = await queryOne<{ id: string }>(
+      `INSERT INTO gc_trafego_edicoes (gc_cliente_id, texto, autor_id) VALUES ($1, $2, $3) RETURNING id`,
+      [req.params.id, texto, sub],
+    );
+    return queryOne(`SELECT ${CAMPOS_EDICAO} FROM gc_trafego_edicoes e LEFT JOIN profiles p ON p.id = e.autor_id WHERE e.id = $1`, [nova?.id]);
+  });
+
+  app.delete<{ Params: { edicaoId: string } }>('/api/gc/trafego/edicoes/:edicaoId', autenticado, async (req, reply) => {
+    const { sub, role } = req.user as { sub: string; role: string };
+    const edicao = await queryOne<{ autor_id: string | null }>('SELECT autor_id FROM gc_trafego_edicoes WHERE id = $1', [req.params.edicaoId]);
+    if (!edicao) return reply.status(404).send({ message: 'Registro não encontrado' });
+    if (edicao.autor_id !== sub && role !== 'admin') return reply.status(403).send({ message: 'Só quem escreveu (ou um admin) pode excluir.' });
+    await query('DELETE FROM gc_trafego_edicoes WHERE id = $1', [req.params.edicaoId]);
+    return { ok: true };
+  });
+
   // PUT /api/gc/clientes/:id/trafego/previsto — a verba prevista do mês (serviço Tráfego Meta). É
   // com ela que os alertas de ritmo medem o mês. A lista de serviços saiu da Visão geral, então o
   // valor é editado aqui: grava no serviço Meta ativo mais antigo (zerando os outros, pra a soma

@@ -573,8 +573,8 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
  *    com a lead que já estava trabalhando.
  * As Atualizações são compartilhadas (ver idCanonicoDasNotas): os dois escrevem no mesmo histórico.
  */
-/** CRMs cuja "Reunião agendada" vai pro closer: o do Arthur e o da IA Luiza. */
-const ESPELHO_PAGES_ORIGEM = ['crm-arthur', 'crm-ia-luiza'];
+/** CRMs cuja "Reunião agendada" vai pro closer: o do Arthur, o da IA Luiza e o OUTBOUND (aba da tela do Arthur). */
+const ESPELHO_PAGES_ORIGEM = ['crm-arthur', 'crm-ia-luiza', 'crm-outbound'];
 const ESPELHO_PAGE_DESTINO = 'crm-luis-closer';
 
 /** Campos de CONTEÚDO que andam juntos. Fora daqui: status e board_id (funil é de cada um),

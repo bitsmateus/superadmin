@@ -4,7 +4,7 @@
  * ver server/src/lib/abasJuntas.ts), e entre elas não há cópia de card.
  */
 export const ABAS_JUNTAS: Record<string, string[]> = {
-  'crm-arthur': ['crm-ia-luiza'],
+  'crm-arthur': ['crm-ia-luiza', 'crm-outbound'],
 }
 
 /** A aba de fora que mostra esta, ou undefined se ela não está dentro de nenhuma. */

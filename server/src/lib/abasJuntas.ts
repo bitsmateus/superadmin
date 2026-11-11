@@ -4,7 +4,7 @@
  * sem precisar marcar cada uma na Equipe. Espelho do front em src/lib/abasJuntas.ts.
  */
 export const ABAS_JUNTAS: Record<string, string[]> = {
-  'crm-arthur': ['crm-ia-luiza'],
+  'crm-arthur': ['crm-ia-luiza', 'crm-outbound'],
 };
 
 /** A allowlist de abas com as abas de dentro das que já estão liberadas (sem repetir). */

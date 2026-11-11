@@ -2221,6 +2221,31 @@ END; $$`);
     }
   }
 
+  // CRM OUTBOUND (pedido de 11/11): uma aba dentro da tela do CRM ARTHUR, ao lado do CRM IA LUIZA (ver lib/abasJuntas.ts),
+  // com os mesmos quadros e etiquetas do CRM ARTHUR, sem nenhum lead — igual ao "Duplicar" das abas. Só na primeira
+  // vez: se a aba já existe (mesmo arquivada ou com quadros mexidos), não toca em nada. O quadro de Vendas (is_vendas)
+  // é único no sistema e fica de fora.
+  {
+    const { rows: arthur } = await pool.query(`SELECT 1 FROM lead_pages WHERE id = 'crm-arthur'`);
+    if (arthur.length) {
+      const { rows: criou } = await pool.query(
+        `INSERT INTO lead_pages (id, name, position, section)
+         SELECT 'crm-outbound', 'CRM OUTBOUND', COALESCE(MAX(position), -1) + 1, 'comercial' FROM lead_pages
+         ON CONFLICT (id) DO NOTHING RETURNING id`);
+      if (criou.length) {
+        await pool.query(
+          `INSERT INTO lead_boards (name, color, page, position, is_contrato)
+           SELECT name, color, 'crm-outbound', position, is_contrato FROM lead_boards
+           WHERE page = 'crm-arthur' AND is_vendas = false ORDER BY position`);
+        await pool.query(
+          `INSERT INTO lead_labels (field, name, color, position, page_id)
+           SELECT field, name, color, position, 'crm-outbound' FROM lead_labels
+           WHERE page_id = 'crm-arthur' AND field != 'sdr'`);
+        console.log('[crm-outbound] aba criada com os quadros e etiquetas do CRM ARTHUR');
+      }
+    }
+  }
+
   // Rogerio Paim (pedido de 11/11): estava em Follow-up Propostas desde antes da régua do n8n, então a régua nunca pegou
   // ele, e a caixinha "mandar pro Follow-up" do popup não mexe em quem já está lá. Uma vez só: o card principal (o que a
   // régua lê; cópia do closer/IA fica de fora) fica como se tivesse acabado de entrar no Follow-up, com a régua zerada —

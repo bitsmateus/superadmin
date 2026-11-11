@@ -1427,7 +1427,7 @@ function CreateBoardModal({ open, onClose, page }: { open: boolean; onClose: () 
 }
 
 /** Abas em que o admin vê o sininho do dono (Arthur: CRM ARTHUR e a aba CRM IA LUIZA; Luis: CRM LUIS CLOSER). */
-const PAGINAS_COM_SININHO = new Set(['crm-arthur', 'crm-ia-luiza', 'crm-luis-closer'])
+const PAGINAS_COM_SININHO = new Set(['crm-arthur', 'crm-ia-luiza', 'crm-outbound', 'crm-luis-closer'])
 
 export interface LeadBoardsViewProps {
   page: LeadBoardPage

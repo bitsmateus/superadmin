@@ -14,6 +14,10 @@ export interface GcTotaisTrafego {
 /** Registro manual do que foi mudado no tráfego do cliente ("Última edição"). */
 export interface GcEdicaoTrafego {
   id: string; texto: string; created_at: string; autor_id: string | null; autor_nome: string | null
+  /** Recado de WhatsApp para o cliente, escrito pela IA a partir do texto (vazio = ainda não gerado). */
+  mensagem_cliente: string
+  /** Só na resposta de registrar: por que a IA não gerou a mensagem. */
+  erroIa?: string | null
 }
 
 export type GcNivelAlerta = 'critico' | 'atencao' | 'oportunidade'
@@ -91,6 +95,9 @@ export const gcTrafego = {
   edicoes: (id: string) => api.get<GcEdicaoTrafego[]>(`/api/gc/clientes/${id}/trafego/edicoes`),
   registrarEdicao: (id: string, texto: string) => api.post<GcEdicaoTrafego>(`/api/gc/clientes/${id}/trafego/edicoes`, { texto }),
   excluirEdicao: (edicaoId: string) => api.delete(`/api/gc/trafego/edicoes/${edicaoId}`),
+  gerarMensagemCliente: (edicaoId: string) => api.post<GcEdicaoTrafego>(`/api/gc/trafego/edicoes/${edicaoId}/mensagem`),
+  salvarMensagemCliente: (edicaoId: string, mensagem: string) =>
+    api.put<GcEdicaoTrafego>(`/api/gc/trafego/edicoes/${edicaoId}/mensagem`, { mensagem }),
   sincronizar: (id: string) =>
     api.post<{ resultados: { conta: string; ok: boolean; linhas: number; erro?: string }[] }>(`/api/gc/clientes/${id}/trafego/sincronizar`),
 }

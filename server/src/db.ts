@@ -2221,6 +2221,60 @@ END; $$`);
     }
   }
 
+  // Rogerio Paim (pedido de 11/11): estava em Follow-up Propostas desde antes da régua do n8n, então a régua nunca pegou
+  // ele, e a caixinha "mandar pro Follow-up" do popup não mexe em quem já está lá. Uma vez só: o card principal (o que a
+  // régua lê; cópia do closer/IA fica de fora) fica como se tivesse acabado de entrar no Follow-up, com a régua zerada —
+  // o n8n recomeça do D1 no dia útil seguinte. Só esse card; nada muda pros outros.
+  {
+    const { rows: reservou } = await pool.query(
+      `INSERT INTO traffic_report_log (dia, kind) VALUES ('2026-11-11'::date, 'rogerio_paim_follow') ON CONFLICT DO NOTHING RETURNING dia`);
+    if (reservou.length) {
+      const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const { rows: achados } = await pool.query<{ raiz: string }>(
+        `SELECT DISTINCT COALESCE(espelho_origem_id, copia_ia_origem_id, id) AS raiz FROM lead_rows
+         WHERE deleted_at IS NULL AND venda_origem_id IS NULL
+           AND translate(lower(concat_ws(' ', nome, empresa)), 'áàâãéêíóôõúç', 'aaaaeeiooouc') LIKE '%rogerio%paim%'`);
+      if (achados.length !== 1) {
+        console.warn(`[rogerio-paim] ${achados.length} lead(s) com esse nome — nada alterado`);
+      } else {
+        const raiz = achados[0].raiz;
+        const { rows: [card] } = await pool.query<{ board_id: string; page: string; quadro: string; optout: boolean }>(
+          `SELECT r.board_id, lb.page, lb.name AS quadro, r.optout FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
+           WHERE r.id = $1 AND r.deleted_at IS NULL`, [raiz]);
+        if (!card) {
+          console.warn('[rogerio-paim] card principal não encontrado (excluído?) — nada alterado');
+        } else {
+          let quadro = card.quadro;
+          if (!semAcento(card.quadro).startsWith('follow')) {
+            // O principal não está no Follow-up (só a cópia do closer estava): vai pro Follow-up da aba dele.
+            const { rows: quadros } = await pool.query<{ id: string; name: string }>(
+              'SELECT id, name FROM lead_boards WHERE page = $1 ORDER BY position', [card.page]);
+            const follow = quadros.find((q) => semAcento(q.name).startsWith('follow'));
+            if (follow) {
+              const { rows: etiquetas } = await pool.query<{ name: string }>(
+                `SELECT name FROM lead_labels WHERE field = 'status' AND page_id = $1`, [card.page]);
+              const status = etiquetas.find((l) => semAcento(l.name) === semAcento(follow.name))?.name;
+              await pool.query(
+                `UPDATE lead_rows SET board_id = $2, status = COALESCE($3, status) WHERE id = $1`, [raiz, follow.id, status ?? null]);
+              quadro = follow.name;
+            }
+          }
+          if (!semAcento(quadro).startsWith('follow')) {
+            console.warn(`[rogerio-paim] aba do card principal não tem quadro de Follow-up (está em "${card.quadro}") — nada alterado`);
+          } else {
+            await pool.query(
+              `UPDATE lead_rows SET entrou_coluna_em = NOW(), regua = '', regua_etapa = '', regua_status = '',
+                 regua_ultimo_envio_em = NULL, followup = '' WHERE id = $1`, [raiz]);
+            await pool.query(
+              `INSERT INTO lead_notes (lead_row_id, author_id, author_name, content, attachments) VALUES ($1, NULL, 'Sistema', $2, '[]')`,
+              [raiz, '<p>Cadência de follow-up de proposta reiniciada: a régua automática recomeça do D1 no próximo dia útil.</p>']);
+            console.log(`[rogerio-paim] cadência reiniciada no card ${raiz} ("${quadro}")${card.optout ? ' — ATENÇÃO: card com opt-out, a régua não envia' : ''}`);
+          }
+        }
+      }
+    }
+  }
+
   // "Agendou ✅" no grupo LEADS (jobs/avisoAgendamento.ts): um aviso por lead e horário. Na primeira subida, as
   // reuniões que já estão agendadas entram como avisadas, pra mexer nelas depois não mandar aviso de agendamento velho —
   // menos as marcadas desde AVISO_DESDE, que saem uma vez logo depois da subida (avisarAgendamentosDaEstreia).

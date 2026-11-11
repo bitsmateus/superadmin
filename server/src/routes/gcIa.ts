@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query, queryOne } from '../db.js';
+import { guardaDoCliente, sqlSoDoGestor, type UsuarioGc } from '../lib/gcAcesso.js';
 import { conversar, gerarAnalise, ultimaAnalise, type MensagemIa } from '../lib/gcIa.js';
 import {
   instagramPeloTrafego, perfisDisponiveis, postsDoCliente, sincronizarInstagram, tokenDoTrafego, tokenInstagram, vincularInstagram,
@@ -22,6 +23,8 @@ type Tipo = (typeof TIPOS)[number];
 const gerando = new Set<string>();
 
 export async function gcIaRoutes(app: FastifyInstance) {
+  // Gestor que não é admin só mexe nos clientes em que é o gestor de tráfego (lib/gcAcesso.ts).
+  app.addHook('preHandler', guardaDoCliente);
   const autenticado = {
     onRequest: [
       app.authenticate,

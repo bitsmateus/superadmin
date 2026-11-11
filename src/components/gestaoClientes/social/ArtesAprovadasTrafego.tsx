@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
+import { useAuth } from '@/hooks/useAuth'
 import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import {
   gestaoClientes, type GcSocialAnuncio, type GcSocialDesempenho, type GcSocialDoCliente, type GcSocialProducao,
@@ -250,6 +251,7 @@ function ItemArte({ card, desempenho, podeDrive, temPasta, anuncios, carregarAnu
 }
 
 export function ArtesAprovadasTrafego({ clienteId }: { clienteId: string }) {
+  const ehAdmin = useAuth().profile?.role === 'admin'
   const { data: perfis } = useTeamProfiles()
   const [dados, setDados] = React.useState<GcSocialDoCliente | null>(null)
   const [desempenho, setDesempenho] = React.useState<GcSocialDesempenho[]>([])
@@ -342,9 +344,11 @@ export function ArtesAprovadasTrafego({ clienteId }: { clienteId: string }) {
 
       <div className="grid gap-2 rounded-xl bg-elevate/[0.03] p-3 sm:grid-cols-2">
         <label className="text-xs text-foreground/65">
-          <span className="mb-1 block font-medium">Gestor de tráfego (recebe o aviso quando o cliente aprova)</span>
+          <span className="mb-1 block font-medium">Gestor de tráfego (recebe o aviso quando o cliente aprova e é quem enxerga o cliente)</span>
           <select
             value={dados.gestor_trafego_id ?? ''}
+            disabled={!ehAdmin}
+            title={ehAdmin ? undefined : 'Só o administrador troca o gestor'}
             onChange={(e) => void salvarConfig({ gestor_trafego_id: e.target.value || null })}
             className="h-9 w-full rounded-lg border border-line bg-surface px-2 text-sm text-foreground"
           >

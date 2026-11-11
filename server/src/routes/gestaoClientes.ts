@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import crypto from 'node:crypto';
 import { pool, query, queryOne, withTransaction } from '../db.js';
+import { guardaDoCliente, sqlSoDoGestor, veTodosOsClientes, type UsuarioGc } from '../lib/gcAcesso.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlSocialPdf, type ItemPdfSocial } from '../lib/gcSocialPdf.js';
 import { contaDoCliente, midiaPublica } from '../lib/gcSocialPublicar.js';
@@ -401,6 +402,8 @@ async function valoresFinais(
 }
 
 export async function gestaoClientesRoutes(app: FastifyInstance) {
+  // Gestor que não é admin só mexe nos clientes em que é o gestor de tráfego (lib/gcAcesso.ts).
+  app.addHook('preHandler', guardaDoCliente);
   const autenticado = {
     onRequest: [
       app.authenticate,
@@ -437,7 +440,8 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       cnpj: string | null; ficha: Record<string, unknown> | null; vinculado: string | null;
     }>(
       `SELECT c.id, c.name, c.company, c.phone, c.email, c.cnpj, c.ficha_cadastro AS ficha,
-              (SELECT g.nome_empresa FROM gc_clientes g WHERE g.cliente_externo_id = c.id LIMIT 1) AS vinculado
+              (SELECT CASE WHEN ${sqlSoDoGestor(req.user as UsuarioGc, 'g')} THEN g.nome_empresa ELSE 'outro cliente' END
+                 FROM gc_clientes g WHERE g.cliente_externo_id = c.id LIMIT 1) AS vinculado
        FROM clients c
        WHERE c.ficha_cadastro IS NOT NULL AND c.archived_at IS NULL ${filtro}
        ORDER BY (c.ficha_cadastro->>'submittedAt') DESC NULLS LAST, c.created_at DESC
@@ -495,7 +499,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { periodo?: string } }>('/api/gc/clientes', autenticado, async (req) => {
     await garantirRecorrentes();
     const [mes, anterior] = mesesDeReferencia(req.query.periodo);
-    return query(`${SQL_CLIENTES} ORDER BY c.nome_empresa`, [mes, anterior]);
+    return query(`${SQL_CLIENTES} WHERE ${sqlSoDoGestor(req.user as UsuarioGc)} ORDER BY c.nome_empresa`, [mes, anterior]);
   });
 
   // GET /api/gc/clientes/:id — tudo do cliente numa tacada: a tela de detalhe abre as abas
@@ -585,8 +589,11 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ message: 'Escolha o responsável pelo cliente' });
     }
 
+    if (!veTodosOsClientes(req.user as UsuarioGc)) body.gestor_trafego_id = sub;
+    else if (!body.gestor_trafego_id) delete body.gestor_trafego_id;
+
     const criado = await withTransaction(async (client) => {
-      const campos = CAMPOS_CLIENTE.filter((c) => body[c] !== undefined);
+      const campos = [...CAMPOS_CLIENTE.filter((c) => body[c] !== undefined), ...(body.gestor_trafego_id ? ['gestor_trafego_id'] : [])];
       const valores = campos.map((c) => (body[c] === '' ? null : body[c]));
       const { rows } = await client.query(
         `INSERT INTO gc_clientes (${campos.join(', ')})
@@ -626,7 +633,13 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
       if (corpo.logo_url && !/^(data:image\/(png|jpeg|webp|gif);base64,|https?:\/\/)/.test(String(corpo.logo_url))) {
         return reply.status(400).send({ message: 'A logo precisa ser uma imagem' });
       }
-      const { sets, params } = montarUpdate(CAMPOS_CLIENTE, corpo);
+      // O gestor de tráfego decide quem enxerga o cliente (lib/gcAcesso.ts): só o administrador troca.
+      const trocaGestor = 'gestor_trafego_id' in corpo;
+      if (trocaGestor && !veTodosOsClientes(req.user as UsuarioGc)) {
+        return reply.status(403).send({ message: 'Só o administrador pode trocar o gestor de tráfego do cliente.' });
+      }
+      if (trocaGestor) corpo.gestor_trafego_id = corpo.gestor_trafego_id || null;
+      const { sets, params } = montarUpdate([...CAMPOS_CLIENTE, ...(trocaGestor ? ['gestor_trafego_id'] : [])], corpo);
       if (!sets.length) return reply.status(400).send({ message: 'Nada para atualizar' });
       params.push(req.params.id);
       const atualizado = await queryOne(
@@ -1260,7 +1273,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     // caminhos diferentes pros mesmos números é como eles começam a discordar.
     const [mes, anterior] = mesesDeReferencia(periodo);
     return query(
-      `${SQL_CLIENTES} WHERE c.status <> 'encerrado' ORDER BY c.nome_empresa`,
+      `${SQL_CLIENTES} WHERE c.status <> 'encerrado' AND ${sqlSoDoGestor(req.user as UsuarioGc)} ORDER BY c.nome_empresa`,
       [mes, anterior]
     );
   });
@@ -1523,7 +1536,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   // O responsável efetivo cai em cascata — item, depois etapa/estratégia, depois o cliente —,
   // porque quase ninguém atribui item por item, e filtrar só pelo campo do item deixaria quase
   // tudo "sem responsável". Atraso é comparado em horário de Brasília.
-  app.get('/api/gc/pendencias', autenticado, async () => {
+  app.get('/api/gc/pendencias', autenticado, async (req) => {
     await garantirRecorrentes();
     await sincronizarRotinaAutomatica();
     const itens = await query<{ prazo: string | null; atrasado: boolean; cliente_nome: string }>(
@@ -1544,6 +1557,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
          ON pr.id = COALESCE(i.responsavel_id, j.responsavel_id, e.responsavel_id, c.responsavel_id)
        WHERE NOT i.concluido
          AND c.status = 'ativo' AND NOT c.fora_dos_totais
+         AND ${sqlSoDoGestor(req.user as UsuarioGc)}
          -- Etapa que ainda nem começou não é pendência de ninguém agora: o checklist dela só vira
          -- trabalho quando a etapa abre. Estratégia aplicada entra sempre.
          AND (j.id IS NULL OR j.status <> 'pendente')
@@ -2210,7 +2224,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { cliente_id?: string } }>('/api/gc/demandas', autenticado, async (req) => {
     const filtro = req.query.cliente_id;
     return query(
-      `${SELECT_DEMANDA} ${filtro ? 'WHERE d.gc_cliente_id = $1' : ''} ORDER BY d.coluna_id, d.ordem, d.created_at`,
+      `${SELECT_DEMANDA} WHERE ${sqlSoDoGestor(req.user as UsuarioGc)} ${filtro ? 'AND d.gc_cliente_id = $1' : ''} ORDER BY d.coluna_id, d.ordem, d.created_at`,
       filtro ? [filtro] : []
     );
   });
@@ -2327,13 +2341,14 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     };
   }
 
-  async function checklistDoMes(mes: string, clienteId?: string) {
+  async function checklistDoMes(mes: string, usuario: UsuarioGc, clienteId?: string) {
     const params: unknown[] = [mes];
     let filtro = `c.status <> 'encerrado'`;
     if (clienteId) {
       params.push(clienteId);
       filtro = `c.id = $2`;
     }
+    filtro += ` AND ${sqlSoDoGestor(usuario)}`;
     const clientes = await query<{
       id: string; nome_empresa: string; logo_url: string | null; segmento: string; status: string;
       gestor_nome: string | null; responsavel_nome: string | null; artes: ArtesDoMes;
@@ -2400,7 +2415,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { mes?: string; cliente_id?: string } }>('/api/gc/social/checklist', autenticado, async (req, reply) => {
     const mes = req.query.mes;
     if (!ehMes(mes)) return reply.status(400).send({ message: 'Mês inválido (use AAAA-MM)' });
-    return checklistDoMes(mes, req.query.cliente_id || undefined);
+    return checklistDoMes(mes, req.user as UsuarioGc, req.query.cliente_id || undefined);
   });
 
   // PUT /api/gc/social/checklist/:clienteId/:mes/:etapa — marca/desmarca a etapa, ou guarda a data e a observação.
@@ -2451,7 +2466,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         );
       }
     }
-    const [linha] = await checklistDoMes(mes, clienteId);
+    const [linha] = await checklistDoMes(mes, req.user as UsuarioGc, clienteId);
     return linha;
   });
 
@@ -2470,7 +2485,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     FROM gc_social_producao d LEFT JOIN profiles e ON e.id = d.editor_id LEFT JOIN profiles cp ON cp.id = d.criado_por`;
 
   // Resumo de TODOS os clientes: a lista da aba. Sem os arquivos (são pesados), só as contagens e os editores.
-  app.get('/api/gc/social/resumo', autenticado, async () => {
+  app.get('/api/gc/social/resumo', autenticado, async (req) => {
     return query(
       `SELECT c.id, c.nome_empresa, c.logo_url, c.segmento, c.status,
               (SELECT count(*) FROM gc_social_materiais m WHERE m.gc_cliente_id = c.id)::int AS materiais,
@@ -2482,7 +2497,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
               COALESCE((SELECT array_agg(DISTINCT pr.name) FROM gc_social_producao p JOIN profiles pr ON pr.id = p.editor_id
                         WHERE p.gc_cliente_id = c.id AND p.status = 'em_producao'), '{}') AS editores
        FROM gc_clientes c
-       WHERE c.status <> 'encerrado'
+       WHERE c.status <> 'encerrado' AND ${sqlSoDoGestor(req.user as UsuarioGc)}
        ORDER BY c.nome_empresa`
     );
   });
@@ -2840,9 +2855,15 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   app.put<{ Params: { id: string }; Body: { gestor_trafego_id?: string | null; drive_pasta_artes?: string } }>(
     '/api/gc/clientes/:id/social/config',
     autenticado,
-    async (req) => {
+    async (req, reply) => {
       const corpo: Record<string, unknown> = {};
-      if (req.body?.gestor_trafego_id !== undefined) corpo.gestor_trafego_id = req.body.gestor_trafego_id || null;
+      if (req.body?.gestor_trafego_id !== undefined) {
+        // O gestor de tráfego decide quem enxerga o cliente (lib/gcAcesso.ts): só o administrador troca.
+        if (!veTodosOsClientes(req.user as UsuarioGc)) {
+          return reply.status(403).send({ message: 'Só o administrador pode trocar o gestor de tráfego do cliente.' });
+        }
+        corpo.gestor_trafego_id = req.body.gestor_trafego_id || null;
+      }
       if (req.body?.drive_pasta_artes !== undefined) corpo.drive_pasta_artes = String(req.body.drive_pasta_artes).trim().slice(0, 500);
       const { sets, params } = montarUpdate(['gestor_trafego_id', 'drive_pasta_artes'], corpo);
       if (sets.length) {

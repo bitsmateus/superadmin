@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query, queryOne } from '../db.js';
+import { guardaDoCliente, sqlSoDoGestor, type UsuarioGc } from '../lib/gcAcesso.js';
 import { diasAtras } from '../lib/metaInsights.js';
 import {
   anunciosDoCliente, avaliarAlertasClientes, benchmarkDoSegmento, campanhasDoCliente, lerContaNaMeta, metricasDoMesPeloTrafego, normalizarConta,
@@ -34,6 +35,8 @@ const CAMPOS_CONTA = `id, gc_cliente_id, ad_account_id, nome, moeda, ativo, ulti
   (token IS NOT NULL AND token <> '') AS tem_token, created_at`;
 
 export async function gcTrafegoRoutes(app: FastifyInstance) {
+  // Gestor que não é admin só mexe nos clientes em que é o gestor de tráfego (lib/gcAcesso.ts).
+  app.addHook('preHandler', guardaDoCliente);
   const autenticado = {
     onRequest: [
       app.authenticate,
@@ -49,7 +52,8 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
   // ------------------------------------------------------------------ painel da carteira
   // GET /api/gc/trafego/painel — todos os clientes ativos com o resumo da semana, os alertas
   // abertos e as últimas atualizações registradas nas fichas.
-  app.get('/api/gc/trafego/painel', autenticado, async () => {
+  app.get('/api/gc/trafego/painel', autenticado, async (req) => {
+    const soDoGestor = sqlSoDoGestor(req.user as UsuarioGc);
     const semana = { de: diasAtras(7), ate: diasAtras(1) };
     const semanaAnterior = { de: diasAtras(14), ate: diasAtras(8) };
     const inicioMes = `${diasAtras(0).slice(0, 8)}01`;
@@ -58,7 +62,7 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
       query<{ id: string; nome_empresa: string; logo_url: string | null; prioridade: string; segmento: string; responsavel_nome: string | null }>(
         `SELECT c.id, c.nome_empresa, c.logo_url, c.prioridade, c.segmento, p.name AS responsavel_nome
          FROM gc_clientes c LEFT JOIN profiles p ON p.id = c.responsavel_id
-         WHERE c.status = 'ativo' ORDER BY c.nome_empresa`,
+         WHERE c.status = 'ativo' AND ${soDoGestor} ORDER BY c.nome_empresa`,
       ),
       query<{ gc_cliente_id: string; ultimo_sync_em: string | null; ultimo_erro: string | null; ativo: boolean }>(
         `SELECT gc_cliente_id, ultimo_sync_em, ultimo_erro, ativo FROM gc_trafego_contas`,
@@ -73,14 +77,14 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
       query<{ id: string; gc_cliente_id: string; regra: string; nivel: string; mensagem: string; created_at: string; nome_empresa: string }>(
         `SELECT a.id, a.gc_cliente_id, a.regra, a.nivel, a.mensagem, a.created_at, c.nome_empresa
          FROM gc_trafego_alertas a JOIN gc_clientes c ON c.id = a.gc_cliente_id
-         WHERE a.resolved_at IS NULL AND c.status = 'ativo'
+         WHERE a.resolved_at IS NULL AND c.status = 'ativo' AND ${soDoGestor}
          ORDER BY CASE a.nivel WHEN 'critico' THEN 0 WHEN 'atencao' THEN 1 ELSE 2 END, a.created_at DESC`,
       ),
       query(
         `SELECT h.id, h.gc_cliente_id, h.tipo, h.titulo, h.descricao, h.created_at, c.nome_empresa, p.name AS autor_nome
          FROM gc_historico h JOIN gc_clientes c ON c.id = h.gc_cliente_id
          LEFT JOIN profiles p ON p.id = h.autor_id
-         WHERE c.status = 'ativo'
+         WHERE c.status = 'ativo' AND ${soDoGestor}
          ORDER BY h.created_at DESC LIMIT 30`,
       ),
       // Última nota que a IA deu pro tráfego de cada cliente.

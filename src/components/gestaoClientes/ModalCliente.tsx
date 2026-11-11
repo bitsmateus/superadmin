@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import * as React from 'react'
 import { Link2, Loader2, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -158,6 +159,7 @@ export function ModalCliente({
   onSalvo: (id: string) => void
 }) {
   const { data: perfis } = useTeamProfiles()
+  const ehAdmin = useAuth().profile?.role === 'admin'
   const [salvando, setSalvando] = React.useState(false)
   const [form, setForm] = React.useState<GcClienteEntrada>({})
   const [ficha, setFicha] = React.useState<GcFichaParaVincular | null>(null)
@@ -175,6 +177,7 @@ export function ModalCliente({
       cidade: cliente?.cidade ?? '',
       segmento: cliente?.segmento ?? '',
       responsavel_id: cliente?.responsavel_id ?? '',
+      gestor_trafego_id: cliente?.gestor_trafego_id ?? '',
       status: cliente?.status ?? 'ativo',
       prioridade: cliente?.prioridade ?? 'media',
       fora_dos_totais: cliente?.fora_dos_totais ?? false,
@@ -223,9 +226,13 @@ export function ModalCliente({
     }
     setSalvando(true)
     try {
+      // Só o admin escolhe o gestor de tráfego (é ele que decide quem enxerga o cliente). Quem não é
+      // admin e cadastra um cliente vira o gestor dele no servidor.
+      const { gestor_trafego_id, ...resto } = form
+      const dados = ehAdmin ? { ...resto, gestor_trafego_id: gestor_trafego_id || null } : resto
       const salvo = cliente
-        ? await gestaoClientes.atualizar(cliente.id, form)
-        : await gestaoClientes.criar(form)
+        ? await gestaoClientes.atualizar(cliente.id, dados)
+        : await gestaoClientes.criar(dados)
       toast.success(cliente ? 'Cliente atualizado' : 'Cliente cadastrado com a jornada criada')
       onSalvo(salvo.id)
       onFechar()
@@ -316,6 +323,14 @@ export function ModalCliente({
           options={opcoesResponsavel}
           value={form.responsavel_id ?? ''}
           onChange={(e) => mudar('responsavel_id')(e.target.value)}
+        />
+        <Select
+          label="Gestor de tráfego"
+          hint={ehAdmin ? 'Quem não é administrador só vê os clientes em que é o gestor' : 'Só o administrador troca o gestor'}
+          options={[{ value: '', label: 'Ninguém (só administradores veem)' }, ...opcoesResponsavel.slice(1)]}
+          value={form.gestor_trafego_id ?? ''}
+          disabled={!ehAdmin}
+          onChange={(e) => mudar('gestor_trafego_id')(e.target.value)}
         />
         <Select
           label="Status"

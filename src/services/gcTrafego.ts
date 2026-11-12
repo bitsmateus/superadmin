@@ -30,6 +30,21 @@ export interface GcAlertaTrafego {
 export interface GcContaTrafego {
   id: string; gc_cliente_id: string; ad_account_id: string; nome: string; moeda: string; ativo: boolean
   ultimo_sync_em: string | null; ultimo_erro: string | null; tem_token: boolean; created_at: string
+  /** Só na aba Tráfego do cliente: saldo e pagamento lidos da Meta (null = ainda não lido). */
+  saldo?: GcSaldoConta | null
+}
+
+/** Saldo e forma de pagamento da conta de anúncio (ver server/src/lib/gcSaldo.ts). */
+export interface GcSaldoConta {
+  statusRotulo: string; bloqueada: boolean; prePaga: boolean
+  formaPagamento: string; detalhePagamento: string
+  saldoDisponivel: number | null; valorAPagar: number | null
+  limiteGasto: number | null; restanteLimite: number | null
+  /** Gasto médio por dia nos últimos 7 dias. */
+  gastoDia: number
+  /** Para quantos dias dá o saldo (pré-paga) ou o que falta do limite (null = sem como estimar). */
+  diasRestantes: number | null
+  lidoEm: string | null
 }
 
 export interface GcCampanhaTrafego extends GcTotaisTrafego {

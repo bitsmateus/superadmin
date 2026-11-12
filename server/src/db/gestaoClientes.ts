@@ -658,6 +658,9 @@ const TABELAS = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (gc_cliente_id, ad_account_id)
   )`,
+  // Saldo e forma de pagamento como a Meta devolveu (lib/gcSaldo.ts interpreta), lidos de hora em hora.
+  `ALTER TABLE gc_trafego_contas ADD COLUMN IF NOT EXISTS financeiro JSONB`,
+  `ALTER TABLE gc_trafego_contas ADD COLUMN IF NOT EXISTS financeiro_em TIMESTAMPTZ`,
   `CREATE TABLE IF NOT EXISTS gc_meta_campanhas (
     campaign_id TEXT PRIMARY KEY,
     gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,

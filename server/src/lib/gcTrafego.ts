@@ -1,5 +1,6 @@
 import { query, queryOne } from '../db.js';
 import { diasAtras, formatoDoCriativo, graphList, janelas, type MetaAd } from './metaInsights.js';
+import { alertasDeSaldo, CAMPOS_FINANCEIRO_META, interpretarFinanceiro, type FinanceiroMeta } from './gcSaldo.js';
 
 /**
  * Tráfego (Meta) dos clientes NX Digital — SOMENTE LEITURA na Meta.
@@ -159,6 +160,52 @@ async function sincronizarInsights(conta: ContaTrafego, token: string, diasParaT
   return linhas;
 }
 
+// ── Saldo e pagamento ────────────────────────────────────────────────────────
+
+/** Lê status, saldo, limite e forma de pagamento da conta e guarda como veio. Nunca lança. */
+export async function atualizarFinanceiro(conta: ContaTrafego): Promise<boolean> {
+  const token = tokenDa(conta);
+  if (!token) return false;
+  try {
+    const url = new URL(`https://graph.facebook.com/${VERSION}/${conta.ad_account_id}`);
+    url.searchParams.set('fields', CAMPOS_FINANCEIRO_META);
+    url.searchParams.set('access_token', token);
+    const res = await fetch(url.toString());
+    const json = (await res.json().catch(() => ({}))) as FinanceiroMeta & { error?: { message?: string } };
+    if (!res.ok || json.error) {
+      console.warn('[gc-trafego] saldo da conta', conta.ad_account_id, json.error?.message ?? res.status);
+      return false;
+    }
+    const { error: _e, ...financeiro } = json as FinanceiroMeta & { error?: unknown; id?: string };
+    await query(`UPDATE gc_trafego_contas SET financeiro = $2, financeiro_em = now() WHERE id = $1`, [conta.id, JSON.stringify(financeiro)]);
+    return true;
+  } catch (err) {
+    console.warn('[gc-trafego] saldo da conta', conta.ad_account_id, err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
+/** Saldo de todas as contas ativas (uma chamada leve por conta): roda de hora em hora. */
+export async function atualizarSaldosDeTodas(): Promise<number> {
+  const contas = await query<ContaTrafego>(
+    `SELECT t.id, t.gc_cliente_id, t.ad_account_id, t.token FROM gc_trafego_contas t
+     JOIN gc_clientes c ON c.id = t.gc_cliente_id WHERE t.ativo AND c.status = 'ativo'`,
+  );
+  let ok = 0;
+  for (const c of contas) if (await atualizarFinanceiro(c)) ok++;
+  return ok;
+}
+
+/** Gasto médio por dia da conta nos últimos 7 dias fechados (é com ele que o saldo vira "dias"). */
+export async function gastoMedioDiarioDaConta(adAccountId: string): Promise<number> {
+  const r = await queryOne<{ total: string | null }>(
+    `SELECT SUM(i.gasto) AS total FROM gc_meta_insights_dia i JOIN gc_meta_anuncios a ON a.ad_id = i.ad_id
+     WHERE a.ad_account_id = $1 AND i.dia BETWEEN $2 AND $3`,
+    [adAccountId, diasAtras(7), diasAtras(1)],
+  );
+  return num(r?.total) / 7;
+}
+
 /** Sincroniza uma conta. Grava o resultado (ou o erro) na própria conta e nunca lança. */
 export async function sincronizarConta(conta: ContaTrafego): Promise<{ ok: boolean; linhas: number; erro?: string }> {
   const token = tokenDa(conta);
@@ -182,6 +229,7 @@ export async function sincronizarConta(conta: ContaTrafego): Promise<{ ok: boole
       [conta.gc_cliente_id, diasAtras(DIAS_HISTORICO)],
     );
     const linhas = await sincronizarInsights(conta, token, temHistorico && !semNome ? DIAS_REGRAVAR : DIAS_HISTORICO);
+    await atualizarFinanceiro(conta);
     await query(`UPDATE gc_trafego_contas SET ultimo_sync_em = now(), ultimo_erro = NULL WHERE id = $1`, [conta.id]);
     return { ok: true, linhas };
   } catch (err) {
@@ -332,12 +380,20 @@ function posicaoNoMes(): { dia: number; diasNoMes: number; inicioMes: string } {
  */
 async function regrasDoCliente(
   clienteId: string,
-  contas: { ad_account_id: string; nome: string; ultimo_erro: string | null }[],
+  contas: { ad_account_id: string; nome: string; ultimo_erro: string | null; financeiro: FinanceiroMeta | null }[],
 ): Promise<Disparo[]> {
   const out: Disparo[] = [];
   for (const c of contas) {
     if (c.ultimo_erro) {
       out.push({ regra: 'sync_erro', nivel: 'critico', entidade: c.ad_account_id, mensagem: `Não consegui ler a conta ${c.nome || c.ad_account_id}: ${c.ultimo_erro}` });
+    }
+    // Saldo acabando, limite de gastos perto e conta bloqueada (lib/gcSaldo.ts).
+    if (c.financeiro) {
+      const gastoDia = await gastoMedioDiarioDaConta(c.ad_account_id);
+      const nome = contas.length > 1 ? c.nome || c.ad_account_id : '';
+      for (const d of alertasDeSaldo(interpretarFinanceiro(c.financeiro), gastoDia, nome)) {
+        out.push({ regra: d.regra, nivel: d.nivel, entidade: c.ad_account_id, mensagem: d.mensagem });
+      }
     }
   }
 
@@ -395,8 +451,8 @@ async function regrasDoCliente(
 
 /** Roda as regras pra todos os clientes com conta. Abre o que disparou e fecha o que parou. */
 export async function avaliarAlertasClientes(): Promise<{ novos: number; resolvidos: number }> {
-  const contas = await query<{ gc_cliente_id: string; ad_account_id: string; nome: string; ultimo_erro: string | null }>(
-    `SELECT t.gc_cliente_id, t.ad_account_id, t.nome, t.ultimo_erro FROM gc_trafego_contas t
+  const contas = await query<{ gc_cliente_id: string; ad_account_id: string; nome: string; ultimo_erro: string | null; financeiro: FinanceiroMeta | null }>(
+    `SELECT t.gc_cliente_id, t.ad_account_id, t.nome, t.ultimo_erro, t.financeiro FROM gc_trafego_contas t
      JOIN gc_clientes c ON c.id = t.gc_cliente_id WHERE t.ativo AND c.status = 'ativo'`,
   );
   const porCliente = new Map<string, typeof contas>();

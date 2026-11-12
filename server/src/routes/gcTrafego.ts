@@ -4,10 +4,11 @@ import { guardaDoCliente, sqlSoDoGestor, type UsuarioGc } from '../lib/gcAcesso.
 import { diasAtras } from '../lib/metaInsights.js';
 import {
   anunciosDoCliente, avaliarAlertasClientes, benchmarkDoSegmento, campanhasDoCliente, lerContaNaMeta, metricasDoMesPeloTrafego, normalizarConta,
-  serieDoCliente, sincronizarConta, tokenDa, totaisDoCliente, totaisPorCliente, type ContaTrafego,
+  gastoMedioDiarioDaConta, serieDoCliente, sincronizarConta, tokenDa, totaisDoCliente, totaisPorCliente, type ContaTrafego,
 } from '../lib/gcTrafego.js';
 import { instagramPeloTrafego } from '../lib/gcInstagram.js';
 import { gerarMensagemParaCliente } from '../lib/gcMensagemTrafego.js';
+import { diasQueDa, interpretarFinanceiro, type FinanceiroMeta } from '../lib/gcSaldo.js';
 import { podeUsarModulo } from './gestaoClientes.js';
 
 /**
@@ -140,7 +141,9 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
       const ant = anteriorA(de, ate);
       const hoje = diasAtras(0);
       const [contas, atual, anterior, serie, campanhas, anuncios, alertas, benchmark, mes, previsto] = await Promise.all([
-        query(`SELECT ${CAMPOS_CONTA} FROM gc_trafego_contas WHERE gc_cliente_id = $1 ORDER BY created_at`, [id]),
+        query<{ ad_account_id: string; financeiro: FinanceiroMeta | null; financeiro_em: string | null }>(
+          `SELECT ${CAMPOS_CONTA}, financeiro, financeiro_em FROM gc_trafego_contas WHERE gc_cliente_id = $1 ORDER BY created_at`, [id],
+        ),
         totaisDoCliente(id, de, ate),
         totaisDoCliente(id, ant.de, ant.ate),
         serieDoCliente(id, de, ate),
@@ -161,7 +164,15 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
         ),
       ]);
       const ritmo = { gastoMes: mes.gasto, previstoMes: previsto?.total == null ? null : Number(previsto.total) };
-      return { de, ate, anterior: ant, contas, totais: { atual, anterior }, serie, campanhas, anuncios, alertas, benchmark, ritmo };
+      // Saldo e pagamento de cada conta, já interpretados, com o gasto médio por dia (pra "dá para N dias").
+      const contasComSaldo = await Promise.all(contas.map(async ({ financeiro, financeiro_em, ...c }) => {
+        if (!financeiro) return { ...c, saldo: null };
+        const gastoDia = await gastoMedioDiarioDaConta(c.ad_account_id);
+        const fin = interpretarFinanceiro(financeiro);
+        const base = fin.prePaga ? fin.saldoDisponivel : fin.restanteLimite;
+        return { ...c, saldo: { ...fin, gastoDia, diasRestantes: diasQueDa(base, gastoDia), lidoEm: financeiro_em } };
+      }));
+      return { de, ate, anterior: ant, contas: contasComSaldo, totais: { atual, anterior }, serie, campanhas, anuncios, alertas, benchmark, ritmo };
     },
   );
 

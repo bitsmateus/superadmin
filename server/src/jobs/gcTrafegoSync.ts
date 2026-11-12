@@ -1,4 +1,4 @@
-import { avaliarAlertasClientes, sincronizarTodasAsContas } from '../lib/gcTrafego.js';
+import { atualizarSaldosDeTodas, avaliarAlertasClientes, sincronizarTodasAsContas } from '../lib/gcTrafego.js';
 import { sincronizarTodosInstagrams } from '../lib/gcInstagram.js';
 import { analisesDiarias } from '../lib/gcIa.js';
 
@@ -8,6 +8,8 @@ import { analisesDiarias } from '../lib/gcIa.js';
  *   conta (conta nova puxa 90 dias de histórico) e roda as regras de alerta do painel.
  * - Instagram dos clientes: ao subir e às 07h (os posts não mudam tanto ao longo do dia).
  * - 08h: análise de tráfego da IA pra quem gastou na semana (sem ANTHROPIC_API_KEY, não roda).
+ * - De hora em hora (08h às 22h, aos 30 min): só o saldo/pagamento de cada conta e as regras de
+ *   alerta, pra o aviso de "saldo acabando" não esperar a próxima coleta completa.
  * Sem nenhuma conta cadastrada, cada rodada termina sem chamar a Meta.
  */
 
@@ -25,6 +27,22 @@ function spAgora(): { dia: string; hora: number; minuto: number } {
 }
 
 let rodando = false;
+
+/** Só saldo + alertas (leve): de hora em hora, fora dos horários da coleta completa. */
+export async function rodarSaldos(): Promise<void> {
+  if (rodando) return;
+  rodando = true;
+  try {
+    const n = await atualizarSaldosDeTodas();
+    if (n === 0) return;
+    const a = await avaliarAlertasClientes();
+    if (a.novos || a.resolvidos) console.log(`[gc-trafego] saldos: ${n} conta(s); alertas: ${a.novos} novo(s), ${a.resolvidos} resolvido(s)`);
+  } catch (err) {
+    console.error('[gc-trafego] erro nos saldos', err instanceof Error ? err.message : err);
+  } finally {
+    rodando = false;
+  }
+}
 
 export async function rodarGcTrafego(comInstagram = false): Promise<void> {
   if (rodando) return;
@@ -48,8 +66,14 @@ export async function rodarGcTrafego(comInstagram = false): Promise<void> {
 export function startGcTrafegoSync(): void {
   setTimeout(() => void rodarGcTrafego(true), 90_000);
   let ultimoSlot = '';
+  let ultimoSaldo = '';
   setInterval(() => {
     const { dia, hora, minuto } = spAgora();
+    if (hora >= 8 && hora <= 22 && minuto >= 30 && minuto < 30 + JANELA_MIN && ultimoSaldo !== `${dia}-${hora}`) {
+      ultimoSaldo = `${dia}-${hora}`;
+      void rodarSaldos();
+      return;
+    }
     if ((!HORAS.includes(hora) && hora !== HORA_IA) || minuto >= JANELA_MIN) return;
     const slot = `${dia}-${hora}`;
     if (slot === ultimoSlot) return;

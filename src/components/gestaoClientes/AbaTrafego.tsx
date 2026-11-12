@@ -1,6 +1,6 @@
 import * as React from 'react'
 import {
-  AlertTriangle, ExternalLink, Link2, Loader2, Lightbulb, RefreshCw, Siren, Trash2, X,
+  AlertTriangle, ExternalLink, Link2, Loader2, Lightbulb, RefreshCw, Siren, Trash2, Wallet, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
@@ -398,6 +398,85 @@ function VerbaDoMes({ clienteId, ritmo, onSalvou }: {
   )
 }
 
+const AVISO_DIAS = 3
+
+/**
+ * Saldo e forma de pagamento de cada conta de anúncio (lidos da Meta de hora em hora). Pré-paga mostra
+ * o saldo e para quantos dias ele dá; cartão/fatura mostra o valor a pagar. O limite de gastos aparece
+ * quando a conta tem um. O alerta de saldo acabando vai para o painel de Tráfego.
+ */
+function SaldoDasContas({ contas }: { contas: GcContaTrafego[] }) {
+  const comSaldo = contas.filter((c) => c.saldo !== undefined)
+  if (!comSaldo.length) return null
+  const diasTexto = (d: number | null) => (d === null ? '' : d < 1 ? 'dá para menos de 1 dia' : `dá para ~${Math.floor(d)} ${Math.floor(d) === 1 ? 'dia' : 'dias'}`)
+  return (
+    <Painel title={<span className="flex items-center gap-1.5"><Wallet className="h-4 w-4 text-foreground/50" /> Saldo e pagamento</span>}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {comSaldo.map((c) => {
+          const s = c.saldo
+          if (!s) {
+            return (
+              <div key={c.id} className="rounded-lg border border-line p-3 text-xs text-foreground/50">
+                <p className="font-medium text-foreground/70">{c.nome || c.ad_account_id}</p>
+                Saldo ainda não lido. Clique em “Atualizar agora”.
+              </div>
+            )
+          }
+          const pouco = s.diasRestantes !== null && s.diasRestantes < AVISO_DIAS
+          const zerado = (s.prePaga && s.saldoDisponivel !== null && s.saldoDisponivel <= 0) || (s.restanteLimite !== null && s.restanteLimite <= 0)
+          const ruim = s.bloqueada || zerado || (pouco && (s.diasRestantes ?? 0) < 1)
+          return (
+            <div key={c.id} className={cn('rounded-lg border p-3', ruim ? 'border-danger/50 bg-danger/5' : pouco ? 'border-amber-500/50 bg-amber-500/5' : 'border-line')}>
+              <div className="flex items-start justify-between gap-2">
+                <p className="truncate text-sm font-medium text-foreground" title={c.ad_account_id}>{contas.length > 1 ? c.nome || c.ad_account_id : 'Conta de anúncio'}</p>
+                <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', s.bloqueada ? 'bg-danger/15 text-danger' : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400')}>
+                  {s.statusRotulo}
+                </span>
+              </div>
+              {s.prePaga ? (
+                <>
+                  <p className="mt-2 text-[11px] uppercase tracking-wide text-foreground/45">Saldo disponível</p>
+                  <p className={cn('text-xl font-semibold tabular-nums', ruim ? 'text-danger' : pouco ? 'text-amber-600' : 'text-foreground')}>
+                    {s.saldoDisponivel === null ? '—' : brlExato(s.saldoDisponivel)}
+                  </p>
+                  <p className="text-xs text-foreground/55">
+                    {s.saldoDisponivel === null
+                      ? 'A Meta não informou o valor do saldo.'
+                      : s.gastoDia > 0 ? `${diasTexto(s.diasRestantes)} no ritmo atual (${brlExato(s.gastoDia)}/dia)` : 'Sem gasto nos últimos 7 dias.'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 text-[11px] uppercase tracking-wide text-foreground/45">A pagar (acumulado)</p>
+                  <p className="text-xl font-semibold tabular-nums text-foreground">{s.valorAPagar === null ? '—' : brlExato(s.valorAPagar)}</p>
+                  <p className="text-xs text-foreground/55">Pós-pago: a Meta cobra na forma de pagamento abaixo.</p>
+                </>
+              )}
+              <dl className="mt-2 space-y-0.5 border-t border-line pt-2 text-xs">
+                <div className="flex justify-between gap-2"><dt className="text-foreground/50">Forma de pagamento</dt><dd className="text-right text-foreground">{s.formaPagamento}</dd></div>
+                {s.detalhePagamento && !s.prePaga && (
+                  <div className="flex justify-between gap-2"><dt className="text-foreground/50">Cartão/conta</dt><dd className="text-right text-foreground">{s.detalhePagamento}</dd></div>
+                )}
+                {s.limiteGasto !== null && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-foreground/50">Limite de gastos</dt>
+                    <dd className="text-right tabular-nums text-foreground">
+                      faltam {brlExato(s.restanteLimite ?? 0)} de {brlExato(s.limiteGasto)}
+                      {!s.prePaga && s.diasRestantes !== null && <span className="text-foreground/50"> · {diasTexto(s.diasRestantes)}</span>}
+                    </dd>
+                  </div>
+                )}
+                {s.lidoEm && <p className="pt-1 text-[11px] text-foreground/40">Lido da Meta {quandoFoi(s.lidoEm)}</p>}
+              </dl>
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-2 text-[11px] text-foreground/40">Alerta no painel quando o saldo ou o limite der para menos de {AVISO_DIAS} dias, zerar, ou a conta ficar bloqueada.</p>
+    </Painel>
+  )
+}
+
 /**
  * Aba Tráfego do cliente NX: números do Meta (gasto, resultados, custo, CTR...), comparação com o
  * período anterior, alertas abertos, campanhas e os criativos que mais receberam verba.
@@ -500,6 +579,7 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
             )}
 
             <Kpis atual={dados.totais.atual} anterior={dados.totais.anterior} benchmark={dados.benchmark} />
+            <SaldoDasContas contas={contas} />
             <UltimaEdicaoTrafego clienteId={clienteId} />
             <VerbaDoMes clienteId={clienteId} ritmo={dados.ritmo} onSalvou={recarregar} />
             {dados.benchmark && dados.benchmark.custoResultado != null && dados.totais.atual.custoResultado != null && (

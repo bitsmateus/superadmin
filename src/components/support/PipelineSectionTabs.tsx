@@ -1,19 +1,17 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Columns3, ListChecks, ListTodo } from 'lucide-react'
+import { Columns3, ListChecks } from 'lucide-react'
 import { useLeadPages } from '@/hooks/useLeadPages'
 import { cn } from '@/lib/utils'
 
+// "Tarefas" saiu daqui (pedido de 12/11): tarefa nova agora é o botão "Nova tarefa" do Pipeline, que vira card no CRM
+// do Jean ou do João. A rota /tarefas continua existindo, só não tem mais aba.
 const TABS = [
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
-  { to: '/tarefas', label: 'Tarefas', icon: ListTodo },
 ]
 
-/** Alterna entre Pipeline e Tarefas sem precisar passar pelo menu lateral — as duas telas viraram
- * uma coisa só do ponto de vista de quem trabalha nelas (funil de clientes + demandas do dia a
- * dia), então esse par de abas fica no topo das duas, pra trocar direto. Some numa "cópia" do
- * menu (/visao/:id) — lá a navegação é outra, já resolvida pelo SupportViewContext.
- * Depois delas vêm os CRMs do time do suporte (abas de Demandas com no_pipeline: Jean, João), só os que
- * a pessoa enxerga. */
+/** Abas no topo do Pipeline: o funil de clientes e, depois dele, os CRMs do time do suporte (abas de Demandas com
+ * no_pipeline: Jean, João), só os que a pessoa enxerga. Some numa "cópia" do menu (/visao/:id) — lá a navegação é
+ * outra, já resolvida pelo SupportViewContext. */
 export function PipelineSectionTabs() {
   const navigate = useNavigate()
   const location = useLocation()

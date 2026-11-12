@@ -23,6 +23,7 @@ import {
   Clock,
   Link as LinkIcon,
   ListChecks,
+  ListTodo,
   Lock,
   Pause,
   Phone,
@@ -31,9 +32,11 @@ import {
   Search,
   UserCircle2,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
 import { PipelineSectionTabs } from '@/components/support/PipelineSectionTabs'
+import { NovaDemandaModal, useCrmsDoSuporte } from '@/components/comercial/NovaDemandaModal'
 import { useSupportView, useSupportViewText } from '@/components/support/SupportViewContext'
 import { supportPagesService } from '@/services/supportPages'
 import { AddClientsToPageModal } from '@/components/support/AddClientsToPageModal'
@@ -139,6 +142,10 @@ export function PipelinePage() {
   const [search, setSearch] = React.useState(useSupportViewText('search'))
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
   const [openNew, setOpenNew] = React.useState(false)
+  // "Nova tarefa": card no CRM do Jean ou do João (NovaDemandaModal sem quadro fixo).
+  const [novaTarefa, setNovaTarefa] = React.useState(false)
+  const crmsDoSuporte = useCrmsDoSuporte()
+  const irPara = useNavigate()
   const [addToCopyOpen, setAddToCopyOpen] = React.useState(false)
   // Filtros separados: quem vendeu x quem está entregando. Ver só a própria
   // carga de entrega é o caso de uso principal da fila de configuração.
@@ -458,6 +465,16 @@ export function PipelinePage() {
             >
               <span className="hidden lg:inline">Link de cadastro</span>
             </Button>
+            {crmsDoSuporte.length > 0 && (
+              <Button
+                variant="secondary"
+                onClick={() => setNovaTarefa(true)}
+                leftIcon={<ListTodo className="h-4 w-4" />}
+                aria-label="Nova tarefa"
+              >
+                <span className="hidden lg:inline">Nova tarefa</span>
+              </Button>
+            )}
             <Button
               onClick={() => setOpenNew(true)}
               leftIcon={<PlusCircle className="h-4 w-4" />}
@@ -647,6 +664,20 @@ export function PipelinePage() {
           </div>
         )}
       </Modal>
+
+      {novaTarefa && (
+        <NovaDemandaModal
+          board={null}
+          clientes={clients}
+          onClose={() => setNovaTarefa(false)}
+          onCriada={(_, quadro) => {
+            const crm = crmsDoSuporte.find((p) => p.id === quadro.page)?.name ?? 'CRM'
+            toast.success(`Tarefa criada no ${crm}, em "${quadro.name}"`, {
+              action: { label: 'Abrir', onClick: () => irPara(`/pipeline/crm/${quadro.page}`) },
+            })
+          }}
+        />
+      )}
 
       <Modal
         open={openNew}

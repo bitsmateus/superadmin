@@ -1231,6 +1231,29 @@ async function propagarVenda(origemId: string, patch: Record<string, unknown>) {
 
 /** As Atualizações são compartilhadas: a cópia não tem histórico próprio, lê e escreve no da lead
  * original. É o que faz Arthur e Luis conversarem no mesmo lugar. */
+/**
+ * Todos os cards cujas Atualizações pertencem à mesma lead que `leadRowId`: ele mesmo, a venda -> o card que virou
+ * Vendido (venda_origem_id) -> o original (espelho/cópia da IA), e as outras origens do card do closer.
+ */
+export async function idsDoHistoricoDaLead(leadRowId: string): Promise<string[]> {
+  type Liga = { venda_origem_id: string | null; espelho_origem_id: string | null; copia_ia_origem_id: string | null; espelho_origens_extras: string[] | null };
+  const ligacoes = (id: string) => queryOne<Liga>(
+    'SELECT venda_origem_id, espelho_origem_id, copia_ia_origem_id, espelho_origens_extras FROM lead_rows WHERE id = $1',
+    [id]
+  );
+  const ids = new Set<string>([leadRowId]);
+  const fila = [leadRowId];
+  // Poucos saltos (venda -> closer -> original); o limite só evita laço se algum dia um vínculo apontar pra trás.
+  for (let i = 0; fila.length && i < 6; i++) {
+    const l = await ligacoes(fila.shift()!);
+    if (!l) continue;
+    for (const prox of [l.venda_origem_id, l.espelho_origem_id, l.copia_ia_origem_id, ...(l.espelho_origens_extras ?? [])]) {
+      if (prox && !ids.has(prox)) { ids.add(prox); fila.push(prox); }
+    }
+  }
+  return [...ids];
+}
+
 export async function idCanonicoDasNotas(leadRowId: string): Promise<string> {
   const row = await queryOne<{ espelho_origem_id: string | null; copia_ia_origem_id: string | null }>(
     'SELECT espelho_origem_id, copia_ia_origem_id FROM lead_rows WHERE id = $1',
@@ -1411,9 +1434,13 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         [req.params.id]
       );
       if (!lead) return reply.status(404).send({ message: 'Lead não encontrada' });
+      // O vínculo do cliente costuma ser a linha da aba Vendas (ou a cópia do closer), e as Atualizações moram no card
+      // ORIGINAL do CRM (Arthur / IA Luiza), uma ou duas ligações pra trás: venda -> card que virou Vendido (às vezes o
+      // do closer) -> original, mais as outras origens do card do closer. Sem isso o Suporte via "Nenhuma atualização".
+      const ids = await idsDoHistoricoDaLead(req.params.id);
       const notes = await query(
-        'SELECT id, author_name, content, attachments, created_at FROM lead_notes WHERE lead_row_id = $1 ORDER BY created_at DESC',
-        [req.params.id]
+        'SELECT id, author_name, content, attachments, created_at FROM lead_notes WHERE lead_row_id = ANY($1) ORDER BY created_at DESC',
+        [ids]
       );
       return { lead, notes };
     }

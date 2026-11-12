@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Loader2, MessageSquare } from 'lucide-react'
+import { Loader2, MessageSquare, Paperclip } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { fetchSupportLeadView, type SupportLeadInfo, type SupportLeadNote } from '@/services/leadRowLookup'
 import { sanitizeHtml, stripHtml } from '@/lib/richText'
@@ -54,20 +54,39 @@ export function SupportLeadCard({ leadId, onClose }: { leadId: string | null; on
             </span>
             <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
               {data.notes.length === 0 && <p className="text-xs text-foreground/40">Nenhuma atualização ainda.</p>}
-              {data.notes.map((n) => (
-                stripHtml(n.content) && (
+              {data.notes.map((n) => {
+                const anexos = Array.isArray(n.attachments) ? n.attachments : []
+                if (!stripHtml(n.content) && anexos.length === 0) return null
+                return (
                   <div key={n.id} className="rounded-lg border border-line/60 bg-elevate/[0.02] p-3 text-sm">
                     <div className="mb-1 flex items-center justify-between text-[11px] text-foreground/40">
                       <span className="font-medium text-foreground/70">{n.author_name}</span>
                       <span>{formatDateTimeShort(n.created_at)}</span>
                     </div>
-                    <div
-                      className="whitespace-pre-wrap text-foreground/85"
-                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(n.content) }}
-                    />
+                    {stripHtml(n.content) && (
+                      <div
+                        className="whitespace-pre-wrap text-foreground/85"
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(n.content) }}
+                      />
+                    )}
+                    {anexos.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {anexos.map((a) => (
+                          <a
+                            key={a.id}
+                            href={a.dataUrl}
+                            download={a.name}
+                            className="inline-flex max-w-full items-center gap-1.5 truncate rounded-md border border-line px-2 py-1 text-xs text-foreground/70 hover:border-accent/40 hover:text-accent"
+                          >
+                            <Paperclip className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{a.name}</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
-              ))}
+              })}
             </div>
           </div>
         </div>

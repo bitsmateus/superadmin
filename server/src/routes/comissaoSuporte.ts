@@ -29,14 +29,16 @@ export async function comissaoSuporteRoutes(app: FastifyInstance) {
       const de = mes.test(req.query.de ?? '') ? req.query.de! : '0000-00';
       const ate = mes.test(req.query.ate ?? '') ? req.query.ate! : '9999-99';
       await sincronizarComissoesDoSuporte();
-      // As de Suporte dessa pessoa: as que nasceram dos cards e as lançadas à mão em "Registrar comissão".
+      // Tudo dessa pessoa: as que nasceram dos cards e as lançadas à mão em "Registrar comissão" (de Suporte ou SDR).
+      // A Pessoa lá é texto livre: casa pelo primeiro nome, sem acento nem maiúscula ("João Pedro" = "joao" = "Joao").
       const entradas = await query<{
         id: string; nome: string; type_label: string; reference: string; amount_cents: number; month: string;
         status: string; lead_row_id: string | null;
       }>(
         `SELECT id, nome, type_label, reference, amount_cents, month, status, lead_row_id
          FROM commission_entries
-         WHERE role = 'suporte' AND lower(person) = lower($1) AND month >= $2 AND month <= $3
+         WHERE translate(lower(split_part(btrim(person), ' ', 1)), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') = lower($1)
+           AND month >= $2 AND month <= $3
          ORDER BY month DESC, created_at DESC`,
         [pessoa, de, ate]
       );

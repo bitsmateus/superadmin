@@ -240,6 +240,31 @@ export function BriefingTab({ client, forceOpenSections }: { client: Client; for
     }
   }
 
+  /**
+   * "Gerar novo briefing": a configuração foi escolhida errado e o link já saiu. Invalida o link antigo
+   * (troca o token), volta pra "não enviado" e reabre a configuração pra corrigir; depois é só gerar
+   * de novo. O que o cliente já respondeu (se respondeu) não é apagado.
+   */
+  const regenerar = () => {
+    const respondido = status === 'filled' || status === 'approved'
+    const aviso = respondido
+      ? 'O cliente já respondeu este briefing. Gerar um novo invalida o link atual e volta o briefing para "não enviado" (as respostas ficam guardadas). Continuar?'
+      : 'Gerar um novo briefing? O link atual deixa de funcionar e a configuração reabre para você corrigir antes de gerar o novo link.'
+    if (!window.confirm(aviso)) return
+    db.updateClient(client.id, {
+      briefingToken: undefined,
+      briefingStatus: 'not_sent',
+      briefingSentAt: undefined,
+      briefingApprovedAt: undefined,
+      briefingRevisionNote: undefined,
+    })
+    db.addLog(client.id, 'Novo briefing', 'Link anterior invalidado para corrigir a configuração')
+    setRevisionNote('')
+    setLinkOpen(false)
+    setConfigOpen(true)
+    toast.success('Link antigo invalidado · corrija a configuração e gere o novo briefing')
+  }
+
   const copy = async () => {
     if (!link) return
     const ok = await copyToClipboard(link)
@@ -520,7 +545,14 @@ export function BriefingTab({ client, forceOpenSections }: { client: Client; for
               Link do briefing
             </button>
           }
-          action={<BriefingStatusBadge status={status} />}
+          action={
+            <span className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={regenerar} leftIcon={<RefreshCw className="h-3.5 w-3.5" />}>
+                Gerar novo briefing
+              </Button>
+              <BriefingStatusBadge status={status} />
+            </span>
+          }
         >
           {linkOpen && (
           <>

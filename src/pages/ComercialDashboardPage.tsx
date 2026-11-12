@@ -3,8 +3,6 @@ import { CalendarRange, Loader2 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Input } from '@/components/ui/Input'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
-import { LeadTodayBySdr } from '@/components/comercial/LeadTodayBySdr'
-import { SdrSummaryPanel } from '@/components/comercial/SdrSummaryPanel'
 import { PainelMetricasMes } from '@/components/comercial/PainelMetricasMes'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { SdrFilterButton } from '@/components/comercial/LeadBoardsView'
@@ -41,9 +39,8 @@ function RangePill({ active, onClick, children }: { active: boolean; onClick: ()
  * Arthur e as que forem criadas depois) num só lugar, pra bater o olho e entender o cenário da
  * operação sem entrar aba por aba. Propositalmente diferente (mais resumido/visual) do dashboard
  * de cada aba: sem os gráficos de "leads por quadro/status/dia de contato", só painel do dia
- * combinado + funil e status do dia sempre abertos por SDR (Luis/Arthur, mesmo zerados). Filtro
- * por data e por SDR — parte em "Hoje" por padrão. O total de leads do card usa a data de criação
- * do lead; Agendadas/No-show/Vendas usam a data do próprio evento (ver SdrSummaryPanel). */
+ * combinado e o painel de metas do período. As tabelas por SDR ("Status do dia por SDR" e
+ * "Métricas por SDR") saíram em 12/11. Filtro por data e por SDR — parte em "Hoje" por padrão. */
 export function ComercialDashboardPage() {
   const boardsBooted = useLeadBoardsBooted()
   const pagesBooted = useLeadPagesBooted()
@@ -93,20 +90,6 @@ export function ComercialDashboardPage() {
       return true
     })
   }, [pageRows, sdrFilter, from, to])
-
-  // O "total de leads" de cada SDR não conta as linhas do quadro Vendas: elas são o registro da venda (cópia do
-  // lead que fechou), não um lead novo — somá-las dava mais leads do que o SDR realmente recebeu.
-  const leadRowsDoPeriodo = React.useMemo(() => {
-    const quadrosDeVenda = new Set(boards.filter((b) => b.isVendas).map((b) => b.id))
-    return rows.filter((r) => !quadrosDeVenda.has(r.boardId))
-  }, [rows, boards])
-
-  // Sem filtro de data — Agendadas/No-show/Vendas do SdrSummaryPanel usam a DATA DO PRÓPRIO
-  // EVENTO (não a de criação do lead) pra decidir o que entra no período selecionado.
-  const sdrScopedRows = React.useMemo(
-    () => pageRows.filter((r) => !sdrFilter || r.sdr === sdrFilter),
-    [pageRows, sdrFilter],
-  )
 
   return (
     <>
@@ -166,9 +149,8 @@ export function ComercialDashboardPage() {
                 fim do período. */}
             <PainelMetricasMes from={from} to={to} rows={pageRows} boards={boards} />
 
+            {/* "Status do dia por SDR" e "Métricas por SDR" saíram daqui (pedido de 12/11). */}
             <LeadTodayPanel rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
-            <LeadTodayBySdr rows={rows} boards={boards} onOpenLead={setOpenLeadId} />
-            <SdrSummaryPanel rows={leadRowsDoPeriodo} allRows={sdrScopedRows} from={from} to={to} boards={boards} onOpenLead={setOpenLeadId} />
           </>
         )}
       </div>

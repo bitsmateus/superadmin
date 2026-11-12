@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/Input'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { PainelMetricasMes } from '@/components/comercial/PainelMetricasMes'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
-import { SdrFilterButton } from '@/components/comercial/LeadBoardsView'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted } from '@/hooks/useLeadBoards'
 import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
 import { currentMonthId, addMonthsToId, monthIdBounds } from '@/hooks/useMonthFilter'
@@ -40,7 +39,7 @@ function RangePill({ active, onClick, children }: { active: boolean; onClick: ()
  * operação sem entrar aba por aba. Propositalmente diferente (mais resumido/visual) do dashboard
  * de cada aba: sem os gráficos de "leads por quadro/status/dia de contato", só painel do dia
  * combinado e o painel de metas do período. As tabelas por SDR ("Status do dia por SDR" e
- * "Métricas por SDR") saíram em 12/11. Filtro por data e por SDR — parte em "Hoje" por padrão. */
+ * "Métricas por SDR") saíram em 12/11. Filtro por data (o de SDR saiu em 12/11) — parte em "Hoje" por padrão. */
 export function ComercialDashboardPage() {
   const boardsBooted = useLeadBoardsBooted()
   const pagesBooted = useLeadPagesBooted()
@@ -68,7 +67,6 @@ export function ComercialDashboardPage() {
   const [dateRange, setDateRange] = React.useState<DateRange>('today')
   const [from, setFrom] = React.useState<string>(() => toISODate(new Date()))
   const [to, setTo] = React.useState<string>(() => toISODate(new Date()))
-  const [sdrFilter, setSdrFilter] = React.useState<string | null>(null)
   const [openLeadId, setOpenLeadId] = React.useState<string | null>(null)
 
   React.useEffect(() => {
@@ -84,18 +82,16 @@ export function ComercialDashboardPage() {
 
   const rows = React.useMemo(() => {
     return pageRows.filter((r) => {
-      if (sdrFilter && r.sdr !== sdrFilter) return false
       if (from && r.createdAt.slice(0, 10) < from) return false
       if (to && r.createdAt.slice(0, 10) > to) return false
       return true
     })
-  }, [pageRows, sdrFilter, from, to])
+  }, [pageRows, from, to])
 
   return (
     <>
       <TopBar
         title="Dashboard Comercial"
-        subtitle="Comercial · visão geral de todas as abas"
         titleClassName="text-xl font-semibold lg:text-[36px]"
         breadcrumbs={[
           { label: 'Grupo NX Digital', to: '/' },
@@ -141,7 +137,6 @@ export function ComercialDashboardPage() {
                     />
                   </>
                 )}
-                <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} />
               </div>
             </div>
 

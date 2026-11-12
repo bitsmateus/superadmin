@@ -161,6 +161,13 @@ function isIanMateusPage(pageName: string): boolean {
   return /\bian\b/i.test(pageName) || /\bmateus\b/i.test(pageName)
 }
 
+/** Abas sem "Marcar como bloco de notas" no menu Página (pedido de 12/11): CRM IAN, CRM MATEUS, Novos Leads, CRM ARTHUR e
+ * CRM LUIS CLOSER. */
+function semBlocoDeNotas(pageId: string, pageName: string): boolean {
+  return isIanMateusPage(pageName) || isIanMateusPage(pageId) || pageId === 'novos_leads' || pageId === 'crm-arthur'
+    || pageId === 'crm-luis-closer'
+}
+
 /** Colunas visíveis numa aba — a coluna SDR só faz sentido em Novos Leads (várias pessoas
  * cadastrando ali); numa aba travada num SDR só, a coluna vira redundante e some da tabela.
  * O quadro de vendas tem um conjunto próprio: lá o que importa é quem, quanto e quando. */
@@ -410,8 +417,9 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
             <Copy className="h-3.5 w-3.5" />
             Duplicar aba
           </button>
-          {/* CRM do Jean/João (dentro do Pipeline): sem bloco de notas e sem voltar pro menu Demandas. */}
-          {!noPipeline && (
+          {/* CRM do Jean/João (dentro do Pipeline): sem bloco de notas e sem voltar pro menu Demandas. CRM IAN/MATEUS,
+              Novos Leads e CRM ARTHUR também sem bloco de notas; CRM IAN/MATEUS sem "Mover pra dentro do Pipeline". */}
+          {!noPipeline && !semBlocoDeNotas(pageId, pageName) && (
           <button
             type="button"
             onClick={toggleNotas}
@@ -422,7 +430,7 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
             {isNotas ? 'Voltar a ser quadro normal' : 'Marcar como bloco de notas'}
           </button>
           )}
-          {currentSection === 'demandas' && !noPipeline && (
+          {currentSection === 'demandas' && !noPipeline && !isIanMateusPage(pageName) && !isIanMateusPage(pageId) && (
             <button
               type="button"
               onClick={togglePipeline}
@@ -1702,8 +1710,8 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
             : isDemandas ? { label: 'Demandas', to: '/demandas' } : { label: 'Comercial', to: '/comercial' },
           { label: tituloDaTela ?? title },
         ]}
-        // CRM do Jean/João: sem "Vincular pessoa", compromisso do dia e "Organizar com IA".
-        rightSlot={crmDoSuporte ? undefined : isDemandas ? (
+        // CRM do Jean/João e CRM IAN/MATEUS: sem "Vincular pessoa", compromisso do dia e "Organizar com IA".
+        rightSlot={crmDoSuporte || (isDemandas && hideIanMateusCols) ? undefined : isDemandas ? (
           <DemandaTopo pageId={page} pageName={title} responsavel={currentPage?.responsavel ?? ''} isAdmin={isAdmin} />
         ) : isAdmin && PAGINAS_COM_SININHO.has(page) ? (
           // Admin dentro do CRM do Arthur ou do Luis: o sininho daquele usuário, só pra olhar, e a rotina dele.
@@ -1799,10 +1807,12 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
               {crmDoSuporte && view === 'dashboard' && (
                 <ToolbarButton icon={<ListTodo className="h-3.5 w-3.5" />} onClick={() => changeView('list')}>Lista</ToolbarButton>
               )}
-              {!crmDoSuporte && <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo={page === 'crm-luis-closer' ? 'Closer' : 'SDR'} />}
+              {/* CRM ARTHUR e CRM LUIS CLOSER: sem o filtro de SDR/Closer (pedido de 12/11). */}
+              {!crmDoSuporte && page !== 'crm-arthur' && page !== 'crm-luis-closer' && <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo="SDR" />}
               </>
               )}
-              {!kanbanIan && (
+              {/* Novos Leads: sem o Filtro (pedido de 12/11). */}
+              {!kanbanIan && page !== 'novos_leads' && (
                 <ToolbarButton
                   icon={<Filter className="h-3.5 w-3.5" />}
                   onClick={() => setFiltersOpen(true)}

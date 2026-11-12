@@ -81,6 +81,24 @@ export function PainelMetricasMes({ from, to, rows, boards }: {
     return () => { vivo = false }
   }, [from, to])
 
+  // Reuniões realizadas e no-shows vêm do CRM do Luis (closer), pela data em que o card dele chegou na etapa — ver
+  // GET /api/dashboard-comercial/reunioes-do-closer. null = carregando ou sem acesso (aí usa a conta antiga, do funil).
+  type ItemCloser = { id: string; nome: string; status: string }
+  const [doCloser, setDoCloser] = React.useState<{ realizadas: ItemCloser[]; no_show: ItemCloser[] } | null>(null)
+  const assinaturaCloser = React.useMemo(
+    () => rows.length + ':' + rows.reduce((s, r) => (r.status.length + s) % 100000, 0),
+    [rows],
+  )
+  React.useEffect(() => {
+    let vivo = true
+    const t = window.setTimeout(() => {
+      api.get<{ realizadas: ItemCloser[]; no_show: ItemCloser[] }>(`/api/dashboard-comercial/reunioes-do-closer?from=${from}&to=${to}`)
+        .then((r) => { if (vivo) setDoCloser(r) })
+        .catch(() => { if (vivo) setDoCloser(null) })
+    }, 300)
+    return () => { vivo = false; window.clearTimeout(t) }
+  }, [from, to, assinaturaCloser])
+
   const month = months.find((m) => m.id === monthId) ?? null
   const milestoneById = React.useMemo(() => new Map(milestones.map((m) => [m.id, m])), [milestones])
   const vendasBoard = React.useMemo(() => boards.find((b) => b.isVendas), [boards])
@@ -98,8 +116,11 @@ export function PainelMetricasMes({ from, to, rows, boards }: {
     // Quantos vieram do formulário do Meta Ads — é o número que tem que bater com o Gerenciador de Anúncios.
     const doMeta = leva.filter((r) => !!r.metaLeadId).length
     const agendados = leva.filter((r) => milestoneById.get(r.id)?.everAgendada)
-    const compareceram = agendados.filter((r) => milestoneById.get(r.id)?.everCompareceu)
-    const noShow = agendados.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_NO_SHOW)
+    // Do CRM do Luis, quando já chegou; até lá (ou sem acesso), a conta do funil pela leva do período.
+    const compareceram: { id: string }[] = doCloser?.realizadas
+      ?? agendados.filter((r) => milestoneById.get(r.id)?.everCompareceu)
+    const noShow: { id: string }[] = doCloser?.no_show
+      ?? agendados.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_NO_SHOW)
     const vendasFunil = leva.filter((r) => milestoneById.get(r.id)?.milestone === MILESTONE_VENDIDO)
 
     // Dinheiro vem das linhas da aba Vendas fechadas no mês — é onde MRR e implementação existem
@@ -158,7 +179,7 @@ export function PainelMetricasMes({ from, to, rows, boards }: {
       taxaNoShow: comDesfecho > 0 ? noShow.length / comDesfecho : 0,
       taxaReuniaoVenda: compareceram.length > 0 ? vendasFunil.length / compareceram.length : 0,
     }
-  }, [rows, boards, milestoneById, vendasBoard, month])
+  }, [rows, boards, milestoneById, vendasBoard, month, doCloser])
   const dados = React.useMemo(() => calcular(from, to, mesInteiro, gastoMeta), [calcular, from, to, mesInteiro, gastoMeta])
   // As metas são do mês: comparam com o mês inteiro, seja qual for o período do filtro.
   const doMes = React.useMemo(

@@ -411,7 +411,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const comercialItems = visibleComercialItems.length
     ? [
         ...(canSee('/comercial-dashboard') ? [{ to: '/comercial-dashboard', label: 'Dashboard Comercial', icon: LayoutDashboard }] : []),
-        ...(canSee('/agenda') ? [{ to: '/agenda', label: 'Agenda', icon: CalendarDays }] : []),
+        // A Agenda saiu do grupo Comercial (pedido de 12/11): continua em Suporte, na mesma rota /agenda.
         ...visibleComercialItems,
       ]
     : []
@@ -462,9 +462,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       ...(isAdmin
         ? [{ to: '/users', label: 'Equipe', icon: ShieldCheck }]
         : []),
-      ...(isAdmin
-        ? [{ to: '/auditoria', label: 'Auditoria', icon: FileSearch }]
-        : []),
+      // "Auditoria" saiu do menu (pedido de 12/11). A rota /auditoria continua, só sem atalho aqui.
       { to: '/settings', label: 'Configurações', icon: Settings },
     ].filter((item) => canSee(item.to) && isSupportPageVisible(item.to)),
     duplicatesByKey,

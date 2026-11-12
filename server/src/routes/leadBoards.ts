@@ -2265,6 +2265,61 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     }
   );
 
+  // GET /api/dashboard-comercial/reunioes-do-closer?from&to — "Reuniões realizadas" e "No-shows" do Dashboard Comercial
+  // saem do CRM do Luis (closer), que é onde a reunião acontece e onde ele marca o resultado (pedido de 12/11):
+  //  - realizada: card do CRM do closer que chegou numa etapa pós-reunião (Proposta enviada, Follow-up Propostas,
+  //    Vendido) DENTRO do período — vale a primeira vez que chegou lá (linha do tempo de status ou de quadro do próprio
+  //    card; sem registro, a data em que entrou no quadro atual);
+  //  - no-show: card do CRM do closer que foi pra "Reunião não comparecida" dentro do período;
+  //  - vendas: card do CRM do closer que chegou em "Vendido" dentro do período (pra % de conversão das Minhas métricas).
+  // Usado no Dashboard Comercial e nas Minhas métricas do CRM do Luis.
+  // Os nomes das etapas variam de CRM pra CRM ("Follow up Propostas", "Followup Propostas"…): compara sem acento,
+  // maiúscula nem espaço/hífen.
+  app.get<{ Querystring: { from?: string; to?: string } }>(
+    '/api/dashboard-comercial/reunioes-do-closer',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const eu = req.user as { sub: string; role?: string };
+      if (!(await podeVerMetricasDoCloser(eu.sub, eu.role))) return reply.status(403).send({ message: 'Sem acesso' });
+      const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from ?? '') ? req.query.from! : '1970-01-01';
+      const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to ?? '') ? req.query.to! : '2999-12-31';
+      const norm = (col: string) =>
+        `regexp_replace(translate(lower(COALESCE(${col}, '')), 'áàâãéêíóôõúç', 'aaaaeeiooouc'), '[^a-z0-9]', '', 'g')`;
+      const ehRealizada = (col: string) =>
+        `(${norm(col)} LIKE 'propostaenviada%' OR ${norm(col)} LIKE 'followup%proposta%' OR ${norm(col)} = 'vendido')`;
+      const ehNoShow = (col: string) => `(${norm(col)} = 'reuniaonaocomparecida')`;
+      const ehVenda = (col: string) => `(${norm(col)} = 'vendido')`;
+      // Primeira vez (no fuso de Brasília) que o card do closer chegou numa etapa: pela linha do tempo, ou — sem
+      // registro nenhum e estando nela agora — pelo dia em que entrou no quadro atual.
+      const primeiraVez = (teste: (col: string) => string) => `COALESCE(
+        (SELECT MIN(le.created_at) FROM lead_events le
+         WHERE le.lead_row_id = lr.id AND le.type IN ('status', 'board') AND ${teste('le.to_value')}),
+        CASE WHEN ${teste('lr.status')} OR ${teste('lb.name')} THEN COALESCE(lr.entrou_coluna_em, lr.created_at) END
+      )`;
+      const cards = await query<{ id: string; nome: string; status: string; realizada_em: string | null; no_show_em: string | null; venda_em: string | null }>(
+        `SELECT lr.id, COALESCE(NULLIF(lr.nome, ''), NULLIF(lr.empresa, ''), 'Sem nome') AS nome, COALESCE(lr.status, '') AS status,
+                ${primeiraVez(ehRealizada)} AS realizada_em,
+                ${primeiraVez(ehNoShow)} AS no_show_em,
+                ${primeiraVez(ehVenda)} AS venda_em
+         FROM lead_rows lr
+         JOIN lead_boards lb ON lb.id = lr.board_id
+         WHERE lb.page = $1 AND lb.is_vendas = false AND lr.deleted_at IS NULL`,
+        [ESPELHO_PAGE_DESTINO]
+      );
+      const dia = (iso: string | null) => (iso
+        ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
+        : '');
+      const noPeriodo = (iso: string | null) => { const d = dia(iso); return !!d && d >= from && d <= to; };
+      // abrir_id: o próprio card do closer (é o que ele abre).
+      const item = (c: { id: string; nome: string; status: string }) => ({ id: c.id, abrir_id: c.id, nome: c.nome, status: c.status });
+      return {
+        realizadas: cards.filter((c) => noPeriodo(c.realizada_em)).map(item),
+        no_show: cards.filter((c) => noPeriodo(c.no_show_em)).map(item),
+        vendas: cards.filter((c) => noPeriodo(c.venda_em)).map(item),
+      };
+    }
+  );
+
   // GET /api/lead-notes?lead_row_id=xxx — bloco de anotações/atualizações do lead
   app.get<{ Querystring: { lead_row_id?: string } }>(
     '/api/lead-notes',

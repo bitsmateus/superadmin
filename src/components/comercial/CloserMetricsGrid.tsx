@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CalendarCheck, UserCheck, TrendingUp, UserRound } from 'lucide-react'
+import { CalendarCheck, UserCheck, TrendingUp, UserRound, UserX } from 'lucide-react'
 import { useMonthFilter, addMonthsToId, currentMonthId } from '@/hooks/useMonthFilter'
 import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
 import { api } from '@/services/api'
@@ -109,31 +109,29 @@ export function CloserMetricsGrid({ closer = 'Luis', onOpenLead }: {
 }) {
   const monthFilter = useMonthFilter(React.useMemo(() => [addMonthsToId(currentMonthId(), -1)], []))
   const { from, to } = monthFilter.bounds
-  const [dados, setDados] = React.useState<{
-    agendadas: number; compareceu: number; no_show: number; vendas: number
-    lista: { agendadas: ItemDaLista[]; compareceu: ItemDaLista[]; no_show: ItemDaLista[]; vendas: ItemDaLista[] }
-  } | null>(null)
+  // Do próprio CRM do closer (pedido de 12/11): os cards dele que chegaram em proposta/follow-up/venda (realizada),
+  // em "Reunião não comparecida" (no-show) e em "Vendido" no período — GET /api/dashboard-comercial/reunioes-do-closer,
+  // a mesma conta do Dashboard Comercial.
+  const [dados, setDados] = React.useState<{ realizadas: ItemDaLista[]; no_show: ItemDaLista[]; vendas: ItemDaLista[] } | null>(null)
 
-  // Vem do servidor: é a mesma conta (e as mesmas leads) das Métricas por SDR do Arthur, então os dois batem.
   React.useEffect(() => {
     let vivo = true
     setDados(null)
     api
       .get<NonNullable<typeof dados>>(
-        `/api/closer-metrics?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        `/api/dashboard-comercial/reunioes-do-closer?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       )
       .then((r) => vivo && setDados(r))
-      .catch(() => vivo && setDados({ agendadas: 0, compareceu: 0, no_show: 0, vendas: 0, lista: { agendadas: [], compareceu: [], no_show: [], vendas: [] } }))
+      .catch(() => vivo && setDados({ realizadas: [], no_show: [], vendas: [] }))
     return () => {
       vivo = false
     }
   }, [from, to])
 
-  const lista = dados?.lista ?? { agendadas: [], compareceu: [], no_show: [], vendas: [] }
-  const agendadas = dados?.agendadas ?? 0
-  const compareceu = dados?.compareceu ?? 0
-  const noShow = dados?.no_show ?? 0
-  const vendas = dados?.vendas ?? 0
+  const lista = { compareceu: dados?.realizadas ?? [], no_show: dados?.no_show ?? [], vendas: dados?.vendas ?? [] }
+  const compareceu = lista.compareceu.length
+  const noShow = lista.no_show.length
+  const vendas = lista.vendas.length
   const comDesfecho = compareceu + noShow
   const m = {
     comparecimento: comDesfecho > 0 ? compareceu / comDesfecho : 0,
@@ -154,13 +152,13 @@ export function CloserMetricsGrid({ closer = 'Luis', onOpenLead }: {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <ComLista grupos={[{ titulo: 'Reuniões agendadas', itens: lista.agendadas }]} onOpenLead={onOpenLead} className="flex cursor-default flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
-            <span className="text-3xl font-bold text-accent">{dados ? agendadas : '…'}</span>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <ComLista grupos={[{ titulo: 'Reuniões realizadas', itens: lista.compareceu }]} onOpenLead={onOpenLead} className="flex cursor-default flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
+            <span className="text-3xl font-bold text-accent">{dados ? compareceu : '…'}</span>
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/80">
-              <CalendarCheck className="h-3 w-3 text-accent" /> Reuniões agendadas
+              <CalendarCheck className="h-3 w-3 text-accent" /> Reuniões realizadas
             </span>
-            <span className="text-[10px] text-foreground/40">total no período</span>
+            <span className="text-[10px] text-foreground/40">no período</span>
           </ComLista>
           <Anel
             icone={<UserCheck className="h-3 w-3" />}
@@ -180,12 +178,20 @@ export function CloserMetricsGrid({ closer = 'Luis', onOpenLead }: {
             onOpenLead={onOpenLead}
             grupos={[{ titulo: 'Vendas', itens: lista.vendas }, { titulo: 'Reuniões realizadas', itens: lista.compareceu }]}
           />
+          <ComLista grupos={[{ titulo: 'No-shows', itens: lista.no_show }]} onOpenLead={onOpenLead} className="flex cursor-default flex-col items-center justify-center gap-1 rounded-xl bg-elevate/[0.05] px-2 py-3">
+            <span className={cn('text-3xl font-bold', noShow > 0 ? 'text-danger' : 'text-foreground/60')}>{dados ? noShow : '…'}</span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground/80">
+              <UserX className="h-3 w-3 text-danger" /> No-shows
+            </span>
+            <span className="text-[10px] text-foreground/40">não compareceram</span>
+          </ComLista>
         </div>
         <ul className="mt-3 space-y-0.5 text-[11px] leading-snug text-foreground/45">
-          <li><strong className="font-semibold text-foreground/60">Reuniões agendadas:</strong> o total no período.</li>
+          <li><strong className="font-semibold text-foreground/60">Reuniões realizadas:</strong> cards do seu CRM que chegaram em Proposta enviada, Follow-up ou Vendido no período.</li>
+          <li><strong className="font-semibold text-foreground/60">No-shows:</strong> cards do seu CRM que foram pra “Reunião não comparecida” no período.</li>
           <li><strong className="font-semibold text-foreground/60">% de comparecimento:</strong> realizadas ÷ (realizadas + no-show).</li>
           <li><strong className="font-semibold text-foreground/60">% de conversão:</strong> vendas ÷ reuniões realizadas.</li>
-          <li className="pt-1">Reunião realizada = a lead chegou em Proposta enviada, Follow-up ou Vendido. Quem ainda está em “Reunião agendada” não entra nas porcentagens.</li>
+          <li className="pt-1">Quem ainda está em “Reunião agendada” não entra nas porcentagens.</li>
         </ul>
       </div>
     </div>

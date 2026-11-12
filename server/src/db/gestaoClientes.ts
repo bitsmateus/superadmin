@@ -661,6 +661,37 @@ const TABELAS = [
   // Saldo e forma de pagamento como a Meta devolveu (lib/gcSaldo.ts interpreta), lidos de hora em hora.
   `ALTER TABLE gc_trafego_contas ADD COLUMN IF NOT EXISTS financeiro JSONB`,
   `ALTER TABLE gc_trafego_contas ADD COLUMN IF NOT EXISTS financeiro_em TIMESTAMPTZ`,
+  // ---------------------------------------------------------------- Google Ads (lib/gcGoogleAds.ts)
+  `CREATE TABLE IF NOT EXISTS gc_google_contas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    customer_id TEXT NOT NULL,
+    nome TEXT NOT NULL DEFAULT '',
+    moeda TEXT NOT NULL DEFAULT '',
+    ativo BOOLEAN NOT NULL DEFAULT true,
+    ultimo_sync_em TIMESTAMPTZ,
+    ultimo_erro TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (gc_cliente_id, customer_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS gc_google_campanhas_dia (
+    dia DATE NOT NULL,
+    customer_id TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    campanha_nome TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    canal TEXT NOT NULL DEFAULT '',
+    orcamento_dia NUMERIC(14,2),
+    gasto NUMERIC(14,2) NOT NULL DEFAULT 0,
+    impressoes BIGINT NOT NULL DEFAULT 0,
+    cliques BIGINT NOT NULL DEFAULT 0,
+    conversoes NUMERIC(14,2) NOT NULL DEFAULT 0,
+    valor_conversoes NUMERIC(14,2) NOT NULL DEFAULT 0,
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (dia, campaign_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_google_campanhas_cliente_idx ON gc_google_campanhas_dia (gc_cliente_id, dia)`,
   `CREATE TABLE IF NOT EXISTS gc_meta_campanhas (
     campaign_id TEXT PRIMARY KEY,
     gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,

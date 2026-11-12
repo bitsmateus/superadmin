@@ -69,6 +69,27 @@ export interface GcTrafegoCliente {
   ritmo: { gastoMes: number; previstoMes: number | null }
 }
 
+/** Google Ads do cliente (ver server/src/lib/gcGoogleAds.ts). CTR em fração (0,01 = 1%). */
+export interface GcTotaisGoogle {
+  gasto: number; impressoes: number; cliques: number; conversoes: number; valorConversoes: number
+  ctr: number | null; cpc: number | null; custoConversao: number | null; roas: number | null
+}
+export interface GcContaGoogle {
+  id: string; gc_cliente_id: string; customer_id: string; customer_id_formatado: string; nome: string; moeda: string
+  ativo: boolean; ultimo_sync_em: string | null; ultimo_erro: string | null; created_at: string
+}
+export interface GcCampanhaGoogle extends GcTotaisGoogle {
+  id: string; conta: string; nome: string; status: string; canal: string; orcamentoDia: number | null
+}
+export interface GcGoogleCliente {
+  configurado: boolean
+  de: string; ate: string; anterior: { de: string; ate: string }
+  contas: GcContaGoogle[]
+  totais: { atual: GcTotaisGoogle; anterior: GcTotaisGoogle }
+  serie: { dia: string; gasto: number; resultados: number }[]
+  campanhas: GcCampanhaGoogle[]
+}
+
 export type GcStatusTrafego = 'ok' | 'atencao' | 'critico' | 'sem_conta'
 
 export interface GcLinhaPainel {
@@ -113,6 +134,9 @@ export const gcTrafego = {
   gerarMensagemCliente: (edicaoId: string) => api.post<GcEdicaoTrafego>(`/api/gc/trafego/edicoes/${edicaoId}/mensagem`),
   salvarMensagemCliente: (edicaoId: string, mensagem: string) =>
     api.put<GcEdicaoTrafego>(`/api/gc/trafego/edicoes/${edicaoId}/mensagem`, { mensagem }),
+  google: (id: string, de: string, ate: string) => api.get<GcGoogleCliente>(`/api/gc/clientes/${id}/trafego/google${qs({ de, ate })}`),
+  vincularGoogle: (id: string, customer_id: string) => api.post<GcContaGoogle>(`/api/gc/clientes/${id}/trafego/google/contas`, { customer_id }),
+  desvincularGoogle: (contaId: string) => api.delete(`/api/gc/trafego/google/contas/${contaId}`),
   sincronizar: (id: string) =>
     api.post<{ resultados: { conta: string; ok: boolean; linhas: number; erro?: string }[] }>(`/api/gc/clientes/${id}/trafego/sincronizar`),
 }

@@ -61,6 +61,7 @@ const DONO_POR_ROTA: { prefixo: string; param: string; sql: string }[] = [
   },
   { prefixo: '/api/gc/trafego/alertas/:id', param: 'id', sql: 'SELECT gc_cliente_id FROM gc_trafego_alertas WHERE id = $1' },
   { prefixo: '/api/gc/trafego/contas/:id', param: 'id', sql: 'SELECT gc_cliente_id FROM gc_trafego_contas WHERE id = $1' },
+  { prefixo: '/api/gc/trafego/google/contas/:id', param: 'id', sql: 'SELECT gc_cliente_id FROM gc_google_contas WHERE id = $1' },
   { prefixo: '/api/gc/trafego/edicoes/:edicaoId', param: 'edicaoId', sql: 'SELECT gc_cliente_id FROM gc_trafego_edicoes WHERE id = $1' },
 ];
 

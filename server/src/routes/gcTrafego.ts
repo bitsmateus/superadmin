@@ -9,6 +9,10 @@ import {
 import { instagramPeloTrafego } from '../lib/gcInstagram.js';
 import { gerarMensagemParaCliente } from '../lib/gcMensagemTrafego.js';
 import { diasQueDa, interpretarFinanceiro, type FinanceiroMeta } from '../lib/gcSaldo.js';
+import {
+  campanhasGoogleDoCliente, formatarCustomerId, googleAdsConfigurado, lerContaNoGoogle, normalizarCustomerId, serieGoogleDoCliente,
+  sincronizarContaGoogle, totaisGoogleDoCliente, type ContaGoogle,
+} from '../lib/gcGoogleAds.js';
 import { podeUsarModulo } from './gestaoClientes.js';
 
 /**
@@ -339,6 +343,76 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
+  // ------------------------------------------------------------------ Google Ads (lib/gcGoogleAds.ts)
+  const CAMPOS_CONTA_GOOGLE = `id, gc_cliente_id, customer_id, nome, moeda, ativo, ultimo_sync_em, ultimo_erro, created_at`;
+
+  // GET /api/gc/clientes/:id/trafego/google?de=&ate= — o que a aba Tráfego mostra do Google Ads.
+  app.get<{ Params: { id: string }; Querystring: { de?: string; ate?: string } }>(
+    '/api/gc/clientes/:id/trafego/google',
+    autenticado,
+    async (req) => {
+      const id = req.params.id;
+      const { de, ate } = periodo(req.query);
+      const ant = anteriorA(de, ate);
+      const [contas, atual, anterior, serie, campanhas] = await Promise.all([
+        query<{ customer_id: string }>(`SELECT ${CAMPOS_CONTA_GOOGLE} FROM gc_google_contas WHERE gc_cliente_id = $1 ORDER BY created_at`, [id]),
+        totaisGoogleDoCliente(id, de, ate),
+        totaisGoogleDoCliente(id, ant.de, ant.ate),
+        serieGoogleDoCliente(id, de, ate),
+        campanhasGoogleDoCliente(id, de, ate),
+      ]);
+      return {
+        configurado: googleAdsConfigurado(),
+        de, ate, anterior: ant,
+        contas: contas.map((c) => ({ ...c, customer_id_formatado: formatarCustomerId(c.customer_id) })),
+        totais: { atual, anterior }, serie, campanhas,
+      };
+    },
+  );
+
+  // POST /api/gc/clientes/:id/trafego/google/contas — vincula pelo ID de cliente do Google Ads.
+  app.post<{ Params: { id: string }; Body: { customer_id?: string } }>(
+    '/api/gc/clientes/:id/trafego/google/contas',
+    autenticado,
+    async (req, reply) => {
+      const customerId = normalizarCustomerId(req.body?.customer_id ?? '');
+      if (!customerId) return reply.status(400).send({ message: 'Informe o ID de cliente do Google Ads (10 dígitos, ex.: 123-456-7890).' });
+      if (!googleAdsConfigurado()) {
+        return reply.status(400).send({ message: 'O Google Ads ainda não está configurado no servidor (token de desenvolvedor e acesso da MCC).' });
+      }
+      const cliente = await queryOne('SELECT 1 FROM gc_clientes WHERE id = $1', [req.params.id]);
+      if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      let info: { nome: string; moeda: string };
+      try {
+        info = await lerContaNoGoogle(customerId);
+      } catch (err) {
+        return reply.status(400).send({ message: `O Google não liberou essa conta. ${(err as Error).message}` });
+      }
+      const conta = await queryOne<ContaGoogle>(
+        `INSERT INTO gc_google_contas (gc_cliente_id, customer_id, nome, moeda) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (gc_cliente_id, customer_id) DO UPDATE SET nome = EXCLUDED.nome, moeda = EXCLUDED.moeda, ativo = true
+         RETURNING id, gc_cliente_id, customer_id`,
+        [req.params.id, customerId, info.nome, info.moeda],
+      );
+      const { sub } = req.user as { sub: string };
+      await query(
+        `INSERT INTO gc_historico (gc_cliente_id, tipo, titulo, descricao, autor_id)
+         VALUES ($1, 'evento_sistema', 'Conta do Google Ads vinculada', $2, $3)`,
+        [req.params.id, `${info.nome || formatarCustomerId(customerId)} (${formatarCustomerId(customerId)})`, sub],
+      );
+      // Primeira coleta (90 dias) em segundo plano.
+      if (conta) void sincronizarContaGoogle(conta).then(() => avaliarAlertasClientes()).catch(() => undefined);
+      return queryOne(`SELECT ${CAMPOS_CONTA_GOOGLE} FROM gc_google_contas WHERE id = $1`, [conta?.id]);
+    },
+  );
+
+  // DELETE /api/gc/trafego/google/contas/:id — desvincula. Os números já coletados ficam.
+  app.delete<{ Params: { id: string } }>('/api/gc/trafego/google/contas/:id', autenticado, async (req, reply) => {
+    const r = await queryOne('DELETE FROM gc_google_contas WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!r) return reply.status(404).send({ message: 'Conta não encontrada' });
+    return reply.status(204).send();
+  });
+
   // POST /api/gc/clientes/:id/trafego/sincronizar — "atualizar agora" (espera terminar).
   app.post<{ Params: { id: string } }>('/api/gc/clientes/:id/trafego/sincronizar', autenticado, async (req) => {
     const contas = await query<ContaTrafego>(
@@ -347,6 +421,10 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
     );
     const resultados = [];
     for (const c of contas) resultados.push({ conta: c.ad_account_id, ...(await sincronizarConta(c)) });
+    const google = await query<ContaGoogle>(
+      'SELECT id, gc_cliente_id, customer_id FROM gc_google_contas WHERE gc_cliente_id = $1 AND ativo', [req.params.id],
+    );
+    for (const c of google) resultados.push({ conta: `Google ${formatarCustomerId(c.customer_id)}`, ...(await sincronizarContaGoogle(c)) });
     await avaliarAlertasClientes();
     return { resultados };
   });

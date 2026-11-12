@@ -9,6 +9,8 @@ import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/utils'
 import { brl, brlExato, num, useCarregar, Estado, Painel, Vazio, diaCurto } from '@/components/trafego/format'
 import { PainelIaTrafego } from '@/components/gestaoClientes/IaDoCliente'
+import { GraficoDiario, Kpi, Variacao, quandoFoi } from '@/components/gestaoClientes/trafegoBlocos'
+import { PainelGoogleAds } from '@/components/gestaoClientes/PainelGoogleAds'
 import { ArtesAprovadasTrafego } from '@/components/gestaoClientes/social/ArtesAprovadasTrafego'
 import { UltimaEdicaoTrafego } from '@/components/gestaoClientes/UltimaEdicaoTrafego'
 import {
@@ -44,18 +46,11 @@ function intervalo(p: Periodo): { de: string; ate: string } {
   return { de: dia(Number(p)), ate: dia(1) }
 }
 
+export { quandoFoi, Variacao }
+
 const pct = (v: number | null | undefined, casas = 2) =>
   v == null ? '—' : `${v.toFixed(casas).replace('.', ',')}%`
 
-export function quandoFoi(iso: string | null): string {
-  if (!iso) return 'nunca'
-  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60_000)
-  if (min < 2) return 'agora'
-  if (min < 60) return `há ${min} min`
-  const h = Math.round(min / 60)
-  if (h < 24) return `há ${h} h`
-  return `há ${Math.round(h / 24)} dias`
-}
 
 export const NIVEL_ALERTA: Record<GcNivelAlerta, { label: string; classe: string; icone: typeof Siren }> = {
   critico: { label: 'Crítico', classe: 'border-danger/30 bg-danger/10 text-danger', icone: Siren },
@@ -94,33 +89,7 @@ export function ListaAlertas({ alertas, onVisto, mostrarCliente }: {
   )
 }
 
-/** Variação % entre dois números; `menorMelhor` inverte a cor (custo caindo é bom). */
-export function Variacao({ atual, anterior, menorMelhor }: { atual: number | null; anterior: number | null; menorMelhor?: boolean }) {
-  if (atual == null || anterior == null || anterior === 0) return null
-  const v = (atual - anterior) / anterior
-  if (Math.abs(v) < 0.005) return <span className="text-[11px] text-foreground/40">=</span>
-  const bom = menorMelhor ? v < 0 : v > 0
-  return (
-    <span className={cn('text-[11px] font-medium tabular-nums', bom ? 'text-emerald-600 dark:text-emerald-400' : 'text-danger')}>
-      {v > 0 ? '▲' : '▼'} {Math.abs(Math.round(v * 100))}%
-    </span>
-  )
-}
 
-function Kpi({ titulo, valor, detalhe, atual, anterior, menorMelhor }: {
-  titulo: string; valor: string; detalhe?: string; atual: number | null; anterior: number | null; menorMelhor?: boolean
-}) {
-  return (
-    <div className="rounded-xl border border-line bg-card px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-foreground/50">{titulo}</p>
-      <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-xl font-semibold tabular-nums text-foreground">{valor}</span>
-        <Variacao atual={atual} anterior={anterior} menorMelhor={menorMelhor} />
-      </div>
-      {detalhe && <p className="mt-0.5 truncate text-xs text-foreground/50">{detalhe}</p>}
-    </div>
-  )
-}
 
 function Kpis({ atual, anterior, benchmark }: { atual: GcTotaisTrafego; anterior: GcTotaisTrafego; benchmark: GcBenchmark | null }) {
   const bench = benchmark && benchmark.custoResultado != null
@@ -147,22 +116,6 @@ function Kpis({ atual, anterior, benchmark }: { atual: GcTotaisTrafego; anterior
   )
 }
 
-/** Barras de gasto por dia, com os resultados do dia em cima de cada barra. */
-function GraficoDiario({ serie }: { serie: { dia: string; gasto: number; resultados: number }[] }) {
-  const max = Math.max(1, ...serie.map((s) => s.gasto))
-  if (serie.every((s) => s.gasto === 0)) return <Vazio>Sem gasto no período.</Vazio>
-  return (
-    <div className="flex h-40 items-end gap-[3px] overflow-x-auto">
-      {serie.map((s) => (
-        <div key={s.dia} className="flex min-w-[14px] flex-1 flex-col items-center gap-1" title={`${diaCurto(s.dia)}: ${brl(s.gasto)} · ${s.resultados} resultado(s)`}>
-          <span className="text-[10px] tabular-nums text-foreground/50">{s.resultados || ''}</span>
-          <div className="w-full rounded-t bg-accent/70 transition-colors hover:bg-accent" style={{ height: `${Math.max(2, (s.gasto / max) * 110)}px` }} />
-          <span className="text-[9px] tabular-nums text-foreground/40">{diaCurto(s.dia).slice(0, 2)}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 const STATUS_META: Record<string, string> = {
   ACTIVE: 'Ativa', PAUSED: 'Pausada', CAMPAIGN_PAUSED: 'Campanha pausada', ADSET_PAUSED: 'Conjunto pausado',
@@ -483,6 +436,7 @@ function SaldoDasContas({ contas }: { contas: GcContaTrafego[] }) {
  */
 export function AbaTrafego({ clienteId }: { clienteId: string }) {
   const [periodo, setPeriodo] = React.useState<Periodo>('30')
+  const [plataforma, setPlataforma] = React.useState<'meta' | 'google'>('meta')
   const { de, ate } = intervalo(periodo)
   const { dados, erro, carregando, recarregar } = useCarregar(() => gcTrafego.doCliente(clienteId, de, ate), [clienteId, de, ate])
   const [contasAbertas, setContasAbertas] = React.useState(false)
@@ -517,6 +471,21 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
   return (
     <div className="space-y-4">
       <ArtesAprovadasTrafego clienteId={clienteId} />
+      <div className="flex gap-1 border-b border-line">
+        {([['meta', 'Meta Ads'], ['google', 'Google Ads']] as const).map(([valor, rotulo]) => (
+          <button
+            key={valor}
+            type="button"
+            onClick={() => setPlataforma(valor)}
+            className={cn(
+              '-mb-px border-b-2 px-4 py-2 text-sm transition-colors',
+              plataforma === valor ? 'border-accent font-medium text-foreground' : 'border-transparent text-foreground/55 hover:text-foreground',
+            )}
+          >
+            {rotulo}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1 rounded-lg bg-elevate/[0.04] p-1">
           {PERIODOS.map((p) => (
@@ -535,6 +504,7 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
           {diaCurto(de)} a {diaCurto(ate)}
           {dados && ` · comparando com ${diaCurto(dados.anterior.de)} a ${diaCurto(dados.anterior.ate)}`}
         </span>
+        {plataforma === 'meta' && (
         <div className="ml-auto flex items-center gap-2">
           {contas.length > 0 && (
             <span className="hidden text-xs text-foreground/45 sm:inline">Meta atualizada {quandoFoi(ultimoSync)}</span>
@@ -548,8 +518,12 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
             {contas.length ? `Contas (${contas.length})` : 'Vincular conta'}
           </Button>
         </div>
+        )}
       </div>
 
+      {plataforma === 'google' && <PainelGoogleAds clienteId={clienteId} de={de} ate={ate} />}
+
+      {plataforma === 'meta' && (
       <Estado carregando={carregando && !dados} erro={erro}>
         {dados && contas.length === 0 ? (
           <Painel>
@@ -715,6 +689,7 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
           </>
         ) : null}
       </Estado>
+      )}
 
       <ModalContas
         aberto={contasAbertas}

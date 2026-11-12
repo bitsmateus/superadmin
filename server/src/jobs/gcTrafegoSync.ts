@@ -1,11 +1,12 @@
 import { atualizarSaldosDeTodas, avaliarAlertasClientes, sincronizarTodasAsContas } from '../lib/gcTrafego.js';
 import { sincronizarTodosInstagrams } from '../lib/gcInstagram.js';
 import { analisesDiarias } from '../lib/gcIa.js';
+import { sincronizarTodasGoogle } from '../lib/gcGoogleAds.js';
 
 /**
  * Coleta do Meta dos clientes NX Digital (contas em gc_trafego_contas).
  * - Ao subir o servidor e às 07h, 11h, 15h e 19h (São Paulo): regrava os últimos 7 dias de cada
- *   conta (conta nova puxa 90 dias de histórico) e roda as regras de alerta do painel.
+ *   conta Meta e Google Ads (conta nova puxa 90 dias de histórico) e roda as regras de alerta do painel.
  * - Instagram dos clientes: ao subir e às 07h (os posts não mudam tanto ao longo do dia).
  * - 08h: análise de tráfego da IA pra quem gastou na semana (sem ANTHROPIC_API_KEY, não roda).
  * - De hora em hora (08h às 22h, aos 30 min): só o saldo/pagamento de cada conta e as regras de
@@ -53,9 +54,10 @@ export async function rodarGcTrafego(comInstagram = false): Promise<void> {
       if (ig.contas) console.log(`[gc-trafego] instagram: ${ig.contas} perfil(is), ${ig.erros} com erro`);
     }
     const s = await sincronizarTodasAsContas();
-    if (s.contas === 0) return;
+    const g = await sincronizarTodasGoogle();
+    if (s.contas === 0 && g.contas === 0) return;
     const a = await avaliarAlertasClientes();
-    console.log(`[gc-trafego] ${s.contas} conta(s), ${s.erros} com erro; alertas: ${a.novos} novo(s), ${a.resolvidos} resolvido(s)`);
+    console.log(`[gc-trafego] meta: ${s.contas} conta(s), ${s.erros} com erro; google: ${g.contas} conta(s), ${g.erros} com erro; alertas: ${a.novos} novo(s), ${a.resolvidos} resolvido(s)`);
   } catch (err) {
     console.error('[gc-trafego] erro', err instanceof Error ? err.message : err);
   } finally {

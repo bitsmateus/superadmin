@@ -26,6 +26,7 @@ test('acha o cliente pela rota', () => {
   assert.match((filho as { sql: string }).sql, /FROM gc_social_producao/);
   assert.equal((clienteDaRota('/api/gc/trafego/edicoes/:edicaoId', { edicaoId: 'e1' }) as { id: string }).id, 'e1');
   assert.equal(clienteDaRota('/api/gc/demandas/:id/mover', { id: 'd1' }).tipo, 'filho');
+  assert.match((clienteDaRota('/api/gc/trafego/google/contas/:id', { id: 'g1' }) as { sql: string }).sql, /FROM gc_google_contas/);
 });
 
 test('rotas que não são de um cliente passam (as listagens filtram no SQL)', () => {

@@ -1,6 +1,7 @@
 import { query, queryOne } from '../db.js';
 import { diasAtras, formatoDoCriativo, graphList, janelas, type MetaAd } from './metaInsights.js';
 import { alertasDeSaldo, CAMPOS_FINANCEIRO_META, interpretarFinanceiro, type FinanceiroMeta } from './gcSaldo.js';
+import { formatarCustomerId, totaisGoogleDoCliente } from './gcGoogleAds.js';
 
 /**
  * Tráfego (Meta) dos clientes NX Digital — SOMENTE LEITURA na Meta.
@@ -449,6 +450,31 @@ async function regrasDoCliente(
   return out;
 }
 
+/** Regras do Google Ads do cliente (mesma lógica de semana fechada do Meta). */
+async function regrasGoogleDoCliente(
+  clienteId: string,
+  contas: { customer_id: string; nome: string; ultimo_erro: string | null }[],
+): Promise<Disparo[]> {
+  const out: Disparo[] = [];
+  for (const c of contas) {
+    if (c.ultimo_erro) {
+      out.push({ regra: 'google_sync_erro', nivel: 'critico', entidade: c.customer_id, mensagem: `Google Ads: não consegui ler a conta ${c.nome || formatarCustomerId(c.customer_id)}: ${c.ultimo_erro}` });
+    }
+  }
+  const [semana, ultimos2, antes2] = await Promise.all([
+    totaisGoogleDoCliente(clienteId, diasAtras(7), diasAtras(1)),
+    totaisGoogleDoCliente(clienteId, diasAtras(2), diasAtras(1)),
+    totaisGoogleDoCliente(clienteId, diasAtras(9), diasAtras(3)),
+  ]);
+  if (ultimos2.gasto === 0 && antes2.gasto >= 50) {
+    out.push({ regra: 'google_parou', nivel: 'critico', entidade: '', mensagem: 'Google Ads: as campanhas não gastaram nada nos últimos 2 dias. Conferir pagamento, reprovação ou orçamento.' });
+  }
+  if (semana.gasto >= 150 && semana.conversoes === 0) {
+    out.push({ regra: 'google_sem_conversao', nivel: 'atencao', entidade: '', mensagem: `Google Ads: ${brl(semana.gasto)} gastos em 7 dias sem nenhuma conversão. Conferir a campanha e o acompanhamento de conversões.` });
+  }
+  return out;
+}
+
 /** Roda as regras pra todos os clientes com conta. Abre o que disparou e fecha o que parou. */
 export async function avaliarAlertasClientes(): Promise<{ novos: number; resolvidos: number }> {
   const contas = await query<{ gc_cliente_id: string; ad_account_id: string; nome: string; ultimo_erro: string | null; financeiro: FinanceiroMeta | null }>(
@@ -457,11 +483,22 @@ export async function avaliarAlertasClientes(): Promise<{ novos: number; resolvi
   );
   const porCliente = new Map<string, typeof contas>();
   for (const c of contas) porCliente.set(c.gc_cliente_id, [...(porCliente.get(c.gc_cliente_id) ?? []), c]);
+  const contasGoogle = await query<{ gc_cliente_id: string; customer_id: string; nome: string; ultimo_erro: string | null }>(
+    `SELECT g.gc_cliente_id, g.customer_id, g.nome, g.ultimo_erro FROM gc_google_contas g
+     JOIN gc_clientes c ON c.id = g.gc_cliente_id WHERE g.ativo AND c.status = 'ativo'`,
+  );
+  const googlePorCliente = new Map<string, typeof contasGoogle>();
+  for (const c of contasGoogle) googlePorCliente.set(c.gc_cliente_id, [...(googlePorCliente.get(c.gc_cliente_id) ?? []), c]);
+  const clientes = new Set([...porCliente.keys(), ...googlePorCliente.keys()]);
 
   let novos = 0;
   let resolvidos = 0;
-  for (const [clienteId, lista] of porCliente) {
-    const disparos = await regrasDoCliente(clienteId, lista);
+  for (const clienteId of clientes) {
+    const lista = porCliente.get(clienteId) ?? [];
+    const disparos = [
+      ...(lista.length ? await regrasDoCliente(clienteId, lista) : []),
+      ...(googlePorCliente.has(clienteId) ? await regrasGoogleDoCliente(clienteId, googlePorCliente.get(clienteId)!) : []),
+    ];
     const chaves = new Set(disparos.map((d) => `${d.regra}|${d.entidade}`));
     for (const d of disparos) {
       // Alguém já marcou esse alerta como visto há menos de 7 dias: não volta a abrir todo sync.

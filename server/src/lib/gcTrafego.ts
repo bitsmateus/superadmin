@@ -2,6 +2,7 @@ import { query, queryOne } from '../db.js';
 import { diasAtras, formatoDoCriativo, graphList, janelas, type MetaAd } from './metaInsights.js';
 import { alertasDeSaldo, CAMPOS_FINANCEIRO_META, interpretarFinanceiro, type FinanceiroMeta } from './gcSaldo.js';
 import { formatarCustomerId, totaisGoogleDoCliente } from './gcGoogleAds.js';
+import { novaReferencia } from './gcCrmGestorRegras.js';
 
 /**
  * Tráfego (Meta) dos clientes NX Digital — SOMENTE LEITURA na Meta.
@@ -179,6 +180,22 @@ export async function atualizarFinanceiro(conta: ContaTrafego): Promise<boolean>
     }
     const { error: _e, ...financeiro } = json as FinanceiroMeta & { error?: unknown; id?: string };
     await query(`UPDATE gc_trafego_contas SET financeiro = $2, financeiro_em = now() WHERE id = $1`, [conta.id, JSON.stringify(financeiro)]);
+    // Pré-paga: guarda o saldo de agora e o de referência (logo depois da última recarga) pro "30% do saldo".
+    const saldo = interpretarFinanceiro(financeiro).saldoDisponivel;
+    if (saldo !== null && interpretarFinanceiro(financeiro).prePaga) {
+      const antes = await queryOne<{ saldo_ultimo: string | null; saldo_referencia: string | null }>(
+        'SELECT saldo_ultimo, saldo_referencia FROM gc_trafego_contas WHERE id = $1', [conta.id],
+      );
+      const r = novaReferencia(
+        { ultimo: antes?.saldo_ultimo == null ? null : Number(antes.saldo_ultimo), referencia: antes?.saldo_referencia == null ? null : Number(antes.saldo_referencia) },
+        saldo,
+      );
+      await query(
+        `UPDATE gc_trafego_contas SET saldo_ultimo = $2, saldo_referencia = $3,
+           saldo_referencia_em = CASE WHEN $4 THEN now() ELSE saldo_referencia_em END WHERE id = $1`,
+        [conta.id, saldo, r.referencia, r.recarga],
+      );
+    }
     return true;
   } catch (err) {
     console.warn('[gc-trafego] saldo da conta', conta.ad_account_id, err instanceof Error ? err.message : err);

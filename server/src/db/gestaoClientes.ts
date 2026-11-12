@@ -661,6 +661,16 @@ const TABELAS = [
   // Saldo e forma de pagamento como a Meta devolveu (lib/gcSaldo.ts interpreta), lidos de hora em hora.
   `ALTER TABLE gc_trafego_contas ADD COLUMN IF NOT EXISTS financeiro JSONB`,
   `ALTER TABLE gc_trafego_contas ADD COLUMN IF NOT EXISTS financeiro_em TIMESTAMPTZ`,
+  // Saldo de referência = saldo logo depois da última recarga (lib/gcCrmGestorRegras.ts): com ele sai o "30% do saldo".
+  `ALTER TABLE gc_trafego_contas ADD COLUMN IF NOT EXISTS saldo_ultimo NUMERIC(14,2)`,
+  `ALTER TABLE gc_trafego_contas ADD COLUMN IF NOT EXISTS saldo_referencia NUMERIC(14,2)`,
+  `ALTER TABLE gc_trafego_contas ADD COLUMN IF NOT EXISTS saldo_referencia_em TIMESTAMPTZ`,
+  // Cards criados sozinhos no CRM do gestor (jobs/gcCrmGestor.ts): a chave garante um só por motivo.
+  `CREATE TABLE IF NOT EXISTS gc_crm_cards_auto (
+    chave TEXT PRIMARY KEY,
+    lead_row_id UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
   // ---------------------------------------------------------------- Google Ads (lib/gcGoogleAds.ts)
   `CREATE TABLE IF NOT EXISTS gc_google_contas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

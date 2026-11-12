@@ -2,6 +2,7 @@ import { atualizarSaldosDeTodas, avaliarAlertasClientes, sincronizarTodasAsConta
 import { sincronizarTodosInstagrams } from '../lib/gcInstagram.js';
 import { analisesDiarias } from '../lib/gcIa.js';
 import { sincronizarTodasGoogle } from '../lib/gcGoogleAds.js';
+import { cardsDeCobranca, cardsDeGestao } from './gcCrmGestor.js';
 
 /**
  * Coleta do Meta dos clientes NX Digital (contas em gc_trafego_contas).
@@ -11,6 +12,8 @@ import { sincronizarTodasGoogle } from '../lib/gcGoogleAds.js';
  * - 08h: análise de tráfego da IA pra quem gastou na semana (sem ANTHROPIC_API_KEY, não roda).
  * - De hora em hora (08h às 22h, aos 30 min): só o saldo/pagamento de cada conta e as regras de
  *   alerta, pra o aviso de "saldo acabando" não esperar a próxima coleta completa.
+ * - Cards no CRM do gestor (jobs/gcCrmGestor.ts): segunda e quinta a partir das 08h, um por cliente de
+ *   tráfego; e, depois de cada leitura de saldo, "cobrar pagamento" quando o saldo chega a 30% ou zera.
  * Sem nenhuma conta cadastrada, cada rodada termina sem chamar a Meta.
  */
 
@@ -29,15 +32,31 @@ function spAgora(): { dia: string; hora: number; minuto: number } {
 
 let rodando = false;
 
+/** Cards do CRM do gestor: gestão (seg/qui, a partir das 08h) e cobrança de saldo. Nunca lança. */
+async function cardsNoCrm(): Promise<void> {
+  try {
+    const { dia, hora } = spAgora();
+    const diaSemana = new Date(`${dia}T12:00:00-03:00`).getUTCDay();
+    const gestao = hora >= 8 ? await cardsDeGestao(dia, diaSemana) : 0;
+    const cobranca = await cardsDeCobranca(dia);
+    if (gestao || cobranca) console.log(`[crm-gestor] ${gestao} card(s) de gestão, ${cobranca} de cobrança`);
+  } catch (err) {
+    console.error('[crm-gestor] erro', err instanceof Error ? err.message : err);
+  }
+}
+
 /** Só saldo + alertas (leve): de hora em hora, fora dos horários da coleta completa. */
 export async function rodarSaldos(): Promise<void> {
   if (rodando) return;
   rodando = true;
   try {
     const n = await atualizarSaldosDeTodas();
-    if (n === 0) return;
-    const a = await avaliarAlertasClientes();
-    if (a.novos || a.resolvidos) console.log(`[gc-trafego] saldos: ${n} conta(s); alertas: ${a.novos} novo(s), ${a.resolvidos} resolvido(s)`);
+    if (n > 0) {
+      const a = await avaliarAlertasClientes();
+      if (a.novos || a.resolvidos) console.log(`[gc-trafego] saldos: ${n} conta(s); alertas: ${a.novos} novo(s), ${a.resolvidos} resolvido(s)`);
+    }
+    // Sempre: o card de segunda/quinta vale também pra cliente só com Google ou só com o serviço de tráfego.
+    await cardsNoCrm();
   } catch (err) {
     console.error('[gc-trafego] erro nos saldos', err instanceof Error ? err.message : err);
   } finally {
@@ -57,6 +76,7 @@ export async function rodarGcTrafego(comInstagram = false): Promise<void> {
     const g = await sincronizarTodasGoogle();
     if (s.contas === 0 && g.contas === 0) return;
     const a = await avaliarAlertasClientes();
+    await cardsNoCrm();
     console.log(`[gc-trafego] meta: ${s.contas} conta(s), ${s.erros} com erro; google: ${g.contas} conta(s), ${g.erros} com erro; alertas: ${a.novos} novo(s), ${a.resolvidos} resolvido(s)`);
   } catch (err) {
     console.error('[gc-trafego] erro', err instanceof Error ? err.message : err);

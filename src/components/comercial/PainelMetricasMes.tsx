@@ -72,19 +72,28 @@ export function PainelMetricasMes({ from, to, rows, boards }: {
 
   // Gasto do Meta no período (em reais). null = carregando, sem acesso ou Meta não configurado.
   const [gastoMeta, setGastoMeta] = React.useState<number | null>(null)
+  // Leads que o Meta contou no período (soma dos leads de formulário de todos os anúncios da conta, dia a dia) — é o
+  // número do Gerenciador de Anúncios. null = sem integração/sem acesso.
+  const [leadsMeta, setLeadsMeta] = React.useState<number | null>(null)
   React.useEffect(() => {
     let vivo = true
     setGastoMeta(null)
+    setLeadsMeta(null)
     trafegoService.resumo(from, to)
-      .then((r) => { if (vivo) setGastoMeta(r.configurado || r.atual.gasto > 0 ? r.atual.gasto : null) })
-      .catch(() => { if (vivo) setGastoMeta(null) })
+      .then((r) => {
+        if (!vivo) return
+        setGastoMeta(r.configurado || r.atual.gasto > 0 ? r.atual.gasto : null)
+        const soma = (r.serie ?? []).reduce((s, d) => s + (d.leadsMeta || 0), 0)
+        setLeadsMeta(r.configurado || soma > 0 ? soma : null)
+      })
+      .catch(() => { if (vivo) { setGastoMeta(null); setLeadsMeta(null) } })
     return () => { vivo = false }
   }, [from, to])
 
   // Reuniões realizadas e no-shows vêm do CRM do Luis (closer), pela data em que o card dele chegou na etapa — ver
   // GET /api/dashboard-comercial/reunioes-do-closer. null = carregando ou sem acesso (aí usa a conta antiga, do funil).
   type ItemCloser = { id: string; nome: string; status: string }
-  const [doCloser, setDoCloser] = React.useState<{ realizadas: ItemCloser[]; no_show: ItemCloser[] } | null>(null)
+  const [doCloser, setDoCloser] = React.useState<{ realizadas: ItemCloser[]; no_show: ItemCloser[]; vendas?: ItemCloser[] } | null>(null)
   const assinaturaCloser = React.useMemo(
     () => rows.length + ':' + rows.reduce((s, r) => (r.status.length + s) % 100000, 0),
     [rows],
@@ -92,7 +101,7 @@ export function PainelMetricasMes({ from, to, rows, boards }: {
   React.useEffect(() => {
     let vivo = true
     const t = window.setTimeout(() => {
-      api.get<{ realizadas: ItemCloser[]; no_show: ItemCloser[] }>(`/api/dashboard-comercial/reunioes-do-closer?from=${from}&to=${to}`)
+      api.get<{ realizadas: ItemCloser[]; no_show: ItemCloser[]; vendas?: ItemCloser[] }>(`/api/dashboard-comercial/reunioes-do-closer?from=${from}&to=${to}`)
         .then((r) => { if (vivo) setDoCloser(r) })
         .catch(() => { if (vivo) setDoCloser(null) })
     }, 300)
@@ -103,7 +112,7 @@ export function PainelMetricasMes({ from, to, rows, boards }: {
   const milestoneById = React.useMemo(() => new Map(milestones.map((m) => [m.id, m])), [milestones])
   const vendasBoard = React.useMemo(() => boards.find((b) => b.isVendas), [boards])
 
-  const calcular = React.useCallback((from: string, to: string, inteiro: boolean, gastoReais: number | null) => {
+  const calcular = React.useCallback((from: string, to: string, inteiro: boolean, gastoReais: number | null, leadsDoMeta: number | null = null) => {
     // A leva do mês = leads de verdade criados no período. Ficam de fora as linhas do quadro VENDAS: são o
     // REGISTRO da venda (a cópia do lead que virou cliente, ou uma venda avulsa), não um lead novo — contá-las
     // somava duas vezes quem vendeu e punha venda de indicação como "lead". Lead sem SDR marcado ENTRA: é lead
@@ -144,7 +153,9 @@ export function PainelMetricasMes({ from, to, rows, boards }: {
     // investimento); sem ele preenchido, usa o que o CRM tem — melhor um número real do que zero.
     // Um só, usado no CPL, no funil e na meta: antes a meta olhava só o digitado e mostrava 0 de
     // 400 com o CRM cheio de lead.
-    const leadsGerados = (inteiro && month?.leadsGerados) || leva.length
+    // Pedido de 12/11: o total vem do Meta (integração) quando ele tem número no período; sem ele, o digitado no mês;
+    // sem nenhum dos dois, o que caiu no CRM.
+    const leadsGerados = (leadsDoMeta && leadsDoMeta > 0 ? leadsDoMeta : 0) || (inteiro && month?.leadsGerados) || leva.length
     const permanencia = month?.permanenciaMedia ?? 0
 
     const vendas = vendasDoMes.length
@@ -177,10 +188,13 @@ export function PainelMetricasMes({ from, to, rows, boards }: {
       taxaLeadAgend: leadsGerados > 0 ? agendados.length / leadsGerados : 0,
       taxaComparecimento: comDesfecho > 0 ? compareceram.length / comDesfecho : 0,
       taxaNoShow: comDesfecho > 0 ? noShow.length / comDesfecho : 0,
-      taxaReuniaoVenda: compareceram.length > 0 ? vendasFunil.length / compareceram.length : 0,
+      // Reunião -> venda: tudo do CRM do Luis (vendas dele ÷ reuniões realizadas dele, no período); sem esses dados,
+      // a conta antiga do funil.
+      vendasDoCloser: doCloser?.vendas?.length ?? null,
+      taxaReuniaoVenda: compareceram.length > 0 ? (doCloser?.vendas?.length ?? vendasFunil.length) / compareceram.length : 0,
     }
   }, [rows, boards, milestoneById, vendasBoard, month, doCloser])
-  const dados = React.useMemo(() => calcular(from, to, mesInteiro, gastoMeta), [calcular, from, to, mesInteiro, gastoMeta])
+  const dados = React.useMemo(() => calcular(from, to, mesInteiro, gastoMeta, leadsMeta), [calcular, from, to, mesInteiro, gastoMeta, leadsMeta])
   // As metas são do mês: comparam com o mês inteiro, seja qual for o período do filtro.
   const doMes = React.useMemo(
     () => (mesInteiro ? dados : calcular(limites.from, limites.to, true, null)),
@@ -261,12 +275,12 @@ export function PainelMetricasMes({ from, to, rows, boards }: {
           <Kpi titulo="ROI / ROAS" valor={pct(dados.roi)} nota={`ROAS ${dados.roas.toFixed(1)}x · receita ÷ custo`}
             tom={dados.roi >= 0 ? 'bom' : 'ruim'} />
           <Kpi titulo="Total de leads" valor={String(dados.leadsGerados)}
-            nota={mesInteiro && month.leadsGerados ? `${dados.leva.length} no CRM` : 'contados no CRM'} />
+            nota={leadsMeta && leadsMeta > 0 ? `do Meta · ${dados.leva.length} no CRM` : mesInteiro && month.leadsGerados ? `${dados.leva.length} no CRM` : 'contados no CRM'} />
           <Kpi titulo="Agendamentos" valor={String(dados.agendados.length)} nota={`${pct(dados.taxaLeadAgend)} dos leads`} />
           <Kpi titulo="Vendas" valor={String(dados.vendas)} nota={`${dados.vendasFunil.length} pelo funil`} tom="bom" />
           <Kpi titulo="Reuniões realizadas" valor={String(dados.compareceram.length)} nota={`${pct(dados.taxaComparecimento)} de comparecimento`} />
           <Kpi titulo="No-shows" valor={String(dados.noShow.length)} nota={pct(dados.taxaNoShow)} tom={dados.noShow.length ? 'ruim' : undefined} />
-          <Kpi titulo="Reunião → venda" valor={pct(dados.taxaReuniaoVenda)} nota="fechamento" />
+          <Kpi titulo="Reunião → venda" valor={pct(dados.taxaReuniaoVenda)} nota={dados.vendasDoCloser !== null ? `${dados.vendasDoCloser} venda(s) no CRM do Luis` : 'fechamento'} />
           <Kpi titulo="Receita" valor={money(dados.entrouCents)} nota="MRR + implementação" tom="bom" />
           <Kpi titulo="MRR novo" valor={money(dados.mrrCents)} nota="recorrente conquistado" />
           <Kpi titulo="Ticket médio" valor={money(dados.ticketCents)} nota="por venda" />

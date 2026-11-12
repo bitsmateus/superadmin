@@ -70,9 +70,18 @@ export function CommissionSdrSection({
   // Só o que foi registrado à mão ("Registrar comissão") precisa de lista: é o único lançamento que não
   // tem uma venda por trás pra ser ajustado na linha dela. Sem nenhum, a tabela nem aparece.
   const manuais = React.useMemo(
-    () => visiveis.filter((e) => !e.vendaLeadId && e.typeLabel !== CLOSER_TYPE_LABEL),
+    () => visiveis.filter((e) => !e.vendaLeadId && !e.leadRowId && e.typeLabel !== CLOSER_TYPE_LABEL),
     [visiveis],
   )
+  // Entregas do suporte (cards do CRM do Jean/João que entraram em ENTREGAS REALIZADAS): uma tabela por pessoa.
+  const entregasPorPessoa = React.useMemo(() => {
+    const mapa = new Map<string, CommissionEntry[]>()
+    for (const e of visiveis) {
+      if (!e.leadRowId) continue
+      mapa.set(e.person, [...(mapa.get(e.person) ?? []), e])
+    }
+    return [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [visiveis])
   // Fechamentos ficam separados POR PESSOA: a faixa de volume é individual, então cada closer tem
   // a própria contagem e o próprio valor por venda — misturar numa tabela só escondia isso.
   const closerPorPessoa = React.useMemo(() => {
@@ -96,7 +105,7 @@ export function CommissionSdrSection({
   // (quanto veio de SDR e quanto de fechamento) e por CONTRATO (só o Assinado entra no pagamento;
   // Pendente é um "a caminho").
   const totalsByPerson = React.useMemo(() => {
-    const vazio = () => ({ sdr: 0, closer: 0, assinado: 0, pendente: 0 })
+    const vazio = () => ({ sdr: 0, closer: 0, suporte: 0, assinado: 0, pendente: 0 })
     const totals = new Map<string, ReturnType<typeof vazio>>(TOTAL_NAMES.map((n) => [n, vazio()]))
     for (const e of entries) {
       const pessoa = e.person.trim()
@@ -104,6 +113,7 @@ export function CommissionSdrSection({
       const chave = TOTAL_NAMES.find((n) => n.toLowerCase() === pessoa.toLowerCase()) ?? pessoa
       const t = totals.get(chave) ?? vazio()
       if (e.typeLabel === CLOSER_TYPE_LABEL) t.closer += e.amountCents
+      else if (e.role === 'suporte') t.suporte += e.amountCents
       else t.sdr += e.amountCents
       if (e.contratoAssinado) t.assinado += e.amountCents
       else t.pendente += e.amountCents
@@ -129,6 +139,18 @@ export function CommissionSdrSection({
           hint="O que foi registrado em “Registrar comissão”, sem uma venda da lista por trás."
         />
       )}
+
+      {entregasPorPessoa.map(([pessoa, lista]) => (
+        <EntriesTable
+          key={`suporte-${pessoa}`}
+          title={`Comissão Suporte (entregas) — ${pessoa}`}
+          entries={lista}
+          onToggle={toggleStatus}
+          types={types}
+          onOpenLead={onOpenLead}
+          hint={`${lista.length} entrega(s) no período · ${formatBRLCents(lista.reduce((s, e) => s + e.amountCents, 0))}. O sistema lança sozinho quando o card entra em “Entregas realizadas” no CRM dele (o valor vem do Tipo do card).`}
+        />
+      ))}
 
       {closerPorPessoa.map(([pessoa, lista]) => (
         <EntriesTable
@@ -156,13 +178,14 @@ export function CommissionSdrSection({
                 <th className="px-4 py-2.5">Pessoa</th>
                 <th className="px-4 py-2.5 text-right">Como SDR</th>
                 <th className="px-4 py-2.5 text-right">Como closer</th>
+                <th className="px-4 py-2.5 text-right">Como suporte</th>
                 <th className="px-4 py-2.5 text-right">Assinado</th>
                 <th className="px-4 py-2.5 text-right">Pendente</th>
               </tr>
             </thead>
             <tbody>
               {pessoasDoTotal.map((name) => {
-                const t = totalsByPerson.get(name) ?? { sdr: 0, closer: 0, assinado: 0, pendente: 0 }
+                const t = totalsByPerson.get(name) ?? { sdr: 0, closer: 0, suporte: 0, assinado: 0, pendente: 0 }
                 return (
                   <tr key={name} className="border-b border-line/60 last:border-0">
                     <td className="px-4 py-2.5 text-sm font-medium text-foreground">{name}</td>
@@ -171,6 +194,9 @@ export function CommissionSdrSection({
                     </td>
                     <td className="px-4 py-2.5 text-right text-sm tabular-nums text-foreground/70">
                       {formatBRLCents(t.closer)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-sm tabular-nums text-foreground/70">
+                      {formatBRLCents(t.suporte)}
                     </td>
                     <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-success">
                       {formatBRLCents(t.assinado)}
@@ -342,11 +368,13 @@ function NomeCell({ entry, onOpenLead }: { entry: CommissionEntry; onOpenLead?: 
   const [editing, setEditing] = React.useState(false)
   const [value, setValue] = React.useState(entry.nome)
 
-  if (entry.vendaLeadId && onOpenLead) {
+  // A venda por trás do lançamento, ou o card do CRM do suporte que gerou a comissão de entrega.
+  const ligado = entry.vendaLeadId ?? entry.leadRowId
+  if (ligado && onOpenLead) {
     return (
       <button
         type="button"
-        onClick={() => onOpenLead(entry.vendaLeadId!)}
+        onClick={() => onOpenLead(ligado)}
         title="Ver dados do lead"
         className="rounded px-1.5 py-0.5 text-left font-medium text-foreground underline decoration-dotted underline-offset-2 hover:bg-elevate/[0.06] hover:text-accent"
       >

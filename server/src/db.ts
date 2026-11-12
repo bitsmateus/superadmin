@@ -1478,6 +1478,11 @@ END; $$`);
   await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS venda_lead_id UUID`);
   await pool.query(`CREATE INDEX IF NOT EXISTS commission_entries_venda_lead_idx
     ON commission_entries(venda_lead_id) WHERE venda_lead_id IS NOT NULL`);
+  // Comissão de entrega do suporte (lib/comissaoSuporte.ts): o card do CRM do Jean/João que entrou em ENTREGAS
+  // REALIZADAS. Um lançamento por card.
+  await pool.query(`ALTER TABLE commission_entries ADD COLUMN IF NOT EXISTS lead_row_id UUID`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS commission_entries_lead_row_uidx
+    ON commission_entries(lead_row_id) WHERE lead_row_id IS NOT NULL`);
   await pool.query(`DO $$ BEGIN
     IF NOT EXISTS (
       SELECT 1 FROM pg_constraint WHERE conname = 'commission_entries_source_type_source_id_type_id_key'

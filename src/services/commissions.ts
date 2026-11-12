@@ -34,6 +34,8 @@ export interface CommissionEntry {
   contratoAssinado: boolean
   /** Linha da venda que gerou o lançamento. null = registrado à mão em "Registrar comissão". */
   vendaLeadId: string | null
+  /** Card do CRM do Jean/João que gerou a comissão de entrega (o servidor lança sozinho). null = não veio de card. */
+  leadRowId: string | null
   createdAt: string
 }
 
@@ -44,7 +46,7 @@ type TypeRow = {
 type EntryRow = {
   id: string; nome: string; person: string; role: CommissionRole; type_id: string | null; type_label: string
   reference: string; base_value_cents: number | null; amount_cents: number; month: string
-  status: CommissionStatus; contrato_assinado: boolean; venda_lead_id: string | null; created_at: string
+  status: CommissionStatus; contrato_assinado: boolean; venda_lead_id: string | null; lead_row_id?: string | null; created_at: string
 }
 
 function rowToType(r: TypeRow): CommissionType {
@@ -59,7 +61,7 @@ function rowToEntry(r: EntryRow): CommissionEntry {
     id: r.id, nome: r.nome ?? '', person: r.person, role: r.role, typeId: r.type_id, typeLabel: r.type_label,
     reference: r.reference ?? '', baseValueCents: r.base_value_cents ?? null, amountCents: r.amount_cents,
     month: r.month, status: r.status, contratoAssinado: r.contrato_assinado ?? false,
-    vendaLeadId: r.venda_lead_id ?? null, createdAt: r.created_at,
+    vendaLeadId: r.venda_lead_id ?? null, leadRowId: r.lead_row_id ?? null, createdAt: r.created_at,
   }
 }
 

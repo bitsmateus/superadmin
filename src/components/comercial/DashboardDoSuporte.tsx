@@ -2,6 +2,7 @@ import * as React from 'react'
 import { AlertTriangle, CalendarRange, CheckCircle2, HelpCircle, Inbox, LayoutGrid, ListTodo, PackageCheck, PlayCircle, ShoppingBag, Tags, Timer } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
 import { ClickableStat } from '@/components/comercial/ClickableStat'
+import { ComissaoDoSuporte } from '@/components/comercial/ComissaoDoSuporte'
 import { TodayStatCard, type StatCard } from '@/components/comercial/LeadTodayPanel'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { leadLabelsService } from '@/services/leadLabels'
@@ -212,6 +213,16 @@ export function DashboardDoSuporte({ rows, boards, onOpenLead }: { rows: LeadRow
           {cardsPeriodo.map((c) => <TodayStatCard key={c.key} card={c} boards={boards} onOpenLead={onOpenLead} />)}
         </div>
       </div>
+
+      {pageId && (
+        <ComissaoDoSuporte
+          pageId={pageId}
+          deMes={(from || hoje).slice(0, 7)}
+          ateMes={(to || hoje).slice(0, 7)}
+          rows={rows}
+          onOpenLead={onOpenLead}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">

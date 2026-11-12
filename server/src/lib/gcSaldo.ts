@@ -128,6 +128,37 @@ export function interpretarFinanceiro(f: FinanceiroMeta): FinanceiroConta {
   };
 }
 
+/** Resumo de uma ou mais contas do cliente, pra coluna "Saldo" da lista de clientes. */
+export interface ResumoSaldo {
+  /** Soma do saldo das contas pré-pagas (null = nenhuma pré-paga ou valor não lido). */
+  saldo: number | null;
+  /** "Cartão de crédito", "Saldo pré-pago (boleto/Pix)"… (sem repetir). */
+  formas: string[];
+  /** Detalhe do cartão quando é um só (ex.: "Visa •••• 1234"). */
+  detalhe: string;
+  prePaga: boolean;
+  bloqueada: boolean;
+  /** Menor "dá para N dias" entre as contas (saldo ou limite). */
+  diasRestantes: number | null;
+}
+
+export function resumirSaldos(contas: { fin: FinanceiroConta; gastoDia: number }[]): ResumoSaldo | null {
+  if (!contas.length) return null;
+  const pre = contas.filter((c) => c.fin.prePaga && c.fin.saldoDisponivel !== null);
+  const dias = contas
+    .map((c) => diasQueDa(c.fin.prePaga ? c.fin.saldoDisponivel : c.fin.restanteLimite, c.gastoDia))
+    .filter((d): d is number => d !== null);
+  const detalhes = [...new Set(contas.filter((c) => !c.fin.prePaga).map((c) => c.fin.detalhePagamento).filter(Boolean))];
+  return {
+    saldo: pre.length ? pre.reduce((s, c) => s + (c.fin.saldoDisponivel ?? 0), 0) : null,
+    formas: [...new Set(contas.map((c) => c.fin.formaPagamento))],
+    detalhe: detalhes.length === 1 ? detalhes[0] : '',
+    prePaga: contas.some((c) => c.fin.prePaga),
+    bloqueada: contas.some((c) => c.fin.bloqueada),
+    diasRestantes: dias.length ? Math.min(...dias) : null,
+  };
+}
+
 /** Avisar quando o que sobra dá para menos que isso de dias (no gasto médio dos últimos 7 dias). */
 export const DIAS_AVISO_SALDO = 3;
 

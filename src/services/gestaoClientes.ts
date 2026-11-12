@@ -382,6 +382,16 @@ export interface GcRegistroHistorico {
 }
 
 /** Linha da lista: o cadastro mais o resumo da jornada, pra tela não precisar abrir cada cliente. */
+/** Resumo do saldo das contas de anúncio do cliente (ver server/src/lib/gcSaldo.ts). */
+export interface GcResumoSaldo {
+  saldo: number | null
+  formas: string[]
+  detalhe: string
+  prePaga: boolean
+  bloqueada: boolean
+  diasRestantes: number | null
+}
+
 export interface GcClienteLista {
   id: string
   nome_empresa: string
@@ -396,6 +406,8 @@ export interface GcClienteLista {
   /** Quem não é admin só vê os clientes em que é o gestor de tráfego. */
   gestor_trafego_id: string | null
   gestor_trafego_nome?: string | null
+  /** Só na lista: saldo/forma de pagamento das contas de anúncio (null = sem conta ou ainda não lido). */
+  saldo_trafego?: GcResumoSaldo | null
   responsavel_nome: string | null
   status: GcStatusCliente
   prioridade: GcPrioridade

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alertasDeSaldo, interpretarFinanceiro, valorDoTexto } from './gcSaldo.js';
+import { alertasDeSaldo, interpretarFinanceiro, resumirSaldos, valorDoTexto } from './gcSaldo.js';
 
 test('lê o valor do texto da Meta nos dois formatos', () => {
   assert.equal(valorDoTexto('Saldo disponível (R$ 1.234,56 BRL)'), 1234.56);
@@ -54,4 +54,18 @@ test('alertas: saldo para menos de 3 dias, zerado, limite e conta bloqueada', ()
   const bloqueada = interpretarFinanceiro({ account_status: 3, funding_source_details: { type: 1 } });
   assert.equal(alertasDeSaldo(bloqueada, 30, '')[0].regra, 'conta_bloqueada');
   assert.match(alertasDeSaldo(bloqueada, 30, '')[0].mensagem, /Pagamento pendente/);
+});
+
+test('resumo da lista: soma o saldo pré-pago e junta as formas de pagamento', () => {
+  const pre = interpretarFinanceiro({ account_status: 1, is_prepay_account: true, funding_source_details: { type: 20, display_string: 'Saldo disponível (R$ 100,00 BRL)' } });
+  const cartao = interpretarFinanceiro({ account_status: 1, funding_source_details: { type: 1, display_string: 'Mastercard •••• 9876' } });
+  const r = resumirSaldos([{ fin: pre, gastoDia: 25 }, { fin: cartao, gastoDia: 10 }])!;
+  assert.equal(r.saldo, 100);
+  assert.deepEqual(r.formas, ['Saldo pré-pago (boleto/Pix)', 'Cartão de crédito']);
+  assert.equal(r.detalhe, 'Mastercard •••• 9876');
+  assert.equal(r.diasRestantes, 4);
+  const soCartao = resumirSaldos([{ fin: cartao, gastoDia: 10 }])!;
+  assert.equal(soCartao.saldo, null);
+  assert.equal(soCartao.prePaga, false);
+  assert.equal(resumirSaldos([]), null);
 });

@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import crypto from 'node:crypto';
 import { pool, query, queryOne, withTransaction } from '../db.js';
 import { guardaDoCliente, sqlSoDoGestor, veTodosOsClientes, type UsuarioGc } from '../lib/gcAcesso.js';
+import { interpretarFinanceiro, resumirSaldos, type FinanceiroMeta } from '../lib/gcSaldo.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import { montarHtmlSocialPdf, type ItemPdfSocial } from '../lib/gcSocialPdf.js';
 import { contaDoCliente, midiaPublica } from '../lib/gcSocialPublicar.js';
@@ -509,7 +510,25 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { periodo?: string } }>('/api/gc/clientes', autenticado, async (req) => {
     await garantirRecorrentes();
     const [mes, anterior] = mesesDeReferencia(req.query.periodo);
-    return query(`${SQL_CLIENTES} WHERE ${sqlSoDoGestor(req.user as UsuarioGc)} ORDER BY c.nome_empresa`, [mes, anterior]);
+    const clientes = await query<{ id: string }>(
+      `${SQL_CLIENTES} WHERE ${sqlSoDoGestor(req.user as UsuarioGc)} ORDER BY c.nome_empresa`, [mes, anterior]
+    );
+    // Coluna "Saldo": saldo pré-pago (ou forma de pagamento) das contas de anúncio, lido da Meta (lib/gcSaldo.ts).
+    const contas = await query<{ gc_cliente_id: string; financeiro: FinanceiroMeta; gasto_dia: string | null }>(
+      `SELECT t.gc_cliente_id, t.financeiro,
+              (SELECT SUM(i.gasto) / 7 FROM gc_meta_insights_dia i JOIN gc_meta_anuncios a ON a.ad_id = i.ad_id
+                WHERE a.ad_account_id = t.ad_account_id AND i.dia BETWEEN $1::date AND $2::date) AS gasto_dia
+       FROM gc_trafego_contas t
+       WHERE t.ativo AND t.financeiro IS NOT NULL AND t.gc_cliente_id = ANY($3::uuid[])`,
+      [diasAtras(7), diasAtras(1), clientes.map((c) => c.id)]
+    );
+    const porCliente = new Map<string, { fin: ReturnType<typeof interpretarFinanceiro>; gastoDia: number }[]>();
+    for (const c of contas) {
+      const lista = porCliente.get(c.gc_cliente_id) ?? [];
+      lista.push({ fin: interpretarFinanceiro(c.financeiro), gastoDia: Number(c.gasto_dia ?? 0) || 0 });
+      porCliente.set(c.gc_cliente_id, lista);
+    }
+    return clientes.map((c) => ({ ...c, saldo_trafego: resumirSaldos(porCliente.get(c.id) ?? []) }));
   });
 
   // GET /api/gc/clientes/:id — tudo do cliente numa tacada: a tela de detalhe abre as abas

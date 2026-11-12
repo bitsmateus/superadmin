@@ -17,7 +17,7 @@ import {
 import { ModalMoverEtapa } from '@/components/gestaoClientes/ModalMoverEtapa'
 import { FaixaLancamento } from '@/components/gestaoClientes/FaixaLancamento'
 import { useLancamentoPendente } from '@/hooks/useLancamentoPendente'
-import {
+import { type GcResumoSaldo,
   NIVEIS_AVALIACAO, PRIORIDADES, TIPOS_REUNIAO, TIPOS_SERVICO, gestaoClientes, progressoDoCliente,
   type GcClienteLista, type GcNivelAvaliacao, type GcPreviaMover, type GcPrioridade, type GcReuniaoTipo,
   type GcStatusCliente,
@@ -700,6 +700,7 @@ export function ClientesNxDigitalPage() {
                   <tr>
                     <th className="px-4 py-2.5 font-medium">#</th>
                     <th className="px-4 py-2.5 font-medium">Empresa</th>
+                    <th className="px-4 py-2.5 font-medium">Saldo</th>
                     {mostrarPrioridade && <th className="px-4 py-2.5 font-medium">Prioridade</th>}
                     <th className="px-4 py-2.5 font-medium">Como está</th>
                     <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Serviços</th>
@@ -788,6 +789,7 @@ function CartaoCliente({
             {[c.nome_contato, c.responsavel_nome].filter(Boolean).join(' · ') || '—'}
           </span>
         </span>
+        {c.saldo_trafego && <SaldoDaLista saldo={c.saldo_trafego} compacto />}
         <PastilhaSaude estado={saude.nivel} />
       </span>
       {pior && (saude.nivel === 'risco' || saude.nivel === 'atencao') && (
@@ -805,6 +807,38 @@ function CartaoCliente({
         )}
       </span>
     </button>
+  )
+}
+
+/**
+ * Coluna "Saldo": conta pré-paga mostra o valor (amarelo/vermelho quando dá para poucos dias);
+ * cartão ou fatura mostra a forma de pagamento. Sem conta de anúncio lida, um traço.
+ */
+function SaldoDaLista({ saldo, compacto }: { saldo?: GcResumoSaldo | null; compacto?: boolean }) {
+  if (!saldo) return <span className="text-foreground/25">—</span>
+  const dias = saldo.diasRestantes
+  const critico = saldo.bloqueada || (saldo.saldo !== null && saldo.saldo <= 0) || (dias !== null && dias < 1)
+  const atencao = !critico && dias !== null && dias < 3
+  const cor = critico ? 'text-danger' : atencao ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'
+  const forma = saldo.formas.filter((f) => !f.startsWith('Saldo pré-pago')).join(' + ')
+  const brlSaldo = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  return (
+    <span className={cn('block whitespace-nowrap', compacto && 'text-right')}>
+      {saldo.saldo !== null ? (
+        <span className={cn('block text-sm font-semibold tabular-nums', cor)}>{brlSaldo(saldo.saldo)}</span>
+      ) : (
+        <span className={cn('block text-sm font-medium', saldo.bloqueada ? 'text-danger' : 'text-foreground')}>
+          {forma || saldo.formas.join(' + ')}
+        </span>
+      )}
+      <span className={cn('block text-[11px]', critico || atencao ? cor : 'text-foreground/45')}>
+        {saldo.bloqueada
+          ? 'conta bloqueada'
+          : saldo.saldo !== null
+            ? [dias !== null ? (dias < 1 ? 'acaba hoje' : `~${Math.floor(dias)} ${Math.floor(dias) === 1 ? 'dia' : 'dias'}`) : '', forma ? `+ ${forma}` : 'pré-pago'].filter(Boolean).join(' · ')
+            : saldo.detalhe || (dias !== null && dias < 3 ? `limite em ~${Math.max(0, Math.floor(dias))} dias` : 'pós-pago')}
+      </span>
+    </span>
   )
 }
 
@@ -873,6 +907,9 @@ function LinhaCliente({
             </span>
           </span>
         </div>
+      </td>
+      <td className="px-4 py-3">
+        <SaldoDaLista saldo={c.saldo_trafego} />
       </td>
       {mostrarPrioridade && <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <select

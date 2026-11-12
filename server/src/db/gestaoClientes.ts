@@ -766,6 +766,16 @@ const TABELAS = [
   `CREATE INDEX IF NOT EXISTS gc_trafego_edicoes_cliente_idx ON gc_trafego_edicoes (gc_cliente_id, created_at DESC)`,
   // Recado de WhatsApp para o cliente, escrito pela IA a partir da edição (o gestor revisa e copia).
   `ALTER TABLE gc_trafego_edicoes ADD COLUMN IF NOT EXISTS mensagem_cliente TEXT NOT NULL DEFAULT ''`,
+  // Mensagens para o cliente geradas pela IA a partir do pedido do gestor (aba Tráfego).
+  `CREATE TABLE IF NOT EXISTS gc_trafego_mensagens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    gc_cliente_id UUID NOT NULL REFERENCES gc_clientes(id) ON DELETE CASCADE,
+    pedido TEXT NOT NULL,
+    mensagem TEXT NOT NULL,
+    autor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_trafego_mensagens_cliente_idx ON gc_trafego_mensagens (gc_cliente_id, created_at DESC)`,
 
   // ---------------------------------------------------------------- IA e conteúdo (Instagram)
   // O que a IA gerou pro cliente: análise do tráfego (todo dia ou à mão) e ideias de conteúdo

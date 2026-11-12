@@ -14,10 +14,11 @@ export interface GcTotaisTrafego {
 /** Registro manual do que foi mudado no tráfego do cliente ("Última edição"). */
 export interface GcEdicaoTrafego {
   id: string; texto: string; created_at: string; autor_id: string | null; autor_nome: string | null
-  /** Recado de WhatsApp para o cliente, escrito pela IA a partir do texto (vazio = ainda não gerado). */
-  mensagem_cliente: string
-  /** Só na resposta de registrar: por que a IA não gerou a mensagem. */
-  erroIa?: string | null
+}
+
+/** Mensagem de WhatsApp para o cliente, escrita pela IA a partir do pedido do gestor. */
+export interface GcMensagemCliente {
+  id: string; pedido: string; mensagem: string; created_at: string; autor_id: string | null; autor_nome: string | null
 }
 
 export type GcNivelAlerta = 'critico' | 'atencao' | 'oportunidade'
@@ -131,9 +132,11 @@ export const gcTrafego = {
   edicoes: (id: string) => api.get<GcEdicaoTrafego[]>(`/api/gc/clientes/${id}/trafego/edicoes`),
   registrarEdicao: (id: string, texto: string) => api.post<GcEdicaoTrafego>(`/api/gc/clientes/${id}/trafego/edicoes`, { texto }),
   excluirEdicao: (edicaoId: string) => api.delete(`/api/gc/trafego/edicoes/${edicaoId}`),
-  gerarMensagemCliente: (edicaoId: string) => api.post<GcEdicaoTrafego>(`/api/gc/trafego/edicoes/${edicaoId}/mensagem`),
-  salvarMensagemCliente: (edicaoId: string, mensagem: string) =>
-    api.put<GcEdicaoTrafego>(`/api/gc/trafego/edicoes/${edicaoId}/mensagem`, { mensagem }),
+  mensagens: (id: string) => api.get<GcMensagemCliente[]>(`/api/gc/clientes/${id}/trafego/mensagens`),
+  gerarMensagem: (id: string, pedido: string) => api.post<GcMensagemCliente>(`/api/gc/clientes/${id}/trafego/mensagens`, { pedido }),
+  salvarMensagem: (mensagemId: string, mensagem: string) =>
+    api.put<GcMensagemCliente>(`/api/gc/trafego/mensagens/${mensagemId}`, { mensagem }),
+  excluirMensagem: (mensagemId: string) => api.delete(`/api/gc/trafego/mensagens/${mensagemId}`),
   google: (id: string, de: string, ate: string) => api.get<GcGoogleCliente>(`/api/gc/clientes/${id}/trafego/google${qs({ de, ate })}`),
   vincularGoogle: (id: string, customer_id: string) => api.post<GcContaGoogle>(`/api/gc/clientes/${id}/trafego/google/contas`, { customer_id }),
   desvincularGoogle: (contaId: string) => api.delete(`/api/gc/trafego/google/contas/${contaId}`),

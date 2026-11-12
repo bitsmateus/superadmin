@@ -7,7 +7,7 @@ import {
   gastoMedioDiarioDaConta, serieDoCliente, sincronizarConta, tokenDa, totaisDoCliente, totaisPorCliente, type ContaTrafego,
 } from '../lib/gcTrafego.js';
 import { instagramPeloTrafego } from '../lib/gcInstagram.js';
-import { gerarMensagemParaCliente } from '../lib/gcMensagemTrafego.js';
+import { gerarMensagemPorPedido } from '../lib/gcMensagemTrafego.js';
 import { diasQueDa, interpretarFinanceiro, type FinanceiroMeta } from '../lib/gcSaldo.js';
 import {
   campanhasGoogleDoCliente, formatarCustomerId, googleAdsConfigurado, lerContaNoGoogle, normalizarCustomerId, serieGoogleDoCliente,
@@ -183,20 +183,9 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
   // ------------------------------------------------------------------ última edição do tráfego
   // GET/POST /api/gc/clientes/:id/trafego/edicoes — o que foi mudado nas campanhas (registro manual),
   // da mais recente para a mais antiga. DELETE só para quem escreveu ou admin.
-  const CAMPOS_EDICAO = `e.id, e.texto, e.mensagem_cliente, e.created_at, e.autor_id, p.name AS autor_nome`;
+  const CAMPOS_EDICAO = `e.id, e.texto, e.created_at, e.autor_id, p.name AS autor_nome`;
   const edicaoPorId = (id: string | undefined) =>
     queryOne(`SELECT ${CAMPOS_EDICAO} FROM gc_trafego_edicoes e LEFT JOIN profiles p ON p.id = e.autor_id WHERE e.id = $1`, [id]);
-  /** Escreve a mensagem para o cliente com a IA. Falhou (sem chave, fora do ar)? Devolve o motivo e a edição fica salva assim mesmo. */
-  const gerarMensagem = async (edicaoId: string, clienteId: string, texto: string): Promise<string | null> => {
-    try {
-      const msg = await gerarMensagemParaCliente(clienteId, texto);
-      await query('UPDATE gc_trafego_edicoes SET mensagem_cliente = $2 WHERE id = $1', [edicaoId, msg]);
-      return null;
-    } catch (err) {
-      console.warn('[gcTrafego] mensagem para o cliente falhou', String(err).slice(0, 200));
-      return (err as Error).message || 'Não consegui gerar a mensagem agora.';
-    }
-  };
   app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/trafego/edicoes', autenticado, async (req) =>
     query(
       `SELECT ${CAMPOS_EDICAO} FROM gc_trafego_edicoes e LEFT JOIN profiles p ON p.id = e.autor_id
@@ -216,27 +205,58 @@ export async function gcTrafegoRoutes(app: FastifyInstance) {
       `INSERT INTO gc_trafego_edicoes (gc_cliente_id, texto, autor_id) VALUES ($1, $2, $3) RETURNING id`,
       [req.params.id, texto, sub],
     );
-    const erroIa = nova ? await gerarMensagem(nova.id, req.params.id, texto) : null;
-    return { ...(await edicaoPorId(nova?.id)), erroIa };
+    return edicaoPorId(nova?.id);
   });
 
-  // POST /api/gc/trafego/edicoes/:edicaoId/mensagem — gera de novo a mensagem para o cliente.
-  app.post<{ Params: { edicaoId: string } }>('/api/gc/trafego/edicoes/:edicaoId/mensagem', autenticado, async (req, reply) => {
-    const e = await queryOne<{ gc_cliente_id: string; texto: string }>(
-      'SELECT gc_cliente_id, texto FROM gc_trafego_edicoes WHERE id = $1', [req.params.edicaoId],
+  // ------------------------------------------------------------------ mensagem para o cliente
+  // O gestor escreve o que quer dizer (ou escolhe um atalho) e a IA monta o recado de WhatsApp com os
+  // números reais do cliente (lib/gcMensagemTrafego.ts). Fica guardado; nada é enviado sozinho.
+  const CAMPOS_MSG = `m.id, m.pedido, m.mensagem, m.created_at, m.autor_id, p.name AS autor_nome`;
+  const mensagemPorId = (id: string | undefined) =>
+    queryOne(`SELECT ${CAMPOS_MSG} FROM gc_trafego_mensagens m LEFT JOIN profiles p ON p.id = m.autor_id WHERE m.id = $1`, [id]);
+
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/trafego/mensagens', autenticado, async (req) =>
+    query(
+      `SELECT ${CAMPOS_MSG} FROM gc_trafego_mensagens m LEFT JOIN profiles p ON p.id = m.autor_id
+       WHERE m.gc_cliente_id = $1 ORDER BY m.created_at DESC LIMIT 200`,
+      [req.params.id],
+    ),
+  );
+
+  app.post<{ Params: { id: string }; Body: { pedido?: string } }>('/api/gc/clientes/:id/trafego/mensagens', autenticado, async (req, reply) => {
+    const pedido = String(req.body?.pedido ?? '').trim();
+    if (!pedido) return reply.status(400).send({ message: 'Escreva o que a mensagem tem que dizer.' });
+    if (pedido.length > 2000) return reply.status(400).send({ message: 'Pedido muito longo (máx. 2.000 caracteres).' });
+    const cliente = await queryOne('SELECT 1 FROM gc_clientes WHERE id = $1', [req.params.id]);
+    if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+    let mensagem: string;
+    try {
+      mensagem = await gerarMensagemPorPedido(req.params.id, pedido);
+    } catch (err) {
+      console.warn('[gcTrafego] mensagem para o cliente falhou', String(err).slice(0, 200));
+      return reply.status(502).send({ message: `Não consegui gerar a mensagem: ${(err as Error).message}` });
+    }
+    const { sub } = req.user as { sub: string };
+    const nova = await queryOne<{ id: string }>(
+      'INSERT INTO gc_trafego_mensagens (gc_cliente_id, pedido, mensagem, autor_id) VALUES ($1,$2,$3,$4) RETURNING id',
+      [req.params.id, pedido, mensagem, sub],
     );
-    if (!e) return reply.status(404).send({ message: 'Registro não encontrado' });
-    const erroIa = await gerarMensagem(req.params.edicaoId, e.gc_cliente_id, e.texto);
-    if (erroIa) return reply.status(502).send({ message: `Não consegui gerar a mensagem: ${erroIa}` });
-    return edicaoPorId(req.params.edicaoId);
+    return mensagemPorId(nova?.id);
   });
 
-  // PUT /api/gc/trafego/edicoes/:edicaoId/mensagem — guarda a mensagem como o gestor deixou.
-  app.put<{ Params: { edicaoId: string }; Body: { mensagem?: string } }>('/api/gc/trafego/edicoes/:edicaoId/mensagem', autenticado, async (req, reply) => {
+  // PUT /api/gc/trafego/mensagens/:mensagemId — guarda a mensagem como o gestor deixou.
+  app.put<{ Params: { mensagemId: string }; Body: { mensagem?: string } }>('/api/gc/trafego/mensagens/:mensagemId', autenticado, async (req, reply) => {
     const mensagem = String(req.body?.mensagem ?? '').trim().slice(0, 4000);
-    const r = await queryOne('UPDATE gc_trafego_edicoes SET mensagem_cliente = $2 WHERE id = $1 RETURNING id', [req.params.edicaoId, mensagem]);
-    if (!r) return reply.status(404).send({ message: 'Registro não encontrado' });
-    return edicaoPorId(req.params.edicaoId);
+    if (!mensagem) return reply.status(400).send({ message: 'A mensagem não pode ficar vazia.' });
+    const r = await queryOne('UPDATE gc_trafego_mensagens SET mensagem = $2 WHERE id = $1 RETURNING id', [req.params.mensagemId, mensagem]);
+    if (!r) return reply.status(404).send({ message: 'Mensagem não encontrada' });
+    return mensagemPorId(req.params.mensagemId);
+  });
+
+  app.delete<{ Params: { mensagemId: string } }>('/api/gc/trafego/mensagens/:mensagemId', autenticado, async (req, reply) => {
+    const r = await queryOne('DELETE FROM gc_trafego_mensagens WHERE id = $1 RETURNING id', [req.params.mensagemId]);
+    if (!r) return reply.status(404).send({ message: 'Mensagem não encontrada' });
+    return { ok: true };
   });
 
   app.delete<{ Params: { edicaoId: string } }>('/api/gc/trafego/edicoes/:edicaoId', autenticado, async (req, reply) => {

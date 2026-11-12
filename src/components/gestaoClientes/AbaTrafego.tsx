@@ -13,6 +13,7 @@ import { GraficoDiario, Kpi, Variacao, quandoFoi } from '@/components/gestaoClie
 import { PainelGoogleAds } from '@/components/gestaoClientes/PainelGoogleAds'
 import { ArtesAprovadasTrafego } from '@/components/gestaoClientes/social/ArtesAprovadasTrafego'
 import { UltimaEdicaoTrafego } from '@/components/gestaoClientes/UltimaEdicaoTrafego'
+import { MensagemClienteTrafego } from '@/components/gestaoClientes/MensagemClienteTrafego'
 import {
   gcTrafego, type GcAlertaTrafego, type GcBenchmark, type GcCampanhaTrafego, type GcContaTrafego, type GcNivelAlerta, type GcTotaisTrafego,
 } from '@/services/gcTrafego'
@@ -690,6 +691,8 @@ export function AbaTrafego({ clienteId }: { clienteId: string }) {
         ) : null}
       </Estado>
       )}
+
+      <MensagemClienteTrafego clienteId={clienteId} />
 
       <ModalContas
         aberto={contasAbertas}

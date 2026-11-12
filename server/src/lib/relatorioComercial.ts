@@ -1,4 +1,5 @@
 import { query, queryOne } from '../db.js';
+import { reunioesDoCloser } from './reunioesDoCloser.js';
 
 /**
  * O relatório do mês do Dashboard Comercial, montado AQUI no servidor.
@@ -71,6 +72,13 @@ export interface RelatorioComercial {
     agendamentos: number;
   };
   porSdr: { nome: string; cor: string; vendas: number; mrrCents: number }[];
+  /** Vendas fechadas no CRM do Luis no mês (é o que entra no "Reunião → venda"). */
+  vendasDoCloser: number;
+  /** De onde vieram o investimento e os leads: o Meta (integração), o que foi digitado no mês ou o CRM. */
+  fonteInvestimento: 'meta' | 'digitado';
+  fonteLeads: 'meta' | 'digitado' | 'crm';
+  /** Dia a dia do mês: gasto (centavos) e leads do Meta e leads que entraram no CRM. */
+  serie: { dia: string; gastoCents: number; leadsMeta: number; leadsCrm: number }[];
 }
 
 export async function montarRelatorioDoMes(mes: string): Promise<RelatorioComercial | null> {
@@ -145,15 +153,40 @@ export async function montarRelatorioDoMes(mes: string): Promise<RelatorioComerc
     porSdrMapa.set(nome, atual);
   }
 
+  // Meta (integração): gasto e leads de formulário de todos os anúncios da conta, dia a dia.
+  const metaDia = await query<{ dia: string; gasto: string; leads: string }>(
+    `SELECT to_char(dia, 'YYYY-MM-DD') AS dia, COALESCE(SUM(spend), 0) AS gasto, COALESCE(SUM(meta_leads), 0) AS leads
+     FROM meta_ad_insights_daily WHERE dia >= $1::date AND dia < $2::date GROUP BY dia`,
+    [inicio, fimExclusivo]
+  );
+  const crmDia = await query<{ dia: string; n: string }>(
+    `SELECT to_char((lr.created_at AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS dia, count(*) AS n
+     FROM lead_rows lr JOIN lead_boards lb ON lb.id = lr.board_id
+     WHERE lb.is_vendas = false AND lr.espelho_origem_id IS NULL AND lr.copia_ia_origem_id IS NULL AND lr.deleted_at IS NULL
+       AND (lr.created_at AT TIME ZONE 'America/Sao_Paulo') >= $1::date
+       AND (lr.created_at AT TIME ZONE 'America/Sao_Paulo') < $2::date
+     GROUP BY 1`,
+    [inicio, fimExclusivo]
+  );
+  const gastoMetaCents = metaDia.reduce((s, d) => s + Math.round(Number(d.gasto) * 100), 0);
+  const leadsMeta = metaDia.reduce((s, d) => s + Number(d.leads), 0);
+
+  // Reuniões: as do CRM do Luis no mês (mesma conta do Dashboard Comercial e das Minhas métricas dele).
+  const fimInclusivo = new Date(new Date(`${fimExclusivo}T12:00:00Z`).getTime() - 86400000).toISOString().slice(0, 10);
+  const closer = await reunioesDoCloser(inicio, fimInclusivo);
+
   const leadsNoCrm = Number(funil?.leads ?? 0);
-  // Mesma regra da tela: vale o número digitado (o que o tráfego entregou); sem ele, o do CRM.
-  const leads = mesManual?.leads_gerados || leadsNoCrm;
+  // Mesma regra da tela: o número do Meta; sem ele, o digitado no mês; sem nenhum dos dois, o do CRM.
+  const leads = leadsMeta > 0 ? leadsMeta : (mesManual?.leads_gerados || leadsNoCrm);
+  const fonteLeads: 'meta' | 'digitado' | 'crm' = leadsMeta > 0 ? 'meta' : mesManual?.leads_gerados ? 'digitado' : 'crm';
   const agendamentos = Number(funil?.agendadas ?? 0);
-  const reunioesRealizadas = Number(funil?.compareceram ?? 0);
-  const noShows = Number(funil?.no_show ?? 0);
+  const reunioesRealizadas = closer.realizadas.length;
+  const noShows = closer.no_show.length;
+  const vendasDoCloser = closer.vendas.length;
   const vendasDoFunil = Number(funil?.vendidos ?? 0);
 
-  const investimentoCents = centavos(mesManual?.investimento_trafego);
+  // Investimento: o gasto real do Meta no mês; sem ele, o digitado.
+  const investimentoCents = gastoMetaCents > 0 ? gastoMetaCents : centavos(mesManual?.investimento_trafego);
   const custosExtrasCents = centavos(mesManual?.custos_extras);
   const custoTotalCents = investimentoCents + custosExtrasCents;
   const permanencia = Number(mesManual?.permanencia_media ?? 0);
@@ -191,7 +224,26 @@ export async function montarRelatorioDoMes(mes: string): Promise<RelatorioComerc
     // não derruba a taxa de ninguém.
     taxaComparecimento: comDesfecho > 0 ? reunioesRealizadas / comDesfecho : 0,
     taxaNoShow: comDesfecho > 0 ? noShows / comDesfecho : 0,
-    taxaReuniaoVenda: reunioesRealizadas > 0 ? vendasDoFunil / reunioesRealizadas : 0,
+    // Reunião -> venda: tudo do CRM do Luis (vendas dele ÷ reuniões realizadas dele).
+    taxaReuniaoVenda: reunioesRealizadas > 0 ? vendasDoCloser / reunioesRealizadas : 0,
+    vendasDoCloser,
+    fonteInvestimento: gastoMetaCents > 0 ? 'meta' : 'digitado',
+    fonteLeads,
+    serie: (() => {
+      const g = new Map(metaDia.map((d) => [d.dia, d]));
+      const c = new Map(crmDia.map((d) => [d.dia, Number(d.n)]));
+      const saida: RelatorioComercial['serie'] = [];
+      for (let t = new Date(`${inicio}T12:00:00Z`); t.toISOString().slice(0, 10) < fimExclusivo; t = new Date(t.getTime() + 86400000)) {
+        const dia = t.toISOString().slice(0, 10);
+        saida.push({
+          dia,
+          gastoCents: Math.round(Number(g.get(dia)?.gasto ?? 0) * 100),
+          leadsMeta: Number(g.get(dia)?.leads ?? 0),
+          leadsCrm: c.get(dia) ?? 0,
+        });
+      }
+      return saida;
+    })(),
     metas: {
       // A meta geral é sempre a soma das duas — não existe campo próprio, pra não se contradizer.
       receitaCents: centavos(mesManual?.meta_mrr) + centavos(mesManual?.meta_impl),

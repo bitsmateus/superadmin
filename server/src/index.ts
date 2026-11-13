@@ -36,6 +36,7 @@ import { commercialMonthRoutes } from './routes/commercialMonths.js';
 import { contractRoutes } from './routes/contracts.js';
 import { commissionRoutes } from './routes/commissions.js';
 import { comissaoSuporteRoutes } from './routes/comissaoSuporte.js';
+import { tubaraoDiagnosticoRoutes } from './routes/tubaraoDiagnostico.js';
 import { startComissaoSuporteSync } from './lib/comissaoSuporte.js';
 import { cnpjRoutes } from './routes/cnpj.js';
 import { leadLabelRoutes } from './routes/leadLabels.js';
@@ -187,6 +188,7 @@ async function main() {
   await app.register(contractRoutes);
   await app.register(commissionRoutes);
   await app.register(comissaoSuporteRoutes);
+  await app.register(tubaraoDiagnosticoRoutes);
   await app.register(cnpjRoutes);
   await app.register(leadLabelRoutes);
   await app.register(supportColumnRoutes);

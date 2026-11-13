@@ -940,6 +940,8 @@ interface BoardGroupProps {
   onResizeColumn: (key: string, width: number) => void
   sdrLock: string | undefined
   sdrPageBoards: Map<string, LeadBoard[]>
+  /** Quadros do CRM TUBARAO (pra onde a coluna SDR de Novos Leads manda lead de Tubarão). */
+  quadrosTubarao: LeadBoard[]
   hideIanMateusCols: boolean
   /** Aba CRM do Arthur ou do Luis (não o Closer): é onde existem as colunas de cadência. */
   crmArthurLuis: boolean
@@ -951,7 +953,7 @@ function BoardGroup({
   onTableScroll,
   selectedIds, onToggleRow, onToggleAll,
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
-  columnWidths, onResizeColumn, sdrLock, sdrPageBoards, hideIanMateusCols, crmArthurLuis, crmDoSuporte,
+  columnWidths, onResizeColumn, sdrLock, sdrPageBoards, quadrosTubarao, hideIanMateusCols, crmArthurLuis, crmDoSuporte,
 }: BoardGroupProps) {
   // Quadro nasce fechado — só mostra os leads quando a pessoa abre de propósito. Exceto em "Novos
   // Leads": ali entra já aberto, sem precisar clicar, pedido específico dessa aba.
@@ -1259,13 +1261,21 @@ function BoardGroup({
                               {rotuloDaOrigem(row.origem)}
                             </span>
                           )}
-                          {sdrLock && row.sdr && row.sdr !== sdrLock && ehSdrDaIa(row.sdr) && (
-                            <span
-                              title="Agendada pela IA Luiza: conta nas métricas dela, não nas deste CRM"
-                              className="mr-1.5 shrink-0 rounded bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-pink-600"
-                            >
-                              IA Luiza
-                            </span>
+                          {/* Aba travada num SDR (sem a coluna SDR): o SDR vai do lado do nome (pedido de 13/11). A IA Luiza
+                              num CRM de outro SDR continua com o selo rosa. */}
+                          {sdrLock && row.sdr && (
+                            ehSdrDaIa(row.sdr) && row.sdr !== sdrLock ? (
+                              <span
+                                title="Agendada pela IA Luiza: conta nas métricas dela, não nas deste CRM"
+                                className="mr-1.5 shrink-0 rounded bg-pink-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-pink-600"
+                              >
+                                IA Luiza
+                              </span>
+                            ) : (
+                              <span title="SDR" className="mr-1.5 max-w-[7rem] shrink-0 truncate rounded bg-elevate/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-foreground/55">
+                                {row.sdr}
+                              </span>
+                            )
                           )}
                           <button
                             type="button"
@@ -1306,10 +1316,14 @@ function BoardGroup({
                               // Marcar o SDR aqui (só existe em abas sem dono, ex.: Novos Leads) já
                               // manda o lead pro quadro de MESMO NOME na aba daquele SDR — não faz
                               // sentido ficar em Novos Leads depois de atribuído.
+                              // Lead de Tubarão (isLeadTubarao) só vai pro CRM TUBARAO, com o SDR marcado (pedido de 13/11).
+                              const paraTubarao = board.page === 'novos_leads' && isLeadTubarao(row) && quadrosTubarao.length > 0
                               const target = next
-                                ? sdrPageBoards.get(next)?.find(
-                                    (b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase(),
-                                  )
+                                ? paraTubarao
+                                  ? quadrosTubarao.find((b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase()) ?? quadrosTubarao[0]
+                                  : sdrPageBoards.get(next)?.find(
+                                      (b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase(),
+                                    )
                                 : undefined
                               applyFieldChange(row, target ? { sdr: next, boardId: target.id } : { sdr: next })
                             } else {
@@ -1487,7 +1501,8 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   // CRM do Arthur ou do Luis "normais" (o Closer tem outra rotina): é onde ficam as colunas de cadência. Casa também
   // pelo id da aba, que já existe antes de o nome carregar.
   const crmArthurLuis = React.useMemo(() => {
-    const ehDeles = (s: string) => /(arthur|lu[ií]s|luiza)/i.test(s)
+    // CRM TUBARAO (id crm-outbound) também mostra as colunas da régua (Disparo, Follow-up) — pedido de 13/11.
+    const ehDeles = (s: string) => /(arthur|lu[ií]s|luiza|tubar[aã]o|crm-outbound)/i.test(s)
     return (ehDeles(title) || ehDeles(page)) && !/closer/i.test(title) && !/closer/i.test(page)
   }, [title, page])
 
@@ -1509,6 +1524,10 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
     }
     return map
   }, [sdrLabelsForLock, allPages, allBoards])
+  const quadrosTubarao = React.useMemo(
+    () => allBoards.filter((b) => b.page === PAGINA_TUBARAO && !b.isVendas && !b.isContrato).sort((a, b) => a.position - b.position),
+    [allBoards],
+  )
   const allRows = useAllLeadRows()
   const pageRows = React.useMemo(() => {
     const boardIds = new Set(boards.map((b) => b.id))
@@ -1904,6 +1923,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                       onResizeColumn={handleResizeColumn}
                       sdrLock={sdrLock}
                       sdrPageBoards={sdrPageBoards}
+                      quadrosTubarao={quadrosTubarao}
                       hideIanMateusCols={hideIanMateusCols}
                       crmArthurLuis={crmArthurLuis}
                       crmDoSuporte={crmDoSuporte}

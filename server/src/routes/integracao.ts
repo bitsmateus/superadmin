@@ -332,10 +332,11 @@ export async function integracaoRoutes(app: FastifyInstance) {
     const telefone = v.campos.telefone;
     const ultimos8 = chaveTelefone(telefone)!.ultimos8;
     const status = (await statusDoQuadro(coluna.id)) ?? '';
-    // Trava por quadro + telefone: duas chamadas iguais ao mesmo tempo não criam dois cards.
+    // Trava por telefone: duas chamadas iguais ao mesmo tempo (no mesmo quadro ou em quadros diferentes) não criam dois
+    // cards.
     const r = await withTransaction(async (client) => {
       await client.query(`SELECT set_config('app.actor', $1, true)`, [ATOR]);
-      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`integracao-card:${quadro!.id}:${ultimos8}`]);
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`integracao-card:${ultimos8}`]);
       const { rows: mesmos } = await client.query<{ id: string; telefone: string; espelho_origem_id: string | null; copia_ia_origem_id: string | null }>(
         `SELECT r.id, r.telefone, r.espelho_origem_id, r.copia_ia_origem_id FROM lead_rows r
          JOIN lead_boards lb ON lb.id = r.board_id
@@ -347,6 +348,20 @@ export async function integracaoRoutes(app: FastifyInstance) {
       const existente = mesmos.filter((m) => mesmoTelefone(m.telefone, telefone))
         .sort((a, b) => Number(!!(a.espelho_origem_id || a.copia_ia_origem_id)) - Number(!!(b.espelho_origem_id || b.copia_ia_origem_id)))[0];
       if (existente) return { id: existente.id, criado: false };
+      // Trava contra duplicado (pedido de 13/11): já existe card com esse telefone em QUALQUER outro quadro (fora o
+      // novos_leads) = não cria outro; devolve o existente (o original antes das cópias do closer/IA, o mais antigo).
+      const { rows: emOutros } = await client.query<{ id: string; telefone: string; copia: boolean }>(
+        `SELECT r.id, r.telefone, (r.espelho_origem_id IS NOT NULL OR r.copia_ia_origem_id IS NOT NULL) AS copia FROM lead_rows r
+         JOIN lead_boards lb ON lb.id = r.board_id JOIN lead_pages lp ON lp.id = lb.page
+         WHERE lb.page <> 'novos_leads' AND lb.is_vendas = false AND lb.is_contrato = false AND r.deleted_at IS NULL
+           AND r.venda_origem_id IS NULL AND lp.archived_at IS NULL
+           AND right(regexp_replace(r.telefone, '\\D', '', 'g'), 8) = $1
+         ORDER BY r.created_at ASC`,
+        [ultimos8]
+      );
+      const jaExiste = emOutros.filter((m) => mesmoTelefone(m.telefone, telefone))
+        .sort((a, b) => Number(a.copia) - Number(b.copia))[0];
+      if (jaExiste) return { id: jaExiste.id, criado: false };
       const { rows: [{ max }] } = await client.query<{ max: number | null }>(
         'SELECT MAX(position) AS max FROM lead_rows WHERE board_id = $1', [coluna!.id]);
       // Nomes de coluna vêm da lista fixa do validador (nunca do cliente) — seguro interpolar.

@@ -341,7 +341,8 @@ function exigenciaDaMudanca(atual: LeadParaRegra | null, patch: Partial<LeadRow>
   return campos.length
     ? {
         status: statusNovo, campos, oferecerIa: ofereceAgendadoPelaIa(statusNovo, aba?.name ?? '', quadroDestino.page),
-        copiaNaIa: !saoAbasJuntas(quadroDestino.page, 'crm-ia-luiza'),
+        // CRM TUBARAO (crm-outbound): a lead da IA fica só lá, sem cópia no CRM IA LUIZA.
+        copiaNaIa: !saoAbasJuntas(quadroDestino.page, 'crm-ia-luiza') && quadroDestino.page !== 'crm-outbound',
       }
     : null
 }

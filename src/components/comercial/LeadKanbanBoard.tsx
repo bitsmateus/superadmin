@@ -478,6 +478,8 @@ function KanbanCard({
       <div className="flex items-start gap-1.5">
         <div className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
           {row.nome || 'Sem nome'}
+          {/* O SDR do lado do nome (pedido de 13/11): "Fabiana · IA Luiza". */}
+          {!modoDemanda && row.sdr && <span className="font-normal text-foreground/45"> · {row.sdr}</span>}
           {origemMostraSelo(row.origem) && (
             <span
               title={`Origem: ${rotuloDaOrigem(row.origem)}`}

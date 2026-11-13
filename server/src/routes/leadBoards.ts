@@ -356,6 +356,20 @@ export async function restrictedBoardFilter(userId: string, role: string): Promi
   return boards.map((r) => r.id);
 }
 
+/** CRM TUBARAO (pedido de 13/11). O id é o de quando a aba foi criada; o nome na tela é "CRM TUBARAO". */
+export const PAGINA_TUBARAO = 'crm-outbound';
+
+/** O SDR de quem está logado: a etiqueta de SDR com o mesmo primeiro nome ("Arthur Faveri" -> "Arthur"); sem
+ * etiqueta, o próprio primeiro nome. */
+async function sdrDoUsuario(userId: string): Promise<string> {
+  const perfil = await queryOne<{ name: string | null }>('SELECT name FROM profiles WHERE id = $1', [userId]);
+  const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const primeiro = (perfil?.name ?? '').trim().split(/\s+/)[0] ?? '';
+  if (!primeiro) return '';
+  const etiquetas = await query<{ name: string }>(`SELECT name FROM lead_labels WHERE field = 'sdr' ORDER BY position`);
+  return etiquetas.find((l) => semAcento(l.name.split(/\s+/)[0] ?? '') === semAcento(primeiro))?.name ?? primeiro;
+}
+
 async function getActorName(userId: string | null | undefined): Promise<string> {
   if (!userId) return 'Sistema';
   const profile = await queryOne<{ name: string | null; email: string }>(
@@ -1129,8 +1143,10 @@ export async function syncCopiaDaIa(leadRowId: string) {
 
     // Abas separadas: a lead fica no CRM do SDR e ganha uma cópia no CRM IA LUIZA.
     // Uma cópia que já existia vai pra lixeira na próxima edição da original.
+    // CRM TUBARAO (pedido de 13/11): a lead da Luiza que está lá NÃO ganha cópia no CRM IA LUIZA (o card dela fica só
+    // no Tubarão, com SDR "IA Luiza"); uma cópia que já existia vai pra lixeira na próxima edição.
     const deveTer = ehSdrDaIa(lead.sdr) && !!etapa && !STATUS_INICIO_DO_FUNIL.has(normalizaNome(etapa))
-      && !saoAbasJuntas(lead.page, PAGE_IA);
+      && !saoAbasJuntas(lead.page, PAGE_IA) && lead.page !== PAGINA_TUBARAO;
     if (!deveTer) {
       if (copia && !copia.deleted_at) await query('UPDATE lead_rows SET deleted_at = NOW() WHERE id = $1', [copia.id]);
       return;
@@ -1814,6 +1830,21 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       // O popup de resultado da reunião ("Não compareceu") move o card sem ficha aberta: lá a origem não é cobrada.
       const falta = await faltaDadoDoStatus(req.params.id, patch, req.headers['x-sem-regra-origem'] === '1');
       if (falta) return reply.status(400).send({ message: falta.mensagem, exigir: falta.campos });
+
+      // Lead que entra no CRM TUBARAO vindo de outra aba (pedido de 13/11): o SDR vira quem moveu (ex.: "Arthur").
+      // Fica como está quando o patch já traz o SDR (coluna SDR de Novos Leads) ou quando a lead é da IA Luiza.
+      if (typeof patch.board_id === 'string' && !('sdr' in patch)) {
+        const mov = await queryOne<{ destino: string; origem: string; sdr: string }>(
+          `SELECT nb.page AS destino, ob.page AS origem, COALESCE(r.sdr, '') AS sdr
+           FROM lead_rows r JOIN lead_boards ob ON ob.id = r.board_id, lead_boards nb
+           WHERE r.id = $1 AND nb.id = $2`,
+          [req.params.id, patch.board_id]
+        );
+        if (mov && mov.destino === PAGINA_TUBARAO && mov.origem !== PAGINA_TUBARAO && !/luiza/i.test(mov.sdr)) {
+          const sdr = await sdrDoUsuario(sub);
+          if (sdr) patch.sdr = sdr;
+        }
+      }
 
       const sets: string[] = [];
       const params: unknown[] = [];

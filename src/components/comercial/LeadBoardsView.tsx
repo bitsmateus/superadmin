@@ -49,6 +49,7 @@ import { LeadKanbanBoard } from '@/components/comercial/LeadKanbanBoard'
 import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { DashboardDoSuporte } from '@/components/comercial/DashboardDoSuporte'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
+import { isLeadTubarao, PAGINA_TUBARAO } from '@/lib/leadTubarao'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { NovaDemandaModal } from '@/components/comercial/NovaDemandaModal'
@@ -641,14 +642,21 @@ function MoveSubmenu({
   onMove,
   currentPageId,
   sdrLock,
+  selectedRows,
 }: {
   allBoards: LeadBoard[]
   allPages: LeadPage[]
   onMove: (boardId: string) => void
   currentPageId: string
   sdrLock: string | undefined
+  selectedRows: LeadRow[]
 }) {
   const [aba, setAba] = React.useState<LeadBoardPage | null>(null)
+  // Novos Leads (pedido de 13/11): lead "de Tubarão" (isLeadTubarao: Tipo começando com "tubarao" ou DDD 48) só vai
+  // pro CRM TUBARAO. Seleção misturada (Tubarão + outros) não move: pede pra separar.
+  const deTubarao = currentPageId === 'novos_leads' ? selectedRows.filter((r) => isLeadTubarao(r)).length : 0
+  const soTubarao = deTubarao > 0 && deTubarao === selectedRows.length
+  const misturado = deTubarao > 0 && deTubarao < selectedRows.length
 
   // Nunca lista aba arquivada como destino — uma cópia arquivada pode ter um quadro de mesmo nome
   // da aba viva (ex.: "Proposta enviada"), e sem esse filtro dava pra mover um lead pra lá sem
@@ -660,13 +668,27 @@ function MoveSubmenu({
   // Do CRM ARTHUR e do CRM IA LUIZA também dá pra mandar a lead pro CRM TUBARAO (id crm-outbound, a terceira aba da
   // mesma tela — pedido de 13/11).
   const destinosExtras = currentPageId === 'crm-arthur' || currentPageId === 'crm-ia-luiza' ? ['crm-outbound'] : []
-  const movablePages = sdrLock
-    ? livePages.filter((p) => p.id === currentPageId || p.name.trim().toLowerCase() === 'novos leads' || destinosExtras.includes(p.id))
-    : livePages
+  const movablePages = soTubarao
+    ? livePages.filter((p) => p.id === PAGINA_TUBARAO)
+    : sdrLock
+      ? livePages.filter((p) => p.id === currentPageId || p.name.trim().toLowerCase() === 'novos leads' || destinosExtras.includes(p.id))
+      : livePages
+
+  if (misturado) {
+    return (
+      <p className="px-2 py-1.5 text-xs leading-snug text-foreground/60">
+        {deTubarao} da seleção {deTubarao === 1 ? 'é lead' : 'são leads'} de Tubarão, que só {deTubarao === 1 ? 'vai' : 'vão'} pro CRM
+        TUBARAO. Mova separado: primeiro os de Tubarão, depois os outros.
+      </p>
+    )
+  }
 
   if (!aba) {
     return (
       <>
+        {soTubarao && (
+          <p className="px-2 pb-1 pt-0.5 text-[11px] text-foreground/45">Lead de Tubarão: só vai pro CRM TUBARAO.</p>
+        )}
         {movablePages.map((p) => (
           <button
             key={p.id}
@@ -674,7 +696,7 @@ function MoveSubmenu({
             onClick={() => setAba(p.id)}
             className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-foreground/70 hover:bg-elevate/[0.04]"
           >
-            {p.name}
+            {soTubarao ? 'Transferir pro CRM Tubarão' : p.name}
             <ChevronRight className="h-3.5 w-3.5 text-foreground/30" />
           </button>
         ))}
@@ -854,7 +876,7 @@ function BulkActionBar({
           <BulkActionButton icon={<ArrowRightLeft className="h-4 w-4" />} label="Mover" onClick={() => setMoveOpen((o) => !o)} />
           {moveOpen && (
             <div className="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-lg border border-line bg-card p-1.5 shadow-xl">
-              <MoveSubmenu allBoards={allBoards} allPages={allPages} onMove={moveTo} currentPageId={pageId} sdrLock={sdrLock} />
+              <MoveSubmenu allBoards={allBoards} allPages={allPages} onMove={moveTo} currentPageId={pageId} sdrLock={sdrLock} selectedRows={selectedRows} />
             </div>
           )}
         </div>

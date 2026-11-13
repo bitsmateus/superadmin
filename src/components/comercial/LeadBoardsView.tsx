@@ -657,8 +657,11 @@ function MoveSubmenu({
   // Aba travada num SDR só (CRM Luis/Arthur): só pode mover pra dentro da própria aba ou pra
   // Novos Leads — nunca pra outro SDR, Vendas ou Contrato. Sem trava (ex.: Novos Leads), continua
   // podendo mover pra qualquer aba, como sempre foi.
+  // Do CRM ARTHUR e do CRM IA LUIZA também dá pra mandar a lead pro CRM TUBARAO (id crm-outbound, a terceira aba da
+  // mesma tela — pedido de 13/11).
+  const destinosExtras = currentPageId === 'crm-arthur' || currentPageId === 'crm-ia-luiza' ? ['crm-outbound'] : []
   const movablePages = sdrLock
-    ? livePages.filter((p) => p.id === currentPageId || p.name.trim().toLowerCase() === 'novos leads')
+    ? livePages.filter((p) => p.id === currentPageId || p.name.trim().toLowerCase() === 'novos leads' || destinosExtras.includes(p.id))
     : livePages
 
   if (!aba) {

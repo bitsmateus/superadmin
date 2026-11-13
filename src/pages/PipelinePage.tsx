@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Globe,
   Link as LinkIcon,
   ListChecks,
   ListTodo,
@@ -46,6 +47,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { ListKanbanToggle } from '@/components/ui/ListKanbanToggle'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
+import { SiteBriefingModal } from '@/components/crm/SiteBriefingModal'
 import { StageBadge } from '@/components/crm/StageBadge'
 import { StageAgeBadge } from '@/components/crm/StageAgeBadge'
 import { useClients, useCurrentUser, useSettings } from '@/hooks/useClients'
@@ -144,6 +146,8 @@ export function PipelinePage() {
   const [openNew, setOpenNew] = React.useState(false)
   // "Nova tarefa": card no CRM do Jean ou do João (NovaDemandaModal sem quadro fixo).
   const [novaTarefa, setNovaTarefa] = React.useState(false)
+  // "Briefing de site": mesmo briefing do onboarding, só com as perguntas de criação de site.
+  const [briefingSite, setBriefingSite] = React.useState(false)
   const crmsDoSuporte = useCrmsDoSuporte()
   const irPara = useNavigate()
   const [addToCopyOpen, setAddToCopyOpen] = React.useState(false)
@@ -465,6 +469,14 @@ export function PipelinePage() {
             >
               <span className="hidden lg:inline">Link de cadastro</span>
             </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setBriefingSite(true)}
+              leftIcon={<Globe className="h-4 w-4" />}
+              aria-label="Briefing de site"
+            >
+              <span className="hidden lg:inline">Briefing de site</span>
+            </Button>
             {crmsDoSuporte.length > 0 && (
               <Button
                 variant="secondary"
@@ -678,6 +690,13 @@ export function PipelinePage() {
           }}
         />
       )}
+
+      <SiteBriefingModal
+        open={briefingSite}
+        onClose={() => setBriefingSite(false)}
+        clients={clients}
+        onOpenClient={setOpenClientId}
+      />
 
       <Modal
         open={openNew}

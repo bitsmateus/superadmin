@@ -49,6 +49,7 @@ import { BriefingMeeting } from '../BriefingMeeting'
 import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
+import { buildSiteBriefingMessage } from '@/lib/briefingSite'
 import { generateUserPassword } from '@/lib/accessSheet'
 import { getServerById, useAuthStore } from '@/store/authStore'
 import type { Tenant } from '@/types'
@@ -81,6 +82,7 @@ import type {
   BriefingScheduleSlot,
   AiTone,
   SiteGoal,
+  SiteType,
 } from '@/types/client'
 
 const SITE_GOAL_LABELS: Record<SiteGoal, string> = {
@@ -203,6 +205,7 @@ export function BriefingTab({ client, forceOpenSections }: { client: Client; for
 
   // Automação (chatbot/IA) é opcional — o briefing pode ser gerado sem ela.
   const configComplete =
+    Boolean(config.siteOnly) ||
     config.connectionTypes.length > 0 &&
     config.channels.length > 0 &&
     config.maxUsers > 0
@@ -228,7 +231,7 @@ export function BriefingTab({ client, forceOpenSections }: { client: Client; for
       try {
         await api.post('/api/whatsapp/send', {
           number: client.briefingNumber,
-          text: buildWhatsAppMessage(client.name || 'cliente', newLink),
+          text: buildWhatsAppMessage(client.name || 'cliente', newLink, config.siteOnly),
         })
         db.addLog(client.id, 'Briefing enviado no WhatsApp', client.briefingNumber)
         toast.success('Briefing enviado no WhatsApp do cliente')
@@ -274,7 +277,7 @@ export function BriefingTab({ client, forceOpenSections }: { client: Client; for
 
   const copyMessage = async () => {
     if (!link) return
-    const msg = buildWhatsAppMessage(client.name || 'cliente', link)
+    const msg = buildWhatsAppMessage(client.name || 'cliente', link, config.siteOnly)
     const ok = await copyToClipboard(msg)
     if (ok) toast.success('Mensagem copiada')
     else toast.error('Não foi possível copiar')
@@ -374,6 +377,35 @@ export function BriefingTab({ client, forceOpenSections }: { client: Client; for
           </p>
         )}
         <div className="space-y-4">
+          <ConfigGroup label="Tipo de briefing">
+            <ChipBtn
+              active={!config.siteOnly}
+              onClick={() => updateConfig({ siteOnly: false })}
+            >
+              Completo (atendimento)
+            </ChipBtn>
+            <ChipBtn
+              active={Boolean(config.siteOnly)}
+              onClick={() =>
+                updateConfig({
+                  siteOnly: true,
+                  automationTypes: config.automationTypes.includes('site')
+                    ? config.automationTypes
+                    : [...config.automationTypes, 'site'],
+                })
+              }
+            >
+              Só site
+            </ChipBtn>
+          </ConfigGroup>
+
+          {config.siteOnly ? (
+            <p className="text-xs text-foreground/55">
+              O cliente recebe só as perguntas de criação de site (empresa, contato, tipo de site,
+              páginas, identidade visual, domínio e conteúdo). Sem usuários, horários, WhatsApp, chatbot ou IA.
+            </p>
+          ) : (
+          <>
           <ConfigGroup label="Forma de Conexão *">
             {CONNECTION_OPTIONS.map((opt) => (
               <ChipBtn
@@ -488,6 +520,8 @@ export function BriefingTab({ client, forceOpenSections }: { client: Client; for
               />
             )}
           </div>
+          </>
+          )}
         </div>
         </fieldset>
         )}
@@ -774,7 +808,8 @@ function ChipBtn({
   )
 }
 
-function buildWhatsAppMessage(name: string, link: string): string {
+function buildWhatsAppMessage(name: string, link: string, siteOnly?: boolean): string {
+  if (siteOnly) return buildSiteBriefingMessage(name, link)
   return `Olá, ${name}!
 
 Para continuarmos com o seu processo de onboarding, preparamos um briefing onde precisamos que você preencha algumas informações sobre a sua empresa.
@@ -1843,6 +1878,20 @@ function BriefingViewer({
     data.mercadolivreInfo ||
     data.emailConfig
 
+  // Briefing só de site: não tem usuários, horários nem atendimento — mostra só o que foi perguntado.
+  if (config?.siteOnly) {
+    return (
+      <div className="space-y-2">
+        <SiteAccordion data={data} siteOnly />
+        {data.extraNotes && (
+          <Accordion title={<SectionTitle icon={<StickyNote className="h-3.5 w-3.5" />}>Observações</SectionTitle>} defaultOpen>
+            <Row k="" v={data.extraNotes} />
+          </Accordion>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-2">
       <Accordion title={<SectionTitle icon={<Building2 className="h-3.5 w-3.5" />}>1. Empresa</SectionTitle>} defaultOpen>
@@ -2004,33 +2053,7 @@ function BriefingViewer({
         </Accordion>
       )}
 
-      {(data.siteCompanyName ||
-        data.siteSocialMedia ||
-        (data.siteGoals?.length ?? 0) > 0 ||
-        data.siteTargetAudience ||
-        data.siteHasLogo !== undefined ||
-        data.siteColors ||
-        data.siteHasDomain !== undefined) && (
-        <Accordion title={<SectionTitle icon={<Globe className="h-3.5 w-3.5" />}>Site</SectionTitle>} defaultOpen>
-          <Row k="Nome da empresa" v={data.siteCompanyName} />
-          <Row k="Redes sociais (referência)" v={data.siteSocialMedia} />
-          {(data.siteGoals?.length ?? 0) > 0 && (
-            <Row k="Objetivo do site" v={data.siteGoals!.map((g) => SITE_GOAL_LABELS[g] ?? g).join(', ')} />
-          )}
-          {data.siteGoalsOther && <Row k="Outro objetivo" v={data.siteGoalsOther} />}
-          <Row k="Público-alvo" v={data.siteTargetAudience} />
-          {data.siteHasLogo !== undefined && (
-            <Row k="Já tem logo?" v={data.siteHasLogo ? 'Sim (cliente vai enviar pelo WhatsApp)' : 'Não'} />
-          )}
-          <Row k="Cores da marca" v={data.siteColors} />
-          {data.siteHasDomain !== undefined && (
-            <Row
-              k="Já tem domínio?"
-              v={data.siteHasDomain ? data.siteDomain || 'Sim' : 'Não — nosso time avalia domínios disponíveis'}
-            />
-          )}
-        </Accordion>
-      )}
+      <SiteAccordion data={data} />
 
       {(hasAnyAiData(data) ||
         data.useAI ||
@@ -2050,6 +2073,96 @@ function BriefingViewer({
         </Accordion>
       )}
     </div>
+  )
+}
+
+// ── Visualização das respostas do site ───────────────────────────────────────
+
+const SITE_TYPE_LABELS: Record<SiteType, string> = {
+  institucional: 'Site institucional',
+  landing_page: 'Landing page',
+  loja_virtual: 'Loja virtual',
+  catalogo: 'Catálogo / cardápio',
+  nao_sei: 'Não sabe ainda — equipe indica',
+}
+
+const SITE_TEXTS_LABELS: Record<'sim' | 'parcial' | 'nao', string> = {
+  sim: 'Sim, já tem os textos',
+  parcial: 'Tem uma parte',
+  nao: 'Não — precisamos escrever',
+}
+
+function SiteAccordion({ data, siteOnly }: { data: NonNullable<Client['briefingData']>; siteOnly?: boolean }) {
+  const has =
+    data.siteCompanyName ||
+    data.siteSocialMedia ||
+    (data.siteGoals?.length ?? 0) > 0 ||
+    data.siteTargetAudience ||
+    data.siteHasLogo !== undefined ||
+    data.siteColors ||
+    data.siteHasDomain !== undefined ||
+    data.siteType ||
+    data.siteAbout ||
+    data.siteServices
+  if (!has) return null
+  const pages = [
+    ...(data.sitePages ?? []).filter((p) => p !== 'Outra'),
+    ...(data.sitePagesOther ? [data.sitePagesOther] : []),
+  ]
+  return (
+    <>
+      {siteOnly && (
+        <Accordion title={<SectionTitle icon={<Building2 className="h-3.5 w-3.5" />}>1. Empresa</SectionTitle>} defaultOpen>
+          <Row k="Nome no site" v={data.siteCompanyName} />
+          <Row k="Sobre a empresa" v={data.siteAbout} />
+          <Row k="Serviços / produtos" v={data.siteServices} />
+          <Row k="Diferenciais" v={data.siteDifferentials} />
+          <Row k="Redes sociais" v={data.siteSocialMedia} />
+          <Row k="WhatsApp" v={data.siteContactWhatsapp} />
+          <Row k="E-mail" v={data.siteContactEmail} />
+          <Row k="Endereço" v={data.siteAddress} />
+          <Row k="Horário" v={data.siteHours} />
+        </Accordion>
+      )}
+      <Accordion
+        title={<SectionTitle icon={<Globe className="h-3.5 w-3.5" />}>{siteOnly ? '2. Site' : 'Site'}</SectionTitle>}
+        defaultOpen
+      >
+        {!siteOnly && <Row k="Nome da empresa" v={data.siteCompanyName} />}
+        {!siteOnly && <Row k="Redes sociais (referência)" v={data.siteSocialMedia} />}
+        {data.siteType && <Row k="Tipo de site" v={SITE_TYPE_LABELS[data.siteType] ?? data.siteType} />}
+        {(data.siteGoals?.length ?? 0) > 0 && (
+          <Row k="Objetivo do site" v={data.siteGoals!.map((g) => SITE_GOAL_LABELS[g] ?? g).join(', ')} />
+        )}
+        {data.siteGoalsOther && <Row k="Outro objetivo" v={data.siteGoalsOther} />}
+        <Row k="Público-alvo" v={data.siteTargetAudience} />
+        {pages.length > 0 && <Row k="Páginas" v={pages.join(', ')} />}
+        {(data.siteFeatures?.length ?? 0) > 0 && <Row k="Recursos" v={data.siteFeatures!.join(', ')} />}
+        <Row k="Referências" v={data.siteReferences} />
+        {data.siteHasLogo !== undefined && (
+          <Row k="Já tem logo?" v={data.siteHasLogo ? 'Sim (cliente vai enviar pelo WhatsApp)' : 'Não'} />
+        )}
+        <Row k="Cores da marca" v={data.siteColors} />
+        {data.siteHasDomain !== undefined && (
+          <Row
+            k="Já tem domínio?"
+            v={data.siteHasDomain ? data.siteDomain || 'Sim' : 'Não — nosso time avalia domínios disponíveis'}
+          />
+        )}
+      </Accordion>
+      {(data.siteHasTexts || data.siteHasPhotos !== undefined || data.siteTestimonials) && (
+        <Accordion
+          title={<SectionTitle icon={<FileText className="h-3.5 w-3.5" />}>{siteOnly ? '3. Conteúdo' : 'Conteúdo do site'}</SectionTitle>}
+          defaultOpen
+        >
+          {data.siteHasTexts && <Row k="Textos" v={SITE_TEXTS_LABELS[data.siteHasTexts]} />}
+          {data.siteHasPhotos !== undefined && (
+            <Row k="Fotos próprias" v={data.siteHasPhotos ? 'Sim (cliente vai enviar)' : 'Não — usar banco de imagens'} />
+          )}
+          <Row k="Depoimentos" v={data.siteTestimonials} />
+        </Accordion>
+      )}
+    </>
   )
 }
 

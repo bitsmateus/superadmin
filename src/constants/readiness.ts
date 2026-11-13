@@ -93,6 +93,12 @@ export function computeReadiness(c: ReadinessInput): Readiness {
     )
   }
 
+  // Briefing só de site: não tem WhatsApp, usuários nem canais pra conectar — basta o briefing.
+  if (cfg?.siteOnly) {
+    const blockers = items.filter((i) => i.severity === 'blocker')
+    return { items, blockers, warnings: [], ready: blockers.length === 0 }
+  }
+
   // ── Número de WhatsApp ────────────────────────────────────────────────────
   const numbers = bd?.whatsappNumbers ?? []
   if (numbers.length === 0) {

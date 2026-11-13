@@ -164,6 +164,22 @@ export interface BriefingData {
   siteColors?: string
   siteHasDomain?: boolean
   siteDomain?: string
+  /** Campos do briefing "só site" (config.siteOnly) — também aparecem, opcionais, na seção Site do briefing completo. */
+  siteType?: SiteType
+  sitePages?: string[]
+  sitePagesOther?: string
+  siteFeatures?: string[]
+  siteReferences?: string
+  siteAbout?: string
+  siteServices?: string
+  siteDifferentials?: string
+  siteContactWhatsapp?: string
+  siteContactEmail?: string
+  siteAddress?: string
+  siteHours?: string
+  siteHasTexts?: 'sim' | 'parcial' | 'nao'
+  siteHasPhotos?: boolean
+  siteTestimonials?: string
 
   extraNotes?: string
 
@@ -235,6 +251,7 @@ export type SiteGoal =
   | 'divulgar_portfolio'
   | 'agendar_servicos'
   | 'outros'
+export type SiteType = 'institucional' | 'landing_page' | 'loja_virtual' | 'catalogo' | 'nao_sei'
 export type BriefingChannel = 'whatsapp' | 'instagram' | 'messenger' | 'wavoip' | 'olx' | 'mercadolivre' | 'email'
 
 export interface BriefingConfig {
@@ -246,6 +263,12 @@ export interface BriefingConfig {
   maxWhatsappNumbers?: number
   hasExternalAutomation: boolean
   externalAutomationNotes?: string
+  /**
+   * Briefing só para criação de site: o formulário público pula usuários, horários, WhatsApp,
+   * chatbot e IA e pergunta só o que o time precisa pra montar o site. Criado pelo botão
+   * "Briefing de site" do Pipeline (ou marcado na configuração do briefing do cliente).
+   */
+  siteOnly?: boolean
 }
 
 /** Ficha de cadastro preenchida pelo cliente no formulário público. */

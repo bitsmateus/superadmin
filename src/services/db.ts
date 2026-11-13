@@ -561,6 +561,9 @@ export type CreateClientInput = Pick<Client, 'name' | 'email' | 'phone' | 'compa
   tenantId?: string; tenantServerId?: string; tenantApiId?: string; tenantName?: string
 }
 
+/** POSTs de criação ainda em voo (ver createClientAndWait). */
+const pendingCreates = new Map<string, Promise<boolean>>()
+
 export const db = {
   subscribe(fn: () => void): () => void {
     subscribers.add(fn)
@@ -608,19 +611,34 @@ export const db = {
     clientsCache = [client, ...clientsCache]
     notify()
 
-    void (async () => {
+    pendingCreates.set(client.id, (async () => {
       const row = patchToRow(client as unknown as Partial<Client>)
       row.id = client.id
       try {
         await api.post('/api/clients', row)
+        return true
       } catch (err) {
         clientsCache = clientsCache.filter((c) => c.id !== client.id)
         notify()
         toast.error('Falha ao criar cliente: ' + (err as Error).message)
+        return false
+      } finally {
+        pendingCreates.delete(client.id)
       }
-    })()
+    })())
 
     return client
+  },
+
+  /**
+   * Igual a createClient, mas espera o POST terminar — pra quem precisa gravar mais campos logo em
+   * seguida (um PATCH que chegasse antes do POST daria "Cliente não encontrado").
+   * Devolve null se a criação falhou (o erro já foi avisado no toast).
+   */
+  async createClientAndWait(data: CreateClientInput): Promise<Client | null> {
+    const client = db.createClient(data)
+    const ok = await (pendingCreates.get(client.id) ?? Promise.resolve(true))
+    return ok ? client : null
   },
 
   updateClient(id: string, patch: Partial<Client>): Client | undefined {

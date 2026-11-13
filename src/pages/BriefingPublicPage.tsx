@@ -7,8 +7,10 @@ import {
   Check,
   ChevronDown,
   Clock,
+  Building2,
   Globe,
   HelpCircle,
+  ImageIcon,
   Lightbulb,
   MessageSquare,
   MoreVertical,
@@ -44,6 +46,7 @@ import type {
   BriefingUserRole,
   AiTone,
   SiteGoal,
+  SiteType,
 } from '@/types/client'
 
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
@@ -59,6 +62,30 @@ const SITE_GOAL_OPTIONS: { v: SiteGoal; l: string }[] = [
   { v: 'divulgar_portfolio', l: 'Divulgar portfólio' },
   { v: 'agendar_servicos', l: 'Agendar serviços' },
   { v: 'outros', l: 'Outros' },
+]
+
+const SITE_TYPE_OPTIONS: { v: SiteType; l: string; d: string }[] = [
+  { v: 'institucional', l: 'Site institucional', d: 'Várias páginas apresentando a empresa' },
+  { v: 'landing_page', l: 'Landing page', d: 'Uma página só, focada em um produto/serviço ou em captar contatos' },
+  { v: 'loja_virtual', l: 'Loja virtual', d: 'Vender e receber pagamento pelo site' },
+  { v: 'catalogo', l: 'Catálogo / cardápio', d: 'Mostrar produtos e o cliente chama no WhatsApp' },
+  { v: 'nao_sei', l: 'Não sei ainda', d: 'A nossa equipe indica o melhor formato' },
+]
+
+const SITE_PAGE_OPTIONS = [
+  'Início', 'Sobre nós', 'Serviços', 'Produtos', 'Portfólio / Galeria', 'Depoimentos',
+  'Equipe', 'Blog', 'Perguntas frequentes', 'Contato', 'Outra',
+]
+
+const SITE_FEATURE_OPTIONS = [
+  'Botão de WhatsApp', 'Formulário de contato', 'Mapa / localização', 'Feed do Instagram',
+  'Agendamento online', 'Área de orçamento', 'Pixel do Meta / Google Analytics', 'Integração com loja/pagamento',
+]
+
+const SITE_TEXTS_OPTIONS: { v: 'sim' | 'parcial' | 'nao'; l: string }[] = [
+  { v: 'sim', l: 'Sim, já tenho os textos' },
+  { v: 'parcial', l: 'Tenho uma parte' },
+  { v: 'nao', l: 'Não — preciso que vocês escrevam' },
 ]
 
 // Quantidade de "caixinhas" pra números de WhatsApp — configurável por cliente
@@ -124,6 +151,8 @@ function cleanChannelAccess(
 }
 
 type SectionKey =
+  | 'site_empresa'
+  | 'site_conteudo'
   | 'usuarios'
   | 'horarios'
   | 'integracoes'
@@ -134,6 +163,8 @@ type SectionKey =
   | 'observacoes'
 
 function buildSections(cfg: BriefingConfig | null): SectionKey[] {
+  // Briefing só de site: nada de usuários, horários, WhatsApp, chatbot ou IA.
+  if (cfg?.siteOnly) return ['site_empresa', 'site', 'site_conteudo', 'observacoes']
   const sections: SectionKey[] = ['usuarios', 'horarios', 'integracoes']
   if (!cfg) {
     sections.push('chatbot', 'ia', 'observacoes')
@@ -167,6 +198,25 @@ function validateBriefing(
   sections: SectionKey[],
 ): BriefingFieldError[] {
   const errs: BriefingFieldError[] = []
+
+  if (cfg?.siteOnly) {
+    if (!state.siteCompanyName.trim())
+      errs.push({ section: 'site_empresa', key: 'siteCompanyName', message: 'Informe o nome da empresa como deve aparecer no site.' })
+    if (!state.siteAbout.trim())
+      errs.push({ section: 'site_empresa', key: 'siteAbout', message: 'Conte um pouco sobre a empresa.' })
+    if (!state.siteServices.trim())
+      errs.push({ section: 'site_empresa', key: 'siteServices', message: 'Liste os principais serviços ou produtos.' })
+    if (!state.siteContactWhatsapp.trim())
+      errs.push({ section: 'site_empresa', key: 'siteContactWhatsapp', message: 'Informe o WhatsApp de contato que vai aparecer no site.' })
+    if (state.siteGoals.length === 0)
+      errs.push({ section: 'site', key: 'siteGoals', message: 'Selecione ao menos um objetivo para o site.' })
+    if (!state.siteTargetAudience.trim())
+      errs.push({ section: 'site', key: 'siteTargetAudience', message: 'Descreva o público-alvo do site.' })
+    if (!state.siteType)
+      errs.push({ section: 'site', key: 'siteType', message: 'Escolha o tipo de site.' })
+    return errs
+  }
+
   const isIA = sections.includes('ia')
   const isAdvancedAI = Boolean(cfg?.automationTypes.includes('ia_avancada'))
   const isApiOficial = Boolean(cfg?.connectionTypes.includes('api_oficial'))
@@ -418,6 +468,21 @@ interface BriefingFormState {
   siteColors: string
   siteHasDomain: boolean | null
   siteDomain: string
+  siteType: SiteType | null
+  sitePages: string[]
+  sitePagesOther: string
+  siteFeatures: string[]
+  siteReferences: string
+  siteAbout: string
+  siteServices: string
+  siteDifferentials: string
+  siteContactWhatsapp: string
+  siteContactEmail: string
+  siteAddress: string
+  siteHours: string
+  siteHasTexts: 'sim' | 'parcial' | 'nao' | null
+  siteHasPhotos: boolean | null
+  siteTestimonials: string
   externalAutomationInfo: string
   extraNotes: string
   // Respostas das perguntas de texto livre novas, adicionadas pelo admin (ver
@@ -497,6 +562,21 @@ function initialFormState(
     siteColors: '',
     siteHasDomain: null,
     siteDomain: '',
+    siteType: null,
+    sitePages: [],
+    sitePagesOther: '',
+    siteFeatures: [],
+    siteReferences: '',
+    siteAbout: '',
+    siteServices: '',
+    siteDifferentials: '',
+    siteContactWhatsapp: '',
+    siteContactEmail: '',
+    siteAddress: '',
+    siteHours: '',
+    siteHasTexts: null,
+    siteHasPhotos: null,
+    siteTestimonials: '',
     externalAutomationInfo: '',
     extraNotes: '',
     customAnswers: {},
@@ -622,6 +702,21 @@ function formStateFromBriefing(bd: BriefingData, base: BriefingFormState): Brief
     siteColors: bd.siteColors ?? base.siteColors,
     siteHasDomain: bd.siteHasDomain ?? base.siteHasDomain,
     siteDomain: bd.siteDomain ?? base.siteDomain,
+    siteType: bd.siteType ?? base.siteType,
+    sitePages: bd.sitePages ?? base.sitePages,
+    sitePagesOther: bd.sitePagesOther ?? base.sitePagesOther,
+    siteFeatures: bd.siteFeatures ?? base.siteFeatures,
+    siteReferences: bd.siteReferences ?? base.siteReferences,
+    siteAbout: bd.siteAbout ?? base.siteAbout,
+    siteServices: bd.siteServices ?? base.siteServices,
+    siteDifferentials: bd.siteDifferentials ?? base.siteDifferentials,
+    siteContactWhatsapp: bd.siteContactWhatsapp ?? base.siteContactWhatsapp,
+    siteContactEmail: bd.siteContactEmail ?? base.siteContactEmail,
+    siteAddress: bd.siteAddress ?? base.siteAddress,
+    siteHours: bd.siteHours ?? base.siteHours,
+    siteHasTexts: bd.siteHasTexts ?? base.siteHasTexts,
+    siteHasPhotos: bd.siteHasPhotos ?? base.siteHasPhotos,
+    siteTestimonials: bd.siteTestimonials ?? base.siteTestimonials,
     externalAutomationInfo: bd.externalAutomationInfo ?? base.externalAutomationInfo,
     extraNotes: bd.extraNotes ?? base.extraNotes,
     customAnswers: bd.customAnswers ?? base.customAnswers,
@@ -803,8 +898,9 @@ export function BriefingPublicPage() {
   }
 
   if (!token || !client) return <BriefingErrorPage />
-  if (submitted) return <BriefingSuccessPage />
-  if (showWelcome) return <BriefingWelcomePage onStart={() => setShowWelcome(false)} />
+  const siteOnly = Boolean(cfg?.siteOnly)
+  if (submitted) return <BriefingSuccessPage siteOnly={siteOnly} />
+  if (showWelcome) return <BriefingWelcomePage siteOnly={siteOnly} onStart={() => setShowWelcome(false)} />
 
   // Leva o usuário até a seção do primeiro erro, marca os campos e avisa.
   const focusErrors = (problems: BriefingFieldError[]) => {
@@ -839,7 +935,7 @@ export function BriefingPublicPage() {
       nomeFantasia: client.company,
       cnpj: '',
       site: state.site.trim() || undefined,
-      users: state.users
+      users: siteOnly ? [] : state.users
         .filter((u) => u.name.trim() && u.email.trim())
         .map((u) => ({
           name: u.name.trim(),
@@ -849,7 +945,7 @@ export function BriefingPublicPage() {
         })),
       schedule: state.schedule,
       timezone: state.timezone,
-      whatsappNumbers: state.whatsappNumbers.map((s) => s.trim()).filter(Boolean),
+      whatsappNumbers: siteOnly ? [] : state.whatsappNumbers.map((s) => s.trim()).filter(Boolean),
       whatsappType: 'baileys',
       useFacebook: Boolean(state.facebookEmail.trim()),
       facebookEmail: state.facebookEmail.trim() || undefined,
@@ -882,10 +978,10 @@ export function BriefingPublicPage() {
             closingMessage: state.chatbotClosing.trim(),
           }
         : undefined,
-      greetingMessage: state.greetingMessage.trim(),
-      offHoursMessage: state.offHoursEnabled ? state.offHoursMessage.trim() : '',
-      offHoursEnabled: state.offHoursEnabled,
-      departments: state.sectors,
+      greetingMessage: siteOnly ? '' : state.greetingMessage.trim(),
+      offHoursMessage: !siteOnly && state.offHoursEnabled ? state.offHoursMessage.trim() : '',
+      offHoursEnabled: siteOnly ? undefined : state.offHoursEnabled,
+      departments: siteOnly ? [] : state.sectors,
       useAI: aiEnabled,
       aiTone: aiEnabled ? state.aiTone : undefined,
       aiAgentName: aiEnabled ? state.aiAgentName.trim() || undefined : undefined,
@@ -933,6 +1029,21 @@ export function BriefingPublicPage() {
       siteColors: state.siteColors.trim() || undefined,
       siteHasDomain: state.siteHasDomain ?? undefined,
       siteDomain: state.siteHasDomain ? state.siteDomain.trim() || undefined : undefined,
+      siteType: state.siteType ?? undefined,
+      sitePages: state.sitePages.length > 0 ? state.sitePages : undefined,
+      sitePagesOther: state.sitePages.includes('Outra') ? state.sitePagesOther.trim() || undefined : undefined,
+      siteFeatures: state.siteFeatures.length > 0 ? state.siteFeatures : undefined,
+      siteReferences: state.siteReferences.trim() || undefined,
+      siteAbout: state.siteAbout.trim() || undefined,
+      siteServices: state.siteServices.trim() || undefined,
+      siteDifferentials: state.siteDifferentials.trim() || undefined,
+      siteContactWhatsapp: state.siteContactWhatsapp.trim() || undefined,
+      siteContactEmail: state.siteContactEmail.trim() || undefined,
+      siteAddress: state.siteAddress.trim() || undefined,
+      siteHours: state.siteHours.trim() || undefined,
+      siteHasTexts: state.siteHasTexts ?? undefined,
+      siteHasPhotos: state.siteHasPhotos ?? undefined,
+      siteTestimonials: state.siteTestimonials.trim() || undefined,
       externalAutomationInfo: state.externalAutomationInfo.trim() || undefined,
       extraNotes: state.extraNotes.trim() || undefined,
       customAnswers:
@@ -1008,7 +1119,7 @@ export function BriefingPublicPage() {
 
   return (
     <div className="min-h-screen text-slate-900" style={{ background: BRIEFING_GRADIENT }}>
-      <BriefingHeader companyName={client.company} />
+      <BriefingHeader companyName={client.company} siteOnly={siteOnly} />
 
       <main className="mx-auto max-w-5xl px-4 pb-32 pt-8 sm:px-6">
         {client.briefing_revision_note && (
@@ -1608,6 +1719,7 @@ export function BriefingPublicPage() {
             description="Algumas informações pra gente já começar a pensar no site."
           >
             <div className="space-y-5">
+              {!siteOnly && (
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label={L('Nome da empresa (como deve aparecer no site)')}>
@@ -1625,6 +1737,39 @@ export function BriefingPublicPage() {
                     />
                   </Field>
                 </div>
+              </div>
+              )}
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  Tipo de site{siteOnly ? ' *' : ''}
+                </label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {SITE_TYPE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => {
+                        setState({ ...state, siteType: opt.v })
+                        clearError('siteType')
+                      }}
+                      className={cn(
+                        'rounded-lg border px-3 py-2 text-left transition',
+                        state.siteType === opt.v
+                          ? 'border-[#4F8EF7] bg-[#4F8EF7]/10'
+                          : 'border-slate-200 hover:border-slate-300',
+                      )}
+                    >
+                      <span className={cn('block text-sm font-medium', state.siteType === opt.v ? 'text-[#4F8EF7]' : 'text-slate-700')}>
+                        {opt.l}
+                      </span>
+                      <span className="block text-xs text-slate-500">{opt.d}</span>
+                    </button>
+                  ))}
+                </div>
+                {errors.siteType && (
+                  <p className="mt-1 text-xs font-medium text-rose-600">{errors.siteType}</p>
+                )}
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -1681,6 +1826,47 @@ export function BriefingPublicPage() {
                 {errors.siteTargetAudience && (
                   <p className="mt-1 text-xs font-medium text-rose-600">{errors.siteTargetAudience}</p>
                 )}
+              </Field>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  Quais páginas/seções o site precisa ter?
+                </label>
+                <p className="mb-2 text-xs text-slate-500">Pode marcar mais de um. Se não souber, deixe em branco que a gente sugere.</p>
+                <ChipMulti
+                  options={SITE_PAGE_OPTIONS}
+                  value={state.sitePages}
+                  onChange={(v) => setState({ ...state, sitePages: v })}
+                />
+                {state.sitePages.includes('Outra') && (
+                  <PlainInput
+                    value={state.sitePagesOther}
+                    onChange={(v) => setState({ ...state, sitePagesOther: v })}
+                    placeholder="Qual outra página?"
+                    className="mt-2"
+                  />
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  Recursos que o site deve ter
+                </label>
+                <p className="mb-2 text-xs text-slate-500">Pode marcar mais de um.</p>
+                <ChipMulti
+                  options={SITE_FEATURE_OPTIONS}
+                  value={state.siteFeatures}
+                  onChange={(v) => setState({ ...state, siteFeatures: v })}
+                />
+              </div>
+
+              <Field label={L('Sites de referência (que você gosta, inclusive de concorrentes)')}>
+                <PlainTextarea
+                  value={state.siteReferences}
+                  onChange={(v) => setState({ ...state, siteReferences: v })}
+                  rows={3}
+                  placeholder="Cole os links e, se quiser, diga o que gosta em cada um (cores, layout, textos…)"
+                />
               </Field>
 
               <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -1752,6 +1938,188 @@ export function BriefingPublicPage() {
                   </p>
                 )}
               </div>
+            </div>
+          </SectionBlock>
+        )}
+
+        {/* ── Seção (só site): A empresa ── */}
+        {currentKey === 'site_empresa' && (
+          <SectionBlock
+            number={section + 1}
+            total={totalSections}
+            title="Sua empresa"
+            icon={<Building2 className="h-5 w-5 text-[#4F8EF7]" />}
+            description="O que vai aparecer no site sobre a empresa e como os clientes falam com vocês."
+          >
+            <div className="space-y-5">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={L('Nome da empresa (como deve aparecer no site) *')}>
+                    <PlainInput
+                      value={state.siteCompanyName}
+                      onChange={(v) => {
+                        setState({ ...state, siteCompanyName: v })
+                        clearError('siteCompanyName')
+                      }}
+                      placeholder="Ex: Mídia Fachadas"
+                    />
+                    <FieldError msg={errors.siteCompanyName} />
+                  </Field>
+                  <Field label={L('Redes sociais')}>
+                    <PlainInput
+                      value={state.siteSocialMedia}
+                      onChange={(v) => setState({ ...state, siteSocialMedia: v })}
+                      placeholder="Ex: Instagram @suaempresa, Facebook…"
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              <Field label={L('Sobre a empresa — o que faz, há quanto tempo, a história *')}>
+                <PlainTextarea
+                  value={state.siteAbout}
+                  onChange={(v) => {
+                    setState({ ...state, siteAbout: v })
+                    clearError('siteAbout')
+                  }}
+                  rows={4}
+                  placeholder="Ex: somos uma empresa de comunicação visual desde 2010, atendendo comércios da região…"
+                />
+                <FieldError msg={errors.siteAbout} />
+              </Field>
+
+              <Field label={L('Principais serviços ou produtos *')}>
+                <PlainTextarea
+                  value={state.siteServices}
+                  onChange={(v) => {
+                    setState({ ...state, siteServices: v })
+                    clearError('siteServices')
+                  }}
+                  rows={4}
+                  placeholder="Um por linha, com uma breve descrição se quiser"
+                />
+                <FieldError msg={errors.siteServices} />
+              </Field>
+
+              <Field label={L('Diferenciais — por que escolher vocês?')}>
+                <PlainTextarea
+                  value={state.siteDifferentials}
+                  onChange={(v) => setState({ ...state, siteDifferentials: v })}
+                  rows={3}
+                  placeholder="Ex: entrega em 48h, garantia de 1 ano, atendimento 24h…"
+                />
+              </Field>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Contato que vai no site</h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={L('WhatsApp de contato *')}>
+                    <PlainInput
+                      type="tel"
+                      value={state.siteContactWhatsapp}
+                      onChange={(v) => {
+                        setState({ ...state, siteContactWhatsapp: v })
+                        clearError('siteContactWhatsapp')
+                      }}
+                      placeholder="(48) 99999-9999"
+                    />
+                    <FieldError msg={errors.siteContactWhatsapp} />
+                  </Field>
+                  <Field label={L('E-mail de contato')}>
+                    <PlainInput
+                      type="email"
+                      value={state.siteContactEmail}
+                      onChange={(v) => setState({ ...state, siteContactEmail: v })}
+                      placeholder="contato@suaempresa.com.br"
+                    />
+                  </Field>
+                  <Field label={L('Endereço (se atende no local)')}>
+                    <PlainInput
+                      value={state.siteAddress}
+                      onChange={(v) => setState({ ...state, siteAddress: v })}
+                      placeholder="Rua, número, bairro, cidade"
+                    />
+                  </Field>
+                  <Field label={L('Horário de funcionamento')}>
+                    <PlainInput
+                      value={state.siteHours}
+                      onChange={(v) => setState({ ...state, siteHours: v })}
+                      placeholder="Ex: seg a sex 8h às 18h, sáb 8h às 12h"
+                    />
+                  </Field>
+                </div>
+              </div>
+            </div>
+          </SectionBlock>
+        )}
+
+        {/* ── Seção (só site): Conteúdo ── */}
+        {currentKey === 'site_conteudo' && (
+          <SectionBlock
+            number={section + 1}
+            total={totalSections}
+            title="Conteúdo do site"
+            icon={<ImageIcon className="h-5 w-5 text-[#4F8EF7]" />}
+            description="Textos, fotos e depoimentos que vão no site."
+          >
+            <div className="space-y-5">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Você já tem os textos do site?
+                </span>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
+                  {SITE_TEXTS_OPTIONS.map(({ v, l }) => (
+                    <label key={v} className="inline-flex cursor-pointer items-center gap-1.5 text-sm">
+                      <input
+                        type="radio"
+                        checked={state.siteHasTexts === v}
+                        onChange={() => setState({ ...state, siteHasTexts: v })}
+                        className="h-4 w-4 accent-[#4F8EF7]"
+                      />
+                      {l}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Tem fotos próprias (da empresa, equipe, produtos, trabalhos feitos)?
+                </span>
+                <div className="flex items-center gap-3">
+                  {[{ v: true, l: 'Sim' }, { v: false, l: 'Não' }].map(({ v, l }) => (
+                    <label key={String(v)} className="inline-flex cursor-pointer items-center gap-1.5 text-sm">
+                      <input
+                        type="radio"
+                        checked={state.siteHasPhotos === v}
+                        onChange={() => setState({ ...state, siteHasPhotos: v })}
+                        className="h-4 w-4 accent-[#4F8EF7]"
+                      />
+                      {l}
+                    </label>
+                  ))}
+                </div>
+                {state.siteHasPhotos === true && (
+                  <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    📎 Manda as fotos (e a logo, se tiver) pelo WhatsApp da nossa equipe ou por um link do
+                    Google Drive — aqui no formulário não dá pra anexar arquivo.
+                  </p>
+                )}
+                {state.siteHasPhotos === false && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Sem problemas — usamos imagens de banco profissionais que combinem com a empresa.
+                  </p>
+                )}
+              </div>
+
+              <Field label={L('Depoimentos de clientes (se tiver)')}>
+                <PlainTextarea
+                  value={state.siteTestimonials}
+                  onChange={(v) => setState({ ...state, siteTestimonials: v })}
+                  rows={4}
+                  placeholder="Cole aqui avaliações do Google, mensagens de clientes… (com o nome de quem falou)"
+                />
+              </Field>
             </div>
           </SectionBlock>
         )}
@@ -2414,7 +2782,7 @@ export function BriefingPublicPage() {
                 placeholder="Informações adicionais, preferências, dúvidas…"
               />
             </Field>
-            {customQuestions.map((q) => (
+            {!siteOnly && customQuestions.map((q) => (
               <div key={q.id} className="mt-4">
                 <Field label={q.label}>
                   {q.type === 'textarea' ? (
@@ -2454,6 +2822,28 @@ export function BriefingPublicPage() {
             </div>
 
             <div className="space-y-1 px-6 py-4 max-h-[60vh] overflow-y-auto">
+              {siteOnly ? (
+                <>
+                  <SummaryRow label="Empresa" value={state.siteCompanyName.trim()} />
+                  <SummaryRow label="WhatsApp" value={state.siteContactWhatsapp.trim()} />
+                  <SummaryRow
+                    label="Tipo de site"
+                    value={SITE_TYPE_OPTIONS.find((o) => o.v === state.siteType)?.l ?? ''}
+                  />
+                  <SummaryRow
+                    label="Objetivo"
+                    value={state.siteGoals.map((g) => SITE_GOAL_OPTIONS.find((o) => o.v === g)?.l ?? g).join(', ')}
+                  />
+                  <SummaryRow label="Páginas" value={state.sitePages.join(', ')} />
+                  <SummaryRow label="Recursos" value={state.siteFeatures.join(', ')} />
+                  <SummaryRow
+                    label="Domínio"
+                    value={state.siteHasDomain === true ? state.siteDomain.trim() || 'Sim' : state.siteHasDomain === false ? 'Ainda não tem' : ''}
+                  />
+                  <SummaryRow label="Observações" value={state.extraNotes.trim()} />
+                </>
+              ) : (
+              <>
               <SummaryRow label="Setores" value={state.sectors.join(', ')} />
               <SummaryRow
                 label="Usuários"
@@ -2527,6 +2917,8 @@ export function BriefingPublicPage() {
                 />
               )}
               <SummaryRow label="Observações" value={state.extraNotes.trim()} />
+              </>
+              )}
 
               <div className="mt-3 rounded-xl border-2 border-[#4F8EF7]/30 bg-[#4F8EF7]/5 px-4 py-4 text-sm font-medium text-slate-700">
                 💬 Fique tranquilo(a): você tem nosso suporte durante todo o processo. Se algo não
@@ -2951,7 +3343,7 @@ function WhatsappNumbersInfoPopover() {
   )
 }
 
-function BriefingHeader({ companyName }: { companyName: string }) {
+function BriefingHeader({ companyName, siteOnly }: { companyName: string; siteOnly?: boolean }) {
   return (
     <header className="bg-transparent">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
@@ -2963,7 +3355,7 @@ function BriefingHeader({ companyName }: { companyName: string }) {
           />
           <div className="leading-tight">
             <p className="text-sm font-semibold text-white">Grupo NX Digital</p>
-            <p className="text-xs text-white/60">Briefing de onboarding</p>
+            <p className="text-xs text-white/60">{siteOnly ? 'Briefing do site' : 'Briefing de onboarding'}</p>
           </div>
         </div>
         <div className="min-w-0 truncate text-right text-xs font-medium text-white/70">
@@ -2977,24 +3369,28 @@ function BriefingHeader({ companyName }: { companyName: string }) {
 /** Tela de boas-vindas antes do wizard — mesmo estilo/gradiente da Ficha de cadastro
  * (FichaPublicPage), avisando o tempo médio de preenchimento e reforçando que esses
  * dados viram a base de todo o atendimento configurado depois. */
-function BriefingWelcomePage({ onStart }: { onStart: () => void }) {
+function BriefingWelcomePage({ onStart, siteOnly }: { onStart: () => void; siteOnly?: boolean }) {
   return (
     <div className="min-h-screen w-full px-4 py-6 sm:py-10" style={{ background: BRIEFING_GRADIENT }}>
       <div className="mx-auto max-w-2xl">
         <div className="rounded-2xl bg-white p-6 shadow-xl sm:p-8">
           <img src={logoNx} alt="Grupo NX Digital" className="mb-4 h-14 w-14 rounded-2xl object-cover shadow-sm" />
-          <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">Boas-vindas ao seu Briefing</h1>
+          <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">
+            {siteOnly ? 'Boas-vindas ao briefing do seu site' : 'Boas-vindas ao seu Briefing'}
+          </h1>
           <p className="mt-4 text-sm font-semibold text-slate-700">
-            Esse formulário leva, em média, de 5 a 15 minutos para ser preenchido. 🕐
+            {siteOnly
+              ? 'Esse formulário leva, em média, de 5 a 10 minutos para ser preenchido. 🕐'
+              : 'Esse formulário leva, em média, de 5 a 15 minutos para ser preenchido. 🕐'}
           </p>
           <p className="mt-3 text-sm leading-relaxed text-slate-500">
             Preencha com calma. Se precisar parar no meio e continuar depois, sem problema — suas
             respostas ficam salvas automaticamente neste link, e você retoma de onde parou.
           </p>
           <p className="mt-3 text-sm leading-relaxed text-slate-500">
-            As informações que você preenche aqui vão ser a base de todo o atendimento que vamos
-            configurar pra você — quanto mais completo e cuidadoso for o preenchimento, melhor vai
-            ficar o resultado final.
+            {siteOnly
+              ? 'As informações que você preenche aqui vão ser a base do site que vamos criar pra você — quanto mais completo e cuidadoso for o preenchimento, melhor vai ficar o resultado final.'
+              : 'As informações que você preenche aqui vão ser a base de todo o atendimento que vamos configurar pra você — quanto mais completo e cuidadoso for o preenchimento, melhor vai ficar o resultado final.'}
           </p>
           <p className="mt-3 text-sm font-semibold text-slate-700">Vamos juntos!</p>
           <button
@@ -3030,7 +3426,7 @@ function BriefingErrorPage() {
   )
 }
 
-function BriefingSuccessPage() {
+function BriefingSuccessPage({ siteOnly }: { siteOnly?: boolean }) {
   return (
     <div className="min-h-screen w-full px-4 py-10" style={{ background: BRIEFING_GRADIENT }}>
       <div className="mx-auto max-w-2xl">
@@ -3040,8 +3436,9 @@ function BriefingSuccessPage() {
           </div>
           <h1 className="text-2xl font-bold text-slate-800">Briefing enviado!</h1>
           <p className="mt-3 text-sm text-slate-500">
-            Recebemos seus dados. Vamos iniciar as configurações e, em breve, nosso time entra em
-            contato. Obrigado! 🚀
+            {siteOnly
+              ? 'Recebemos seus dados. Vamos começar a criação do seu site e, em breve, nosso time entra em contato. Obrigado! 🚀'
+              : 'Recebemos seus dados. Vamos iniciar as configurações e, em breve, nosso time entra em contato. Obrigado! 🚀'}
           </p>
         </div>
       </div>
@@ -3075,6 +3472,37 @@ function SectionBlock({
       </header>
       {children}
     </section>
+  )
+}
+
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null
+  return <p className="mt-1 text-xs font-medium text-rose-600">{msg}</p>
+}
+
+/** Chips de múltipla escolha (texto livre como valor). */
+function ChipMulti({ options, value, onChange }: { options: string[]; value: string[]; onChange: (v: string[]) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((opt) => {
+        const on = value.includes(opt)
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(on ? value.filter((v) => v !== opt) : [...value, opt])}
+            className={cn(
+              'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+              on
+                ? 'border-[#4F8EF7] bg-[#4F8EF7]/10 text-[#4F8EF7]'
+                : 'border-slate-200 text-slate-600 hover:border-slate-300',
+            )}
+          >
+            {opt}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

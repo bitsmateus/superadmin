@@ -1837,6 +1837,16 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const falta = await faltaDadoDoStatus(req.params.id, patch, req.headers['x-sem-regra-origem'] === '1');
       if (falta) return reply.status(400).send({ message: falta.mensagem, exigir: falta.campos });
 
+      // Lead do CRM TUBARAO fica no CRM TUBARAO (pedido de 13/11): mudar de coluna lá dentro pode, ir pra outra aba não.
+      if (typeof patch.board_id === 'string') {
+        const sai = await queryOne<{ ok: boolean }>(
+          `SELECT (ob.page = $3 AND nb.page <> $3) AS ok FROM lead_rows r JOIN lead_boards ob ON ob.id = r.board_id, lead_boards nb
+           WHERE r.id = $1 AND nb.id = $2`,
+          [req.params.id, patch.board_id, PAGINA_TUBARAO]
+        );
+        if (sai?.ok) return reply.status(400).send({ message: 'Lead do CRM TUBARAO fica no CRM TUBARAO: dá pra mudar de coluna lá dentro, não pra outro CRM.' });
+      }
+
       // Lead que entra no CRM TUBARAO vindo de outra aba (pedido de 13/11). O SDR de verdade é o Arthur (ou a IA Luiza);
       // Ian, Mateus e Luis são sócios/closer e só às vezes agendam — aí trocam o SDR à mão no card. Então:
       //  - o Arthur moveu: SDR = Arthur;

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { query, queryOne, queryAsActor, withTransaction } from '../db.js';
 import {
-  completarEspelhoComAsOrigens, idCanonicoDasNotas, logLeadEvent, PAGE_IA, propagarEspelho, SDR_IA,
+  completarEspelhoComAsOrigens, idCanonicoDasNotas, logLeadEvent, PAGE_IA, PAGINA_TUBARAO, propagarEspelho, SDR_IA,
   sincronizarContagemNotas, statusDoQuadro, syncCopiaDaIa, syncEspelhoReuniaoAgendada,
 } from './leadBoards.js';
 import { saoAbasJuntas } from '../lib/abasJuntas.js';
@@ -428,7 +428,9 @@ export async function integracaoRoutes(app: FastifyInstance) {
     if (v.quadro !== undefined) {
       const q = await acharQuadro(v.quadro);
       if (q.erro) return reply.status(400).send({ message: q.erro });
-      if (q.id !== atual.page) {
+      // Card do CRM TUBARAO fica no CRM TUBARAO (pedido de 13/11): pedido de outro quadro vira "a coluna de mesmo nome
+      // dentro do Tubarão".
+      if (q.id !== atual.page && atual.page !== PAGINA_TUBARAO) {
         if (!v.coluna) {
           return reply.status(400).send({ message: 'Pra mudar de quadro, "coluna" é obrigatória (ex.: {"quadro":"crm-ia-luiza","coluna":"Primeiro contato"}).' });
         }
@@ -465,6 +467,17 @@ export async function integracaoRoutes(app: FastifyInstance) {
         [destino]
       );
       if (!alvo) return reply.status(404).send({ message: 'Coluna de destino não existe.' });
+      // board_id de outro quadro num card do CRM TUBARAO: usa a coluna de mesmo nome no Tubarão; sem ela, não move.
+      if (atual.page === PAGINA_TUBARAO && alvo.page !== PAGINA_TUBARAO) {
+        const doTubarao = await query<{ id: string; name: string; page: string; is_vendas: boolean; is_contrato: boolean }>(
+          'SELECT id, name, page, is_vendas, is_contrato FROM lead_boards WHERE page = $1 ORDER BY position, created_at',
+          [PAGINA_TUBARAO]
+        );
+        const mesmoNome = colunasQueCasam(doTubarao, alvo.name);
+        destino = mesmoNome.length === 1 ? mesmoNome[0] : atual.board_id;
+        alvo.page = PAGINA_TUBARAO;
+        alvo.name = doTubarao.find((c) => c.id === destino)?.name ?? alvo.name;
+      }
       paginaFinal = alvo.page;
       if (alvo.archived_at) return reply.status(400).send({ message: 'A coluna de destino está num quadro arquivado.' });
       if (alvo.is_vendas || alvo.is_contrato) {

@@ -96,7 +96,71 @@ async function acertarUm(rotulo: string, telefone: string, prefixo: string, pagi
   if (ok) console.log(`[acerto-tubarao] ${rotulo}: ${alvo[0].id} -> CRM TUBARAO / ${coluna}`);
 }
 
+/**
+ * Devolve pro CRM TUBARAO o que saiu de lá sem querer (pedido de 13/11): marcar o SDR na coluna SDR do Tubarão mandava
+ * o card pro CRM daquele SDR (Arthur / IA Luiza / Luis). Volta todo card original cujo ÚLTIMO movimento foi de um quadro
+ * do Tubarão pra outro CRM e que ainda está lá — pro mesmo quadro de onde saiu, com o "entrou na coluna" de antes. O
+ * SDR marcado fica. A Patrícia Rechia (…91713860, id b3851007…) vai pro "Primeiro contato" com SDR Arthur.
+ */
+async function devolverProTubarao(): Promise<void> {
+  // Patrícia primeiro (ela tem destino próprio).
+  const patricia = (await cardsDoTelefone('5548991713860'))
+    .filter((c) => c.id.startsWith('b3851007') && !c.espelho_origem_id && !c.copia_ia_origem_id);
+  let patriciaId: string | null = null;
+  if (patricia.length === 1) {
+    patriciaId = patricia[0].id;
+    const destino = await queryOne<{ id: string }>(
+      `SELECT id FROM lead_boards WHERE page = $1 AND lower(name) = 'primeiro contato' LIMIT 1`, [TUBARAO]
+    );
+    if (destino && destino.id !== (await queryOne<{ board_id: string }>('SELECT board_id FROM lead_rows WHERE id = $1', [patriciaId]))?.board_id) {
+      await moverProTubarao(patricia[0], 'Primeiro contato');
+    }
+    const arthur = (await queryOne<{ name: string }>(
+      `SELECT name FROM lead_labels WHERE field = 'sdr' AND lower(split_part(name, ' ', 1)) = 'arthur' ORDER BY position LIMIT 1`
+    ))?.name ?? 'Arthur';
+    await query('UPDATE lead_rows SET sdr = $2 WHERE id = $1', [patriciaId, arthur]);
+    console.log(`[acerto-tubarao] Patrícia Rechia: ${patriciaId} -> CRM TUBARAO / Primeiro contato, SDR ${arthur}`);
+  } else {
+    console.warn(`[acerto-tubarao] Patrícia Rechia: achei ${patricia.length} card(s) b3851007… — não mexi`);
+  }
+
+  const saiu = await query<{ id: string; page: string; board: string; de: string; de_nome: string; entrou_antes: string | null }>(
+    `SELECT r.id, cb.page, cb.name AS board, h.from_board_id AS de, fb.name AS de_nome,
+            (SELECT h2.moved_at FROM lead_board_history h2
+             WHERE h2.lead_row_id = r.id AND h2.to_board_id = h.from_board_id AND h2.moved_at < h.moved_at
+             ORDER BY h2.moved_at DESC LIMIT 1) AS entrou_antes
+     FROM lead_rows r
+     JOIN lead_boards cb ON cb.id = r.board_id
+     JOIN LATERAL (SELECT * FROM lead_board_history x WHERE x.lead_row_id = r.id ORDER BY x.moved_at DESC LIMIT 1) h ON true
+     JOIN lead_boards fb ON fb.id = h.from_board_id
+     WHERE r.deleted_at IS NULL AND fb.page = $1 AND cb.page <> $1 AND h.to_board_id = r.board_id
+       AND r.espelho_origem_id IS NULL AND r.copia_ia_origem_id IS NULL AND r.venda_origem_id IS NULL AND NOT cb.is_vendas`,
+    [TUBARAO]
+  );
+  for (const c of saiu) {
+    if (c.id === patriciaId) continue;
+    const status = (await statusDoQuadro(c.de)) ?? c.de_nome;
+    const [{ max }] = await query<{ max: number | null }>('SELECT MAX(position) AS max FROM lead_rows WHERE board_id = $1', [c.de]);
+    await query('UPDATE lead_rows SET board_id = $2, status = $3, position = $4 WHERE id = $1', [c.id, c.de, status, (max ?? -1) + 1]);
+    if (c.entrou_antes) await query('UPDATE lead_rows SET entrou_coluna_em = $2 WHERE id = $1', [c.id, c.entrou_antes]);
+    await logLeadEvent(c.id, 'board', c.board, c.de_nome, AUTOR).catch(() => undefined);
+    await nota(c.id, `Card devolvido ao CRM TUBARAO / ${c.de_nome}: tinha ido pro ${c.page} ao marcar o SDR (correção de 13/11). O SDR marcado ficou.`);
+    console.log(`[acerto-tubarao] devolvido: ${c.id} ${c.page} / ${c.board} -> CRM TUBARAO / ${c.de_nome}`);
+  }
+  console.log(`[acerto-tubarao] devolvidos ao CRM TUBARAO: ${saiu.filter((c) => c.id !== patriciaId).length}`);
+}
+
 export async function acertarLeadsTubarao(): Promise<void> {
+  await acertoDosLeads();
+  const { rows: devolver } = await pool.query(
+    `INSERT INTO traffic_report_log (dia, kind) VALUES ('2026-11-13'::date, 'devolver_tubarao') ON CONFLICT DO NOTHING RETURNING dia`
+  );
+  if (devolver.length) {
+    try { await devolverProTubarao(); } catch (err) { console.error('[acerto-tubarao] erro ao devolver pro Tubarão', err); }
+  }
+}
+
+async function acertoDosLeads(): Promise<void> {
   const { rows } = await pool.query(
     `INSERT INTO traffic_report_log (dia, kind) VALUES ('2026-11-13'::date, 'acerto_leads_tubarao') ON CONFLICT DO NOTHING RETURNING dia`
   );

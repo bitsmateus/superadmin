@@ -668,7 +668,8 @@ function MoveSubmenu({
   // Do CRM ARTHUR e do CRM IA LUIZA também dá pra mandar a lead pro CRM TUBARAO (id crm-outbound, a terceira aba da
   // mesma tela — pedido de 13/11).
   const destinosExtras = currentPageId === 'crm-arthur' || currentPageId === 'crm-ia-luiza' ? ['crm-outbound'] : []
-  const movablePages = soTubarao
+  // Lead do CRM TUBARAO fica no CRM TUBARAO: dali o Mover só troca de coluna dentro dele.
+  const movablePages = soTubarao || currentPageId === PAGINA_TUBARAO
     ? livePages.filter((p) => p.id === PAGINA_TUBARAO)
     : sdrLock
       ? livePages.filter((p) => p.id === currentPageId || p.name.trim().toLowerCase() === 'novos leads' || destinosExtras.includes(p.id))
@@ -1317,8 +1318,9 @@ function BoardGroup({
                               // manda o lead pro quadro de MESMO NOME na aba daquele SDR — não faz
                               // sentido ficar em Novos Leads depois de atribuído.
                               // Lead de Tubarão (isLeadTubarao) só vai pro CRM TUBARAO, com o SDR marcado (pedido de 13/11).
+                              // No próprio CRM TUBARAO o SDR (Arthur, IA Luiza, Luis…) só fica marcado: o card não sai de lá.
                               const paraTubarao = board.page === 'novos_leads' && isLeadTubarao(row) && quadrosTubarao.length > 0
-                              const target = next
+                              const target = next && board.page !== PAGINA_TUBARAO
                                 ? paraTubarao
                                   ? quadrosTubarao.find((b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase()) ?? quadrosTubarao[0]
                                   : sdrPageBoards.get(next)?.find(

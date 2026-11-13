@@ -16,6 +16,10 @@ interface Diagnostico {
       atualizacoes: number; tipoDeCard: string; deTubarao: boolean
     }[]
   }[]
+  foraDoTubarao?: {
+    id: string; nome: string; empresa: string; telefone: string; tipo: string; sdr: string; quadro: string; coluna: string
+    agendamento: string; criadoEm: string; atualizacoes: number; motivo: string
+  }[]
 }
 
 /**
@@ -93,6 +97,48 @@ export function TubaraoDiagnosticoPage() {
                 )}
               </section>
             ))}
+
+            {d.foraDoTubarao && (
+              <section className="rounded-2xl bg-card p-4 shadow-sm">
+                <h2 className="text-sm font-semibold text-foreground">
+                  Outros leads de Tubarão fora do CRM TUBARAO <span className="font-normal text-foreground/45">· {d.foraDoTubarao.length}</span>
+                </h2>
+                <p className="mb-3 text-xs text-foreground/50">
+                  Cards originais no CRM ARTHUR e no CRM IA LUIZA com Tipo “tubarao…” ou DDD 48. Nada aqui é movido sozinho.
+                </p>
+                {d.foraDoTubarao.length === 0 ? (
+                  <p className="text-xs text-foreground/45">Nenhum.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px] text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-line text-[11px] text-foreground/45">
+                          {['Quadro', 'Coluna', 'SDR', 'Criado em', 'Nome', 'Telefone', 'Por quê', 'Agendamento', 'Atualizações', 'id'].map((h) => (
+                            <th key={h} className="px-2 py-1.5 font-medium">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {d.foraDoTubarao.map((c) => (
+                          <tr key={c.id} className="border-b border-line last:border-0">
+                            <td className="px-2 py-1.5 font-medium text-foreground">{c.quadro}</td>
+                            <td className="px-2 py-1.5">{c.coluna}</td>
+                            <td className="px-2 py-1.5">{c.sdr || '—'}</td>
+                            <td className="whitespace-nowrap px-2 py-1.5">{new Date(c.criadoEm).toLocaleString('pt-BR')}</td>
+                            <td className="px-2 py-1.5">{c.nome}{c.empresa && c.empresa !== c.nome ? ` · ${c.empresa}` : ''}</td>
+                            <td className="whitespace-nowrap px-2 py-1.5">{c.telefone}</td>
+                            <td className="px-2 py-1.5">{c.motivo}</td>
+                            <td className="whitespace-nowrap px-2 py-1.5">{c.agendamento || '—'}</td>
+                            <td className="px-2 py-1.5 text-center">{c.atualizacoes}</td>
+                            <td className="px-2 py-1.5 font-mono text-[10px] text-foreground/45">{c.id}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            )}
           </>
         )}
       </div>

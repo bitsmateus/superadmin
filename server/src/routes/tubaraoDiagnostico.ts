@@ -92,6 +92,18 @@ export async function tubaraoDiagnosticoRoutes(app: FastifyInstance) {
       return { rotulo: l.rotulo, cards };
     });
 
-    return { quadroTubarao: PAGINA_TUBARAO, colunas, colunasDoTubarao: quadros.map((q) => q.name), leads };
+    // 3) "e outros": todo lead de Tubarão (Tipo "tubarao…" ou DDD 48) que ainda está fora do CRM TUBARAO — só os
+    // cards originais (não as cópias do closer/IA nem a aba Vendas) no CRM ARTHUR e no CRM IA LUIZA.
+    const foraDoTubarao = todos
+      .filter((c) => !c.deleted_at && !c.is_vendas && !c.espelho_origem_id && !c.copia_ia_origem_id && !c.venda_origem_id
+        && (c.pagina_id === 'crm-arthur' || c.pagina_id === 'crm-ia-luiza') && ehDeTubarao(c))
+      .sort((a, b) => a.pagina.localeCompare(b.pagina) || a.coluna.localeCompare(b.coluna) || a.nome.localeCompare(b.nome))
+      .map((c) => ({
+        id: c.id, nome: c.nome, empresa: c.empresa, telefone: c.telefone, tipo: c.tipo, sdr: c.sdr, quadro: c.pagina,
+        coluna: c.coluna, agendamento: c.agendamento, criadoEm: c.created_at, atualizacoes: notasPorCard.get(c.id) ?? 0,
+        motivo: norm(c.tipo).startsWith('tubarao') ? 'Tipo Tubarão' : 'DDD 48',
+      }));
+
+    return { quadroTubarao: PAGINA_TUBARAO, colunas, colunasDoTubarao: quadros.map((q) => q.name), leads, foraDoTubarao };
   });
 }

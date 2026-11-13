@@ -38,6 +38,7 @@ import { commissionRoutes } from './routes/commissions.js';
 import { comissaoSuporteRoutes } from './routes/comissaoSuporte.js';
 import { tubaraoDiagnosticoRoutes } from './routes/tubaraoDiagnostico.js';
 import { startComissaoSuporteSync } from './lib/comissaoSuporte.js';
+import { acertarLeadsTubarao } from './lib/acertoTubarao.js';
 import { cnpjRoutes } from './routes/cnpj.js';
 import { leadLabelRoutes } from './routes/leadLabels.js';
 import { supportColumnRoutes } from './routes/supportColumns.js';
@@ -269,6 +270,8 @@ async function main() {
   startReuniaoWebhook();
   startLeadAvisosPush();
   startComissaoSuporteSync();
+  // Acerto dos leads de Tubarão (13/11): uma vez só, depois das migrações.
+  void acertarLeadsTubarao().catch((err) => console.error('[acerto-tubarao] falhou', err));
   startComunicadosDisparo();
   startComunicadosSemanal();
   startMonitorAtendimento();

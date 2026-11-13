@@ -322,7 +322,7 @@ export async function chatbotFlowRoutes(app: FastifyInstance) {
     return {
       serverId: c.tenant_server_id,
       serverName: server.name ?? c.tenant_server_id,
-      sessionType: c.tenant_server_id === 'chat' ? 'uazapi' : 'evo',
+      sessionType: 'uazapi', // todos os servidores criam canal uazapi (ver sessionTypeForServer no front)
       apiId: c.tenant_api_id,
       numbers: nums,
     };

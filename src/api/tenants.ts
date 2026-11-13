@@ -13,8 +13,14 @@ import type {
 } from '@/types'
 
 /** Tipo de sessão WhatsApp por servidor: chat → uazapi; app e web → evo. */
-export function sessionTypeForServer(server: ServerConfig): 'uazapi' | 'evo' {
-  return server.id === 'chat' ? 'uazapi' : 'evo'
+/**
+ * Tipo de canal criado no provisionamento. Antes o App/Web usavam Evolution ('evo'), mas o
+ * servidor App passou a responder ERR_CHANNEL_LIB_NOT_CONFIGURED pra 'evo' — agora todos os
+ * servidores criam com uazapi. Canais 'evo' que já existem continuam funcionando como estão.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function sessionTypeForServer(_server: ServerConfig): 'uazapi' | 'evo' {
+  return 'uazapi'
 }
 
 function unwrap<T = unknown>(data: unknown): T {

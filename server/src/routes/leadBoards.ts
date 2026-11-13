@@ -359,15 +359,21 @@ export async function restrictedBoardFilter(userId: string, role: string): Promi
 /** CRM TUBARAO (pedido de 13/11). O id é o de quando a aba foi criada; o nome na tela é "CRM TUBARAO". */
 export const PAGINA_TUBARAO = 'crm-outbound';
 
-/** O SDR de quem está logado: a etiqueta de SDR com o mesmo primeiro nome ("Arthur Faveri" -> "Arthur"); sem
- * etiqueta, o próprio primeiro nome. */
-async function sdrDoUsuario(userId: string): Promise<string> {
-  const perfil = await queryOne<{ name: string | null }>('SELECT name FROM profiles WHERE id = $1', [userId]);
+/** O SDR humano do comercial (o do CRM TUBARAO). Ian, Mateus e Luis não viram SDR sozinhos. */
+const SDR_HUMANO = 'arthur';
+
+/**
+ * O SDR de uma lead que entra no CRM TUBARAO: "Arthur" (a etiqueta de SDR dele) se foi ele que moveu ou se a lead
+ * não tem SDR; senão, o SDR que ela já tem.
+ */
+async function sdrDoTubarao(userId: string, sdrAtual: string): Promise<string> {
   const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-  const primeiro = (perfil?.name ?? '').trim().split(/\s+/)[0] ?? '';
-  if (!primeiro) return '';
+  const primeiro = (s: string) => semAcento(s.trim().split(/\s+/)[0] ?? '');
+  const perfil = await queryOne<{ name: string | null }>('SELECT name FROM profiles WHERE id = $1', [userId]);
+  const foiOArthur = primeiro(perfil?.name ?? '') === SDR_HUMANO;
+  if (!foiOArthur && sdrAtual.trim()) return sdrAtual;
   const etiquetas = await query<{ name: string }>(`SELECT name FROM lead_labels WHERE field = 'sdr' ORDER BY position`);
-  return etiquetas.find((l) => semAcento(l.name.split(/\s+/)[0] ?? '') === semAcento(primeiro))?.name ?? primeiro;
+  return etiquetas.find((l) => primeiro(l.name) === SDR_HUMANO)?.name ?? 'Arthur';
 }
 
 async function getActorName(userId: string | null | undefined): Promise<string> {
@@ -1831,8 +1837,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       const falta = await faltaDadoDoStatus(req.params.id, patch, req.headers['x-sem-regra-origem'] === '1');
       if (falta) return reply.status(400).send({ message: falta.mensagem, exigir: falta.campos });
 
-      // Lead que entra no CRM TUBARAO vindo de outra aba (pedido de 13/11): o SDR vira quem moveu (ex.: "Arthur").
-      // Fica como está quando o patch já traz o SDR (coluna SDR de Novos Leads) ou quando a lead é da IA Luiza.
+      // Lead que entra no CRM TUBARAO vindo de outra aba (pedido de 13/11). O SDR de verdade é o Arthur (ou a IA Luiza);
+      // Ian, Mateus e Luis são sócios/closer e só às vezes agendam — aí trocam o SDR à mão no card. Então:
+      //  - o Arthur moveu: SDR = Arthur;
+      //  - outra pessoa moveu: o SDR que já está no card fica; card sem SDR fica com o Arthur;
+      //  - lead da IA Luiza continua "IA Luiza"; patch que já traz o SDR (coluna SDR de Novos Leads) manda.
       if (typeof patch.board_id === 'string' && !('sdr' in patch)) {
         const mov = await queryOne<{ destino: string; origem: string; sdr: string }>(
           `SELECT nb.page AS destino, ob.page AS origem, COALESCE(r.sdr, '') AS sdr
@@ -1841,8 +1850,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           [req.params.id, patch.board_id]
         );
         if (mov && mov.destino === PAGINA_TUBARAO && mov.origem !== PAGINA_TUBARAO && !/luiza/i.test(mov.sdr)) {
-          const sdr = await sdrDoUsuario(sub);
-          if (sdr) patch.sdr = sdr;
+          const sdr = await sdrDoTubarao(sub, mov.sdr);
+          if (sdr && sdr !== mov.sdr) patch.sdr = sdr;
         }
       }
 

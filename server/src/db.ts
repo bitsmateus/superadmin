@@ -2235,7 +2235,7 @@ END; $$`);
     if (arthur.length) {
       const { rows: criou } = await pool.query(
         `INSERT INTO lead_pages (id, name, position, section)
-         SELECT 'crm-outbound', 'CRM OUTBOUND', COALESCE(MAX(position), -1) + 1, 'comercial' FROM lead_pages
+         SELECT 'crm-outbound', 'CRM TUBARAO', COALESCE(MAX(position), -1) + 1, 'comercial' FROM lead_pages
          ON CONFLICT (id) DO NOTHING RETURNING id`);
       if (criou.length) {
         await pool.query(
@@ -2250,6 +2250,10 @@ END; $$`);
       }
     }
   }
+
+  // CRM OUTBOUND virou CRM TUBARAO (pedido de 13/11). Só o nome: o id continua crm-outbound (cards, acesso e cópia pro
+  // closer não mudam). Só troca se ainda está com o nome antigo — se alguém renomear pela tela depois, fica o novo.
+  await pool.query(`UPDATE lead_pages SET name = 'CRM TUBARAO' WHERE id = 'crm-outbound' AND name = 'CRM OUTBOUND'`);
 
   // Rogerio Paim (pedido de 11/11): estava em Follow-up Propostas desde antes da régua do n8n, então a régua nunca pegou
   // ele, e a caixinha "mandar pro Follow-up" do popup não mexe em quem já está lá. Uma vez só: o card principal (o que a

@@ -18,6 +18,8 @@ export interface ReuniaoPendente {
   link: string | null
   dor: string
   resumo: string
+  /** Ainda dá pra usar o "Estou em reunião" (adia 1h, uma vez só por reunião). */
+  pode_adiar?: boolean
 }
 
 export type ResultadoReuniao = 'compareceu' | 'nao_compareceu' | 'remarcada'
@@ -45,6 +47,8 @@ export const MINIMO_RESUMO = 20
 
 export const reunioesService = {
   pendentes: () => api.get<ReuniaoPendente[]>('/api/reunioes/pendentes'),
+  /** "Estou em reunião": o popup dessa reunião some por 1h. Uma vez só por reunião. */
+  adiar: (cardId: string) => api.post<{ ok: true; volta_em: string }>(`/api/reunioes/${cardId}/adiar`),
   registrar: (cardId: string, pedido: PedidoDeResultado) =>
     api.post<{ ok: true; resultado: ResultadoReuniao }>(`/api/reunioes/${cardId}/resultado`, pedido),
 }

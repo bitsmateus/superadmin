@@ -2,7 +2,7 @@ import * as React from 'react'
 import { TelefoneAcoes } from '@/components/comercial/TelefoneAcoes'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
-import { CalendarClock, CalendarX2, CheckCircle2, Circle, ExternalLink, Phone, Video } from 'lucide-react'
+import { CalendarClock, CalendarX2, CheckCircle2, Circle, ExternalLink, Hourglass, Phone, Video } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { LeadDetailModal } from '@/components/comercial/LeadDetailModal'
 import { MotivoComOutro } from '@/components/comercial/LeadOrigemBlock'
@@ -72,6 +72,23 @@ export function ReuniaoResultadoPopup() {
     }
   }
 
+  // "Estou em reunião": tira o popup por 1h (o servidor devolve a reunião depois). Uma vez só por reunião.
+  const adiar = async () => {
+    if (!atual || enviando) return
+    setEnviando(true)
+    try {
+      const r = await reunioesService.adiar(atual.card_id)
+      const hora = new Date(r.volta_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      toast.success(`Beleza. Essa reunião volta a aparecer às ${hora}.`)
+      setLista((l) => l.filter((x) => x.card_id !== atual.card_id))
+    } catch (err) {
+      toast.error((err as Error).message || 'Não deu pra adiar.')
+      void carregar()
+    } finally {
+      setEnviando(false)
+    }
+  }
+
   if (!atual) return null
   const contador = `${feitas + 1} de ${feitas + lista.length}`
 
@@ -121,6 +138,20 @@ export function ReuniaoResultadoPopup() {
               <Opcao icone={<CalendarX2 className="h-5 w-5 text-danger" />} titulo="Não compareceu" onClick={() => setPasso('nao')} />
               <Opcao icone={<CalendarClock className="h-5 w-5 text-accent" />} titulo="Remarcar" onClick={() => setPasso('remarcar')} />
             </div>
+            {atual.pode_adiar !== false ? (
+              <button
+                type="button"
+                onClick={() => void adiar()}
+                disabled={enviando}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line px-3 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-elevate/[0.04] hover:text-foreground disabled:opacity-50"
+              >
+                <Hourglass className="h-4 w-4 text-warning" />
+                Estou em reunião
+                <span className="text-xs font-normal text-foreground/45">(volta em 1 hora · só 1 vez)</span>
+              </button>
+            ) : (
+              <p className="mt-2 text-center text-xs text-foreground/45">Essa reunião já foi adiada uma vez: agora é responder.</p>
+            )}
           </div>
         )}
         {passo === 'nao' && <NaoCompareceu enviando={enviando} onVoltar={() => setPasso('escolha')} onConcluir={enviar} />}

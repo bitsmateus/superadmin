@@ -2020,6 +2020,17 @@ END; $$`);
     UNIQUE (lead_row_id, agendamento)
   )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS reuniao_resultados_created_idx ON reuniao_resultados(created_at)`);
+  // "Estou em reunião" no popup de resultado (pedido de 13/11): adia aquela reunião por 1h, UMA vez só por reunião
+  // (lead original + horário). A chave primária é o que garante a vez única.
+  await pool.query(`CREATE TABLE IF NOT EXISTS reuniao_adiamentos (
+    familia UUID NOT NULL,
+    agendamento TEXT NOT NULL,
+    user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    adiado_ate TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (familia, agendamento)
+  )`);
   // Origem: os códigos antigos da automação (lp_teste, bio_instagram, anuncio_meta, formulario_*, …) viram as opções
   // da ficha (meta, bio, site, indicacao, outros), pela mesma tabela que a API usa agora (CONVERSAO_ORIGEM).
   // Idempotente: o que já está no formato novo não muda.

@@ -23,6 +23,8 @@ import {
  * meses de cards parados em "Reunião agendada" de uma vez.
  */
 const DESDE = process.env.REUNIAO_RESULTADO_DESDE || '2026-10-23T00:00';
+/** "Estou em reunião": quanto tempo o popup daquela reunião some. */
+const ADIAR_MS = 60 * 60 * 1000;
 
 interface Candidato extends CandidatoReuniao {
   sdr: string;
@@ -84,6 +86,12 @@ async function pendenciasDe(userId: string, role: string) {
     query<{ id: string; name: string }>('SELECT id, name FROM lead_pages'),
   ]);
   const feitas = new Set(respondidas.map((r) => chaveDaReuniao(r.lead_row_id, r.agendamento)));
+  // "Estou em reunião": a reunião adiada some do popup até o horário marcado (1h); já adiada uma vez, não adia de novo.
+  const adiamentos = await query<{ familia: string; agendamento: string; adiado_ate: string }>(
+    'SELECT familia, agendamento, adiado_ate FROM reuniao_adiamentos WHERE familia = ANY($1::uuid[])', [familias]
+  );
+  const adiada = new Map(adiamentos.map((a) => [chaveDaReuniao(a.familia, a.agendamento), new Date(a.adiado_ate)]));
+  for (const [chave, ate] of adiada) if (ate.getTime() > agora.getTime()) feitas.add(chave);
   const nomeDasSdrs = sdrs.map((s) => s.name);
   const nomeDaPagina = (id: string | undefined) => paginas.find((p) => p.id === id)?.name ?? '';
   const allowed = await restrictedBoardFilter(userId, role);
@@ -127,6 +135,7 @@ async function pendenciasDe(userId: string, role: string) {
       link: linkDeReuniao(...notas.filter((n) => n.lead_row_id === card.familia).map((n) => n.content), card.observacoes),
       dor: card.dor_cliente,
       resumo: card.last_note_preview,
+      pode_adiar: !adiada.has(chaveDaReuniao(card.familia, card.agendamento)),
     };
   });
 }
@@ -139,6 +148,27 @@ export async function reunioesRoutes(app: FastifyInstance) {
   });
 
   // POST /api/reunioes/:cardId/resultado — { resultado, resumo?, proxima_etapa?, motivo?, motivo_outro?, agendamento_novo? }
+  // POST /api/reunioes/:cardId/adiar — "Estou em reunião": o popup dessa reunião some por 1h. Uma vez só por reunião.
+  app.post<{ Params: { cardId: string } }>(
+    '/api/reunioes/:cardId/adiar',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const pendencia = (await pendenciasDe(sub, role)).find((p) => p.card_id === req.params.cardId);
+      if (!pendencia) return reply.status(409).send({ message: 'Essa reunião não está mais pendente pra você.' });
+      if (!pendencia.pode_adiar) return reply.status(409).send({ message: 'Essa reunião já foi adiada uma vez: agora é responder.' });
+      const perfil = await queryOne<{ name: string | null; email: string }>('SELECT name, email FROM profiles WHERE id = $1', [sub]);
+      const ate = new Date(Date.now() + ADIAR_MS);
+      const [criado] = await query<{ familia: string }>(
+        `INSERT INTO reuniao_adiamentos (familia, agendamento, user_id, user_name, adiado_ate) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT DO NOTHING RETURNING familia`,
+        [pendencia.familia, pendencia.agendamento, sub, perfil?.name || perfil?.email || '', ate.toISOString()]
+      );
+      if (!criado) return reply.status(409).send({ message: 'Essa reunião já foi adiada uma vez: agora é responder.' });
+      return { ok: true, volta_em: ate.toISOString() };
+    }
+  );
+
   app.post<{ Params: { cardId: string }; Body: unknown }>(
     '/api/reunioes/:cardId/resultado',
     { onRequest: [app.authenticate] },

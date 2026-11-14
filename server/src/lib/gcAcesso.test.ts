@@ -9,8 +9,9 @@ test('admin vê todos os clientes; qualquer outro papel só os dele', () => {
   assert.equal(veTodosOsClientes(ADMIN), true);
   for (const role of ['user', 'supervisor', 'gestor', '']) assert.equal(veTodosOsClientes({ role }), false);
   assert.equal(sqlSoDoGestor(ADMIN), 'TRUE');
-  assert.equal(sqlSoDoGestor(GESTOR), `c.gestor_trafego_id = '${GESTOR.sub}'::uuid`);
-  assert.equal(sqlSoDoGestor(GESTOR, 'g'), `g.gestor_trafego_id = '${GESTOR.sub}'::uuid`);
+  assert.match(sqlSoDoGestor(GESTOR), new RegExp(`^\\(c\\.gestor_trafego_id = '${GESTOR.sub}'::uuid OR EXISTS`));
+  assert.match(sqlSoDoGestor(GESTOR, 'g'), new RegExp(`^\\(g\\.gestor_trafego_id = '${GESTOR.sub}'::uuid OR EXISTS`));
+  assert.match(sqlSoDoGestor(GESTOR), /menu_key IN \('nxdigital_socialmedia', 'nxdigital_demandas_social'\)/);
 });
 
 test('id fora do formato nunca vai pro SQL', () => {

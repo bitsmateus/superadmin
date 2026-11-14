@@ -6,6 +6,9 @@ import { queryOne } from '../db.js';
  *  - administrador vê todos;
  *  - qualquer outro usuário vê SÓ os clientes em que está vinculado como gestor de tráfego
  *    (gc_clientes.gestor_trafego_id). Dos demais não vê nada: nem na lista, nem a ficha, nem as abas.
+ *  - exceção (pedido de 14/11/2026): quem tem a permissão de Social media (Equipe → Permissões,
+ *    "Social media" ou "Demandas social") vê TODOS os clientes — o social media atende a carteira
+ *    inteira e nunca é o gestor de tráfego, então pela regra acima não via ninguém.
  *
  * A checagem é no servidor, sempre. Rotas de um cliente passam pelo hook `guardaDoCliente` (que acha
  * o cliente pela URL); listagens aplicam `sqlSoDoGestor` no WHERE.
@@ -20,6 +23,10 @@ export interface UsuarioGc {
 
 export const veTodosOsClientes = (u: Pick<UsuarioGc, 'role'>): boolean => u.role === 'admin';
 
+/** Chaves de permissão que liberam a carteira inteira do NX DIGITAL (ver comentário do topo). */
+export const CHAVES_VE_TODOS = ['nxdigital_socialmedia', 'nxdigital_demandas_social'];
+const SQL_CHAVES_VE_TODOS = CHAVES_VE_TODOS.map((k) => `'${k}'`).join(', ');
+
 /**
  * Condição SQL que restringe aos clientes do gestor (`alias` = alias de gc_clientes na consulta).
  * Admin: 'TRUE'. O id vem do token (já validado) e ainda passa pelo regex antes de ir pro SQL.
@@ -27,13 +34,17 @@ export const veTodosOsClientes = (u: Pick<UsuarioGc, 'role'>): boolean => u.role
 export function sqlSoDoGestor(u: UsuarioGc, alias = 'c'): string {
   if (veTodosOsClientes(u)) return 'TRUE';
   if (!UUID_RE.test(u.sub)) return 'FALSE';
-  return `${alias}.gestor_trafego_id = '${u.sub}'::uuid`;
+  return (
+    `(${alias}.gestor_trafego_id = '${u.sub}'::uuid OR EXISTS (SELECT 1 FROM user_menu_access uma ` +
+    `WHERE uma.user_id = '${u.sub}'::uuid AND uma.menu_key IN (${SQL_CHAVES_VE_TODOS})))`
+  );
 }
 
 export async function podeVerCliente(u: UsuarioGc, clienteId: string | null | undefined): Promise<boolean> {
   if (veTodosOsClientes(u)) return true;
   if (!clienteId || !UUID_RE.test(clienteId)) return false;
-  const r = await queryOne('SELECT 1 FROM gc_clientes WHERE id = $1 AND gestor_trafego_id = $2', [clienteId, u.sub]);
+  if (!UUID_RE.test(u.sub)) return false;
+  const r = await queryOne(`SELECT 1 FROM gc_clientes c WHERE c.id = $1 AND ${sqlSoDoGestor(u)}`, [clienteId]);
   return !!r;
 }
 

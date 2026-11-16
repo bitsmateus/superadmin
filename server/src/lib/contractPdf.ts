@@ -26,6 +26,7 @@ function renderHtml(bodyHtml: string, title: string): string {
 <title>${escapeHtml(title)}</title>
 <style>
   * { box-sizing: border-box; }
+  tr { break-inside: avoid; }
   body {
     font-family: Arial, Helvetica, sans-serif;
     color: #000;
@@ -39,6 +40,27 @@ function renderHtml(bodyHtml: string, title: string): string {
 </html>`;
 }
 
+/** Roda dentro da página (Chromium): quebras de página que não deixam nada "cortado". Em texto (String.raw) pra o
+ * transpilador não injetar nada que só existe no Node. */
+const MANTER_JUNTO = String.raw`(() => {
+  const norm = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const blocos = Array.from(document.body.querySelectorAll('p, h1, h2, h3, h4, h5, h6'));
+  const textos = blocos.map((el) => norm(el.textContent));
+  blocos.forEach((el, i) => {
+    if (/^titulo [ivxlcdm0-9]+/.test(textos[i]) || /^h[1-6]$/i.test(el.tagName)) el.style.breakAfter = 'avoid';
+  });
+  // Fecho: da data ("Cidade, 16 de novembro de 2026") ou do primeiro "CONTRATANTE" sozinho até o fim.
+  let ini = textos.findIndex((t) => /^[a-z ]+, \d{1,2} de [a-z]+ de \d{4}/.test(t));
+  const c = textos.findIndex((t) => t === 'contratante');
+  if (ini < 0 || (c >= 0 && ini > c)) ini = c;
+  if (ini >= 0) {
+    for (let i = ini; i < blocos.length; i++) {
+      blocos[i].style.breakInside = 'avoid';
+      if (i < blocos.length - 1) blocos[i].style.breakAfter = 'avoid';
+    }
+  }
+})()`;
+
 export async function renderContractPdf(bodyHtml: string, title: string): Promise<Buffer> {
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
   const browser = await puppeteer.launch({
@@ -49,6 +71,9 @@ export async function renderContractPdf(bodyHtml: string, title: string): Promis
   try {
     const page = await browser.newPage();
     await page.setContent(renderHtml(bodyHtml, title), { waitUntil: 'domcontentloaded' });
+    // Quebras de página que não deixam nada "cortado": título nunca fica sozinho no pé da página (vai junto com a cláusula
+    // seguinte) e o fecho (data, CONTRATANTE, CONTRATADA, linhas de assinatura) fica inteiro na mesma página.
+    await page.evaluate(MANTER_JUNTO);
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,

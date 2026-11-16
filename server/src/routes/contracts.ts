@@ -229,6 +229,24 @@ export async function contractRoutes(app: FastifyInstance) {
     }
   );
 
+  // POST /api/contracts/previa-pdf — o PDF que o contrato vai ter (o mesmo gerado e enviado), em base64, com o número de páginas.
+  // Serve pra ver o contrato PÁGINA POR PÁGINA antes de gerar (prévia e editor do modelo).
+  app.post<{ Body: { html?: string } }>(
+    '/api/contracts/previa-pdf',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const html = (req.body?.html ?? '').trim();
+      if (!html) return reply.status(400).send({ message: 'html é obrigatório' });
+      try {
+        const pdf = await renderContractPdf(html, 'Contrato');
+        return { paginas: await contarPaginas(pdf), pdf: pdf.toString('base64') };
+      } catch (err) {
+        app.log.error({ err }, 'Falha ao gerar a prévia em PDF do contrato');
+        return reply.status(500).send({ message: 'Não deu pra gerar a prévia em páginas — tenta de novo.' });
+      }
+    }
+  );
+
   // POST /api/contracts/:id/autentique — manda o contrato pro Autentique sem sair do sistema: gera o PDF (do texto atual
   // ou do PDF anexado), cria o documento com a NX e o cliente como signatários, assina como NX (conta do token) e devolve
   // o link pro cliente assinar. NADA é enviado ao cliente: quem manda o link é você. Segue valendo o "assinou lá, marca

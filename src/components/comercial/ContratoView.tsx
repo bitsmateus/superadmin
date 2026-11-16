@@ -151,6 +151,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const conteudoPrevia = React.useMemo(() => montarContrato(aplicarAutomaticos(draftCampos, camposDoModelo, { hoje: new Date() }), false), [montarContrato, draftCampos, camposDoModelo])
   // Edição manual do texto na própria prévia (antes de gerar).
   const [previaEditando, setPreviaEditando] = React.useState(false)
+  const [previaVista, setPreviaVista] = React.useState<'texto' | 'paginas'>('texto')
   const previaRef = React.useRef<HTMLDivElement>(null)
   React.useEffect(() => {
     if (previaEditando && previaRef.current) previaRef.current.innerHTML = conteudoPrevia
@@ -707,7 +708,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     {modoPdf ? (
                       <Button onClick={registerContract} loading={creating} disabled={!draftPdfData}>Registrar contrato</Button>
                     ) : (
-                      <Button onClick={() => { setPreviaEditando(false); setPreviaOpen(true) }} disabled={!template} leftIcon={<Eye className="h-4 w-4" />}>Ver prévia e gerar</Button>
+                      <Button onClick={() => { setPreviaEditando(false); setPreviaVista('texto'); setPreviaOpen(true) }} disabled={!template} leftIcon={<Eye className="h-4 w-4" />}>Ver prévia e gerar</Button>
                     )}
                   </div>
                 </div>
@@ -739,7 +740,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
       <Modal
         open={previaOpen}
-        onClose={() => { setPreviaOpen(false); setPreviaEditando(false) }}
+        onClose={() => { setPreviaOpen(false); setPreviaEditando(false); setPreviaVista('texto') }}
         title="Prévia do contrato"
         description="Confira como o contrato vai ficar. Campos em vermelho ainda estão vazios (no contrato gerado nada fica vermelho). Dá pra editar o texto à mão antes de gerar."
         size="xl"
@@ -779,7 +780,17 @@ export function ContratoView({ pageId }: { pageId: string }) {
           <div className="flex items-center gap-2">
             <Button
               size="sm"
+              variant={previaVista === 'paginas' ? 'primary' : 'secondary'}
+              onClick={() => { setPreviaEditando(false); setPreviaVista((v) => (v === 'paginas' ? 'texto' : 'paginas')) }}
+              leftIcon={<FileText className="h-3.5 w-3.5" />}
+              title="Ver o contrato página por página, como vai sair no PDF"
+            >
+              {previaVista === 'paginas' ? 'Voltar ao texto' : 'Ver por páginas'}
+            </Button>
+            <Button
+              size="sm"
               variant={previaEditando ? 'primary' : 'secondary'}
+              disabled={previaVista === 'paginas'}
               onClick={() => setPreviaEditando((v) => !v)}
               leftIcon={<Pencil className="h-3.5 w-3.5" />}
               title="Mexer no texto do contrato à mão antes de gerar"
@@ -789,8 +800,9 @@ export function ContratoView({ pageId }: { pageId: string }) {
             <ZoomBar value={previaZoom} onChange={setPreviaZoom} />
           </div>
         </div>
-        {previaEditando && <RichTextToolbar targetRef={previaRef} extras className="mx-auto mb-2 max-w-[800px]" />}
-        <div className="mx-auto max-h-[60vh] max-w-[800px] overflow-y-auto rounded-lg border border-line/60 bg-white">
+        {previaVista === 'paginas' && <div className="mx-auto max-w-[800px]"><PaginasDoContrato html={montarContrato(aplicarAutomaticos(draftCampos, camposDoModelo, { hoje: new Date() }), true)} /></div>}
+        {previaEditando && previaVista === 'texto' && <RichTextToolbar targetRef={previaRef} extras className="mx-auto mb-2 max-w-[800px]" />}
+        <div className={cn('mx-auto max-h-[60vh] max-w-[800px] overflow-y-auto rounded-lg border border-line/60 bg-white', previaVista === 'paginas' && 'hidden')}>
           {previaEditando ? (
             <div
               ref={previaRef}
@@ -1844,12 +1856,43 @@ function ServicesTableField({ value, onChange }: { value: string; onChange: (nex
   )
 }
 
+/** O contrato em PÁGINAS, como vai sair no PDF: o visualizador do navegador mostra cada página inteira e o total. É o mesmo PDF gerado
+ * pelo servidor, então o que está cortado aqui estaria cortado no contrato. */
+function PaginasDoContrato({ html, altura = '62vh' }: { html: string; altura?: string }) {
+  const [res, setRes] = React.useState<{ paginas: number; url: string } | null>(null)
+  const [erro, setErro] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    let cancelado = false
+    let url: string | null = null
+    setRes(null)
+    setErro(null)
+    contractsService.previaPdf(html)
+      .then((r) => { url = r.url; if (cancelado) URL.revokeObjectURL(r.url); else setRes(r) })
+      .catch((e) => { if (!cancelado) setErro((e as Error).message || 'Não deu pra gerar as páginas.') })
+    return () => { cancelado = true; if (url) URL.revokeObjectURL(url) }
+  }, [html])
+  if (erro) return <p className="py-10 text-center text-sm text-danger">{erro}</p>
+  if (!res) return <p className="inline-flex w-full items-center justify-center gap-2 py-16 text-sm text-foreground/50"><Loader2 className="h-4 w-4 animate-spin" />Montando as páginas…</p>
+  return (
+    <div>
+      <p className="mb-2 text-xs text-foreground/60">
+        <strong className="text-foreground">{res.paginas} {res.paginas === 1 ? 'página' : 'páginas'}</strong> no total. Role pra ver cada página inteira;
+        título nunca fica sozinho no fim da página e o fecho de assinaturas fica junto.
+      </p>
+      <iframe title="Páginas do contrato" src={`${res.url}#view=FitH`} className="w-full rounded-lg border border-line bg-white" style={{ height: altura }} />
+    </div>
+  )
+}
+
 function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose: () => void; template: ContractTemplate | null }) {
   const bodyRef = React.useRef<HTMLDivElement>(null)
   const [saving, setSaving] = React.useState(false)
   const [zoom, setZoom] = React.useState(100)
+  // Modo "ver as páginas": guarda o texto do editor na hora do clique e mostra o PDF dele.
+  const [htmlDasPaginas, setHtmlDasPaginas] = React.useState<string | null>(null)
 
   React.useEffect(() => {
+    if (!open) setHtmlDasPaginas(null)
     if (open && bodyRef.current && template) bodyRef.current.innerHTML = template.conteudo
   }, [open, template])
 
@@ -1880,11 +1923,21 @@ function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose
       }
     >
       <div className="mx-auto mb-2 flex max-w-[800px] flex-wrap items-center gap-2">
-        <RichTextToolbar targetRef={bodyRef} extras className="min-w-0 flex-1" />
-        <ZoomBar value={zoom} onChange={setZoom} />
+        {htmlDasPaginas == null ? (
+          <>
+            <RichTextToolbar targetRef={bodyRef} extras className="min-w-0 flex-1" />
+            <ZoomBar value={zoom} onChange={setZoom} />
+            <Button size="sm" variant="secondary" onClick={() => setHtmlDasPaginas(bodyRef.current?.innerHTML ?? '')} leftIcon={<Eye className="h-3.5 w-3.5" />} title="Ver o modelo página por página, com o total de páginas">
+              Ver páginas
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => setHtmlDasPaginas(null)} leftIcon={<Pencil className="h-3.5 w-3.5" />}>Voltar a editar</Button>
+        )}
       </div>
-      {/* A rolagem fica FORA do que recebe o zoom (vh dentro de um elemento com zoom também escala). */}
-      <div className="mx-auto max-h-[55vh] max-w-[800px] overflow-y-auto rounded-lg border border-line bg-card">
+      {htmlDasPaginas != null && <div className="mx-auto max-w-[800px]"><PaginasDoContrato html={htmlDasPaginas} /></div>}
+      {/* A rolagem fica FORA do que recebe o zoom (vh dentro de um elemento com zoom também escala). O editor continua montado (só escondido) pra não perder o texto. */}
+      <div className={cn('mx-auto max-h-[55vh] max-w-[800px] overflow-y-auto rounded-lg border border-line bg-card', htmlDasPaginas != null && 'hidden')}>
         <div
           ref={bodyRef}
           contentEditable

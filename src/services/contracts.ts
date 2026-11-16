@@ -213,6 +213,13 @@ export const contractsService = {
     return r.paginas
   },
 
+  /** O PDF do contrato (o mesmo que será gerado e enviado) e o total de páginas — pra ver página por página. */
+  async previaPdf(html: string): Promise<{ paginas: number; url: string }> {
+    const r = await api.post<{ paginas: number; pdf: string }>('/api/contracts/previa-pdf', { html })
+    const bytes = Uint8Array.from(atob(r.pdf), (c) => c.charCodeAt(0))
+    return { paginas: r.paginas, url: URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })) }
+  },
+
   async deleteContract(id: string): Promise<void> {
     try {
       await api.delete(`/api/contracts/${id}`)

@@ -236,13 +236,13 @@ test('seção 5 — Jean (jean may)', () => {
   const d = (dd: string) => dias.find((x) => x.data === `2026-11-${dd}`)!;
   assert.deepEqual([h(d('10').trabalhadoMinutos), h(d('10').saldoMinutos), d('10').status], ['3h10', '-5h20', 'manha_sem_batida']);
   assert.deepEqual([h(d('11').trabalhadoMinutos), h(d('11').saldoMinutos), d('11').status], ['8h47', '0h17', 'extra']);
-  assert.deepEqual([h(d('12').trabalhadoMinutos), h(d('12').saldoMinutos), d('12').atrasoMinutos], ['8h17', '-0h18', 18]);
+  assert.deepEqual([h(d('12').trabalhadoMinutos), h(d('12').saldoMinutos), d('12').atrasoMinutos], ['8h17', '-0h13', 18]);
   assert.deepEqual([h(d('13').trabalhadoMinutos), h(d('13').saldoBrutoMinutos), d('13').saldoMinutos], ['8h34', '0h04', 0]);
   assert.equal(d('16').status, 'em_andamento');
-  assert.equal(h(resumo.bancoMinutos), '-5h21');
+  assert.equal(h(resumo.bancoMinutos), '-5h16');
   assert.equal(resumo.faltas, 0);
   assert.equal(h(resumo.extraMinutos), '0h17');
-  assert.equal(h(periodo(JEAN, { '2026-11-10': [{ tipo: 'abonar_manha' }] }).resumo.bancoMinutos), '-1h21');
+  assert.equal(h(periodo(JEAN, { '2026-11-10': [{ tipo: 'abonar_manha' }] }).resumo.bancoMinutos), '-1h16');
 });
 
 test('Arthur fora do arquivo: nenhum dia coberto, nenhuma falta', () => {
@@ -298,4 +298,18 @@ test('Arthur dia 16: bateu só 13:30 e saiu 18:00, "descontar saldo": a manhã v
   assert.equal(d.bancoMinutos, 0);
   assert.equal(d.descontoCentavos, Math.round((240 * valorHora(cfg)) / 60));
   assert.ok(d.descontoCentavos > 3400 && d.descontoCentavos < 3500);
+});
+
+test('hora extra: chegar 10 min antes (07:50) já conta; depois das 18:00 conta tudo', () => {
+  const dia = (batidas: string[]) => calcularDia({ data: '2026-11-12', batidas, cfg: CFG, coberto: true, hoje: '2026-11-20' });
+  const a = dia(['07:50', '12:00', '13:30', '18:00']);
+  assert.equal(a.saldoMinutos, 10);
+  assert.equal(a.extraMinutos, 10);
+  assert.equal(dia(['07:43', '12:00', '13:30', '18:00']).extraMinutos, 17);
+  // 07:55 ainda não conta como extra.
+  assert.equal(dia(['07:55', '12:00', '13:30', '18:00']).extraMinutos, 0);
+  // Depois das 18:00: cada minuto conta.
+  assert.equal(dia(['08:00', '12:00', '13:30', '18:03']).extraMinutos, 3);
+  // O almoço (12:00 às 13:30) nunca vira extra.
+  assert.equal(dia(['08:00', '12:40', '13:00', '18:00']).extraMinutos, 0);
 });

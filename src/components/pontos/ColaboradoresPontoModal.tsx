@@ -140,7 +140,7 @@ export function ColaboradoresPontoModal({ open, onClose, colaboradores, onSalvo 
             <Input label="Saída prevista" type="time" value={r.saidaPrevista} onChange={(e) => set('saidaPrevista', e.target.value)} />
             <Input label="Início do almoço" type="time" value={r.intervaloInicio} onChange={(e) => set('intervaloInicio', e.target.value)} />
             <Input label="Almoço previsto (min)" inputMode="numeric" value={r.intervaloMinutos} onChange={(e) => set('intervaloMinutos', e.target.value)} />
-            <Input label="Tolerância (min)" inputMode="numeric" value={r.toleranciaMinutos} onChange={(e) => set('toleranciaMinutos', e.target.value)} />
+            <Input label="Tolerância manhã e tarde (min)" inputMode="numeric" value={r.toleranciaMinutos} onChange={(e) => set('toleranciaMinutos', e.target.value)} />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">

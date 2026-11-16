@@ -32,6 +32,7 @@ import { formatCnpj, isValidCnpjLength } from '@/lib/cnpj'
 import { formatCep, isValidCepLength } from '@/lib/cep'
 import { openContractSheet } from '@/lib/contractSheet'
 import { RichTextToolbar, ZoomBar } from '@/components/comercial/RichTextToolbar'
+import { aoColarComoNoWord } from '@/lib/colarDoWord'
 import { LeadLinkPanel, LeadPickerModal } from '@/components/comercial/LeadLinkPanel'
 import { salvarLeadDaFicha, suggestCrmLead } from '@/services/crmLeadLookup'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
@@ -744,6 +745,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     contentEditable
                     suppressContentEditableWarning
                     onInput={(e) => debouncedSaveBody((e.target as HTMLDivElement).innerHTML)}
+                    onPaste={aoColarComoNoWord}
                     className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[12pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
                     style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000', zoom: bodyZoom / 100 }}
                   />
@@ -1633,6 +1635,7 @@ function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose
           ref={bodyRef}
           contentEditable
           suppressContentEditableWarning
+          onPaste={aoColarComoNoWord}
           className="p-4 text-[12pt] sm:p-8 leading-relaxed outline-none"
           style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000', zoom: zoom / 100 }}
         />

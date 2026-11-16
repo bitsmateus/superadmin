@@ -762,6 +762,12 @@ function FichaCell({
 }
 
 /** Escolhe a ficha de cadastro (cliente) dessa venda, à mão — pra quando o telefone ou o nome não batem e o sistema não achou sozinho. */
+/** Quando o cliente preencheu a ficha (ou foi cadastrado, se ainda não preencheu) — pra listar do mais novo pro mais antigo. */
+function dataDaFicha(c: { createdAt?: string; fichaCadastro?: { submittedAt?: string } }): number {
+  const t = new Date(c.fichaCadastro?.submittedAt ?? c.createdAt ?? '').getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
 function VincularFichaModal({
   row, atual, onClose, onSalvo,
 }: {
@@ -781,9 +787,9 @@ function VincularFichaModal({
     return clients
       .filter((c) => !n || (c.company ?? '').toLowerCase().includes(n) || (c.name ?? '').toLowerCase().includes(n)
         || (nd.length >= 3 && ((c.phone ?? '').replace(/\D/g, '').includes(nd) || (c.fichaCadastro?.cnpj ?? '').replace(/\D/g, '').includes(nd))))
-      // Quem tem ficha preenchida primeiro: é o que se costuma procurar.
-      .sort((a, b) => Number(!!b.fichaCadastro) - Number(!!a.fichaCadastro) || (a.company || a.name).localeCompare(b.company || b.name))
-      .slice(0, 40)
+      // Mais recentes em cima: pela data em que a ficha foi preenchida (ou, sem ficha, pela data do cadastro).
+      .sort((a, b) => dataDaFicha(b) - dataDaFicha(a))
+      .slice(0, 60)
   }, [clients, q])
 
   const salvar = async (clientId: string | null) => {
@@ -815,7 +821,7 @@ function VincularFichaModal({
           >
             <span className="min-w-0">
               <span className="block truncate text-sm font-medium text-foreground">{c.company || c.name}</span>
-              <span className="block truncate text-xs text-foreground/50">{[c.name !== c.company ? c.name : '', c.phone].filter(Boolean).join(' · ') || '—'}</span>
+              <span className="block truncate text-xs text-foreground/50">{[c.name !== c.company ? c.name : '', c.phone, dataDaFicha(c) ? new Date(dataDaFicha(c)).toLocaleDateString('pt-BR') : ''].filter(Boolean).join(' · ') || '—'}</span>
             </span>
             <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium', c.fichaCadastro ? 'bg-success/10 text-success' : 'bg-elevate/[0.06] text-foreground/50')}>
               {c.id === atual ? 'vinculada' : c.fichaCadastro ? 'ficha preenchida' : 'sem ficha'}

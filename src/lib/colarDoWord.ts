@@ -43,6 +43,12 @@ function estiloDoTexto(cs: CSSStyleDeclaration, pai: CSSStyleDeclaration | null)
   return out
 }
 
+/** align="center" do HTML antigo (LibreOffice, Word) volta do navegador como "-webkit-center". */
+function alinhamento(cs: CSSStyleDeclaration): 'left' | 'center' | 'right' | 'justify' {
+  const a = cs.textAlign.replace('-webkit-', '')
+  return a === 'center' || a === 'right' || a === 'justify' ? a : a === 'end' ? 'right' : 'left'
+}
+
 function borda(cs: CSSStyleDeclaration, lado: 'top' | 'right' | 'bottom' | 'left'): string | null {
   const estilo = cs.getPropertyValue(`border-${lado}-style`)
   const larg = num(cs.getPropertyValue(`border-${lado}-width`))
@@ -73,7 +79,8 @@ export function converterHtmlDoWord(html: string): string {
     const raiz = cstyle(doc.body)
 
     const ehBloco = (el: Element) => LISTA_DE_BLOCOS.has(el.localName)
-    const temBlocoDentro = (el: Element) => [...el.children].some((c) => ehBloco(c))
+    const temBlocoDentro = (el: Element): boolean => [...el.children].some((c) => ehBloco(c) || temBlocoDentro(c))
+    const ehBlocoOuContem = (el: Element) => ehBloco(el) || temBlocoDentro(el)
 
     const inline = (no: Node, pai: CSSStyleDeclaration): string => {
       if (no.nodeType === Node.TEXT_NODE) return esc((no.textContent ?? '').replace(/[\r\n]+\s*/g, ' '))
@@ -93,9 +100,18 @@ export function converterHtmlDoWord(html: string): string {
     const filhosInline = (el: Element, cs: CSSStyleDeclaration) => [...el.childNodes].map((c) => inline(c, cs)).join('')
 
     const estiloDoBloco = (el: Element, cs: CSSStyleDeclaration): string => {
-      const partes = estiloDoTexto(cs, raiz)
-      const alinha = cs.textAlign
-      if (['left', 'center', 'right', 'justify'].includes(alinha)) partes.push(`text-align:${alinha}`)
+      // Estado COMPLETO em todo parágrafo (negrito sim/não, alinhamento…): assim o que for colado nunca herda a formatação
+      // de onde o cursor estava (um título em negrito e centralizado, por exemplo).
+      const sub = cs.textDecorationLine.includes('underline')
+      const risc = cs.textDecorationLine.includes('line-through')
+      const partes = [
+        `font-family:${fonteDe(cs)}`, `font-size:${pt(num(cs.fontSize))}pt`,
+        `font-weight:${negrito(cs) ? 'bold' : 'normal'}`, `font-style:${cs.fontStyle === 'italic' ? 'italic' : 'normal'}`,
+        `text-decoration:${[sub ? 'underline' : '', risc ? 'line-through' : ''].filter(Boolean).join(' ') || 'none'}`,
+        `color:${cs.color}`,
+      ]
+      if (!transparente(cs.backgroundColor)) partes.push(`background-color:${cs.backgroundColor}`)
+      partes.push(`text-align:${alinhamento(cs)}`)
       const tamanho = num(cs.fontSize) || BASE_PX
       const altura = num(cs.lineHeight)
       if (altura > 0 && cs.lineHeight !== 'normal') partes.push(`line-height:${arredonda(altura / tamanho)}`)
@@ -124,8 +140,8 @@ export function converterHtmlDoWord(html: string): string {
       if (temBlocoDentro(el)) {
         // Envoltório (div WordSection1…): só desce, o que importa são os blocos de dentro.
         return [...el.childNodes].map((c) => {
-          if (c.nodeType === Node.ELEMENT_NODE) return ehBloco(c as Element) ? bloco(c as Element) : `<p>${inline(c, cs)}</p>`
-          return (c.textContent ?? '').trim() ? `<p>${esc(c.textContent ?? '')}</p>` : ''
+          if (c.nodeType === Node.ELEMENT_NODE) return ehBlocoOuContem(c as Element) ? bloco(c as Element) : `<p style="${estiloDoBloco(c as Element, cs)}">${inline(c, cs)}</p>`
+          return (c.textContent ?? '').trim() ? `<p style="${estiloDoBloco(el, cs)}">${esc(c.textContent ?? '')}</p>` : ''
         }).join('')
       }
       const filhos = [...el.childNodes].map((c) => inline(c, cs)).join('')
@@ -149,10 +165,10 @@ export function converterHtmlDoWord(html: string): string {
             `padding:${pt(num(c.paddingTop))}pt ${pt(num(c.paddingRight))}pt ${pt(num(c.paddingBottom))}pt ${pt(num(c.paddingLeft))}pt`,
             `vertical-align:${c.verticalAlign === 'baseline' ? 'top' : c.verticalAlign}`,
           ]
-          if (['left', 'center', 'right', 'justify'].includes(c.textAlign)) partes.push(`text-align:${c.textAlign}`)
+          partes.push(`text-align:${alinhamento(c)}`)
           if (!transparente(c.backgroundColor)) partes.push(`background-color:${c.backgroundColor}`)
           if (ri === 0) partes.push(`width:${arredonda((td.getBoundingClientRect().width / totalPrimeira) * 100)}%`)
-          const interior = temBlocoDentro(td) ? [...td.childNodes].map((n) => (n.nodeType === Node.ELEMENT_NODE ? (ehBloco(n as Element) ? bloco(n as Element) : `<p>${inline(n, c)}</p>`) : esc(n.textContent ?? ''))).join('') : filhosInline(td, c)
+          const interior = temBlocoDentro(td) ? [...td.childNodes].map((n) => (n.nodeType === Node.ELEMENT_NODE ? (ehBlocoOuContem(n as Element) ? bloco(n as Element) : `<p style="${estiloDoBloco(n as Element, c)}">${inline(n, c)}</p>`) : esc(n.textContent ?? ''))).join('') : filhosInline(td, c)
           const attrs = `${td.colSpan > 1 ? ` colspan="${td.colSpan}"` : ''}${td.rowSpan > 1 ? ` rowspan="${td.rowSpan}"` : ''}`
           return `<${td.localName}${attrs} style="${partes.join(';')}">${interior || '<br>'}</${td.localName}>`
         }).join('')
@@ -166,24 +182,87 @@ export function converterHtmlDoWord(html: string): string {
       if (c.nodeType === Node.ELEMENT_NODE) {
         const el = c as Element
         if (IGNORAR.has(el.localName)) return ''
-        return ehBloco(el) ? bloco(el) : `<p>${inline(el, raiz)}</p>`
+        return ehBlocoOuContem(el) ? bloco(el) : `<p style="${estiloDoBloco(el, raiz)}">${inline(el, raiz)}</p>`
       }
-      return (c.textContent ?? '').trim() ? `<p>${esc(c.textContent ?? '')}</p>` : ''
+      return (c.textContent ?? '').trim() ? `<p style="${estiloDoBloco(caixa, raiz)}">${esc(c.textContent ?? '')}</p>` : ''
     }).join('')
   } finally {
     frame.remove()
   }
 }
 
+/** Texto puro -> parágrafos normais (Arial 12pt, esquerda, sem negrito). */
+function htmlDoTextoPuro(texto: string): string {
+  const base = 'font-family:Arial;font-size:12pt;font-weight:normal;font-style:normal;text-decoration:none;color:#000;text-align:left;margin-top:0pt;margin-bottom:0pt'
+  return texto.split(/\r?\n/).map((l) => `<p style="${base}">${l.trim() ? esc(l) : '<br>'}</p>`).join('')
+}
+
+/** Põe os blocos no lugar do cursor, partindo o parágrafo onde ele está — sem passar pelo colar do navegador (que mistura o
+ * formato colado com o do cursor: foi o que deixou tudo em negrito e centralizado). */
+function inserirBlocos(editor: HTMLElement, html: string) {
+  const molde = document.createElement('div')
+  molde.innerHTML = html
+  const nos = [...molde.childNodes]
+  const sel = window.getSelection()
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null
+  if (!range || !editor.contains(range.commonAncestorContainer)) {
+    editor.append(...nos)
+  } else if (nos.length === 1 && nos[0] instanceof HTMLElement && nos[0].localName === 'p' && range.startContainer !== editor) {
+    // Um parágrafo só (poucas palavras copiadas): entra no meio da frase, sem partir o parágrafo onde está o cursor.
+    range.deleteContents()
+    const dentro = document.createDocumentFragment()
+    dentro.append(...nos[0].childNodes)
+    const ultimo = dentro.lastChild
+    range.insertNode(dentro)
+    if (ultimo) { range.setStartAfter(ultimo); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range) }
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+    return
+  } else {
+    range.deleteContents()
+    let topo: Node = range.startContainer
+    while (topo !== editor && topo.parentNode && topo.parentNode !== editor) topo = topo.parentNode
+    if (topo === editor) {
+      // Cursor direto no editor (vazio ou entre blocos).
+      const ref = editor.childNodes[range.startOffset] ?? null
+      for (const n of nos) editor.insertBefore(n, ref)
+    } else {
+      const resto = document.createRange()
+      resto.setStart(range.startContainer, range.startOffset)
+      resto.setEnd(topo, topo.childNodes.length)
+      const parte = resto.extractContents()
+      const metade = (topo as Element).cloneNode(false) as Element
+      metade.appendChild(parte)
+      const vazio = (n: Element) => !(n.textContent ?? '').trim() && !n.querySelector('br,img,table')
+      const antes = topo as Element
+      antes.after(...nos, metade)
+      if (vazio(metade)) metade.remove()
+      if (vazio(antes)) antes.remove()
+    }
+  }
+  const fim = document.createRange()
+  fim.selectNodeContents(editor)
+  fim.collapse(false)
+  sel?.removeAllRanges()
+  sel?.addRange(fim)
+  editor.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
 /**
- * onPaste dos editores de contrato: se o que veio da área de transferência é HTML (Word, Docs, página), limpa e insere
- * mantendo o formato; texto puro segue o caminho normal do navegador.
+ * onPaste dos editores de contrato: o que vem do Word/Docs/página é limpo e inserido com a formatação dele (e só dele). Se
+ * a limpeza falhar, entra o texto puro em parágrafos normais — nunca o colar padrão do navegador.
  */
 export function aoColarComoNoWord(e: React.ClipboardEvent<HTMLElement>) {
   const html = e.clipboardData?.getData('text/html') ?? ''
-  if (!html.trim()) return
-  const limpo = converterHtmlDoWord(html)
+  const puro = e.clipboardData?.getData('text/plain') ?? ''
+  if (!html.trim() && !puro.trim()) return
+  // Texto puro de uma linha só: o colar normal do navegador já faz o certo.
+  if (!html.trim() && !puro.includes('\n')) return
+  let limpo = ''
+  if (html.trim()) {
+    try { limpo = converterHtmlDoWord(html) } catch (err) { console.error('[colar] falha ao converter o HTML colado:', err) }
+  }
+  if (!limpo.trim()) limpo = htmlDoTextoPuro(puro)
   if (!limpo.trim()) return
   e.preventDefault()
-  document.execCommand('insertHTML', false, limpo)
+  inserirBlocos(e.currentTarget, limpo)
 }

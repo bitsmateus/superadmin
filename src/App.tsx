@@ -59,6 +59,9 @@ const FinanceiroVendasPage = React.lazy(() =>
 const FinanceiroContratoPage = React.lazy(() =>
   import('./pages/FinanceiroContratoPage').then((m) => ({ default: m.FinanceiroContratoPage })),
 )
+const FinanceiroPontosPage = React.lazy(() =>
+  import('./pages/FinanceiroPontosPage').then((m) => ({ default: m.FinanceiroPontosPage })),
+)
 const ClientesNxDigitalPage = React.lazy(() =>
   import('./pages/ClientesNxDigitalPage').then((m) => ({ default: m.ClientesNxDigitalPage })),
 )
@@ -309,6 +312,7 @@ export default function App() {
           <Route path="/demandas/:pageId" element={<ComercialPage />} />
           <Route path="/financeiro/vendas" element={<FinanceiroVendasPage />} />
           <Route path="/financeiro/contrato" element={<FinanceiroContratoPage />} />
+          <Route path="/financeiro/pontos" element={<FinanceiroPontosPage />} />
           {/* Gestão Interna virou parte de Vendas — mesma tela, mesmo período, só num lugar. */}
           <Route path="/financeiro/gestao-interna" element={<Navigate to="/financeiro/vendas" replace />} />
           {/* Clientes NX Digital — módulo de gestão dos clientes de tráfego (tabelas gc_*). */}

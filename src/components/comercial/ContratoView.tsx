@@ -22,6 +22,7 @@ import { PREV_STAGE, STAGE_COLORS } from '@/constants/stageColors'
 import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/useContracts'
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
+import { sanitizeCurrencyRaw } from '@/lib/currency'
 import { lookupCep, type CepData } from '@/services/cepLookup'
 import { COMPLEMENTO_PADRAO, lerEnderecoDaFicha, mesclarEndereco, precisaConsultarCep } from '@/lib/enderecoDoContrato'
 import { onlyDigits } from '@/lib/cnpj'
@@ -35,6 +36,7 @@ import { formatCep, isValidCepLength } from '@/lib/cep'
 import { openContractSheet } from '@/lib/contractSheet'
 import { RichTextToolbar, ZoomBar } from '@/components/comercial/RichTextToolbar'
 import { aoColarComoNoWord } from '@/lib/colarDoWord'
+import { aplicarAutomaticos, formatarMoeda, lerMoeda, marcarManual, prepararModelo, tirarVermelho, type CampoDoModelo } from '@/lib/modeloDoContrato'
 import { LeadLinkPanel, LeadPickerModal } from '@/components/comercial/LeadLinkPanel'
 import { salvarLeadDaFicha, suggestCrmLead } from '@/services/crmLeadLookup'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
@@ -81,7 +83,19 @@ export function ContratoView({ pageId }: { pageId: string }) {
     [allContracts, board],
   )
   const template = templates[0] ?? null
-  const placeholders = React.useMemo(() => (template ? extractPlaceholders(template.conteudo) : []), [template])
+  // O modelo com os campos genéricos (VALOR, X, DATA) já separados pelo significado de cada um.
+  const modelo = React.useMemo(() => (template ? prepararModelo(template.conteudo) : null), [template])
+  const placeholders = React.useMemo(() => (modelo ? extractPlaceholders(modelo.html) : []), [modelo])
+  const camposDoModelo = React.useMemo(() => modelo?.campos ?? [], [modelo])
+  /** Texto do contrato a partir dos campos. Nada fica vermelho: na prévia só o que falta (marcarVazios), no gerado nada. */
+  const montarContrato = React.useCallback(
+    (campos: Record<string, string>, final: boolean) => {
+      if (!modelo) return ''
+      const texto = applyPlaceholders(applyServicesTable(tirarVermelho(modelo.html), campos), campos, { marcarVazios: !final })
+      return final ? tirarVermelho(texto) : texto
+    },
+    [modelo],
+  )
 
   // "Boas-vindas" = ficha preenchida, ainda sem contrato gerado — "avançar" já abre o formulário
   // de criar contrato direto (ver createContractFromDrawer), sem etapa intermediária pra esperar.
@@ -130,10 +144,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
   // Quantas páginas o PDF vai ter (o servidor gera o mesmo PDF que será enviado e conta).
   const [previaPaginas, setPreviaPaginas] = React.useState<number | null>(null)
   const [previaPaginasErro, setPreviaPaginasErro] = React.useState(false)
-  const conteudoPrevia = React.useMemo(
-    () => (template ? applyPlaceholders(applyServicesTable(template.conteudo, draftCampos), draftCampos) : ''),
-    [template, draftCampos],
-  )
+  const conteudoPrevia = React.useMemo(() => montarContrato(aplicarAutomaticos(draftCampos, camposDoModelo, { hoje: new Date() }), false), [montarContrato, draftCampos, camposDoModelo])
+  // Edição manual do texto na própria prévia (antes de gerar).
+  const [previaEditando, setPreviaEditando] = React.useState(false)
+  const previaRef = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    if (previaEditando && previaRef.current) previaRef.current.innerHTML = conteudoPrevia
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previaEditando])
   React.useEffect(() => {
     if (!previaOpen || !conteudoPrevia) return
     let cancelado = false
@@ -275,7 +293,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
         if (key && ['logradouro', 'numero', 'complemento', 'bairro', 'cep'].includes(key) && v) campos[name] = v
       }
     }
-    setDraftCampos(campos)
+    setDraftCampos(aplicarAutomaticos(campos, camposDoModelo, { hoje: new Date() }))
     setDraftClientId(client?.id ?? null)
     setDraftVendaLeadId(null)
     setDraftPdfData(null)
@@ -286,12 +304,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
     if (client?.fichaCadastro?.cnpj && placeholders.includes('CNPJ')) void fillFromCnpj(client.fichaCadastro.cnpj, client.fichaCadastro.address)
   }
 
-  const generate = async () => {
-    if (!board || !template) return
+  const generate = async (conteudoEditado?: string | null) => {
+    if (!board || !template || !modelo) return
     setCreating(true)
     try {
-      const conteudo = applyPlaceholders(applyServicesTable(template.conteudo, draftCampos), draftCampos)
-      const created = await contractsService.createContract(board.id, template.id, draftCampos, conteudo, draftClientId, draftVendaLeadId)
+      // A data é a do dia em que o contrato é gerado; total e vigência saem das contas. Tudo em preto.
+      const campos = aplicarAutomaticos(draftCampos, camposDoModelo, { hoje: new Date() })
+      const conteudo = conteudoEditado ? tirarVermelho(conteudoEditado) : montarContrato(campos, true)
+      const created = await contractsService.createContract(board.id, template.id, campos, conteudo, draftClientId, draftVendaLeadId)
       // Sai de "Boas-vindas" só agora que o contrato existe de verdade — não no clique de
       // "avançar" (senão, se a pessoa fechasse o formulário sem gerar, o cliente ficava perdido,
       // sem contrato e sem aparecer em lugar nenhum). Também é o que libera o "Marcar como
@@ -347,7 +367,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const regenerate = () => {
     if (!selected || !template) return
     if (!window.confirm('Isso reaplica os campos preenchidos no texto do modelo, sobrescrevendo o corpo atual do contrato (inclusive edições manuais). Continuar?')) return
-    const conteudo = applyPlaceholders(applyServicesTable(template.conteudo, selected.campos), selected.campos)
+    const conteudo = montarContrato(selected.campos, true)
     if (bodyRef.current) bodyRef.current.innerHTML = conteudo
     void contractsService.updateContract(selected.id, { conteudo })
   }
@@ -358,11 +378,11 @@ export function ContratoView({ pageId }: { pageId: string }) {
   // notar. Depois de assinado, o texto já foi pro cliente/Autentique — aí só o campo muda, o corpo
   // fica intocado (evita reescrever um documento que já pode ter sido baixado/assinado).
   const applyFieldsToContract = (contract: Contract, nextCampos: Record<string, string>) => {
-    if (!template || contract.status === 'assinado') {
+    if (!template || !modelo || contract.status === 'assinado') {
       void contractsService.updateContract(contract.id, { campos: nextCampos })
       return
     }
-    const conteudo = applyPlaceholders(applyServicesTable(template.conteudo, nextCampos), nextCampos)
+    const conteudo = montarContrato(nextCampos, true)
     if (editingBody && bodyRef.current && selected?.id === contract.id) bodyRef.current.innerHTML = conteudo
     void contractsService.updateContract(contract.id, { campos: nextCampos, conteudo })
   }
@@ -370,9 +390,16 @@ export function ContratoView({ pageId }: { pageId: string }) {
   // Só o campo "Nome Fantasia" (identificação na lista) fica editável aqui agora — sem geração
   // automática de texto, não precisa passar por applyFieldsToContract (mantida acima pra quando o
   // fluxo completo de modelo voltar).
+  /** Muda um campo e refaz as contas (total, vigência). Campo calculado que a pessoa digita à mão deixa de ser recalculado. */
+  const mudarCampo = (campos: Record<string, string>, name: string, value: string): Record<string, string> => {
+    const info = camposDoModelo.find((c) => c.nome === name)
+    const base = { ...campos, [name]: value }
+    return aplicarAutomaticos(info?.automatico ? marcarManual(base, name) : base, camposDoModelo)
+  }
+
   const saveField = (contract: Contract, name: string, value: string) => {
     // Contrato gerado pelo modelo: mudar um campo já reaplica no texto. Contrato com PDF anexado: só guarda o campo.
-    if (contract.conteudo.trim()) applyFieldsToContract(contract, { ...contract.campos, [name]: value })
+    if (contract.conteudo.trim()) applyFieldsToContract(contract, mudarCampo(contract.campos, name, value))
     else void contractsService.updateContract(contract.id, { campos: { ...contract.campos, [name]: value } })
   }
 
@@ -641,7 +668,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   <FieldForm
                     placeholders={placeholders}
                     campos={draftCampos}
-                    onChange={(name, value) => setDraftCampos((prev) => ({ ...prev, [name]: value }))}
+                    onChange={(name, value) => setDraftCampos((prev) => mudarCampo(prev, name, value))}
+                    modelo={camposDoModelo}
                     onCnpjBlur={() => fillFromCnpj()}
                     cnpjLoading={cnpjLoading}
                     onCepBlur={() => fillFromCep()}
@@ -657,7 +685,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     {modoPdf ? (
                       <Button onClick={registerContract} loading={creating} disabled={!draftPdfData}>Registrar contrato</Button>
                     ) : (
-                      <Button onClick={() => setPreviaOpen(true)} disabled={!template} leftIcon={<Eye className="h-4 w-4" />}>Ver prévia e gerar</Button>
+                      <Button onClick={() => { setPreviaEditando(false); setPreviaOpen(true) }} disabled={!template} leftIcon={<Eye className="h-4 w-4" />}>Ver prévia e gerar</Button>
                     )}
                   </div>
                 </div>
@@ -689,16 +717,16 @@ export function ContratoView({ pageId }: { pageId: string }) {
 
       <Modal
         open={previaOpen}
-        onClose={() => setPreviaOpen(false)}
+        onClose={() => { setPreviaOpen(false); setPreviaEditando(false) }}
         title="Prévia do contrato"
-        description="Confira como o contrato vai ficar. Campos em vermelho ainda estão vazios."
+        description="Confira como o contrato vai ficar. Campos em vermelho ainda estão vazios (no contrato gerado nada fica vermelho). Dá pra editar o texto à mão antes de gerar."
         size="xl"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setPreviaOpen(false)} disabled={creating}>Voltar e editar</Button>
+            <Button variant="ghost" onClick={() => { setPreviaOpen(false); setPreviaEditando(false) }} disabled={creating}>Voltar e editar</Button>
             <Button
               loading={creating}
-              onClick={async () => { await generate(); setPreviaOpen(false) }}
+              onClick={async () => { await generate(previaEditando ? previaRef.current?.innerHTML : null); setPreviaOpen(false); setPreviaEditando(false) }}
             >
               {camposVazios.length ? 'Gerar mesmo assim' : 'Gerar contrato'}
             </Button>
@@ -726,14 +754,37 @@ export function ContratoView({ pageId }: { pageId: string }) {
               <span className="inline-flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" />Contando as páginas…</span>
             )}
           </div>
-          <ZoomBar value={previaZoom} onChange={setPreviaZoom} />
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={previaEditando ? 'primary' : 'secondary'}
+              onClick={() => setPreviaEditando((v) => !v)}
+              leftIcon={<Pencil className="h-3.5 w-3.5" />}
+              title="Mexer no texto do contrato à mão antes de gerar"
+            >
+              {previaEditando ? 'Editando o texto' : 'Editar texto'}
+            </Button>
+            <ZoomBar value={previaZoom} onChange={setPreviaZoom} />
+          </div>
         </div>
+        {previaEditando && <RichTextToolbar targetRef={previaRef} extras className="mx-auto mb-2 max-w-[800px]" />}
         <div className="mx-auto max-h-[60vh] max-w-[800px] overflow-y-auto rounded-lg border border-line/60 bg-white">
-          <div
-            dangerouslySetInnerHTML={{ __html: conteudoPrevia }}
-            className="p-10 text-[12pt] leading-relaxed"
-            style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000', zoom: previaZoom / 100 }}
-          />
+          {previaEditando ? (
+            <div
+              ref={previaRef}
+              contentEditable
+              suppressContentEditableWarning
+              onPaste={aoColarComoNoWord}
+              className="p-10 text-[12pt] leading-relaxed outline-none"
+              style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000', zoom: previaZoom / 100 }}
+            />
+          ) : (
+            <div
+              dangerouslySetInnerHTML={{ __html: conteudoPrevia }}
+              className="p-10 text-[12pt] leading-relaxed"
+              style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000', zoom: previaZoom / 100 }}
+            />
+          )}
         </div>
       </Modal>
 
@@ -804,6 +855,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   placeholders={placeholders}
                   campos={selected.campos}
                   onChange={(name, value) => saveField(selected, name, value)}
+                  modelo={camposDoModelo}
                   onCnpjBlur={fillSelectedFromCnpj}
                   cnpjLoading={cnpjLoading}
                   onCepBlur={fillSelectedFromCep}
@@ -1195,6 +1247,7 @@ function FieldForm({
   placeholders,
   campos,
   onChange,
+  modelo,
   onCnpjBlur,
   cnpjLoading,
   onCepBlur,
@@ -1203,6 +1256,7 @@ function FieldForm({
   placeholders: string[]
   campos: Record<string, string>
   onChange: (name: string, value: string) => void
+  modelo?: CampoDoModelo[]
   onCnpjBlur: () => void
   cnpjLoading: boolean
   onCepBlur: () => void
@@ -1231,6 +1285,7 @@ function FieldForm({
           names={bySection.get(section)!}
           campos={campos}
           onChange={onChange}
+          modelo={modelo}
           onCnpjBlur={onCnpjBlur}
           cnpjLoading={cnpjLoading}
           onCepBlur={onCepBlur}
@@ -1247,6 +1302,7 @@ function FieldSection({
   names,
   campos,
   onChange,
+  modelo,
   onCnpjBlur,
   cnpjLoading,
   onCepBlur,
@@ -1257,6 +1313,7 @@ function FieldSection({
   names: string[]
   campos: Record<string, string>
   onChange: (name: string, value: string) => void
+  modelo?: CampoDoModelo[]
   onCnpjBlur: () => void
   cnpjLoading: boolean
   onCepBlur: () => void
@@ -1293,6 +1350,8 @@ function FieldSection({
                 name={name}
                 value={campos[name] ?? ''}
                 onChange={onChange}
+                info={modelo?.find((c) => c.nome === name)}
+                manual={campos[`__manual:${name}`] === '1'}
                 isCnpj={isCnpj}
                 isCep={isCep}
                 hint={hint}
@@ -1318,6 +1377,8 @@ function FieldInput({
   name,
   value,
   onChange,
+  info,
+  manual,
   isCnpj,
   isCep,
   hint,
@@ -1329,6 +1390,8 @@ function FieldInput({
   name: string
   value: string
   onChange: (name: string, value: string) => void
+  info?: CampoDoModelo
+  manual?: boolean
   isCnpj: boolean
   isCep: boolean
   hint?: string
@@ -1345,9 +1408,58 @@ function FieldInput({
     if (!focusedRef.current) setLocal(value)
   }, [value])
 
+  const tipo = info?.tipo ?? 'texto'
+  const caixa = 'h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent'
+  // De "DD/MM/AAAA" pro <input type="date"> e de volta.
+  const paraIso = (br: string) => { const m = br.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : '' }
+  const paraBr = (iso: string) => { const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}/${m[2]}/${m[1]}` : '' }
+
   return (
     <div className={isCnpj ? 'sm:col-span-2' : undefined}>
-      <label className="mb-1 block text-[11px] font-medium text-foreground/50">{name}</label>
+      <label className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-foreground/50">
+        {name}
+        {info?.automatico && (
+          <span className={cn('rounded-full px-1.5 py-px text-[9px] font-semibold', manual ? 'bg-warning/15 text-warning' : 'bg-success/15 text-success')}>
+            {manual ? 'editado à mão' : 'automático'}
+          </span>
+        )}
+      </label>
+      {tipo === 'fidelidade' ? (
+        <select value={value} onChange={(e) => onChange(name, e.target.value)} className={caixa}>
+          <option value="">Escolha a fidelidade…</option>
+          {['3', '6', '12'].map((m) => <option key={m} value={m}>{m} meses</option>)}
+        </select>
+      ) : tipo === 'moeda' ? (
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/45">R$</span>
+          <input
+            inputMode="decimal"
+            value={local}
+            onFocus={() => { focusedRef.current = true }}
+            onChange={(e) => setLocal(sanitizeCurrencyRaw(e.target.value))} // grava ao sair do campo, já formatado (um save atrasado desfaria a formatação)
+            onBlur={() => {
+              focusedRef.current = false
+              const n = lerMoeda(local)
+              const bonito = n == null ? '' : formatarMoeda(n)
+              setLocal(bonito)
+              if (bonito !== value) onChange(name, bonito)
+            }}
+            placeholder="0,00"
+            className={`${caixa} pl-9`}
+          />
+        </div>
+      ) : tipo === 'numero' ? (
+        <input
+          inputMode="numeric"
+          value={local}
+          onFocus={() => { focusedRef.current = true }}
+          onChange={(e) => { const n = e.target.value.replace(/\D/g, ''); setLocal(n); debouncedSave(n) }}
+          onBlur={() => { focusedRef.current = false; if (local !== value) onChange(name, local) }}
+          className={caixa}
+        />
+      ) : tipo === 'data' && info?.papel === 'primeiroVencimento' ? (
+        <input type="date" value={paraIso(value)} onChange={(e) => onChange(name, paraBr(e.target.value))} className={caixa} />
+      ) : (
       <div className="flex items-center gap-1.5">
         <input
           value={local}
@@ -1377,7 +1489,13 @@ function FieldInput({
           </button>
         )}
       </div>
+      )}
       {hint && <p className="mt-1 text-[10px] text-foreground/40">{hint}</p>}
+      {!hint && info?.papel && info.papel !== 'telas' && info.papel !== 'hoje' && info.papel !== 'fidelidade' && (
+        <p className="mt-1 text-[10px] italic text-foreground/35">No contrato: …{info.contexto}…</p>
+      )}
+      {info?.papel === 'total' && !manual && <p className="mt-1 text-[10px] text-foreground/40">Mensalidade × meses da fidelidade, sozinho. Pode editar se precisar.</p>}
+      {info?.papel === 'hoje' && <p className="mt-1 text-[10px] text-foreground/40">É a data do dia em que o contrato for gerado.</p>}
     </div>
   )
 }
@@ -1684,6 +1802,13 @@ function ServicesTableField({ value, onChange }: { value: string; onChange: (nex
           className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-2 text-xs font-medium text-foreground/50 transition-colors hover:bg-elevate/[0.04]"
         >
           <Plus className="h-3.5 w-3.5" /> Adicionar serviço
+        </button>
+        <button
+          type="button"
+          onClick={() => update([...rows, { codigo: String(rows.length + 1).padStart(2, '0'), nome: 'API OFICIAL DO WHATSAPP (ATÉ 3 NÚMEROS CONECTADOS)' }])}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-accent/40 py-2 text-xs font-medium text-accent transition-colors hover:bg-accent/[0.06]"
+        >
+          <Plus className="h-3.5 w-3.5" /> Adicionar API oficial do WhatsApp (até 3 números) — dá pra alterar o texto
         </button>
       </div>
     </div>

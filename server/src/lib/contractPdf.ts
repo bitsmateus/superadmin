@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer-core';
+import { tirarVermelho } from './corDoContrato.js';
 
 /**
  * Gera o PDF do contrato de verdade, renderizado no servidor via Chromium headless — sem passar
@@ -34,7 +35,7 @@ function renderHtml(bodyHtml: string, title: string): string {
   }
 </style>
 </head>
-<body>${bodyHtml}</body>
+<body>${tirarVermelho(bodyHtml)}</body>
 </html>`;
 }
 

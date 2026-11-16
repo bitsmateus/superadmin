@@ -33,11 +33,13 @@ const RAW_PLACEHOLDER_NAMES = new Set(['Tabela de Serviços'])
 
 /** Substitui cada placeholder pelo valor preenchido em `campos`. Sem valor (ou vazio) = mantém o
  * token visível, pintado de vermelho — mesmo aviso visual do documento original de referência. */
-export function applyPlaceholders(html: string, campos: Record<string, string>): string {
+export function applyPlaceholders(html: string, campos: Record<string, string>, opcoes: { marcarVazios?: boolean } = {}): string {
+  const marcarVazios = opcoes.marcarVazios ?? true
   return html.replace(PLACEHOLDER_RE, (full, rawName: string) => {
     const name = rawName.trim()
     const value = campos[name]?.trim()
-    if (!value) return `<span style="color:#dc2626;font-weight:600;">${full}</span>`
+    // Na prévia o que falta aparece em vermelho; no contrato gerado nada fica vermelho.
+    if (!value) return marcarVazios ? `<span style="color:#dc2626;font-weight:600;">${full}</span>` : full
     return RAW_PLACEHOLDER_NAMES.has(name) ? value : escapeHtml(value)
   })
 }
@@ -125,6 +127,14 @@ const SECTION_ALIASES: Record<string, PlaceholderSection> = {
   'estado': 'contratante',
   'uf': 'contratante',
   'numero de telas': 'servicos',
+  'valor da instalacao': 'valores',
+  'valor total': 'valores',
+  'valor das parcelas': 'valores',
+  'numero de parcelas': 'valores',
+  '3 / 6 / 12': 'valores',
+  'fidelidade (meses)': 'valores',
+  'x meses': 'vigencia',
+  'data': 'vigencia',
   'tabela de servicos': 'servicos',
   'valor de instalacao': 'valores',
   'valor mensal': 'valores',

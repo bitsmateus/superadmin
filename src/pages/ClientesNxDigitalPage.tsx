@@ -271,6 +271,8 @@ const segmento = (ativo: boolean) =>
  * Cadastro próprio do módulo (tabelas `gc_*`) — não é a lista do Suporte nem a de Clientes Geral
  * do Financeiro, de propósito: aqui o que importa é a entrega, não a cobrança.
  */
+const SEM_GESTOR = '__sem_gestor__'
+
 export function ClientesNxDigitalPage() {
   useModuloNxNoCelular()
   const navegar = useNavigate()
@@ -281,6 +283,8 @@ export function ClientesNxDigitalPage() {
   const [soProblemas, setSoProblemas] = React.useState(false)
   /** Filtra quem NÃO teve reunião desse tipo no mês corrente (ex.: sem retenção). */
   const [semReuniao, setSemReuniao] = React.useState<GcReuniaoTipo | ''>('')
+  // Filtro por gestor de tráfego: '' = todos, SEM_GESTOR = clientes sem gestor, senão o id do gestor.
+  const [gestor, setGestor] = React.useState('')
   // Preferências de exibição, lembradas neste navegador: a lista padrão é a de trabalho — sem a coluna de
   // prioridade e sem os clientes de teste.
   // Sempre à mostra: sem os seletores "Mostrar clientes de teste" e "Prioridade".
@@ -431,6 +435,7 @@ export function ClientesNxDigitalPage() {
     if (aba !== 'todos' && c.status !== aba) return false
     if (soProblemas && saude.nivel !== 'risco' && saude.nivel !== 'atencao') return false
     if (semReuniao && (c.reunioes?.[semReuniao]?.mes ?? 0) > 0) return false
+    if (gestor === SEM_GESTOR ? Boolean(c.gestor_trafego_id) : gestor && c.gestor_trafego_id !== gestor) return false
     if (!termo) return true
     const digitos = termo.replace(/\D/g, '')
     return (
@@ -457,8 +462,16 @@ export function ClientesNxDigitalPage() {
         .filter(passaNoFiltro)
         .sort(comparador),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clientesSituacao, aba, soProblemas, semReuniao, termo, ordem, mostrarTeste],
+    [clientesSituacao, aba, soProblemas, semReuniao, gestor, termo, ordem, mostrarTeste],
   )
+
+  // Gestores que aparecem nos clientes carregados (quem não gerencia nenhum não entra na lista).
+  const gestores = React.useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of clientes) if (c.gestor_trafego_id) m.set(c.gestor_trafego_id, c.gestor_trafego_nome || 'Sem nome')
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+  }, [clientes])
+  const temSemGestor = clientes.some((c) => !c.gestor_trafego_id)
 
   const contagem = (status: GcStatusCliente | 'todos') =>
     clientes.filter((c) => (mostrarTeste || !c.fora_dos_totais) && (status === 'todos' || c.status === status)).length
@@ -605,6 +618,24 @@ export function ClientesNxDigitalPage() {
                   </button>
                 ))}
               </div>
+            )}
+            {(gestores.length > 0 || gestor) && (
+              <label className="flex items-center gap-1.5 text-xs text-foreground/50">
+                <select
+                  value={gestor}
+                  onChange={(e) => setGestor(e.target.value)}
+                  aria-label="Filtrar por gestor de tráfego"
+                  className="h-9 rounded-lg border border-line bg-transparent px-2 text-sm text-foreground outline-none focus:border-accent/60"
+                >
+                  <option value="">Gestor: todos</option>
+                  {gestores.map(([id, nome]) => (
+                    <option key={id} value={id}>
+                      Gestor: {nome}
+                    </option>
+                  ))}
+                  {temSemGestor && <option value={SEM_GESTOR}>Sem gestor</option>}
+                </select>
+              </label>
             )}
             <label className="flex items-center gap-1.5 text-xs text-foreground/50">
               <select

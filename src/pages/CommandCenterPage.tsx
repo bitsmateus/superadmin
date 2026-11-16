@@ -248,7 +248,7 @@ function BillingQueue({ clients }: { clients: Client[] }) {
                 onClick={() => navigate('/financeiro')}
                 className="flex w-full items-center justify-center gap-1 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-xs text-foreground/70 hover:bg-elevate/[0.04]"
               >
-                Ver todos no Financeiro
+                Ver todos na Gestão
                 <ArrowRight className="h-3 w-3" />
               </button>
             </li>

@@ -478,7 +478,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       ...(seeFinancials
         ? [
             { to: '/comando', label: 'Comando', icon: Zap },
-            { to: '/financeiro', label: 'Financeiro', icon: Wallet },
+            { to: '/financeiro', label: 'Gestão', icon: Wallet },
           ]
         : []),
       { to: '/templates', label: 'Templates', icon: MessageSquare },
@@ -884,7 +884,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
                 : 'text-foreground/50 group-hover:text-foreground/75',
             )}
           />
-          <span>Financeiro</span>
+          <span>Gestão</span>
           <ChevronDown
             className={cn(
               'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',

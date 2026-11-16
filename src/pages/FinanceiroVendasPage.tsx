@@ -26,7 +26,7 @@ export function FinanceiroVendasPage() {
   if (!board) {
     return (
       <>
-        <TopBar title="Vendas" subtitle="Financeiro" />
+        <TopBar title="Vendas" subtitle="Gestão" />
         <div className="mx-auto mt-10 max-w-md rounded-2xl bg-card p-6 text-center shadow-sm">
           <ShoppingBag className="mx-auto h-8 w-8 text-foreground/30" />
           <p className="mt-3 text-sm font-medium text-foreground">Nenhum quadro de vendas configurado</p>

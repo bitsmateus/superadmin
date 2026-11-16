@@ -10,7 +10,7 @@ const labels: Record<string, string> = {
   atendimento: 'Monitor de Atendimento',
   clients: 'Clientes',
   pipeline: 'Pipeline',
-  financeiro: 'Financeiro',
+  financeiro: 'Gestão',
   users: 'Equipe',
   settings: 'Configurações',
   briefing: 'Briefing',

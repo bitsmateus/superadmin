@@ -26,7 +26,7 @@ export function FinanceiroContratoPage() {
   if (!board) {
     return (
       <>
-        <TopBar title="Contrato" subtitle="Financeiro" />
+        <TopBar title="Contrato" subtitle="Gestão" />
         <div className="mx-auto mt-10 max-w-md rounded-2xl bg-card p-6 text-center shadow-sm">
           <FileText className="mx-auto h-8 w-8 text-foreground/30" />
           <p className="mt-3 text-sm font-medium text-foreground">Nenhum quadro de contrato configurado</p>

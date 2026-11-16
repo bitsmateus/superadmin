@@ -82,10 +82,10 @@ export function FinanceiroPontosPage() {
   if (!pode) {
     return (
       <>
-        <TopBar title="Pontos" subtitle="Financeiro" />
+        <TopBar title="Pontos" subtitle="Gestão" />
         <div className="mx-auto mt-10 max-w-md rounded-2xl bg-card p-6 text-center shadow-sm">
           <Lock className="mx-auto h-7 w-7 text-foreground/30" />
-          <p className="mt-3 text-sm font-medium text-foreground">Acesso restrito ao administrador do Financeiro.</p>
+          <p className="mt-3 text-sm font-medium text-foreground">Acesso restrito ao administrador da Gestão.</p>
         </div>
       </>
     )
@@ -107,7 +107,7 @@ export function FinanceiroPontosPage() {
     <>
       <TopBar
         title="Pontos"
-        subtitle="Financeiro"
+        subtitle="Gestão"
         rightSlot={(
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" leftIcon={<History className="h-4 w-4" />} onClick={() => setModal('importacoes')}>Importações</Button>

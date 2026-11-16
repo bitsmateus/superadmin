@@ -187,7 +187,7 @@ export function FinancePage() {
   return (
     <>
       <TopBar
-        title="Financeiro"
+        title="Gestão"
         subtitle="MRR, implementações e inadimplência"
         rightSlot={
           <Button

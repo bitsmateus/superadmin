@@ -258,8 +258,8 @@ export function FinanceiroClientesGeralPage() {
     <>
       <TopBar
         title="CLIENTES GERAL"
-        subtitle="Financeiro"
-        breadcrumbs={[{ label: 'Grupo NX Digital', to: '/' }, { label: 'Financeiro' }, { label: 'Clientes Geral' }]}
+        subtitle="Gestão"
+        breadcrumbs={[{ label: 'Grupo NX Digital', to: '/' }, { label: 'Gestão' }, { label: 'Clientes Geral' }]}
       />
 
       <div className="px-4 pb-10 lg:px-6">

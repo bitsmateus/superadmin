@@ -109,6 +109,17 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const [creating, setCreating] = React.useState(false)
   // 'Já tenho o PDF pronto': registra um contrato feito por fora (fluxo antigo) em vez de gerar pelo modelo.
   const [modoPdf, setModoPdf] = React.useState(false)
+  // Prévia do contrato (com o que foi preenchido) antes de gerar.
+  const [previaOpen, setPreviaOpen] = React.useState(false)
+  const [previaZoom, setPreviaZoom] = React.useState(100)
+  const conteudoPrevia = React.useMemo(
+    () => (template ? applyPlaceholders(applyServicesTable(template.conteudo, draftCampos), draftCampos) : ''),
+    [template, draftCampos],
+  )
+  const camposVazios = React.useMemo(
+    () => placeholders.filter((p) => !(draftCampos[p] ?? '').trim()),
+    [placeholders, draftCampos],
+  )
   const [editTemplateOpen, setEditTemplateOpen] = React.useState(false)
   const [pdfLoading, setPdfLoading] = React.useState<'baixar' | 'ver' | null>(null)
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
@@ -607,7 +618,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     {modoPdf ? (
                       <Button onClick={registerContract} loading={creating} disabled={!draftPdfData}>Registrar contrato</Button>
                     ) : (
-                      <Button onClick={generate} loading={creating} disabled={!template}>Gerar contrato</Button>
+                      <Button onClick={() => setPreviaOpen(true)} disabled={!template} leftIcon={<Eye className="h-4 w-4" />}>Ver prévia e gerar</Button>
                     )}
                   </div>
                 </div>
@@ -636,6 +647,40 @@ export function ContratoView({ pageId }: { pageId: string }) {
           </>
         )}
       </div>
+
+      <Modal
+        open={previaOpen}
+        onClose={() => setPreviaOpen(false)}
+        title="Prévia do contrato"
+        description="Confira como o contrato vai ficar. Campos em vermelho ainda estão vazios."
+        size="xl"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setPreviaOpen(false)} disabled={creating}>Voltar e editar</Button>
+            <Button
+              loading={creating}
+              onClick={async () => { await generate(); setPreviaOpen(false) }}
+            >
+              {camposVazios.length ? 'Gerar mesmo assim' : 'Gerar contrato'}
+            </Button>
+          </>
+        }
+      >
+        {camposVazios.length > 0 && (
+          <div className="mb-3 rounded-lg border border-warning/30 bg-warning/[0.08] px-3 py-2 text-xs text-foreground/70">
+            <strong className="text-warning">{camposVazios.length} campo(s) sem preencher:</strong> {camposVazios.join(', ')}.
+            Dá pra gerar assim e completar depois dentro do contrato.
+          </div>
+        )}
+        <div className="mx-auto mb-2 flex max-w-[800px] justify-end"><ZoomBar value={previaZoom} onChange={setPreviaZoom} /></div>
+        <div className="mx-auto max-h-[60vh] max-w-[800px] overflow-y-auto rounded-lg border border-line/60 bg-white">
+          <div
+            dangerouslySetInnerHTML={{ __html: conteudoPrevia }}
+            className="p-10 text-[12pt] leading-relaxed"
+            style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000', zoom: previaZoom / 100 }}
+          />
+        </div>
+      </Modal>
 
       <EditTemplateModal open={editTemplateOpen} onClose={() => setEditTemplateOpen(false)} template={template} />
 

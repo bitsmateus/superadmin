@@ -10,7 +10,8 @@ import { sincronizarContagemNotas } from '../routes/leadBoards.js';
  *   marcada), nasce em "Demandas pendentes": nome e empresa = empresa do cliente, telefone, "Finalizar até" = data da
  *   entrega (quando tem); uma nota diz a etapa;
  * - trocou o responsável entre Jean e João: o MESMO card vai pro CRM do outro;
- * - entregue/ativo, ou deixou de ser do Jean/João: o card vai pro "Finalizado";
+ * - entregue/ativo, ou deixou de ser do Jean/João: o card vai pro "Finalizado" UMA vez só — se o Jean/João tirar o
+ *   card de lá depois (ex.: pra "Entregas realizadas"), ele fica onde a pessoa pôs (antes voltava a cada 2 minutos);
  * - o card nasce uma vez: apagado no CRM (lixeira), não volta. O que o Jean/João fazem no card não é desfeito.
  *
  * Roda na subida, a cada 2 minutos e logo depois de editar um cliente. Uma passada por vez (fila), então duas
@@ -60,9 +61,13 @@ async function passada(clientId?: string): Promise<void> {
     id: string; name: string | null; company: string | null; phone: string | null; stage: string;
     responsavel_entrega: string | null; delivery_date: string | null; crm_card_id: string | null;
     card_board: string | null; card_page: string | null; card_quadro: string | null; card_apagado: boolean | null;
+    card_ja_finalizado: boolean | null;
   }>(
     `SELECT c.id, c.name, c.company, c.phone, c.stage, c.responsavel_entrega, c.delivery_date, c.crm_card_id,
-            r.board_id AS card_board, lb.page AS card_page, lb.name AS card_quadro, (r.deleted_at IS NOT NULL) AS card_apagado
+            r.board_id AS card_board, lb.page AS card_page, lb.name AS card_quadro, (r.deleted_at IS NOT NULL) AS card_apagado,
+            EXISTS (SELECT 1 FROM lead_board_history h JOIN lead_boards hb ON hb.id = h.to_board_id
+                    WHERE h.lead_row_id = r.id AND h.moved_by = 'Pipeline'
+                      AND lower(trim(hb.name)) = 'finalizado') AS card_ja_finalizado
      FROM clients c
      LEFT JOIN lead_rows r ON r.id = c.crm_card_id
      LEFT JOIN lead_boards lb ON lb.id = r.board_id
@@ -99,7 +104,8 @@ async function passada(clientId?: string): Promise<void> {
     }
 
     // Entregue/ativo, ou não é mais do Jean/João: o card vai pro "Finalizado" do CRM em que está.
-    if (card && (ETAPAS_FINAIS.has(c.stage) || !crm)) {
+    // Só uma vez: se o Pipeline já levou esse card pro Finalizado, o que a pessoa fez depois vale.
+    if (card && !c.card_ja_finalizado && (ETAPAS_FINAIS.has(c.stage) || !crm)) {
       const fin = c.card_page ? porPagina.get(c.card_page)?.finalizado : null;
       const fechado = /^(finalizado|vendas do mes)/.test(normalizar(c.card_quadro));
       if (fin && c.card_board !== fin.id && !fechado) await moverCard(card, fin);

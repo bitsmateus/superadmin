@@ -1356,8 +1356,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     );
     if (!vendas.length) return {};
 
-    const clientes = await query<{ id: string; name: string; company: string; phone: string; tem_ficha: boolean }>(
-      `SELECT id, name, company, phone, (ficha_cadastro IS NOT NULL) AS tem_ficha FROM clients`
+    const clientes = await query<{ id: string; name: string; company: string; phone: string; tem_ficha: boolean; crm_lead_id: string | null }>(
+      `SELECT id, name, company, phone, (ficha_cadastro IS NOT NULL) AS tem_ficha, crm_lead_id FROM clients`
     );
     const contratos = await query<{ venda_lead_id: string; client_id: string }>(
       `SELECT venda_lead_id, client_id FROM contracts
@@ -1365,6 +1365,9 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     );
 
     const clientePorId = new Map(clientes.map((c) => [c.id, c]));
+    // Vínculo feito à mão (Boas-vindas ou aqui na lista de Vendas): ficha <-> lead. Vale mais que qualquer casamento automático.
+    const clientePorVinculo = new Map<string, typeof clientes[number]>();
+    for (const c of clientes) if (c.crm_lead_id) clientePorVinculo.set(c.crm_lead_id, c);
     const clientePorLead = new Map<string, typeof clientes[number]>();
     for (const ct of contratos) {
       const cli = clientePorId.get(ct.client_id);
@@ -1380,7 +1383,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
     const resultado: Record<string, { status: string; clientId: string | null }> = {};
     for (const v of vendas) {
       let cli =
-        clientePorLead.get(v.id) ?? (v.venda_origem_id ? clientePorLead.get(v.venda_origem_id) : undefined);
+        clientePorVinculo.get(v.id) ?? (v.venda_origem_id ? clientePorVinculo.get(v.venda_origem_id) : undefined)
+        ?? clientePorLead.get(v.id) ?? (v.venda_origem_id ? clientePorLead.get(v.venda_origem_id) : undefined);
 
       if (!cli) {
         const k = phoneKey(v.telefone);
@@ -1431,7 +1435,12 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         [base]
       );
 
+      // Vínculo feito à mão (ficha <-> lead) primeiro; depois o do contrato; depois o casamento por telefone/nome.
       let client = await queryOne<{ id: string; ficha_cadastro: unknown }>(
+        'SELECT id, ficha_cadastro FROM clients WHERE crm_lead_id = ANY($1) LIMIT 1',
+        [related.map((r) => r.id)]
+      );
+      if (!client) client = await queryOne<{ id: string; ficha_cadastro: unknown }>(
         `SELECT c.id, c.ficha_cadastro FROM contracts ct JOIN clients c ON c.id = ct.client_id
          WHERE ct.venda_lead_id = ANY($1) ORDER BY ct.created_at DESC LIMIT 1`,
         [related.map((r) => r.id)]
@@ -1447,6 +1456,30 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       }
       if (!client) return { status: 'nao_atrelada', clientId: null };
       return { status: client.ficha_cadastro ? 'preenchida' : 'pendente', clientId: client.id };
+    }
+  );
+
+  // PUT /api/lead-rows/:id/ficha-cliente — liga (ou troca; clientId null desliga) a ficha de cadastro/cliente a esta venda. O
+  // vínculo mora em clients.crm_lead_id (o mesmo da tela Boas-vindas) apontando pro lead ORIGINAL; um lead tem uma ficha só.
+  app.put<{ Params: { id: string }; Body: { clientId?: string | null } }>(
+    '/api/lead-rows/:id/ficha-cliente',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const u = req.user as { sub?: string; role?: string };
+      if (!ehDoFinanceiro(u.sub, u.role)) return reply.status(403).send({ message: 'Só o administrador do Financeiro vincula a ficha.' });
+      const lead = await queryOne<{ id: string; venda_origem_id: string | null }>('SELECT id, venda_origem_id FROM lead_rows WHERE id = $1', [req.params.id]);
+      if (!lead) return reply.status(404).send({ message: 'Venda não encontrada' });
+      const alvo = lead.venda_origem_id ?? lead.id;
+      const clientId = req.body?.clientId ?? null;
+      if (!clientId) {
+        await query('UPDATE clients SET crm_lead_id = NULL WHERE crm_lead_id = ANY($1)', [[lead.id, alvo]]);
+        return { clientId: null };
+      }
+      const cliente = await queryOne<{ id: string; tem_ficha: boolean }>('SELECT id, (ficha_cadastro IS NOT NULL) AS tem_ficha FROM clients WHERE id = $1', [clientId]);
+      if (!cliente) return reply.status(404).send({ message: 'Cliente não encontrado' });
+      await query('UPDATE clients SET crm_lead_id = NULL WHERE crm_lead_id = ANY($1) AND id <> $2', [[lead.id, alvo], clientId]);
+      await query('UPDATE clients SET crm_lead_id = $1 WHERE id = $2', [alvo, clientId]);
+      return { clientId, status: cliente.tem_ficha ? 'preenchida' : 'pendente' };
     }
   );
 

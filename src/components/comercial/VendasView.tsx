@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Award, FileText, Loader2, Plus, RotateCcw, ShoppingBag, Trash2, TrendingUp, Wrench } from 'lucide-react'
+import { Award, FileText, Link2, Loader2, Plus, RotateCcw, Search, ShoppingBag, Trash2, TrendingUp, Wrench } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
@@ -18,6 +18,7 @@ import {
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { useLeadBoards, useLeadRows } from '@/hooks/useLeadBoards'
 import { useCommissionEntries, useCommissionTypes } from '@/hooks/useCommissions'
+import { useClients } from '@/hooks/useClients'
 import { useContracts } from '@/hooks/useContracts'
 import { contractsService } from '@/services/contracts'
 import { addMonthsToId, currentMonthId, monthIdBounds, monthLabelPt } from '@/hooks/useMonthFilter'
@@ -129,14 +130,17 @@ export function VendasView({ pageId }: { pageId: string }) {
   // Estado da ficha de cadastro de cada venda, em uma consulta só (ver ficha-status-lote): a lista
   // mostra isso por linha, e perguntar de uma em uma deixaria a tela lenta.
   const [fichas, setFichas] = React.useState<Record<string, { status: string; clientId: string | null }>>({})
+  const [fichasVersao, setFichasVersao] = React.useState(0)
   React.useEffect(() => {
     let cancelado = false
     api.get<Record<string, { status: string; clientId: string | null }>>('/api/lead-rows/ficha-status-lote')
       .then((res) => { if (!cancelado) setFichas(res) })
       .catch(() => { if (!cancelado) setFichas({}) })
     return () => { cancelado = true }
-  }, [rows.length])
+  }, [rows.length, fichasVersao])
   const [fichaClientId, setFichaClientId] = React.useState<string | null>(null)
+  // Venda cuja ficha de cadastro está sendo vinculada à mão.
+  const [vincularFichaDe, setVincularFichaDe] = React.useState<string | null>(null)
   const commissionsInPeriod = React.useMemo(
     () => commissionEntries.filter(
       (e) => monthOverlapsRange(e.month, from, to) && (!sdrFiltro || e.person === sdrFiltro),
@@ -540,6 +544,7 @@ export function VendasView({ pageId }: { pageId: string }) {
                     tiposDeSdr={tiposDeSdr}
                     ficha={fichas[r.id]}
                     onAbrirCliente={setFichaClientId}
+                    onVincularFicha={() => setVincularFichaDe(r.id)}
                     selected={selectedIds.has(r.id)}
                     onToggleSelect={() => toggleSelect(r.id)}
                     // A linha daqui é uma CÓPIA que o sistema cria sozinho ao marcar "Vendido" —
@@ -664,6 +669,12 @@ export function VendasView({ pageId }: { pageId: string }) {
       />
       <LeadDetailModal mostrarContrato leadRowId={openLeadId} onClose={() => setOpenLeadId(null)} />
       <ClientDrawer clientId={fichaClientId} onClose={() => setFichaClientId(null)} />
+      <VincularFichaModal
+        row={vincularFichaDe ? rows.find((x) => x.id === vincularFichaDe) ?? null : null}
+        atual={vincularFichaDe ? fichas[vincularFichaDe]?.clientId ?? null : null}
+        onClose={() => setVincularFichaDe(null)}
+        onSalvo={() => setFichasVersao((v) => v + 1)}
+      />
       <RegisterCommissionModal
         open={commissionRegisterOpen}
         onClose={() => setCommissionRegisterOpen(false)}
@@ -706,34 +717,119 @@ function SummaryCard({
  * vermelho = pendente (cliente existe, sem ficha) ou sem cliente atrelado — nesses dois o clique
  * abre o formulário público pra mandar pro cliente. Mesma regra do botão dentro da lead. */
 function FichaCell({
-  ficha, onAbrirCliente,
+  ficha, onAbrirCliente, onVincular,
 }: {
   ficha: { status: string; clientId: string | null } | undefined
   onAbrirCliente: (clientId: string) => void
+  onVincular: () => void
 }) {
   if (!ficha) return <span className="text-xs text-foreground/25">—</span>
   const preenchida = ficha.status === 'preenchida' && !!ficha.clientId
+  const semCliente = ficha.status !== 'pendente' && !preenchida
   const titulo = preenchida
     ? 'Ficha preenchida — clique pra ver o cadastro do cliente'
     : ficha.status === 'pendente'
       ? 'Cliente cadastrado, mas ainda sem ficha. Clique pra abrir o formulário.'
-      : 'Nenhum cliente atrelado a essa venda. Clique pra abrir o formulário.'
+      : 'Nenhum cliente casou com essa venda por telefone ou nome (ou há mais de um parecido). Clique pra vincular a ficha de cadastro à mão.'
 
   return (
-    <button
-      type="button"
-      title={titulo}
-      onClick={() => {
-        if (preenchida) onAbrirCliente(ficha.clientId!)
-        else window.open(`${window.location.origin}/ficha`, '_blank', 'noopener,noreferrer')
-      }}
-      className={cn(
-        'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors lg:px-2 lg:py-0.5',
-        preenchida ? 'bg-success/10 text-success hover:bg-success/15' : 'bg-danger/10 text-danger hover:bg-danger/15',
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        title={titulo}
+        onClick={() => {
+          if (preenchida) onAbrirCliente(ficha.clientId!)
+          else if (semCliente) onVincular()
+          else window.open(`${window.location.origin}/ficha`, '_blank', 'noopener,noreferrer')
+        }}
+        className={cn(
+          'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors lg:px-2 lg:py-0.5',
+          preenchida ? 'bg-success/10 text-success hover:bg-success/15' : 'bg-danger/10 text-danger hover:bg-danger/15',
+        )}
+      >
+        {preenchida ? 'Preenchida' : ficha.status === 'pendente' ? 'Pendente' : 'Sem cliente'}
+      </button>
+      <button
+        type="button"
+        title={semCliente ? 'Vincular a ficha de cadastro' : 'Trocar a ficha de cadastro vinculada'}
+        onClick={onVincular}
+        className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/35 hover:bg-accent/10 hover:text-accent"
+      >
+        <Link2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
+
+/** Escolhe a ficha de cadastro (cliente) dessa venda, à mão — pra quando o telefone ou o nome não batem e o sistema não achou sozinho. */
+function VincularFichaModal({
+  row, atual, onClose, onSalvo,
+}: {
+  row: LeadRow | null
+  atual: string | null
+  onClose: () => void
+  onSalvo: () => void
+}) {
+  const clients = useClients()
+  const [q, setQ] = React.useState('')
+  const [salvando, setSalvando] = React.useState(false)
+  React.useEffect(() => { if (row) setQ('') }, [row?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const lista = React.useMemo(() => {
+    const n = q.trim().toLowerCase()
+    const nd = n.replace(/\D/g, '')
+    return clients
+      .filter((c) => !n || (c.company ?? '').toLowerCase().includes(n) || (c.name ?? '').toLowerCase().includes(n)
+        || (nd.length >= 3 && ((c.phone ?? '').replace(/\D/g, '').includes(nd) || (c.fichaCadastro?.cnpj ?? '').replace(/\D/g, '').includes(nd))))
+      // Quem tem ficha preenchida primeiro: é o que se costuma procurar.
+      .sort((a, b) => Number(!!b.fichaCadastro) - Number(!!a.fichaCadastro) || (a.company || a.name).localeCompare(b.company || b.name))
+      .slice(0, 40)
+  }, [clients, q])
+
+  const salvar = async (clientId: string | null) => {
+    if (!row) return
+    setSalvando(true)
+    try {
+      await api.put(`/api/lead-rows/${row.id}/ficha-cliente`, { clientId })
+      toast.success(clientId ? 'Ficha vinculada à venda.' : 'Vínculo removido.')
+      onSalvo()
+      onClose()
+    } catch (err) {
+      toast.error((err as Error).message || 'Não deu pra salvar o vínculo.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <Modal open={!!row} onClose={onClose} title="Vincular a ficha de cadastro" description={`Venda: ${row?.empresa || row?.nome || ''}. Escolha o cliente que preencheu a ficha.`} size="md">
+      <Input placeholder="Buscar por empresa, nome, telefone ou CNPJ…" value={q} onChange={(e) => setQ(e.target.value)} leftIcon={<Search className="h-4 w-4" />} autoFocus />
+      <div className="mt-3 max-h-80 space-y-1 overflow-y-auto">
+        {lista.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            disabled={salvando}
+            onClick={() => void salvar(c.id)}
+            className={cn('flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-elevate/[0.06]', c.id === atual && 'bg-accent/10')}
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium text-foreground">{c.company || c.name}</span>
+              <span className="block truncate text-xs text-foreground/50">{[c.name !== c.company ? c.name : '', c.phone].filter(Boolean).join(' · ') || '—'}</span>
+            </span>
+            <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium', c.fichaCadastro ? 'bg-success/10 text-success' : 'bg-elevate/[0.06] text-foreground/50')}>
+              {c.id === atual ? 'vinculada' : c.fichaCadastro ? 'ficha preenchida' : 'sem ficha'}
+            </span>
+          </button>
+        ))}
+        {lista.length === 0 && <p className="px-3 py-6 text-center text-xs text-foreground/40">Nenhum cliente encontrado.</p>}
+      </div>
+      {atual && (
+        <div className="mt-3 flex justify-end">
+          <Button variant="ghost" size="sm" disabled={salvando} onClick={() => void salvar(null)}>Remover o vínculo feito à mão</Button>
+        </div>
       )}
-    >
-      {preenchida ? 'Preenchida' : ficha.status === 'pendente' ? 'Pendente' : 'Sem cliente'}
-    </button>
+    </Modal>
   )
 }
 
@@ -966,6 +1062,7 @@ function VendaRow({
   onToggleSelect,
   onOpenLead,
   onAbrirCliente,
+  onVincularFicha,
 }: {
   row: LeadRow
   /** Contrato gerado pra essa venda na aba Contrato (null = ainda não existe). */
@@ -979,6 +1076,7 @@ function VendaRow({
   onToggleSelect: () => void
   onOpenLead: () => void
   onAbrirCliente: (clientId: string) => void
+  onVincularFicha: () => void
 }) {
   const [excluirOpen, setExcluirOpen] = React.useState(false)
 
@@ -1103,7 +1201,7 @@ function VendaRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        <FichaCell ficha={ficha} onAbrirCliente={onAbrirCliente} />
+        <FichaCell ficha={ficha} onAbrirCliente={onAbrirCliente} onVincular={onVincularFicha} />
       </td>
       <PendenteValueCell
         value={row.valorMrr}

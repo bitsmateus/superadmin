@@ -140,7 +140,9 @@ export async function clientRoutes(app: FastifyInstance) {
         'SELECT id, venda_lead_id FROM contracts WHERE client_id = $1 ORDER BY created_at DESC LIMIT 1',
         [req.params.id]
       );
-      return { contractId: contract?.id ?? null, vendaLeadId: contract?.venda_lead_id ?? null };
+      // Sem vínculo no contrato (ou sem contrato ainda): vale o da ficha de cadastro (tela Boas-vindas).
+      const ficha = await queryOne<{ crm_lead_id: string | null }>('SELECT crm_lead_id FROM clients WHERE id = $1', [req.params.id]);
+      return { contractId: contract?.id ?? null, vendaLeadId: contract?.venda_lead_id ?? ficha?.crm_lead_id ?? null };
     }
   );
 
@@ -154,13 +156,34 @@ export async function clientRoutes(app: FastifyInstance) {
     '/api/clients/:id/crm-lead',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
-      const client = await queryOne<{ phone: string | null; name: string | null; company: string | null }>(
-        'SELECT phone, name, company FROM clients WHERE id = $1',
+      const client = await queryOne<{ phone: string | null; name: string | null; company: string | null; crm_lead_id: string | null }>(
+        'SELECT phone, name, company, crm_lead_id FROM clients WHERE id = $1',
         [req.params.id]
       );
       if (!client) return reply.status(404).send({ message: 'Cliente não encontrado' });
 
+      // Vínculo salvo na ficha (Boas-vindas) ganha da sugestão automática.
+      if (client.crm_lead_id) return { leadId: client.crm_lead_id, salvo: true };
       const leadId = await findMatchingLeadRowId(client.phone, client.name, client.company);
+      return { leadId, salvo: false };
+    }
+  );
+
+  // PUT /api/clients/:id/crm-lead — liga (ou troca/remove, com leadId null) a lead do CRM a esta ficha de cadastro, na tela
+  // Boas-vindas (antes de existir contrato). Quando o contrato é gerado, o vínculo vai junto. Só quem vê o Financeiro.
+  app.put<{ Params: { id: string }; Body: { leadId?: string | null } }>(
+    '/api/clients/:id/crm-lead',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const u = req.user as { sub?: string; role?: string };
+      if (!ehDoFinanceiro(u.sub, u.role)) return reply.status(403).send({ message: 'Só o administrador do Financeiro vincula a lead.' });
+      const leadId = req.body?.leadId ?? null;
+      if (leadId) {
+        const lead = await queryOne<{ id: string }>('SELECT id FROM lead_rows WHERE id = $1', [leadId]);
+        if (!lead) return reply.status(404).send({ message: 'Lead não encontrada' });
+      }
+      const [row] = await query<{ id: string }>('UPDATE clients SET crm_lead_id = $1 WHERE id = $2 RETURNING id', [leadId, req.params.id]);
+      if (!row) return reply.status(404).send({ message: 'Cliente não encontrado' });
       return { leadId };
     }
   );

@@ -1059,6 +1059,9 @@ END; $$`);
   END $$`);
   await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS venda_lead_id UUID REFERENCES lead_rows(id) ON DELETE SET NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS contracts_venda_lead_id_idx ON contracts(venda_lead_id)`);
+  // Lead do CRM ligada à ficha de cadastro ANTES de existir contrato (tela Boas-vindas). Quando o contrato é gerado, o vínculo
+  // vai pra contracts.venda_lead_id.
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS crm_lead_id UUID REFERENCES lead_rows(id) ON DELETE SET NULL`);
 
   // "Pendente de contrato" passou a ser alimentada pela ficha de cadastro pública (app/ficha →
   // tabela clients, clients.ficha_cadastro) em vez de vendas registradas manualmente no CRM —

@@ -13,13 +13,14 @@ import { fetchSupportLeadView, type SupportLeadInfo } from '@/services/leadRowLo
  * dela — pelo quadro do Comercial se a pessoa tem acesso, ou por leitura pontual (Suporte). */
 function useEffectiveLead(clientId: string | null, vendaLeadId: string | null) {
   const [suggestedId, setSuggestedId] = React.useState<string | null>(null)
+  const [fichaSalva, setFichaSalva] = React.useState(false)
   const [fallbackLead, setFallbackLead] = React.useState<SupportLeadInfo | null>(null)
 
   React.useEffect(() => {
-    if (vendaLeadId || !clientId) { setSuggestedId(null); return }
+    if (vendaLeadId || !clientId) { setSuggestedId(null); setFichaSalva(false); return }
     let cancelled = false
     suggestCrmLead(clientId)
-      .then((res) => { if (!cancelled) setSuggestedId(res.leadId) })
+      .then((res) => { if (!cancelled) { setSuggestedId(res.leadId); setFichaSalva(!!res.salvo) } })
       .catch(() => { if (!cancelled) setSuggestedId(null) })
     return () => { cancelled = true }
   }, [clientId, vendaLeadId])
@@ -39,7 +40,8 @@ function useEffectiveLead(clientId: string | null, vendaLeadId: string | null) {
   return {
     effectiveId,
     row,
-    isSuggestion: !vendaLeadId && !!suggestedId,
+    // O vínculo salvo na ficha (Boas-vindas) não é sugestão: já foi confirmado.
+    isSuggestion: !vendaLeadId && !!suggestedId && !fichaSalva,
     displayName: row?.nome || row?.empresa || fallbackLead?.nome || fallbackLead?.empresa,
     displaySdr: row?.sdr || fallbackLead?.sdr,
     hasLead: !!effectiveId && !!(row || fallbackLead),
@@ -136,7 +138,7 @@ export function LeadLinkPanel({
   )
 }
 
-function LeadPickerModal({
+export function LeadPickerModal({
   open,
   onClose,
   onSelect,

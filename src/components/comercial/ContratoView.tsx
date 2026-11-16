@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/Modal'
 import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
 import { addMonthsToId, currentMonthId, useMonthFilter, withinBounds } from '@/hooks/useMonthFilter'
 import { useAuth } from '@/hooks/useAuth'
-import { useLeadBoards } from '@/hooks/useLeadBoards'
+import { useLeadBoards, useLeadRow } from '@/hooks/useLeadBoards'
 import { useClients } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { canDeleteClient } from '@/services/supabase'
@@ -32,7 +32,8 @@ import { formatCnpj, isValidCnpjLength } from '@/lib/cnpj'
 import { formatCep, isValidCepLength } from '@/lib/cep'
 import { openContractSheet } from '@/lib/contractSheet'
 import { RichTextToolbar } from '@/components/comercial/RichTextToolbar'
-import { LeadLinkPanel } from '@/components/comercial/LeadLinkPanel'
+import { LeadLinkPanel, LeadPickerModal } from '@/components/comercial/LeadLinkPanel'
+import { salvarLeadDaFicha, suggestCrmLead } from '@/services/crmLeadLookup'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { formatDateShort, initials } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -918,6 +919,71 @@ function StageTabCard({
  * contrato gerado — fila de "falta fazer o contrato". Clicar no nome abre a ficha completa do
  * cliente (mesmo drawer usado em Clientes/Pipeline); "Criar contrato" só existe lá dentro — não dá
  * pra gerar um contrato sem antes ver a ficha. */
+/** Lead do CRM ligada à ficha de cadastro, na tela Boas-vindas (antes de existir contrato): mostra o vínculo confirmado ou a
+ * sugestão automática (telefone/nome), e deixa vincular, confirmar a sugestão, trocar ou remover. O vínculo vai pro contrato
+ * quando ele é gerado. */
+function ClientLeadCell({ clientId }: { clientId: string }) {
+  const [leadId, setLeadId] = React.useState<string | null>(null)
+  const [salvo, setSalvo] = React.useState(false)
+  const [pickerOpen, setPickerOpen] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const row = useLeadRow(leadId)
+
+  React.useEffect(() => {
+    let cancelled = false
+    suggestCrmLead(clientId)
+      .then((r) => { if (!cancelled) { setLeadId(r.leadId); setSalvo(!!r.salvo) } })
+      .catch(() => { if (!cancelled) { setLeadId(null); setSalvo(false) } })
+    return () => { cancelled = true }
+  }, [clientId])
+
+  const salvar = async (next: string | null) => {
+    setSaving(true)
+    try {
+      await salvarLeadDaFicha(clientId, next)
+      if (next) { setLeadId(next); setSalvo(true) }
+      else {
+        // Removido: volta a mostrar a sugestão automática (se houver).
+        const r = await suggestCrmLead(clientId).catch(() => ({ leadId: null, salvo: false }))
+        setLeadId(r.leadId); setSalvo(!!r.salvo)
+      }
+      toast.success(next ? 'Lead vinculada à ficha.' : 'Vínculo removido.')
+    } catch (err) {
+      toast.error((err as Error).message || 'Não deu pra salvar o vínculo.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="truncate text-xs">
+        {leadId ? (
+          <>
+            <span className="font-medium text-foreground">{row?.nome || row?.empresa || 'Lead do CRM'}</span>
+            {row?.sdr ? <span className="text-foreground/40"> — SDR {row.sdr}</span> : null}
+            {!salvo ? <span className="text-foreground/40"> (sugestão)</span> : null}
+          </>
+        ) : (
+          <span className="text-foreground/40">Nenhuma lead vinculada</span>
+        )}
+      </span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {leadId && !salvo && (
+          <Button size="sm" variant="secondary" loading={saving} onClick={() => void salvar(leadId)}>Confirmar</Button>
+        )}
+        <Button size="sm" variant="secondary" disabled={saving} onClick={() => setPickerOpen(true)}>{leadId ? 'Trocar' : 'Vincular lead'}</Button>
+        {leadId && salvo && (
+          <button type="button" title="Remover vínculo" disabled={saving} onClick={() => void salvar(null)} className="rounded-md p-1 text-foreground/40 hover:bg-danger/10 hover:text-danger">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      <LeadPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={(id) => void salvar(id)} />
+    </div>
+  )
+}
+
 function PendingClientsList({
   clients,
   onOpen,
@@ -941,6 +1007,7 @@ function PendingClientsList({
             <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
               <th className="px-4 py-3">Empresa</th>
               <th className="w-40 px-4 py-3">CNPJ</th>
+              <th className="w-56 px-4 py-3">Lead do CRM</th>
               <th className="w-32 px-4 py-3">Entrada</th>
               <th className="w-24 px-4 py-3">Na etapa</th>
               <th className="w-24 px-2 py-3" />
@@ -949,7 +1016,7 @@ function PendingClientsList({
           <tbody>
             {clients.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-foreground/40">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-foreground/40">
                   {emptyText}
                 </td>
               </tr>
@@ -969,6 +1036,7 @@ function PendingClientsList({
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-foreground/70">{c.fichaCadastro?.cnpj ? formatCnpj(c.fichaCadastro.cnpj) : '—'}</td>
+                <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}><ClientLeadCell clientId={c.id} /></td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-foreground/70">{formatDateShort(c.createdAt)}</td>
                 <td className="px-4 py-3 text-sm"><StageAgeBadge stage={c.stage} since={c.stageUpdatedAt ?? c.createdAt} /></td>
                 <td className="px-2 py-3">

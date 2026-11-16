@@ -4,8 +4,13 @@ import { api } from '@/services/api'
  * desse cliente (por telefone, com fallback pro nome/empresa — ver server/src/lib/leadMatch.ts);
  * leadId: null se não achar exatamente 1 correspondência. É só uma SUGESTÃO — quem está gerando o
  * contrato pode confirmar/trocar o vínculo à mão (ver LeadLinkPanel). */
-export function suggestCrmLead(clientId: string): Promise<{ leadId: string | null }> {
-  return api.get<{ leadId: string | null }>(`/api/clients/${clientId}/crm-lead`)
+export function suggestCrmLead(clientId: string): Promise<{ leadId: string | null; salvo?: boolean }> {
+  return api.get<{ leadId: string | null; salvo?: boolean }>(`/api/clients/${clientId}/crm-lead`)
+}
+
+/** Liga (ou troca; null remove) a lead do CRM à ficha de cadastro — tela Boas-vindas, antes de existir contrato. */
+export function salvarLeadDaFicha(clientId: string, leadId: string | null): Promise<{ leadId: string | null }> {
+  return api.put<{ leadId: string | null }>(`/api/clients/${clientId}/crm-lead`, { leadId })
 }
 
 /** Resumo do contrato desse cliente (id + vínculo já confirmado) — sem passar pela allowlist de

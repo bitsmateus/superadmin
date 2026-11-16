@@ -106,12 +106,13 @@ export async function contractRoutes(app: FastifyInstance) {
       // "Vincular lead" em cada contrato, e quase nenhum tinha. Continua trocável à mão na tela.
       let vendaLeadId = req.body.vendaLeadId ?? null;
       if (!vendaLeadId && req.body.clientId) {
-        const cliente = await queryOne<{ phone: string | null; name: string | null; company: string | null }>(
-          'SELECT phone, name, company FROM clients WHERE id = $1',
+        const cliente = await queryOne<{ phone: string | null; name: string | null; company: string | null; crm_lead_id: string | null }>(
+          'SELECT phone, name, company, crm_lead_id FROM clients WHERE id = $1',
           [req.body.clientId]
         );
         if (cliente) {
-          vendaLeadId = await findMatchingLeadRowId(cliente.phone, cliente.name, cliente.company);
+          // O vínculo confirmado na ficha (Boas-vindas) vale mais que a sugestão por telefone/nome.
+          vendaLeadId = cliente.crm_lead_id ?? await findMatchingLeadRowId(cliente.phone, cliente.name, cliente.company);
         }
       }
 

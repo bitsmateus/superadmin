@@ -314,3 +314,12 @@ test('hora extra: chegar 10 min antes (07:50) já conta; depois das 18:00 conta 
   // O almoço (12:00 às 13:30) nunca vira extra.
   assert.equal(dia(['08:00', '12:40', '13:00', '18:00']).extraMinutos, 0);
 });
+
+test('Arthur dia 16: 13:30 às 17:30, sem manhã: -4h30 (manhã inteira + 30 min da tarde), em R$ com "descontar saldo"', () => {
+  const cfg = { ...CFG, inicioControle: '2026-11-10', salarioBaseCentavos: 190000, divisorMensal: 220, destinoExtra: 'banco' as const };
+  const d = calcularDia({ data: '2026-11-16', batidas: ['13:30', '17:30'], cfg, coberto: true, hoje: '2026-11-16', ajustes: [{ tipo: 'descontar_saldo' }] });
+  assert.equal(d.trabalhadoMinutos, 240);
+  assert.equal(d.saldoMinutos, -270);
+  assert.equal(d.bancoMinutos, 0);
+  assert.equal(d.descontoCentavos, Math.round((270 * valorHora(cfg)) / 60));
+});

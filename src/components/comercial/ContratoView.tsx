@@ -105,6 +105,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const [cnpjLoading, setCnpjLoading] = React.useState(false)
   const [cepLoading, setCepLoading] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
+  // 'Já tenho o PDF pronto': registra um contrato feito por fora (fluxo antigo) em vez de gerar pelo modelo.
+  const [modoPdf, setModoPdf] = React.useState(false)
   const [editTemplateOpen, setEditTemplateOpen] = React.useState(false)
   const [pdfLoading, setPdfLoading] = React.useState<'baixar' | 'ver' | null>(null)
   const [openClientId, setOpenClientId] = React.useState<string | null>(null)
@@ -209,12 +211,26 @@ export function ContratoView({ pageId }: { pageId: string }) {
   }
 
   const startNew = (client?: Client) => {
-    setDraftCampos(client ? { 'Nome Fantasia': client.company || client.name } : {})
+    const campos: Record<string, string> = {}
+    for (const name of placeholders) {
+      const def = defaultValueFor(name)
+      if (def) campos[name] = def
+    }
+    if (placeholders.includes('Tabela de Serviços')) campos['Tabela de Serviços'] = JSON.stringify(DEFAULT_SERVICE_ROWS)
+    if (client) {
+      campos['Nome Fantasia'] = client.company || client.name
+      const cnpj = client.fichaCadastro?.cnpj
+      if (cnpj && placeholders.includes('CNPJ')) campos['CNPJ'] = formatCnpj(cnpj)
+    }
+    setDraftCampos(campos)
     setDraftClientId(client?.id ?? null)
     setDraftVendaLeadId(null)
     setDraftPdfData(null)
     setDraftPdfFilename(null)
+    setModoPdf(false)
     setTab('criar')
+    // Já veio da ficha com o CNPJ — dispara a busca sozinho, sem esperar o blur do campo.
+    if (client?.fichaCadastro?.cnpj && placeholders.includes('CNPJ')) void fillFromCnpj(client.fichaCadastro.cnpj)
   }
 
   const generate = async () => {
@@ -302,7 +318,9 @@ export function ContratoView({ pageId }: { pageId: string }) {
   // automática de texto, não precisa passar por applyFieldsToContract (mantida acima pra quando o
   // fluxo completo de modelo voltar).
   const saveField = (contract: Contract, name: string, value: string) => {
-    void contractsService.updateContract(contract.id, { campos: { ...contract.campos, [name]: value } })
+    // Contrato gerado pelo modelo: mudar um campo já reaplica no texto. Contrato com PDF anexado: só guarda o campo.
+    if (contract.conteudo.trim()) applyFieldsToContract(contract, { ...contract.campos, [name]: value })
+    else void contractsService.updateContract(contract.id, { campos: { ...contract.campos, [name]: value } })
   }
 
   const fillSelectedFromCnpj = async () => {
@@ -472,6 +490,11 @@ export function ContratoView({ pageId }: { pageId: string }) {
       <TopBar
         title="Contrato"
         subtitle={`${contracts.length} contrato(s) registrado(s)`}
+        rightSlot={
+          <Button variant="secondary" onClick={() => setEditTemplateOpen(true)} leftIcon={<Settings className="h-4 w-4" />}>
+            Editar modelo padrão
+          </Button>
+        }
       />
 
       <div className="px-1 pb-8">
@@ -530,28 +553,60 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     </span>
                   )}
                 </div>
+                {!modoPdf && placeholders.length > 0 && (() => {
+                  const filled = placeholders.filter((p) => (draftCampos[p] ?? '').trim() !== '').length
+                  return (
+                    <div className="mb-3 flex items-center gap-2.5">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-elevate/[0.08]">
+                        <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${Math.round((filled / placeholders.length) * 100)}%` }} />
+                      </div>
+                      <span className="shrink-0 text-[11px] font-medium text-foreground/45">{filled}/{placeholders.length} campos preenchidos</span>
+                    </div>
+                  )
+                })()}
                 <LeadLinkPanel clientId={draftClientId} vendaLeadId={draftVendaLeadId} onLink={setDraftVendaLeadId} />
-                <div className="mb-4">
-                  <label className="mb-1 block text-[11px] font-medium text-foreground/50">
-                    Nome (identificação do contrato)
-                  </label>
-                  <input
-                    value={draftCampos['Nome Fantasia'] ?? ''}
-                    onChange={(e) => setDraftCampos((prev) => ({ ...prev, 'Nome Fantasia': e.target.value }))}
-                    placeholder="Ex.: Empresa Cliente Ltda"
-                    className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+                {modoPdf ? (
+                  <>
+                    <div className="mb-4">
+                      <label className="mb-1 block text-[11px] font-medium text-foreground/50">Nome (identificação do contrato)</label>
+                      <input
+                        value={draftCampos['Nome Fantasia'] ?? ''}
+                        onChange={(e) => setDraftCampos((prev) => ({ ...prev, 'Nome Fantasia': e.target.value }))}
+                        placeholder="Ex.: Empresa Cliente Ltda"
+                        className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+                      />
+                    </div>
+                    <ContractPdfField
+                      data={draftPdfData}
+                      filename={draftPdfFilename}
+                      onChange={(data, filename) => { setDraftPdfData(data); setDraftPdfFilename(filename) }}
+                    />
+                  </>
+                ) : !template ? (
+                  <p className="py-6 text-center text-sm text-foreground/40">Nenhum modelo de contrato cadastrado.</p>
+                ) : (
+                  <FieldForm
+                    placeholders={placeholders}
+                    campos={draftCampos}
+                    onChange={(name, value) => setDraftCampos((prev) => ({ ...prev, [name]: value }))}
+                    onCnpjBlur={() => fillFromCnpj()}
+                    cnpjLoading={cnpjLoading}
+                    onCepBlur={() => fillFromCep()}
+                    cepLoading={cepLoading}
                   />
-                </div>
-                <ContractPdfField
-                  data={draftPdfData}
-                  filename={draftPdfFilename}
-                  onChange={(data, filename) => { setDraftPdfData(data); setDraftPdfFilename(filename) }}
-                />
-                <div className="mt-4 flex justify-end gap-2">
-                  <Button variant="ghost" onClick={() => changeTab('boas-vindas')}>Cancelar</Button>
-                  <Button onClick={registerContract} loading={creating} disabled={!draftPdfData}>
-                    Registrar contrato
-                  </Button>
+                )}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                  <button type="button" onClick={() => setModoPdf((v) => !v)} className="text-xs text-foreground/50 underline-offset-2 hover:text-foreground hover:underline">
+                    {modoPdf ? 'Voltar pro formulário do modelo' : 'Já tenho o PDF pronto'}
+                  </button>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" onClick={() => changeTab('boas-vindas')}>Cancelar</Button>
+                    {modoPdf ? (
+                      <Button onClick={registerContract} loading={creating} disabled={!draftPdfData}>Registrar contrato</Button>
+                    ) : (
+                      <Button onClick={generate} loading={creating} disabled={!template}>Gerar contrato</Button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -599,11 +654,13 @@ export function ContratoView({ pageId }: { pageId: string }) {
         title={selected ? contractLabel(selected) : ''}
         size="xl"
       >
-        {selected && (
+        {selected && (() => {
+          const temTexto = selected.conteudo.trim() !== ''
+          return (
           <div className="space-y-4">
             <div className="rounded-2xl bg-elevate/[0.03] p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-foreground">Dados do contrato</span>
+                <span className="text-sm font-semibold text-foreground">{temTexto ? 'Campos do cliente' : 'Dados do contrato'}</span>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
@@ -615,6 +672,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   >
                     Ver ficha de cadastro
                   </Button>
+                  {temTexto && selected.status !== 'assinado' && <Button size="sm" variant="secondary" onClick={regenerate}>Reaplicar no texto</Button>}
                   <Button
                     size="sm"
                     variant={selected.status === 'assinado' ? 'secondary' : 'primary'}
@@ -625,6 +683,9 @@ export function ContratoView({ pageId }: { pageId: string }) {
                   </Button>
                 </div>
               </div>
+              {temTexto && (
+                <AutentiqueEnviar contract={selected} getHtml={currentBodyHtml} />
+              )}
               <AutentiqueField
                 contractId={selected.id}
                 value={selected.autentiqueDocumentId}
@@ -635,29 +696,74 @@ export function ContratoView({ pageId }: { pageId: string }) {
                 vendaLeadId={selected.vendaLeadId}
                 onLink={(id) => void contractsService.updateContract(selected.id, { vendaLeadId: id })}
               />
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-foreground/50">
-                  Nome (identificação do contrato)
-                </label>
-                <input
-                  value={selected.campos['Nome Fantasia'] ?? ''}
-                  onChange={(e) => saveField(selected, 'Nome Fantasia', e.target.value)}
-                  placeholder="Ex.: Empresa Cliente Ltda"
-                  className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+              {temTexto ? (
+                <FieldForm
+                  placeholders={placeholders}
+                  campos={selected.campos}
+                  onChange={(name, value) => saveField(selected, name, value)}
+                  onCnpjBlur={fillSelectedFromCnpj}
+                  cnpjLoading={cnpjLoading}
+                  onCepBlur={fillSelectedFromCep}
+                  cepLoading={cepLoading}
                 />
-              </div>
+              ) : (
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-foreground/50">Nome (identificação do contrato)</label>
+                  <input
+                    value={selected.campos['Nome Fantasia'] ?? ''}
+                    onChange={(e) => saveField(selected, 'Nome Fantasia', e.target.value)}
+                    placeholder="Ex.: Empresa Cliente Ltda"
+                    className="h-9 w-full rounded-lg border border-line px-3 text-sm text-foreground/70 outline-none focus:border-accent"
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="rounded-2xl bg-elevate/[0.03] p-4">
-              <span className="mb-3 block text-sm font-semibold text-foreground">Contrato (PDF)</span>
-              <ContractPdfField
-                data={selected.pdfData}
-                filename={selected.pdfFilename}
-                onChange={(data, filename) => void contractsService.updateContract(selected.id, { pdfData: data, pdfFilename: filename })}
-              />
-            </div>
+            {temTexto ? (
+              <div className="rounded-2xl bg-elevate/[0.03] p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-foreground">Contrato</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" onClick={download} loading={pdfLoading === 'baixar'} leftIcon={<Download className="h-3.5 w-3.5" />}>Baixar PDF</Button>
+                    <Button size="sm" variant="secondary" onClick={printContract} leftIcon={<Printer className="h-3.5 w-3.5" />}>Imprimir</Button>
+                    <Button size="sm" variant="secondary" onClick={viewContractSheet} loading={pdfLoading === 'ver'} leftIcon={<Eye className="h-3.5 w-3.5" />}>Ver PDF</Button>
+                    {editingBody ? (
+                      <Button size="sm" variant="secondary" onClick={saveNow} leftIcon={<Save className="h-3.5 w-3.5" />}>Salvar no histórico</Button>
+                    ) : (
+                      <Button size="sm" variant="secondary" onClick={() => setEditingBody(true)} leftIcon={<Pencil className="h-3.5 w-3.5" />}>Editar texto</Button>
+                    )}
+                  </div>
+                </div>
+                {editingBody ? (
+                  <div
+                    ref={bodyRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={(e) => debouncedSaveBody((e.target as HTMLDivElement).innerHTML)}
+                    className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[12pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
+                    style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
+                  />
+                ) : (
+                  <div
+                    dangerouslySetInnerHTML={{ __html: selected.conteudo }}
+                    className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[12pt] leading-relaxed"
+                    style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-elevate/[0.03] p-4">
+                <span className="mb-3 block text-sm font-semibold text-foreground">Contrato (PDF)</span>
+                <ContractPdfField
+                  data={selected.pdfData}
+                  filename={selected.pdfFilename}
+                  onChange={(data, filename) => void contractsService.updateContract(selected.id, { pdfData: data, pdfFilename: filename })}
+                />
+              </div>
+            )}
           </div>
-        )}
+          )
+        })()}
       </Modal>
     </>
   )
@@ -1227,9 +1333,86 @@ function ContractPdfField({
   )
 }
 
-/** Vínculo com o documento no Autentique — o contrato é gerado aqui, mas enviado pra assinatura
- * lá fora (a pessoa sobe o PDF manualmente, não existe criação via API). Colar o ID (ou o link)
- * do documento aqui é o que liga o webhook de "documento assinado" de volta a este contrato, pra
+/** Gera o documento no Autentique por dentro do sistema: a NX já sai assinada (conta do token) e o link do
+ * cliente aparece aqui pra copiar e mandar. Nada é enviado ao cliente automaticamente. */
+function AutentiqueEnviar({ contract, getHtml }: { contract: Contract; getHtml: () => string }) {
+  const [enviando, setEnviando] = React.useState(false)
+  const [linkNx, setLinkNx] = React.useState<string | null>(null)
+  const [erroNx, setErroNx] = React.useState<string | null>(null)
+  const jaEnviado = !!contract.autentiqueDocumentId && !!contract.autentiqueEnviadoEm
+  const assinado = contract.status === 'assinado'
+
+  const copiar = async (texto: string) => {
+    try {
+      await navigator.clipboard.writeText(texto)
+      toast.success('Link copiado.')
+    } catch {
+      toast.error('Não deu pra copiar — selecione e copie o link.')
+    }
+  }
+
+  const enviar = async () => {
+    if (jaEnviado && !window.confirm('Este contrato já foi enviado ao Autentique. Criar outro documento (o anterior continua lá)?')) return
+    setEnviando(true)
+    try {
+      const r = await contractsService.enviarAutentique(contract.id, getHtml(), jaEnviado)
+      setLinkNx(r.linkNx)
+      setErroNx(r.erroNx)
+      toast.success(r.nxAssinou ? 'Documento criado e assinado pela NX. Link do cliente pronto.' : 'Documento criado. A NX ainda precisa assinar.')
+    } catch (err) {
+      toast.error((err as Error).message || 'Falha ao enviar pro Autentique.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-accent/25 bg-accent/[0.04] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Assinatura eletrônica (Autentique)</p>
+          <p className="text-[11px] text-foreground/50">
+            Cria o documento no Autentique, já assinado pela NX. Você só copia o link e manda pro cliente — nada é enviado a ele daqui.
+          </p>
+        </div>
+        {!assinado && (
+          <Button size="sm" onClick={enviar} loading={enviando} leftIcon={<FileText className="h-3.5 w-3.5" />}>
+            {jaEnviado ? 'Gerar outro documento' : 'Gerar link de assinatura'}
+          </Button>
+        )}
+      </div>
+      {jaEnviado && contract.autentiqueLinkCliente && (
+        <div className="mt-3 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-medium text-foreground/50">Link do cliente</span>
+            <input readOnly value={contract.autentiqueLinkCliente} onFocus={(e) => e.target.select()} className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-card px-2.5 text-xs text-foreground/80" />
+            <Button size="sm" variant="secondary" onClick={() => void copiar(contract.autentiqueLinkCliente!)}>Copiar</Button>
+            <Button size="sm" variant="ghost" onClick={() => window.open(contract.autentiqueLinkCliente!, '_blank')}>Abrir</Button>
+          </div>
+          <p className="text-[11px] text-foreground/50">
+            {contract.autentiqueNxAssinou ? '✓ NX já assinou.' : '⚠ A NX ainda não assinou (assine no Autentique antes de mandar o link ao cliente).'}
+            {' '}Quando o cliente assinar, o contrato marca como assinado sozinho aqui (em até 10 min).
+          </p>
+        </div>
+      )}
+      {(linkNx || erroNx) && !contract.autentiqueNxAssinou && (
+        <div className="mt-2 rounded-lg bg-warning/10 p-2 text-[11px] text-foreground/70">
+          {erroNx && <p>Não consegui assinar pela NX automaticamente: {erroNx}</p>}
+          {linkNx && (
+            <p className="mt-1 flex flex-wrap items-center gap-2">
+              Link pra NX assinar:
+              <a href={linkNx} target="_blank" rel="noreferrer" className="font-medium text-accent underline">{linkNx}</a>
+              <Button size="sm" variant="secondary" onClick={() => void copiar(linkNx)}>Copiar</Button>
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Vínculo com o documento no Autentique — normalmente preenchido sozinho ao gerar o link acima; também dá pra colar o ID
+ * (ou o link) de um documento criado à mão lá. É o id que liga o "documento assinado" de volta a este contrato, pra
  * marcar como assinado e avançar o cliente pra Briefing sozinho (ver server/src/routes/webhooks.ts). */
 function AutentiqueField({
   contractId,

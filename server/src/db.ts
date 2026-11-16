@@ -1102,6 +1102,10 @@ END; $$`);
   // assinado" de volta a este contrato específico (ver server/src/routes/webhooks.ts).
   await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS autentique_document_id TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS contracts_autentique_document_id_idx ON contracts(autentique_document_id) WHERE autentique_document_id IS NOT NULL`);
+  // Envio pelo próprio sistema (lib/autentique.ts): link do cliente, se a NX já assinou e quando foi enviado.
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS autentique_link_cliente TEXT`);
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS autentique_nx_assinou BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS autentique_enviado_em TIMESTAMPTZ`);
 
   // Contrato gerado por fora e só anexado aqui — data URL em base64, mesmo padrão dos anexos de
   // Atualizações do lead (ver lead_notes). Substitui a geração automática por template como fluxo

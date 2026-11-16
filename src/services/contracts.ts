@@ -36,6 +36,11 @@ export interface Contract {
    * avisar (ver server/src/routes/webhooks.ts). null = ainda não vinculado, ou nunca foi mandado
    * pro Autentique. */
   autentiqueDocumentId: string | null
+  /** Link (assina.ae) pro cliente assinar, gerado ao enviar pelo sistema. */
+  autentiqueLinkCliente: string | null
+  /** A NX já assinou no Autentique (assinatura automática ao enviar). */
+  autentiqueNxAssinou: boolean
+  autentiqueEnviadoEm: string | null
   /** Contrato pronto (gerado por fora) anexado aqui — data URL em base64. null = nada anexado
    * ainda. Campo pesado: a listagem (GET /api/contracts) não traz isso, só o detalhe de UM
    * contrato (GET /api/contracts/:id) — ver loadFullContract. */
@@ -50,6 +55,7 @@ type ContractRow = {
   id: string; board_id: string; template_id: string | null; campos: Record<string, string>
   conteudo: string; status: ContractStatus; venda_lead_id: string | null; client_id: string | null
   signed_at: string | null; autentique_document_id: string | null
+  autentique_link_cliente?: string | null; autentique_nx_assinou?: boolean; autentique_enviado_em?: string | null
   pdf_data?: string | null; pdf_filename: string | null
   created_at: string; updated_at: string
 }
@@ -66,6 +72,9 @@ function rowToContract(r: ContractRow, prevPdfData?: string | null): Contract {
     conteudo: r.conteudo, status: r.status ?? 'pendente', vendaLeadId: r.venda_lead_id ?? null,
     clientId: r.client_id ?? null, signedAt: r.signed_at ?? null,
     autentiqueDocumentId: r.autentique_document_id ?? null,
+    autentiqueLinkCliente: r.autentique_link_cliente ?? null,
+    autentiqueNxAssinou: r.autentique_nx_assinou ?? false,
+    autentiqueEnviadoEm: r.autentique_enviado_em ?? null,
     pdfData: 'pdf_data' in r ? (r.pdf_data ?? null) : (prevPdfData ?? null),
     pdfFilename: r.pdf_filename ?? null,
     createdAt: r.created_at, updatedAt: r.updated_at,
@@ -183,6 +192,18 @@ export const contractsService = {
    * navegador, então sem o cabeçalho/rodapé que ele sempre adiciona. */
   async generatePdf(id: string, html: string, title: string): Promise<Blob> {
     return api.postForBlob(`/api/contracts/${id}/pdf`, { html, title })
+  },
+
+  /** Cria o documento no Autentique (NX + cliente), assina como NX e devolve o link do cliente. Não manda nada ao cliente. */
+  async enviarAutentique(id: string, html: string, refazer = false): Promise<{
+    documentId: string; linkCliente: string; nxAssinou: boolean; linkNx: string | null; erroNx: string | null
+  }> {
+    const r = await api.post<{ documentId: string; linkCliente: string; nxAssinou: boolean; linkNx: string | null; erroNx: string | null }>(
+      `/api/contracts/${id}/autentique`, { html, refazer },
+    )
+    await contractsService.loadFullContract(id)
+    void reload()
+    return r
   },
 
   async deleteContract(id: string): Promise<void> {

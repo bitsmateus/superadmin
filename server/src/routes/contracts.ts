@@ -7,6 +7,8 @@ import { renderContractPdf } from '../lib/contractPdf.js';
 import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
 import { propagarContratoAssinado } from '../lib/contractSignal.js';
 import { findMatchingLeadRowId } from '../lib/leadMatch.js';
+import { enviarContratoAoAutentique } from '../lib/autentique.js';
+import { obterToken } from '../jobs/autentiqueSync.js';
 
 /**
  * Aba Contrato (Dashboard Comercial) — modelo(s) padrão + contratos gerados por cliente. Reusa a
@@ -204,6 +206,53 @@ export async function contractRoutes(app: FastifyInstance) {
       } catch (err) {
         app.log.error({ err }, 'Falha ao gerar PDF do contrato');
         return reply.status(500).send({ message: 'Falha ao gerar o PDF — tenta de novo.' });
+      }
+    }
+  );
+
+  // POST /api/contracts/:id/autentique — manda o contrato pro Autentique sem sair do sistema: gera o PDF (do texto atual
+  // ou do PDF anexado), cria o documento com a NX e o cliente como signatários, assina como NX (conta do token) e devolve
+  // o link pro cliente assinar. NADA é enviado ao cliente: quem manda o link é você. Segue valendo o "assinou lá, marca
+  // aqui" (jobs/autentiqueSync.ts), que usa o id do documento salvo aqui.
+  app.post<{ Params: { id: string }; Body: { html?: string; refazer?: boolean; sandbox?: boolean } }>(
+    '/api/contracts/:id/autentique',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      const [c] = await query<{
+        id: string; board_id: string; campos: Record<string, string> | null; conteudo: string | null
+        pdf_data: string | null; autentique_document_id: string | null; autentique_link_cliente: string | null
+      }>('SELECT id, board_id, campos, conteudo, pdf_data, autentique_document_id, autentique_link_cliente FROM contracts WHERE id = $1', [req.params.id]);
+      if (!c) return reply.status(404).send({ message: 'Contrato não encontrado' });
+      const allowed = await restrictedBoardFilter(sub, role);
+      if (allowed !== null && !allowed.includes(c.board_id)) return reply.status(403).send({ message: 'Acesso negado' });
+      if (c.autentique_document_id && !req.body?.refazer) {
+        return reply.status(409).send({
+          message: 'Este contrato já foi enviado ao Autentique. Pra criar outro documento (o de agora fica lá), confirme "Enviar de novo".',
+          linkCliente: c.autentique_link_cliente,
+        });
+      }
+      const token = await obterToken();
+      if (!token) return reply.status(400).send({ message: 'Falta o token da API do Autentique (Configurações).' });
+
+      const nomeCliente = (c.campos?.['Nome Fantasia'] || c.campos?.['Razão Social'] || c.campos?.['Razao Social'] || '').trim() || 'Cliente';
+      try {
+        const html = (req.body?.html || c.conteudo || '').trim();
+        let pdf: Buffer;
+        if (html) pdf = await renderContractPdf(html, `Contrato — ${nomeCliente}`);
+        else if (c.pdf_data) pdf = Buffer.from(c.pdf_data.replace(/^data:[^,]*,/, ''), 'base64');
+        else return reply.status(400).send({ message: 'O contrato não tem texto nem PDF anexado.' });
+
+        const r = await enviarContratoAoAutentique({ token, nome: `Contrato — ${nomeCliente}`, clienteNome: nomeCliente, pdf, sandbox: req.body?.sandbox === true, url: process.env.AUTENTIQUE_API_URL || undefined });
+        await query(
+          `UPDATE contracts SET autentique_document_id = $1, autentique_link_cliente = $2, autentique_nx_assinou = $3,
+                  autentique_enviado_em = NOW(), updated_at = NOW() WHERE id = $4`,
+          [r.documentId, r.linkCliente, r.nxAssinou, c.id]
+        );
+        return { documentId: r.documentId, linkCliente: r.linkCliente, nxAssinou: r.nxAssinou, linkNx: r.linkNx, erroNx: r.erroNx };
+      } catch (err) {
+        app.log.error({ err }, 'Falha ao enviar contrato pro Autentique');
+        return reply.status(502).send({ message: `Não deu pra enviar ao Autentique: ${(err as Error).message}` });
       }
     }
   );

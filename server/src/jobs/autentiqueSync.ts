@@ -25,7 +25,7 @@ const PRIMEIRA_CHECAGEM_MS = 30_000;
 /** Token da API do Autentique: variável de ambiente ganha da configuração salva no banco
  * (settings.autentique_api_token, mesmo lugar onde já moram a chave do Asaas e a senha do SMTP) —
  * assim dá pra trocar o token sem precisar mexer no deploy. */
-async function obterToken(): Promise<string | null> {
+export async function obterToken(): Promise<string | null> {
   const doAmbiente = process.env.AUTENTIQUE_API_TOKEN?.trim();
   if (doAmbiente) return doAmbiente;
   const row = await queryOne<{ autentique_api_token: string | null }>(

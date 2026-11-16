@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/Modal'
 import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
 import { addMonthsToId, currentMonthId, useMonthFilter, withinBounds } from '@/hooks/useMonthFilter'
 import { useAuth } from '@/hooks/useAuth'
-import { useLeadBoards, useLeadRow } from '@/hooks/useLeadBoards'
+import { useAllLeadRows, useLeadBoards, useLeadRow } from '@/hooks/useLeadBoards'
 import { useClients } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { canDeleteClient } from '@/services/supabase'
@@ -36,7 +36,7 @@ import { formatCep, isValidCepLength } from '@/lib/cep'
 import { openContractSheet } from '@/lib/contractSheet'
 import { RichTextToolbar, ZoomBar } from '@/components/comercial/RichTextToolbar'
 import { aoColarComoNoWord } from '@/lib/colarDoWord'
-import { aplicarAutomaticos, formatarMoeda, lerMoeda, marcarManual, prepararModelo, tirarVermelho, type CampoDoModelo } from '@/lib/modeloDoContrato'
+import { aplicarAutomaticos, camposDaLead, formatarMoeda, lerMoeda, marcarManual, prepararModelo, tirarVermelho, type CampoDoModelo } from '@/lib/modeloDoContrato'
 import { LeadLinkPanel, LeadPickerModal } from '@/components/comercial/LeadLinkPanel'
 import { salvarLeadDaFicha, suggestCrmLead } from '@/services/crmLeadLookup'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
@@ -75,6 +75,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
     [boards, pageId],
   )
   const clients = useClients()
+  const leadRows = useAllLeadRows()
   const loaded = useContractsLoaded()
   const templates = useContractTemplates()
   const allContracts = useContracts()
@@ -273,6 +274,22 @@ export function ContratoView({ pageId }: { pageId: string }) {
     }
   }
 
+  /** Preenche o rascunho com o que a lead do CRM já tem (só nos campos ainda vazios — nada digitado é sobrescrito). */
+  const puxarDaLead = async (clientId: string) => {
+    try {
+      const r = await suggestCrmLead(clientId)
+      const lead = r.leadId ? leadRows.find((x) => x.id === r.leadId) : undefined
+      if (!lead) return
+      const dados = camposDaLead(camposDoModelo, lead)
+      if (!Object.keys(dados).length) return
+      setDraftCampos((prev) => {
+        const next = { ...prev }
+        for (const [nome, valor] of Object.entries(dados)) if (!(next[nome] ?? '').trim() || (nome === 'Vigência (meses)' && next[nome] === '12')) next[nome] = valor
+        return aplicarAutomaticos(next, camposDoModelo)
+      })
+    } catch { /* sem lead ligada: segue com o que a ficha tem */ }
+  }
+
   const startNew = (client?: Client) => {
     const campos: Record<string, string> = {}
     for (const name of placeholders) {
@@ -300,6 +317,8 @@ export function ContratoView({ pageId }: { pageId: string }) {
     setDraftPdfFilename(null)
     setModoPdf(false)
     setTab('criar')
+    // Lead do CRM ligada à ficha (ou a sugerida): mensalidade, instalação, fidelidade e nº de telas já entram.
+    if (client) void puxarDaLead(client.id)
     // Já veio da ficha com o CNPJ — dispara a busca sozinho, sem esperar o blur do campo.
     if (client?.fichaCadastro?.cnpj && placeholders.includes('CNPJ')) void fillFromCnpj(client.fichaCadastro.cnpj, client.fichaCadastro.address)
   }
@@ -1125,6 +1144,13 @@ function ClientLeadCell({ clientId }: { clientId: string }) {
           <span className="text-foreground/40">Nenhuma lead vinculada</span>
         )}
       </span>
+      {row && (
+        <span className="text-[11px] leading-snug text-foreground/55">
+          MRR {row.valorMrr || '—'} · Instalação {row.valorImplementacao || '—'} · Fidelidade{' '}
+          {row.fidelidade ? row.fidelidade : <span className="font-medium text-warning">falta</span>}
+          {row.numeroAtendentes ? ` · ${row.numeroAtendentes} atendente(s)` : ''}
+        </span>
+      )}
       <div className="flex flex-wrap items-center gap-1.5">
         {leadId && !salvo && (
           <Button size="sm" variant="secondary" loading={saving} onClick={() => void salvar(leadId)}>Confirmar</Button>

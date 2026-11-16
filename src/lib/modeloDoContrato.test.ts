@@ -67,3 +67,13 @@ test('gerar o contrato: nenhum vermelho sobra', () => {
   assert.ok(r.includes('#1d4ed8'))
   assert.ok(r.includes('background-color:red'))
 })
+
+test('lead do CRM: MRR, implementação, fidelidade e atendentes entram no contrato; o total sai da conta', async () => {
+  const { camposDaLead } = await import('./modeloDoContrato')
+  const m = prepararModelo(MODELO)
+  const lead = camposDaLead(m.campos, { valorMrr: 'R$ 349,00', valorImplementacao: 'R$ 997,00', fidelidade: '12 meses', numeroAtendentes: '5' })
+  assert.deepEqual(lead, { 'Valor Mensal': '349,00', 'Valor da Instalação': '997,00', '3 / 6 / 12': '12', 'NÚMERO DE TELAS': '5' })
+  assert.equal(aplicarAutomaticos(lead, m.campos)['Valor Total'], '4.188,00')
+  // Fidelidade fora de 3/6/12 ("sem fidelidade") e valor vazio não entram.
+  assert.deepEqual(camposDaLead(m.campos, { valorMrr: '', fidelidade: 'Sem fidelidade' }), {})
+})

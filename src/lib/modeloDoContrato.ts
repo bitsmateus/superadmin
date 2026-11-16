@@ -209,3 +209,37 @@ export function tirarVermelho(html: string): string {
     .replace(/((?:^|[;\s"'])color\s*:\s*)(#[0-9a-fA-F]{3,6}|rgba?\([^)]*\)|[a-zA-Z]+)/g, (m, pre: string, cor: string) => (ehVermelho(cor) ? `${pre}#000000` : m))
     .replace(/(<font[^>]*\scolor\s*=\s*["']?)(#[0-9a-fA-F]{3,6}|[a-zA-Z]+)(["']?)/gi, (m, pre: string, cor: string, pos: string) => (ehVermelho(cor) ? `${pre}#000000${pos}` : m))
 }
+
+// ───────────────────────────── puxar da lead do CRM ─────────────────────────────
+
+export interface DadosDaLead {
+  valorMrr?: string
+  valorImplementacao?: string
+  fidelidade?: string
+  numeroAtendentes?: string
+}
+
+/** "R$ 349,00" → "349,00" (vazio se não tiver número). */
+function moedaDoLead(v: string | undefined): string {
+  const n = lerMoeda(v)
+  return n == null ? '' : formatarMoeda(n)
+}
+
+/** "12 meses" / "12" → "12" quando for uma das fidelidades do contrato (3, 6 ou 12). */
+export function mesesDaFidelidade(v: string | undefined): string {
+  const m = (v ?? '').match(/\d+/)
+  return m && ['3', '6', '12'].includes(m[0]) ? m[0] : ''
+}
+
+/** O que a lead do CRM já sabe e entra no contrato: mensalidade (MRR), instalação, fidelidade e nº de telas (atendentes). */
+export function camposDaLead(modelo: CampoDoModelo[], lead: DadosDaLead): Record<string, string> {
+  const out: Record<string, string> = {}
+  const por = (p: Papel) => modelo.find((c) => c.papel === p)?.nome
+  const poe = (p: Papel, valor: string) => { const n = por(p); if (n && valor) out[n] = valor }
+  poe('mensal', moedaDoLead(lead.valorMrr))
+  poe('instalacao', moedaDoLead(lead.valorImplementacao))
+  poe('fidelidade', mesesDaFidelidade(lead.fidelidade))
+  const telas = (lead.numeroAtendentes ?? '').match(/\d+/)?.[0]
+  poe('telas', telas ?? '')
+  return out
+}

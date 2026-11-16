@@ -101,7 +101,7 @@ export function ColaboradoresPontoModal({ open, onClose, colaboradores, onSalvo 
         <div className="space-y-1">
           {colaboradores.map((c) => (
             <button key={c.id} type="button" onClick={() => setSelecionado(c.id)}
-              className={cn('flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm', selecionado === c.id ? 'bg-accent/10 text-accent' : 'hover:bg-elevate/[0.04]', !c.ativo && 'opacity-50')}>
+              className={cn('flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm', selecionado === c.id ? 'bg-accent/10 text-accent' : 'text-foreground hover:bg-elevate/[0.04]', !c.ativo && 'opacity-50')}>
               {c.nome}{!c.ativo && <span className="text-[10px]">inativo</span>}
             </button>
           ))}

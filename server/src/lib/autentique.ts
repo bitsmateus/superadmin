@@ -9,6 +9,8 @@
  * Docs: https://docs.autentique.com.br/api/mutations/criando-um-documento
  */
 
+import type { Posicao } from './assinaturasDoContrato.js';
+
 export const AUTENTIQUE_URL = 'https://api.autentique.com.br/v2/graphql';
 const TIMEOUT_MS = 60_000;
 
@@ -81,6 +83,8 @@ export async function enviarContratoAoAutentique(p: {
   pdf: Buffer;
   /** Documento de teste: não gasta crédito e some em alguns dias. */
   sandbox?: boolean;
+  /** Onde rubricar (todas as páginas menos a última) e assinar (última) — ver assinaturasDoContrato.ts. */
+  posicoes?: { nx: Posicao[]; cliente: Posicao[] };
   url?: string;
 }): Promise<EnvioAutentique> {
   const o: Opcoes = { token: p.token, url: p.url };
@@ -101,8 +105,8 @@ export async function enviarContratoAoAutentique(p: {
     {
       document: { name: p.nome },
       signers: [
-        { email: nxEmail, action: 'SIGN' },
-        { name: p.clienteNome, action: 'SIGN' },
+        { email: nxEmail, action: 'SIGN', ...(p.posicoes?.nx.length ? { positions: p.posicoes.nx } : {}) },
+        { name: p.clienteNome, action: 'SIGN', ...(p.posicoes?.cliente.length ? { positions: p.posicoes.cliente } : {}) },
       ],
     },
     p.pdf,

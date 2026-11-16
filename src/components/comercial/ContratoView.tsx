@@ -23,6 +23,8 @@ import { useContracts, useContractsLoaded, useContractTemplates } from '@/hooks/
 import { contractsService, type Contract, type ContractStatus, type ContractTemplate } from '@/services/contracts'
 import { lookupCnpj, type CnpjData } from '@/services/cnpjLookup'
 import { lookupCep, type CepData } from '@/services/cepLookup'
+import { COMPLEMENTO_PADRAO, lerEnderecoDaFicha, mesclarEndereco, precisaConsultarCep } from '@/lib/enderecoDoContrato'
+import { onlyDigits } from '@/lib/cnpj'
 import {
   applyPlaceholders, applyServicesTable, cepFieldFor, cnpjFieldFor, defaultValueFor,
   DEFAULT_SERVICE_ROWS, extractPlaceholders, hintFor, parseServiceRows, sectionFor,
@@ -39,6 +41,19 @@ import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { formatDateShort, initials } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { Client } from '@/types/client'
+
+/** Consulta o CNPJ e completa o endereço: rua/bairro/cidade que a Receita não trouxe vêm do endereço escrito na ficha e do CEP;
+ * número só se alguém souber (senão fica vazio pra preencher à mão); complemento vazio vira "Empresa". */
+async function buscarDadosDoCnpj(cnpj: string, enderecoDaFicha?: string): Promise<CnpjData> {
+  const data = await lookupCnpj(cnpj)
+  let viaCep: CepData | null = null
+  const cep = onlyDigits(data.cep || lerEnderecoDaFicha(enderecoDaFicha).cep || '')
+  if (cep.length === 8 && precisaConsultarCep(data)) {
+    try { viaCep = await lookupCep(cep) } catch { /* sem CEP na base: segue com o que tem */ }
+  }
+  const end = mesclarEndereco(data, viaCep, enderecoDaFicha)
+  return { ...data, logradouro: end.logradouro, numero: end.numero, complemento: end.complemento, bairro: end.bairro, municipio: end.municipio, uf: end.uf, cep: end.cep }
+}
 
 type Tab = 'boas-vindas' | 'criar' | 'pendentes-contrato' | 'assinados'
 
@@ -112,10 +127,25 @@ export function ContratoView({ pageId }: { pageId: string }) {
   // Prévia do contrato (com o que foi preenchido) antes de gerar.
   const [previaOpen, setPreviaOpen] = React.useState(false)
   const [previaZoom, setPreviaZoom] = React.useState(100)
+  // Quantas páginas o PDF vai ter (o servidor gera o mesmo PDF que será enviado e conta).
+  const [previaPaginas, setPreviaPaginas] = React.useState<number | null>(null)
+  const [previaPaginasErro, setPreviaPaginasErro] = React.useState(false)
   const conteudoPrevia = React.useMemo(
     () => (template ? applyPlaceholders(applyServicesTable(template.conteudo, draftCampos), draftCampos) : ''),
     [template, draftCampos],
   )
+  React.useEffect(() => {
+    if (!previaOpen || !conteudoPrevia) return
+    let cancelado = false
+    setPreviaPaginas(null)
+    setPreviaPaginasErro(false)
+    const t = setTimeout(() => {
+      contractsService.contarPaginas(conteudoPrevia)
+        .then((n) => { if (!cancelado) setPreviaPaginas(n) })
+        .catch(() => { if (!cancelado) setPreviaPaginasErro(true) })
+    }, 300)
+    return () => { cancelado = true; clearTimeout(t) }
+  }, [previaOpen, conteudoPrevia])
   const camposVazios = React.useMemo(
     () => placeholders.filter((p) => !(draftCampos[p] ?? '').trim()),
     [placeholders, draftCampos],
@@ -174,19 +204,20 @@ export function ContratoView({ pageId }: { pageId: string }) {
     if (selected) void contractsService.updateContract(selected.id, { conteudo: html })
   }, 800)
 
-  const fillFromCnpj = async (cnpjOverride?: string) => {
+  const fillFromCnpj = async (cnpjOverride?: string, fichaOverride?: string) => {
     const raw = cnpjOverride ?? draftCampos['CNPJ'] ?? ''
     if (!isValidCnpjLength(raw)) { toast.error('Digite um CNPJ com 14 dígitos.'); return }
     setCnpjLoading(true)
     try {
-      const data = await lookupCnpj(raw)
+      const data = await buscarDadosDoCnpj(raw, fichaOverride ?? clients.find((c) => c.id === draftClientId)?.fichaCadastro?.address)
       setDraftCampos((prev) => {
         const next = { ...prev }
         for (const name of placeholders) {
           const key = cnpjFieldFor(name)
           if (key) {
             const value = data[key as keyof CnpjData]
-            if (value) next[name] = value
+            // "Empresa" é só o padrão de complemento vazio: não apaga um complemento já digitado.
+            if (value && !(key === 'complemento' && value === COMPLEMENTO_PADRAO && (next[name] ?? '').trim())) next[name] = value
           }
         }
         return next
@@ -209,7 +240,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
         const next = { ...prev }
         for (const name of placeholders) {
           const key = cepFieldFor(name)
-          if (key) {
+          if (key && key !== 'complemento') { // o complemento do ViaCEP é faixa de numeração, não o da empresa
             const value = data[key as keyof CepData]
             if (value) next[name] = value
           }
@@ -235,6 +266,14 @@ export function ContratoView({ pageId }: { pageId: string }) {
       campos['Nome Fantasia'] = client.company || client.name
       const cnpj = client.fichaCadastro?.cnpj
       if (cnpj && placeholders.includes('CNPJ')) campos['CNPJ'] = formatCnpj(cnpj)
+      // Endereço escrito na ficha já entra (rua, número, bairro, CEP) e o complemento começa como "Empresa"; a consulta do
+      // CNPJ, logo abaixo, completa o que faltar e traz a cidade/UF.
+      const doEndereco = mesclarEndereco({}, null, client.fichaCadastro?.address)
+      for (const name of placeholders) {
+        const key = cnpjFieldFor(name)
+        const v = key ? doEndereco[key === 'municipio' ? 'municipio' : (key as keyof typeof doEndereco)] : ''
+        if (key && ['logradouro', 'numero', 'complemento', 'bairro', 'cep'].includes(key) && v) campos[name] = v
+      }
     }
     setDraftCampos(campos)
     setDraftClientId(client?.id ?? null)
@@ -244,7 +283,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
     setModoPdf(false)
     setTab('criar')
     // Já veio da ficha com o CNPJ — dispara a busca sozinho, sem esperar o blur do campo.
-    if (client?.fichaCadastro?.cnpj && placeholders.includes('CNPJ')) void fillFromCnpj(client.fichaCadastro.cnpj)
+    if (client?.fichaCadastro?.cnpj && placeholders.includes('CNPJ')) void fillFromCnpj(client.fichaCadastro.cnpj, client.fichaCadastro.address)
   }
 
   const generate = async () => {
@@ -343,13 +382,13 @@ export function ContratoView({ pageId }: { pageId: string }) {
     if (!isValidCnpjLength(raw)) { toast.error('Digite um CNPJ com 14 dígitos.'); return }
     setCnpjLoading(true)
     try {
-      const data = await lookupCnpj(raw)
+      const data = await buscarDadosDoCnpj(raw, clients.find((c) => c.id === selected.clientId)?.fichaCadastro?.address)
       const next = { ...selected.campos }
       for (const name of placeholders) {
         const key = cnpjFieldFor(name)
         if (key) {
           const value = data[key as keyof CnpjData]
-          if (value) next[name] = value
+          if (value && !(key === 'complemento' && value === COMPLEMENTO_PADRAO && (next[name] ?? '').trim())) next[name] = value
         }
       }
       applyFieldsToContract(selected, next)
@@ -371,7 +410,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
       const next = { ...selected.campos }
       for (const name of placeholders) {
         const key = cepFieldFor(name)
-        if (key) {
+        if (key && key !== 'complemento') {
           const value = data[key as keyof CepData]
           if (value) next[name] = value
         }
@@ -672,7 +711,23 @@ export function ContratoView({ pageId }: { pageId: string }) {
             Dá pra gerar assim e completar depois dentro do contrato.
           </div>
         )}
-        <div className="mx-auto mb-2 flex max-w-[800px] justify-end"><ZoomBar value={previaZoom} onChange={setPreviaZoom} /></div>
+        <div className="mx-auto mb-2 flex max-w-[800px] flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0 text-xs text-foreground/60">
+            {previaPaginas != null ? (
+              <>
+                <strong className="text-foreground">{previaPaginas} {previaPaginas === 1 ? 'página' : 'páginas'}</strong> no total.{' '}
+                {previaPaginas > 1
+                  ? `NX e cliente rubricam as páginas 1 a ${previaPaginas - 1} e assinam na página ${previaPaginas}.`
+                  : 'NX e cliente assinam nessa página.'}
+              </>
+            ) : previaPaginasErro ? (
+              'Não deu pra contar as páginas agora.'
+            ) : (
+              <span className="inline-flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" />Contando as páginas…</span>
+            )}
+          </div>
+          <ZoomBar value={previaZoom} onChange={setPreviaZoom} />
+        </div>
         <div className="mx-auto max-h-[60vh] max-w-[800px] overflow-y-auto rounded-lg border border-line/60 bg-white">
           <div
             dangerouslySetInnerHTML={{ __html: conteudoPrevia }}
@@ -1490,7 +1545,7 @@ function AutentiqueEnviar({ contract, getHtml }: { contract: Contract; getHtml: 
         <div>
           <p className="text-sm font-semibold text-foreground">Assinatura eletrônica (Autentique)</p>
           <p className="text-[11px] text-foreground/50">
-            Cria o documento no Autentique, já assinado pela NX. Você só copia o link e manda pro cliente — nada é enviado a ele daqui.
+            Cria o documento no Autentique, já assinado pela NX (rubrica em todas as páginas menos a última; assinatura na última). Você só copia o link e manda pro cliente — nada é enviado a ele daqui.
           </p>
         </div>
         {!assinado && (

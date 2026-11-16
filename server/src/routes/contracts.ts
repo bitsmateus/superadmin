@@ -8,6 +8,7 @@ import { advanceClientToBriefing } from '../lib/briefingHandoff.js';
 import { propagarContratoAssinado } from '../lib/contractSignal.js';
 import { findMatchingLeadRowId } from '../lib/leadMatch.js';
 import { enviarContratoAoAutentique } from '../lib/autentique.js';
+import { contarPaginas, planoDeAssinaturas } from '../lib/assinaturasDoContrato.js';
 import { obterToken } from '../jobs/autentiqueSync.js';
 
 /**
@@ -211,6 +212,23 @@ export async function contractRoutes(app: FastifyInstance) {
     }
   );
 
+  // POST /api/contracts/paginas — quantas páginas o contrato terá (mesmo PDF que será gerado e enviado). Usada na prévia.
+  app.post<{ Body: { html?: string } }>(
+    '/api/contracts/paginas',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const html = (req.body?.html ?? '').trim();
+      if (!html) return reply.status(400).send({ message: 'html é obrigatório' });
+      try {
+        const pdf = await renderContractPdf(html, 'Contrato');
+        return { paginas: await contarPaginas(pdf) };
+      } catch (err) {
+        app.log.error({ err }, 'Falha ao contar as páginas do contrato');
+        return reply.status(500).send({ message: 'Não deu pra contar as páginas — tenta de novo.' });
+      }
+    }
+  );
+
   // POST /api/contracts/:id/autentique — manda o contrato pro Autentique sem sair do sistema: gera o PDF (do texto atual
   // ou do PDF anexado), cria o documento com a NX e o cliente como signatários, assina como NX (conta do token) e devolve
   // o link pro cliente assinar. NADA é enviado ao cliente: quem manda o link é você. Segue valendo o "assinou lá, marca
@@ -244,13 +262,15 @@ export async function contractRoutes(app: FastifyInstance) {
         else if (c.pdf_data) pdf = Buffer.from(c.pdf_data.replace(/^data:[^,]*,/, ''), 'base64');
         else return reply.status(400).send({ message: 'O contrato não tem texto nem PDF anexado.' });
 
-        const r = await enviarContratoAoAutentique({ token, nome: `Contrato — ${nomeCliente}`, clienteNome: nomeCliente, pdf, sandbox: req.body?.sandbox === true, url: process.env.AUTENTIQUE_API_URL || undefined });
+        // Rubrica em todas as páginas menos a última; assinatura na última, em cima da linha de cada parte.
+        const plano = await planoDeAssinaturas(pdf);
+        const r = await enviarContratoAoAutentique({ token, nome: `Contrato — ${nomeCliente}`, clienteNome: nomeCliente, pdf, sandbox: req.body?.sandbox === true, url: process.env.AUTENTIQUE_API_URL || undefined, posicoes: { nx: plano.nx, cliente: plano.cliente } });
         await query(
           `UPDATE contracts SET autentique_document_id = $1, autentique_link_cliente = $2, autentique_nx_assinou = $3,
                   autentique_enviado_em = NOW(), updated_at = NOW() WHERE id = $4`,
           [r.documentId, r.linkCliente, r.nxAssinou, c.id]
         );
-        return { documentId: r.documentId, linkCliente: r.linkCliente, nxAssinou: r.nxAssinou, linkNx: r.linkNx, erroNx: r.erroNx };
+        return { documentId: r.documentId, linkCliente: r.linkCliente, nxAssinou: r.nxAssinou, linkNx: r.linkNx, erroNx: r.erroNx, paginas: plano.paginas, linhasAchadas: plano.linhasAchadas };
       } catch (err) {
         app.log.error({ err }, 'Falha ao enviar contrato pro Autentique');
         return reply.status(502).send({ message: `Não deu pra enviar ao Autentique: ${(err as Error).message}` });

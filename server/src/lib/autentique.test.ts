@@ -56,7 +56,11 @@ const PDF = Buffer.from('%PDF-1.4 teste');
 test('Autentique: cria o documento com a NX e o cliente, a NX assina e volta o link do cliente', async () => {
   const m = await subirMock();
   try {
-    const r = await enviarContratoAoAutentique({ token: 'tok', nome: 'Contrato — Cliente Ltda', clienteNome: 'Cliente Ltda', pdf: PDF, url: m.url });
+    const posicoes = {
+      nx: [{ x: '83.0', y: '94.5', z: 1, angle: 0, scale: 0.7, element: 'INITIALS' as const }, { x: '39.0', y: '69.1', z: 2, angle: 0, scale: 0.9, element: 'SIGNATURE' as const }],
+      cliente: [{ x: '70.0', y: '94.5', z: 1, angle: 0, scale: 0.7, element: 'INITIALS' as const }, { x: '39.0', y: '50.9', z: 2, angle: 0, scale: 0.9, element: 'SIGNATURE' as const }],
+    };
+    const r = await enviarContratoAoAutentique({ token: 'tok', nome: 'Contrato — Cliente Ltda', clienteNome: 'Cliente Ltda', pdf: PDF, url: m.url, posicoes });
     assert.equal(r.documentId, 'doc-1');
     assert.equal(r.linkCliente, 'https://assina.ae/cliente');
     assert.equal(r.nxAssinou, true);
@@ -66,7 +70,10 @@ test('Autentique: cria o documento com a NX e o cliente, a NX assina e volta o l
     const criar = m.chamadas.find((c) => c.query.includes('createDocument'))!;
     assert.deepEqual(criar.variables.document, { name: 'Contrato — Cliente Ltda' });
     // A NX entra com o e-mail da conta; o cliente só com o nome (nada é enviado a ele pelo Autentique).
-    assert.deepEqual(criar.variables.signers, [{ email: 'nx@exemplo.com', action: 'SIGN' }, { name: 'Cliente Ltda', action: 'SIGN' }]);
+    assert.deepEqual(criar.variables.signers, [
+      { email: 'nx@exemplo.com', action: 'SIGN', positions: posicoes.nx },
+      { name: 'Cliente Ltda', action: 'SIGN', positions: posicoes.cliente },
+    ]);
     assert.deepEqual(criar.arquivo, { nome: 'contrato.pdf', bytes: PDF.length, tipo: 'application/pdf' });
     assert.ok(!criar.query.includes('sandbox'));
   } finally { await m.fechar(); }

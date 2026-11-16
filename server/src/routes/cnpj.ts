@@ -9,6 +9,7 @@ import { FastifyInstance } from 'fastify';
 type BrasilApiCnpj = {
   razao_social?: string;
   nome_fantasia?: string;
+  descricao_tipo_de_logradouro?: string;
   logradouro?: string;
   numero?: string;
   complemento?: string;
@@ -17,6 +18,15 @@ type BrasilApiCnpj = {
   uf?: string;
   cep?: string;
 };
+
+/** A Receita separa o tipo ("RUA") do nome ("MARECHAL DEODORO"): junta os dois, sem repetir o tipo se já vier no nome. */
+export function logradouroCompleto(d: { descricao_tipo_de_logradouro?: string; logradouro?: string }): string {
+  const nome = (d.logradouro ?? '').trim();
+  const tipo = (d.descricao_tipo_de_logradouro ?? '').trim();
+  if (!nome) return '';
+  if (!tipo || nome.toUpperCase().startsWith(tipo.toUpperCase())) return nome;
+  return `${tipo} ${nome}`;
+}
 
 export async function cnpjRoutes(app: FastifyInstance) {
   app.get<{ Params: { cnpj: string } }>(
@@ -54,7 +64,7 @@ export async function cnpjRoutes(app: FastifyInstance) {
         return {
           razaoSocial: data.razao_social ?? '',
           nomeFantasia: data.nome_fantasia || data.razao_social || '',
-          logradouro: data.logradouro ?? '',
+          logradouro: logradouroCompleto(data),
           numero: data.numero ?? '',
           complemento: data.complemento ?? '',
           bairro: data.bairro ?? '',

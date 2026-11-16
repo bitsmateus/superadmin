@@ -197,6 +197,7 @@ export const contractsService = {
   /** Cria o documento no Autentique (NX + cliente), assina como NX e devolve o link do cliente. Não manda nada ao cliente. */
   async enviarAutentique(id: string, html: string, refazer = false): Promise<{
     documentId: string; linkCliente: string; nxAssinou: boolean; linkNx: string | null; erroNx: string | null
+    paginas?: number; linhasAchadas?: boolean
   }> {
     const r = await api.post<{ documentId: string; linkCliente: string; nxAssinou: boolean; linkNx: string | null; erroNx: string | null }>(
       `/api/contracts/${id}/autentique`, { html, refazer },
@@ -204,6 +205,12 @@ export const contractsService = {
     await contractsService.loadFullContract(id)
     void reload()
     return r
+  },
+
+  /** Quantas páginas o contrato terá (o mesmo PDF que é gerado e enviado). */
+  async contarPaginas(html: string): Promise<number> {
+    const r = await api.post<{ paginas: number }>('/api/contracts/paginas', { html })
+    return r.paginas
   },
 
   async deleteContract(id: string): Promise<void> {

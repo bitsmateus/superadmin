@@ -53,6 +53,7 @@ import {
   LayoutTemplate,
   UserCheck,
   Link2,
+  Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { abaDeFora } from '@/lib/abasJuntas'
@@ -432,6 +433,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
     ? [
         ...(hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
         ...(hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),
+        { to: '/financeiro/pontos', label: 'Pontos', icon: Clock },
       ]
     : []
   // Cada grupo já sai na ordem que ESSA pessoa montou arrastando (ver useMenuArrastavel).

@@ -1,3 +1,4 @@
+import { montarTabelaDeServicos, type ServicosDoModelo } from './modeloDoContrato'
 /**
  * Placeholders do modelo de contrato ficam guardados como entidades HTML — "&lt;&lt;Nome
  * Fantasia&gt;&gt;" — pra serem HTML válido dentro do próprio texto (o "<<...>>" visual do
@@ -217,8 +218,9 @@ function buildServicesTableHtml(rows: ServiceRow[]): string {
 /** Roda ANTES de applyPlaceholders — troca o token da tabela pelo HTML já pronto, montado a partir
  * das linhas em `campos['Tabela de Serviços']` (JSON). O restante dos campos passa pelo caminho
  * normal (texto escapado) na sequência. */
-export function applyServicesTable(html: string, campos: Record<string, string>): string {
-  const rows = parseServiceRows(campos['Tabela de Serviços'])
-  const tableHtml = buildServicesTableHtml(rows)
+export function applyServicesTable(html: string, campos: Record<string, string>, servicos?: ServicosDoModelo): string {
+  // Tabela que já existia no modelo: mantém o visual dela (bordas, fonte) e só troca as linhas.
+  const rows = servicos && !campos['Tabela de Serviços'] ? servicos.linhasPadrao : parseServiceRows(campos['Tabela de Serviços'])
+  const tableHtml = servicos ? montarTabelaDeServicos(servicos, rows) : buildServicesTableHtml(rows)
   return html.replace(/&lt;&lt;Tabela de Serviços&gt;&gt;/g, tableHtml)
 }

@@ -86,13 +86,16 @@ export function ContratoView({ pageId }: { pageId: string }) {
   const template = templates[0] ?? null
   // O modelo com os campos genéricos (VALOR, X, DATA) já separados pelo significado de cada um.
   const modelo = React.useMemo(() => (template ? prepararModelo(template.conteudo) : null), [template])
-  const placeholders = React.useMemo(() => (modelo ? extractPlaceholders(modelo.html) : []), [modelo])
+  const placeholders = React.useMemo(
+    () => (modelo ? [...extractPlaceholders(modelo.html), ...modelo.campos.filter((c) => c.implicito).map((c) => c.nome)] : []),
+    [modelo],
+  )
   const camposDoModelo = React.useMemo(() => modelo?.campos ?? [], [modelo])
   /** Texto do contrato a partir dos campos. Nada fica vermelho: na prévia só o que falta (marcarVazios), no gerado nada. */
   const montarContrato = React.useCallback(
     (campos: Record<string, string>, final: boolean) => {
       if (!modelo) return ''
-      const texto = applyPlaceholders(applyServicesTable(tirarVermelho(modelo.html), campos), campos, { marcarVazios: !final })
+      const texto = applyPlaceholders(applyServicesTable(tirarVermelho(modelo.html), campos, modelo.servicos), campos, { marcarVazios: !final })
       return final ? tirarVermelho(texto) : texto
     },
     [modelo],
@@ -296,7 +299,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
       const def = defaultValueFor(name)
       if (def) campos[name] = def
     }
-    if (placeholders.includes('Tabela de Serviços')) campos['Tabela de Serviços'] = JSON.stringify(DEFAULT_SERVICE_ROWS)
+    if (placeholders.includes('Tabela de Serviços')) campos['Tabela de Serviços'] = JSON.stringify(modelo?.servicos?.linhasPadrao ?? DEFAULT_SERVICE_ROWS)
     if (client) {
       campos['Nome Fantasia'] = client.company || client.name
       const cnpj = client.fichaCadastro?.cnpj

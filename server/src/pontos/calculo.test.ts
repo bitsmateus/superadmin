@@ -286,3 +286,12 @@ test('Arthur: controle começa em 16/11; dias antes não contam; hoje só com a 
   assert.equal(fechado.status, 'manha_sem_batida');
   assert.equal(fechado.saldoMinutos, -240);
 });
+
+test('Arthur dia 16: bateu só 13:30 e saiu 18:00, "descontar saldo": a manhã vira R$ (R$ 1.900), não banco', () => {
+  const cfg = { ...CFG, inicioControle: '2026-11-10', salarioBaseCentavos: 190000, divisorMensal: 220, destinoExtra: 'banco' as const };
+  const d = calcularDia({ data: '2026-11-16', batidas: ['13:30', '18:00'], cfg, coberto: true, hoje: '2026-11-17', ajustes: [{ tipo: 'descontar_saldo' }] });
+  assert.equal(d.saldoMinutos, -240);
+  assert.equal(d.bancoMinutos, 0);
+  assert.equal(d.descontoCentavos, Math.round((240 * valorHora(cfg)) / 60));
+  assert.ok(d.descontoCentavos > 3400 && d.descontoCentavos < 3500);
+});

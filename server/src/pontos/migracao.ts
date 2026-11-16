@@ -216,6 +216,18 @@ INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
 SELECT 'migracao_arthur_inicio_10', '{"inicio_controle":"2026-11-10"}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_inicio_10');
 
+-- Arthur: salário base R$ 1.900 (+ comissão, que fica na aba Comissões) e a manhã de 16/11 (só bateu 13:30, faltou de manhã)
+-- vira desconto em R$ quando o dia fechar (saldo negativo convertido). Só na primeira vez.
+UPDATE ponto_colaboradores SET salario_base_centavos = 190000, atualizado_em = NOW()
+ WHERE lower(nome) = 'arthur' AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_salario_dia16');
+INSERT INTO ponto_ajustes (colaborador_id, data, tipo, motivo, autor_nome)
+SELECT c.id, DATE '2026-11-16', 'descontar_saldo', 'Faltou de manhã (bateu só às 13:30): desconta em R$', 'migração'
+  FROM ponto_colaboradores c
+ WHERE lower(c.nome) = 'arthur' AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_salario_dia16');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_arthur_salario_dia16', '{"salario_base_centavos":190000,"dia16":"descontar_saldo"}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_salario_dia16');
+
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES
   ('2026-01-01', 'Confraternização Universal', 'nacional'),

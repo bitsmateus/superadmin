@@ -217,17 +217,18 @@ test('seção 5 — João (joao vitor)', () => {
   const d = (dd: string) => dias.find((x) => x.data === `2026-11-${dd}`)!;
   assert.deepEqual([h(d('10').trabalhadoMinutos), h(d('10').saldoMinutos), d('10').status], ['3h14', '-5h16', 'manha_sem_batida']);
   assert.deepEqual([h(d('11').trabalhadoMinutos), h(d('11').saldoBrutoMinutos), d('11').saldoMinutos], ['8h26', '-0h04', 0]);
-  assert.deepEqual([h(d('12').trabalhadoMinutos), h(d('12').saldoMinutos), d('12').atrasoMinutos], ['8h13', '-0h17', 43]);
-  assert.deepEqual([h(d('13').trabalhadoMinutos), h(d('13').saldoBrutoMinutos), d('13').saldoMinutos], ['8h34', '0h04', 0]);
+  assert.deepEqual([h(d('12').trabalhadoMinutos), h(d('12').saldoMinutos), d('12').atrasoMinutos], ['7h57', '-0h33', 43]);
+  assert.deepEqual([h(d('13').trabalhadoMinutos), h(d('13').saldoBrutoMinutos), d('13').saldoMinutos], ['8h20', '-0h10', 0]);
   assert.equal(d('16').status, 'em_andamento');
   for (const x of ['01', '03', '04', '05', '06', '09']) assert.equal(d(x).status, 'fora_controle', x);
   assert.equal(d('14').status, 'folga');
   assert.equal(d('15').status, 'feriado');
-  assert.equal(h(resumo.bancoMinutos), '-5h33');
+  assert.equal(h(resumo.bancoMinutos), '-5h49');
   assert.equal(resumo.faltas, 0);
   assert.equal(resumo.extraMinutos, 0);
-  // Com a manhã de 10/11 abonada: -1h33.
-  assert.equal(h(periodo(JOAO, { '2026-11-10': [{ tipo: 'abonar_manha' }] }).resumo.bancoMinutos), '-1h33');
+  // Com a manhã de 10/11 abonada: -1h49. Com manhã e tarde (dia de teste do relógio): -0h33.
+  assert.equal(h(periodo(JOAO, { '2026-11-10': [{ tipo: 'abonar_manha' }] }).resumo.bancoMinutos), '-1h49');
+  assert.equal(h(periodo(JOAO, { '2026-11-10': [{ tipo: 'abonar_manha' }, { tipo: 'abonar_tarde' }] }).resumo.bancoMinutos), '-0h33');
 });
 
 test('seção 5 — Jean (jean may)', () => {
@@ -235,13 +236,13 @@ test('seção 5 — Jean (jean may)', () => {
   const d = (dd: string) => dias.find((x) => x.data === `2026-11-${dd}`)!;
   assert.deepEqual([h(d('10').trabalhadoMinutos), h(d('10').saldoMinutos), d('10').status], ['3h10', '-5h20', 'manha_sem_batida']);
   assert.deepEqual([h(d('11').trabalhadoMinutos), h(d('11').saldoMinutos), d('11').status], ['8h47', '0h17', 'extra']);
-  assert.deepEqual([h(d('12').trabalhadoMinutos), h(d('12').saldoMinutos), d('12').atrasoMinutos], ['8h17', '-0h13', 18]);
-  assert.deepEqual([h(d('13').trabalhadoMinutos), h(d('13').saldoBrutoMinutos), d('13').saldoMinutos], ['8h35', '0h05', 0]);
+  assert.deepEqual([h(d('12').trabalhadoMinutos), h(d('12').saldoMinutos), d('12').atrasoMinutos], ['8h17', '-0h18', 18]);
+  assert.deepEqual([h(d('13').trabalhadoMinutos), h(d('13').saldoBrutoMinutos), d('13').saldoMinutos], ['8h34', '0h04', 0]);
   assert.equal(d('16').status, 'em_andamento');
-  assert.equal(h(resumo.bancoMinutos), '-5h16');
+  assert.equal(h(resumo.bancoMinutos), '-5h21');
   assert.equal(resumo.faltas, 0);
   assert.equal(h(resumo.extraMinutos), '0h17');
-  assert.equal(h(periodo(JEAN, { '2026-11-10': [{ tipo: 'abonar_manha' }] }).resumo.bancoMinutos), '-1h16');
+  assert.equal(h(periodo(JEAN, { '2026-11-10': [{ tipo: 'abonar_manha' }] }).resumo.bancoMinutos), '-1h21');
 });
 
 test('Arthur fora do arquivo: nenhum dia coberto, nenhuma falta', () => {
@@ -251,4 +252,24 @@ test('Arthur fora do arquivo: nenhum dia coberto, nenhuma falta', () => {
   });
   assert.equal(resumo.faltas, 0);
   assert.ok(dias.every((d) => d.status === 'sem_registro' || d.status === 'folga'));
+});
+
+test('almoço (12:00 às 13:30) não vira hora extra nem acumulado; tolerância de 10 min na manhã e outra na tarde', () => {
+  const dia = (batidas: string[]) => calcularDia({ data: '2026-11-12', batidas, cfg: CFG, coberto: true, hoje: '2026-11-20' });
+  // Saiu 12:16 e voltou 13:22: os 16 min e os 8 min caem no almoço, não contam.
+  const a = dia(['08:00', '12:16', '13:22', '18:00']);
+  assert.equal(a.trabalhadoMinutos, 510);
+  assert.equal(a.saldoMinutos, 0);
+  assert.equal(a.extraMinutos, 0);
+  // Sem batida de almoço: o almoço inteiro sai.
+  assert.equal(dia(['08:00', '18:00']).trabalhadoMinutos, 510);
+  // 08:10 de manhã e 13:40 à tarde: uma tolerância em cada período, nada desconta.
+  const b = dia(['08:10', '12:00', '13:40', '18:00']);
+  assert.equal(b.trabalhadoMinutos, 490);
+  assert.equal(b.saldoMinutos, 0);
+  // 08:11 já passa da tolerância da manhã.
+  assert.equal(dia(['08:11', '12:00', '13:30', '18:00']).saldoMinutos, -11);
+  // Saída 17:50 ainda é tolerância; 17:49 desconta.
+  assert.equal(dia(['08:00', '12:00', '13:30', '17:50']).saldoMinutos, 0);
+  assert.equal(dia(['08:00', '12:00', '13:30', '17:49']).saldoMinutos, -11);
 });

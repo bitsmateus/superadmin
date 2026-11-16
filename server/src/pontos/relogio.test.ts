@@ -158,12 +158,12 @@ test('apelidos "joao vitor" e "jean may" reconhecem João e Jean; Arthur fica de
 
 test('planilha do relógio -> cálculo: bate com o resultado esperado (seção 5) e avisa as divergências do resumo', () => {
   const l = lerPlanilha(planilhaDoRelogio());
-  const calc = (nome: string) => {
+  const calc = (nome: string, ajustes: Map<string, { tipo: any }[]> = new Map()) => {
     const batidas = new Map(l.registros.filter((r) => r.nome === nome).map((r) => [r.data, r.horas]));
     const doColab = l.turnos.filter((t) => t.nome === nome);
     return calcularPeriodo({
       inicio: '2026-11-01', fim: '2026-11-16', cfg: CFG, batidas, feriados: new Map([['2026-11-02', 'Finados'], ['2026-11-15', 'Proclamação da República']]),
-      ajustes: new Map(), cobertos: new Set(doColab.map((t) => t.data)), hoje: '2026-11-16',
+      ajustes: ajustes as any, cobertos: new Set(doColab.map((t) => t.data)), hoje: '2026-11-16',
       turnos: new Map<string, TurnoDoDia>(doColab.map((t) => [t.data, { tipo: t.tipo, codigo: t.codigo }])),
     });
   };
@@ -171,25 +171,33 @@ test('planilha do relógio -> cálculo: bate com o resultado esperado (seção 5
   const linha = (d: string) => joao.dias.find((x) => x.data === d)!;
   assert.deepEqual(
     ['10', '11', '12', '13'].map((d) => [formatarMinutos(linha(`2026-11-${d}`).trabalhadoMinutos), formatarMinutos(linha(`2026-11-${d}`).saldoMinutos)]),
-    [['3h14', '-5h16'], ['8h26', '0h00'], ['8h13', '-0h17'], ['8h34', '0h00']],
+    [['3h14', '-5h16'], ['8h26', '0h00'], ['7h57', '-0h33'], ['8h20', '0h00']],
   );
   assert.equal(linha('2026-11-12').atrasoMinutos, 43);
   assert.equal(linha('2026-11-16').status, 'em_andamento');
-  assert.equal(formatarMinutos(joao.resumo.bancoMinutos), '-5h33');
+  assert.equal(formatarMinutos(joao.resumo.bancoMinutos), '-5h49');
   assert.equal(joao.resumo.faltas, 0);
   // Dias 02 a 09 (antes do controle) não viram falta, mesmo o relógio contando "Ausência" (7).
   assert.ok(['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-09'].every((d) => linha(d).status === 'fora_controle'));
 
   const jean = calc('jean may');
-  assert.equal(formatarMinutos(jean.resumo.bancoMinutos), '-5h16');
+  assert.equal(formatarMinutos(jean.resumo.bancoMinutos), '-5h21');
   assert.equal(formatarMinutos(jean.resumo.extraMinutos), '0h17');
+
+  // Dia 10 foi só teste do relógio: manhã e tarde abonadas, o dia fica zerado (como lançado na migração).
+  const abono = new Map([['2026-11-10', [{ tipo: 'abonar_manha' }, { tipo: 'abonar_tarde' }]]]);
+  const joaoAbonado = calc('joao vitor', abono);
+  assert.equal(joaoAbonado.dias.find((d) => d.data === '2026-11-10')!.status, 'abonado');
+  assert.equal(formatarMinutos(joaoAbonado.resumo.bancoMinutos), '-0h33');
+  const jeanAbonado = calc('jean may', abono);
+  assert.equal(formatarMinutos(jeanAbonado.resumo.bancoMinutos), '-0h01');
 
   // Conferência com o resumo real. João: o relógio ignora 11/11 (sem almoço) e 13/11 (tolerância) no atraso (145 x 181),
   // e conta 7 ausências (dias antes do controle e o 16 em andamento).
   const comAtraso = (r: typeof joao) => r.dias.filter((d) => d.atrasoMinutos > 0).length;
   const aj = compararComResumo(l.conferencia[0].campos, joao.resumo, comAtraso(joao));
   assert.equal(aj.length, 4);
-  assert.match(aj.join('\n'), /"Duração do trabalho Atual" no relógio = 23\.05 \(23h05\); no nosso cálculo = 28h27/);
+  assert.match(aj.join('\n'), /"Duração do trabalho Atual" no relógio = 23\.05 \(23h05\); no nosso cálculo = 27h57/);
   assert.match(aj.join('\n'), /"Atraso Vezes" no relógio = 3; no nosso cálculo = 4 dia\(s\)/);
   assert.match(aj.join('\n'), /"Atraso Min" no relógio = 145; no nosso cálculo = 181 min/);
   assert.match(aj.join('\n'), /"Ausência" no relógio = 7; no nosso cálculo = 0 falta/);

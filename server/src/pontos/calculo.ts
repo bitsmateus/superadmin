@@ -3,8 +3,9 @@
  * feriados, turnos e ajustes, e devolvem o dia a dia e o resumo. Nada aqui lê ou grava no banco (testes: calculo.test.ts).
  *
  * Regras (resumo):
- *  - saldo do dia = trabalhado − previsto; tolerância sobre o SALDO: passou de 10 min (pra mais ou pra menos) conta
- *    inteiro, senão vale 0;
+ *  - saldo do dia = trabalhado − previsto; o almoço (12:00 às 13:30) não conta como trabalho nem como extra;
+ *    tolerância de 10 min POR PERÍODO (manhã e tarde, pra mais ou pra menos): passou de 10 conta inteiro, senão vale 0
+ *    (sem o desenho manhã/tarde, a tolerância vale sobre o saldo do dia);
  *  - banco de horas = soma dos saldos líquidos (atraso/saída antecipada são só informação, não entram de novo);
  *  - falta (dia útil com turno, sem batida, dentro do controle, coberto pela importação) vai pra desconto em R$ e NÃO
  *    entra no banco (senão desconta duas vezes); "não descontar em R$" manda ela pro banco;
@@ -371,15 +372,45 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
     }
   }
 
-  // Saldo: trabalhado − previsto, com os abonos; tolerância sobre o saldo.
-  const semAbono = trabalhado - previsto;
-  let bruto = semAbono;
+  // Saldo. Com manhã e tarde (almoço fora da conta): cada período tem a sua tolerância e o almoço não soma
+  // nem como hora extra nem no acumulado. Sem esse desenho de jornada, vale o saldo do dia com a tolerância.
   const manha = periodos[0];
   const tarde = doisPeriodos ? periodos[1] : null;
-  if (tem('abonar_manha') && bruto < 0 && manha) bruto = Math.min(0, bruto + (manha[1] - manha[0]));
-  if (tem('abonar_tarde') && bruto < 0 && tarde) bruto = Math.min(0, bruto + (tarde[1] - tarde[0]));
-  if ((tem('abonar_falta') || tem('abonar_atraso')) && bruto < 0) bruto = 0;
-  const liquido = Math.abs(bruto) > tol ? bruto : 0;
+  const porPeriodo = !!tarde && (manha[1] - manha[0]) + (tarde[1] - tarde[0]) === previsto;
+  const tolera = (x: number) => (Math.abs(x) <= tol ? 0 : x);
+  let trabalhadoFinal = trabalhado;
+  let bruto: number;
+  let liquido: number;
+  let liquidoSemAbono: number;
+  if (porPeriodo && tarde) {
+    let trabM = 0;
+    let trabT = 0;
+    for (let i = 0; i + 1 < n; i += 2) {
+      const ini = efetivas[i];
+      const fim = efetivas[i + 1];
+      trabM += Math.max(0, Math.min(fim, manha[1]) - ini); // até o início do almoço (inclui a chegada antes do horário)
+      trabT += Math.max(0, fim - Math.max(ini, tarde[0])); // do fim do almoço em diante (inclui a saída depois do horário)
+    }
+    trabalhadoFinal = trabM + trabT;
+    const netM = trabM - (manha[1] - manha[0]);
+    const netT = trabT - (tarde[1] - tarde[0]);
+    let nM = netM;
+    let nT = netT;
+    if (tem('abonar_manha') && nM < 0) nM = 0;
+    if (tem('abonar_tarde') && nT < 0) nT = 0;
+    if (tem('abonar_falta') || tem('abonar_atraso')) { nM = Math.max(0, nM); nT = Math.max(0, nT); }
+    bruto = nM + nT;
+    liquido = tolera(tolera(nM) + tolera(nT));
+    liquidoSemAbono = tolera(tolera(netM) + tolera(netT));
+  } else {
+    const semAbono = trabalhado - previsto;
+    bruto = semAbono;
+    if (tem('abonar_manha') && bruto < 0 && manha) bruto = Math.min(0, bruto + (manha[1] - manha[0]));
+    if (tem('abonar_tarde') && bruto < 0 && tarde) bruto = Math.min(0, bruto + (tarde[1] - tarde[0]));
+    if ((tem('abonar_falta') || tem('abonar_atraso')) && bruto < 0) bruto = 0;
+    liquido = tolera(bruto);
+    liquidoSemAbono = tolera(semAbono);
+  }
 
   let banco = liquido;
   let extra = 0;
@@ -399,11 +430,11 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
   else if (tardeSemBatida && liquido < 0) status = 'tarde_sem_batida';
   else if (liquido < 0) status = 'atraso';
   else if (liquido > 0) status = 'extra';
-  else if (ABONOS.some(tem) && bruto !== semAbono) status = 'abonado';
+  else if (ABONOS.some(tem) && liquido !== liquidoSemAbono) status = 'abonado';
   else status = 'normal';
 
   return fechar(status, {
-    atrasoMinutos: atraso, saidaAntecipadaMinutos: saida, saldoBrutoMinutos: bruto, saldoMinutos: liquido,
+    trabalhadoMinutos: trabalhadoFinal, atrasoMinutos: atraso, saidaAntecipadaMinutos: saida, saldoBrutoMinutos: bruto, saldoMinutos: liquido,
     bancoMinutos: banco, extraMinutos: extra, valorExtraCentavos: valorExtra, descontoCentavos: desconto,
   });
 }

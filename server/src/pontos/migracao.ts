@@ -180,6 +180,17 @@ INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
 SELECT 'migracao_cadastro_jean_joao', '{"horario":"08:00-12:00/13:30-18:00","extra":"pagamento","dias":"seg-sex"}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_jean_joao');
 
+-- Dia 10/11/2026 foi o teste do relógio (antes não havia ponto; bateram à tarde só pra testar): manhã e tarde abonadas
+-- pra Jean e João, o dia fica zerado. Só na primeira vez; se alguém remover o abono na tela, ele não volta.
+INSERT INTO ponto_ajustes (colaborador_id, data, tipo, motivo, autor_nome)
+SELECT c.id, DATE '2026-11-10', t.tipo, 'Dia de teste do relógio de ponto (antes não havia controle)', 'migração'
+  FROM ponto_colaboradores c CROSS JOIN (VALUES ('abonar_manha'), ('abonar_tarde')) AS t(tipo)
+ WHERE lower(c.nome) IN ('jean', 'joão', 'joao')
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_abono_dia_10');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_abono_dia_10', '{"data":"2026-11-10","tipos":["abonar_manha","abonar_tarde"],"colaboradores":["Jean","João"]}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_abono_dia_10');
+
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES
   ('2026-01-01', 'Confraternização Universal', 'nacional'),

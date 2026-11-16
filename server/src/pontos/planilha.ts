@@ -427,8 +427,11 @@ export function lerExportacaoDoRelogio(todas: { nome: string; linhas: unknown[][
     const linha = aba.linhas[i] ?? [];
     if (!ehLinhaDeColaborador(linha)) continue;
     const nome = nomeDaLinha(linha);
-    const batidasDaLinha = aba.linhas[i + 1] ?? [];
-    i += 1; // a linha das batidas é lida junto
+    // A linha das batidas vem logo embaixo. Colaborador sem nenhuma batida: a linha vazia some na leitura e a de baixo já
+    // é o próximo colaborador; aí não consome.
+    const proxima = aba.linhas[i + 1] ?? [];
+    const batidasDaLinha = ehLinhaDeColaborador(proxima) ? [] : proxima;
+    if (batidasDaLinha === proxima) i += 1;
     if (!nome) { invalidas.push({ aba: aba.nome, linha: i, motivo: 'Colaborador sem nome' }); continue; }
     nomes.push(nome);
     for (const [idx, diaDoMes] of cab.dias) {
@@ -493,11 +496,24 @@ function lerTurnos(linhas: unknown[][], periodo: { inicio: string; fim: string }
   const out: TurnoLido[] = [];
   const lerLinha = (nome: string, l: unknown[]) => { for (const [idx, data] of colunaData) out.push({ nome, data, ...tipoDoTurno(l[idx]) }); };
   let porColaborador = false;
-  for (let i = iSemana + 1; i < linhas.length; i++) {
-    if (!ehLinhaDeColaborador(linhas[i] ?? [])) continue;
-    const nome = nomeDaLinha(linhas[i]);
-    if (nome && linhas[i + 1]) { lerLinha(nome, linhas[i + 1]); porColaborador = true; }
-    i += 1;
+  // Formato do relógio: "No | Nome | Dept. | 1 | 2 | …" e uma linha por colaborador, com o nome na coluna "Nome".
+  const idxNome = [cab?.linha, iSemana - 1, iSemana].filter((x): x is number => x != null && x >= 0)
+    .map((i) => (linhas[i] ?? []).findIndex((c) => /^nome$/.test(norm(c).replace(/[^a-z]/g, ''))))
+    .find((x) => x >= 0);
+  if (idxNome != null) {
+    for (const l of linhas.slice(iSemana + 1)) {
+      const nome = texto((l ?? [])[idxNome]);
+      if (nome && !/^(especial|legenda|nota)/i.test(nome)) { lerLinha(nome, l); porColaborador = true; }
+    }
+  }
+  // Outro formato: blocos "No: … Nome: …" com os turnos na linha de baixo.
+  if (!porColaborador) {
+    for (let i = iSemana + 1; i < linhas.length; i++) {
+      if (!ehLinhaDeColaborador(linhas[i] ?? [])) continue;
+      const nome = nomeDaLinha(linhas[i]);
+      if (nome && linhas[i + 1]) { lerLinha(nome, linhas[i + 1]); porColaborador = true; }
+      i += 1;
+    }
   }
   if (!porColaborador) {
     // Uma linha só (vale pra todos): a primeira linha depois dos dias da semana com valor em alguma coluna de dia.
@@ -507,22 +523,41 @@ function lerTurnos(linhas: unknown[][], periodo: { inicio: string; fim: string }
   return out;
 }
 
-/** Aba resumo: cabeçalho + uma linha por colaborador (só pra conferência; nada daqui entra no cálculo). */
+/**
+ * Aba resumo: cabeçalho em até duas linhas ("Atraso" mesclado em cima de "Vezes | Min") + uma linha por colaborador.
+ * Só pra conferência; nada daqui entra no cálculo.
+ */
 function lerResumo(nomeAba: string, linhas: unknown[][], nomes: string[]): ConferenciaLida[] {
   const alvo = new Set(nomes.map(normalizarNome));
   const out: ConferenciaLida[] = [];
-  let cabecalho: string[] | null = null;
+  const cabecalhos: string[][] = []; // linhas "cheias" (3+ células) antes do primeiro colaborador
+  let rotulos: string[] | null = null;
   for (const bruta of linhas) {
     const l = (bruta ?? []).map((c) => texto(c).replace(/\s+/g, ' '));
     const idxNome = l.findIndex((c) => c && alvo.has(normalizarNome(c)));
     if (idxNome < 0) {
-      if (l.filter(Boolean).length >= 3) cabecalho = l; // a última linha "cheia" antes do colaborador é o cabeçalho
+      if (!out.length && l.filter(Boolean).length >= 3) { cabecalhos.push(l); rotulos = null; }
       continue;
+    }
+    if (!rotulos) {
+      // Cabeçalho de cima (célula mesclada vale pras colunas seguintes enquanto a de baixo tiver subtítulo) + o de baixo.
+      const [cima, baixo] = cabecalhos.length >= 2 ? cabecalhos.slice(-2) : [cabecalhos[cabecalhos.length - 1] ?? [], []];
+      rotulos = [];
+      let mesclado = '';
+      const n = Math.max(cima.length, baixo.length, l.length);
+      for (let idx = 0; idx < n; idx++) {
+        if (cima[idx]) mesclado = cima[idx];
+        else if (!baixo[idx]) mesclado = '';
+        const topo = cima[idx] || (baixo[idx] ? mesclado : '');
+        rotulos.push([topo, baixo[idx]].filter(Boolean).join(' ').trim());
+      }
     }
     const campos: Record<string, string> = {};
     l.forEach((v, idx) => {
       if (idx === idxNome || !v) return;
-      campos[(cabecalho?.[idx] || `Coluna ${idx + 1}`).trim()] = v;
+      const rotulo = rotulos![idx] || `Coluna ${idx + 1}`;
+      if (/^(no|dept\.?|departamento)$/i.test(rotulo)) return;
+      campos[rotulo] = v;
     });
     out.push({ aba: nomeAba, nome: l[idxNome], campos });
   }

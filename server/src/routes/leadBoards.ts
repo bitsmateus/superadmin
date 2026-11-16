@@ -220,6 +220,15 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
  *    (Origem de lead que veio do anúncio já é Meta. Valor em R$ precisa ter sido digitado — R$ 0,00 conta.)
  * Devolve o que falta (e a mensagem) ou null.
  */
+/**
+ * CRMs dos SDRs, onde valem a regra de status e a agenda manual: Arthur, Luis (inclui o Closer), IA Luiza e o CRM
+ * TUBARAO (id crm-outbound), que segue as mesmas regras do CRM ARTHUR (pedido de 16/11). Mesma regra do front
+ * (abaComRegraDeStatus em src/lib/regraDoStatus.ts).
+ */
+export function ehAbaDeSdr(aba: { id: string; name: string } | null | undefined): boolean {
+  return !!aba && (/(arthur|lu[ií]s|luiza|tubar[aã]o)/i.test(aba.name) || /(arthur|luis|luiza|outbound)/i.test(aba.id));
+}
+
 async function faltaDadoDoStatus(
   leadId: string, patch: Record<string, unknown>, semRegraDeOrigem = false,
 ): Promise<{ campos: string[]; mensagem: string } | null> {
@@ -264,7 +273,7 @@ async function faltaDadoDoStatus(
     'SELECT lp.id, lp.name FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1',
     [quadroDestino]
   );
-  if (!aba || !(/(arthur|lu[ií]s|luiza)/i.test(aba.name) || /(arthur|luis|luiza)/i.test(aba.id))) return pedeOrigem ? SO_ORIGEM : null;
+  if (!ehAbaDeSdr(aba)) return pedeOrigem ? SO_ORIGEM : null;
 
   const NOMES: Record<string, string> = {
     agendamento: 'dia e horário do agendamento', agendado_por: 'por onde foi agendado', retornar: 'dia e horário em "Retornar"', origem: 'origem do lead',
@@ -1901,14 +1910,14 @@ export async function leadBoardRoutes(app: FastifyInstance) {
         if (sdrDaAba) (leadRow as { sdr?: string }).sdr = sdrDaAba;
       }
 
-      // Agendamento vai sozinho pra agenda (Google) — MENOS nos CRMs do Arthur e do Luis (inclui o Closer): ali o SDR
-      // manda o link pro lead e põe na agenda à mão (o popup do agendamento lembra disso).
+      // Agendamento vai sozinho pra agenda (Google) — MENOS nos CRMs dos SDRs (Arthur, Luis/Closer, IA Luiza, Tubarão):
+      // ali o SDR manda o link pro lead e põe na agenda à mão (o popup do agendamento lembra disso).
       if ('agendamento' in patch) {
         const aba = await queryOne<{ id: string; name: string }>(
           'SELECT lp.id, lp.name FROM lead_boards lb JOIN lead_pages lp ON lp.id = lb.page WHERE lb.id = $1',
           [(leadRow as { board_id: string }).board_id]
         );
-        const agendaManual = !!aba && (/(arthur|lu[ií]s|luiza)/i.test(aba.name) || /(arthur|luis|luiza)/i.test(aba.id));
+        const agendaManual = ehAbaDeSdr(aba);
         if (!agendaManual) {
           void syncLeadAgendamentoCalendar(leadRow as unknown as LeadAgendamentoRow).catch((err) =>
             console.error('[calendarSync] lead-rows (agendamento):', err),

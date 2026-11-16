@@ -162,11 +162,11 @@ function isIanMateusPage(pageName: string): boolean {
   return /\bian\b/i.test(pageName) || /\bmateus\b/i.test(pageName)
 }
 
-/** Abas sem "Marcar como bloco de notas" no menu Página (pedido de 12/11): CRM IAN, CRM MATEUS, Novos Leads, CRM ARTHUR e
- * CRM LUIS CLOSER. */
+/** Abas sem "Marcar como bloco de notas" no menu Página (pedido de 12/11): CRM IAN, CRM MATEUS, Novos Leads, CRM ARTHUR,
+ * CRM LUIS CLOSER e o CRM TUBARAO (crm-outbound, mesmas regras do CRM ARTHUR — 16/11). */
 function semBlocoDeNotas(pageId: string, pageName: string): boolean {
   return isIanMateusPage(pageName) || isIanMateusPage(pageId) || pageId === 'novos_leads' || pageId === 'crm-arthur'
-    || pageId === 'crm-luis-closer'
+    || pageId === 'crm-luis-closer' || pageId === 'crm-outbound'
 }
 
 /** Colunas visíveis numa aba — a coluna SDR só faz sentido em Novos Leads (várias pessoas

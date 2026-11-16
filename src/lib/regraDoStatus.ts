@@ -118,8 +118,9 @@ function normaliza(s: string): string {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
+/** CRMs dos SDRs: Arthur, Luis (inclui o Closer), IA Luiza e CRM TUBARAO (id crm-outbound) — mesmas regras do Arthur. */
 export function abaComRegraDeStatus(nomeDaAba: string, idDaAba = ''): boolean {
-  return /(arthur|lu[ií]s|luiza)/i.test(nomeDaAba) || /(arthur|luis|luiza)/i.test(idDaAba)
+  return /(arthur|lu[ií]s|luiza|tubar[aã]o)/i.test(nomeDaAba) || /(arthur|luis|luiza|outbound)/i.test(idDaAba)
 }
 
 

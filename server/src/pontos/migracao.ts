@@ -247,6 +247,38 @@ INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
 SELECT 'migracao_arthur_saida_dia16', '{"data":"2026-11-16","hora":"17:30"}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_saida_dia16');
 
+-- Início do controle (pedido de 16/11): Jean e João contam a partir de 11/11 (foram cadastrados no relógio em 10/11, os dias
+-- 01 a 10 ficam de fora); Arthur a partir de 12/11. Só troca quem ainda está com a data das versões anteriores (10/11 e
+-- 16/11), então o que alguém mudou na tela fica. As correções de batida lançadas pra dias que agora ficam fora do controle
+-- (10/11 dos três e 11/11 do Arthur) são retiradas.
+UPDATE ponto_colaboradores SET inicio_controle = '2026-11-11', atualizado_em = NOW()
+ WHERE lower(nome) IN ('jean', 'joão', 'joao') AND inicio_controle = DATE '2026-11-10'
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_inicio_controle_v2');
+UPDATE ponto_colaboradores SET inicio_controle = '2026-11-12', atualizado_em = NOW()
+ WHERE lower(nome) = 'arthur' AND inicio_controle IN (DATE '2026-11-10', DATE '2026-11-16')
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_inicio_controle_v2');
+UPDATE ponto_ajustes a SET removido_em = NOW(), removido_por_nome = 'migração'
+  FROM ponto_colaboradores c
+ WHERE c.id = a.colaborador_id AND a.tipo = 'corrigir_batidas' AND a.autor_nome = 'migração' AND a.removido_em IS NULL
+   AND ((a.data = DATE '2026-11-10') OR (lower(c.nome) = 'arthur' AND a.data = DATE '2026-11-11'))
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_inicio_controle_v2');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_inicio_controle_v2', '{"jean_joao":"2026-11-11","arthur":"2026-11-12"}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_inicio_controle_v2');
+
+-- Novo colaborador: Luis, salário base R$ 2.500 (+ comissão, que fica na aba Comissões), controle a partir de 18/11/2026.
+-- Horário da casa (seg a sex, 08:00-12:00 / 13:30-18:00, tolerância 10 min), hora extra pra folha como o Jean e o João.
+-- Só na primeira vez: depois vale o que for alterado na tela de Colaboradores.
+INSERT INTO ponto_colaboradores (nome) VALUES ('Luis') ON CONFLICT DO NOTHING;
+UPDATE ponto_colaboradores SET
+  dias_semana = '{1,2,3,4,5}', minutos_dia = 510, entrada_prevista = '08:00', saida_prevista = '18:00',
+  intervalo_inicio = '12:00', intervalo_minutos = 90, tolerancia_minutos = 10, destino_extra = 'pagamento',
+  salario_base_centavos = 250000, inicio_controle = '2026-11-18', atualizado_em = NOW()
+ WHERE lower(nome) IN ('luis', 'luís') AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_luis');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_cadastro_luis', '{"salario_base_centavos":250000,"inicio_controle":"2026-11-18","extra":"pagamento"}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_luis');
+
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES
   ('2026-01-01', 'Confraternização Universal', 'nacional'),

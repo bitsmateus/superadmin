@@ -158,11 +158,11 @@ test('apelidos "joao vitor" e "jean may" reconhecem João e Jean; Arthur fica de
 
 test('planilha do relógio -> cálculo: bate com o resultado esperado (seção 5) e avisa as divergências do resumo', () => {
   const l = lerPlanilha(planilhaDoRelogio());
-  const calc = (nome: string, ajustes: Map<string, { tipo: any }[]> = new Map()) => {
+  const calc = (nome: string, ajustes: Map<string, { tipo: any }[]> = new Map(), cfg = CFG) => {
     const batidas = new Map(l.registros.filter((r) => r.nome === nome).map((r) => [r.data, r.horas]));
     const doColab = l.turnos.filter((t) => t.nome === nome);
     return calcularPeriodo({
-      inicio: '2026-11-01', fim: '2026-11-16', cfg: CFG, batidas, feriados: new Map([['2026-11-02', 'Finados'], ['2026-11-15', 'Proclamação da República']]),
+      inicio: '2026-11-01', fim: '2026-11-16', cfg, batidas, feriados: new Map([['2026-11-02', 'Finados'], ['2026-11-15', 'Proclamação da República']]),
       ajustes: ajustes as any, cobertos: new Set(doColab.map((t) => t.data)), hoje: '2026-11-16',
       turnos: new Map<string, TurnoDoDia>(doColab.map((t) => [t.data, { tipo: t.tipo, codigo: t.codigo }])),
     });
@@ -191,6 +191,14 @@ test('planilha do relógio -> cálculo: bate com o resultado esperado (seção 5
   assert.equal(formatarMinutos(joaoAbonado.resumo.bancoMinutos), '-0h33');
   const jeanAbonado = calc('jean may', abono);
   assert.equal(formatarMinutos(jeanAbonado.resumo.bancoMinutos), '0h01');
+
+  // Controle de Jean e João a partir de 11/11 (dias 01 a 10 desconsiderados, o dia 10 inclusive).
+  const cfg11 = { ...CFG, inicioControle: '2026-11-11' };
+  const j11 = calc('joao vitor', new Map(), cfg11);
+  assert.equal(j11.dias.find((d) => d.data === '2026-11-10')!.status, 'fora_controle');
+  assert.equal(formatarMinutos(j11.resumo.bancoMinutos), '-0h33');
+  const e11 = calc('jean may', new Map(), cfg11);
+  assert.equal(formatarMinutos(e11.resumo.bancoMinutos), '0h01');
 
   // Conferência com o resumo real. João: o relógio ignora 11/11 (sem almoço) e 13/11 (tolerância) no atraso (145 x 181),
   // e conta 7 ausências (dias antes do controle e o 16 em andamento).

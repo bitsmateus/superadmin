@@ -45,7 +45,8 @@ export function relatorioCsv(r: DadosDoRelatorio): string {
     ['  para banco de horas', formatarMinutos(r.resumo.extraBancoMinutos)],
     ['  para pagamento', formatarMinutos(r.resumo.extraPagamentoMinutos)],
     ['Atrasos + saídas antecipadas', formatarMinutos(r.resumo.atrasoMinutos + r.resumo.saidaAntecipadaMinutos)],
-    ['Faltas', r.resumo.faltas],
+    ['Faltas (dia inteiro)', r.resumo.faltas],
+    ['Faltas de meio período', r.resumo.meiasFaltas],
     ['Saldo do período', formatarMinutos(r.resumo.saldoMinutos)],
     ['Banco de horas acumulado', formatarMinutos(r.bancoAcumuladoMinutos)],
     ['Valor/hora', brl(r.valorHoraCentavos)],
@@ -61,10 +62,10 @@ export function relatorioHtml(r: DadosDoRelatorio): string {
     <tr class="${d.status}">
       <td>${dataBr(d.data)}</td><td>${DIAS[d.diaSemana]}</td><td>${esc(d.batidas.join(' '))}</td>
       <td>${formatarMinutos(d.trabalhadoMinutos)}</td><td>${formatarMinutos(d.previstoMinutos)}</td>
-      <td>${d.atrasoMinutos + d.saidaAntecipadaMinutos ? formatarMinutos(d.atrasoMinutos + d.saidaAntecipadaMinutos) : '—'}</td>
+      <td>${d.atrasoMinutos + d.saidaAntecipadaMinutos + d.faltaMinutos ? formatarMinutos(d.atrasoMinutos + d.saidaAntecipadaMinutos + d.faltaMinutos) : '—'}</td>
       <td>${d.extraMinutos ? formatarMinutos(d.extraMinutos) + (d.extraDestino === 'banco' ? ' (banco)' : ' (pag.)') : '—'}</td>
       <td>${formatarMinutos(d.saldoMinutos)}</td><td>${d.descontoCentavos ? brl(d.descontoCentavos) : '—'}</td>
-      <td>${STATUS[d.status] ?? d.status}</td>
+      <td>${STATUS[d.status] ?? d.status}${d.faltaPeriodo ? (d.faltaPeriodo === 'manha' ? ' (manhã)' : ' (tarde)') : ''}</td>
     </tr>`).join('');
   const card = (t: string, v: string) => `<div class="card"><span>${t}</span><b>${v}</b></div>`;
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ponto ${esc(r.colaborador)}</title>
@@ -86,13 +87,13 @@ export function relatorioHtml(r: DadosDoRelatorio): string {
   ${card('Trabalhadas', formatarMinutos(r.resumo.trabalhadoMinutos))}
   ${card('Horas extras', formatarMinutos(r.resumo.extraMinutos))}
   ${card('Atrasos + saídas', formatarMinutos(r.resumo.atrasoMinutos + r.resumo.saidaAntecipadaMinutos))}
-  ${card('Faltas', String(r.resumo.faltas))}
+  ${card('Faltas', String(r.resumo.faltas) + (r.resumo.meiasFaltas ? ` + ${r.resumo.meiasFaltas} meio período` : ''))}
   ${card('Saldo do período', formatarMinutos(r.resumo.saldoMinutos))}
   ${card('Banco acumulado', formatarMinutos(r.bancoAcumuladoMinutos))}
   ${card('Desconto', brl(r.resumo.descontoCentavos))}
   ${card('Extras a pagar', brl(r.resumo.valorExtraCentavos))}
 </div>
-<table><thead><tr><th>Data</th><th>Dia</th><th>Batidas</th><th>Trab.</th><th>Prev.</th><th>Atraso/saída</th><th>Extra</th><th>Saldo</th><th>Desconto</th><th>Status</th></tr></thead>
+<table><thead><tr><th>Data</th><th>Dia</th><th>Batidas</th><th>Trab.</th><th>Prev.</th><th>Atraso/saída/falta</th><th>Extra</th><th>Saldo</th><th>Desconto</th><th>Status</th></tr></thead>
 <tbody>${linhas}</tbody></table>
 <div class="assin"><div>Colaborador</div><div>Empresa</div></div>
 </body></html>`;

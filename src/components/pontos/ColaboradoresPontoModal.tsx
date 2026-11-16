@@ -9,7 +9,7 @@ import { brl, DIAS_CURTOS, pontosService, type Colaborador } from '@/services/po
 
 type Rascunho = {
   nome: string; apelidos: string; ativo: boolean; diasSemana: number[]; horasDia: string; horasSabado: string; horasDomingo: string
-  entradaPrevista: string; saidaPrevista: string; intervaloMinutos: string; toleranciaMinutos: string
+  entradaPrevista: string; saidaPrevista: string; intervaloMinutos: string; intervaloInicio: string; toleranciaMinutos: string
   salario: string; divisorMensal: string; valorHora: string; pctExtraUtil: string; pctExtraDomingoFeriado: string
   destinoExtra: 'banco' | 'pagamento'; bancoSaldoInicial: string; bancoInicio: string
 }
@@ -30,8 +30,8 @@ const reais = (c: number | null) => (c == null ? '' : (c / 100).toFixed(2).repla
 function paraRascunho(c?: Colaborador): Rascunho {
   return {
     nome: c?.nome ?? '', apelidos: (c?.apelidos ?? []).join(', '), ativo: c?.ativo ?? true, diasSemana: c?.diasSemana ?? [1, 2, 3, 4, 5],
-    horasDia: paraHorasTexto(c?.minutosDia ?? 480), horasSabado: paraHorasTexto(c?.minutosSabado ?? 240), horasDomingo: paraHorasTexto(c?.minutosDomingo ?? 0),
-    entradaPrevista: c?.entradaPrevista ?? '08:00', saidaPrevista: c?.saidaPrevista ?? '18:00', intervaloMinutos: String(c?.intervaloMinutos ?? 120),
+    horasDia: paraHorasTexto(c?.minutosDia ?? 510), horasSabado: paraHorasTexto(c?.minutosSabado ?? 240), horasDomingo: paraHorasTexto(c?.minutosDomingo ?? 0),
+    entradaPrevista: c?.entradaPrevista ?? '08:00', saidaPrevista: c?.saidaPrevista ?? '18:00', intervaloMinutos: String(c?.intervaloMinutos ?? 90), intervaloInicio: c ? (c.intervaloInicio ?? '') : '12:00',
     toleranciaMinutos: String(c?.toleranciaMinutos ?? 10), salario: reais(c?.salarioBaseCentavos ?? 0), divisorMensal: String(c?.divisorMensal ?? 220),
     valorHora: reais(c?.valorHoraCentavos ?? null), pctExtraUtil: String(c?.pctExtraUtil ?? 50), pctExtraDomingoFeriado: String(c?.pctExtraDomingoFeriado ?? 100),
     destinoExtra: c?.destinoExtra ?? 'banco', bancoSaldoInicial: paraHorasTexto(Math.abs(c?.bancoSaldoInicialMinutos ?? 0)).replace(/^/, (c?.bancoSaldoInicialMinutos ?? 0) < 0 ? '-' : ''),
@@ -71,7 +71,7 @@ export function ColaboradoresPontoModal({ open, onClose, colaboradores, onSalvo 
     const corpo: Partial<Colaborador> = {
       nome: r.nome.trim(), apelidos: r.apelidos.split(',').map((s) => s.trim()).filter(Boolean), ativo: r.ativo, diasSemana: r.diasSemana,
       minutosDia, minutosSabado, minutosDomingo, entradaPrevista: r.entradaPrevista, saidaPrevista: r.saidaPrevista,
-      intervaloMinutos: Number(r.intervaloMinutos) || 0, toleranciaMinutos: Number(r.toleranciaMinutos) || 0,
+      intervaloMinutos: Number(r.intervaloMinutos) || 0, intervaloInicio: r.intervaloInicio || null, toleranciaMinutos: Number(r.toleranciaMinutos) || 0,
       salarioBaseCentavos: salario ?? 0, divisorMensal: Number(r.divisorMensal) || 220, valorHoraCentavos: centavos(r.valorHora),
       pctExtraUtil: Number(r.pctExtraUtil.replace(',', '.')) || 0, pctExtraDomingoFeriado: Number(r.pctExtraDomingoFeriado.replace(',', '.')) || 0,
       destinoExtra: r.destinoExtra, bancoSaldoInicialMinutos: r.bancoSaldoInicial.trim().startsWith('-') ? -saldo : saldo,
@@ -135,6 +135,7 @@ export function ColaboradoresPontoModal({ open, onClose, colaboradores, onSalvo 
             <Input label="Jornada domingo (h:mm)" value={r.horasDomingo} onChange={(e) => set('horasDomingo', e.target.value)} />
             <Input label="Entrada prevista" type="time" value={r.entradaPrevista} onChange={(e) => set('entradaPrevista', e.target.value)} />
             <Input label="Saída prevista" type="time" value={r.saidaPrevista} onChange={(e) => set('saidaPrevista', e.target.value)} />
+            <Input label="Início do almoço" type="time" value={r.intervaloInicio} onChange={(e) => set('intervaloInicio', e.target.value)} />
             <Input label="Almoço previsto (min)" inputMode="numeric" value={r.intervaloMinutos} onChange={(e) => set('intervaloMinutos', e.target.value)} />
             <Input label="Tolerância (min)" inputMode="numeric" value={r.toleranciaMinutos} onChange={(e) => set('toleranciaMinutos', e.target.value)} />
           </div>

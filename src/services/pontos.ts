@@ -21,6 +21,8 @@ export interface Colaborador {
   entradaPrevista: string
   saidaPrevista: string
   intervaloMinutos: number
+  /** Início do almoço ("12:00"); divide o dia em manhã e tarde. */
+  intervaloInicio: string | null
   toleranciaMinutos: number
   salarioBaseCentavos: number
   divisorMensal: number
@@ -43,6 +45,8 @@ export interface DiaPonto {
   atrasoMinutos: number
   saidaAntecipadaMinutos: number
   faltaMinutos: number
+  /** Faltou só a manhã ou só a tarde. */
+  faltaPeriodo: 'manha' | 'tarde' | null
   extraMinutos: number
   extraDestino: DestinoExtra
   pctExtra: number
@@ -65,6 +69,7 @@ export interface ResumoPonto {
   saidaAntecipadaMinutos: number
   faltaMinutos: number
   faltas: number
+  meiasFaltas: number
   saldoMinutos: number
   descontoCentavos: number
   valorExtraCentavos: number

@@ -18,12 +18,14 @@ CREATE TABLE IF NOT EXISTS ponto_colaboradores (
   ativo BOOLEAN NOT NULL DEFAULT true,
   -- Dias trabalhados (0 = domingo … 6 = sábado) e jornada em minutos.
   dias_semana INT[] NOT NULL DEFAULT '{1,2,3,4,5}',
-  minutos_dia INT NOT NULL DEFAULT 480,
+  minutos_dia INT NOT NULL DEFAULT 510,
   minutos_sabado INT NOT NULL DEFAULT 240,
   minutos_domingo INT NOT NULL DEFAULT 0,
   entrada_prevista TEXT NOT NULL DEFAULT '08:00',
   saida_prevista TEXT NOT NULL DEFAULT '18:00',
-  intervalo_minutos INT NOT NULL DEFAULT 120,
+  -- Almoço: começa em intervalo_inicio e dura intervalo_minutos (padrão 12:00-13:30). Divide o dia em manhã e tarde.
+  intervalo_minutos INT NOT NULL DEFAULT 90,
+  intervalo_inicio TEXT DEFAULT '12:00',
   tolerancia_minutos INT NOT NULL DEFAULT 10,
   salario_base_centavos BIGINT NOT NULL DEFAULT 0,
   divisor_mensal INT NOT NULL DEFAULT 220,
@@ -125,7 +127,10 @@ CREATE TABLE IF NOT EXISTS ponto_auditoria (
   criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Cadastro inicial (idempotente).
+-- Coluna nova pra quem já tinha rodado uma versão anterior desta migração.
+ALTER TABLE ponto_colaboradores ADD COLUMN IF NOT EXISTS intervalo_inicio TEXT DEFAULT '12:00';
+
+-- Cadastro inicial (idempotente). Horário da casa: 08:00-12:00 e 13:30-18:00 (8h30), 10 min de tolerância.
 INSERT INTO ponto_colaboradores (nome) VALUES ('Jean'), ('João'), ('Arthur') ON CONFLICT DO NOTHING;
 
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.

@@ -172,3 +172,78 @@ test('período: banco de horas = soma dos saldos; resumo soma tudo', () => {
   assert.equal(resumo.atrasoMinutos, 30);
   assert.equal(resumo.faltas, 1);
 });
+
+// ── Horário da casa: 08:00-12:00 e 13:30-18:00 (8h30), 10 min de tolerância na chegada e na saída ──
+const CASA: ConfigColaborador = { ...CFG, minutosDia: 510, intervaloMinutos: 90, intervaloInicio: '12:00', saidaPrevista: '18:00' };
+const casa = (batidas: string[], extra: Partial<Parameters<typeof calcularDia>[0]> = {}) =>
+  calcularDia({ data: SEG, batidas, cfg: CASA, coberto: true, ...extra });
+
+test('casa: dia certinho 08:00-12:00 / 13:30-18:00 = 8h30, nada a descontar', () => {
+  const d = casa(['08:00', '12:00', '13:30', '18:00']);
+  assert.equal(d.trabalhadoMinutos, 510);
+  assert.equal(d.saldoMinutos, 0);
+  assert.equal(d.descontoCentavos, 0);
+  assert.equal(d.status, 'normal');
+});
+
+test('casa: chegou até 08:10 e saiu a partir das 17:50 não desconta; 08:11 ou 17:49 desconta inteiro', () => {
+  assert.equal(casa(['08:10', '12:00', '13:30', '17:50']).saldoMinutos, 0);
+  assert.equal(casa(['08:11', '12:00', '13:30', '18:00']).atrasoMinutos, 11);
+  assert.equal(casa(['08:00', '12:00', '13:30', '17:49']).saidaAntecipadaMinutos, 11);
+});
+
+test('casa: não veio de manhã (só 13:30-18:00) desconta a manhã inteira (4h), não o almoço', () => {
+  const d = casa(['13:30', '18:00']);
+  assert.equal(d.trabalhadoMinutos, 270);
+  assert.equal(d.faltaMinutos, 240);
+  assert.equal(d.faltaPeriodo, 'manha');
+  assert.equal(d.atrasoMinutos, 0);
+  assert.equal(d.saldoMinutos, -240);
+  assert.equal(d.descontoCentavos, 4000); // 4h × R$10
+  assert.equal(d.status, 'falta');
+});
+
+test('casa: hoje, chegou 13:30 e ainda não saiu: a manhã já desconta', () => {
+  const d = casa(['13:30'], { hoje: SEG });
+  assert.equal(d.faltaMinutos, 240);
+  assert.equal(d.faltaPeriodo, 'manha');
+  assert.match(d.avisos.join(' '), /andamento/);
+});
+
+test('casa: chegou 13:45 (sem manhã) desconta a manhã e os 15 min da tarde', () => {
+  const d = casa(['13:45', '18:00']);
+  assert.equal(d.faltaMinutos, 240);
+  assert.equal(d.atrasoMinutos, 15);
+});
+
+test('casa: foi embora no almoço (08:00-12:00) desconta a tarde inteira (4h30)', () => {
+  const d = casa(['08:00', '12:00']);
+  assert.equal(d.faltaMinutos, 270);
+  assert.equal(d.faltaPeriodo, 'tarde');
+  assert.equal(d.saidaAntecipadaMinutos, 0);
+  assert.equal(d.saldoMinutos, -270);
+});
+
+test('casa: almoço de 1h45 desconta os 15 min a mais; almoço deslocado com 1h30 não desconta', () => {
+  const longo = casa(['08:00', '12:00', '13:45', '18:00']);
+  assert.equal(longo.atrasoMinutos, 15);
+  assert.equal(longo.saldoMinutos, -15);
+  assert.equal(casa(['08:00', '12:10', '13:40', '18:00']).saldoMinutos, 0);
+});
+
+test('casa: sem batida de almoço (08:00-18:00) desconta 1h30 e fecha 8h30', () => {
+  const d = casa(['08:00', '18:00']);
+  assert.equal(d.trabalhadoMinutos, 510);
+  assert.equal(d.saldoMinutos, 0);
+});
+
+test('casa: resumo separa falta do dia inteiro de meia falta', () => {
+  const { resumo } = calcularPeriodo({
+    inicio: '2026-11-16', fim: '2026-11-17', cfg: CASA, feriados: new Map(), ajustes: new Map(),
+    batidas: new Map([['2026-11-16', ['13:30', '18:00']]]),
+    cobertos: new Set(['2026-11-16', '2026-11-17']),
+  });
+  assert.equal(resumo.faltas, 1);
+  assert.equal(resumo.meiasFaltas, 1);
+  assert.equal(resumo.faltaMinutos, 240 + 510);
+});

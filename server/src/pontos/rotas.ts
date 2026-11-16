@@ -48,13 +48,13 @@ async function auditar(acao: string, detalhes: Record<string, unknown>, u: Usuar
 interface ColabRow {
   id: string; nome: string; apelidos: string[]; ativo: boolean; dias_semana: number[]; minutos_dia: number;
   minutos_sabado: number; minutos_domingo: number; entrada_prevista: string; saida_prevista: string;
-  intervalo_minutos: number; tolerancia_minutos: number; salario_base_centavos: string; divisor_mensal: number;
+  intervalo_minutos: number; intervalo_inicio: string | null; tolerancia_minutos: number; salario_base_centavos: string; divisor_mensal: number;
   valor_hora_centavos: string | null; pct_extra_util: string; pct_extra_domingo_feriado: string;
   destino_extra: 'banco' | 'pagamento'; banco_saldo_inicial_minutos: number; banco_inicio: string | null;
 }
 
 const SELECT_COLAB = `SELECT id, nome, apelidos, ativo, dias_semana, minutos_dia, minutos_sabado, minutos_domingo,
-  entrada_prevista, saida_prevista, intervalo_minutos, tolerancia_minutos, salario_base_centavos, divisor_mensal,
+  entrada_prevista, saida_prevista, intervalo_minutos, intervalo_inicio, tolerancia_minutos, salario_base_centavos, divisor_mensal,
   valor_hora_centavos, pct_extra_util, pct_extra_domingo_feriado, destino_extra, banco_saldo_inicial_minutos,
   to_char(banco_inicio, 'YYYY-MM-DD') AS banco_inicio FROM ponto_colaboradores`;
 
@@ -62,6 +62,7 @@ function cfgDe(r: ColabRow): ConfigColaborador {
   return {
     diasSemana: r.dias_semana, minutosDia: r.minutos_dia, minutosSabado: r.minutos_sabado, minutosDomingo: r.minutos_domingo,
     entradaPrevista: r.entrada_prevista, saidaPrevista: r.saida_prevista, intervaloMinutos: r.intervalo_minutos,
+    intervaloInicio: r.intervalo_inicio,
     toleranciaMinutos: r.tolerancia_minutos, salarioBaseCentavos: Number(r.salario_base_centavos), divisorMensal: r.divisor_mensal,
     valorHoraCentavos: r.valor_hora_centavos == null ? null : Number(r.valor_hora_centavos),
     pctExtraUtil: Number(r.pct_extra_util), pctExtraDomingoFeriado: Number(r.pct_extra_domingo_feriado), destinoExtra: r.destino_extra,
@@ -100,6 +101,10 @@ function camposDoColaborador(b: Record<string, unknown>): { campos: Record<strin
   }
   for (const [k, col] of [['entradaPrevista', 'entrada_prevista'], ['saidaPrevista', 'saida_prevista']] as const) {
     if (k in b) { if (!hora(b[k])) return { campos: c, erro: `Horário inválido em ${k} (use HH:MM).` }; c[col] = b[k]; }
+  }
+  if ('intervaloInicio' in b) {
+    if (b.intervaloInicio != null && b.intervaloInicio !== '' && !hora(b.intervaloInicio)) return { campos: c, erro: 'Horário inválido no início do almoço (use HH:MM).' };
+    c.intervalo_inicio = b.intervaloInicio || null;
   }
   if ('salarioBaseCentavos' in b) { if (!inteiro(b.salarioBaseCentavos, 0, 1e10)) return { campos: c, erro: 'Salário inválido.' }; c.salario_base_centavos = b.salarioBaseCentavos; }
   if ('valorHoraCentavos' in b) {

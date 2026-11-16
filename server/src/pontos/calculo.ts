@@ -28,6 +28,8 @@ export interface ConfigColaborador {
   entradaPrevista: string;
   saidaPrevista: string;
   intervaloMinutos: number;
+  /** Início do almoço ("12:00"). Com ele o dia vira dois períodos (manhã e tarde); vazio = um período só. */
+  intervaloInicio?: string | null;
   toleranciaMinutos: number;
   salarioBaseCentavos: number;
   divisorMensal: number;
@@ -57,6 +59,8 @@ export interface DiaCalculado {
   atrasoMinutos: number;
   saidaAntecipadaMinutos: number;
   faltaMinutos: number;
+  /** Faltou num período inteiro (meia falta): 'manha' ou 'tarde'. */
+  faltaPeriodo: 'manha' | 'tarde' | null;
   extraMinutos: number;
   extraDestino: DestinoExtra;
   pctExtra: number;
@@ -80,6 +84,8 @@ export interface ResumoPeriodo {
   saidaAntecipadaMinutos: number;
   faltaMinutos: number;
   faltas: number;
+  /** Dias em que faltou só a manhã ou só a tarde. */
+  meiasFaltas: number;
   saldoMinutos: number;
   descontoCentavos: number;
   valorExtraCentavos: number;
@@ -177,6 +183,25 @@ function previstoDoDia(cfg: ConfigColaborador, dow: number): number {
   return cfg.minutosDia;
 }
 
+/** Minutos em comum entre [a, b) e [c, d). */
+function sobreposicao(a: number, b: number, c: number, d: number): number {
+  return Math.max(0, Math.min(b, d) - Math.max(a, c));
+}
+
+/**
+ * Períodos de trabalho do dia ([início, fim] em minutos). Com o início do almoço: manhã (entrada → almoço) e tarde
+ * (fim do almoço → saída); sem ele (ou se o dia acaba antes do almoço, ex.: sábado meio período): um período só.
+ */
+export function periodosDoDia(cfg: ConfigColaborador, entrada: number, saida: number): [number, number][] {
+  const ini = cfg.intervaloInicio ? paraMinutos(cfg.intervaloInicio) : null;
+  if (ini == null || cfg.intervaloMinutos <= 0) return saida > entrada ? [[entrada, saida]] : [];
+  const fim = ini + cfg.intervaloMinutos;
+  const out: [number, number][] = [];
+  if (Math.min(ini, saida) > entrada) out.push([entrada, Math.min(ini, saida)]);
+  if (saida > Math.max(fim, entrada)) out.push([Math.max(fim, entrada), saida]);
+  return out;
+}
+
 export function calcularDia(e: EntradaDoDia): DiaCalculado {
   const { cfg } = e;
   const ajustes = e.ajustes ?? [];
@@ -200,7 +225,11 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
   let trabalhado = 0;
   for (let i = 0; i + 1 < efetivas.length; i += 2) trabalhado += efetivas[i + 1] - efetivas[i];
   const incompleto = efetivas.length % 2 === 1;
-  if (incompleto) avisos.push('Dia sem saída (número ímpar de batidas): a última batida ficou fora da conta.');
+  if (incompleto) {
+    avisos.push(e.hoje && e.data === e.hoje
+      ? 'Dia em andamento: falta a batida de saída.'
+      : 'Dia sem saída (número ímpar de batidas): a última batida ficou fora da conta.');
+  }
   // Só entrada e saída, sem a batida do almoço, numa jornada de mais de 6h: desconta o intervalo previsto (senão o
   // almoço vira hora trabalhada).
   if (efetivas.length === 2 && trabalhado > 6 * 60 && cfg.intervaloMinutos > 0) {
@@ -209,24 +238,60 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
   }
 
   // Atraso e saída antecipada: só em dia previsto, com batidas. Passou da tolerância = conta o atraso inteiro.
+  // Com almoço definido o dia tem dois períodos (ex.: 08:00-12:00 e 13:30-18:00): só conta o tempo DENTRO dos períodos
+  // (o almoço não é devido), e período inteiro sem ninguém (não veio de manhã / foi embora no almoço) vira meia falta.
   const entradaPrev = paraMinutos(cfg.entradaPrevista) ?? 0;
   const saidaPrev = dow === 6 || dow === 0 ? entradaPrev + previsto : (paraMinutos(cfg.saidaPrevista) ?? entradaPrev + previsto);
+  const turnos = periodosDoDia(cfg, entradaPrev, saidaPrev);
   let atraso = 0;
   let saidaAntecipada = 0;
+  let faltaPeriodo: 'manha' | 'tarde' | null = null;
+  let faltaDePeriodo = 0;
   if (previsto > 0 && efetivas.length > 0 && !compensacao) {
-    const d = efetivas[0] - entradaPrev;
-    if (d > tol) atraso = d;
+    const primeira = efetivas[0];
+    // Chegada: tempo de período entre a entrada prevista e a primeira batida.
+    const antes = turnos.reduce((t, [a, b]) => t + sobreposicao(a, b, -Infinity, primeira), 0);
+    if (antes > tol) {
+      const perdidos = turnos.filter(([, b]) => b <= primeira);
+      if (perdidos.length && turnos.length > 1 && perdidos.length < turnos.length) {
+        faltaPeriodo = 'manha';
+        faltaDePeriodo += perdidos.reduce((t, [a, b]) => t + (b - a), 0);
+        avisos.push(`Não veio no período da manhã (${paraHora(turnos[0][0])}-${paraHora(turnos[0][1])}).`);
+      }
+      atraso = antes - faltaDePeriodo;
+    }
     if (!incompleto && efetivas.length >= 2) {
-      const s = saidaPrev - efetivas[efetivas.length - 1];
-      if (s > tol) saidaAntecipada = s;
+      const ultima = efetivas[efetivas.length - 1];
+      const depois = turnos.reduce((t, [a, b]) => t + sobreposicao(a, b, ultima, Infinity), 0);
+      if (depois > tol) {
+        const perdidos = turnos.filter(([a]) => a >= ultima);
+        let semTarde = 0;
+        if (perdidos.length && turnos.length > 1 && perdidos.length < turnos.length) {
+          faltaPeriodo = faltaPeriodo ?? 'tarde';
+          semTarde = perdidos.reduce((t, [a, b]) => t + (b - a), 0);
+          faltaDePeriodo += semTarde;
+          avisos.push(`Não veio no período da tarde (${paraHora(turnos[turnos.length - 1][0])}-${paraHora(turnos[turnos.length - 1][1])}).`);
+        }
+        saidaAntecipada = depois - semTarde;
+      }
+      // Almoço mais longo que o previsto (só quando trabalhou manhã e tarde): o que passou desconta.
+      if (turnos.length > 1 && efetivas.length >= 4 && primeira < turnos[0][1] && ultima > turnos[1][0]) {
+        let pausas = 0;
+        for (let i = 1; i + 1 < efetivas.length; i += 2) pausas += efetivas[i + 1] - efetivas[i];
+        const passou = pausas - cfg.intervaloMinutos;
+        if (passou > 0) {
+          atraso += passou;
+          avisos.push(`Intervalo de ${pausas} min (previsto ${cfg.intervaloMinutos}): ${passou} min a mais.`);
+        }
+      }
     }
   }
   if (tem('abonar_atraso')) { atraso = 0; saidaAntecipada = 0; }
 
   // Falta: dia previsto, sem nenhuma batida, coberto por importação, que já passou.
   const passou = !e.hoje || e.data <= e.hoje;
-  let falta = previsto > 0 && efetivas.length === 0 && e.coberto && passou && !compensacao ? previsto : 0;
-  if (tem('abonar_falta')) falta = 0;
+  let falta = previsto > 0 && efetivas.length === 0 && e.coberto && passou && !compensacao ? previsto : faltaDePeriodo;
+  if (tem('abonar_falta')) { falta = 0; faltaPeriodo = null; }
 
   // Hora extra: o que passou da jornada (acima da tolerância). Dia sem jornada prevista: tudo o que trabalhou.
   const domingoOuFeriado = dow === 0 || !!feriadoNome;
@@ -269,6 +334,7 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
     atrasoMinutos: atraso,
     saidaAntecipadaMinutos: saidaAntecipada,
     faltaMinutos: falta,
+    faltaPeriodo: falta > 0 && falta < previsto ? faltaPeriodo : null,
     extraMinutos: extra,
     extraDestino: destino,
     pctExtra,
@@ -317,7 +383,7 @@ export function calcularPeriodo(e: EntradaDoPeriodo): { dias: DiaCalculado[]; re
 export function resumir(dias: DiaCalculado[]): ResumoPeriodo {
   const r: ResumoPeriodo = {
     trabalhadoMinutos: 0, previstoMinutos: 0, extraMinutos: 0, extraBancoMinutos: 0, extraPagamentoMinutos: 0,
-    atrasoMinutos: 0, saidaAntecipadaMinutos: 0, faltaMinutos: 0, faltas: 0, saldoMinutos: 0, descontoCentavos: 0,
+    atrasoMinutos: 0, saidaAntecipadaMinutos: 0, faltaMinutos: 0, faltas: 0, meiasFaltas: 0, saldoMinutos: 0, descontoCentavos: 0,
     valorExtraCentavos: 0,
   };
   for (const d of dias) {
@@ -329,7 +395,8 @@ export function resumir(dias: DiaCalculado[]): ResumoPeriodo {
     r.atrasoMinutos += d.atrasoMinutos;
     r.saidaAntecipadaMinutos += d.saidaAntecipadaMinutos;
     r.faltaMinutos += d.faltaMinutos;
-    if (d.faltaMinutos > 0) r.faltas += 1;
+    if (d.faltaPeriodo) r.meiasFaltas += 1;
+    else if (d.faltaMinutos > 0) r.faltas += 1;
     r.saldoMinutos += d.saldoMinutos;
     r.descontoCentavos += d.descontoCentavos;
     r.valorExtraCentavos += d.valorExtraCentavos;

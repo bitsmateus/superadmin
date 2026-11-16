@@ -21,14 +21,15 @@ export function AjusteDiaModal({ dia, colaboradorId, colaboradorNome, ajustes, o
   onClose: () => void
   onSalvo: () => void
 }) {
-  const [tipo, setTipo] = React.useState<TipoAjuste>('abonar_atraso')
+  const [tipo, setTipo] = React.useState<TipoAjuste>('abonar_manha')
   const [motivo, setMotivo] = React.useState('')
   const [batidas, setBatidas] = React.useState('')
   const [salvando, setSalvando] = React.useState(false)
 
   React.useEffect(() => {
     if (!dia) return
-    setTipo(dia.status === 'falta' ? 'abonar_falta' : dia.extraMinutos > 0 ? 'extra_pagamento' : 'abonar_atraso')
+    setTipo(dia.status === 'falta' ? 'abonar_falta' : dia.status === 'manha_sem_batida' ? 'abonar_manha' : dia.status === 'tarde_sem_batida' ? 'abonar_tarde'
+      : dia.extraMinutos > 0 ? 'extra_pagamento' : dia.previstoMinutos === 0 && dia.batidas.length ? 'extra_banco' : 'abonar_falta')
     setMotivo('')
     setBatidas(dia.batidas.join(' '))
   }, [dia])

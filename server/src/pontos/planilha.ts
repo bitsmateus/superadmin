@@ -50,7 +50,22 @@ export interface LeituraDaPlanilha {
   periodo: { inicio: string; fim: string } | null;
   /** Mês com mais datas (AAAA-MM). */
   mesProvavel: string | null;
+  /** 'relogio' = exportação do relógio (abas Registros/Turnos/resumo); 'colunas' = planilha comum. */
+  formato: 'relogio' | 'colunas';
+  /** Período declarado no arquivo ("2026/11/01 ~ 11/16"), quando tem. */
+  periodoArquivo: { inicio: string; fim: string } | null;
+  /** Aba Turnos: dia com turno, sem turno ou ausência justificada. nome '*' = vale pra todos. */
+  turnos: TurnoLido[];
+  /** Totais que o relógio calculou (aba resumo), só pra conferência. */
+  conferencia: ConferenciaLida[];
+  /** Observações da leitura (abas ignoradas etc.). */
+  observacoes: string[];
+  /** Relógio: todos os colaboradores da aba Registros (inclusive quem não tem batida nenhuma no período). */
+  nomes?: string[];
 }
+
+export interface TurnoLido { nome: string; data: string; tipo: 'turno' | 'sem_turno' | 'justificada'; codigo: string | null }
+export interface ConferenciaLida { aba: string; nome: string; campos: Record<string, string> }
 
 export const TAMANHO_MAXIMO = 5 * 1024 * 1024;
 export const EXTENSOES = ['xlsx', 'xls', 'csv'];
@@ -233,11 +248,16 @@ export function lerPlanilha(
   mapeamentosSalvos: Record<string, Mapeamento> = {},
   mapeamentoManual: Record<string, Mapeamento> = {},
 ): LeituraDaPlanilha {
+  const todas = lerAbas(buf);
+  // Exportação do relógio (abas Registros/Turnos/resumo): leitor próprio, sem mapeamento de colunas.
+  const relogio = lerExportacaoDoRelogio(todas);
+  if (relogio) return relogio;
+
   const abas: AbaLida[] = [];
   const registros: RegistroLido[] = [];
   const invalidas: LinhaInvalida[] = [];
 
-  for (const { nome: aba, linhas } of lerAbas(buf)) {
+  for (const { nome: aba, linhas } of todas) {
     if (!linhas.length) continue;
     const auto = detectarMapeamento(linhas);
     // Mapeamento salvo: acha a linha cujo cabeçalho tem a mesma assinatura (o cabeçalho pode ter mudado de linha de um
@@ -302,8 +322,211 @@ export function lerPlanilha(
   return {
     abas, registros, invalidas,
     periodo: datas.length ? { inicio: datas[0], fim: datas[datas.length - 1] } : null,
-    mesProvavel,
+    mesProvavel, formato: 'colunas', periodoArquivo: null, turnos: [], conferencia: [], observacoes: [],
   };
+}
+
+// ───────────────────────────── exportação do relógio ─────────────────────────────
+//
+// Formato do relógio (abas resumo, Turnos, Registros, Anormal, …):
+//  - Registros: período em texto ("2026/11/01 ~ 11/16\t( nx digital )"); uma linha com os dias 1..31 (coluna A = dia 1);
+//    cada colaborador em 2 linhas: "No:" / "Nome:" / "Dept:" e, embaixo, uma célula por dia com as batidas separadas
+//    por quebra de linha ("08:18\n12:16\n13:55\n18:10\n");
+//  - Turnos: linha com o dia da semana (Su Mo Tu We Th Fr Sa) e "1" no dia com turno; 25 = licença, 26 = viagem,
+//    "férias" = ausência justificada; vazio = sem turno;
+//  - resumo / Anormal / outras: NÃO entram no cálculo; o resumo é lido só pra conferir com o nosso cálculo.
+
+const texto = (v: unknown) => String(v ?? '').trim();
+const ehRotulo = (v: unknown, r: RegExp) => r.test(norm(v));
+
+/** "2026/11/01 ~ 11/16" (ou "2026/10/26 ~ 2026/11/25") -> início e fim. */
+export function lerPeriodoDoTexto(v: unknown): { inicio: string; fim: string } | null {
+  const m = /(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})\s*~\s*(?:(\d{4})[/.-])?(\d{1,2})[/.-](\d{1,2})/.exec(String(v ?? ''));
+  if (!m) return null;
+  const inicio = dataValida(Number(m[1]), Number(m[2]), Number(m[3]));
+  let anoFim = m[4] ? Number(m[4]) : Number(m[1]);
+  if (!m[4] && Number(m[5]) < Number(m[2])) anoFim += 1; // 2026/12/20 ~ 01/19
+  const fim = dataValida(anoFim, Number(m[5]), Number(m[6]));
+  return inicio && fim && fim >= inicio ? { inicio, fim } : null;
+}
+
+/** Linha com os dias do mês (1, 2, 3 … em colunas seguidas): índice da coluna -> dia. */
+function linhaDeDias(linhas: unknown[][], ate = 15): { linha: number; dias: Map<number, number> } | null {
+  for (let i = 0; i < Math.min(ate, linhas.length); i++) {
+    const dias = new Map<number, number>();
+    (linhas[i] ?? []).forEach((c, idx) => {
+      const n = Number(texto(c));
+      if (texto(c) !== '' && Number.isInteger(n) && n >= 1 && n <= 31) dias.set(idx, n);
+    });
+    // Precisa ser uma sequência (1, 2, 3 …) em pelo menos 5 colunas seguidas.
+    const seq = [...dias.entries()].sort((a, b) => a[0] - b[0]);
+    let seguidas = 1;
+    let melhor = seq.length ? 1 : 0;
+    for (let k = 1; k < seq.length; k++) {
+      seguidas = seq[k][0] === seq[k - 1][0] + 1 && seq[k][1] === seq[k - 1][1] + 1 ? seguidas + 1 : 1;
+      melhor = Math.max(melhor, seguidas);
+    }
+    if (melhor >= 5) return { linha: i, dias };
+  }
+  return null;
+}
+
+/** Dia do mês -> data, dentro do período do arquivo (o período pode virar o mês: 26/10 ~ 25/11). */
+function mapaDeDias(periodo: { inicio: string; fim: string }): Map<number, string> {
+  const m = new Map<number, string>();
+  for (let d = new Date(`${periodo.inicio}T12:00:00Z`); d.toISOString().slice(0, 10) <= periodo.fim; d.setUTCDate(d.getUTCDate() + 1)) {
+    if (!m.has(d.getUTCDate())) m.set(d.getUTCDate(), d.toISOString().slice(0, 10));
+  }
+  return m;
+}
+
+/** Nome do colaborador numa linha "No: 1 … Nome: joao vitor … Dept: …". */
+function nomeDaLinha(linha: unknown[]): string | null {
+  for (let i = 0; i < linha.length; i++) {
+    const m = /^nome\s*:\s*(.*)$/i.exec(texto(linha[i]));
+    if (!m) continue;
+    if (m[1].trim()) return m[1].trim();
+    for (let j = i + 1; j < linha.length; j++) {
+      const v = texto(linha[j]);
+      if (!v) continue;
+      return /^(dept|depto|departamento|no)\s*:/i.test(v) ? null : v;
+    }
+  }
+  return null;
+}
+const ehLinhaDeColaborador = (linha: unknown[]) => linha.some((c) => ehRotulo(c, /^no\s*:/)) && linha.some((c) => ehRotulo(c, /^nome\s*:/));
+
+export function lerExportacaoDoRelogio(todas: { nome: string; linhas: unknown[][] }[]): LeituraDaPlanilha | null {
+  const aba = todas.find((a) => norm(a.nome) === 'registros' && a.linhas.some(ehLinhaDeColaborador));
+  if (!aba) return null;
+  const observacoes: string[] = [];
+  const invalidas: LinhaInvalida[] = [];
+  const registros: RegistroLido[] = [];
+  const abaLida = (amostra: string[][]): AbaLida => ({
+    nome: aba.nome, cabecalhos: [], assinatura: 'relogio:registros', mapeamento: null, precisaMapeamento: false, nomeDaAba: '', amostra,
+  });
+
+  // Período em texto (Registros primeiro, depois as outras abas).
+  let periodoArquivo: { inicio: string; fim: string } | null = null;
+  for (const a of [aba, ...todas.filter((x) => x !== aba)]) {
+    for (const l of a.linhas.slice(0, 15)) for (const c of l) periodoArquivo = periodoArquivo ?? lerPeriodoDoTexto(c);
+    if (periodoArquivo) break;
+  }
+  const cab = linhaDeDias(aba.linhas);
+  if (!periodoArquivo || !cab) {
+    observacoes.push(!periodoArquivo ? 'Não achei o período ("aaaa/mm/dd ~ mm/dd") na aba Registros.' : 'Não achei a linha com os dias (1..31) na aba Registros.');
+    return {
+      abas: [abaLida(aba.linhas.slice(0, 6).map((l) => l.map(texto)))], registros, invalidas, periodo: null, mesProvavel: null,
+      formato: 'relogio', periodoArquivo, turnos: [], conferencia: [], observacoes,
+    };
+  }
+  const dataDoDia = mapaDeDias(periodoArquivo);
+  const nomes: string[] = [];
+
+  for (let i = cab.linha + 1; i < aba.linhas.length; i++) {
+    const linha = aba.linhas[i] ?? [];
+    if (!ehLinhaDeColaborador(linha)) continue;
+    const nome = nomeDaLinha(linha);
+    const batidasDaLinha = aba.linhas[i + 1] ?? [];
+    i += 1; // a linha das batidas é lida junto
+    if (!nome) { invalidas.push({ aba: aba.nome, linha: i, motivo: 'Colaborador sem nome' }); continue; }
+    nomes.push(nome);
+    for (const [idx, diaDoMes] of cab.dias) {
+      const v = batidasDaLinha[idx];
+      // Texto ("08:18\n12:16\n…"); número só se o Excel tiver guardado um horário solto.
+      const horas = lerHoras(typeof v === 'number' ? v : texto(v));
+      if (!horas.length) continue;
+      const data = dataDoDia.get(diaDoMes);
+      if (!data) { invalidas.push({ aba: aba.nome, linha: i + 1, motivo: `Dia ${diaDoMes} fora do período do arquivo` }); continue; }
+      registros.push({ aba: aba.nome, linha: i + 1, nome, data, horas: aplicarViradaNaLinha(horas) });
+    }
+  }
+
+  const turnos: TurnoLido[] = [];
+  const abaTurnos = todas.find((a) => norm(a.nome) === 'turnos');
+  if (abaTurnos) turnos.push(...lerTurnos(abaTurnos.linhas, periodoArquivo, observacoes));
+  else observacoes.push('Sem aba "Turnos": dias úteis pelo cadastro de cada colaborador.');
+
+  const conferencia: ConferenciaLida[] = [];
+  const abaResumo = todas.find((a) => norm(a.nome) === 'resumo');
+  if (abaResumo) conferencia.push(...lerResumo(abaResumo.nome, abaResumo.linhas, nomes));
+  const outras = todas.filter((a) => a !== aba && a !== abaTurnos).map((a) => a.nome);
+  if (outras.length) observacoes.push(`Abas que não entram no cálculo (só conferência): ${outras.join(', ')}.`);
+
+  const datas = registros.map((r) => r.data).sort();
+  return {
+    abas: [abaLida(aba.linhas.slice(cab.linha, cab.linha + 5).map((l) => l.slice(0, 16).map((c) => texto(c).replace(/\s+/g, ' '))))],
+    registros, invalidas,
+    periodo: datas.length ? { inicio: datas[0], fim: datas[datas.length - 1] } : null,
+    mesProvavel: periodoArquivo.fim.slice(0, 7),
+    formato: 'relogio', periodoArquivo, turnos, conferencia, observacoes, nomes,
+  };
+}
+
+const DIAS_EN = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'];
+const diaEn = (v: unknown) => { const n = norm(v); return n.length >= 2 && n.length <= 3 && DIAS_EN.includes(n.slice(0, 2)) ? n.slice(0, 2) : null; };
+
+/** Valor da célula da aba Turnos -> tipo do dia (vazio = sem turno; 25/26/férias = justificada; resto = turno). */
+export function tipoDoTurno(v: unknown): { tipo: TurnoLido['tipo']; codigo: string | null } {
+  const c = texto(v);
+  const n = norm(c);
+  if (!c) return { tipo: 'sem_turno', codigo: null };
+  if (n === '25' || n === '26' || n.startsWith('feria')) return { tipo: 'justificada', codigo: c };
+  return { tipo: 'turno', codigo: null };
+}
+
+function lerTurnos(linhas: unknown[][], periodo: { inicio: string; fim: string }, observacoes: string[]): TurnoLido[] {
+  const iSemana = linhas.findIndex((l, i) => i < 20 && (l ?? []).filter((c) => diaEn(c)).length >= 5);
+  if (iSemana < 0) { observacoes.push('Aba Turnos sem a linha dos dias da semana (Su Mo Tu …): dias úteis pelo cadastro.'); return []; }
+  // Coluna -> data: pela linha de dias (se a aba tiver) ou coluna A = dia 1; e o dia da semana tem que bater.
+  const cab = linhaDeDias(linhas.slice(0, iSemana + 2), iSemana + 2);
+  const dataDoDia = mapaDeDias(periodo);
+  const colunaData = new Map<number, string>();
+  (linhas[iSemana] ?? []).forEach((c, idx) => {
+    const dSemana = diaEn(c);
+    if (!dSemana) return;
+    const data = dataDoDia.get(cab?.dias.get(idx) ?? idx + 1);
+    if (data && DIAS_EN[new Date(`${data}T12:00:00Z`).getUTCDay()] === dSemana) colunaData.set(idx, data);
+  });
+  if (!colunaData.size) { observacoes.push('Aba Turnos: os dias da semana não batem com o período do arquivo; dias úteis pelo cadastro.'); return []; }
+
+  const out: TurnoLido[] = [];
+  const lerLinha = (nome: string, l: unknown[]) => { for (const [idx, data] of colunaData) out.push({ nome, data, ...tipoDoTurno(l[idx]) }); };
+  let porColaborador = false;
+  for (let i = iSemana + 1; i < linhas.length; i++) {
+    if (!ehLinhaDeColaborador(linhas[i] ?? [])) continue;
+    const nome = nomeDaLinha(linhas[i]);
+    if (nome && linhas[i + 1]) { lerLinha(nome, linhas[i + 1]); porColaborador = true; }
+    i += 1;
+  }
+  if (!porColaborador) {
+    // Uma linha só (vale pra todos): a primeira linha depois dos dias da semana com valor em alguma coluna de dia.
+    const linha = linhas.slice(iSemana + 1).find((l) => [...colunaData.keys()].some((idx) => texto((l ?? [])[idx])));
+    if (linha) lerLinha('*', linha);
+  }
+  return out;
+}
+
+/** Aba resumo: cabeçalho + uma linha por colaborador (só pra conferência; nada daqui entra no cálculo). */
+function lerResumo(nomeAba: string, linhas: unknown[][], nomes: string[]): ConferenciaLida[] {
+  const alvo = new Set(nomes.map(normalizarNome));
+  const out: ConferenciaLida[] = [];
+  let cabecalho: string[] | null = null;
+  for (const bruta of linhas) {
+    const l = (bruta ?? []).map((c) => texto(c).replace(/\s+/g, ' '));
+    const idxNome = l.findIndex((c) => c && alvo.has(normalizarNome(c)));
+    if (idxNome < 0) {
+      if (l.filter(Boolean).length >= 3) cabecalho = l; // a última linha "cheia" antes do colaborador é o cabeçalho
+      continue;
+    }
+    const campos: Record<string, string> = {};
+    l.forEach((v, idx) => {
+      if (idx === idxNome || !v) return;
+      campos[(cabecalho?.[idx] || `Coluna ${idx + 1}`).trim()] = v;
+    });
+    out.push({ aba: nomeAba, nome: l[idxNome], campos });
+  }
+  return out;
 }
 
 // ───────────────────────────── nomes ─────────────────────────────

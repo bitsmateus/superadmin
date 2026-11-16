@@ -4,9 +4,11 @@ import { api } from '@/services/api'
 
 export type DestinoExtra = 'banco' | 'pagamento'
 export type TipoAjuste =
-  | 'abonar_atraso' | 'abonar_falta' | 'justificar' | 'folga' | 'compensacao' | 'feriado'
-  | 'perdoar_desconto' | 'extra_banco' | 'extra_pagamento' | 'corrigir_batidas'
-export type StatusDia = 'normal' | 'falta' | 'atraso' | 'extra' | 'folga' | 'abonado' | 'feriado' | 'incompleto' | 'sem_registro'
+  | 'abonar_manha' | 'abonar_tarde' | 'abonar_falta' | 'abonar_atraso' | 'justificar' | 'folga' | 'compensacao'
+  | 'feriado' | 'perdoar_desconto' | 'descontar_saldo' | 'extra_banco' | 'extra_pagamento' | 'corrigir_batidas'
+export type StatusDia =
+  | 'normal' | 'atraso' | 'extra' | 'manha_sem_batida' | 'tarde_sem_batida' | 'em_andamento' | 'incompleto'
+  | 'falta' | 'justificada' | 'feriado' | 'folga' | 'fora_controle' | 'abonado' | 'sem_registro'
 export type PapelColuna = 'ignorar' | 'nome' | 'data' | 'datahora' | 'hora' | 'batida' | 'batidas_texto'
 
 export interface Colaborador {
@@ -33,6 +35,8 @@ export interface Colaborador {
   destinoExtra: DestinoExtra
   bancoSaldoInicialMinutos: number
   bancoInicio: string | null
+  /** Início do controle de ponto: antes dessa data nada conta. */
+  inicioControle: string | null
 }
 
 export interface DiaPonto {
@@ -44,9 +48,11 @@ export interface DiaPonto {
   trabalhadoMinutos: number
   atrasoMinutos: number
   saidaAntecipadaMinutos: number
+  /** trabalhado − previsto (com abonos), antes da tolerância. */
+  saldoBrutoMinutos: number
+  /** Efeito no banco de horas. */
+  bancoMinutos: number
   faltaMinutos: number
-  /** Faltou só a manhã ou só a tarde. */
-  faltaPeriodo: 'manha' | 'tarde' | null
   extraMinutos: number
   extraDestino: DestinoExtra
   pctExtra: number
@@ -54,6 +60,7 @@ export interface DiaPonto {
   descontoCentavos: number
   valorExtraCentavos: number
   feriado: string | null
+  justificativa: string | null
   status: StatusDia
   avisos: string[]
   ajustes: TipoAjuste[]
@@ -69,8 +76,11 @@ export interface ResumoPonto {
   saidaAntecipadaMinutos: number
   faltaMinutos: number
   faltas: number
-  meiasFaltas: number
+  justificadas: number
+  manhasSemBatida: number
+  emAndamento: number
   saldoMinutos: number
+  bancoMinutos: number
   descontoCentavos: number
   valorExtraCentavos: number
 }
@@ -109,9 +119,21 @@ export interface PedidoDeImportacao {
   decisoes?: Record<string, 'manter' | 'substituir'>
 }
 
+export interface ConferenciaDoRelogio {
+  nome: string
+  nomeNaPlanilha: string
+  relogio: Record<string, string>
+  nosso: { faltas: number; atrasoBruto: string; horasExtras: string; trabalhadas: string; banco: string; justificadas: number; emAndamento: number }
+  divergencias: string[]
+}
+
 export interface PreviaDeImportacao {
   arquivoNome: string
   modo: 'mes' | 'periodo'
+  formato: 'relogio' | 'colunas'
+  periodoLido: { inicio: string; fim: string } | null
+  turnos: { total: number; justificadas: number }
+  conferencia: ConferenciaDoRelogio[]
   mesDetectado: string | null
   periodoDoArquivo: { inicio: string; fim: string } | null
   periodo: { inicio: string; fim: string } | null
@@ -175,20 +197,24 @@ export const brl = (centavos: number) => (centavos / 100).toLocaleString('pt-BR'
 export const dataBr = (d: string) => d.split('-').reverse().join('/')
 
 export const ROTULO_STATUS: Record<StatusDia, string> = {
-  normal: 'Normal', falta: 'Falta', atraso: 'Atraso', extra: 'Extra', folga: 'Folga', abonado: 'Abonado',
-  feriado: 'Feriado', incompleto: 'Sem saída', sem_registro: 'Sem registro',
+  normal: 'Normal', atraso: 'Atraso', extra: 'Extra', manha_sem_batida: 'Manhã sem batida', tarde_sem_batida: 'Tarde sem batida',
+  em_andamento: 'Em andamento', incompleto: 'Sem saída', falta: 'Falta', justificada: 'Justificada', feriado: 'Feriado',
+  folga: 'Folga', fora_controle: 'Fora do controle', abonado: 'Abonado', sem_registro: 'Sem registro',
 }
 
 export const ROTULO_AJUSTE: Record<TipoAjuste, string> = {
-  abonar_atraso: 'Abonar atraso/saída antecipada',
-  abonar_falta: 'Abonar falta',
-  justificar: 'Justificar (só anotação)',
+  abonar_manha: 'Abonar manhã',
+  abonar_tarde: 'Abonar tarde',
+  abonar_falta: 'Abonar dia (falta ou saldo negativo)',
+  abonar_atraso: 'Abonar atraso (saldo negativo do dia)',
+  justificar: 'Justificar ausência (não desconta)',
   folga: 'Marcar folga',
-  compensacao: 'Compensação (desconta do banco)',
+  compensacao: 'Compensação (folga paga com o banco)',
   feriado: 'Marcar feriado',
-  perdoar_desconto: 'Perdoar desconto em R$',
-  extra_banco: 'Hora extra vai pro banco',
-  extra_pagamento: 'Hora extra vai pra pagamento',
+  perdoar_desconto: 'Falta sem desconto em R$ (vai pro banco)',
+  descontar_saldo: 'Converter saldo negativo em desconto (R$)',
+  extra_banco: 'Converter em hora extra: banco',
+  extra_pagamento: 'Converter em hora extra: pagamento',
   corrigir_batidas: 'Corrigir batidas',
 }
 

@@ -11,7 +11,7 @@ type Rascunho = {
   nome: string; apelidos: string; ativo: boolean; diasSemana: number[]; horasDia: string; horasSabado: string; horasDomingo: string
   entradaPrevista: string; saidaPrevista: string; intervaloMinutos: string; intervaloInicio: string; toleranciaMinutos: string
   salario: string; divisorMensal: string; valorHora: string; pctExtraUtil: string; pctExtraDomingoFeriado: string
-  destinoExtra: 'banco' | 'pagamento'; bancoSaldoInicial: string; bancoInicio: string
+  destinoExtra: 'banco' | 'pagamento'; bancoSaldoInicial: string; bancoInicio: string; inicioControle: string
 }
 
 const paraHorasTexto = (min: number) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`
@@ -35,7 +35,7 @@ function paraRascunho(c?: Colaborador): Rascunho {
     toleranciaMinutos: String(c?.toleranciaMinutos ?? 10), salario: reais(c?.salarioBaseCentavos ?? 0), divisorMensal: String(c?.divisorMensal ?? 220),
     valorHora: reais(c?.valorHoraCentavos ?? null), pctExtraUtil: String(c?.pctExtraUtil ?? 50), pctExtraDomingoFeriado: String(c?.pctExtraDomingoFeriado ?? 100),
     destinoExtra: c?.destinoExtra ?? 'banco', bancoSaldoInicial: paraHorasTexto(Math.abs(c?.bancoSaldoInicialMinutos ?? 0)).replace(/^/, (c?.bancoSaldoInicialMinutos ?? 0) < 0 ? '-' : ''),
-    bancoInicio: c?.bancoInicio ?? '',
+    bancoInicio: c?.bancoInicio ?? '', inicioControle: c?.inicioControle ?? '',
   }
 }
 
@@ -75,7 +75,7 @@ export function ColaboradoresPontoModal({ open, onClose, colaboradores, onSalvo 
       salarioBaseCentavos: salario ?? 0, divisorMensal: Number(r.divisorMensal) || 220, valorHoraCentavos: centavos(r.valorHora),
       pctExtraUtil: Number(r.pctExtraUtil.replace(',', '.')) || 0, pctExtraDomingoFeriado: Number(r.pctExtraDomingoFeriado.replace(',', '.')) || 0,
       destinoExtra: r.destinoExtra, bancoSaldoInicialMinutos: r.bancoSaldoInicial.trim().startsWith('-') ? -saldo : saldo,
-      bancoInicio: r.bancoInicio || null,
+      bancoInicio: r.bancoInicio || null, inicioControle: r.inicioControle || null,
     }
     setSalvando(true)
     try {
@@ -111,7 +111,10 @@ export function ColaboradoresPontoModal({ open, onClose, colaboradores, onSalvo 
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Nome" value={r.nome} onChange={(e) => set('nome', e.target.value)} />
-            <Input label="Outros nomes na planilha (separados por vírgula)" value={r.apelidos} onChange={(e) => set('apelidos', e.target.value)} />
+            <Input label="Apelidos: como aparece na planilha (separados por vírgula)" value={r.apelidos} onChange={(e) => set('apelidos', e.target.value)}
+              hint='Ex.: "joao vitor". A planilha do relógio usa o nome em minúsculas e abreviado.' />
+            <Input label="Início do controle de ponto" type="date" value={r.inicioControle} onChange={(e) => set('inicioControle', e.target.value)}
+              hint="Antes dessa data nada conta: sem falta, previsto ou saldo." />
           </div>
           <label className="inline-flex items-center gap-2 text-sm text-foreground/70">
             <input type="checkbox" checked={r.ativo} onChange={(e) => set('ativo', e.target.checked)} /> Ativo

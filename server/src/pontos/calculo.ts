@@ -1,23 +1,31 @@
 /**
  * Regras de cálculo do ponto (Financeiro > Pontos). Funções puras: recebem batidas, configuração do colaborador,
- * feriados e ajustes, e devolvem o dia a dia e o resumo. Nada aqui lê ou grava no banco (testes: calculo.test.ts).
+ * feriados, turnos e ajustes, e devolvem o dia a dia e o resumo. Nada aqui lê ou grava no banco (testes: calculo.test.ts).
  *
- * Convenções:
- *  - horário em minutos desde 00:00 do dia de trabalho; batida depois da meia-noite que fecha o turno vira 24h+ (ex.:
- *    "26:10" = 02:10 do dia seguinte, ainda do mesmo dia de trabalho);
- *  - datas "AAAA-MM-DD"; dia da semana 0 = domingo … 6 = sábado;
- *  - dinheiro em centavos.
+ * Regras (resumo):
+ *  - saldo do dia = trabalhado − previsto; tolerância sobre o SALDO: passou de 10 min (pra mais ou pra menos) conta
+ *    inteiro, senão vale 0;
+ *  - banco de horas = soma dos saldos líquidos (atraso/saída antecipada são só informação, não entram de novo);
+ *  - falta (dia útil com turno, sem batida, dentro do controle, coberto pela importação) vai pra desconto em R$ e NÃO
+ *    entra no banco (senão desconta duas vezes); "não descontar em R$" manda ela pro banco;
+ *  - fim de semana, feriado e dia sem turno: nunca previsto nem falta; batida neles só gera aviso (vira extra só se
+ *    alguém lançar "converter em hora extra");
+ *  - antes do início do controle de ponto: nada conta;
+ *  - número ímpar de batidas no último dia lido (ou hoje): "em andamento", sem falta, atraso nem extra.
+ *
+ * Convenções: horário em minutos desde 00:00 do dia de trabalho (batida depois da meia-noite que fecha o turno vira
+ * 24h+, "26:10"); datas "AAAA-MM-DD"; dia da semana 0 = domingo … 6 = sábado; dinheiro em centavos.
  */
 
 export type DestinoExtra = 'banco' | 'pagamento';
 
 export type TipoAjuste =
-  | 'abonar_atraso' | 'abonar_falta' | 'justificar' | 'folga' | 'compensacao' | 'feriado'
-  | 'perdoar_desconto' | 'extra_banco' | 'extra_pagamento' | 'corrigir_batidas';
+  | 'abonar_manha' | 'abonar_tarde' | 'abonar_falta' | 'abonar_atraso' | 'justificar' | 'folga' | 'compensacao'
+  | 'feriado' | 'perdoar_desconto' | 'descontar_saldo' | 'extra_banco' | 'extra_pagamento' | 'corrigir_batidas';
 
 export const TIPOS_DE_AJUSTE: TipoAjuste[] = [
-  'abonar_atraso', 'abonar_falta', 'justificar', 'folga', 'compensacao', 'feriado',
-  'perdoar_desconto', 'extra_banco', 'extra_pagamento', 'corrigir_batidas',
+  'abonar_manha', 'abonar_tarde', 'abonar_falta', 'abonar_atraso', 'justificar', 'folga', 'compensacao',
+  'feriado', 'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas',
 ];
 
 export interface ConfigColaborador {
@@ -28,7 +36,7 @@ export interface ConfigColaborador {
   entradaPrevista: string;
   saidaPrevista: string;
   intervaloMinutos: number;
-  /** Início do almoço ("12:00"). Com ele o dia vira dois períodos (manhã e tarde); vazio = um período só. */
+  /** Início do almoço ("12:00"). Com ele o dia tem manhã e tarde; vazio = um período só. */
   intervaloInicio?: string | null;
   toleranciaMinutos: number;
   salarioBaseCentavos: number;
@@ -37,6 +45,8 @@ export interface ConfigColaborador {
   pctExtraUtil: number;
   pctExtraDomingoFeriado: number;
   destinoExtra: DestinoExtra;
+  /** Início do controle de ponto (AAAA-MM-DD). Antes dele nada conta. */
+  inicioControle?: string | null;
 }
 
 export interface AjusteDoDia {
@@ -45,7 +55,16 @@ export interface AjusteDoDia {
   batidas?: string[] | null;
 }
 
-export type StatusDia = 'normal' | 'falta' | 'atraso' | 'extra' | 'folga' | 'abonado' | 'feriado' | 'incompleto' | 'sem_registro';
+/** Turno do dia vindo da planilha (aba "Turnos"). Sem isso, vale o cadastro (dias da semana). */
+export interface TurnoDoDia {
+  tipo: 'turno' | 'sem_turno' | 'justificada';
+  /** Código do relógio (25 = licença, 26 = viagem, "férias"…), quando justificada. */
+  codigo?: string | null;
+}
+
+export type StatusDia =
+  | 'normal' | 'atraso' | 'extra' | 'manha_sem_batida' | 'tarde_sem_batida' | 'em_andamento' | 'incompleto'
+  | 'falta' | 'justificada' | 'feriado' | 'folga' | 'fora_controle' | 'abonado' | 'sem_registro';
 
 export interface DiaCalculado {
   data: string;
@@ -56,19 +75,25 @@ export interface DiaCalculado {
   batidas: string[];
   previstoMinutos: number;
   trabalhadoMinutos: number;
+  /** Informação bruta (não entra de novo no banco): chegada depois da entrada + volta do almoço depois do fim do almoço. */
   atrasoMinutos: number;
+  /** Informação bruta: saída antes da prevista + saída pro almoço antes do início do almoço. */
   saidaAntecipadaMinutos: number;
+  /** trabalhado − previsto (com os abonos), antes da tolerância. */
+  saldoBrutoMinutos: number;
+  /** Saldo do dia depois da tolerância (o que vale). */
+  saldoMinutos: number;
+  /** Efeito no banco de horas (o saldo menos o que foi pra R$: falta descontada, extra paga, saldo convertido). */
+  bancoMinutos: number;
   faltaMinutos: number;
-  /** Faltou num período inteiro (meia falta): 'manha' ou 'tarde'. */
-  faltaPeriodo: 'manha' | 'tarde' | null;
   extraMinutos: number;
   extraDestino: DestinoExtra;
   pctExtra: number;
-  /** Efeito do dia no banco de horas (minutos; negativo = deve). */
-  saldoMinutos: number;
   descontoCentavos: number;
   valorExtraCentavos: number;
   feriado: string | null;
+  /** Ausência justificada (licença, viagem, férias, ou justificativa lançada). */
+  justificativa: string | null;
   status: StatusDia;
   avisos: string[];
   ajustes: TipoAjuste[];
@@ -84,9 +109,13 @@ export interface ResumoPeriodo {
   saidaAntecipadaMinutos: number;
   faltaMinutos: number;
   faltas: number;
-  /** Dias em que faltou só a manhã ou só a tarde. */
-  meiasFaltas: number;
+  justificadas: number;
+  manhasSemBatida: number;
+  emAndamento: number;
+  /** Soma dos saldos do dia (depois da tolerância). */
   saldoMinutos: number;
+  /** Soma do efeito no banco de horas. */
+  bancoMinutos: number;
   descontoCentavos: number;
   valorExtraCentavos: number;
 }
@@ -133,6 +162,15 @@ export function valorHora(cfg: ConfigColaborador): number {
   return Math.round(cfg.salarioBaseCentavos / cfg.divisorMensal);
 }
 
+/** Rótulo da justificativa pelo código do relógio. */
+export function rotuloJustificativa(codigo: string | null | undefined): string {
+  const c = String(codigo ?? '').trim().toLowerCase();
+  if (c === '25') return 'Licença';
+  if (c === '26') return 'Viagem';
+  if (c.startsWith('f')) return 'Férias';
+  return c ? `Justificada (${codigo})` : 'Justificada';
+}
+
 /**
  * Virada da meia-noite: a batida da madrugada (antes das 06:00) que FECHA um turno aberto do dia anterior (que ficou
  * com número ímpar de batidas) passa a ser do dia anterior, como 24h+ (02:10 -> "26:10"). Recebe e devolve
@@ -147,8 +185,7 @@ export function resolverViradaDeDia(porData: Map<string, string[]>): Map<string,
   }
   for (const d of datas) {
     const hoje = out.get(d)!;
-    const amanhaData = somarDias(d, 1);
-    const amanha = out.get(amanhaData);
+    const amanha = out.get(somarDias(d, 1));
     if (!amanha || !amanha.length || hoje.length % 2 === 0) continue;
     const primeira = amanha[0];
     if (primeira < LIMITE_MADRUGADA && hoje[hoje.length - 1] > primeira) {
@@ -159,33 +196,6 @@ export function resolverViradaDeDia(porData: Map<string, string[]>): Map<string,
   const final = new Map<string, string[]>();
   for (const [d, mins] of out) final.set(d, mins.map(paraHora));
   return final;
-}
-
-// ───────────────────────────── um dia ─────────────────────────────
-
-export interface EntradaDoDia {
-  data: string;
-  batidas: string[];
-  cfg: ConfigColaborador;
-  /** Nome do feriado (tabela de feriados), se for. */
-  feriado?: string | null;
-  ajustes?: AjusteDoDia[];
-  /** O dia está dentro de um período que alguma planilha importou? Fora disso, dia sem batida não é falta. */
-  coberto: boolean;
-  /** "Hoje" (AAAA-MM-DD): dia futuro nunca é falta. */
-  hoje?: string;
-}
-
-function previstoDoDia(cfg: ConfigColaborador, dow: number): number {
-  if (!cfg.diasSemana.includes(dow)) return 0;
-  if (dow === 6) return cfg.minutosSabado;
-  if (dow === 0) return cfg.minutosDomingo || cfg.minutosDia;
-  return cfg.minutosDia;
-}
-
-/** Minutos em comum entre [a, b) e [c, d). */
-function sobreposicao(a: number, b: number, c: number, d: number): number {
-  return Math.max(0, Math.min(b, d) - Math.max(a, c));
 }
 
 /**
@@ -202,6 +212,33 @@ export function periodosDoDia(cfg: ConfigColaborador, entrada: number, saida: nu
   return out;
 }
 
+// ───────────────────────────── um dia ─────────────────────────────
+
+export interface EntradaDoDia {
+  data: string;
+  batidas: string[];
+  cfg: ConfigColaborador;
+  /** Nome do feriado (tabela de feriados), se for. */
+  feriado?: string | null;
+  ajustes?: AjusteDoDia[];
+  /** O dia está dentro de um período que alguma planilha importou (pra este colaborador)? Fora disso, não é falta. */
+  coberto: boolean;
+  /** "Hoje" (AAAA-MM-DD): dia de hoje ou futuro nunca é falta; hoje com batida ímpar está em andamento. */
+  hoje?: string;
+  /** Último dia que a importação trouxe pra este colaborador: batida ímpar nele = em andamento. */
+  ultimoDiaLido?: string | null;
+  /** Turno do dia pela planilha (aba Turnos). */
+  turno?: TurnoDoDia | null;
+}
+
+function jornadaDoDia(cfg: ConfigColaborador, dow: number): number {
+  if (dow === 6) return cfg.minutosSabado;
+  if (dow === 0) return cfg.minutosDomingo || cfg.minutosDia;
+  return cfg.minutosDia;
+}
+
+const ABONOS: TipoAjuste[] = ['abonar_manha', 'abonar_tarde', 'abonar_falta', 'abonar_atraso'];
+
 export function calcularDia(e: EntradaDoDia): DiaCalculado {
   const { cfg } = e;
   const ajustes = e.ajustes ?? [];
@@ -209,143 +246,166 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
   const correcao = [...ajustes].reverse().find((a) => a.tipo === 'corrigir_batidas' && Array.isArray(a.batidas));
   const dow = diaDaSemana(e.data);
   const tol = Math.max(0, cfg.toleranciaMinutos);
+  const vh = valorHora(cfg);
   const avisos: string[] = [];
 
   const originais = [...e.batidas];
   const efetivas = (correcao ? (correcao.batidas ?? []) : originais)
     .map(paraMinutos).filter((m): m is number => m !== null).sort((a, b) => a - b);
+  const n = efetivas.length;
+
+  // Horas trabalhadas: pares entrada/saída em ordem; batida sobrando (ímpar) fica fora.
+  let trabalhado = 0;
+  for (let i = 0; i + 1 < n; i += 2) trabalhado += efetivas[i + 1] - efetivas[i];
+  // Só entrada e saída, sem o almoço, com mais de 6h entre elas: desconta o almoço previsto.
+  if (n === 2 && trabalhado > 6 * 60 && cfg.intervaloMinutos > 0) {
+    trabalhado -= cfg.intervaloMinutos;
+    avisos.push(`Sem batida de almoço: descontado o almoço previsto (${cfg.intervaloMinutos} min).`);
+  }
 
   const feriadoNome = e.feriado ?? (tem('feriado') ? 'Feriado (ajuste)' : null);
+  const destinoAjuste: DestinoExtra | null = tem('extra_pagamento') ? 'pagamento' : tem('extra_banco') ? 'banco' : null;
+  const pctExtra = dow === 0 || feriadoNome ? cfg.pctExtraDomingoFeriado : cfg.pctExtraUtil;
+  const extraDestino = destinoAjuste ?? cfg.destinoExtra;
+
+  const base: Omit<DiaCalculado, 'status'> = {
+    data: e.data, diaSemana: dow, batidasOriginais: originais, batidas: efetivas.map(paraHora),
+    previstoMinutos: 0, trabalhadoMinutos: trabalhado, atrasoMinutos: 0, saidaAntecipadaMinutos: 0,
+    saldoBrutoMinutos: 0, saldoMinutos: 0, bancoMinutos: 0, faltaMinutos: 0, extraMinutos: 0,
+    extraDestino, pctExtra, descontoCentavos: 0, valorExtraCentavos: 0, feriado: feriadoNome, justificativa: null,
+    avisos, ajustes: ajustes.map((a) => a.tipo),
+  };
+  const fechar = (status: StatusDia, extra: Partial<DiaCalculado> = {}): DiaCalculado => ({ ...base, ...extra, status });
+  const valorDaExtra = (min: number) => Math.round(((min * vh) / 60) * (1 + pctExtra / 100));
+
+  // 1) Antes do início do controle de ponto: nada conta.
+  if (cfg.inicioControle && e.data < cfg.inicioControle) {
+    if (n) avisos.push('Antes do início do controle de ponto: não conta.');
+    return fechar('fora_controle');
+  }
+
+  // 2) Ausência justificada (código do relógio ou lançamento): não deve nada.
+  if (e.turno?.tipo === 'justificada' || tem('justificar')) {
+    const justificativa = e.turno?.tipo === 'justificada' ? rotuloJustificativa(e.turno.codigo) : 'Justificada';
+    if (n) avisos.push('Dia justificado com batida: não somada.');
+    return fechar('justificada', { justificativa });
+  }
+
+  // 3) Dia sem jornada (fim de semana, sem turno, feriado, folga): nada automático.
+  const diaUtil = e.turno ? e.turno.tipo === 'turno' : cfg.diasSemana.includes(dow);
   const folga = tem('folga');
-  const compensacao = tem('compensacao');
-  const naoTrabalha = !!feriadoNome || folga;
-  const previsto = naoTrabalha ? 0 : previstoDoDia(cfg, dow);
-
-  // Horas trabalhadas: pares entrada/saída. Batida sobrando (ímpar) fica fora da conta.
-  let trabalhado = 0;
-  for (let i = 0; i + 1 < efetivas.length; i += 2) trabalhado += efetivas[i + 1] - efetivas[i];
-  const incompleto = efetivas.length % 2 === 1;
-  if (incompleto) {
-    avisos.push(e.hoje && e.data === e.hoje
-      ? 'Dia em andamento: falta a batida de saída.'
-      : 'Dia sem saída (número ímpar de batidas): a última batida ficou fora da conta.');
-  }
-  // Só entrada e saída, sem a batida do almoço, numa jornada de mais de 6h: desconta o intervalo previsto (senão o
-  // almoço vira hora trabalhada).
-  if (efetivas.length === 2 && trabalhado > 6 * 60 && cfg.intervaloMinutos > 0) {
-    trabalhado -= cfg.intervaloMinutos;
-    avisos.push(`Sem batida de almoço: descontado o intervalo previsto (${cfg.intervaloMinutos} min).`);
+  if (!diaUtil || feriadoNome || folga) {
+    const status: StatusDia = feriadoNome ? 'feriado' : 'folga';
+    if (!n) return fechar(status);
+    if (destinoAjuste) {
+      // Hora extra lançada à mão: tudo o que trabalhou.
+      return fechar(status, {
+        extraMinutos: trabalhado, saldoBrutoMinutos: trabalhado, saldoMinutos: trabalhado,
+        bancoMinutos: destinoAjuste === 'banco' ? trabalhado : 0,
+        valorExtraCentavos: destinoAjuste === 'pagamento' ? valorDaExtra(trabalhado) : 0,
+      });
+    }
+    const onde = feriadoNome ? `feriado (${feriadoNome})` : folga ? 'folga' : dow === 0 || dow === 6 ? 'fim de semana' : 'dia sem turno';
+    avisos.push(`Batida em ${onde}: não somada. Se for hora extra, lance "Converter em hora extra".`);
+    return fechar(status);
   }
 
-  // Atraso e saída antecipada: só em dia previsto, com batidas. Passou da tolerância = conta o atraso inteiro.
-  // Com almoço definido o dia tem dois períodos (ex.: 08:00-12:00 e 13:30-18:00): só conta o tempo DENTRO dos períodos
-  // (o almoço não é devido), e período inteiro sem ninguém (não veio de manhã / foi embora no almoço) vira meia falta.
+  const previsto = jornadaDoDia(cfg, dow);
+  base.previstoMinutos = previsto;
+
+  // 4) Sem nenhuma batida.
+  if (!n) {
+    if (tem('compensacao')) {
+      return fechar('folga', { saldoBrutoMinutos: -previsto, saldoMinutos: -previsto, bancoMinutos: -previsto });
+    }
+    const passou = !e.hoje || e.data < e.hoje;
+    if (!e.coberto || !passou) return fechar('sem_registro');
+    if (tem('abonar_falta') || tem('abonar_atraso')) return fechar('abonado');
+    const perdoado = tem('perdoar_desconto');
+    return fechar('falta', {
+      faltaMinutos: previsto, saldoBrutoMinutos: -previsto, saldoMinutos: -previsto,
+      bancoMinutos: perdoado ? -previsto : 0,
+      descontoCentavos: perdoado ? 0 : Math.round((previsto * vh) / 60),
+    });
+  }
+
+  // 5) Número ímpar de batidas.
+  if (n % 2 === 1) {
+    if (e.data === e.ultimoDiaLido || e.data === e.hoje) {
+      avisos.push('Dia em andamento: falta a batida de saída. Fecha quando a próxima importação trouxer.');
+      return fechar('em_andamento');
+    }
+    avisos.push('Dia sem saída (número ímpar de batidas): corrija as batidas pra calcular.');
+    return fechar('incompleto');
+  }
+
+  // 6) Dia trabalhado.
   const entradaPrev = paraMinutos(cfg.entradaPrevista) ?? 0;
   const saidaPrev = dow === 6 || dow === 0 ? entradaPrev + previsto : (paraMinutos(cfg.saidaPrevista) ?? entradaPrev + previsto);
-  const turnos = periodosDoDia(cfg, entradaPrev, saidaPrev);
-  let atraso = 0;
-  let saidaAntecipada = 0;
-  let faltaPeriodo: 'manha' | 'tarde' | null = null;
-  let faltaDePeriodo = 0;
-  if (previsto > 0 && efetivas.length > 0 && !compensacao) {
-    const primeira = efetivas[0];
-    // Chegada: tempo de período entre a entrada prevista e a primeira batida.
-    const antes = turnos.reduce((t, [a, b]) => t + sobreposicao(a, b, -Infinity, primeira), 0);
-    if (antes > tol) {
-      const perdidos = turnos.filter(([, b]) => b <= primeira);
-      if (perdidos.length && turnos.length > 1 && perdidos.length < turnos.length) {
-        faltaPeriodo = 'manha';
-        faltaDePeriodo += perdidos.reduce((t, [a, b]) => t + (b - a), 0);
-        avisos.push(`Não veio no período da manhã (${paraHora(turnos[0][0])}-${paraHora(turnos[0][1])}).`);
-      }
-      atraso = antes - faltaDePeriodo;
-    }
-    if (!incompleto && efetivas.length >= 2) {
-      const ultima = efetivas[efetivas.length - 1];
-      const depois = turnos.reduce((t, [a, b]) => t + sobreposicao(a, b, ultima, Infinity), 0);
-      if (depois > tol) {
-        const perdidos = turnos.filter(([a]) => a >= ultima);
-        let semTarde = 0;
-        if (perdidos.length && turnos.length > 1 && perdidos.length < turnos.length) {
-          faltaPeriodo = faltaPeriodo ?? 'tarde';
-          semTarde = perdidos.reduce((t, [a, b]) => t + (b - a), 0);
-          faltaDePeriodo += semTarde;
-          avisos.push(`Não veio no período da tarde (${paraHora(turnos[turnos.length - 1][0])}-${paraHora(turnos[turnos.length - 1][1])}).`);
-        }
-        saidaAntecipada = depois - semTarde;
-      }
-      // Almoço mais longo que o previsto (só quando trabalhou manhã e tarde): o que passou desconta.
-      if (turnos.length > 1 && efetivas.length >= 4 && primeira < turnos[0][1] && ultima > turnos[1][0]) {
-        let pausas = 0;
-        for (let i = 1; i + 1 < efetivas.length; i += 2) pausas += efetivas[i + 1] - efetivas[i];
-        const passou = pausas - cfg.intervaloMinutos;
-        if (passou > 0) {
-          atraso += passou;
-          avisos.push(`Intervalo de ${pausas} min (previsto ${cfg.intervaloMinutos}): ${passou} min a mais.`);
-        }
-      }
+  const periodos = periodosDoDia(cfg, entradaPrev, saidaPrev);
+  const almocoIni = cfg.intervaloInicio ? paraMinutos(cfg.intervaloInicio) : null;
+  const doisPeriodos = periodos.length > 1 && almocoIni != null;
+  const almocoFim = doisPeriodos ? periodos[1][0] : 0;
+  const primeira = efetivas[0];
+  const ultima = efetivas[n - 1];
+  const manhaSemBatida = doisPeriodos && primeira >= almocoIni!;
+  const tardeSemBatida = doisPeriodos && !manhaSemBatida && ultima <= almocoFim;
+
+  // Atraso e saída antecipada brutos (só informação, não entram no banco de novo).
+  let atraso: number;
+  let saida: number;
+  if (manhaSemBatida) {
+    atraso = Math.max(0, primeira - almocoFim);
+    saida = Math.max(0, saidaPrev - ultima);
+    avisos.push('Manhã sem batida: o saldo negativo da manhã pode ser abonado ("Abonar manhã").');
+  } else if (tardeSemBatida) {
+    atraso = Math.max(0, primeira - entradaPrev);
+    saida = Math.max(0, almocoIni! - ultima);
+    avisos.push('Tarde sem batida: o saldo negativo da tarde pode ser abonado ("Abonar tarde").');
+  } else {
+    atraso = Math.max(0, primeira - entradaPrev);
+    saida = Math.max(0, saidaPrev - ultima);
+    if (doisPeriodos && n >= 4) {
+      atraso += Math.max(0, efetivas[2] - almocoFim);
+      saida += Math.max(0, almocoIni! - efetivas[1]);
     }
   }
-  if (tem('abonar_atraso')) { atraso = 0; saidaAntecipada = 0; }
 
-  // Falta: dia previsto, sem nenhuma batida, coberto por importação, que já passou.
-  const passou = !e.hoje || e.data <= e.hoje;
-  let falta = previsto > 0 && efetivas.length === 0 && e.coberto && passou && !compensacao ? previsto : faltaDePeriodo;
-  if (tem('abonar_falta')) { falta = 0; faltaPeriodo = null; }
+  // Saldo: trabalhado − previsto, com os abonos; tolerância sobre o saldo.
+  const semAbono = trabalhado - previsto;
+  let bruto = semAbono;
+  const manha = periodos[0];
+  const tarde = doisPeriodos ? periodos[1] : null;
+  if (tem('abonar_manha') && bruto < 0 && manha) bruto = Math.min(0, bruto + (manha[1] - manha[0]));
+  if (tem('abonar_tarde') && bruto < 0 && tarde) bruto = Math.min(0, bruto + (tarde[1] - tarde[0]));
+  if ((tem('abonar_falta') || tem('abonar_atraso')) && bruto < 0) bruto = 0;
+  const liquido = Math.abs(bruto) > tol ? bruto : 0;
 
-  // Hora extra: o que passou da jornada (acima da tolerância). Dia sem jornada prevista: tudo o que trabalhou.
-  const domingoOuFeriado = dow === 0 || !!feriadoNome;
-  const pctExtra = domingoOuFeriado ? cfg.pctExtraDomingoFeriado : cfg.pctExtraUtil;
-  const excedente = trabalhado - previsto;
-  const extra = previsto === 0 ? trabalhado : (excedente > tol ? excedente : 0);
-  const destino: DestinoExtra = tem('extra_pagamento') ? 'pagamento' : tem('extra_banco') ? 'banco' : cfg.destinoExtra;
+  let banco = liquido;
+  let extra = 0;
+  let valorExtra = 0;
+  let desconto = 0;
+  if (liquido > 0) {
+    extra = liquido;
+    if (extraDestino === 'pagamento') { banco = 0; valorExtra = valorDaExtra(extra); }
+  } else if (liquido < 0 && tem('descontar_saldo')) {
+    // Saldo negativo convertido em desconto no fechamento: sai do banco, vira R$.
+    banco = 0;
+    desconto = Math.round((-liquido * vh) / 60);
+  }
 
-  // Banco de horas do dia: extra que vai pro banco (+) menos atraso, saída antecipada e falta (−). Compensação: o dia
-  // de folga sai do banco.
-  let saldo = (destino === 'banco' ? extra : 0) - atraso - saidaAntecipada - falta;
-  if (compensacao) saldo -= previstoDoDia(cfg, dow);
-
-  const vh = valorHora(cfg);
-  const descontoBase = Math.round(((atraso + saidaAntecipada + falta) * vh) / 60);
-  const desconto = tem('perdoar_desconto') ? 0 : descontoBase;
-  const valorExtra = destino === 'pagamento' ? Math.round(((extra * vh) / 60) * (1 + pctExtra / 100)) : 0;
-
-  const abonado = tem('abonar_atraso') || tem('abonar_falta');
   let status: StatusDia;
-  if (feriadoNome && efetivas.length === 0) status = 'feriado';
-  else if ((folga || compensacao) && efetivas.length === 0) status = 'folga';
-  else if (falta > 0) status = 'falta';
-  else if (abonado && efetivas.length === 0) status = 'abonado';
-  else if (atraso > 0 || saidaAntecipada > 0) status = 'atraso';
-  else if (extra > 0) status = 'extra';
-  else if (abonado) status = 'abonado';
-  else if (incompleto) status = 'incompleto';
-  else if (efetivas.length === 0 && previsto === 0) status = 'folga';
-  else if (efetivas.length === 0) status = 'sem_registro';
+  if (manhaSemBatida && liquido < 0) status = 'manha_sem_batida';
+  else if (tardeSemBatida && liquido < 0) status = 'tarde_sem_batida';
+  else if (liquido < 0) status = 'atraso';
+  else if (liquido > 0) status = 'extra';
+  else if (ABONOS.some(tem) && bruto !== semAbono) status = 'abonado';
   else status = 'normal';
 
-  return {
-    data: e.data,
-    diaSemana: dow,
-    batidasOriginais: originais,
-    batidas: efetivas.map(paraHora),
-    previstoMinutos: previsto,
-    trabalhadoMinutos: trabalhado,
-    atrasoMinutos: atraso,
-    saidaAntecipadaMinutos: saidaAntecipada,
-    faltaMinutos: falta,
-    faltaPeriodo: falta > 0 && falta < previsto ? faltaPeriodo : null,
-    extraMinutos: extra,
-    extraDestino: destino,
-    pctExtra,
-    saldoMinutos: saldo,
-    descontoCentavos: desconto,
-    valorExtraCentavos: valorExtra,
-    feriado: feriadoNome,
-    status,
-    avisos,
-    ajustes: ajustes.map((a) => a.tipo),
-  };
+  return fechar(status, {
+    atrasoMinutos: atraso, saidaAntecipadaMinutos: saida, saldoBrutoMinutos: bruto, saldoMinutos: liquido,
+    bancoMinutos: banco, extraMinutos: extra, valorExtraCentavos: valorExtra, descontoCentavos: desconto,
+  });
 }
 
 // ───────────────────────────── período ─────────────────────────────
@@ -358,8 +418,10 @@ export interface EntradaDoPeriodo {
   batidas: Map<string, string[]>;
   feriados: Map<string, string>;
   ajustes: Map<string, AjusteDoDia[]>;
-  /** Dias cobertos por alguma importação (Set de datas). */
+  /** Dias cobertos por alguma importação deste colaborador (Set de datas). */
   cobertos: Set<string>;
+  /** data -> turno (aba Turnos). */
+  turnos?: Map<string, TurnoDoDia>;
   hoje?: string;
 }
 
@@ -368,6 +430,7 @@ export function calcularPeriodo(e: EntradaDoPeriodo): { dias: DiaCalculado[]; re
   const ampliado = new Map<string, string[]>();
   for (const [d, hs] of e.batidas) if (d >= somarDias(e.inicio, -1) && d <= somarDias(e.fim, 1)) ampliado.set(d, hs);
   const resolvido = resolverViradaDeDia(ampliado);
+  const ultimoDiaLido = [...e.cobertos].sort().pop() ?? null;
   const dias = datasEntre(e.inicio, e.fim).map((data) => calcularDia({
     data,
     batidas: resolvido.get(data) ?? [],
@@ -376,6 +439,8 @@ export function calcularPeriodo(e: EntradaDoPeriodo): { dias: DiaCalculado[]; re
     ajustes: e.ajustes.get(data) ?? [],
     coberto: e.cobertos.has(data),
     hoje: e.hoje,
+    ultimoDiaLido,
+    turno: e.turnos?.get(data) ?? null,
   }));
   return { dias, resumo: resumir(dias) };
 }
@@ -383,21 +448,28 @@ export function calcularPeriodo(e: EntradaDoPeriodo): { dias: DiaCalculado[]; re
 export function resumir(dias: DiaCalculado[]): ResumoPeriodo {
   const r: ResumoPeriodo = {
     trabalhadoMinutos: 0, previstoMinutos: 0, extraMinutos: 0, extraBancoMinutos: 0, extraPagamentoMinutos: 0,
-    atrasoMinutos: 0, saidaAntecipadaMinutos: 0, faltaMinutos: 0, faltas: 0, meiasFaltas: 0, saldoMinutos: 0, descontoCentavos: 0,
-    valorExtraCentavos: 0,
+    atrasoMinutos: 0, saidaAntecipadaMinutos: 0, faltaMinutos: 0, faltas: 0, justificadas: 0, manhasSemBatida: 0,
+    emAndamento: 0, saldoMinutos: 0, bancoMinutos: 0, descontoCentavos: 0, valorExtraCentavos: 0,
   };
   for (const d of dias) {
-    r.trabalhadoMinutos += d.trabalhadoMinutos;
-    r.previstoMinutos += d.previstoMinutos;
+    // Em andamento e fora do controle: as horas aparecem na linha, mas não entram nos totais.
+    const conta = d.status !== 'em_andamento' && d.status !== 'fora_controle';
+    if (conta) {
+      r.trabalhadoMinutos += d.trabalhadoMinutos;
+      r.previstoMinutos += d.previstoMinutos;
+    }
     r.extraMinutos += d.extraMinutos;
     if (d.extraDestino === 'banco') r.extraBancoMinutos += d.extraMinutos;
     else r.extraPagamentoMinutos += d.extraMinutos;
     r.atrasoMinutos += d.atrasoMinutos;
     r.saidaAntecipadaMinutos += d.saidaAntecipadaMinutos;
     r.faltaMinutos += d.faltaMinutos;
-    if (d.faltaPeriodo) r.meiasFaltas += 1;
-    else if (d.faltaMinutos > 0) r.faltas += 1;
+    if (d.faltaMinutos > 0) r.faltas += 1;
+    if (d.status === 'justificada') r.justificadas += 1;
+    if (d.status === 'manha_sem_batida') r.manhasSemBatida += 1;
+    if (d.status === 'em_andamento') r.emAndamento += 1;
     r.saldoMinutos += d.saldoMinutos;
+    r.bancoMinutos += d.bancoMinutos;
     r.descontoCentavos += d.descontoCentavos;
     r.valorExtraCentavos += d.valorExtraCentavos;
   }

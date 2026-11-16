@@ -1,6 +1,7 @@
 import * as React from 'react'
 import {
-  CalendarDays, Clock, Download, FileText, History, Loader2, Lock, PiggyBank, Settings2, TimerOff, TrendingUp, Upload, Users, Wallet,
+  AlertTriangle, CalendarCheck, CalendarDays, CalendarX, Clock, Download, FileText, History, Loader2, Lock, PiggyBank, Settings2, TimerOff,
+  TrendingUp, Upload, Users, Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TopBar } from '@/components/layout/TopBar'
@@ -30,11 +31,16 @@ const COR_STATUS: Record<StatusDia, string> = {
   normal: 'bg-elevate/[0.06] text-foreground/60',
   falta: 'bg-danger/15 text-danger',
   atraso: 'bg-warning/15 text-warning',
+  manha_sem_batida: 'bg-warning/15 text-warning',
+  tarde_sem_batida: 'bg-warning/15 text-warning',
   extra: 'bg-accent/15 text-accent',
+  em_andamento: 'bg-sky-500/15 text-sky-600 dark:text-sky-300',
+  justificada: 'bg-success/15 text-success',
   folga: 'bg-elevate/[0.06] text-foreground/45',
   abonado: 'bg-success/15 text-success',
   feriado: 'bg-sky-500/15 text-sky-600 dark:text-sky-300',
   incompleto: 'bg-warning/15 text-warning',
+  fora_controle: 'bg-elevate/[0.04] text-foreground/35',
   sem_registro: 'bg-elevate/[0.06] text-foreground/40',
 }
 
@@ -151,13 +157,13 @@ export function FinanceiroPontosPage() {
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-                  <Card icone={<Clock />} rotulo="Horas trabalhadas" valor={horas(atual.resumo.trabalhadoMinutos)} nota={`previstas ${horas(atual.resumo.previstoMinutos)}`} />
-                  <Card icone={<TrendingUp />} rotulo="Horas extras" valor={horas(atual.resumo.extraMinutos)} nota={`banco ${horas(atual.resumo.extraBancoMinutos)} · pag. ${horas(atual.resumo.extraPagamentoMinutos)}`} />
-                  <Card icone={<TimerOff />} rotulo="Atrasos + saídas" valor={horas(atual.resumo.atrasoMinutos + atual.resumo.saidaAntecipadaMinutos)} nota={`${atual.resumo.faltas} falta(s)${atual.resumo.meiasFaltas ? ` · ${atual.resumo.meiasFaltas} meio período` : ''}`} tom={atual.resumo.atrasoMinutos + atual.resumo.saidaAntecipadaMinutos > 0 ? 'ruim' : undefined} />
-                  <Card icone={<Clock />} rotulo="Saldo do período" valor={horas(atual.resumo.saldoMinutos)} tom={atual.resumo.saldoMinutos < 0 ? 'ruim' : atual.resumo.saldoMinutos > 0 ? 'bom' : undefined} />
-                  <Card icone={<PiggyBank />} rotulo="Banco de horas" valor={horas(atual.bancoAcumuladoMinutos)} nota="acumulado até o fim do período" tom={atual.bancoAcumuladoMinutos < 0 ? 'ruim' : atual.bancoAcumuladoMinutos > 0 ? 'bom' : undefined} />
+                  <Card icone={<Clock />} rotulo="Horas trabalhadas" valor={horas(atual.resumo.trabalhadoMinutos)} nota={`previstas ${horas(atual.resumo.previstoMinutos)}${atual.resumo.emAndamento ? ` · ${atual.resumo.emAndamento} em andamento` : ''}`} />
+                  <Card icone={<TrendingUp />} rotulo="Horas extras" valor={horas(atual.resumo.extraMinutos)} nota={atual.resumo.valorExtraCentavos ? `a pagar ${brl(atual.resumo.valorExtraCentavos)}` : `banco ${horas(atual.resumo.extraBancoMinutos)} · pag. ${horas(atual.resumo.extraPagamentoMinutos)}`} />
+                  <Card icone={<TimerOff />} rotulo="Atraso bruto" valor={horas(atual.resumo.atrasoMinutos)} nota="informativo (não entra de novo no banco)" />
+                  <Card icone={<CalendarX />} rotulo="Faltas" valor={String(atual.resumo.faltas)} nota={atual.resumo.manhasSemBatida ? `${atual.resumo.manhasSemBatida} manhã(s) sem batida` : 'dia útil sem batida'} tom={atual.resumo.faltas > 0 ? 'ruim' : undefined} />
+                  <Card icone={<CalendarCheck />} rotulo="Ausências justificadas" valor={String(atual.resumo.justificadas)} nota="licença, viagem, férias" />
+                  <Card icone={<PiggyBank />} rotulo="Banco de horas" valor={horas(atual.bancoAcumuladoMinutos)} nota={`acumulado · no período ${horas(atual.resumo.bancoMinutos)}`} tom={atual.bancoAcumuladoMinutos < 0 ? 'ruim' : atual.bancoAcumuladoMinutos > 0 ? 'bom' : undefined} />
                   <Card icone={<Wallet />} rotulo="Desconto" valor={brl(atual.resumo.descontoCentavos)} nota={`valor/hora ${brl(atual.colaborador.valorHoraCalculadoCentavos)}`} tom={atual.resumo.descontoCentavos > 0 ? 'ruim' : undefined} />
-                  <Card icone={<Wallet />} rotulo="Extras a pagar" valor={brl(atual.resumo.valorExtraCentavos)} />
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -229,9 +235,10 @@ function Comparativo({ dados, onAbrir }: { dados: PeriodoDoColaborador[]; onAbri
             <th className="px-4 py-3">Colaborador</th>
             <th className="px-3 py-3 text-right">Trabalhadas</th>
             <th className="px-3 py-3 text-right">Extras</th>
-            <th className="px-3 py-3 text-right">Atrasos + saídas</th>
+            <th className="px-3 py-3 text-right">Atraso bruto</th>
             <th className="px-3 py-3 text-right">Faltas</th>
-            <th className="px-3 py-3 text-right">Saldo do período</th>
+            <th className="px-3 py-3 text-right">Justificadas</th>
+            <th className="px-3 py-3 text-right">Banco no período</th>
             <th className="px-3 py-3 text-right">Banco acumulado</th>
             <th className="px-3 py-3 text-right">Desconto</th>
             <th className="px-3 py-3 text-right">Extras a pagar</th>
@@ -243,15 +250,16 @@ function Comparativo({ dados, onAbrir }: { dados: PeriodoDoColaborador[]; onAbri
               <td className="px-4 py-3 font-medium text-foreground">{d.colaborador.nome}</td>
               <td className="px-3 py-3 text-right tabular-nums">{horas(d.resumo.trabalhadoMinutos)}</td>
               <td className="px-3 py-3 text-right tabular-nums">{horas(d.resumo.extraMinutos)}</td>
-              <td className="px-3 py-3 text-right tabular-nums">{horas(d.resumo.atrasoMinutos + d.resumo.saidaAntecipadaMinutos)}</td>
-              <td className="px-3 py-3 text-right tabular-nums">{d.resumo.faltas}{d.resumo.meiasFaltas ? <span className="text-foreground/50"> + {d.resumo.meiasFaltas} meio</span> : null}</td>
-              <td className={cn('px-3 py-3 text-right tabular-nums', d.resumo.saldoMinutos < 0 ? 'text-danger' : d.resumo.saldoMinutos > 0 ? 'text-success' : '')}>{horas(d.resumo.saldoMinutos)}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{horas(d.resumo.atrasoMinutos)}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{d.resumo.faltas}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{d.resumo.justificadas}</td>
+              <td className={cn('px-3 py-3 text-right tabular-nums', d.resumo.bancoMinutos < 0 ? 'text-danger' : d.resumo.bancoMinutos > 0 ? 'text-success' : '')}>{horas(d.resumo.bancoMinutos)}</td>
               <td className={cn('px-3 py-3 text-right font-semibold tabular-nums', d.bancoAcumuladoMinutos < 0 ? 'text-danger' : d.bancoAcumuladoMinutos > 0 ? 'text-success' : '')}>{horas(d.bancoAcumuladoMinutos)}</td>
               <td className="px-3 py-3 text-right tabular-nums">{brl(d.resumo.descontoCentavos)}</td>
               <td className="px-3 py-3 text-right tabular-nums">{brl(d.resumo.valorExtraCentavos)}</td>
             </tr>
           ))}
-          {!dados.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-foreground/45">Nenhum colaborador ativo. Cadastre em “Colaboradores”.</td></tr>}
+          {!dados.length && <tr><td colSpan={10} className="px-4 py-8 text-center text-foreground/45">Nenhum colaborador ativo. Cadastre em “Colaboradores”.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -266,9 +274,9 @@ function TabelaDias({ dias, ajustesPorDia, onAjustar }: { dias: DiaPonto[]; ajus
         <thead className="text-[11px] uppercase tracking-wider text-foreground/45">
           <tr className="border-b border-line">
             <th className="px-3 py-3">Data</th><th className="px-2 py-3">Dia</th><th className="px-2 py-3">Entradas e saídas</th>
-            <th className="px-2 py-3 text-right">Trabalhadas</th><th className="px-2 py-3 text-right">Previstas</th>
-            <th className="px-2 py-3 text-right">Atraso</th><th className="px-2 py-3 text-right">Saída antec.</th><th className="px-2 py-3 text-right">Falta</th>
-            <th className="px-2 py-3 text-right">Extra</th><th className="px-2 py-3 text-right">Saldo</th>
+            <th className="px-2 py-3 text-right">Trabalhado</th><th className="px-2 py-3 text-right">Previsto</th>
+            <th className="px-2 py-3 text-right">Atraso bruto</th><th className="px-2 py-3 text-right">Saldo</th>
+            <th className="px-2 py-3 text-right">Hora extra</th>
             <th className="px-2 py-3">Status</th><th className="px-3 py-3" />
           </tr>
         </thead>
@@ -279,18 +287,20 @@ function TabelaDias({ dias, ajustesPorDia, onAjustar }: { dias: DiaPonto[]; ajus
               <td className="px-2 py-2 text-foreground/60">{DIAS_CURTOS[d.diaSemana]}</td>
               <td className="px-2 py-2 tabular-nums" title={d.avisos.join(' ')}>
                 {d.batidas.length ? d.batidas.join('  ') : <span className="text-foreground/35">—</span>}
+                {d.avisos.length > 0 && <AlertTriangle className="ml-1.5 inline h-3.5 w-3.5 text-warning" aria-label={d.avisos.join(' ')} />}
                 {d.batidas.join() !== d.batidasOriginais.join() && <span className="ml-1.5 text-[10px] text-accent">(corrigido)</span>}
                 {d.feriado && <span className="ml-1.5 text-[10px] text-sky-600 dark:text-sky-300">{d.feriado}</span>}
               </td>
               <td className="px-2 py-2 text-right tabular-nums">{traco(d.trabalhadoMinutos)}</td>
               <td className="px-2 py-2 text-right tabular-nums text-foreground/55">{traco(d.previstoMinutos)}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{traco(d.atrasoMinutos)}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{traco(d.saidaAntecipadaMinutos)}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{traco(d.faltaMinutos)}</td>
+              <td className="px-2 py-2 text-right tabular-nums" title={d.saidaAntecipadaMinutos ? `Saída antecipada bruta: ${horas(d.saidaAntecipadaMinutos)}` : undefined}>{traco(d.atrasoMinutos)}</td>
+              <td className={cn('px-2 py-2 text-right font-medium tabular-nums', d.saldoMinutos < 0 ? 'text-danger' : d.saldoMinutos > 0 ? 'text-success' : 'text-foreground/40')}
+                title={d.saldoBrutoMinutos && !d.saldoMinutos ? `${horas(d.saldoBrutoMinutos)} dentro da tolerância` : d.bancoMinutos !== d.saldoMinutos ? `No banco: ${horas(d.bancoMinutos)}` : undefined}>
+                {d.saldoMinutos ? horas(d.saldoMinutos) : d.saldoBrutoMinutos ? <span className="text-foreground/40">0 <span className="text-[10px]">({horas(d.saldoBrutoMinutos)})</span></span> : '—'}
+              </td>
               <td className="px-2 py-2 text-right tabular-nums">{d.extraMinutos ? `${horas(d.extraMinutos)}${d.extraDestino === 'pagamento' ? ' $' : ''}` : '—'}</td>
-              <td className={cn('px-2 py-2 text-right font-medium tabular-nums', d.saldoMinutos < 0 ? 'text-danger' : d.saldoMinutos > 0 ? 'text-success' : 'text-foreground/40')}>{d.saldoMinutos ? horas(d.saldoMinutos) : '—'}</td>
               <td className="px-2 py-2">
-                <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', COR_STATUS[d.status])}>{ROTULO_STATUS[d.status]}{d.faltaPeriodo && ` (${d.faltaPeriodo === 'manha' ? 'manhã' : 'tarde'})`}</span>
+                <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', COR_STATUS[d.status])}>{ROTULO_STATUS[d.status]}{d.justificativa && d.justificativa !== 'Justificada' && ` (${d.justificativa})`}</span>
                 {ajustesPorDia.has(d.data) && <span className="ml-1 text-[10px] text-accent" title="Tem ajuste manual">✎</span>}
               </td>
               <td className="px-3 py-2 text-right">

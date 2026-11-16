@@ -206,6 +206,13 @@ export function ImportarPontosModal({ open, onClose, onImportado, colaboradores 
               />
             ))}
 
+            {previa.formato === 'relogio' && (
+              <p className="rounded-lg bg-accent/5 px-3 py-2 text-xs text-foreground/70">
+                Exportação do relógio reconhecida: batidas da aba <b>Registros</b>, dias úteis da aba <b>Turnos</b>
+                {previa.turnos.total ? ` (${previa.turnos.justificadas} ausência(s) justificada(s))` : ''}. As abas de resumo só servem pra conferência.
+              </p>
+            )}
+
             {previa.periodo && (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <Numero rotulo="Período" valor={`${dataBr(previa.periodo.inicio)} – ${dataBr(previa.periodo.fim)}`} />
@@ -272,6 +279,33 @@ export function ImportarPontosModal({ open, onClose, onImportado, colaboradores 
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {previa.conferencia.length > 0 && (
+              <div className="overflow-x-auto rounded-xl border border-line">
+                <p className="px-3 pt-2.5 text-xs font-semibold uppercase tracking-wide text-foreground/45">Conferência com o resumo do relógio</p>
+                <table className="w-full text-left text-xs">
+                  <thead className="text-foreground/45">
+                    <tr><th className="px-3 py-1.5">Colaborador</th><th className="px-3 py-1.5">Relógio (resumo)</th><th className="px-3 py-1.5">Nosso cálculo</th></tr>
+                  </thead>
+                  <tbody>
+                    {previa.conferencia.map((c) => (
+                      <tr key={c.nome} className="border-t border-line align-top">
+                        <td className="px-3 py-2 font-medium text-foreground">{c.nome}<span className="block font-normal text-foreground/45">{c.nomeNaPlanilha}</span></td>
+                        <td className="px-3 py-2 text-foreground/65">{Object.entries(c.relogio).map(([k, v]) => <span key={k} className="mr-2 inline-block">{k}: <b>{v}</b></span>)}</td>
+                        <td className="px-3 py-2 text-foreground/65">
+                          <span className="mr-2 inline-block">Faltas: <b>{c.nosso.faltas}</b></span>
+                          <span className="mr-2 inline-block">Atraso bruto: <b>{c.nosso.atrasoBruto}</b></span>
+                          <span className="mr-2 inline-block">Extras: <b>{c.nosso.horasExtras}</b></span>
+                          <span className="mr-2 inline-block">Banco: <b>{c.nosso.banco}</b></span>
+                          {c.nosso.emAndamento > 0 && <span className="mr-2 inline-block">Em andamento: <b>{c.nosso.emAndamento}</b></span>}
+                          {c.divergencias.length > 0 && <span className="block text-warning">{c.divergencias.length} divergência(s): veja os avisos</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
 

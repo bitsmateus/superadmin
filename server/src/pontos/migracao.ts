@@ -86,9 +86,9 @@ CREATE TABLE IF NOT EXISTS ponto_ajustes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   colaborador_id UUID NOT NULL REFERENCES ponto_colaboradores(id) ON DELETE CASCADE,
   data DATE NOT NULL,
-  tipo TEXT NOT NULL CHECK (tipo IN (
-    'abonar_atraso', 'abonar_falta', 'justificar', 'folga', 'compensacao', 'feriado',
-    'perdoar_desconto', 'extra_banco', 'extra_pagamento', 'corrigir_batidas'
+  tipo TEXT NOT NULL CONSTRAINT ponto_ajustes_tipo_check CHECK (tipo IN (
+    'abonar_manha', 'abonar_tarde', 'abonar_atraso', 'abonar_falta', 'justificar', 'folga', 'compensacao', 'feriado',
+    'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas'
   )),
   motivo TEXT NOT NULL CHECK (length(btrim(motivo)) > 0),
   -- corrigir_batidas: os horários que valem no lugar das batidas originais do dia (["08:00","12:00",…]).
@@ -127,11 +127,44 @@ CREATE TABLE IF NOT EXISTS ponto_auditoria (
   criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Coluna nova pra quem já tinha rodado uma versão anterior desta migração.
+-- Turno de cada dia vindo da aba "Turnos" do relógio: dia com turno, sem turno, ou ausência justificada
+-- (25 = licença, 26 = viagem, férias). Sem linha aqui, vale o cadastro do colaborador (dias da semana).
+CREATE TABLE IF NOT EXISTS ponto_turnos (
+  colaborador_id UUID NOT NULL REFERENCES ponto_colaboradores(id) ON DELETE CASCADE,
+  data DATE NOT NULL,
+  tipo TEXT NOT NULL CHECK (tipo IN ('turno', 'sem_turno', 'justificada')),
+  codigo TEXT,
+  importacao_id UUID REFERENCES ponto_importacoes(id) ON DELETE CASCADE,
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (colaborador_id, data)
+);
+CREATE INDEX IF NOT EXISTS ponto_turnos_importacao_idx ON ponto_turnos (importacao_id);
+
+-- Colunas novas (aditivas) pra quem já tinha rodado uma versão anterior desta migração.
 ALTER TABLE ponto_colaboradores ADD COLUMN IF NOT EXISTS intervalo_inicio TEXT DEFAULT '12:00';
+-- Início do controle de ponto: antes dessa data nada conta (nem falta, nem previsto, nem saldo).
+ALTER TABLE ponto_colaboradores ADD COLUMN IF NOT EXISTS inicio_controle DATE;
+-- Tipos de ajuste novos (abonar manhã/tarde, converter saldo negativo em desconto).
+ALTER TABLE ponto_ajustes DROP CONSTRAINT IF EXISTS ponto_ajustes_tipo_check;
+ALTER TABLE ponto_ajustes ADD CONSTRAINT ponto_ajustes_tipo_check CHECK (tipo IN (
+  'abonar_manha', 'abonar_tarde', 'abonar_atraso', 'abonar_falta', 'justificar', 'folga', 'compensacao', 'feriado',
+  'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas'
+));
 
 -- Cadastro inicial (idempotente). Horário da casa: 08:00-12:00 e 13:30-18:00 (8h30), 10 min de tolerância.
 INSERT INTO ponto_colaboradores (nome) VALUES ('Jean'), ('João'), ('Arthur') ON CONFLICT DO NOTHING;
+-- Como aparecem na planilha do relógio.
+UPDATE ponto_colaboradores SET apelidos = array_append(apelidos, 'joao vitor')
+ WHERE lower(nome) IN ('joão', 'joao') AND NOT ('joao vitor' = ANY(apelidos));
+UPDATE ponto_colaboradores SET apelidos = array_append(apelidos, 'jean may')
+ WHERE lower(nome) = 'jean' AND NOT ('jean may' = ANY(apelidos));
+-- Início do controle do João e do Jean (10/11/2026): só na primeira vez (se depois mudarem na tela, fica o da tela).
+UPDATE ponto_colaboradores SET inicio_controle = '2026-11-10'
+ WHERE lower(nome) IN ('joão', 'joao', 'jean') AND inicio_controle IS NULL
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_inicio_controle');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_inicio_controle', '{"data":"2026-11-10","colaboradores":["João","Jean"]}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_inicio_controle');
 
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES
@@ -164,6 +197,10 @@ export async function migrarPontos(pool: Pool): Promise<void> {
 
 /** As tabelas do módulo já existem? (Sem a migração, as rotas respondem 503 com a instrução.) */
 export async function pontosMigrado(pool: Pool): Promise<boolean> {
-  const { rows } = await pool.query<{ ok: boolean }>(`SELECT to_regclass('public.ponto_auditoria') IS NOT NULL AS ok`);
+  // Confere a coluna mais nova: quem rodou uma versão anterior da migração precisa rodar de novo.
+  const { rows } = await pool.query<{ ok: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'ponto_colaboradores' AND column_name = 'inicio_controle')
+        AND to_regclass('public.ponto_turnos') IS NOT NULL AS ok`
+  );
   return rows[0]?.ok === true;
 }

@@ -3,12 +3,13 @@ import { pool, query, queryOne, withTransaction } from '../db.js';
 import { ehDoFinanceiro } from '../lib/acessoMenu.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import {
-  calcularPeriodo, datasEntre, somarDias, TIPOS_DE_AJUSTE, valorHora, paraMinutos,
-  type AjusteDoDia, type ConfigColaborador, type TipoAjuste,
+  calcularPeriodo, datasEntre, somarDias, TIPOS_DE_AJUSTE, valorHora, paraMinutos, formatarMinutos,
+  type AjusteDoDia, type ConfigColaborador, type TipoAjuste, type TurnoDoDia, type ResumoPeriodo,
 } from './calculo.js';
 import { planejarImportacao, type BatidaExistente, type Decisao } from './importacao.js';
 import { pontosMigrado } from './migracao.js';
 import { lerPlanilha, validarArquivo, vincularNome, type LeituraDaPlanilha, type Mapeamento, type PapelColuna } from './planilha.js';
+import { compararComResumo } from './conferencia.js';
 import { relatorioCsv, relatorioHtml } from './relatorio.js';
 
 /**
@@ -51,12 +52,13 @@ interface ColabRow {
   intervalo_minutos: number; intervalo_inicio: string | null; tolerancia_minutos: number; salario_base_centavos: string; divisor_mensal: number;
   valor_hora_centavos: string | null; pct_extra_util: string; pct_extra_domingo_feriado: string;
   destino_extra: 'banco' | 'pagamento'; banco_saldo_inicial_minutos: number; banco_inicio: string | null;
+  inicio_controle: string | null;
 }
 
 const SELECT_COLAB = `SELECT id, nome, apelidos, ativo, dias_semana, minutos_dia, minutos_sabado, minutos_domingo,
   entrada_prevista, saida_prevista, intervalo_minutos, intervalo_inicio, tolerancia_minutos, salario_base_centavos, divisor_mensal,
   valor_hora_centavos, pct_extra_util, pct_extra_domingo_feriado, destino_extra, banco_saldo_inicial_minutos,
-  to_char(banco_inicio, 'YYYY-MM-DD') AS banco_inicio FROM ponto_colaboradores`;
+  to_char(banco_inicio, 'YYYY-MM-DD') AS banco_inicio, to_char(inicio_controle, 'YYYY-MM-DD') AS inicio_controle FROM ponto_colaboradores`;
 
 function cfgDe(r: ColabRow): ConfigColaborador {
   return {
@@ -66,6 +68,7 @@ function cfgDe(r: ColabRow): ConfigColaborador {
     toleranciaMinutos: r.tolerancia_minutos, salarioBaseCentavos: Number(r.salario_base_centavos), divisorMensal: r.divisor_mensal,
     valorHoraCentavos: r.valor_hora_centavos == null ? null : Number(r.valor_hora_centavos),
     pctExtraUtil: Number(r.pct_extra_util), pctExtraDomingoFeriado: Number(r.pct_extra_domingo_feriado), destinoExtra: r.destino_extra,
+    inicioControle: r.inicio_controle,
   };
 }
 
@@ -119,6 +122,12 @@ function camposDoColaborador(b: Record<string, unknown>): { campos: Record<strin
     if (b.bancoInicio !== null && !(typeof b.bancoInicio === 'string' && DIA.test(b.bancoInicio))) return { campos: c, erro: 'Data de início do banco inválida.' };
     c.banco_inicio = b.bancoInicio || null;
   }
+  if ('inicioControle' in b) {
+    if (b.inicioControle !== null && b.inicioControle !== '' && !(typeof b.inicioControle === 'string' && DIA.test(b.inicioControle))) {
+      return { campos: c, erro: 'Data de início do controle de ponto inválida.' };
+    }
+    c.inicio_controle = b.inicioControle || null;
+  }
   return { campos: c };
 }
 
@@ -127,7 +136,7 @@ function camposDoColaborador(b: Record<string, unknown>): { campos: Record<strin
 interface AjusteRow { id: string; colaborador_id: string; data: string; tipo: TipoAjuste; motivo: string; batidas: string[] | null; autor_nome: string; criado_em: string }
 
 async function dadosParaCalculo(colabIds: string[], inicio: string, fim: string) {
-  const [batidas, ajustes, feriados, importacoes] = await Promise.all([
+  const [batidas, ajustes, feriados, importacoes, turnosRows] = await Promise.all([
     query<{ colaborador_id: string; data: string; hora: string }>(
       `SELECT colaborador_id, to_char(data, 'YYYY-MM-DD') AS data, hora FROM ponto_batidas
        WHERE colaborador_id = ANY($1::uuid[]) AND data BETWEEN $2::date AND $3::date ORDER BY data, hora`,
@@ -144,7 +153,18 @@ async function dadosParaCalculo(colabIds: string[], inicio: string, fim: string)
        WHERE desfeita_em IS NULL AND periodo_fim >= $1::date AND periodo_inicio <= $2::date`,
       [inicio, fim]
     ),
+    query<{ colaborador_id: string; data: string; tipo: TurnoDoDia['tipo']; codigo: string | null }>(
+      `SELECT colaborador_id, to_char(data, 'YYYY-MM-DD') AS data, tipo, codigo FROM ponto_turnos
+       WHERE colaborador_id = ANY($1::uuid[]) AND data BETWEEN $2::date AND $3::date`,
+      [colabIds, inicio, fim]
+    ),
   ]);
+  const turnos = new Map<string, Map<string, TurnoDoDia>>();
+  for (const t of turnosRows) {
+    const m = turnos.get(t.colaborador_id) ?? new Map<string, TurnoDoDia>();
+    m.set(t.data, { tipo: t.tipo, codigo: t.codigo });
+    turnos.set(t.colaborador_id, m);
+  }
   // Dias cobertos, POR colaborador: só as importações que trouxeram aquele colaborador.
   const cobertos = new Map<string, Set<string>>();
   for (const i of importacoes) {
@@ -157,7 +177,7 @@ async function dadosParaCalculo(colabIds: string[], inicio: string, fim: string)
   }
   const feriadosMap = new Map<string, string>();
   for (const f of feriados) feriadosMap.set(f.data, feriadosMap.has(f.data) ? `${feriadosMap.get(f.data)} / ${f.nome}` : f.nome);
-  return { batidas, ajustes, feriados: feriadosMap, cobertos };
+  return { batidas, ajustes, feriados: feriadosMap, cobertos, turnos };
 }
 
 function calcularDoColaborador(r: ColabRow, inicio: string, fim: string, d: Awaited<ReturnType<typeof dadosParaCalculo>>) {
@@ -165,10 +185,16 @@ function calcularDoColaborador(r: ColabRow, inicio: string, fim: string, d: Awai
   for (const b of d.batidas) if (b.colaborador_id === r.id) batidas.set(b.data, [...(batidas.get(b.data) ?? []), b.hora]);
   const ajustes = new Map<string, AjusteDoDia[]>();
   for (const a of d.ajustes) if (a.colaborador_id === r.id) ajustes.set(a.data, [...(ajustes.get(a.data) ?? []), { tipo: a.tipo, batidas: a.batidas }]);
-  return calcularPeriodo({ inicio, fim, cfg: cfgDe(r), batidas, feriados: d.feriados, ajustes, cobertos: d.cobertos.get(r.id) ?? new Set(), hoje: hojeSP() });
+  return calcularPeriodo({
+    inicio, fim, cfg: cfgDe(r), batidas, feriados: d.feriados, ajustes, cobertos: d.cobertos.get(r.id) ?? new Set(),
+    turnos: d.turnos.get(r.id), hoje: hojeSP(),
+  });
 }
 
-/** Banco de horas acumulado até `fim`: saldo inicial + saldos de todos os dias desde o início do banco. */
+/**
+ * Banco de horas acumulado até `fim` (passa de um mês pro outro): saldo inicial + efeito no banco de todos os dias desde
+ * o início do banco (dias antes do início do controle de ponto não contam).
+ */
 async function bancoAcumulado(r: ColabRow, fim: string): Promise<number> {
   const primeira = await queryOne<{ d: string | null }>(
     `SELECT to_char(LEAST(
@@ -179,7 +205,7 @@ async function bancoAcumulado(r: ColabRow, fim: string): Promise<number> {
   const inicio = r.banco_inicio ?? primeira?.d ?? null;
   if (!inicio || inicio > fim) return r.banco_saldo_inicial_minutos;
   const dados = await dadosParaCalculo([r.id], inicio, fim);
-  return r.banco_saldo_inicial_minutos + calcularDoColaborador(r, inicio, fim, dados).resumo.saldoMinutos;
+  return r.banco_saldo_inicial_minutos + calcularDoColaborador(r, inicio, fim, dados).resumo.bancoMinutos;
 }
 
 // ───────────────────────────── importação ─────────────────────────────
@@ -216,6 +242,41 @@ function validarMapeamentos(m: unknown): Record<string, Mapeamento> | null {
   return out;
 }
 
+// ───────────────────────────── conferência com o resumo do relógio ─────────────────────────────
+
+async function conferirComResumo(
+  leitura: LeituraDaPlanilha, lido: { inicio: string; fim: string }, colabIds: string[], colaboradores: ColabRow[],
+  vinculo: Map<string, string | null>, lidas: { colaboradorId: string; data: string; hora: string }[],
+  turnos: { colaboradorId: string; data: string; tipo: TurnoDoDia['tipo']; codigo: string | null }[],
+) {
+  const dados = await dadosParaCalculo(colabIds, lido.inicio, lido.fim);
+  const out = [];
+  for (const conf of leitura.conferencia) {
+    const id = vinculo.get(conf.nome);
+    const c = id ? colaboradores.find((x) => x.id === id) : undefined;
+    if (!c) continue;
+    const batidas = new Map<string, string[]>();
+    for (const l of lidas) if (l.colaboradorId === c.id) batidas.set(l.data, [...(batidas.get(l.data) ?? []), l.hora]);
+    const ajustes = new Map<string, AjusteDoDia[]>();
+    for (const a of dados.ajustes) if (a.colaborador_id === c.id) ajustes.set(a.data, [...(ajustes.get(a.data) ?? []), { tipo: a.tipo, batidas: a.batidas }]);
+    const t = new Map(turnos.filter((x) => x.colaboradorId === c.id).map((x) => [x.data, { tipo: x.tipo, codigo: x.codigo }] as const));
+    const { dias, resumo } = calcularPeriodo({
+      inicio: lido.inicio, fim: lido.fim, cfg: cfgDe(c), batidas, feriados: dados.feriados, ajustes,
+      cobertos: new Set(datasEntre(lido.inicio, lido.fim)), turnos: t, hoje: hojeSP(),
+    });
+    out.push({
+      nome: c.nome, nomeNaPlanilha: conf.nome, relogio: conf.campos,
+      nosso: {
+        faltas: resumo.faltas, atrasoBruto: formatarMinutos(resumo.atrasoMinutos), horasExtras: formatarMinutos(resumo.extraMinutos),
+        trabalhadas: formatarMinutos(resumo.trabalhadoMinutos), banco: formatarMinutos(resumo.bancoMinutos),
+        justificadas: resumo.justificadas, emAndamento: resumo.emAndamento,
+      },
+      divergencias: compararComResumo(conf.campos, resumo, dias.filter((d) => d.atrasoMinutos > 0).length),
+    });
+  }
+  return out;
+}
+
 /** Lê o arquivo e monta o plano (usado na pré-visualização e na confirmação, com as mesmas entradas). */
 async function prepararImportacao(b: CorpoImportacao) {
   const nome = String(b.arquivoNome ?? '').slice(0, 200);
@@ -242,6 +303,9 @@ async function prepararImportacao(b: CorpoImportacao) {
     const ate = b.ate && DIA.test(b.ate) ? b.ate : b.de;
     if (ate < b.de) return { erro: 'O fim do período é antes do início.' };
     periodo = { inicio: b.de, fim: ate };
+  } else if (leitura.formato === 'relogio' && leitura.periodoArquivo) {
+    // Exportação do relógio: o período é o que está escrito no arquivo ("2026/11/01 ~ 11/16").
+    periodo = leitura.periodoArquivo;
   } else {
     const mes = b.mes && MES.test(b.mes) ? b.mes : leitura.mesProvavel;
     if (mes) periodo = limitesDoMes(mes);
@@ -249,7 +313,7 @@ async function prepararImportacao(b: CorpoImportacao) {
 
   const colaboradores = await query<ColabRow>(`${SELECT_COLAB} ORDER BY nome`);
   const associacoes = b.associacoes ?? {};
-  const nomes = [...new Set(leitura.registros.map((r) => r.nome))];
+  const nomes = [...new Set([...leitura.registros.map((r) => r.nome), ...(leitura.nomes ?? [])])];
   const vinculo = new Map<string, string | null>();
   for (const n of nomes) {
     const manual = associacoes[n];
@@ -263,7 +327,11 @@ async function prepararImportacao(b: CorpoImportacao) {
     const colaboradorId = vinculo.get(r.nome);
     return colaboradorId ? r.horas.map((hora) => ({ colaboradorId, data: r.data, hora })) : [];
   });
-  const colabIds = [...new Set(lidas.map((l) => l.colaboradorId))];
+  // Colaboradores do arquivo: os que têm batida e (no relógio) os que aparecem na aba Registros mesmo sem batida.
+  const colabIds = [...new Set([
+    ...lidas.map((l) => l.colaboradorId),
+    ...(leitura.nomes ?? []).map((n) => vinculo.get(n)).filter((x): x is string => !!x),
+  ])];
   const existentes = periodo && colabIds.length
     ? (await query<{ id: string; colaborador_id: string; data: string; hora: string; importacao_id: string | null }>(
         `SELECT id, colaborador_id, to_char(data, 'YYYY-MM-DD') AS data, hora, importacao_id FROM ponto_batidas
@@ -293,11 +361,38 @@ async function prepararImportacao(b: CorpoImportacao) {
     return { colaboradorId: id, nome: nomeDoColab(id), dias: new Set(doColab.map((l) => l.data)).size, batidas: doColab.length };
   });
 
+  // Período lido (o que vira "coberto": dia útil sem batida dentro dele é falta, só pros colaboradores do arquivo).
+  // Relógio e modo período: o período inteiro. Planilha comum no modo mês: as datas que vieram (o relógio pode ter
+  // exportado só até o dia 13: do 14 em diante não é falta).
+  let lido = periodo;
+  if (periodo && leitura.formato !== 'relogio' && modo === 'mes') {
+    const datasLidas = [...new Set(leitura.registros.map((x) => x.data))].filter((d) => d >= periodo!.inicio && d <= periodo!.fim).sort();
+    if (datasLidas.length) lido = { inicio: datasLidas[0], fim: datasLidas[datasLidas.length - 1] };
+  }
+
+  // Aba Turnos -> por colaborador e dia (só dentro do período lido).
+  const turnos = lido ? leitura.turnos.flatMap((t) => {
+    if (t.data < lido!.inicio || t.data > lido!.fim) return [];
+    const ids = t.nome === '*' ? colabIds : [vinculo.get(t.nome)].filter((x): x is string => !!x);
+    return ids.map((colaboradorId) => ({ colaboradorId, data: t.data, tipo: t.tipo, codigo: t.codigo }));
+  }) : [];
+  for (const o of leitura.observacoes) avisos.push(o);
+
+  // Conferência com o resumo do relógio (nada dele entra no cálculo: só avisa se o nosso cálculo der diferente).
+  const conferencia = lido && leitura.conferencia.length
+    ? await conferirComResumo(leitura, lido, colabIds, colaboradores, vinculo, lidas, turnos)
+    : [];
+  for (const c of conferencia) for (const d of c.divergencias) avisos.push(`Conferência (${c.nome}): ${d}`);
+
   return {
-    nome, modo, periodo, leitura, plano, avisos, naoReconhecidos, colaboradores, vinculo,
+    nome, modo, periodo, lido, turnos, colabIds, leitura, plano, avisos, naoReconhecidos, colaboradores, vinculo,
     previa: {
       arquivoNome: nome,
       modo,
+      formato: leitura.formato,
+      periodoLido: lido,
+      turnos: { total: turnos.length, justificadas: turnos.filter((t) => t.tipo === 'justificada').length },
+      conferencia,
       mesDetectado: leitura.mesProvavel,
       periodoDoArquivo: leitura.periodo,
       periodo,
@@ -469,11 +564,8 @@ export async function pontosRoutes(app: FastifyInstance) {
     const u = req.user as Usuario;
     const autor = await nomeDe(u.sub);
     const { plano, periodo } = r;
-    // Período lido (o que vira "coberto"): no modo período, o intervalo escolhido; no modo mês, as datas que vieram no
-    // arquivo dentro do mês (o relógio pode ter exportado só até o dia 13: do 14 em diante não é falta).
-    const datasLidas = [...new Set(r.leitura.registros.map((x) => x.data))].filter((d) => d >= periodo.inicio && d <= periodo.fim).sort();
-    const lido = r.modo === 'periodo' || !datasLidas.length ? periodo : { inicio: datasLidas[0], fim: datasLidas[datasLidas.length - 1] };
-    const colaboradoresDaImportacao = [...new Set([...plano.inserir.map((b) => b.colaboradorId), ...r.previa.colaboradores.map((c) => c.colaboradorId)])];
+    const lido = r.lido ?? periodo;
+    const colaboradoresDaImportacao = [...new Set([...plano.inserir.map((b) => b.colaboradorId), ...r.colabIds])];
     const id = await withTransaction(async (client) => {
       // Mapeamentos usados ficam salvos pras próximas importações.
       for (const a of r.leitura.abas) {
@@ -509,6 +601,15 @@ export async function pontosRoutes(app: FastifyInstance) {
         );
         inseridas += res.rowCount ?? 0;
       }
+      // Turnos do dia (aba Turnos do relógio): a importação mais nova vale.
+      for (const t of r.turnos) {
+        await client.query(
+          `INSERT INTO ponto_turnos (colaborador_id, data, tipo, codigo, importacao_id) VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (colaborador_id, data) DO UPDATE SET tipo = EXCLUDED.tipo, codigo = EXCLUDED.codigo,
+             importacao_id = EXCLUDED.importacao_id, atualizado_em = NOW()`,
+          [t.colaboradorId, t.data, t.tipo, t.codigo, imp.id]
+        );
+      }
       const ignorados = plano.ignorados + (plano.inserir.length - inseridas);
       await client.query('UPDATE ponto_importacoes SET novos = $2, atualizados = $3, ignorados = $4 WHERE id = $1',
         [imp.id, plano.novos, plano.atualizados, ignorados]);
@@ -535,6 +636,7 @@ export async function pontosRoutes(app: FastifyInstance) {
       if (!imp) return { status: 404 as const, message: 'Importação não encontrada.' };
       if (imp.desfeita_em) return { status: 409 as const, message: 'Essa importação já foi desfeita.' };
       const removidas = await client.query('DELETE FROM ponto_batidas WHERE importacao_id = $1', [imp.id]);
+      await client.query('DELETE FROM ponto_turnos WHERE importacao_id = $1', [imp.id]);
       // Devolve as batidas que ela tinha substituído (só se a importação delas continua valendo).
       let devolvidas = 0;
       for (const s of imp.substituidas ?? []) {

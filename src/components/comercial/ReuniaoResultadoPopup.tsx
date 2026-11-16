@@ -276,6 +276,7 @@ function CompareceuNaFicha({ reuniao, contador, enviando, onConcluir }: {
     { ok: /\d/.test(row.valorImplementacao), rotulo: 'Valor Implementação' },
     { ok: /\d/.test(row.valorMrr), rotulo: 'Valor MRR' },
     { ok: !!etapa, rotulo: 'Próxima etapa' },
+    ...(/vendido/i.test(etapa) ? [{ ok: !!row.fidelidade.trim(), rotulo: 'Fidelidade' }] : []),
     ...(pedeRetorno ? [{ ok: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(row.retornar), rotulo: 'Retornar' }] : []),
     ...(pedeMotivo ? [{ ok: motivoValido(row.motivoDesqualificacao), rotulo: 'Motivo' }] : []),
     // Origem vazia não passa de "Primeiro contato" (o servidor recusa mover o card): fica no bloco Origem da ficha.

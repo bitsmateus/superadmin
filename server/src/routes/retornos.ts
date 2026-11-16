@@ -25,13 +25,13 @@ async function pendenciasDe(userId: string, role: string) {
   const agora = new Date();
   const rows = await query<{
     id: string; familia: string; nome: string; empresa: string; telefone: string; retornar: string; coluna: string;
-    nome_da_pagina: string; board_id: string; valor_mrr: string; valor_implementacao: string; origem: string;
+    nome_da_pagina: string; board_id: string; valor_mrr: string; valor_implementacao: string; fidelidade: string; origem: string;
     do_anuncio: boolean; resumo: string; crm_de_origem: string | null;
   }>(
     `SELECT r.id, COALESCE(r.espelho_origem_id, r.copia_ia_origem_id, r.id) AS familia, COALESCE(r.nome, '') AS nome,
             COALESCE(r.empresa, '') AS empresa, COALESCE(r.telefone, '') AS telefone, r.retornar, lb.name AS coluna,
             lp.name AS nome_da_pagina, r.board_id, COALESCE(r.valor_mrr, '') AS valor_mrr,
-            COALESCE(r.valor_implementacao, '') AS valor_implementacao, COALESCE(r.origem, '') AS origem,
+            COALESCE(r.valor_implementacao, '') AS valor_implementacao, COALESCE(r.fidelidade, '') AS fidelidade, COALESCE(r.origem, '') AS origem,
             (r.meta_lead_id IS NOT NULL) AS do_anuncio,
             COALESCE(NULLIF(o.last_note_preview, ''), r.last_note_preview, '') AS resumo, olp.name AS crm_de_origem
      FROM lead_rows r
@@ -73,7 +73,7 @@ async function pendenciasDe(userId: string, role: string) {
       return {
         card_id: r.id, familia: r.familia, nome: r.nome, empresa: r.empresa, telefone: r.telefone,
         retornar: r.retornar.slice(0, 16), coluna: r.coluna, crm_de_origem: r.crm_de_origem,
-        valor_mrr: r.valor_mrr, valor_implementacao: r.valor_implementacao,
+        valor_mrr: r.valor_mrr, valor_implementacao: r.valor_implementacao, fidelidade: r.fidelidade,
         origem: r.origem || (r.do_anuncio ? 'meta' : ''), resumo: r.resumo,
         tentativas: h.tentativas, adiamentos: h.adiamentos,
         em_reuniao_usados: emReuniao.usados, escondido_ate: emReuniao.escondidoAte,
@@ -140,6 +140,7 @@ export async function retornosRoutes(app: FastifyInstance) {
         await irPara('Vendido');
         patch.valor_mrr = r.valorMrr;
         patch.valor_implementacao = r.valorImplementacao;
+        patch.fidelidade = r.fidelidade;
         if (!pendencia.origem || r.origem !== pendencia.origem) patch.origem = r.origem;
       } else if (r.desfecho === 'perdeu') {
         await irPara('Perdidos');

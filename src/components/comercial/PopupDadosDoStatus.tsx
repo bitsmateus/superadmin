@@ -20,6 +20,7 @@ const ROTULO: Record<CampoDoPopup, string> = {
   origem: 'De onde o lead veio?',
   valorMrr: 'Valor MRR',
   valorImplementacao: 'Valor de implementação',
+  fidelidade: 'Fidelidade do contrato',
   motivoDesqualificacao: 'Motivo da desqualificação',
 }
 
@@ -198,6 +199,15 @@ export function PopupDadosDoStatus() {
                   className={`${campoCls} pl-9`}
                 />
               </div>
+            )}
+            {c === 'fidelidade' && (
+              <input
+                value={texto[c] ?? ''}
+                autoFocus={i === 0}
+                placeholder='Ex.: 12 meses, ou "Sem fidelidade"'
+                onChange={(e) => setTexto((x) => ({ ...x, [c]: e.target.value }))}
+                className={campoCls}
+              />
             )}
             {c === 'motivoDesqualificacao' && (
               <>

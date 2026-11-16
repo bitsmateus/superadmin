@@ -224,6 +224,7 @@ function Retornou({ atual, enviando, onVoltar, onConcluir }: Form) {
   const [detalhe, setDetalhe] = React.useState('')
   const [mrr, setMrr] = React.useState(atual.valor_mrr)
   const [impl, setImpl] = React.useState(atual.valor_implementacao)
+  const [fidelidade, setFidelidade] = React.useState(atual.fidelidade ?? '')
   const origemConhecida = (ORIGENS_DO_LEAD.some((o) => o.valor === atual.origem) || atual.origem.startsWith(PREFIXO_ORIGEM_OUTROS)) ? atual.origem : ''
   const [origem, setOrigem] = React.useState(origemConhecida.startsWith(PREFIXO_ORIGEM_OUTROS) ? 'outros' : origemConhecida)
   const [origemOutros, setOrigemOutros] = React.useState(origemConhecida.startsWith(PREFIXO_ORIGEM_OUTROS) ? origemConhecida.slice(PREFIXO_ORIGEM_OUTROS.length) : '')
@@ -237,6 +238,7 @@ function Retornou({ atual, enviando, onVoltar, onConcluir }: Form) {
     : desfecho === 'perdeu' && !textoDeVerdade(detalhe, MINIMO_DETALHE_MOTIVO) ? `Detalhe o motivo com palavras (mínimo ${MINIMO_DETALHE_MOTIVO} letras). Ex.: achou caro, fechou com outro sistema.`
     : desfecho === 'fechou' && !/\d/.test(mrr) ? 'Informe o valor MRR fechado.'
     : desfecho === 'fechou' && !/\d/.test(impl) ? 'Informe o valor de implementação (R$ 0,00 também vale).'
+    : desfecho === 'fechou' && !fidelidade.trim() ? 'Informe a fidelidade do contrato ("Sem fidelidade" também vale).'
     : desfecho === 'fechou' && (!origem || (origem === 'outros' && origemOutros.trim().length < MINIMO_OUTRO)) ? 'Informe a origem do lead.'
     : ''
 
@@ -279,6 +281,9 @@ function Retornou({ atual, enviando, onVoltar, onConcluir }: Form) {
               <div className="mt-0.5 h-10"><CurrencyField value={impl} onSave={setImpl} className={campoCls} /></div>
             </label>
           </div>
+          <label className="block text-xs text-foreground/50">Fidelidade do contrato
+            <input value={fidelidade} onChange={(e) => setFidelidade(e.target.value)} placeholder='Ex.: 12 meses, ou "Sem fidelidade"' className={cn(campoCls, 'mt-0.5')} />
+          </label>
           {!origemConhecida && (
             <label className="block text-xs text-foreground/50">De onde o lead veio?
               <select value={origem} onChange={(e) => setOrigem(e.target.value)} className={cn(campoCls, 'mt-0.5')}>
@@ -300,7 +305,7 @@ function Retornou({ atual, enviando, onVoltar, onConcluir }: Form) {
           resultado: 'retornou', observacao: obs.trim(), desfecho,
           ...(desfecho === 'negociando' ? { retornar_novo: `${data}T${hora}` } : {}),
           ...(desfecho === 'perdeu' ? { motivo, motivo_detalhe: detalhe.trim() } : {}),
-          ...(desfecho === 'fechou' ? { valor_mrr: mrr, valor_implementacao: impl, origem: origemFinal } : {}),
+          ...(desfecho === 'fechou' ? { valor_mrr: mrr, valor_implementacao: impl, fidelidade: fidelidade.trim(), origem: origemFinal } : {}),
         })
       }} />
     </div>

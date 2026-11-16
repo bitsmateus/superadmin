@@ -181,7 +181,7 @@ export async function reunioesRoutes(app: FastifyInstance) {
         `SELECT r.id, lb.page, COALESCE(r.nome, '') AS nome, COALESCE(r.telefone, '') AS telefone,
                 COALESCE(r.numero_atendentes, '') AS numero_atendentes, COALESCE(r.valor_mrr, '') AS valor_mrr,
                 COALESCE(r.valor_implementacao, '') AS valor_implementacao, COALESCE(r.retornar, '') AS retornar,
-                COALESCE(r.motivo_desqualificacao, '') AS motivo_desqualificacao
+                COALESCE(r.fidelidade, '') AS fidelidade, COALESCE(r.motivo_desqualificacao, '') AS motivo_desqualificacao
          FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id WHERE r.id = $1`,
         [req.params.cardId]
       );

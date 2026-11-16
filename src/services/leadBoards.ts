@@ -48,7 +48,7 @@ type LeadRowRow = {
   dia_contato: string; ligacao: string; status: string; agendamento: string; retornar: string; retornado: boolean
   responsavel: string
   sdr: string; numero: string; dor_cliente: string; numero_atendentes: string; valor_mrr: string
-  valor_implementacao: string; notes_count: number; position: number; created_at: string; updated_at: string
+  valor_implementacao: string; fidelidade?: string; notes_count: number; position: number; created_at: string; updated_at: string
   deleted_at: string | null
   delete_reason?: string | null
   fechamento?: string; venda_origem_id?: string | null; venda_revertida?: boolean
@@ -76,7 +76,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     retornado: r.retornado ?? false,
     responsavel: r.responsavel, sdr: r.sdr, numero: r.numero,
     dorCliente: r.dor_cliente, numeroAtendentes: r.numero_atendentes,
-    valorMrr: r.valor_mrr, valorImplementacao: r.valor_implementacao, notesCount: r.notes_count ?? 0,
+    valorMrr: r.valor_mrr, valorImplementacao: r.valor_implementacao, fidelidade: r.fidelidade ?? '', notesCount: r.notes_count ?? 0,
     fechamento: r.fechamento ?? '',
     vendaOrigemId: r.venda_origem_id ?? null,
     metaLeadId: r.meta_lead_id ?? null,
@@ -128,6 +128,7 @@ function leadToRow(patch: Partial<LeadRow>): Record<string, unknown> {
   if ('numeroAtendentes' in patch) row.numero_atendentes = patch.numeroAtendentes
   if ('valorMrr' in patch) row.valor_mrr = patch.valorMrr
   if ('valorImplementacao' in patch) row.valor_implementacao = patch.valorImplementacao
+  if ('fidelidade' in patch) row.fidelidade = patch.fidelidade
   if ('mrrPendente' in patch) row.mrr_pendente = patch.mrrPendente
   if ('implPendente' in patch) row.impl_pendente = patch.implPendente
   if ('observacoes' in patch) row.observacoes = patch.observacoes
@@ -259,7 +260,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
   const row: LeadRow = {
     id: uuid(), boardId, nome: '', tipo: '', etiqueta: '', followup: '', disparo: '', origem: '', agendadoPor: '', nicho: '', motivoDesqualificacao: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
     status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
-    dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', notesCount: 0,
+    dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', fidelidade: '', notesCount: 0,
     fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, copiaIaOrigemId: null, espelhoOrigensExtras: [], entrouColunaEm: now, ticketNx: '', closer: '',
     lastNotePreview: '', lastNoteAt: null,
     position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,
@@ -365,7 +366,7 @@ function valoresDoLead(l: Partial<LeadRow> | null): Partial<Record<CampoDoPopup,
   if (!l) return {}
   return {
     agendamento: l.agendamento ?? '', agendadoPor: l.agendadoPor ?? '', retornar: l.retornar ?? '', origem: l.origem ?? '',
-    valorMrr: l.valorMrr ?? '', valorImplementacao: l.valorImplementacao ?? '', motivoDesqualificacao: l.motivoDesqualificacao ?? '',
+    valorMrr: l.valorMrr ?? '', valorImplementacao: l.valorImplementacao ?? '', fidelidade: l.fidelidade ?? '', motivoDesqualificacao: l.motivoDesqualificacao ?? '',
   }
 }
 

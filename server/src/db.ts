@@ -521,6 +521,8 @@ END $$`);
   END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_mrr TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_implementacao TEXT NOT NULL DEFAULT ''`);
+  // Fidelidade do contrato fechado (texto livre: "12 meses", "Sem fidelidade"…). Obrigatória pra marcar como Vendido.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS fidelidade TEXT NOT NULL DEFAULT ''`);
   // Exclusão de lead é sempre "soft delete" — marca deleted_at em vez de apagar a linha,
   // pra dar pra restaurar depois pela Lixeira na tela de Lista.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);

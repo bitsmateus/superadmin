@@ -190,6 +190,7 @@ export interface CamposDoCard {
   numero_atendentes: string;
   valor_mrr: string;
   valor_implementacao: string;
+  fidelidade: string;
   retornar: string;
   motivo_desqualificacao: string;
 }
@@ -233,6 +234,7 @@ export function validarResultado(
     if (!temDigito(card.valor_mrr)) falta.push('valor MRR');
     if (!etapa) falta.push('próxima etapa');
     if (etapa && /proposta/i.test(etapa) && !agendamentoParaDate(card.retornar)) falta.push('data de retorno ("Retornar")');
+    if (etapa && /vendido/i.test(etapa) && !(card.fidelidade ?? '').trim()) falta.push('fidelidade');
     if (etapa && /perdido|desqualificado/i.test(etapa) && !motivoDeDesqualificacaoValido(card.motivo_desqualificacao)) {
       falta.push(`motivo (da lista, com detalhe escrito com palavras, ${MINIMO_DETALHE_MOTIVO}+ letras)`);
     }

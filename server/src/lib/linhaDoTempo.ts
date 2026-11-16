@@ -6,7 +6,7 @@ import { query, queryOne } from '../db.js';
  * evento (lead_events.type); o front traduz o rótulo e formata o valor (data, origem…).
  */
 export const CAMPOS_DA_LINHA_DO_TEMPO = [
-  'agendamento', 'retornar', 'valor_mrr', 'valor_implementacao', 'numero_atendentes', 'origem', 'nicho',
+  'agendamento', 'retornar', 'valor_mrr', 'valor_implementacao', 'fidelidade', 'numero_atendentes', 'origem', 'nicho',
   'motivo_desqualificacao', 'agendado_por', 'nome', 'empresa', 'telefone', 'dor_cliente', 'tipo', 'ligacao',
   'followup', 'disparo', 'closer',
 ] as const;

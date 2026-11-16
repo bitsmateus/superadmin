@@ -97,7 +97,7 @@ test('ehAPessoa: primeiro nome sem acento; "IA Luiza" não é ninguém', () => {
   assert.equal(ehAPessoa('', 'Luis'), false);
 });
 
-const card = { numero_atendentes: '3', valor_mrr: '50000', valor_implementacao: '0', retornar: '2026-10-30T10:00', motivo_desqualificacao: '' };
+const card = { numero_atendentes: '3', valor_mrr: '50000', valor_implementacao: '0', fidelidade: '12 meses', retornar: '2026-10-30T10:00', motivo_desqualificacao: '' };
 const agoraV = new Date('2026-10-27T13:30:00Z');
 const resumo = 'Reunião boa, quer proposta pra 3 atendentes.';
 const erroDe = (r: ReturnType<typeof validarResultado>) => ('erro' in r ? r.erro : '');
@@ -114,6 +114,9 @@ test('validarResultado compareceu: tudo obrigatório; proposta pede Retornar; pe
     /Retornar/,
   );
   assert.match(erroDe(validarResultado({ resultado: 'compareceu', resumo, proxima_etapa: 'Perdido' }, card, agoraV)), /motivo/);
+  // Vendido também exige a fidelidade preenchida no card.
+  assert.ok('ok' in validarResultado({ resultado: 'compareceu', resumo, proxima_etapa: 'Vendido' }, card, agoraV));
+  assert.match(erroDe(validarResultado({ resultado: 'compareceu', resumo, proxima_etapa: 'Vendido' }, { ...card, fidelidade: '' }, agoraV)), /fidelidade/);
   const comMotivo = validarResultado(
     { resultado: 'compareceu', resumo, proxima_etapa: 'Perdido' },
     { ...card, motivo_desqualificacao: 'Sem orçamento: achou caro demais agora' }, agoraV,

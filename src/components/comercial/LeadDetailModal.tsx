@@ -464,6 +464,10 @@ function LeadDetailModalInner({
                 <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor Implementação">
                   <BoxedCurrencyField value={row.valorImplementacao} onSave={(v) => leadBoardsService.updateRow(row.id, { valorImplementacao: v })} />
                 </FieldRow>
+                {/* Obrigatória pra marcar como Vendido: já aparece em vermelho quando o card está em Vendido e falta. */}
+                <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Fidelidade" required={/^vendido/i.test(row.status.trim())}>
+                  <BoxedField value={row.fidelidade} required={/^vendido/i.test(row.status.trim())} onSave={(v) => leadBoardsService.updateRow(row.id, { fidelidade: v })} />
+                </FieldRow>
               </>
             )}
             <FieldRow icon={<Clock className="h-3.5 w-3.5" />} label="Log de criação">
@@ -736,6 +740,7 @@ const CAMPOS_EDITADOS: Record<string, { rotulo: string; icone: React.ReactNode; 
   retornar: { rotulo: 'Retornar', icone: <Calendar className="h-3.5 w-3.5" />, formatar: dataNaLinha },
   valor_mrr: { rotulo: 'Valor MRR', icone: <Hash className="h-3.5 w-3.5" />, formatar: (v) => v },
   valor_implementacao: { rotulo: 'Valor implementação', icone: <Hash className="h-3.5 w-3.5" />, formatar: (v) => v },
+  fidelidade: { rotulo: 'Fidelidade', icone: <Type className="h-3.5 w-3.5" />, formatar: (v) => v },
   numero_atendentes: { rotulo: 'Nº atendentes', icone: <Hash className="h-3.5 w-3.5" />, formatar: (v) => v },
   origem: { rotulo: 'Origem', icone: <Type className="h-3.5 w-3.5" />, formatar: (v) => rotuloDaOrigem(v) || v },
   nicho: { rotulo: 'Nicho', icone: <Type className="h-3.5 w-3.5" />, formatar: (v) => v },

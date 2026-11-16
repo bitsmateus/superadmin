@@ -69,6 +69,7 @@ export interface RetornoValidado {
   /** Só no Fechou: os valores que vão pro card (o Vendido exige). */
   valorMrr: string | null;
   valorImplementacao: string | null;
+  fidelidade: string | null;
   origem: string | null;
   /** Sem resposta na 3ª tentativa: manda pro Follow-up Propostas. */
   moverProFollowUp: boolean;
@@ -97,7 +98,7 @@ export function validarRetorno(
   const observacao = texto(b, 'observacao');
   const base: RetornoValidado = {
     resultado, observacao, desfecho: null, retornarNovo: null, motivoPerda: null,
-    valorMrr: null, valorImplementacao: null, origem: null, moverProFollowUp: false,
+    valorMrr: null, valorImplementacao: null, fidelidade: null, origem: null, moverProFollowUp: false,
   };
 
   if (resultado === 'retornou') {
@@ -118,14 +119,16 @@ export function validarRetorno(
       if (!textoDeVerdade(detalhe, MINIMO_DETALHE_MOTIVO)) return { erro: `Detalhe o motivo, com palavras (mínimo ${MINIMO_DETALHE_MOTIVO} letras).` };
       return { ok: { ...base, desfecho, motivoPerda: `${motivo}: ${detalhe}` } };
     }
-    // Fechou: o Vendido exige MRR, implementação e origem — vêm do popup (preenchidos com o que o card já tem).
+    // Fechou: o Vendido exige MRR, implementação, fidelidade e origem — vêm do popup (preenchidos com o que o card já tem).
     const mrr = texto(b, 'valor_mrr');
     const impl = texto(b, 'valor_implementacao');
     const origem = texto(b, 'origem');
+    const fidelidade = texto(b, 'fidelidade');
     if (!/\d/.test(mrr)) return { erro: 'Informe o valor MRR fechado.' };
     if (!/\d/.test(impl)) return { erro: 'Informe o valor de implementação fechado (R$ 0,00 também vale).' };
+    if (!fidelidade) return { erro: 'Informe a fidelidade do contrato ("Sem fidelidade" também vale).' };
     if (!origem) return { erro: 'Informe a origem do lead.' };
-    return { ok: { ...base, desfecho, valorMrr: mrr, valorImplementacao: impl, origem } };
+    return { ok: { ...base, desfecho, valorMrr: mrr, valorImplementacao: impl, fidelidade, origem } };
   }
 
   if (resultado === 'sem_resposta') {
@@ -158,7 +161,7 @@ export function textoDaNotaDeRetorno(r: RetornoValidado, retornarAntigo: string,
     linhas.push(`Retorno da proposta (previsto pra ${previsto}): falei com o cliente, ${DESFECHO_LEGIVEL[r.desfecho!]}.`);
     if (r.desfecho === 'negociando') linhas.push(`Próximo retorno: ${agendamentoLegivel(r.retornarNovo!)}`);
     if (r.desfecho === 'perdeu') linhas.push(`Motivo: ${r.motivoPerda}`);
-    if (r.desfecho === 'fechou') linhas.push(`Valor MRR: ${r.valorMrr}`, `Valor de implementação: ${r.valorImplementacao}`);
+    if (r.desfecho === 'fechou') linhas.push(`Valor MRR: ${r.valorMrr}`, `Valor de implementação: ${r.valorImplementacao}`, `Fidelidade: ${r.fidelidade}`);
     linhas.push('', 'O que foi conversado:', r.observacao);
   } else if (r.resultado === 'sem_resposta') {
     linhas.push(`Retorno da proposta (previsto pra ${previsto}): tentei, o cliente NÃO RESPONDEU (${tentativaDeAgora}ª tentativa).`);

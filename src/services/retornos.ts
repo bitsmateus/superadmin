@@ -13,6 +13,7 @@ export interface RetornoPendente {
   crm_de_origem: string | null
   valor_mrr: string
   valor_implementacao: string
+  fidelidade?: string
   origem: string
   resumo: string
   /** Tentativas sem resposta desde o último contato e adiamentos seguidos (saem da Linha do tempo). */
@@ -31,6 +32,7 @@ export interface PedidoDeRetorno {
   motivo_detalhe?: string
   valor_mrr?: string
   valor_implementacao?: string
+  fidelidade?: string
   origem?: string
   mover_follow_up?: boolean
 }

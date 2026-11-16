@@ -78,6 +78,8 @@ export interface LeadRow {
   numeroAtendentes: string
   valorMrr: string
   valorImplementacao: string
+  /** Fidelidade do contrato fechado (texto livre). Obrigatória pra marcar como Vendido. */
+  fidelidade: string
   /** Data de fechamento da venda (yyyy-mm-dd). Só preenchida em oportunidades. */
   fechamento: string
   /** Lead que gerou esta oportunidade. null = venda lançada à mão pelo botão "Registrar venda". */
@@ -178,7 +180,7 @@ export type LeadEventType =
   | 'created' | 'status' | 'dia_contato' | 'sdr' | 'board' | 'retornado' | 'template_sent' | 'template_failed'
   | 'tipo' | 'ligacao' | 'followup' | 'disparo' | 'reuniao' | 'retorno'
   // Campos editados (de -> para) e exclusão/restauração do card — ver server/src/lib/linhaDoTempo.ts.
-  | 'agendamento' | 'retornar' | 'valor_mrr' | 'valor_implementacao' | 'numero_atendentes' | 'origem' | 'nicho'
+  | 'agendamento' | 'retornar' | 'valor_mrr' | 'valor_implementacao' | 'fidelidade' | 'numero_atendentes' | 'origem' | 'nicho'
   | 'motivo_desqualificacao' | 'agendado_por' | 'nome' | 'empresa' | 'telefone' | 'dor_cliente' | 'closer'
   | 'excluido' | 'restaurado'
 

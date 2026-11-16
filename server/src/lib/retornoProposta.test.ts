@@ -34,8 +34,9 @@ test('retornou: conversa obrigatória e o desfecho pede o que precisa', () => {
   const perdeu = validarRetorno({ resultado: 'retornou', observacao: conversa, desfecho: 'perdeu', motivo: 'Sem orçamento', motivo_detalhe: 'achou caro demais' }, agora, semHistorico);
   assert.ok('ok' in perdeu && perdeu.ok.motivoPerda === 'Sem orçamento: achou caro demais');
   assert.match(erroDe(validarRetorno({ resultado: 'retornou', observacao: conversa, desfecho: 'fechou', valor_mrr: '', valor_implementacao: 'R$ 0,00', origem: 'bio' }, agora, semHistorico)), /MRR/);
-  const fechou = validarRetorno({ resultado: 'retornou', observacao: conversa, desfecho: 'fechou', valor_mrr: 'R$ 637,00', valor_implementacao: 'R$ 0,00', origem: 'bio' }, agora, semHistorico);
-  assert.ok('ok' in fechou && fechou.ok.valorMrr === 'R$ 637,00');
+  const fechou = validarRetorno({ resultado: 'retornou', observacao: conversa, desfecho: 'fechou', valor_mrr: 'R$ 637,00', valor_implementacao: 'R$ 0,00', fidelidade: '12 meses', origem: 'bio' }, agora, semHistorico);
+  assert.ok('ok' in fechou && fechou.ok.valorMrr === 'R$ 637,00' && fechou.ok.fidelidade === '12 meses');
+  assert.match(erroDe(validarRetorno({ resultado: 'retornou', observacao: conversa, desfecho: 'fechou', valor_mrr: 'R$ 637,00', valor_implementacao: 'R$ 0,00', origem: 'bio' }, agora, semHistorico)), /fidelidade/);
 });
 
 test('sem resposta: por onde tentou + novo retorno; na 3ª pode ir pro Follow-up', () => {

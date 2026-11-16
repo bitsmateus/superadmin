@@ -234,7 +234,7 @@ async function faltaDadoDoStatus(
 ): Promise<{ campos: string[]; mensagem: string } | null> {
   if (typeof patch.status !== 'string') return null;
   const atual = await queryOne<Record<string, unknown> & { status: string; board_id: string; cobra_motivo: boolean; do_anuncio: boolean }>(
-    `SELECT status, board_id, agendamento, agendado_por, retornar, origem, valor_mrr, valor_implementacao, motivo_desqualificacao,
+    `SELECT status, board_id, agendamento, agendado_por, retornar, origem, valor_mrr, valor_implementacao, fidelidade, motivo_desqualificacao,
             (meta_lead_id IS NOT NULL OR meta_campaign_id IS NOT NULL OR meta_ad_id IS NOT NULL) AS do_anuncio,
             (created_at >= TIMESTAMPTZ '2026-10-01 00:00:00-03') AS cobra_motivo
      FROM lead_rows WHERE id = $1`, [leadId]
@@ -266,7 +266,7 @@ async function faltaDadoDoStatus(
 
   const exige = novo.includes('reuniaoagendada') ? { rotulo: 'Reunião agendada', campos: ['agendamento', 'agendado_por', 'origem'] }
     : novo.includes('propostaenviada') ? { rotulo: 'Proposta enviada', campos: ['retornar', 'valor_mrr', 'valor_implementacao'] }
-    : novo.startsWith('vendido') ? { rotulo: 'Vendido', campos: ['valor_mrr', 'valor_implementacao', 'origem'] }
+    : novo.startsWith('vendido') ? { rotulo: 'Vendido', campos: ['valor_mrr', 'valor_implementacao', 'fidelidade', 'origem'] }
     : null;
   if (!exige) return pedeOrigem ? SO_ORIGEM : null;
   const aba = await queryOne<{ id: string; name: string }>(
@@ -277,7 +277,7 @@ async function faltaDadoDoStatus(
 
   const NOMES: Record<string, string> = {
     agendamento: 'dia e horário do agendamento', agendado_por: 'por onde foi agendado', retornar: 'dia e horário em "Retornar"', origem: 'origem do lead',
-    valor_mrr: 'valor MRR', valor_implementacao: 'valor de implementação',
+    valor_mrr: 'valor MRR', valor_implementacao: 'valor de implementação', fidelidade: 'fidelidade',
   };
   const faltando = exige.campos.filter((c) => {
     const v = final(c);
@@ -286,6 +286,7 @@ async function faltaDadoDoStatus(
     // "Outro" só vale com o texto escrito (mínimo 5 letras).
     if (c === 'agendado_por') return !v || (/^outro\b/i.test(v) && v.replace(/^outro:?/i, '').trim().length < 5);
     if (c === 'origem') return !atual.do_anuncio && (!v || (/^outros/i.test(v) && v.replace(/^outros:?/i, '').trim().length < 5));
+    if (c === 'fidelidade') return !v;
     return !/\d/.test(v);
   });
   if (pedeOrigem && !faltando.includes('origem')) faltando.push('origem');
@@ -540,9 +541,9 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
 
     const lead = await queryOne<{
       nome: string; empresa: string; telefone: string; sdr: string;
-      valor_mrr: string; valor_implementacao: string;
+      valor_mrr: string; valor_implementacao: string; fidelidade: string;
     }>(
-      `SELECT nome, empresa, telefone, sdr, valor_mrr, valor_implementacao
+      `SELECT nome, empresa, telefone, sdr, valor_mrr, valor_implementacao, fidelidade
        FROM lead_rows WHERE id = $1`,
       [leadRowId]
     );
@@ -556,11 +557,11 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
     const [vendaRow] = await query<{ id: string }>(
       `INSERT INTO lead_rows (
         board_id, nome, empresa, telefone, sdr, status,
-        valor_mrr, valor_implementacao, fechamento, venda_origem_id, position, veio_do_funil
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true) RETURNING id`,
+        valor_mrr, valor_implementacao, fidelidade, fechamento, venda_origem_id, position, veio_do_funil
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true) RETURNING id`,
       [
         target.id, lead.nome, lead.empresa, lead.telefone, lead.sdr, MILESTONE_VENDIDO,
-        lead.valor_mrr, lead.valor_implementacao,
+        lead.valor_mrr, lead.valor_implementacao, lead.fidelidade ?? '',
         new Date().toISOString().slice(0, 10),
         leadRowId,
         (max ?? -1) + 1,
@@ -612,7 +613,7 @@ const ESPELHO_PAGE_DESTINO = 'crm-luis-closer';
 const ESPELHO_CAMPOS = [
   'nome', 'tipo', 'empresa', 'telefone', 'dia_contato', 'ligacao', 'agendamento', 'retornar',
   'retornado', 'responsavel', 'sdr', 'numero', 'dor_cliente', 'numero_atendentes',
-  'valor_mrr', 'valor_implementacao', 'observacoes', 'fechamento', 'origem', 'agendado_por', 'email', 'ticket_nx',
+  'valor_mrr', 'valor_implementacao', 'fidelidade', 'observacoes', 'fechamento', 'origem', 'agendado_por', 'email', 'ticket_nx',
   'nicho', 'motivo_desqualificacao',
 ];
 
@@ -1929,10 +1930,11 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       // atualiza o valor "oficial" no lead de origem também — só nesse sentido (Vendas -> CRM),
       // nunca o contrário, senão editar o lead depois apagaria a correção feita na venda.
       const vendaOrigemId = (leadRow as { venda_origem_id?: string | null }).venda_origem_id;
-      if (vendaOrigemId && ('valor_mrr' in patch || 'valor_implementacao' in patch)) {
+      if (vendaOrigemId && ('valor_mrr' in patch || 'valor_implementacao' in patch || 'fidelidade' in patch)) {
         const valores: Record<string, unknown> = {};
         if ('valor_mrr' in patch) valores.valor_mrr = patch.valor_mrr;
         if ('valor_implementacao' in patch) valores.valor_implementacao = patch.valor_implementacao;
+        if ('fidelidade' in patch) valores.fidelidade = patch.fidelidade;
         const campos = Object.keys(valores);
         const originSets = campos.map((k, idx) => `${k} = $${idx + 1}`);
         const originParams = [...campos.map((k) => valores[k]), vendaOrigemId];

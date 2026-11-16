@@ -180,28 +180,41 @@ INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
 SELECT 'migracao_cadastro_jean_joao', '{"horario":"08:00-12:00/13:30-18:00","extra":"pagamento","dias":"seg-sex"}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_jean_joao');
 
--- Dia 10/11/2026 foi o teste do relógio (antes não havia ponto; bateram à tarde só pra testar): manhã e tarde abonadas
--- pra Jean e João, o dia fica zerado. Só na primeira vez; se alguém remover o abono na tela, ele não volta.
-INSERT INTO ponto_ajustes (colaborador_id, data, tipo, motivo, autor_nome)
-SELECT c.id, DATE '2026-11-10', t.tipo, 'Dia de teste do relógio de ponto (antes não havia controle)', 'migração'
-  FROM ponto_colaboradores c CROSS JOIN (VALUES ('abonar_manha'), ('abonar_tarde')) AS t(tipo)
- WHERE lower(c.nome) IN ('jean', 'joão', 'joao')
-   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_abono_dia_10');
+-- Dia 10/11/2026 (início do controle): os três bateram o ponto certinho (08:00-12:00 / 13:30-18:00), e o Arthur também
+-- nos dias 11, 12 e 13. Vira "correção de batidas" (a original, se houver, fica guardada). Se antes tinha ficado o abono
+-- de manhã/tarde desse dia (versão anterior desta migração), ele é removido. Só na primeira vez.
+UPDATE ponto_ajustes SET removido_em = NOW(), removido_por_nome = 'migração'
+ WHERE data = DATE '2026-11-10' AND tipo IN ('abonar_manha', 'abonar_tarde') AND autor_nome = 'migração' AND removido_em IS NULL
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_dias_certinhos');
+INSERT INTO ponto_ajustes (colaborador_id, data, tipo, motivo, batidas, autor_nome)
+SELECT c.id, d.data::date, 'corrigir_batidas', 'Bateu o ponto certinho (informado pela gestão; relógio entrou em uso em 10/11)',
+       '["08:00","12:00","13:30","18:00"]'::jsonb, 'migração'
+  FROM ponto_colaboradores c
+ CROSS JOIN (VALUES ('2026-11-10'), ('2026-11-11'), ('2026-11-12'), ('2026-11-13')) AS d(data)
+ WHERE ((lower(c.nome) IN ('jean', 'joão', 'joao') AND d.data = '2026-11-10') OR lower(c.nome) = 'arthur')
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_dias_certinhos');
 INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
-SELECT 'migracao_abono_dia_10', '{"data":"2026-11-10","tipos":["abonar_manha","abonar_tarde"],"colaboradores":["Jean","João"]}', 'migração'
- WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_abono_dia_10');
+SELECT 'migracao_dias_certinhos', '{"dia10":["Jean","João","Arthur"],"arthur":["2026-11-11","2026-11-12","2026-11-13"]}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_dias_certinhos');
 
--- Arthur (pedido de 16/11): o controle dele começa em 16/11/2026 (os dias do início do mês ficam fora, como se tivesse
--- vindo certinho). Mesmo horário da casa, segunda a sexta; salário e destino da hora extra ficam como estão no cadastro.
+-- Arthur: o controle dele começa em 10/11/2026, como o do Jean e do João (os dias antes ficam fora). Mesmo horário da casa, segunda a sexta; salário e destino da hora extra ficam como estão no cadastro.
 -- Só na primeira vez: depois vale o que for alterado na tela de Colaboradores.
 UPDATE ponto_colaboradores SET
   dias_semana = '{1,2,3,4,5}', minutos_dia = 510, entrada_prevista = '08:00', saida_prevista = '18:00',
-  intervalo_inicio = '12:00', intervalo_minutos = 90, tolerancia_minutos = 10, inicio_controle = '2026-11-16', atualizado_em = NOW()
+  intervalo_inicio = '12:00', intervalo_minutos = 90, tolerancia_minutos = 10, inicio_controle = '2026-11-10', atualizado_em = NOW()
  WHERE lower(nome) = 'arthur'
    AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_arthur');
 INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
-SELECT 'migracao_cadastro_arthur', '{"inicio_controle":"2026-11-16","horario":"08:00-12:00/13:30-18:00","dias":"seg-sex"}', 'migração'
+SELECT 'migracao_cadastro_arthur', '{"inicio_controle":"2026-11-10","horario":"08:00-12:00/13:30-18:00","dias":"seg-sex"}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_arthur');
+
+-- Quem já tinha rodado a versão anterior (controle do Arthur em 16/11): passa pra 10/11. Só uma vez.
+UPDATE ponto_colaboradores SET inicio_controle = '2026-11-10', atualizado_em = NOW()
+ WHERE lower(nome) = 'arthur' AND inicio_controle = DATE '2026-11-16'
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_inicio_10');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_arthur_inicio_10', '{"inicio_controle":"2026-11-10"}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_inicio_10');
 
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES

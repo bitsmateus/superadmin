@@ -184,10 +184,10 @@ test('planilha do relógio -> cálculo: bate com o resultado esperado (seção 5
   assert.equal(formatarMinutos(jean.resumo.bancoMinutos), '-5h21');
   assert.equal(formatarMinutos(jean.resumo.extraMinutos), '0h17');
 
-  // Dia 10 foi só teste do relógio: manhã e tarde abonadas, o dia fica zerado (como lançado na migração).
-  const abono = new Map([['2026-11-10', [{ tipo: 'abonar_manha' }, { tipo: 'abonar_tarde' }]]]);
+  // Dia 10: bateram certinho (lançado na migração como correção de batidas), o dia fica zerado.
+  const abono = new Map([['2026-11-10', [{ tipo: 'corrigir_batidas', batidas: ['08:00', '12:00', '13:30', '18:00'] }]]]);
   const joaoAbonado = calc('joao vitor', abono);
-  assert.equal(joaoAbonado.dias.find((d) => d.data === '2026-11-10')!.status, 'abonado');
+  assert.equal(joaoAbonado.dias.find((d) => d.data === '2026-11-10')!.status, 'normal');
   assert.equal(formatarMinutos(joaoAbonado.resumo.bancoMinutos), '-0h33');
   const jeanAbonado = calc('jean may', abono);
   assert.equal(formatarMinutos(jeanAbonado.resumo.bancoMinutos), '-0h01');

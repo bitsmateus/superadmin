@@ -273,3 +273,16 @@ test('almoço (12:00 às 13:30) não vira hora extra nem acumulado; tolerância 
   assert.equal(dia(['08:00', '12:00', '13:30', '17:50']).saldoMinutos, 0);
   assert.equal(dia(['08:00', '12:00', '13:30', '17:49']).saldoMinutos, -11);
 });
+
+test('Arthur: controle começa em 16/11; dias antes não contam; hoje só com a tarde = manhã sem batida (-4h)', () => {
+  const cfg = { ...CFG, inicioControle: '2026-11-16' };
+  const antes = calcularDia({ data: '2026-11-10', batidas: [], cfg, coberto: true, hoje: '2026-11-16' });
+  assert.equal(antes.status, 'fora_controle');
+  // Só a batida de entrada da tarde, ainda sem saída: em andamento (não desconta antes de fechar o dia).
+  const aberto = calcularDia({ data: '2026-11-16', batidas: ['13:30'], cfg, coberto: true, hoje: '2026-11-16', ultimoDiaLido: '2026-11-16' });
+  assert.equal(aberto.status, 'em_andamento');
+  // Fechou 18:00: a manhã inteira fica devendo.
+  const fechado = calcularDia({ data: '2026-11-16', batidas: ['13:30', '18:00'], cfg, coberto: true, hoje: '2026-11-17' });
+  assert.equal(fechado.status, 'manha_sem_batida');
+  assert.equal(fechado.saldoMinutos, -240);
+});

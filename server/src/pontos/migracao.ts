@@ -191,6 +191,18 @@ INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
 SELECT 'migracao_abono_dia_10', '{"data":"2026-11-10","tipos":["abonar_manha","abonar_tarde"],"colaboradores":["Jean","João"]}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_abono_dia_10');
 
+-- Arthur (pedido de 16/11): o controle dele começa em 16/11/2026 (os dias do início do mês ficam fora, como se tivesse
+-- vindo certinho). Mesmo horário da casa, segunda a sexta; salário e destino da hora extra ficam como estão no cadastro.
+-- Só na primeira vez: depois vale o que for alterado na tela de Colaboradores.
+UPDATE ponto_colaboradores SET
+  dias_semana = '{1,2,3,4,5}', minutos_dia = 510, entrada_prevista = '08:00', saida_prevista = '18:00',
+  intervalo_inicio = '12:00', intervalo_minutos = 90, tolerancia_minutos = 10, inicio_controle = '2026-11-16', atualizado_em = NOW()
+ WHERE lower(nome) = 'arthur'
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_arthur');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_cadastro_arthur', '{"inicio_controle":"2026-11-16","horario":"08:00-12:00/13:30-18:00","dias":"seg-sex"}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_arthur');
+
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES
   ('2026-01-01', 'Confraternização Universal', 'nacional'),

@@ -92,7 +92,11 @@ export interface DiaCalculado {
   extraMinutos: number;
   extraDestino: DestinoExtra;
   pctExtra: number;
+  /** Desconto em R$ pelas horas (falta, manhã/tarde perdida ou saldo convertido). O DSR vem em dsrCentavos. */
   descontoCentavos: number;
+  /** DSR descontado por causa da falta: 1 dia até 15/12/2026, 2 dias (sábado e domingo) de 16/12/2026 em diante. Só no primeiro dia com falta da semana. */
+  dsrDias: number;
+  dsrCentavos: number;
   valorExtraCentavos: number;
   feriado: string | null;
   /** Ausência justificada (licença, viagem, férias, ou justificativa lançada). */
@@ -119,7 +123,12 @@ export interface ResumoPeriodo {
   saldoMinutos: number;
   /** Soma do efeito no banco de horas. */
   bancoMinutos: number;
+  /** Desconto total em R$: horas faltadas + DSR. */
   descontoCentavos: number;
+  /** Parte do desconto que é DSR (já está dentro de descontoCentavos). */
+  descontoDsrCentavos: number;
+  /** Semanas com DSR descontado. */
+  dsrSemanas: number;
   valorExtraCentavos: number;
 }
 
@@ -163,6 +172,29 @@ export function valorHora(cfg: ConfigColaborador): number {
   if (cfg.valorHoraCentavos != null && cfg.valorHoraCentavos > 0) return cfg.valorHoraCentavos;
   if (!cfg.divisorMensal || cfg.divisorMensal <= 0) return 0;
   return Math.round(cfg.salarioBaseCentavos / cfg.divisorMensal);
+}
+
+/**
+ * DSR (descanso semanal remunerado) perdido por falta. Regra da contabilidade:
+ *  - até 15/12/2026: falta de meio período, dia todo ou mais de um dia desconta as horas faltadas + 1 DSR (o domingo);
+ *  - a partir de 16/12/2026 (escala 5x2): as horas faltadas + 2 DSR (sábado e domingo).
+ * Vale 1 vez por semana (segunda a domingo), mesmo com mais de uma falta nela. Falta justificada, abonada ou perdoada não conta.
+ */
+export const DATA_ESCALA_5X2 = '2026-12-16';
+
+export function dsrDiasDaFalta(data: string): number {
+  return data >= DATA_ESCALA_5X2 ? 2 : 1;
+}
+
+/** Valor de 1 DSR: um dia de salário (salário ÷ 30). Sem salário cadastrado, um dia de jornada no valor da hora. */
+export function valorDsr(cfg: ConfigColaborador): number {
+  if (cfg.salarioBaseCentavos > 0) return Math.round(cfg.salarioBaseCentavos / 30);
+  return Math.round((valorHora(cfg) * cfg.minutosDia) / 60);
+}
+
+/** Falta que gera desconto em R$ (dia todo ou meio período). Atraso e saldo convertido de atraso não geram DSR. */
+function faltaComDesconto(d: DiaCalculado): boolean {
+  return d.descontoCentavos > 0 && (d.status === 'falta' || d.status === 'manha_sem_batida' || d.status === 'tarde_sem_batida');
 }
 
 /** Rótulo da justificativa pelo código do relógio. */
@@ -275,7 +307,7 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
     data: e.data, diaSemana: dow, batidasOriginais: originais, batidas: efetivas.map(paraHora),
     previstoMinutos: 0, trabalhadoMinutos: trabalhado, atrasoMinutos: 0, saidaAntecipadaMinutos: 0,
     saldoBrutoMinutos: 0, saldoMinutos: 0, bancoMinutos: 0, faltaMinutos: 0, extraMinutos: 0,
-    extraDestino, pctExtra, descontoCentavos: 0, valorExtraCentavos: 0, feriado: feriadoNome, justificativa: null,
+    extraDestino, pctExtra, descontoCentavos: 0, dsrDias: 0, dsrCentavos: 0, valorExtraCentavos: 0, feriado: feriadoNome, justificativa: null,
     avisos, ajustes: ajustes.map((a) => a.tipo),
   };
   const fechar = (status: StatusDia, extra: Partial<DiaCalculado> = {}): DiaCalculado => ({ ...base, ...extra, status });
@@ -493,6 +525,18 @@ export function calcularPeriodo(e: EntradaDoPeriodo): { dias: DiaCalculado[]; re
     ultimoDiaLido,
     turno: e.turnos?.get(data) ?? null,
   }));
+  // DSR: na primeira falta com desconto de cada semana (segunda a domingo).
+  const semanasComDsr = new Set<string>();
+  for (const d of dias) {
+    if (!faltaComDesconto(d)) continue;
+    const segunda = somarDias(d.data, -((d.diaSemana + 6) % 7));
+    if (semanasComDsr.has(segunda)) continue;
+    semanasComDsr.add(segunda);
+    const n = dsrDiasDaFalta(d.data);
+    d.dsrDias = n;
+    d.dsrCentavos = n * valorDsr(e.cfg);
+    d.avisos.push(`DSR descontado (${n === 2 ? 'sábado e domingo' : 'domingo'}): falta na semana, além das horas.`);
+  }
   return { dias, resumo: resumir(dias) };
 }
 
@@ -500,7 +544,7 @@ export function resumir(dias: DiaCalculado[]): ResumoPeriodo {
   const r: ResumoPeriodo = {
     trabalhadoMinutos: 0, previstoMinutos: 0, extraMinutos: 0, extraBancoMinutos: 0, extraPagamentoMinutos: 0,
     atrasoMinutos: 0, saidaAntecipadaMinutos: 0, faltaMinutos: 0, faltas: 0, justificadas: 0, manhasSemBatida: 0,
-    emAndamento: 0, saldoMinutos: 0, bancoMinutos: 0, descontoCentavos: 0, valorExtraCentavos: 0,
+    emAndamento: 0, saldoMinutos: 0, bancoMinutos: 0, descontoCentavos: 0, descontoDsrCentavos: 0, dsrSemanas: 0, valorExtraCentavos: 0,
   };
   for (const d of dias) {
     // Em andamento e fora do controle: as horas aparecem na linha, mas não entram nos totais.
@@ -521,7 +565,9 @@ export function resumir(dias: DiaCalculado[]): ResumoPeriodo {
     if (d.status === 'em_andamento') r.emAndamento += 1;
     r.saldoMinutos += d.saldoMinutos;
     r.bancoMinutos += d.bancoMinutos;
-    r.descontoCentavos += d.descontoCentavos;
+    r.descontoCentavos += d.descontoCentavos + d.dsrCentavos;
+    r.descontoDsrCentavos += d.dsrCentavos;
+    if (d.dsrCentavos > 0) r.dsrSemanas += 1;
     r.valorExtraCentavos += d.valorExtraCentavos;
   }
   return r;

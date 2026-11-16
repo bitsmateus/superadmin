@@ -57,7 +57,10 @@ export interface DiaPonto {
   extraDestino: DestinoExtra
   pctExtra: number
   saldoMinutos: number
+  /** Desconto das horas. O DSR vem em dsrCentavos (só no primeiro dia com falta da semana). */
   descontoCentavos: number
+  dsrDias: number
+  dsrCentavos: number
   valorExtraCentavos: number
   feriado: string | null
   justificativa: string | null
@@ -81,7 +84,11 @@ export interface ResumoPonto {
   emAndamento: number
   saldoMinutos: number
   bancoMinutos: number
+  /** Desconto total: horas faltadas + DSR. */
   descontoCentavos: number
+  /** Parte do desconto que é DSR. */
+  descontoDsrCentavos: number
+  dsrSemanas: number
   valorExtraCentavos: number
 }
 

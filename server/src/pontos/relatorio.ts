@@ -33,12 +33,12 @@ export function relatorioCsv(r: DadosDoRelatorio): string {
     ['Colaborador', r.colaborador],
     ['Período', `${dataBr(r.inicio)} a ${dataBr(r.fim)}`],
     [],
-    ['Data', 'Dia', 'Batidas', 'Trabalhadas', 'Previstas', 'Atraso bruto', 'Saída antecipada bruta', 'Saldo do dia', 'Banco de horas', 'Hora extra', 'Destino extra', 'Falta', 'Desconto (R$)', 'Extra (R$)', 'Status', 'Ajustes'],
+    ['Data', 'Dia', 'Batidas', 'Trabalhadas', 'Previstas', 'Atraso bruto', 'Saída antecipada bruta', 'Saldo do dia', 'Banco de horas', 'Hora extra', 'Destino extra', 'Falta', 'Desconto das horas (R$)', 'DSR descontado (R$)', 'Extra (R$)', 'Status', 'Ajustes'],
     ...r.dias.map((d) => [
       dataBr(d.data), DIAS[d.diaSemana], d.batidas.join(' '), formatarMinutos(d.trabalhadoMinutos), formatarMinutos(d.previstoMinutos),
       formatarMinutos(d.atrasoMinutos), formatarMinutos(d.saidaAntecipadaMinutos), formatarMinutos(d.saldoMinutos), formatarMinutos(d.bancoMinutos),
       formatarMinutos(d.extraMinutos), d.extraMinutos ? (d.extraDestino === 'banco' ? 'Banco de horas' : 'Pagamento') : '',
-      formatarMinutos(d.faltaMinutos), (d.descontoCentavos / 100).toFixed(2).replace('.', ','),
+      formatarMinutos(d.faltaMinutos), (d.descontoCentavos / 100).toFixed(2).replace('.', ','), (d.dsrCentavos / 100).toFixed(2).replace('.', ','),
       (d.valorExtraCentavos / 100).toFixed(2).replace('.', ','), status(d), d.ajustes.join(', '),
     ]),
     [],
@@ -52,7 +52,8 @@ export function relatorioCsv(r: DadosDoRelatorio): string {
     ['Banco de horas do período', formatarMinutos(r.resumo.bancoMinutos)],
     ['Banco de horas acumulado', formatarMinutos(r.bancoAcumuladoMinutos)],
     ['Valor/hora', brl(r.valorHoraCentavos)],
-    ['Desconto', brl(r.resumo.descontoCentavos)],
+    ['Desconto (horas + DSR)', brl(r.resumo.descontoCentavos)],
+    ['Do desconto, DSR', brl(r.resumo.descontoDsrCentavos)],
     ['Horas extras a pagar', brl(r.resumo.valorExtraCentavos)],
   ];
   return '﻿' + linhas.map((l) => l.map(cel).join(';')).join('\r\n');
@@ -67,7 +68,7 @@ export function relatorioHtml(r: DadosDoRelatorio): string {
       <td>${traco(d.trabalhadoMinutos)}</td><td>${traco(d.previstoMinutos)}</td><td>${traco(d.atrasoMinutos)}</td>
       <td>${traco(d.saldoMinutos)}</td>
       <td>${d.extraMinutos ? formatarMinutos(d.extraMinutos) + (d.extraDestino === 'banco' ? ' (banco)' : ' (pag.)') : '—'}</td>
-      <td>${d.descontoCentavos ? brl(d.descontoCentavos) : '—'}</td><td>${esc(status(d))}</td>
+      <td>${d.descontoCentavos + d.dsrCentavos ? brl(d.descontoCentavos + d.dsrCentavos) + (d.dsrCentavos ? ` (DSR ${brl(d.dsrCentavos)})` : '') : '—'}</td><td>${esc(status(d))}</td>
     </tr>`).join('');
   const card = (t: string, v: string) => `<div class="card"><span>${t}</span><b>${v}</b></div>`;
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ponto ${esc(r.colaborador)}</title>
@@ -93,7 +94,7 @@ export function relatorioHtml(r: DadosDoRelatorio): string {
   ${card('Faltas', String(r.resumo.faltas))}
   ${card('Ausências justificadas', String(r.resumo.justificadas))}
   ${card('Banco acumulado', formatarMinutos(r.bancoAcumuladoMinutos))}
-  ${card('Desconto', brl(r.resumo.descontoCentavos))}
+  ${card('Desconto' + (r.resumo.descontoDsrCentavos ? ' (com DSR)' : ''), brl(r.resumo.descontoCentavos))}
   ${card('Extras a pagar', brl(r.resumo.valorExtraCentavos))}
 </div>
 <table><thead><tr><th>Data</th><th>Dia</th><th>Batidas</th><th>Trab.</th><th>Prev.</th><th>Atraso bruto</th><th>Saldo</th><th>Extra</th><th>Desconto</th><th>Status</th></tr></thead>

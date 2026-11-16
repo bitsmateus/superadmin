@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  calcularDia, calcularPeriodo, resolverViradaDeDia, valorHora, formatarMinutos,
+  calcularDia, calcularPeriodo, datasEntre, resolverViradaDeDia, valorHora, formatarMinutos,
   type AjusteDoDia, type ConfigColaborador, type TurnoDoDia,
 } from './calculo.js';
 
@@ -322,4 +322,49 @@ test('Arthur dia 16: 13:30 às 17:30, sem manhã: -4h30 (manhã inteira + 30 min
   assert.equal(d.saldoMinutos, -270);
   assert.equal(d.bancoMinutos, 0);
   assert.equal(d.descontoCentavos, Math.round((270 * valorHora(cfg)) / 60));
+});
+
+test('DSR: falta desconta as horas + 1 DSR até 15/12/2026 e + 2 DSR (sáb e dom) a partir de 16/12; 1 vez por semana', () => {
+  const cfg = { ...CFG, salarioBaseCentavos: 300000, divisorMensal: 220 };
+  const per = (inicio: string, fim: string, batidas: Record<string, string[]> = {}, ajustes: Record<string, AjusteDoDia[]> = {}) => {
+    const dias = datasEntre(inicio, fim);
+    return calcularPeriodo({
+      inicio, fim, cfg, batidas: new Map(Object.entries(batidas)), feriados: new Map(), ajustes: new Map(Object.entries(ajustes)),
+      cobertos: new Set(dias), hoje: '2027-01-31',
+    });
+  };
+  const dia = 300000 / 30; // R$ 100,00 por DSR, em centavos
+  // Duas faltas na mesma semana (ter 10 e qua 11/11, sem batida): horas das duas + um DSR só.
+  const a = per('2026-11-09', '2026-11-15', { '2026-11-09': ['08:00', '12:00', '13:30', '18:00'], '2026-11-12': ['08:00', '12:00', '13:30', '18:00'], '2026-11-13': ['08:00', '12:00', '13:30', '18:00'] });
+  assert.equal(a.resumo.faltas, 2);
+  assert.equal(a.resumo.dsrSemanas, 1);
+  assert.equal(a.resumo.descontoDsrCentavos, Math.round(dia));
+  assert.equal(a.resumo.descontoCentavos, a.dias.reduce((t, d) => t + d.descontoCentavos, 0) + Math.round(dia));
+  // Meio período (manhã sem batida convertida em R$) também gera DSR.
+  const meio = per('2026-11-09', '2026-11-15', {
+    '2026-11-09': ['08:00', '12:00', '13:30', '18:00'], '2026-11-10': ['13:30', '18:00'], '2026-11-11': ['08:00', '12:00', '13:30', '18:00'],
+    '2026-11-12': ['08:00', '12:00', '13:30', '18:00'], '2026-11-13': ['08:00', '12:00', '13:30', '18:00'],
+  }, { '2026-11-10': [{ tipo: 'descontar_saldo' }] });
+  assert.equal(meio.resumo.dsrSemanas, 1);
+  // Mesmo meio período, mas no banco (sem converter): não desconta em R$, não tem DSR.
+  const banco = per('2026-11-09', '2026-11-15', {
+    '2026-11-09': ['08:00', '12:00', '13:30', '18:00'], '2026-11-10': ['13:30', '18:00'], '2026-11-11': ['08:00', '12:00', '13:30', '18:00'],
+    '2026-11-12': ['08:00', '12:00', '13:30', '18:00'], '2026-11-13': ['08:00', '12:00', '13:30', '18:00'],
+  });
+  assert.equal(banco.resumo.dsrSemanas, 0);
+  assert.equal(banco.resumo.descontoCentavos, 0);
+  // Falta perdoada: sem desconto e sem DSR. Falta justificada: idem.
+  const perdoada = per('2026-11-09', '2026-11-13', {}, { '2026-11-09': [{ tipo: 'perdoar_desconto' }] });
+  assert.equal(perdoada.dias[0].descontoCentavos, 0);
+  assert.equal(perdoada.dias[0].dsrCentavos, 0);
+  // Nova regra 5x2: falta em 16/12/2026 em diante = horas + 2 DSR.
+  const nova = per('2026-12-14', '2026-12-18', {
+    '2026-12-14': ['08:00', '12:00', '13:30', '18:00'], '2026-12-15': ['08:00', '12:00', '13:30', '18:00'], '2026-12-17': ['08:00', '12:00', '13:30', '18:00'], '2026-12-18': ['08:00', '12:00', '13:30', '18:00'],
+  });
+  const faltaDia16 = nova.dias.find((d) => d.data === '2026-12-16')!;
+  assert.equal(faltaDia16.dsrDias, 2);
+  assert.equal(faltaDia16.dsrCentavos, 2 * Math.round(dia));
+  // Até 15/12 é 1 DSR.
+  const velha = per('2026-12-07', '2026-12-11', { '2026-12-07': ['08:00', '12:00', '13:30', '18:00'], '2026-12-08': ['08:00', '12:00', '13:30', '18:00'], '2026-12-10': ['08:00', '12:00', '13:30', '18:00'], '2026-12-11': ['08:00', '12:00', '13:30', '18:00'] });
+  assert.equal(velha.dias.find((d) => d.data === '2026-12-09')!.dsrDias, 1);
 });

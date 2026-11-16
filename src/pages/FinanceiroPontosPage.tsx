@@ -163,7 +163,7 @@ export function FinanceiroPontosPage() {
                   <Card icone={<CalendarX />} rotulo="Faltas" valor={String(atual.resumo.faltas)} nota={atual.resumo.manhasSemBatida ? `${atual.resumo.manhasSemBatida} manhã(s) sem batida` : 'dia útil sem batida'} tom={atual.resumo.faltas > 0 ? 'ruim' : undefined} />
                   <Card icone={<CalendarCheck />} rotulo="Ausências justificadas" valor={String(atual.resumo.justificadas)} nota="licença, viagem, férias" />
                   <Card icone={<PiggyBank />} rotulo="Banco de horas" valor={horas(atual.bancoAcumuladoMinutos)} nota={`acumulado · no período ${horas(atual.resumo.bancoMinutos)}`} tom={atual.bancoAcumuladoMinutos < 0 ? 'ruim' : atual.bancoAcumuladoMinutos > 0 ? 'bom' : undefined} />
-                  <Card icone={<Wallet />} rotulo="Desconto" valor={brl(atual.resumo.descontoCentavos)} nota={`valor/hora ${brl(atual.colaborador.valorHoraCalculadoCentavos)}`} tom={atual.resumo.descontoCentavos > 0 ? 'ruim' : undefined} />
+                  <Card icone={<Wallet />} rotulo="Desconto" valor={brl(atual.resumo.descontoCentavos)} nota={atual.resumo.descontoDsrCentavos > 0 ? `inclui DSR ${brl(atual.resumo.descontoDsrCentavos)} · valor/hora ${brl(atual.colaborador.valorHoraCalculadoCentavos)}` : `valor/hora ${brl(atual.colaborador.valorHoraCalculadoCentavos)}`} tom={atual.resumo.descontoCentavos > 0 ? 'ruim' : undefined} />
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">

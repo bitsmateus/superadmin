@@ -5,7 +5,7 @@ import { VendasView } from '@/components/comercial/VendasView'
 import { useLeadBoards, useLeadBoardsBooted } from '@/hooks/useLeadBoards'
 
 /** Vendas mudou de endereço: antes vivia dentro de "Comercial" (/comercial/vendas), agora é
- * subpágina de "Financeiro" (/financeiro/vendas) — só a navegação mudou, o quadro por trás
+ * subpágina de "Gestão" (/gestao/vendas) — só a navegação mudou, o quadro por trás
  * (lead_boards com isVendas) continua o mesmo, resolvido pelo flag em vez de um id fixo de aba. */
 export function FinanceiroVendasPage() {
   const booted = useLeadBoardsBooted()

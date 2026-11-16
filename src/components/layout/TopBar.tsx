@@ -11,6 +11,7 @@ const labels: Record<string, string> = {
   clients: 'Clientes',
   pipeline: 'Pipeline',
   financeiro: 'Gestão',
+  gestao: 'Gestão',
   users: 'Equipe',
   settings: 'Configurações',
   briefing: 'Briefing',

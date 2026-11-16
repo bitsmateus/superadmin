@@ -141,7 +141,7 @@ function VerContratoButton({ contratoId, assinado }: { contratoId: string | null
     <button
       type="button"
       title={title}
-      onClick={() => navigate(contratoId ? `/financeiro/contrato?contrato=${contratoId}` : '/financeiro/contrato')}
+      onClick={() => navigate(contratoId ? `/gestao/contrato?contrato=${contratoId}` : '/gestao/contrato')}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors focus-ring',
         contratoId ? 'bg-success/10 text-success hover:bg-success/20' : 'bg-danger/10 text-danger hover:bg-danger/20',

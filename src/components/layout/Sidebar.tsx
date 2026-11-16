@@ -333,7 +333,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       if (to === '/comercial-dashboard') return menuAllowed.has('comercial_dashboard')
       if (to === '/demo-studio' || to.startsWith('/demo-studio/')) return menuAllowed.has('demo_studio')
       // Financeiro inteiro: só administrador (menuAllowed só existe pra quem não é).
-      if (to.startsWith('/financeiro') || to === '/comando' || to === '/trafego') return false
+      if (to.startsWith('/gestao') || to.startsWith('/financeiro') || to === '/comando' || to === '/trafego') return false
       const key = MENU_KEY_BY_PATH[to]
       return key ? menuAllowed.has(key) : true
     },
@@ -431,9 +431,9 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   // Financeiro (Vendas, Contrato): SÓ Ian e Mateus — não existe marcação que libere.
   const visibleFinanceiroItems = seeFinancials
     ? [
-        ...(hasVendasBoard ? [{ to: '/financeiro/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
-        ...(hasContratoBoard ? [{ to: '/financeiro/contrato', label: 'Contrato', icon: FileText }] : []),
-        { to: '/financeiro/pontos', label: 'Pontos', icon: Clock },
+        ...(hasVendasBoard ? [{ to: '/gestao/vendas', label: 'Vendas', icon: ShoppingBag }] : []),
+        ...(hasContratoBoard ? [{ to: '/gestao/contrato', label: 'Contrato', icon: FileText }] : []),
+        { to: '/gestao/pontos', label: 'Pontos', icon: Clock },
       ]
     : []
   // Cada grupo já sai na ordem que ESSA pessoa montou arrastando (ver useMenuArrastavel).
@@ -478,7 +478,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       ...(seeFinancials
         ? [
             { to: '/comando', label: 'Comando', icon: Zap },
-            { to: '/financeiro', label: 'Gestão', icon: Wallet },
+            { to: '/gestao', label: 'Gestão', icon: Wallet },
           ]
         : []),
       { to: '/templates', label: 'Templates', icon: MessageSquare },
@@ -871,7 +871,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
           onClick={() => setFinanceiroOpen((o) => !o)}
           className={cn(
             'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
-            location.pathname.startsWith('/financeiro')
+            location.pathname.startsWith('/gestao')
               ? 'text-foreground'
               : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
           )}
@@ -879,7 +879,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
           <Wallet
             className={cn(
               'h-4 w-4 shrink-0',
-              location.pathname.startsWith('/financeiro')
+              location.pathname.startsWith('/gestao')
                 ? 'text-accent'
                 : 'text-foreground/50 group-hover:text-foreground/75',
             )}

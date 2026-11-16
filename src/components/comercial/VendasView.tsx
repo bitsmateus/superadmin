@@ -1089,7 +1089,7 @@ function VendaRow({
         </button>
         {contrato ? (
           <Link
-            to={`/financeiro/contrato?contrato=${contrato.id}`}
+            to={`/gestao/contrato?contrato=${contrato.id}`}
             title={contrato.assinado ? 'Abrir o contrato (assinado)' : 'Abrir o contrato (ainda não assinado lá)'}
             className="grid h-6 w-6 shrink-0 place-items-center rounded text-foreground/35 hover:bg-accent/10 hover:text-accent"
           >

@@ -53,7 +53,7 @@ function liberadoParaRestrito(path: string, c: Contexto): boolean | 'carregando'
   }
 
   // Financeiro inteiro (Vendas, Contrato, painel financeiro): só administrador.
-  if (casa(path, '/financeiro')) return false
+  if (casa(path, '/gestao') || casa(path, '/financeiro')) return false
 
   // Cópia de uma tela do Suporte: vale a marca da tela de origem
   const visao = path.match(/^\/visao\/([^/]+)/)
@@ -113,7 +113,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   // Financeiro (e o que é dinheiro da empresa): só Ian e Mateus — vale até pra outro administrador.
   const caminho = location.pathname
-  const ehTelaDoFinanceiro = caminho === '/financeiro' || caminho.startsWith('/financeiro/') || caminho === '/comando'
+  const ehTelaDoFinanceiro = caminho === '/gestao' || caminho.startsWith('/gestao/') || caminho === '/financeiro' || caminho.startsWith('/financeiro/') || caminho === '/comando'
     || caminho === '/trafego' || caminho.startsWith('/trafego/')
   if (ehTelaDoFinanceiro && !canSeeFinancials(session)) return <Navigate to="/" replace />
 

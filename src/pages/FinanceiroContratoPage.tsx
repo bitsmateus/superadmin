@@ -5,7 +5,7 @@ import { ContratoView } from '@/components/comercial/ContratoView'
 import { useLeadBoards, useLeadBoardsBooted } from '@/hooks/useLeadBoards'
 
 /** Contrato mudou de endereço: antes vivia dentro de "Comercial" (/comercial/contrato), agora é
- * subpágina de "Financeiro" (/financeiro/contrato) — só a navegação mudou, o quadro por trás
+ * subpágina de "Gestão" (/gestao/contrato) — só a navegação mudou, o quadro por trás
  * (lead_boards com isContrato) continua o mesmo, resolvido pelo flag em vez de um id fixo de aba. */
 export function FinanceiroContratoPage() {
   const booted = useLeadBoardsBooted()

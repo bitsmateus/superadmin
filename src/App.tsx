@@ -302,19 +302,24 @@ export default function App() {
           <Route path="/comercial/novos-leads" element={<Navigate to="/comercial/novos_leads" replace />} />
           <Route path="/comercial/crm-nx-luis" element={<Navigate to="/comercial/crm_luis" replace />} />
           <Route path="/comercial/crm-nx-arthur" element={<Navigate to="/comercial/crm_arthur" replace />} />
-          {/* Vendas e Contrato saíram de "Comercial" e viraram subpáginas de "Financeiro". */}
-          <Route path="/comercial/vendas" element={<Navigate to="/financeiro/vendas" replace />} />
-          <Route path="/comercial/contrato" element={<Navigate to="/financeiro/contrato" replace />} />
+          {/* Vendas e Contrato saíram de "Comercial" e viraram subpáginas de "Gestão" (antes "Financeiro": os endereços antigos redirecionam). */}
+          <Route path="/comercial/vendas" element={<Navigate to="/gestao/vendas" replace />} />
+          <Route path="/comercial/contrato" element={<Navigate to="/gestao/contrato" replace />} />
           <Route path="/comercial/:pageId" element={<ComercialPage />} />
           {/* Demandas: mesma tela/estrutura do Comercial (lead_pages/lead_boards), outro menu —
               cada aba é um "pipe" por cliente (ver lead_pages.section em ComercialPage.tsx). */}
           <Route path="/demandas" element={<ComercialPage />} />
           <Route path="/demandas/:pageId" element={<ComercialPage />} />
-          <Route path="/financeiro/vendas" element={<FinanceiroVendasPage />} />
-          <Route path="/financeiro/contrato" element={<FinanceiroContratoPage />} />
-          <Route path="/financeiro/pontos" element={<FinanceiroPontosPage />} />
+          <Route path="/gestao/vendas" element={<FinanceiroVendasPage />} />
+          <Route path="/gestao/contrato" element={<FinanceiroContratoPage />} />
+          <Route path="/gestao/pontos" element={<FinanceiroPontosPage />} />
+          {/* Endereços antigos (/financeiro...) seguem funcionando: redirecionam pra /gestao. */}
+          <Route path="/financeiro/vendas" element={<Navigate to="/gestao/vendas" replace />} />
+          <Route path="/financeiro/contrato" element={<Navigate to="/gestao/contrato" replace />} />
+          <Route path="/financeiro/pontos" element={<Navigate to="/gestao/pontos" replace />} />
           {/* Gestão Interna virou parte de Vendas — mesma tela, mesmo período, só num lugar. */}
-          <Route path="/financeiro/gestao-interna" element={<Navigate to="/financeiro/vendas" replace />} />
+          <Route path="/financeiro/gestao-interna" element={<Navigate to="/gestao/vendas" replace />} />
+          <Route path="/gestao/gestao-interna" element={<Navigate to="/gestao/vendas" replace />} />
           {/* Clientes NX Digital — módulo de gestão dos clientes de tráfego (tabelas gc_*). */}
           {/* A raiz só redireciona: assim a trava por aba (ProtectedRoute) vale pra ela também. */}
           <Route path="/clientesnxdigital" element={<Navigate to="/clientesnxdigital/clientes" replace />} />
@@ -347,7 +352,8 @@ export default function App() {
           <Route path="/arquivados" element={<ArchivedClientsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
           <Route path="/tenants/:serverId/:id" element={<TenantDetailPage />} />
-          <Route path="/financeiro" element={<FinancePage />} />
+          <Route path="/gestao" element={<FinancePage />} />
+          <Route path="/financeiro" element={<Navigate to="/gestao" replace />} />
           <Route path="/trafego" element={<TrafegoPage />} />
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/tickets/:id" element={<TicketsPage />} />

@@ -245,7 +245,7 @@ function BillingQueue({ clients }: { clients: Client[] }) {
           {overdue.length > 6 && (
             <li>
               <button
-                onClick={() => navigate('/financeiro')}
+                onClick={() => navigate('/gestao')}
                 className="flex w-full items-center justify-center gap-1 rounded-lg border border-line bg-elevate/[0.02] px-3 py-2 text-xs text-foreground/70 hover:bg-elevate/[0.04]"
               >
                 Ver todos na Gestão

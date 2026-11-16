@@ -5,7 +5,8 @@
  * Regras (resumo):
  *  - saldo do dia = trabalhado − previsto; o almoço (12:00 às 13:30) não conta como trabalho nem como extra;
  *    tolerância de 10 min POR PERÍODO (manhã e tarde) pra atraso e saída antecipada: passou de 10 conta inteiro;
- *    hora extra: de manhã a partir de 10 min antes do horário (07:50) e à tarde tudo o que passar das 18:00
+ *    hora extra: de manhã a partir de 10 min antes do horário (07:50; antes disso não conta) e à tarde tudo o que
+ *    passar das 18:00
  *    (sem o desenho manhã/tarde, a tolerância vale sobre o saldo do dia, pros dois lados);
  *  - banco de horas = soma dos saldos líquidos (atraso/saída antecipada são só informação, não entram de novo);
  *  - falta (dia útil com turno, sem batida, dentro do controle, coberto pela importação) vai pra desconto em R$ e NÃO
@@ -401,7 +402,8 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
     for (let i = 0; i + 1 < n; i += 2) {
       const ini = efetivas[i];
       const fim = efetivas[i + 1];
-      trabM += Math.max(0, Math.min(fim, manha[1]) - ini); // até o início do almoço (inclui a chegada antes do horário)
+      // Manhã: do início da janela (10 min antes do horário: 07:50) até o início do almoço. Antes da janela não conta.
+      trabM += Math.max(0, Math.min(fim, manha[1]) - Math.max(ini, manha[0] - tol));
       trabT += Math.max(0, fim - Math.max(ini, tarde[0])); // do fim do almoço em diante (inclui a saída depois do horário)
     }
     trabalhadoFinal = trabM + trabT;
@@ -413,11 +415,11 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
     if (tem('abonar_tarde') && nT < 0) nT = 0;
     if (tem('abonar_falta') || tem('abonar_atraso')) { nM = Math.max(0, nM); nT = Math.max(0, nT); }
     bruto = nM + nT;
-    // Atraso/saída antecipada: até a tolerância vale 0. Hora extra: de manhã só a partir da tolerância (07:50 já conta;
-    // 07:55 não), à tarde tudo o que passar das 18:00. A soma do dia que fica negativa dentro da tolerância também zera.
-    const manhaVale = (x: number) => (x < 0 ? tolera(x) : x >= tol ? x : 0);
-    const tardeVale = (x: number) => (x < 0 ? tolera(x) : x);
-    const diaVale = (x: number) => (x < 0 ? tolera(x) : x);
+    // Atraso/saída antecipada: até a tolerância vale 0. Hora extra: de manhã a partir de 10 min antes do horário (07:50;
+    // antes disso não conta) e à tarde tudo o que passar das 18:00. A soma do dia negativa dentro da tolerância zera.
+    const manhaVale = (x: number) => (x < 0 ? tolera(x) : x);
+    const tardeVale = manhaVale;
+    const diaVale = manhaVale;
     liquido = diaVale(manhaVale(nM) + tardeVale(nT));
     liquidoSemAbono = diaVale(manhaVale(netM) + tardeVale(netT));
   } else {

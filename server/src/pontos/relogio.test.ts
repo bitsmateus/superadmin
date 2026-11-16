@@ -181,8 +181,8 @@ test('planilha do relógio -> cálculo: bate com o resultado esperado (seção 5
   assert.ok(['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-09'].every((d) => linha(d).status === 'fora_controle'));
 
   const jean = calc('jean may');
-  assert.equal(formatarMinutos(jean.resumo.bancoMinutos), '-5h16');
-  assert.equal(formatarMinutos(jean.resumo.extraMinutos), '0h17');
+  assert.equal(formatarMinutos(jean.resumo.bancoMinutos), '-5h19');
+  assert.equal(formatarMinutos(jean.resumo.extraMinutos), '0h14');
 
   // Dia 10: bateram certinho (lançado na migração como correção de batidas), o dia fica zerado.
   const abono = new Map([['2026-11-10', [{ tipo: 'corrigir_batidas', batidas: ['08:00', '12:00', '13:30', '18:00'] }]]]);
@@ -190,7 +190,7 @@ test('planilha do relógio -> cálculo: bate com o resultado esperado (seção 5
   assert.equal(joaoAbonado.dias.find((d) => d.data === '2026-11-10')!.status, 'normal');
   assert.equal(formatarMinutos(joaoAbonado.resumo.bancoMinutos), '-0h33');
   const jeanAbonado = calc('jean may', abono);
-  assert.equal(formatarMinutos(jeanAbonado.resumo.bancoMinutos), '0h04');
+  assert.equal(formatarMinutos(jeanAbonado.resumo.bancoMinutos), '0h01');
 
   // Conferência com o resumo real. João: o relógio ignora 11/11 (sem almoço) e 13/11 (tolerância) no atraso (145 x 181),
   // e conta 7 ausências (dias antes do controle e o 16 em andamento).

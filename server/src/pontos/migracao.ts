@@ -228,6 +228,16 @@ INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
 SELECT 'migracao_arthur_salario_dia16', '{"salario_base_centavos":190000,"dia16":"descontar_saldo"}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_salario_dia16');
 
+-- Arthur bateu ponto em 16/11 às 13:30 (só isso; de manhã faltou). Registrado como batida original; a importação do
+-- relógio com o mesmo horário não duplica (se vier outro horário, aparece como conflito pra decidir). Só uma vez.
+INSERT INTO ponto_batidas (colaborador_id, data, hora)
+SELECT c.id, DATE '2026-11-16', '13:30' FROM ponto_colaboradores c
+ WHERE lower(c.nome) = 'arthur' AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_batida_dia16')
+ON CONFLICT DO NOTHING;
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_arthur_batida_dia16', '{"data":"2026-11-16","hora":"13:30"}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_arthur_batida_dia16');
+
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES
   ('2026-01-01', 'Confraternização Universal', 'nacional'),

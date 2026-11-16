@@ -331,8 +331,26 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
   }
 
   // 5) Número ímpar de batidas.
+  const entradaPrev = paraMinutos(cfg.entradaPrevista) ?? 0;
+  const saidaPrev = dow === 6 || dow === 0 ? entradaPrev + previsto : (paraMinutos(cfg.saidaPrevista) ?? entradaPrev + previsto);
+  const periodos = periodosDoDia(cfg, entradaPrev, saidaPrev);
+  const almocoIni = cfg.intervaloInicio ? paraMinutos(cfg.intervaloInicio) : null;
+  const doisPeriodos = periodos.length > 1 && almocoIni != null;
+  const almocoFim = doisPeriodos ? periodos[1][0] : 0;
   if (n % 2 === 1) {
     if (e.data === e.ultimoDiaLido || e.data === e.hoje) {
+      // Entrou só à tarde: a manhã já está perdida (não depende da saída). A tarde fecha com a saída.
+      if (doisPeriodos && efetivas[0] >= almocoIni!) {
+        const manhaPrev = periodos[0][1] - periodos[0][0];
+        const nM = tem('abonar_manha') || tem('abonar_falta') || tem('abonar_atraso') ? 0 : -manhaPrev;
+        avisos.push('Manhã sem batida. Dia em andamento: a tarde fecha quando a próxima importação trouxer a saída.');
+        if (nM === 0) return fechar('abonado', { previstoMinutos: manhaPrev });
+        return fechar('manha_sem_batida', {
+          previstoMinutos: manhaPrev, trabalhadoMinutos: 0, saldoBrutoMinutos: nM, saldoMinutos: nM,
+          bancoMinutos: tem('descontar_saldo') ? 0 : nM,
+          descontoCentavos: tem('descontar_saldo') ? Math.round((manhaPrev * vh) / 60) : 0,
+        });
+      }
       avisos.push('Dia em andamento: falta a batida de saída. Fecha quando a próxima importação trouxer.');
       return fechar('em_andamento');
     }
@@ -341,12 +359,6 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
   }
 
   // 6) Dia trabalhado.
-  const entradaPrev = paraMinutos(cfg.entradaPrevista) ?? 0;
-  const saidaPrev = dow === 6 || dow === 0 ? entradaPrev + previsto : (paraMinutos(cfg.saidaPrevista) ?? entradaPrev + previsto);
-  const periodos = periodosDoDia(cfg, entradaPrev, saidaPrev);
-  const almocoIni = cfg.intervaloInicio ? paraMinutos(cfg.intervaloInicio) : null;
-  const doisPeriodos = periodos.length > 1 && almocoIni != null;
-  const almocoFim = doisPeriodos ? periodos[1][0] : 0;
   const primeira = efetivas[0];
   const ultima = efetivas[n - 1];
   const manhaSemBatida = doisPeriodos && primeira >= almocoIni!;

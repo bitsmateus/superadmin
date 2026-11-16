@@ -31,7 +31,7 @@ import {
 import { formatCnpj, isValidCnpjLength } from '@/lib/cnpj'
 import { formatCep, isValidCepLength } from '@/lib/cep'
 import { openContractSheet } from '@/lib/contractSheet'
-import { RichTextToolbar } from '@/components/comercial/RichTextToolbar'
+import { RichTextToolbar, ZoomBar } from '@/components/comercial/RichTextToolbar'
 import { LeadLinkPanel, LeadPickerModal } from '@/components/comercial/LeadLinkPanel'
 import { salvarLeadDaFicha, suggestCrmLead } from '@/services/crmLeadLookup'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
@@ -147,6 +147,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
   // Contrato abre em modo leitura — só vira contentEditable depois de clicar "Editar texto".
   // Reseta pra leitura toda vez que o modal fecha, pra sempre abrir limpo da próxima vez.
   const [editingBody, setEditingBody] = React.useState(false)
+  const [bodyZoom, setBodyZoom] = React.useState(100)
   React.useEffect(() => {
     if (!detailOpen) setEditingBody(false)
   }, [detailOpen])
@@ -725,6 +726,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-foreground">Contrato</span>
                   <div className="flex flex-wrap items-center gap-2">
+                    <ZoomBar value={bodyZoom} onChange={setBodyZoom} />
                     <Button size="sm" onClick={download} loading={pdfLoading === 'baixar'} leftIcon={<Download className="h-3.5 w-3.5" />}>Baixar PDF</Button>
                     <Button size="sm" variant="secondary" onClick={printContract} leftIcon={<Printer className="h-3.5 w-3.5" />}>Imprimir</Button>
                     <Button size="sm" variant="secondary" onClick={viewContractSheet} loading={pdfLoading === 'ver'} leftIcon={<Eye className="h-3.5 w-3.5" />}>Ver PDF</Button>
@@ -735,6 +737,7 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     )}
                   </div>
                 </div>
+                {editingBody && <RichTextToolbar targetRef={bodyRef} extras className="mx-auto mb-2 max-w-[800px]" />}
                 {editingBody ? (
                   <div
                     ref={bodyRef}
@@ -742,13 +745,13 @@ export function ContratoView({ pageId }: { pageId: string }) {
                     suppressContentEditableWarning
                     onInput={(e) => debouncedSaveBody((e.target as HTMLDivElement).innerHTML)}
                     className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[12pt] leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
-                    style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
+                    style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000', zoom: bodyZoom / 100 }}
                   />
                 ) : (
                   <div
                     dangerouslySetInnerHTML={{ __html: selected.conteudo }}
                     className="mx-auto max-w-[800px] rounded-lg border border-line/60 bg-card p-10 text-[12pt] leading-relaxed"
-                    style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
+                    style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000', zoom: bodyZoom / 100 }}
                   />
                 )}
               </div>
@@ -1588,6 +1591,7 @@ function ServicesTableField({ value, onChange }: { value: string; onChange: (nex
 function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose: () => void; template: ContractTemplate | null }) {
   const bodyRef = React.useRef<HTMLDivElement>(null)
   const [saving, setSaving] = React.useState(false)
+  const [zoom, setZoom] = React.useState(100)
 
   React.useEffect(() => {
     if (open && bodyRef.current && template) bodyRef.current.innerHTML = template.conteudo
@@ -1619,14 +1623,20 @@ function EditTemplateModal({ open, onClose, template }: { open: boolean; onClose
         </>
       }
     >
-      <RichTextToolbar targetRef={bodyRef} className="mx-auto mb-2 max-w-[800px]" />
-      <div
-        ref={bodyRef}
-        contentEditable
-        suppressContentEditableWarning
-        className="mx-auto max-h-[55vh] max-w-[800px] overflow-y-auto rounded-lg border border-line bg-card p-4 text-[12pt] sm:p-8 leading-relaxed outline-none focus:ring-1 focus:ring-accent/30"
-        style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000' }}
-      />
+      <div className="mx-auto mb-2 flex max-w-[800px] flex-wrap items-center gap-2">
+        <RichTextToolbar targetRef={bodyRef} extras className="min-w-0 flex-1" />
+        <ZoomBar value={zoom} onChange={setZoom} />
+      </div>
+      {/* A rolagem fica FORA do que recebe o zoom (vh dentro de um elemento com zoom também escala). */}
+      <div className="mx-auto max-h-[55vh] max-w-[800px] overflow-y-auto rounded-lg border border-line bg-card">
+        <div
+          ref={bodyRef}
+          contentEditable
+          suppressContentEditableWarning
+          className="p-4 text-[12pt] sm:p-8 leading-relaxed outline-none"
+          style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#000000', zoom: zoom / 100 }}
+        />
+      </div>
     </Modal>
   )
 }

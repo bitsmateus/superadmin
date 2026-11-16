@@ -4,10 +4,11 @@ import type { Pool } from 'pg';
  * Migração do módulo Pontos (Financeiro > Pontos). SÓ ADITIVA: cria tabelas novas com prefixo `ponto_` e o cadastro
  * inicial (Jean, João, Arthur). Não toca em nenhuma tabela existente.
  *
- * NÃO roda sozinha na subida do servidor (fica fora do runMigrations de propósito). Pra aplicar:
+ * Roda na subida do servidor (server/src/index.ts, desde 16/11, fora do runMigrations: falha aqui não afeta o resto).
+ * Também dá pra rodar à mão:
  *   node dist/pontos/migrar.js            (produção, depois do build)
  *   npx tsx src/pontos/migrar.ts          (desenvolvimento)
- * Pode rodar mais de uma vez: tudo é IF NOT EXISTS / ON CONFLICT DO NOTHING.
+ * Pode rodar mais de uma vez: tudo é IF NOT EXISTS / ON CONFLICT DO NOTHING, e o cadastro inicial só uma vez.
  */
 export const SQL_PONTOS = `
 CREATE TABLE IF NOT EXISTS ponto_colaboradores (
@@ -165,6 +166,19 @@ UPDATE ponto_colaboradores SET inicio_controle = '2026-11-10'
 INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
 SELECT 'migracao_inicio_controle', '{"data":"2026-11-10","colaboradores":["João","Jean"]}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_inicio_controle');
+
+-- Cadastro do Jean e do João (pedido de 16/11): segunda a sexta, 08:00-12:00 / 13:30-18:00 (8h30), 10 min de
+-- tolerância, hora extra pra folha (pagamento). Salário base: Jean R$ 2.500, João R$ 2.100 (+ comissão, que fica na aba
+-- Comissões, fora do ponto). Só na primeira vez: depois vale o que for alterado na tela de Colaboradores.
+UPDATE ponto_colaboradores SET
+  dias_semana = '{1,2,3,4,5}', minutos_dia = 510, entrada_prevista = '08:00', saida_prevista = '18:00',
+  intervalo_inicio = '12:00', intervalo_minutos = 90, tolerancia_minutos = 10, destino_extra = 'pagamento',
+  salario_base_centavos = CASE WHEN lower(nome) = 'jean' THEN 250000 ELSE 210000 END, atualizado_em = NOW()
+ WHERE lower(nome) IN ('jean', 'joão', 'joao')
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_jean_joao');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_cadastro_jean_joao', '{"horario":"08:00-12:00/13:30-18:00","extra":"pagamento","dias":"seg-sex"}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_jean_joao');
 
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES

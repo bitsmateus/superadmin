@@ -36,6 +36,7 @@ import { commercialMonthRoutes } from './routes/commercialMonths.js';
 import { contractRoutes } from './routes/contracts.js';
 import { commissionRoutes } from './routes/commissions.js';
 import { pontosRoutes } from './pontos/rotas.js';
+import { migrarPontos } from './pontos/migracao.js';
 import { comissaoSuporteRoutes } from './routes/comissaoSuporte.js';
 import { tubaraoDiagnosticoRoutes } from './routes/tubaraoDiagnostico.js';
 import { startComissaoSuporteSync } from './lib/comissaoSuporte.js';
@@ -248,6 +249,13 @@ async function main() {
     await restaurarArquivosDoSeed();
   } catch (err) {
     console.error('[demo-studio] estrutura/seed falhou:', err);
+  }
+  // Financeiro > Pontos (tabelas ponto_*): instalado na subida (pedido de 16/11). Só cria/ajusta tabelas ponto_* e é
+  // idempotente; falha aqui não derruba o servidor (as rotas do Pontos respondem "rode a migração").
+  try {
+    await migrarPontos(pool);
+  } catch (err) {
+    console.error('[pontos] migração falhou:', err);
   }
   await startRealtimeListener();
   startDailyDigest();

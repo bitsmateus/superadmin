@@ -3,10 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ClipboardList, Clock, Download, Eye,
-  FileText, Loader2, Pencil, Plus, Printer, Save, Search, Settings, Trash2,
+  FileText, Loader2, MessageSquare, Pencil, Plus, Printer, Save, Search, Settings, Trash2,
   UserRound, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
+import { mensagemDoContrato } from '@/lib/mensagemDoContrato'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { MonthFilterBar } from '@/components/ui/MonthFilterBar'
@@ -1674,10 +1675,10 @@ function AutentiqueEnviar({ contract, getHtml }: { contract: Contract; getHtml: 
   const jaEnviado = !!contract.autentiqueDocumentId && !!contract.autentiqueEnviadoEm
   const assinado = contract.status === 'assinado'
 
-  const copiar = async (texto: string) => {
+  const copiar = async (texto: string, ok = 'Link copiado.') => {
     try {
       await navigator.clipboard.writeText(texto)
-      toast.success('Link copiado.')
+      toast.success(ok)
     } catch {
       toast.error('Não deu pra copiar — selecione e copie o link.')
     }
@@ -1721,6 +1722,14 @@ function AutentiqueEnviar({ contract, getHtml }: { contract: Contract; getHtml: 
             <Button size="sm" variant="secondary" onClick={() => void copiar(contract.autentiqueLinkCliente!)}>Copiar</Button>
             <Button size="sm" variant="ghost" onClick={() => window.open(contract.autentiqueLinkCliente!, '_blank')}>Abrir</Button>
           </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            leftIcon={<MessageSquare className="h-3.5 w-3.5" />}
+            onClick={() => void copiar(mensagemDoContrato(contract.autentiqueLinkCliente!), 'Mensagem copiada — é só colar no WhatsApp.')}
+          >
+            Copiar msg para enviar
+          </Button>
           <p className="text-[11px] text-foreground/50">
             {contract.autentiqueNxAssinou ? '✓ NX já assinou.' : '⚠ A NX ainda não assinou (assine no Autentique antes de mandar o link ao cliente).'}
             {' '}Quando o cliente assinar, o contrato marca como assinado sozinho aqui (em até 10 min).

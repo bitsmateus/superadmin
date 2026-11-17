@@ -32,10 +32,18 @@ export interface LeadLabelCellProps {
   className?: string
   /** Texto da célula quando vazia (padrão "Selecionar…"). */
   placeholder?: string
+  /** Mostra só as N primeiras etiquetas na lista pra escolher (ex.: Dia de contato até o Dia 3 pra lead de Social Selling).
+   * O valor já marcado continua aparecendo na célula, mesmo se estiver fora do limite. */
+  limite?: number
 }
 
-export function LeadLabelCell({ field, value, onChange, required, pageId, className, placeholder }: LeadLabelCellProps) {
-  const labels = useLeadLabels(field, pageId)
+export function LeadLabelCell({ field, value, onChange, required, pageId, className, placeholder, limite }: LeadLabelCellProps) {
+  const todasAsEtiquetas = useLeadLabels(field, pageId)
+  const labels = React.useMemo(
+    () => (limite !== undefined ? todasAsEtiquetas.slice(0, limite) : todasAsEtiquetas),
+    [todasAsEtiquetas, limite],
+  )
+  const current = todasAsEtiquetas.find((l) => l.name === value)
   const [open, setOpen] = React.useState(false)
   // "Tipo" aceita texto livre além das etiquetas: ali o SDR anota o que o lead é/quer com as
   // palavras dele, e nem toda anotação merece virar etiqueta fixa da aba.
@@ -58,8 +66,6 @@ export function LeadLabelCell({ field, value, onChange, required, pageId, classN
   useOutsideClose(popRef, open, () => setOpen(false))
 
   React.useEffect(() => { void leadLabelsService.ensureLoaded() }, [])
-
-  const current = labels.find((l) => l.name === value)
 
   const openPicker = () => {
     setTextoLivre(labels.some((l) => l.name === value) ? '' : value)

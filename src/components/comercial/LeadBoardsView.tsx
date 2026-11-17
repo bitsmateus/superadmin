@@ -50,6 +50,7 @@ import { LeadDashboardView } from '@/components/comercial/LeadDashboardView'
 import { DashboardDoSuporte } from '@/components/comercial/DashboardDoSuporte'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { isLeadTubarao, PAGINA_TUBARAO } from '@/lib/leadTubarao'
+import { limiteDeDiasDoTipo } from '@/lib/diasDeContato'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { NovaDemandaModal } from '@/components/comercial/NovaDemandaModal'
@@ -1303,6 +1304,7 @@ function BoardGroup({
                           value={row[col.key as LeadRowField]}
                           required={col.required}
                           pageId={board.page}
+                          limite={col.key === 'diaContato' ? limiteDeDiasDoTipo(row.tipo) : undefined}
                           onChange={(next) => {
                             if (col.key === 'status') {
                               // Move o lead pro quadro de MESMO NOME dentro da MESMA PÁGINA — nunca

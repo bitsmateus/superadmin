@@ -38,6 +38,7 @@ import { CurrencyField } from '@/components/comercial/CurrencyField'
 import { RetornarField } from '@/components/comercial/RetornarField'
 import { AgendamentoField } from '@/components/comercial/AgendamentoField'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
+import { limiteDeDiasDoTipo } from '@/lib/diasDeContato'
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/comercial/RichTextEditor'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { api } from '@/services/api'
@@ -396,7 +397,7 @@ function LeadDetailModalInner({
             {!modoSimples && !suporte && (
               <>
                 <FieldRow icon={<Calendar className="h-3.5 w-3.5" />} label="Dia de contato" required>
-                  <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} required pageId={board?.page} />
+                  <LeadLabelCell field="diaContato" value={row.diaContato} onChange={(v) => leadBoardsService.updateRow(row.id, { diaContato: v })} required pageId={board?.page} limite={limiteDeDiasDoTipo(row.tipo)} />
                 </FieldRow>
                 <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Ligação">
                   <LeadLabelCell field="ligacao" value={row.ligacao} onChange={(v) => leadBoardsService.updateRow(row.id, { ligacao: v })} pageId={board?.page} />

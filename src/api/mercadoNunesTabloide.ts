@@ -4,6 +4,21 @@ import type { DadosTabloide } from '../../server/src/lib/tabloide/layout'
  * Cliente da API do tabloide (/mercadonunes/tabloide). Página pública, sem login.
  */
 
+/** Mesmo formato de server/src/lib/tabloide/promocao.ts (SecaoPromocao). */
+export interface SecaoPromocao {
+  secao: string
+  modeloId: string
+  validade: string
+  itens: {
+    nome: string
+    detalhe: string
+    preco: string
+    precoDe: string
+    minUnidades: string
+    variacoes: { nome: string; ean: string }[]
+  }[]
+}
+
 export const API_URL = import.meta.env.VITE_API_URL ?? ''
 const BASE = `${API_URL}/api/public/mercadonunes`
 
@@ -91,6 +106,10 @@ export const tabloideApi = {
   config: () => req<ConfigTabloide>('/tabloide/config'),
   salvarConfig: (c: Partial<Pick<ConfigTabloide, 'endereco' | 'whatsapp' | 'endereco2' | 'whatsapp2' | 'aviso'>>) =>
     req<ConfigTabloide>('/tabloide/config', { method: 'PATCH', body: JSON.stringify(c) }),
+
+  /** PDF de promoções do ERP → seções (tipo de produto), com variações do mesmo produto/preço já juntas. */
+  lerPromocao: (pdf: string) =>
+    req<{ secoes: SecaoPromocao[]; inativos: number; vencidos: number; repetidos: number }>('/tabloides/ler-promocao', json({ pdf })),
 
   tabloides: () => req<{ tabloides: TabloideSalvo[] }>('/tabloides'),
   criarTabloide: (titulo: string, dados: DadosTabloide) => req<TabloideSalvo>('/tabloides', json({ titulo, dados })),

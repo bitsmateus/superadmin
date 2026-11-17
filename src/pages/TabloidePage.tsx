@@ -27,6 +27,7 @@ import { Moldura } from '@/pages/AcouguePage'
 import { MiniaturaTabloide, PreviaTabloide } from '@/components/tabloide/Previa'
 import { EscolherFoto, Modal, XADREZ, btnPrimario, btnSecundario, inputCls } from '@/components/tabloide/EscolherFoto'
 import { CatalogoProdutos } from '@/components/tabloide/CatalogoProdutos'
+import { ImportarPromocao } from '@/components/tabloide/ImportarPromocao'
 import { ModalBaixarEmMassa, ModalPostarEmMassa } from '@/components/tabloide/EmMassa'
 import { ModalLegenda, ModalPublicar, ModalVideo, type VideoPronto } from '@/components/tabloide/Saidas'
 import {
@@ -109,6 +110,8 @@ function Editor() {
   const [modal, setModal] = React.useState<null | 'video' | 'publicar' | 'legenda' | 'layout'>(null)
   const [formatoPublicar, setFormatoPublicar] = React.useState<'feed' | 'story' | 'reels'>('feed')
   const [ocupado, setOcupado] = React.useState<string | null>(null)
+  // Muda quando a importação do PDF cria tabloides: força o Histórico a recarregar a lista.
+  const [versaoHistorico, setVersaoHistorico] = React.useState(0)
 
   React.useEffect(() => {
     tabloideApi
@@ -263,8 +266,17 @@ function Editor() {
         ))}
       </div>
 
+      {(aba === 'montar' || aba === 'historico') && (
+        <ImportarPromocao
+          config={config}
+          onCriados={() => {
+            setVersaoHistorico((v) => v + 1)
+            setAba('historico')
+          }}
+        />
+      )}
       {aba === 'catalogo' && <CatalogoProdutos removeBg={!!config?.removeBg} />}
-      {aba === 'historico' && <Historico onAbrir={abrir} />}
+      {aba === 'historico' && <Historico key={versaoHistorico} onAbrir={abrir} />}
       {aba === 'templates' && <Templates temProdutos={dados.itens.length > 0} onUsar={usarLayout} />}
       {aba === 'montar' && (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_440px]">
@@ -588,6 +600,19 @@ function LinhaItem({ item, onMuda, onRemove, onFoto }: { item: ItemTabloide; onM
       >
         {item.fotoUrl ? <img src={item.fotoUrl} alt="" className="max-h-full max-w-full object-contain" /> : 'FOTO'}
       </button>
+      {/* Variações juntas (vindas do PDF): as fotos a mais aparecem lado a lado no card. */}
+      {!!item.extras?.length && (
+        <span className="flex flex-none items-center gap-0.5" title="Fotos das variações juntas neste card">
+          {item.extras.map((e, n) =>
+            e.fotoUrl ? (
+              <img key={n} src={e.fotoUrl} alt="" className="h-8 w-8 rounded border border-[#E7E1D9] object-contain" style={XADREZ} />
+            ) : null,
+          )}
+          <button onClick={() => onMuda({ extras: [] })} title="Tirar as fotos a mais (fica só a primeira)" className="px-1 text-sm text-[#B0A79F] hover:text-red-600">
+            ✕
+          </button>
+        </span>
+      )}
       <input value={item.nome} onChange={(e) => onMuda({ nome: e.target.value })} placeholder="Produto" className={`${campo} min-w-0 flex-[3_1_140px]`} />
       <input value={item.detalhe} onChange={(e) => onMuda({ detalhe: e.target.value })} placeholder="Peso" className={`${campo} w-20 flex-none`} />
       <input

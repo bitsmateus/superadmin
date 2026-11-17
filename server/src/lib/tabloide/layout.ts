@@ -25,6 +25,8 @@ export interface ItemTabloide {
   destaque: boolean
   /** Preenchido na hora de montar (URL da foto na prévia, data URL no servidor). */
   fotoUrl?: string | null
+  /** Variações juntas no mesmo card (Coca-Cola + Coca-Cola Zero): uma foto a mais por variação, lado a lado. */
+  extras?: { produtoId: string | null; fotoUrl?: string | null }[]
 }
 
 export interface DadosTabloide {
@@ -450,6 +452,7 @@ html,body{background:transparent}
 .faixa{position:absolute;top:calc(var(--u)*-.2);left:50%;transform:translate(-50%,-22%) rotate(-2deg);background:${m.faixaBg};color:${m.faixaTexto};font-family:var(--f-titulo,'Anton',Impact,sans-serif);font-weight:var(--p-titulo,400);font-size:calc(var(--u)*1.05);padding:calc(var(--u)*.12) calc(var(--u)*.9);border-radius:calc(var(--u)*.4);white-space:nowrap;letter-spacing:.04em;box-shadow:0 calc(var(--u)*.2) calc(var(--u)*.5) rgba(0,0,0,.3);z-index:2}
 .foto{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
 .foto img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 calc(var(--u)*.25) calc(var(--u)*.35) rgba(0,0,0,.25))}
+.foto.multi img{position:relative;min-width:0;max-width:calc(100% / var(--n) * 1.35);margin:0 calc(var(--u) * -.55)}
 .foto .semfoto{width:42%;max-height:80%;fill:${m.precoBg};opacity:.22}
 .nome{color:${m.nomeCor};font-weight:800;text-transform:uppercase;text-align:center;line-height:1.05;margin-top:calc(var(--u)*.35);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
 .det{color:${m.nomeCor};opacity:.7;font-weight:600;font-size:calc(var(--u)*.78);text-transform:uppercase;line-height:1.1;margin-top:calc(var(--u)*.08)}
@@ -549,11 +552,14 @@ function card(item: ItemTabloide, u: number, atraso: number): string {
   const nome = item.nome || 'Produto'
   const tamNome = uu * (nome.length > 34 ? 0.78 : nome.length > 22 ? 0.9 : nome.length > 14 ? 1.02 : 1.15)
   const temDe = item.precoDe && precoNumero(item.precoDe) > precoNumero(item.preco)
-  const foto = item.fotoUrl ? `<img src="${esc(item.fotoUrl)}" alt="">` : '<svg class="semfoto" viewBox="0 0 24 24"><path d="M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM5.2 4l.4 2H21l-2.3 8.2a2 2 0 0 1-1.9 1.4H8.1a2 2 0 0 1-2-1.6L3.6 3H1V1h4a1 1 0 0 1 1 .8L6.2 4z"/></svg>'
+  const fotos = [item.fotoUrl, ...(item.extras ?? []).map((e) => e.fotoUrl)].filter((f): f is string => !!f)
+  const foto = fotos.length > 1
+    ? fotos.map((f, n) => `<img src="${esc(f)}" alt="" style="z-index:${fotos.length - n}">`).join('')
+    : item.fotoUrl ? `<img src="${esc(item.fotoUrl)}" alt="">` : '<svg class="semfoto" viewBox="0 0 24 24"><path d="M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM5.2 4l.4 2H21l-2.3 8.2a2 2 0 0 1-1.9 1.4H8.1a2 2 0 0 1-2-1.6L3.6 3H1V1h4a1 1 0 0 1 1 .8L6.2 4z"/></svg>'
   const un = unidadeTexto(item.unidade)
   return `<div class="card${item.destaque ? ' dest' : ''}" style="--u:${uu.toFixed(2)}px;--d:${atraso.toFixed(2)}s">
 ${item.destaque ? '<div class="faixa">SUPER OFERTA</div>' : ''}
-<div class="foto">${foto}</div>
+<div class="foto${fotos.length > 1 ? ' multi' : ''}"${fotos.length > 1 ? ` style="--n:${fotos.length}"` : ''}>${foto}</div>
 <div class="nome" style="font-size:${tamNome.toFixed(1)}px">${esc(nome)}</div>
 ${item.detalhe ? `<div class="det">${esc(item.detalhe)}</div>` : ''}
 <div class="precos">${temDe ? `<div class="de">de <s>R$ ${esc(item.precoDe)}</s> por</div>` : ''}

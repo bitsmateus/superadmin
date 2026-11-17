@@ -10,6 +10,8 @@ import { baixarFoto, buscarPorEan, eanValido } from '../lib/tabloide/ean.js';
 import { DADOS_VAZIOS, FORMATOS, MODELOS, fundoValido, precoNumero, type DadosTabloide, type ItemTabloide } from '../lib/tabloide/layout.js';
 import { normalizar, semelhanca } from '../lib/tabloide/busca.js';
 import { testarConexao } from '../lib/tabloide/conexao.js';
+import { separarPorSecao } from '../lib/tabloide/promocao.js';
+import { lerPdfDePromocao } from '../lib/plaquinhas/relatorio.js';
 import { prepararFoto, removeBgDisponivel, type ModoRecorte } from '../lib/tabloide/recorte.js';
 import { MAX_PAGINAS_VIDEO, renderizarImagens, renderizarPdf, renderizarVideo } from '../lib/tabloide/render.js';
 
@@ -69,7 +71,15 @@ async function prepararDados(bruto: Partial<DadosTabloide> | undefined): Promise
   const d = bruto ?? {};
   const formato = d.formato && d.formato in FORMATOS ? d.formato : 'feed';
   const itensBrutos = Array.isArray(d.itens) ? d.itens.slice(0, 80) : [];
-  const ids = [...new Set(itensBrutos.map((i) => i?.produtoId).filter((x): x is string => typeof x === 'string' && /^[0-9a-f-]{36}$/i.test(x)))];
+  const idValido = (x: unknown): x is string => typeof x === 'string' && /^[0-9a-f-]{36}$/i.test(x);
+  const extrasDe = (i: Partial<ItemTabloide> | undefined) => (Array.isArray(i?.extras) ? i.extras.slice(0, 4) : []);
+  const ids = [
+    ...new Set(
+      itensBrutos
+        .flatMap((i) => [i?.produtoId, ...extrasDe(i).map((e) => e?.produtoId)])
+        .filter(idValido),
+    ),
+  ];
   const fotos = new Map<string, string>();
   if (ids.length) {
     const linhas = await query<{ id: string; foto: Buffer }>('SELECT id, foto FROM mn_produtos WHERE id = ANY($1::uuid[]) AND foto IS NOT NULL', [ids]);
@@ -85,6 +95,10 @@ async function prepararDados(bruto: Partial<DadosTabloide> | undefined): Promise
     produtoId: i?.produtoId ?? null,
     destaque: !!i?.destaque,
     fotoUrl: i?.produtoId ? fotos.get(i.produtoId) ?? null : null,
+    extras: extrasDe(i).map((e) => {
+      const produtoId = idValido(e?.produtoId) ? e.produtoId : null;
+      return { produtoId, fotoUrl: produtoId ? fotos.get(produtoId) ?? null : null };
+    }),
   }));
   return {
     titulo: texto(d.titulo, 60),
@@ -316,6 +330,39 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
        WHERE id = true RETURNING endereco, whatsapp, endereco2, whatsapp2, aviso`,
       [campo(b.endereco, 120), campo(b.whatsapp, 40), campo(b.aviso, 160), campo(b.endereco2, 120), campo(b.whatsapp2, 40)],
     );
+  });
+
+  // ── PDF de promoções do ERP → um tabloide por seção ──────────────────────
+
+  /** Lê o PDF (o mesmo das plaquinhas em massa) e devolve as seções, com as variações do mesmo produto já juntas. */
+  app.post<{ Body: { pdf?: string } }>(`${BASE}/tabloides/ler-promocao`, async (req, reply) => {
+    const m = /^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body?.pdf ?? ''));
+    if (!m) return reply.status(400).send({ message: 'Envie um arquivo PDF.' });
+    let lido;
+    try {
+      lido = await lerPdfDePromocao(Buffer.from(m[1], 'base64'));
+    } catch {
+      return reply.status(400).send({ message: 'Não consegui abrir esse PDF.' });
+    }
+    if (!lido.itens.length) {
+      return reply.status(422).send({ message: 'Não achei produtos em promoção nesse PDF. Ele é o relatório "Itens em Promoção" ou "Promoção de Produto" do sistema?' });
+    }
+    // O relatório em blocos não traz a seção: usa a que o produto já tem nas plaquinhas (vinda de um relatório em tabela).
+    const semSecao = [...new Set(lido.itens.filter((i) => !i.grupo).map((i) => i.produtoId))];
+    const secaoPorProduto = new Map<string, string>();
+    if (semSecao.length) {
+      const linhas = await query<{ produto_id: string; grupo: string }>(
+        `SELECT produto_id, grupo FROM mn_plaquinhas WHERE produto_id = ANY($1::text[]) AND grupo <> ''`,
+        [semSecao],
+      ).catch(() => []);
+      for (const l of linhas) secaoPorProduto.set(l.produto_id, l.grupo);
+    }
+    return {
+      secoes: separarPorSecao(lido.itens, secaoPorProduto),
+      inativos: lido.inativos,
+      vencidos: lido.vencidos,
+      repetidos: lido.repetidos,
+    };
   });
 
   // ── Tabloides salvos ──────────────────────────────────────────────────────

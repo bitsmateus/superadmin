@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { baixarArquivo, tabloideApi, type TabloideSalvo } from '@/api/mercadoNunesTabloide'
-import { FORMATOS, paginar, type FormatoTabloide } from '../../../server/src/lib/tabloide/layout'
+import { FORMATOS, paginar, type DadosTabloide, type FormatoTabloide } from '../../../server/src/lib/tabloide/layout'
 import { Modal, btnPrimario, btnSecundario, inputCls } from './EscolherFoto'
 
 /**
@@ -25,6 +25,57 @@ const agoraMais = (min: number) => {
 }
 
 const quandoTexto = (d: Date) => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+
+/** Escolher quais páginas de UM tabloide vão no post (aparece quando ele tem mais de uma). */
+export function EscolherPaginas({
+  dados,
+  formato,
+  value,
+  onChange,
+}: {
+  dados: DadosTabloide
+  formato: FormatoTabloide
+  value: number[]
+  onChange: (v: number[]) => void
+}) {
+  const paginas = paginar(dados.itens, formato, dados.porPagina)
+  if (paginas.length < 2) return null
+  const todas = value.length === paginas.length
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-wide text-[#7A716A]">Quais páginas postar</span>
+        <button
+          className="text-xs font-bold text-[#C1503F] hover:underline"
+          onClick={() => onChange(todas ? [] : paginas.map((_, i) => i))}
+        >
+          {todas ? 'Limpar' : 'Marcar todas'}
+        </button>
+      </div>
+      <div className="grid gap-1.5">
+        {paginas.map((p, i) => (
+          <label
+            key={i}
+            className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 text-sm ${value.includes(i) ? 'border-[#C1503F] bg-[#FCEFEC]' : 'border-[#E7E1D9] bg-white'}`}
+          >
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={value.includes(i)}
+              onChange={() => onChange(value.includes(i) ? value.filter((x) => x !== i) : [...value, i].sort((a, b) => a - b))}
+            />
+            <span className="min-w-0">
+              <b className="text-[#2A2622]">Página {i + 1}</b>{' '}
+              <span className="text-xs text-[#9A928B]">· {p.length} produto{p.length !== 1 ? 's' : ''}</span>
+              <span className="block truncate text-[11px] text-[#7A716A]">{p.map((it) => it.nome).filter(Boolean).join(', ')}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {value.length === 0 && <p className="mt-1 text-xs font-semibold text-red-600">Marque pelo menos uma página.</p>}
+    </div>
+  )
+}
 
 // ── Baixar em massa ─────────────────────────────────────────────────────────
 
@@ -144,6 +195,9 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
   const [dataHora, setDataHora] = React.useState(agoraMais(60))
   const [intervalo, setIntervalo] = React.useState(varios ? 60 : 0)
   const [etapa, setEtapa] = React.useState<'editar' | 'revisar'>('editar')
+  const [paginasEscolhidas, setPaginasEscolhidas] = React.useState<number[]>(() =>
+    paginar(tabloides[0].dados.itens, 'feed', tabloides[0].dados.porPagina).map((_, i) => i),
+  )
   const [enviando, setEnviando] = React.useState(false)
   const [progresso, setProgresso] = React.useState(0)
   const [resultado, setResultado] = React.useState<{ ok: number; falhas: string[] } | null>(null)
@@ -168,6 +222,7 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
 
   const irRevisar = () => {
     if (!tabloides.every((t) => t.dados.itens.length)) return toast.error('Tem tabloide sem produto na seleção.')
+    if (!varios && !paginasEscolhidas.length) return toast.error('Marque pelo menos uma página.')
     if (estouraCarrossel) return toast.error(`O carrossel aceita até 10 imagens e a seleção tem ${paginas}. Selecione menos ou poste um por tabloide.`)
     if (quando === 'agendar' && new Date(dataHora).getTime() < Date.now() + 60_000) return toast.error('Escolha um horário pelo menos 1 minuto à frente.')
     setEtapa('revisar')
@@ -194,6 +249,7 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
         await tabloideApi.publicar({
           dados: { ...grupo[0].dados, formato },
           dados_lista: juntar ? grupo.map((t) => t.dados) : undefined,
+          paginas: !varios ? paginasEscolhidas : undefined,
           formato,
           legenda: formato === 'story' ? '' : texto,
           agendado_para: horarios[i] ? horarios[i]!.toISOString() : null,
@@ -307,6 +363,15 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
               </label>
             )}
           </div>
+
+          {!varios && (
+            <EscolherPaginas
+              dados={tabloides[0].dados}
+              formato={formato}
+              value={paginasEscolhidas}
+              onChange={setPaginasEscolhidas}
+            />
+          )}
 
           {formato === 'feed' && varios && (
             <div>

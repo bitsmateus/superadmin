@@ -533,6 +533,8 @@ ${lista}`;
       dados_lista?: Partial<DadosTabloide>[];
       formato?: 'feed' | 'story' | 'reels';
       legenda?: string;
+      /** Quais páginas postar (índices a partir de 0). Sem isso, vão todas. Só feed/story de um tabloide. */
+      paginas?: number[];
       agendado_para?: string | null;
       redes?: string[];
       base_url?: string;
@@ -585,7 +587,10 @@ ${lista}`;
     } else {
       const logo = await logoDataUrl();
       const imagens = await renderizarImagens({ ...dados, formato }, logo);
-      for (const [i, png] of imagens.slice(0, 10).entries()) {
+      const escolhidas = Array.isArray(b.paginas) ? new Set(b.paginas.filter((n) => Number.isInteger(n))) : null;
+      const doPost = escolhidas ? imagens.filter((_, i) => escolhidas.has(i)) : imagens;
+      if (!doPost.length) return reply.status(400).send({ message: 'Escolha pelo menos uma página para postar.' });
+      for (const [i, png] of doPost.slice(0, 10).entries()) {
         const jpg = await sharp(png).jpeg({ quality: 92 }).toBuffer();
         anexos.push({ id: crypto.randomUUID(), name: `${nomeArquivo(dados)}-${i + 1}.jpg`, type: 'image/jpeg', size: jpg.length, dataUrl: `data:image/jpeg;base64,${jpg.toString('base64')}` });
       }

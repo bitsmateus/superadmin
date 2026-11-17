@@ -4,6 +4,8 @@ import { baixarArquivo, tabloideApi } from '@/api/mercadoNunesTabloide'
 import type { DadosTabloide } from '../../../server/src/lib/tabloide/layout'
 import { Modal, btnPrimario, btnSecundario, inputCls } from './EscolherFoto'
 import { PreviaTabloide } from './Previa'
+import { EscolherPaginas } from './EmMassa'
+import { paginar } from '../../../server/src/lib/tabloide/layout'
 
 export interface VideoPronto {
   id: string
@@ -136,6 +138,12 @@ export function ModalPublicar({
   const [feito, setFeito] = React.useState<string | null>(null)
   const [etapa, setEtapa] = React.useState<'editar' | 'revisar'>('editar')
   const [teste, setTeste] = React.useState<Teste | null | 'testando'>(null)
+  // Tabloide com mais de uma página: escolhe quais vão no post (padrão: todas).
+  const formatoPaginas = formato === 'story' ? 'story' : 'feed'
+  const totalPaginas = paginar(dados.itens, formatoPaginas, dados.porPagina).length
+  const [paginasSel, setPaginasSel] = React.useState<number[] | null>(null)
+  const paginasValidas = (paginasSel ?? Array.from({ length: totalPaginas }, (_, i) => i)).filter((i) => i < totalPaginas)
+  const escolhePaginas = formato !== 'reels' && totalPaginas > 1
 
   React.useEffect(() => {
     tabloideApi
@@ -167,6 +175,7 @@ export function ModalPublicar({
 
   const irRevisar = () => {
     if (formato === 'reels' && !videoOk) return toast.error('Gere o vídeo antes de publicar o Reels.')
+    if (escolhePaginas && !paginasValidas.length) return toast.error('Marque pelo menos uma página para postar.')
     if (quando === 'agendar' && new Date(dataHora).getTime() < Date.now() + 60_000) return toast.error('Escolha um horário pelo menos 1 minuto à frente.')
     setEtapa('revisar')
   }
@@ -178,6 +187,7 @@ export function ModalPublicar({
         dados,
         formato,
         legenda,
+        paginas: escolhePaginas ? paginasValidas : undefined,
         agendado_para: quando === 'agendar' ? new Date(dataHora).toISOString() : null,
         redes: formato !== 'story' && facebook ? ['instagram', 'facebook'] : ['instagram'],
         video_id: formato === 'reels' ? video?.id : undefined,
@@ -225,6 +235,11 @@ export function ModalPublicar({
               <ResumoLinha rotulo="Como">
                 {formato === 'feed' ? 'Post no feed (carrossel se tiver mais de uma página)' : formato === 'story' ? 'Story (uma por página)' : 'Reels (vídeo)'}
               </ResumoLinha>
+              {escolhePaginas && (
+                <ResumoLinha rotulo="Páginas">
+                  {paginasValidas.length === totalPaginas ? `Todas (${totalPaginas})` : paginasValidas.map((i) => i + 1).join(', ')}
+                </ResumoLinha>
+              )}
               <ResumoLinha rotulo="Quando">
                 {quando === 'agora' ? 'Agora (sai em até 1 minuto)' : new Date(dataHora).toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' })}
               </ResumoLinha>
@@ -301,6 +316,8 @@ export function ModalPublicar({
               </label>
             )}
           </div>
+
+          {escolhePaginas && <EscolherPaginas dados={dados} formato={formatoPaginas} value={paginasValidas} onChange={setPaginasSel} />}
 
           {formato !== 'story' && (
             <div>

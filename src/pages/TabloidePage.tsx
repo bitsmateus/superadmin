@@ -17,6 +17,7 @@ import {
   fotoDoProduto,
   lerFundo,
   tabloideApi,
+  urlDoMascote,
   type ConfigTabloide,
   type FundoSalvo,
   type LayoutTabloide,
@@ -28,6 +29,7 @@ import { MiniaturaTabloide, PreviaTabloide } from '@/components/tabloide/Previa'
 import { EscolherFoto, Modal, XADREZ, btnPrimario, btnSecundario, inputCls } from '@/components/tabloide/EscolherFoto'
 import { CatalogoProdutos } from '@/components/tabloide/CatalogoProdutos'
 import { ImportarPromocao } from '@/components/tabloide/ImportarPromocao'
+import { EscolherMascote } from '@/components/tabloide/EscolherMascote'
 import { ModalBaixarEmMassa, ModalPostarEmMassa } from '@/components/tabloide/EmMassa'
 import { ModalLegenda, ModalPublicar, ModalVideo, type VideoPronto } from '@/components/tabloide/Saidas'
 import {
@@ -112,6 +114,8 @@ function Editor() {
   const [ocupado, setOcupado] = React.useState<string | null>(null)
   // Muda quando a importação do PDF cria tabloides: força o Histórico a recarregar a lista.
   const [versaoHistorico, setVersaoHistorico] = React.useState(0)
+  // Pasta de importação aberta no Histórico (null = lista normal com as pastas em cima).
+  const [pastaAberta, setPastaAberta] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     tabloideApi
@@ -269,14 +273,15 @@ function Editor() {
       {(aba === 'montar' || aba === 'historico') && (
         <ImportarPromocao
           config={config}
-          onCriados={() => {
+          onCriados={(pasta) => {
             setVersaoHistorico((v) => v + 1)
+            setPastaAberta(pasta)
             setAba('historico')
           }}
         />
       )}
       {aba === 'catalogo' && <CatalogoProdutos removeBg={!!config?.removeBg} />}
-      {aba === 'historico' && <Historico key={versaoHistorico} onAbrir={abrir} />}
+      {aba === 'historico' && <Historico key={versaoHistorico} onAbrir={abrir} pasta={pastaAberta} onPasta={setPastaAberta} />}
       {aba === 'templates' && <Templates temProdutos={dados.itens.length > 0} onUsar={usarLayout} />}
       {aba === 'montar' && (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_440px]">
@@ -707,6 +712,13 @@ function ModeloEFormato({ dados, muda }: { dados: DadosTabloide; muda: (p: Parti
       <Fontes dados={dados} muda={muda} />
       <FotoDeFundo dados={dados} muda={muda} />
       <OQueAparece dados={dados} muda={muda} />
+      <div className="mt-4">
+        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-[#7A716A]">Mascote</div>
+        <EscolherMascote
+          valor={dados}
+          onMuda={(v) => muda({ ...v, mascoteUrl: v.mascoteId ? urlDoMascote(v.mascoteId) : '' })}
+        />
+      </div>
     </Bloco>
   )
 }
@@ -1135,8 +1147,16 @@ function Textos({
 
 // ── Histórico ───────────────────────────────────────────────────────────────
 
-function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) => void }) {
-  const [lista, setLista] = React.useState<TabloideSalvo[] | null>(null)
+function Historico({
+  onAbrir,
+  pasta,
+  onPasta,
+}: {
+  onAbrir: (t: TabloideSalvo, copia: boolean) => void
+  pasta: string | null
+  onPasta: (p: string | null) => void
+}) {
+  const [todos, setLista] = React.useState<TabloideSalvo[] | null>(null)
   const carregar = React.useCallback(() => {
     tabloideApi
       .tabloides()
@@ -1149,6 +1169,26 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
   const [marcados, setMarcados] = React.useState<string[]>([])
   const [massa, setMassa] = React.useState<'baixar' | 'postar' | null>(null)
   const [vendo, setVendo] = React.useState<TabloideSalvo | null>(null)
+  // Fora de uma pasta: só os tabloides normais (as importações aparecem como pastas em cima).
+  const lista = todos === null ? null : todos.filter((t) => (pasta ? t.pasta === pasta : !t.pasta))
+  const pastas = React.useMemo(() => {
+    const m = new Map<string, { nome: string; qtd: number; criado: string; capa: TabloideSalvo }>()
+    for (const t of todos ?? []) {
+      if (!t.pasta) continue
+      const p = m.get(t.pasta)
+      if (p) p.qtd++
+      else m.set(t.pasta, { nome: t.pasta, qtd: 1, criado: t.created_at, capa: t })
+    }
+    return [...m.values()].sort((a, b) => b.criado.localeCompare(a.criado))
+  }, [todos])
+  React.useEffect(() => setMarcados([]), [pasta])
+  const excluirPasta = async () => {
+    if (!pasta || !lista) return
+    if (!window.confirm(`Excluir a pasta "${pasta}" com os ${lista.length} tabloides dela?`)) return
+    await tabloideApi.excluirPasta(pasta).catch((e: Error) => toast.error(e.message))
+    onPasta(null)
+    carregar()
+  }
   const alternar = (id: string) => setMarcados((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id]))
   const selecionados = (lista ?? []).length ? marcados.map((id) => lista!.find((t) => t.id === id)).filter((t): t is TabloideSalvo => !!t) : []
 
@@ -1159,8 +1199,48 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
   }
 
   if (lista === null) return <p className="p-6 text-center text-sm text-[#9A928B]">Carregando…</p>
-  if (!lista.length) return <p className="nunes-card p-8 text-center text-sm text-[#7A716A]">Nenhum tabloide salvo ainda. Eles aparecem aqui quando você salva ou baixa.</p>
   return (
+    <>
+    {pasta ? (
+      <div className="nunes-card mb-3 flex flex-wrap items-center gap-3 p-3">
+        <button className={btnSecundario} onClick={() => onPasta(null)}>
+          ← Voltar ao histórico
+        </button>
+        <div className="min-w-0">
+          <div className="truncate text-base font-extrabold text-[#2A2622]">📁 {pasta}</div>
+          <div className="text-xs text-[#7A716A]">{lista.length} tabloide{lista.length !== 1 ? 's' : ''} desta importação do PDF</div>
+        </div>
+        <button className="ml-auto text-xs font-semibold text-red-600 hover:underline" onClick={() => void excluirPasta()}>
+          Excluir pasta
+        </button>
+      </div>
+    ) : (
+      pastas.length > 0 && (
+        <div className="mb-4">
+          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-[#7A716A]">Importações do PDF</div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {pastas.map((p) => (
+              <button
+                key={p.nome}
+                onClick={() => onPasta(p.nome)}
+                className="nunes-card flex items-center gap-3 p-3 text-left hover:ring-2 hover:ring-[#C1503F]/40"
+              >
+                <span className="flex-none overflow-hidden rounded-md bg-[#EDE8E1]">
+                  <MiniaturaTabloide dados={{ ...DADOS_VAZIOS(), ...p.capa.dados }} largura={56} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-[#2A2622]">📁 {p.nome}</span>
+                  <span className="block text-xs text-[#7A716A]">{p.qtd} tabloide{p.qtd !== 1 ? 's' : ''}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )
+    )}
+    {!lista.length ? (
+      <p className="nunes-card p-8 text-center text-sm text-[#7A716A]">Nenhum tabloide salvo ainda. Eles aparecem aqui quando você salva ou baixa.</p>
+    ) : (
     <>
     <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 nunes-card p-3">
       <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">
@@ -1261,6 +1341,8 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
         )
       })}
     </div>
+    </>
+    )}
     </>
   )
 }

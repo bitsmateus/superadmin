@@ -56,7 +56,17 @@ export interface DadosTabloide {
   fonteTitulo?: string
   fontePreco?: string
   fonteTexto?: string
+  /** Mascote (biblioteca mn_mascotes). mascoteUrl é preenchido na hora de montar: URL na prévia, data URL no servidor. */
+  mascoteId?: string
+  mascoteUrl?: string
+  mascoteLado?: 'esquerda' | 'direita'
+  /** -6 a +8, cada passo = 10%. */
+  mascoteTamanho?: number
 }
+
+/** URL de imagem que pode ir no src do mascote (data URL de imagem ou http/https/caminho do próprio site). */
+const mascoteValido = (u: unknown): string =>
+  typeof u === 'string' && (/^data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(u) || /^(https?:\/\/|\/)[^\s"'<>]+$/.test(u)) ? u : ''
 
 /** Só aceita data URL de imagem em base64 (vai dentro de url() no CSS). */
 export const fundoValido = (u: unknown): string =>
@@ -452,6 +462,7 @@ html,body{background:transparent}
 .faixa{position:absolute;top:calc(var(--u)*-.2);left:50%;transform:translate(-50%,-22%) rotate(-2deg);background:${m.faixaBg};color:${m.faixaTexto};font-family:var(--f-titulo,'Anton',Impact,sans-serif);font-weight:var(--p-titulo,400);font-size:calc(var(--u)*1.05);padding:calc(var(--u)*.12) calc(var(--u)*.9);border-radius:calc(var(--u)*.4);white-space:nowrap;letter-spacing:.04em;box-shadow:0 calc(var(--u)*.2) calc(var(--u)*.5) rgba(0,0,0,.3);z-index:2}
 .foto{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
 .foto img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 calc(var(--u)*.25) calc(var(--u)*.35) rgba(0,0,0,.25))}
+.mascote{position:absolute;z-index:6;width:auto;max-width:45%;object-fit:contain;pointer-events:none;filter:drop-shadow(0 8px 14px rgba(0,0,0,.28))}
 .foto.multi img{position:relative;min-width:0;max-width:calc(100% / var(--n) * 1.35);margin:0 calc(var(--u) * -.55)}
 .foto .semfoto{width:42%;max-height:80%;fill:${m.precoBg};opacity:.22}
 .nome{color:${m.nomeCor};font-weight:800;text-transform:uppercase;text-align:center;line-height:1.05;margin-top:calc(var(--u)*.35);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
@@ -633,6 +644,12 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
     : Math.min(maxTitulo * 0.8, larguraTitulo / (metade * fTitulo.larg))
 
   const vars = varsFonte(dados)
+  // Mascote no canto de baixo, por cima da grade, encostado no rodapé.
+  const mascoteSrc = dados.mascoteId ? mascoteValido(dados.mascoteUrl) : ''
+  const mascoteH = Math.round(md.h * 0.26 * (1 + 0.1 * Math.max(-6, Math.min(8, Number(dados.mascoteTamanho) || 0))))
+  const mascote = mascoteSrc
+    ? `<img class="mascote" src="${esc(mascoteSrc)}" alt="" style="height:${mascoteH}px;bottom:${md.padBot + rodH + (temRodape ? md.gap * 0.4 : 0)}px;${dados.mascoteLado === 'esquerda' ? 'left' : 'right'}:${Math.round(md.padX * 0.15)}px">`
+    : ''
   return paginas.map((itens, idx) => {
     const { cols, rows } = escolherGrade(itens, areaW, areaH)
     const gapG = Math.round(md.gap * (cols >= 4 ? 0.8 : 1))
@@ -657,6 +674,7 @@ ${temRodape ? `<div class="rodape" style="height:${rodH}px;font-size:${fRodape.t
   ${htmlDasLojas(lojasRodape)}
   ${dados.aviso ? `<div class="aviso" style="font-size:${(md.hu * 0.82).toFixed(0)}px">${esc(dados.aviso)}</div>` : ''}
 </div>` : ''}
+${mascote}
 ${npag}
 </div>`
     return { html, w: md.w, h: md.h, duracao: dur.total }

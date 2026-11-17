@@ -15,6 +15,7 @@ export interface SecaoPromocao {
     preco: string
     precoDe: string
     minUnidades: string
+    destaque: boolean
     variacoes: { nome: string; ean: string }[]
   }[]
 }
@@ -39,6 +40,8 @@ export interface TabloideSalvo {
   titulo: string
   dados: DadosTabloide
   criado_por: string | null
+  /** Nome da importação do PDF que criou este tabloide; vazio = tabloide normal. */
+  pasta?: string
   created_at: string
   updated_at: string
 }
@@ -70,7 +73,16 @@ export interface LayoutTabloide {
 
 export type ModoRecorte = 'auto' | 'sem' | 'removebg'
 
-export const fotoDoProduto = (p: Pick<ProdutoCatalogo, 'id' | 'foto_versao' | 'tem_foto'>): string | null =>
+export interface Mascote {
+  id: string
+  nome: string
+  created_at: string
+}
+
+/** Endereço da imagem do mascote (vai direto no <img src>). */
+export const urlDoMascote = (id: string): string => `${BASE}/mascotes/${id}/imagem`
+
+export const fotoDoProduto =(p: Pick<ProdutoCatalogo, 'id' | 'foto_versao' | 'tem_foto'>): string | null =>
   p.tem_foto ? `${BASE}/produtos/${p.id}/foto?v=${p.foto_versao}` : null
 
 async function req<T>(path: string, options: RequestInit = {}, comoBlob = false): Promise<T> {
@@ -111,8 +123,15 @@ export const tabloideApi = {
   lerPromocao: (pdf: string) =>
     req<{ secoes: SecaoPromocao[]; inativos: number; vencidos: number; repetidos: number }>('/tabloides/ler-promocao', json({ pdf })),
 
+  // Mascotes (PNG sem fundo), usados no tabloide e nas plaquinhas.
+  mascotes: () => req<{ mascotes: Mascote[] }>('/mascotes'),
+  enviarMascote: (imagem: string, nome: string) => req<Mascote>('/mascotes', json({ imagem, nome })),
+  removerMascote: (id: string) => req<{ ok: true }>(`/mascotes/${id}`, { method: 'DELETE' }),
+
   tabloides: () => req<{ tabloides: TabloideSalvo[] }>('/tabloides'),
-  criarTabloide: (titulo: string, dados: DadosTabloide) => req<TabloideSalvo>('/tabloides', json({ titulo, dados })),
+  /** `pasta` = nome da importação do PDF (os tabloides dela ficam juntos, separados dos outros no Histórico). */
+  criarTabloide: (titulo: string, dados: DadosTabloide, pasta?: string) => req<TabloideSalvo>('/tabloides', json({ titulo, dados, pasta })),
+  excluirPasta: (pasta: string) => req<{ excluidos: number }>('/tabloides/excluir-pasta', json({ pasta })),
   salvarTabloide: (id: string, titulo: string, dados: DadosTabloide) =>
     req<TabloideSalvo>(`/tabloides/${id}`, { method: 'PATCH', body: JSON.stringify({ titulo, dados }) }),
   removerTabloide: (id: string) => req<{ ok: true }>(`/tabloides/${id}`, { method: 'DELETE' }),

@@ -100,7 +100,17 @@ async function prepararDados(bruto: Partial<DadosTabloide> | undefined): Promise
       return { produtoId, fotoUrl: produtoId ? fotos.get(produtoId) ?? null : null };
     }),
   }));
+  // Mascote: o navegador manda o id; aqui vira a imagem embutida pra o print do servidor não depender de rede.
+  let mascoteUrl = '';
+  if (idValido(d.mascoteId)) {
+    const r = await queryOne<{ imagem: Buffer }>('SELECT imagem FROM mn_mascotes WHERE id = $1', [d.mascoteId]);
+    if (r) mascoteUrl = `data:image/webp;base64,${Buffer.from(r.imagem).toString('base64')}`;
+  }
   return {
+    mascoteId: mascoteUrl ? (d.mascoteId as string) : '',
+    mascoteUrl,
+    mascoteLado: d.mascoteLado === 'esquerda' ? 'esquerda' : 'direita',
+    mascoteTamanho: Math.max(-6, Math.min(8, Number(d.mascoteTamanho) || 0)),
     titulo: texto(d.titulo, 60),
     subtitulo: texto(d.subtitulo, 80),
     validade: texto(d.validade, 80),
@@ -367,16 +377,29 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   // ── Tabloides salvos ──────────────────────────────────────────────────────
 
-  app.get(`${BASE}/tabloides`, async () => ({
-    tabloides: await query(
-      `SELECT id, titulo, dados, criado_por, created_at, updated_at FROM mn_tabloides ORDER BY updated_at DESC LIMIT 60`,
-    ),
-  }));
+  // Os do dia a dia e os que vieram de uma importação de PDF (pasta) vêm em listas separadas: uma importação
+  // grande não empurra os tabloides normais pra fora do limite.
+  app.get(`${BASE}/tabloides`, async () => {
+    const colunas = 'id, titulo, dados, criado_por, pasta, created_at, updated_at';
+    const [normais, importados] = await Promise.all([
+      query(`SELECT ${colunas} FROM mn_tabloides WHERE pasta = '' ORDER BY updated_at DESC LIMIT 60`),
+      query(`SELECT ${colunas} FROM mn_tabloides WHERE pasta <> '' ORDER BY created_at DESC, titulo LIMIT 300`),
+    ]);
+    return { tabloides: [...normais, ...importados] };
+  });
 
-  app.post<{ Body: { titulo?: string; dados?: unknown } }>(`${BASE}/tabloides`, async (req, reply) => {
+  /** Apaga uma pasta de importação inteira (todos os tabloides dela). */
+  app.post<{ Body: { pasta?: string } }>(`${BASE}/tabloides/excluir-pasta`, async (req, reply) => {
+    const pasta = texto(req.body?.pasta, 160).trim();
+    if (!pasta) return reply.status(400).send({ message: 'Pasta inválida.' });
+    const r = await query('DELETE FROM mn_tabloides WHERE pasta = $1 RETURNING id', [pasta]);
+    return { excluidos: r.length };
+  });
+
+  app.post<{ Body: { titulo?: string; dados?: unknown; pasta?: string } }>(`${BASE}/tabloides`, async (req, reply) => {
     const r = await queryOne(
-      `INSERT INTO mn_tabloides (titulo, dados, criado_por) VALUES ($1, $2::jsonb, $3) RETURNING id, titulo, dados, criado_por, created_at, updated_at`,
-      [texto(req.body?.titulo, 120), JSON.stringify(req.body?.dados ?? {}), null],
+      `INSERT INTO mn_tabloides (titulo, dados, criado_por, pasta) VALUES ($1, $2::jsonb, $3, $4) RETURNING id, titulo, dados, criado_por, pasta, created_at, updated_at`,
+      [texto(req.body?.titulo, 120), JSON.stringify(req.body?.dados ?? {}), null, texto(req.body?.pasta, 160).trim()],
     );
     return reply.status(201).send(r);
   });
@@ -458,6 +481,46 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>(`${BASE}/tabloide/fundos/:id`, async (req) => {
     if (/^[0-9a-f-]{36}$/i.test(req.params.id)) await query('DELETE FROM mn_tabloide_fundos WHERE id = $1', [req.params.id]);
+    return { ok: true };
+  });
+
+  // ── Mascotes (PNG sem fundo) — usados no tabloide e nas plaquinhas ────────
+
+  app.get(`${BASE}/mascotes`, async () => ({
+    mascotes: await query('SELECT id, nome, created_at FROM mn_mascotes ORDER BY created_at ASC LIMIT 60'),
+  }));
+
+  // Imagem servida direto (vai em <img src>): o id nunca muda de conteúdo, então pode guardar em cache.
+  app.get<{ Params: { id: string } }>(`${BASE}/mascotes/:id/imagem`, async (req, reply) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return reply.status(404).send({ message: 'Mascote não encontrado.' });
+    const r = await queryOne<{ imagem: Buffer }>('SELECT imagem FROM mn_mascotes WHERE id = $1', [req.params.id]);
+    if (!r) return reply.status(404).send({ message: 'Mascote não encontrado.' });
+    return reply.header('Content-Type', 'image/webp').header('Cache-Control', 'public, max-age=31536000, immutable').send(Buffer.from(r.imagem));
+  });
+
+  app.post<{ Body: { imagem?: string; nome?: string } }>(`${BASE}/mascotes`, async (req, reply) => {
+    const m = /^data:image\/(png|webp|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body?.imagem ?? ''));
+    if (!m || m[2].length > 12 * 1024 * 1024) return reply.status(400).send({ message: 'Envie uma imagem PNG (sem fundo) de até 8 MB.' });
+    let imagem: Buffer;
+    try {
+      // Corta a sobra transparente em volta e guarda em webp com transparência (leve pra carregar).
+      imagem = await sharp(Buffer.from(m[2], 'base64'))
+        .trim()
+        .resize({ width: 1000, height: 1000, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 90, alphaQuality: 100 })
+        .toBuffer();
+    } catch {
+      return reply.status(400).send({ message: 'Não consegui abrir essa imagem.' });
+    }
+    const r = await queryOne('INSERT INTO mn_mascotes (nome, imagem) VALUES ($1, $2) RETURNING id, nome, created_at', [
+      texto(req.body?.nome, 60).trim(),
+      imagem,
+    ]);
+    return reply.status(201).send(r);
+  });
+
+  app.delete<{ Params: { id: string } }>(`${BASE}/mascotes/:id`, async (req) => {
+    if (/^[0-9a-f-]{36}$/i.test(req.params.id)) await query('DELETE FROM mn_mascotes WHERE id = $1', [req.params.id]);
     return { ok: true };
   });
 

@@ -32,9 +32,10 @@ async function emLotes<T>(lista: T[], n: number, fn: (x: T) => Promise<void>) {
   await Promise.all(Array.from({ length: Math.min(n, lista.length) }, trabalhador))
 }
 
-export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide | null; onCriados: () => void }) {
+export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide | null; onCriados: (pasta: string) => void }) {
   const [lendo, setLendo] = React.useState(false)
   const [secoes, setSecoes] = React.useState<SecaoPromocao[] | null>(null)
+  const [arquivo, setArquivo] = React.useState('')
   const [ignorados, setIgnorados] = React.useState('')
   const [formato, setFormato] = React.useState<FormatoTabloide>('feed')
   const [progresso, setProgresso] = React.useState<string | null>(null)
@@ -45,6 +46,7 @@ export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide
     setLendo(true)
     try {
       const r = await tabloideApi.lerPromocao(await lerComoDataUrl(f))
+      setArquivo(f.name.replace(/.pdf$/i, ''))
       setSecoes(r.secoes)
       setIgnorados(
         [
@@ -83,7 +85,9 @@ export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide
         setProgresso(`Buscando fotos que faltam pelo código de barras… ${++feitos}/${faltando.length}`)
       })
 
-      // 2. Um tabloide por seção, salvo no histórico.
+      // 2. Os tabloides, todos numa pasta própria da importação (não se misturam com os outros no Histórico).
+      const agora = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+      const pasta = `Importação ${agora}${arquivo ? ` · ${arquivo}` : ''}`
       let semFoto = 0
       for (const [n, s] of secoes.entries()) {
         setProgresso(`Criando os tabloides… ${n + 1}/${secoes.length}`)
@@ -102,7 +106,7 @@ export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide
             preco: i.preco,
             precoDe: i.precoDe,
             unidade: '',
-            destaque: false,
+            destaque: i.destaque,
             produtoId: primeira?.id ?? null,
             fotoUrl: primeira ? fotoDoProduto(primeira) : null,
             extras: resto.map((p) => ({ produtoId: p.id, fotoUrl: fotoDoProduto(p) })),
@@ -121,15 +125,15 @@ export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide
           whatsapp2: config?.whatsapp2 ?? '',
           aviso: config?.aviso || DADOS_VAZIOS().aviso,
         }
-        await tabloideApi.criarTabloide(`${s.secao}${s.validade ? ` — ${s.validade}` : ''}`, dados)
+        await tabloideApi.criarTabloide(`${s.secao}${s.validade ? ` — ${s.validade}` : ''}`, dados, pasta)
       }
       toast.success(
-        `${secoes.length} tabloide${secoes.length > 1 ? 's' : ''} criado${secoes.length > 1 ? 's' : ''} no Histórico.` +
+        `${secoes.length} tabloide${secoes.length > 1 ? 's' : ''} criado${secoes.length > 1 ? 's' : ''} na pasta "${pasta}".` +
           (semFoto ? ` ${semFoto} produto(s) sem foto — abra o tabloide e ponha a foto.` : ''),
         { duration: 8000 },
       )
       setSecoes(null)
-      onCriados()
+      onCriados(pasta)
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -164,8 +168,9 @@ export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide
           />
         </label>
         <span className="text-xs text-[#7A716A]">
-          O mesmo relatório das plaquinhas ("Itens em Promoção" ou "Promoção de Produto"). Cria <b>um tabloide por tipo de produto</b>, e o
-          mesmo produto com o mesmo preço (ex.: Coca-Cola e Coca-Cola Zero) sai num card só, com as fotos juntas.
+          O mesmo relatório das plaquinhas ("Itens em Promoção" ou "Promoção de Produto"). Monta <b>tabloides de até 8 produtos separados por
+          tipo</b> (mercearia, bebidas, limpeza, hortifruti, açougue…) com o mais caro em destaque, numa pasta só desta importação. O mesmo
+          produto com o mesmo preço (ex.: Coca-Cola e Coca-Cola Zero) sai num card só, com as fotos juntas.
         </span>
       </div>
 
@@ -173,7 +178,7 @@ export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide
         <Modal titulo="Tabloides do relatório" onFechar={progresso ? () => {} : () => setSecoes(null)} largura={620}>
           <div className="flex flex-col gap-4">
             <p className="text-sm text-[#5B534D]">
-              <b>{secoes.length}</b> tipo{secoes.length > 1 ? 's' : ''} de produto, <b>{totalItens}</b> card{totalItens !== 1 ? 's' : ''}
+              <b>{secoes.length}</b> tabloide{secoes.length > 1 ? 's' : ''}, <b>{totalItens}</b> card{totalItens !== 1 ? 's' : ''}
               {juntos > 0 && <> ({juntos} com variações juntas)</>}.{ignorados && <span className="text-[#9A928B]"> Ignorados: {ignorados}.</span>}
             </p>
             <div className="grid max-h-[46vh] gap-2 overflow-y-auto pr-1">
@@ -187,7 +192,7 @@ export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide
                     </span>
                   </div>
                   <div className="mt-1 truncate text-[11px] text-[#9A928B]">
-                    {s.itens.map((i) => (i.variacoes.length > 1 ? `${i.nome} (${i.variacoes.length} juntos)` : i.nome)).join(', ')}
+                    {s.itens.map((i) => `${i.destaque ? '★ ' : ''}${i.nome}${i.variacoes.length > 1 ? ` (${i.variacoes.length} juntos)` : ''}`).join(', ')}
                   </div>
                 </div>
               ))}

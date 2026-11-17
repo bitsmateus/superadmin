@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { api } from '@/services/api'
+import { EscolherMascote } from '@/components/tabloide/EscolherMascote'
 import {
   A4_H,
   A4_W,
@@ -184,6 +185,8 @@ export function PlaquinhasPage() {
   // null = "não mexer" (só vai no patch o que a pessoa tocou)
   const [tamanhosMassa, setTamanhosMassa] = React.useState<Partial<Record<ChaveTamanho, number>>>({})
   const [opcoesMassa, setOpcoesMassa] = React.useState<Partial<Record<ChaveOpcao, boolean>>>({})
+  // null = manter o mascote de cada uma; mascoteId '' = tirar o mascote de todas.
+  const [mascoteMassa, setMascoteMassa] = React.useState<{ mascoteId: string; mascoteLado: 'esquerda' | 'direita'; mascoteTamanho: number } | null>(null)
   // Impressão
   const [porFolha, setPorFolha] = React.useState<PorFolha>(4)
   const [corte, setCorte] = React.useState(true)
@@ -431,8 +434,10 @@ export function PlaquinhasPage() {
             ...(faixaMassa ? { textoFaixa: faixaMassa, mostrarFaixa: true } : {}),
             ...tamanhosMassa,
             ...opcoesMassa,
+            ...(mascoteMassa ?? {}),
           }
-          const mudancas = Object.keys(patch).length
+          // O mascote conta como uma mudança só (id, lado e tamanho andam juntos).
+          const mudancas = Object.keys(patch).length - (mascoteMassa ? 2 : 0)
           const posAmostra = Math.min(amostra, Math.max(0, alvo.length - 1))
           const placaAmostra = alvo[posAmostra] ?? null
           const base: Cartaz = placaAmostra ? cartazDe(placaAmostra) : { ...CARTAZ_PADRAO, subtitulo: '', ajustePreco: AJUSTE_PRECO_PADRAO }
@@ -449,6 +454,7 @@ export function PlaquinhasPage() {
             setFaixaMassa('')
             setTamanhosMassa({})
             setOpcoesMassa({})
+            setMascoteMassa(null)
           }
           return (
             <section style={cartao}>
@@ -591,6 +597,16 @@ export function PlaquinhasPage() {
                         )
                       })}
                     </div>
+                  </div>
+
+                  <div style={subcartao}>
+                    <div style={subtitulo}>Mascote</div>
+                    <p style={{ fontSize: 11, color: '#9A928B', margin: '0 0 8px' }}>“Manter” não mexe no mascote de cada uma. Suba o PNG já sem fundo.</p>
+                    <EscolherMascote
+                      valor={mascoteMassa ?? { mascoteId: '', mascoteLado: 'direita', mascoteTamanho: 0 }}
+                      onMuda={(v) => setMascoteMassa({ mascoteId: v.mascoteId ?? '', mascoteLado: v.mascoteLado ?? 'direita', mascoteTamanho: v.mascoteTamanho ?? 0 })}
+                      semEscolha={{ ativo: mascoteMassa === null, onManter: () => setMascoteMassa(null) }}
+                    />
                   </div>
                 </div>
               </div>
@@ -828,6 +844,10 @@ function Visualizador({
               ))}
             </select>
           </Campo>
+          <div style={subcartao}>
+            <div style={subtitulo}>Mascote</div>
+            <EscolherMascote valor={c} onMuda={(v) => setC((x) => ({ ...x, ...v }))} />
+          </div>
           <div style={subcartao}>
             <div style={subtitulo}>Mostrar no cartaz</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '2px 10px' }}>

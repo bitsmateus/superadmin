@@ -1806,6 +1806,8 @@ END; $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  // Tabloides criados pela importação do PDF de promoções ficam numa pasta (nome da importação), separados dos outros.
+  await pool.query(`ALTER TABLE mn_tabloides ADD COLUMN IF NOT EXISTS pasta TEXT NOT NULL DEFAULT ''`);
   // Linha única: dados fixos do rodapé e qual cliente do painel NX é o Mercado Nunes (pra publicar
   // no Instagram dele pelo Social media). gc_cliente_id vazio = acha sozinho pelo nome.
   await pool.query(`CREATE TABLE IF NOT EXISTS mn_tabloide_config (
@@ -1839,6 +1841,13 @@ END; $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`ALTER TABLE mn_tabloide_fundos ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
+  // Mascotes do Nunes (PNG sem fundo que o mercado sobe), pra pôr na plaquinha e no tabloide.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_mascotes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL DEFAULT '',
+    imagem BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS mn_tabloide_layouts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nome TEXT NOT NULL UNIQUE,

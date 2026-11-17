@@ -1,7 +1,9 @@
 import type { ItemRelatorio } from '../plaquinhas/relatorio.js';
 
 /**
- * PDF de promoções do ERP → tabloides, um por seção ("tipo de produto": PRODUTOS LIMPEZA, BEBIDAS, HORTIFRUTI...).
+ * PDF de promoções do ERP → tabloides, um por tipo de produto. As seções do ERP (PRODUTOS LIMPEZA, BOMBONIERE,
+ * HORTIFRUTI...) são agrupadas em categorias grandes (Mercearia, Bebidas, Limpeza...), e categoria com poucos
+ * produtos vai pro tabloide geral — senão saía tabloide de 1 produto.
  *
  * Dentro de cada seção, variações do mesmo produto com o mesmo preço viram UM item com várias fotos (Coca-Cola e
  * Coca-Cola Zero, Suco FRU10 laranja/uva/limão...). Regra de "mesmo produto": mesmo começo de nome (as duas
@@ -21,6 +23,8 @@ export interface ItemPromocao {
   precoDe: string;
   /** "a partir de X un" do relatório em blocos. */
   minUnidades: string;
+  /** Bloco grande do tabloide (o mais caro de cada um). */
+  destaque: boolean;
   /** 1 = produto sozinho; 2+ = variações juntas (uma foto de cada). */
   variacoes: VariacaoPromocao[];
 }
@@ -35,11 +39,32 @@ export interface SecaoPromocao {
 /** Máximo de fotos juntas num item (mais que isso não cabe no card). */
 export const MAX_VARIACOES = 4;
 
-const SEM_SECAO = 'OUTROS';
+/** Cards por tabloide (1 em destaque + 7, como o encarte do mercado). */
+export const CARDS_POR_TABLOIDE = 8;
+export const GERAL = 'OFERTAS DA SEMANA';
+/** Ordem das categorias no encarte. */
+const ORDEM_CATEGORIAS = ['HORTIFRUTI', 'AÇOUGUE', 'MERCEARIA', 'BEBIDAS', 'FRIOS E LATICÍNIOS', 'LIMPEZA, HIGIENE E CASA'];
 
-/** Modelo do tabloide pela seção: hortifruti e açougue têm arte própria; o resto usa "Ofertas da semana". */
+const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+
+/**
+ * As seções do ERP são muito picadas (ACHOCOLATADO, BOMBONIERE, PAES/BOLOS...) e davam tabloide de 1 produto.
+ * Aqui elas viram categorias grandes, que é como o mercado separa o encarte.
+ */
+export function categoriaDa(secao: string): string {
+  const s = semAcento(secao);
+  if (/HORTI|FLV|FRUTA|VERDUR|LEGUM|FEIRA/.test(s)) return 'HORTIFRUTI';
+  if (/ACOUGUE|CARNE|FRIGORIF|BOVIN|SUIN|FRANGO|AVES|PEIXE|LINGUI/.test(s)) return 'AÇOUGUE';
+  if (/FRIOS|LATIC|QUEIJ|IOGUR|EMBUTID|LACTEO/.test(s)) return 'FRIOS E LATICÍNIOS';
+  if (/BEBIDA|REFRIG|CERVEJ|SUCO|AGUA|VINHO|DESTIL|ENERG|CHA\b/.test(s)) return 'BEBIDAS';
+  if (/LIMPEZA|HIGIENE|PERFUM|UTILIDADE|BAZAR|DESCART|PET\b|CASA|PAPEL/.test(s)) return 'LIMPEZA, HIGIENE E CASA';
+  if (!s.trim()) return GERAL;
+  return 'MERCEARIA';
+}
+
+/** Modelo do tabloide pela categoria: hortifruti e açougue têm arte própria; o resto usa "Ofertas da semana". */
 export function modeloDaSecao(secao: string): string {
-  const s = secao.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  const s = semAcento(secao);
   if (/HORTI|FLV|FRUTA|VERDUR|LEGUM|FEIRA/.test(s)) return 'hortifruti';
   if (/ACOUGUE|CARNE|FRIGORIF|BOVIN|SUIN|FRANGO|AVES/.test(s)) return 'acougue';
   return 'semana';
@@ -81,50 +106,104 @@ function comecoComum(nomes: string[]): string {
   return comum.join(' ');
 }
 
+/** Dinheiro "1.234,56" → número (pra achar o mais caro). */
+const valor = (v: string) => Number(v.replace(/\./g, '').replace(',', '.')) || 0;
+
+/** Junta as variações (mesmo começo de nome, peso e preço) de uma lista, mantendo a ordem do primeiro de cada. */
+function cardsDe(lista: ItemRelatorio[]): { card: ItemPromocao; origem: ItemRelatorio[] }[] {
+  const grupos: ItemRelatorio[][] = [];
+  const indice = new Map<string, number>();
+  for (const i of lista) {
+    const k = chaveDeJuntar(i);
+    const pos = k ? indice.get(k) : undefined;
+    if (pos !== undefined && grupos[pos].length < MAX_VARIACOES) {
+      grupos[pos].push(i);
+    } else {
+      if (k && pos === undefined) indice.set(k, grupos.length);
+      grupos.push([i]);
+    }
+  }
+  return grupos.map((g) => ({
+    origem: g,
+    card: {
+      nome: g.length > 1 ? comecoComum(g.map((x) => x.produto)) || g[0].produto : g[0].produto,
+      detalhe: g[0].peso,
+      preco: g[0].preco,
+      precoDe: g[0].precoDe,
+      minUnidades: g[0].minUnidades,
+      destaque: false,
+      variacoes: g.map((x) => ({ nome: x.produto, ean: x.ean })),
+    },
+  }));
+}
+
+/** Divide em partes do mesmo tamanho, nenhuma maior que `max` (10 cards → 5 + 5, não 8 + 2). */
+function emPartes<T>(lista: T[], max: number): T[][] {
+  if (!lista.length) return [];
+  const n = Math.ceil(lista.length / max);
+  const tam = Math.ceil(lista.length / n);
+  const out: T[][] = [];
+  for (let i = 0; i < lista.length; i += tam) out.push(lista.slice(i, i + tam));
+  return out;
+}
+
+/** Nome do tabloide pelas categorias dele: "MERCEARIA" ou "MERCEARIA + BEBIDAS". */
+const nomeDas = (cats: string[]) => (cats.length ? cats.join(' + ') : GERAL);
+
 /**
- * Separa por seção (na ordem em que aparecem no relatório) e junta as variações.
+ * Monta os tabloides do relatório, no jeito do encarte do mercado: até CARDS_POR_TABLOIDE cards em cada, com o
+ * mais caro em destaque. Hortifruti e açougue saem separados (têm arte própria); o resto vai em ordem de categoria
+ * (mercearia, bebidas, frios, limpeza…) e é dividido em tabloides cheios — categorias pequenas se juntam.
  * `secaoPorProduto` completa a seção quando o relatório não traz (modelo em blocos), pelo código do produto no ERP.
  */
 export function separarPorSecao(itens: ItemRelatorio[], secaoPorProduto: Map<string, string> = new Map()): SecaoPromocao[] {
-  const porSecao = new Map<string, ItemRelatorio[]>();
+  const porCategoria = new Map<string, ItemRelatorio[]>();
   for (const i of itens) {
-    const secao = (i.grupo || secaoPorProduto.get(i.produtoId) || SEM_SECAO).trim() || SEM_SECAO;
-    const l = porSecao.get(secao) ?? [];
+    const categoria = categoriaDa(i.grupo || secaoPorProduto.get(i.produtoId) || '');
+    const l = porCategoria.get(categoria) ?? [];
     l.push(i);
-    porSecao.set(secao, l);
+    porCategoria.set(categoria, l);
   }
 
-  const secoes: SecaoPromocao[] = [];
-  for (const [secao, lista] of porSecao) {
-    // Agrupa mantendo a ordem do primeiro de cada grupo.
-    const grupos: ItemRelatorio[][] = [];
-    const indice = new Map<string, number>();
-    for (const i of lista) {
-      const k = chaveDeJuntar(i);
-      const pos = k ? indice.get(k) : undefined;
-      if (pos !== undefined && grupos[pos].length < MAX_VARIACOES) {
-        grupos[pos].push(i);
-      } else {
-        if (k && pos === undefined) indice.set(k, grupos.length);
-        grupos.push([i]);
+  type Card = { card: ItemPromocao; origem: ItemRelatorio[]; categoria: string };
+  const blocos: { especial: boolean; cards: Card[] }[] = [];
+  const resto: Card[] = [];
+  for (const cat of [...ORDEM_CATEGORIAS, ...porCategoria.keys()].filter((c, n, l) => l.indexOf(c) === n && porCategoria.has(c))) {
+    const cards = cardsDe(porCategoria.get(cat)!).map((c) => ({ ...c, categoria: cat }));
+    if (cat === 'HORTIFRUTI' || cat === 'AÇOUGUE') blocos.push({ especial: true, cards });
+    else resto.push(...cards);
+  }
+  if (resto.length) blocos.push({ especial: false, cards: resto });
+
+  const tabloides: SecaoPromocao[] = [];
+  for (const b of blocos) {
+    const partes = emPartes(b.cards, CARDS_POR_TABLOIDE);
+    partes.forEach((parte) => {
+      const cats = [...new Set(parte.map((c) => c.categoria))];
+      const base = nomeDas(cats);
+      const itensDoTabloide = parte.map((c) => ({ ...c.card }));
+      // O mais caro vira o destaque (bloco grande), como no encarte — só quando tem produto suficiente.
+      if (itensDoTabloide.length >= 4) {
+        const caro = itensDoTabloide.reduce((m, c, k) => (valor(c.preco) > valor(itensDoTabloide[m].preco) ? k : m), 0);
+        itensDoTabloide[caro].destaque = true;
       }
-    }
-    secoes.push({
-      secao,
-      modeloId: modeloDaSecao(secao),
-      validade: validadeDos(lista),
-      itens: grupos.map((g) => {
-        const nome = g.length > 1 ? comecoComum(g.map((x) => x.produto)) || g[0].produto : g[0].produto;
-        return {
-          nome,
-          detalhe: g[0].peso,
-          preco: g[0].preco,
-          precoDe: g[0].precoDe,
-          minUnidades: g[0].minUnidades,
-          variacoes: g.map((x) => ({ nome: x.produto, ean: x.ean })),
-        };
-      }),
+      tabloides.push({
+        secao: base,
+        modeloId: modeloDaSecao(cats.length === 1 ? cats[0] : ''),
+        validade: validadeDos(parte.flatMap((c) => c.origem)),
+        itens: itensDoTabloide,
+      });
     });
   }
-  return secoes;
+  // Nome repetido (categoria grande dividida) ganha número: MERCEARIA 1, MERCEARIA 2.
+  const total = new Map<string, number>();
+  for (const t of tabloides) total.set(t.secao, (total.get(t.secao) ?? 0) + 1);
+  const visto = new Map<string, number>();
+  for (const t of tabloides) {
+    if ((total.get(t.secao) ?? 0) < 2) continue;
+    const n = (visto.get(t.secao) ?? 0) + 1;
+    visto.set(t.secao, n);
+    t.secao = `${t.secao} ${n}`;
+  }
+  return tabloides;
 }

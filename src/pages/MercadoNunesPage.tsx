@@ -6,6 +6,8 @@ import {
   type MercadoNunesLayout,
   type MercadoNunesPasta,
 } from '@/api/mercadoNunes'
+import { urlDoMascote } from '@/api/mercadoNunesTabloide'
+import { EscolherMascote } from '@/components/tabloide/EscolherMascote'
 
 /**
  * Gerador de cartazes de oferta A4 do Mercado Nunes (/mercadonunes) — página pública, sem login e
@@ -90,6 +92,10 @@ export interface Cartaz {
   ajusteFaixa: number
   ajustePreco: number
   ajustePeso: number
+  // Mascote do Nunes (biblioteca de mascotes, mesmo do tabloide). Vazio = sem mascote.
+  mascoteId?: string
+  mascoteLado?: 'esquerda' | 'direita'
+  mascoteTamanho?: number
 }
 
 export const CARTAZ_PADRAO: Cartaz = {
@@ -283,8 +289,27 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
         gap: '18px',
         fontFamily: dados.fonte,
         overflow: 'hidden',
+        position: 'relative',
       }}
     >
+      {/* Mascote (biblioteca de mascotes, PNG sem fundo) no canto de baixo, por cima de tudo. */}
+      {dados.mascoteId && (
+        <img
+          src={urlDoMascote(dados.mascoteId)}
+          alt=""
+          style={{
+            position: 'absolute',
+            zIndex: 5,
+            bottom: 34,
+            [dados.mascoteLado === 'esquerda' ? 'left' : 'right']: 14,
+            height: Math.round(330 * (1 + 0.1 * Math.max(-6, Math.min(8, dados.mascoteTamanho ?? 0)))),
+            maxWidth: '48%',
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 8px 14px rgba(0,0,0,.25))',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
       {dados.mostrarFaixa && (
         <div
           style={{
@@ -1182,6 +1207,10 @@ export function MercadoNunesPage() {
               onChange={(v) => set('mostrarBolinhaPreco', v)}
               label="Fundo amarelo (bolinha) atrás do preço"
             />
+          </Card>
+
+          <Card titulo="Mascote" dica="Suba o PNG já sem fundo uma vez; ele fica guardado pra plaquinhas e tabloides.">
+            <EscolherMascote valor={cartaz} onMuda={(v) => setCartaz((c) => ({ ...c, ...v }))} />
           </Card>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

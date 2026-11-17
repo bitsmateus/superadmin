@@ -129,6 +129,8 @@ export const tabloideApi = {
     dados_lista?: DadosTabloide[]
     /** Páginas a postar (índices a partir de 0); sem isso vão todas. */
     paginas?: number[]
+    /** Capa enviada à mão (data URL): entra como 1ª imagem do post. */
+    capa?: string
     formato: 'feed' | 'story' | 'reels'
     legenda: string
     agendado_para: string | null

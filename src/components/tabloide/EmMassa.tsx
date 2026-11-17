@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { baixarArquivo, tabloideApi, type TabloideSalvo } from '@/api/mercadoNunesTabloide'
+import { baixarArquivo, lerImagem, tabloideApi, type TabloideSalvo } from '@/api/mercadoNunesTabloide'
 import { FORMATOS, paginar, type DadosTabloide, type FormatoTabloide } from '../../../server/src/lib/tabloide/layout'
 import { Modal, btnPrimario, btnSecundario, inputCls } from './EscolherFoto'
 
@@ -198,6 +198,8 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
   const [paginasEscolhidas, setPaginasEscolhidas] = React.useState<number[]>(() =>
     paginar(tabloides[0].dados.itens, 'feed', tabloides[0].dados.porPagina).map((_, i) => i),
   )
+  // Capa manual (opcional): entra como 1ª imagem de cada post.
+  const [capa, setCapa] = React.useState<string | null>(null)
   const [enviando, setEnviando] = React.useState(false)
   const [progresso, setProgresso] = React.useState(0)
   const [resultado, setResultado] = React.useState<{ ok: number; falhas: string[] } | null>(null)
@@ -211,7 +213,7 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
 
   const juntar = formato === 'feed' && carrossel && varios
   const paginas = tabloides.reduce((n, t) => n + paginar(t.dados.itens, 'feed', t.dados.porPagina).length, 0)
-  const estouraCarrossel = juntar && paginas > 10
+  const estouraCarrossel = juntar && paginas + (capa ? 1 : 0) > 10
   const nPosts = juntar ? 1 : tabloides.length
   const escalonado = !juntar && quando === 'agendar' && nPosts > 1
 
@@ -250,6 +252,7 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
           dados: { ...grupo[0].dados, formato },
           dados_lista: juntar ? grupo.map((t) => t.dados) : undefined,
           paginas: !varios ? paginasEscolhidas : undefined,
+          capa: capa ?? undefined,
           formato,
           legenda: formato === 'story' ? '' : texto,
           agendado_para: horarios[i] ? horarios[i]!.toISOString() : null,
@@ -292,7 +295,8 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
           <div className="text-sm text-[#2A2622]">
             <b>Onde:</b> Instagram @{conta?.username}
             {formato === 'feed' && facebook ? ' + página do Facebook' : ''} · <b>Como:</b>{' '}
-            {formato === 'story' ? 'Story (uma por página)' : juntar ? `Carrossel com ${paginas} imagens` : 'Post no feed (um por tabloide)'}
+            {formato === 'story' ? 'Story (uma por página)' : juntar ? `Carrossel com ${paginas + (capa ? 1 : 0)} imagens` : 'Post no feed (um por tabloide)'}
+            {capa ? ' · com capa' : ''}
           </div>
           <ul className="max-h-[40vh] divide-y divide-[#EFEAE3] overflow-y-auto rounded-lg border border-[#E7E1D9] text-sm">
             {(juntar ? [{ nome: `Carrossel: ${tabloides.map((t) => t.titulo).join(' → ')}` }] : tabloides.map((t) => ({ nome: t.titulo }))).map((p, i) => (
@@ -364,6 +368,35 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
             )}
           </div>
 
+          <div>
+            <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[#7A716A]">Capa (opcional)</div>
+            {capa ? (
+              <div className="flex items-center gap-3 rounded-lg border border-[#E7E1D9] bg-white p-2">
+                <img src={capa} alt="Capa" className="h-20 w-16 rounded-md object-cover" />
+                <div className="text-xs text-[#7A716A]">
+                  Vai como a <b>primeira imagem</b> {juntar ? 'do carrossel' : 'de cada post'}. A imagem é cortada no centro para caber no formato.
+                </div>
+                <button className="ml-auto text-xs font-bold text-red-600 hover:underline" onClick={() => setCapa(null)}>
+                  Remover
+                </button>
+              </div>
+            ) : (
+              <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-[#CFC7BD] bg-[#FBF9F6] px-3 py-3 text-sm font-semibold text-[#7A716A] hover:bg-white">
+                🖼 Adicionar imagem de capa
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    e.target.value = ''
+                    if (f) lerImagem(f, 1600).then(setCapa).catch((err: Error) => toast.error(err.message))
+                  }}
+                />
+              </label>
+            )}
+          </div>
+
           {!varios && (
             <EscolherPaginas
               dados={tabloides[0].dados}
@@ -395,7 +428,7 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
               </div>
               {juntar && (
                 <p className={`mt-1 text-xs ${estouraCarrossel ? 'font-semibold text-red-600' : 'text-[#9A928B]'}`}>
-                  {paginas} imagem{paginas !== 1 ? 'ns' : ''} no carrossel{estouraCarrossel ? ' — passa do limite de 10. Selecione menos tabloides.' : ' (na ordem em que você selecionou).'}
+                  {paginas + (capa ? 1 : 0)} imagem{paginas + (capa ? 1 : 0) !== 1 ? 'ns' : ''} no carrossel{capa ? ' (com a capa)' : ''}{estouraCarrossel ? ' — passa do limite de 10. Selecione menos tabloides.' : ' (na ordem em que você selecionou).'}
                 </p>
               )}
             </div>

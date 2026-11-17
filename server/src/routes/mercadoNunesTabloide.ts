@@ -535,6 +535,8 @@ ${lista}`;
       legenda?: string;
       /** Quais páginas postar (índices a partir de 0). Sem isso, vão todas. Só feed/story de um tabloide. */
       paginas?: number[];
+      /** Imagem enviada à mão (data URL) que entra como PRIMEIRA imagem do post — a capa. Ajustada ao formato. */
+      capa?: string;
       agendado_para?: string | null;
       redes?: string[];
       base_url?: string;
@@ -594,6 +596,20 @@ ${lista}`;
         const jpg = await sharp(png).jpeg({ quality: 92 }).toBuffer();
         anexos.push({ id: crypto.randomUUID(), name: `${nomeArquivo(dados)}-${i + 1}.jpg`, type: 'image/jpeg', size: jpg.length, dataUrl: `data:image/jpeg;base64,${jpg.toString('base64')}` });
       }
+    }
+    // Capa manual: vira a 1ª imagem, cortada pra proporção do formato (o Instagram usa a proporção da 1ª em todo o carrossel).
+    if (b.capa && formato !== 'reels') {
+      const m = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/.exec(b.capa);
+      if (!m) return reply.status(400).send({ message: 'A capa precisa ser uma imagem PNG, JPG ou WebP.' });
+      if (anexos.length >= 10) return reply.status(400).send({ message: 'Com a capa passa de 10 imagens (limite do Instagram). Tire uma página ou a capa.' });
+      const f = FORMATOS[formato];
+      let jpg: Buffer;
+      try {
+        jpg = await sharp(Buffer.from(m[2], 'base64')).rotate().resize(f.w, f.h, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer();
+      } catch {
+        return reply.status(400).send({ message: 'Não consegui ler a imagem da capa.' });
+      }
+      anexos.unshift({ id: crypto.randomUUID(), name: `${nomeArquivo(dados)}-capa.jpg`, type: 'image/jpeg', size: jpg.length, dataUrl: `data:image/jpeg;base64,${jpg.toString('base64')}` });
     }
     const legenda = texto(b.legenda, 2200);
     const titulo =

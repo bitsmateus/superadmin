@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   DndContext,
@@ -94,7 +94,14 @@ function useFontesDoTabloide() {
 function Editor() {
   useFontesDoTabloide()
   const inicial = React.useMemo(lerRascunho, [])
-  const [aba, setAba] = React.useState<Aba>('montar')
+  // A aba mora na URL (/mercadonunes/tabloide/historico…), então dá pra abrir e compartilhar direto.
+  const { aba: abaUrl } = useParams()
+  const irPara = useNavigate()
+  const aba: Aba = abaUrl === 'catalogo' || abaUrl === 'historico' || abaUrl === 'templates' ? abaUrl : 'montar'
+  const setAba = React.useCallback(
+    (a: Aba) => irPara(a === 'montar' ? '/mercadonunes/tabloide' : `/mercadonunes/tabloide/${a}`),
+    [irPara],
+  )
   const [dados, setDados] = React.useState<DadosTabloide>(inicial?.dados ?? DADOS_VAZIOS())
   const [idSalvo, setIdSalvo] = React.useState<string | null>(inicial?.idSalvo ?? null)
   const [config, setConfig] = React.useState<ConfigTabloide | null>(null)
@@ -1116,6 +1123,7 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
   // Seleção em massa: guarda na ORDEM do clique (é a ordem das imagens do carrossel).
   const [marcados, setMarcados] = React.useState<string[]>([])
   const [massa, setMassa] = React.useState<'baixar' | 'postar' | null>(null)
+  const [vendo, setVendo] = React.useState<TabloideSalvo | null>(null)
   const alternar = (id: string) => setMarcados((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id]))
   const selecionados = (lista ?? []).length ? marcados.map((id) => lista!.find((t) => t.id === id)).filter((t): t is TabloideSalvo => !!t) : []
 
@@ -1155,6 +1163,30 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
         </button>
       </div>
     </div>
+    {vendo && (
+      <Modal titulo={vendo.titulo} onFechar={() => setVendo(null)} largura={560}>
+        <div className="flex flex-col gap-3">
+          <div className="text-xs text-[#7A716A]">
+            {vendo.dados?.itens?.length ?? 0} produtos · {FORMATOS[vendo.dados?.formato ?? 'feed']?.nome} · {modeloPorId(vendo.dados?.modeloId ?? '').nome} ·{' '}
+            {new Date(vendo.updated_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+          </div>
+          <div className="flex justify-center rounded-lg bg-[#EDE8E1] p-3">
+            <PreviaTabloide dados={{ ...DADOS_VAZIOS(), ...vendo.dados }} largura={420} />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button className={btnSecundario} onClick={() => setVendo(null)}>
+              Fechar
+            </button>
+            <button className={btnSecundario} onClick={() => { onAbrir(vendo, true); setVendo(null) }}>
+              Duplicar
+            </button>
+            <button className={btnPrimario} onClick={() => { onAbrir(vendo, false); setVendo(null) }}>
+              Abrir para editar
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )}
     {massa === 'baixar' && <ModalBaixarEmMassa tabloides={selecionados} onFechar={() => setMassa(null)} />}
     {massa === 'postar' && <ModalPostarEmMassa tabloides={selecionados} onFechar={() => setMassa(null)} />}
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1168,11 +1200,14 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
               <input type="checkbox" checked={ordem >= 0} onChange={() => alternar(t.id)} />
               {ordem >= 0 ? ordem + 1 : ''}
             </label>
-            <div className="flex h-16 items-center justify-center px-2" style={{ background: m.fundo }}>
-              <span className="truncate" style={{ color: m.titulo, fontFamily: 'Anton, Impact, sans-serif', fontSize: 18, textShadow: `0 2px 0 ${m.tituloSombra}` }}>
-                {t.dados?.titulo || m.tituloPadrao}
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={() => setVendo(t)}
+              title="Ver o encarte"
+              className="flex justify-center bg-[#EDE8E1] p-3 hover:bg-[#E5DFD6]"
+            >
+              <MiniaturaTabloide dados={{ ...DADOS_VAZIOS(), ...t.dados }} largura={200} />
+            </button>
             <div className="flex flex-1 flex-col gap-1 p-3">
               <div className="text-sm font-bold text-[#2A2622]">{t.titulo}</div>
               <div className="text-xs text-[#7A716A]">
@@ -1183,6 +1218,9 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
                 {t.criado_por ? ` · ${t.criado_por}` : ''}
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
+                <button className={btnSecundario} onClick={() => setVendo(t)}>
+                  👁 Ver
+                </button>
                 <button className={btnSecundario} onClick={() => onAbrir(t, false)}>
                   Abrir
                 </button>

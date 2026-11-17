@@ -260,7 +260,8 @@ export default function App() {
         <Route path="/laundry/:token" element={<LaundryPortalPage />} />
         <Route path="/mercadonunes" element={<MercadoNunesPage />} />
         <Route path="/mercadonunes/acougue" element={<AcouguePage />} />
-        <Route path="/mercadonunes/tabloide" element={<TabloidePage />} />
+        {/* :aba = montar (sem nada) | catalogo | historico | templates — mesma tela, a aba fica na URL. */}
+        <Route path="/mercadonunes/tabloide/:aba?" element={<TabloidePage />} />
         <Route path="/engeenvio" element={<EngeEnvioPage />} />
         <Route path="/engeenvio/ciente/:token" element={<EngeCientePage />} />
         <Route path="/pendencias/:token" element={<PendenciasPublicPage />} />

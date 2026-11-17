@@ -1,6 +1,7 @@
 ﻿import * as React from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button } from './ui/Button'
+import { ehErroDeVersaoNova, recarregarPorVersaoNova } from '@/lib/versaoNova'
 
 interface State {
   hasError: boolean
@@ -19,6 +20,8 @@ export class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('App crashed:', error, info)
+    // Tela que não carregou porque saiu versão nova: recarrega sozinho uma vez, sem o usuário ver o erro.
+    if (ehErroDeVersaoNova(error)) recarregarPorVersaoNova()
   }
 
   reset = () => {

@@ -480,16 +480,30 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
 
   // ── Legenda com IA ────────────────────────────────────────────────────────
 
-  app.post<{ Body: { dados?: Partial<DadosTabloide> } }>(`${BASE}/tabloides/legenda`, async (req, reply) => {
+  app.post<{ Body: { dados?: Partial<DadosTabloide>; dados_lista?: Partial<DadosTabloide>[] } }>(`${BASE}/tabloides/legenda`, async (req, reply) => {
     const d = await prepararDados(req.body?.dados);
     if (!d.itens.length) return reply.status(400).send({ message: 'Coloque pelo menos um produto.' });
-    const lista = d.itens
-      .map((i) => {
-        const un = i.unidade === 'kg' ? ' o kg' : i.unidade === 'un' ? ' a unidade' : i.unidade ? ` (${i.unidade})` : '';
-        const de = i.precoDe && precoNumero(i.precoDe) > precoNumero(i.preco) ? ` (de R$ ${i.precoDe})` : '';
-        return `- ${i.nome}${i.detalhe ? ` ${i.detalhe}` : ''}: R$ ${i.preco}${un}${de}${i.destaque ? ' [DESTAQUE]' : ''}`;
-      })
-      .join('\n');
+    const linhaItem = (i: ItemTabloide) => {
+      const un = i.unidade === 'kg' ? ' o kg' : i.unidade === 'un' ? ' a unidade' : i.unidade ? ` (${i.unidade})` : '';
+      const de = i.precoDe && precoNumero(i.precoDe) > precoNumero(i.preco) ? ` (de R$ ${i.precoDe})` : '';
+      return `- ${i.nome}${i.detalhe ? ` ${i.detalhe}` : ''}: R$ ${i.preco}${un}${de}${i.destaque ? ' [DESTAQUE]' : ''}`;
+    };
+    // Vários tabloides num post só (carrossel): junta as ofertas de todos, com o título/validade de cada um.
+    const varios = Array.isArray(req.body?.dados_lista) && req.body!.dados_lista!.length > 1 ? req.body!.dados_lista!.slice(0, 10) : null;
+    let lista: string;
+    if (varios) {
+      const blocos: string[] = [];
+      for (const bruto of varios) {
+        const x = await prepararDados(bruto);
+        if (!x.itens.length) continue;
+        blocos.push(
+          `[${x.titulo || MODELOS.find((m) => m.id === x.modeloId)?.tituloPadrao}${x.validade ? ` — válido ${x.validade}` : ''}]\n${x.itens.slice(0, 15).map(linhaItem).join('\n')}`,
+        );
+      }
+      lista = blocos.join('\n\n');
+    } else {
+      lista = d.itens.map(linhaItem).join('\n');
+    }
     const sistema =
       'Você escreve legendas de Instagram para o Nunes Supermercado, um mercado de bairro. Tom animado, direto e popular, ' +
       'em português do Brasil. Regras: comece com uma frase de impacto curta; destaque primeiro os produtos marcados como DESTAQUE ' +

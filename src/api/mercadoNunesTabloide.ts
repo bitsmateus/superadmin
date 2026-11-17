@@ -116,7 +116,8 @@ export const tabloideApi = {
   statusVideo: (id: string) =>
     req<{ status: 'gerando' | 'pronto' | 'erro'; progresso: number; erro: string | null; tamanho: number }>(`/tabloides/video/${id}`),
   baixarVideo: (id: string) => req<Blob>(`/tabloides/video/${id}/arquivo`, {}, true),
-  legenda: (dados: DadosTabloide) => req<{ legenda: string }>('/tabloides/legenda', json({ dados })),
+  legenda: (dados: DadosTabloide, dados_lista?: DadosTabloide[]) =>
+    req<{ legenda: string }>('/tabloides/legenda', json({ dados, dados_lista })),
   instagram: () => req<{ ok: boolean; username?: string; cliente?: string; motivo?: string }>('/tabloides/instagram'),
   testarConexao: () =>
     req<{ itens: { nome: string; status: 'ok' | 'aviso' | 'erro'; detalhe: string }[]; podePublicar: boolean }>(

@@ -2,6 +2,7 @@ import * as React from 'react'
 import { toast } from 'sonner'
 import { baixarArquivo, lerImagem, tabloideApi, type TabloideSalvo } from '@/api/mercadoNunesTabloide'
 import { FORMATOS, paginar, type DadosTabloide, type FormatoTabloide } from '../../../server/src/lib/tabloide/layout'
+import { PreviaDoPost } from './Previa'
 import { Modal, btnPrimario, btnSecundario, inputCls } from './EscolherFoto'
 
 /**
@@ -200,6 +201,7 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
   )
   // Capa manual (opcional): entra como 1ª imagem de cada post.
   const [capa, setCapa] = React.useState<string | null>(null)
+  const [gerandoLegenda, setGerandoLegenda] = React.useState(false)
   const [enviando, setEnviando] = React.useState(false)
   const [progresso, setProgresso] = React.useState(0)
   const [resultado, setResultado] = React.useState<{ ok: number; falhas: string[] } | null>(null)
@@ -221,6 +223,22 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
   const horarios = Array.from({ length: nPosts }, (_, i) =>
     quando === 'agendar' ? new Date(new Date(dataHora).getTime() + (escalonado ? i * intervalo * 60_000 : 0)) : null,
   )
+
+  const gerarLegenda = async () => {
+    setGerandoLegenda(true)
+    try {
+      const r = await tabloideApi.legenda(
+        tabloides[0].dados,
+        varios ? tabloides.map((t) => t.dados) : undefined,
+      )
+      setLegenda(r.legenda)
+      setComIa(false)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setGerandoLegenda(false)
+    }
+  }
 
   const irRevisar = () => {
     if (!tabloides.every((t) => t.dados.itens.length)) return toast.error('Tem tabloide sem produto na seleção.')
@@ -434,10 +452,26 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
             </div>
           )}
 
+          <PreviaDoPost
+            tabloides={tabloides.map((t) => t.dados)}
+            formato={formato}
+            capa={capa}
+            paginas={!varios ? paginasEscolhidas : undefined}
+          />
+
           {formato === 'feed' && (
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wide text-[#7A716A]">Legenda</span>
+                <button
+                  className="text-sm font-bold text-[#C1503F] hover:underline disabled:opacity-50"
+                  disabled={gerandoLegenda || (comIa && !juntar)}
+                  onClick={() => void gerarLegenda()}
+                >
+                  {gerandoLegenda ? 'Escrevendo…' : '✨ Gerar legenda com IA'}
+                </button>
+              </div>
+              <div className="mb-1 flex justify-end">
                 {!juntar && varios && (
                   <label className="flex items-center gap-1.5 text-xs font-bold text-[#C1503F]">
                     <input type="checkbox" checked={comIa} onChange={(e) => setComIa(e.target.checked)} />✨ Escrever uma com IA para cada post

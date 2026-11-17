@@ -55,7 +55,7 @@ const NAO_CONFIGURADO = {
 };
 
 /** "crm-arthur=Arthur Rosa;crm-luis-closer=Luis" -> mapa aba -> nome do agente na 3C. */
-function agentesPorAba(): Map<string, string> {
+export function agentesPorAba(): Map<string, string> {
   const m = new Map<string, string>();
   for (const par of (process.env.THREEC_AGENTES ?? '').split(/[;\n]/)) {
     const [aba, nome] = par.split('=').map((s) => s?.trim());

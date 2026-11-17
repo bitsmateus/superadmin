@@ -41,5 +41,18 @@ test('canalEfetivo: agendamento da IA Luiza sem canal é WhatsApp Comercial; o c
 });
 
 test('montarResumoAgendamentos: dia sem agendamento', () => {
-  assert.match(montarResumoAgendamentos('2026-10-25', []), /Total de A\.G:\* 0\nNenhum agendamento hoje\./);
+  assert.match(montarResumoAgendamentos('2026-10-25', []), /Total de A\.G:\* 0 🚨\nNenhum agendamento hoje\./);
+});
+
+test('sirene: menos de 3 A.G no dia e menos de 200 ligações do Arthur', async () => {
+  const { blocoLigacoes, montarResumoAgendamentos: resumo } = await import('./resumoAgendamentos.js');
+  const ag = (n: number) => Array.from({ length: n }, () => ({ autor: 'Arthur', sdr: 'Arthur', canal: 'Ligação' }));
+  assert.match(resumo('2026-11-17', ag(2)), /Total de A\.G:\* 2 🚨/);
+  assert.match(resumo('2026-11-17', ag(0)), /Total de A\.G:\* 0 🚨/);
+  assert.doesNotMatch(resumo('2026-11-17', ag(3)), /🚨/);
+  const baixo = blocoLigacoes({ arthur: 150, luis: 40 }).join('\n');
+  assert.match(baixo, /Total de ligações: 190/);
+  assert.match(baixo, /Arthur: 150 🚨/);
+  assert.doesNotMatch(baixo, /Luís: 40 🚨/);
+  assert.doesNotMatch(blocoLigacoes({ arthur: 200, luis: 0 }).join('\n'), /🚨/);
 });

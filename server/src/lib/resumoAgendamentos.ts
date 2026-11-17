@@ -48,19 +48,26 @@ function contar(valores: string[]): Array<[string, number]> {
     (a[0] === 'Não informado' ? 1 : 0) - (b[0] === 'Não informado' ? 1 : 0) || b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
+/** Menos que isso de A.G no dia (total) acende a sirene. */
+export const MIN_AGENDAMENTOS_DIA = 3;
+/** Menos que isso de ligações do Arthur no dia acende a sirene. */
+export const MIN_LIGACOES_ARTHUR = 200;
+export const SIRENE = '🚨';
+
 /** `dia` no formato AAAA-MM-DD (dia de São Paulo). */
 export function montarResumoAgendamentos(dia: string, agendamentos: AgendamentoDoDia[]): string {
   const [ano, mes, d] = dia.split('-').map(Number);
   const semana = DIAS_SEMANA[new Date(Date.UTC(ano, mes - 1, d)).getUTCDay()];
   const titulo = `📊 *Resumo do dia — ${String(d).padStart(2, '0')}/${String(mes).padStart(2, '0')} (${semana})*`;
   const total = agendamentos.length;
-  if (!total) return `${titulo}\n\n📅 *Total de A.G:* 0\nNenhum agendamento hoje.`;
+  const sirene = total < MIN_AGENDAMENTOS_DIA ? ` ${SIRENE}` : '';
+  if (!total) return `${titulo}\n\n📅 *Total de A.G:* 0${sirene}\nNenhum agendamento hoje.`;
 
   const lista = (pares: Array<[string, number]>) => pares.map(([nome, n]) => `• ${nome}: ${n}`).join('\n');
   return [
     titulo,
     '',
-    `📅 *Total de A.G:* ${total}`,
+    `📅 *Total de A.G:* ${total}${sirene}`,
     '',
     '👤 *Quem agendou*',
     lista(contar(agendamentos.map(quemAgendou))),
@@ -134,4 +141,23 @@ export function blocoReunioes(r: ReunioesDoDia): string[] {
   // andou de etapa sozinho, então listar os nomes só alongaria a mensagem sem ninguém usar.
   if (r.noShow.length) out.push('', `🚫 *Não compareceram (${r.noShow.length})*`, ...linhaNomes(r.noShow))
   return out
+}
+
+// ── Ligações do dia (3C Plus, das abas do Arthur e do Luís) ──────────────────
+
+export interface LigacoesDoDia {
+  arthur: number
+  luis: number
+}
+
+/** Bloco das ligações: total das duas abas e quanto cada um fez. Sirene no Arthur abaixo da meta. */
+export function blocoLigacoes(l: LigacoesDoDia): string[] {
+  const sireneArthur = l.arthur < MIN_LIGACOES_ARTHUR ? ` ${SIRENE}` : ''
+  return [
+    '',
+    '☎️ *Ligações*',
+    `Total de ligações: ${l.arthur + l.luis}`,
+    `• Arthur: ${l.arthur}${sireneArthur}`,
+    `• Luís: ${l.luis}`,
+  ]
 }

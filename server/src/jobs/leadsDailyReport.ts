@@ -1,11 +1,13 @@
 import { query, queryOne } from '../db.js';
 import { POS_REUNIAO_STATUSES, REUNIAO_STATUSES } from '../routes/leadBoards.js';
 import {
-  blocoReunioes, blocoRetornos, montarResumoAgendamentos,
-  type AgendamentoDoDia, type RetornosDoDia,
+  blocoLigacoes, blocoReunioes, blocoRetornos, montarResumoAgendamentos,
+  type AgendamentoDoDia, type LigacoesDoDia, type RetornosDoDia,
 } from '../lib/resumoAgendamentos.js';
 import { PAGINA_DO_CLOSER, ROTULO_ADIADO, ROTULO_RETORNOU, ROTULO_SEM_RESPOSTA } from '../lib/retornoProposta.js';
 import { sendToGroupWith } from '../lib/supportGroup.js';
+import { config3C, listarLigacoes, normalizarLigacao, type Ligacao } from '../lib/tresC.js';
+import { agentesPorAba, ehDaPessoa } from '../routes/ligacoes3c.js';
 
 /**
  * Resumo diário de agendamentos no grupo LEADS do WhatsApp (19h, America/Sao_Paulo): total de A.G, quem agendou e
@@ -123,12 +125,41 @@ export async function reunioesDoDia(dia: string): Promise<{ compareceu: string[]
   return { compareceu, noShow, pendentes };
 }
 
+/**
+ * Ligações do dia da 3C Plus, do Arthur e do Luís (as mesmas do botão "Ligações" nos CRMs deles: o dono da aba
+ * é quem o nome da aba cita, e THREEC_AGENTES troca o nome do agente na 3C). null = 3C não configurada ou fora
+ * do ar — o resumo sai sem o bloco em vez de não sair.
+ */
+export async function ligacoesDoDia(dia: string): Promise<LigacoesDoDia | null> {
+  const cfg = config3C();
+  if (!cfg) return null;
+  try {
+    const { itens } = await listarLigacoes(cfg, dia, dia);
+    const lista = itens.map(normalizarLigacao).filter((l): l is Ligacao => !!l);
+    const abas = await query<{ id: string; name: string }>('SELECT id, name FROM lead_pages WHERE archived_at IS NULL');
+    const agenteDe = (re: RegExp, padrao: string) => {
+      const aba = abas.find((a) => re.test(a.name));
+      return (aba && agentesPorAba().get(aba.id)) || padrao;
+    };
+    const arthur = agenteDe(/arthur/i, 'Arthur');
+    const luis = agenteDe(/lu[ií]s/i, 'Luis');
+    return {
+      arthur: lista.filter((l) => ehDaPessoa(l.agente, arthur)).length,
+      luis: lista.filter((l) => ehDaPessoa(l.agente, luis)).length,
+    };
+  } catch (err) {
+    console.error('[leads-report] ligações da 3C indisponíveis:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 export async function montarResumoDoDia(dia: string): Promise<string> {
-  const [agendamentos, retornos, reunioes] = await Promise.all([
-    agendamentosDoDia(dia), retornosDoDia(dia), reunioesDoDia(dia),
+  const [agendamentos, retornos, reunioes, ligacoes] = await Promise.all([
+    agendamentosDoDia(dia), retornosDoDia(dia), reunioesDoDia(dia), ligacoesDoDia(dia),
   ]);
   return [
     montarResumoAgendamentos(dia, agendamentos),
+    ...(ligacoes ? blocoLigacoes(ligacoes) : []),
     ...blocoReunioes(reunioes),
     ...blocoRetornos(retornos),
   ].join('\n');

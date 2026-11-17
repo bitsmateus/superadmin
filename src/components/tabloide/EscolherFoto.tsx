@@ -20,7 +20,7 @@ export function Modal({ titulo, onFechar, children, largura = 720 }: { titulo: s
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:p-8" onMouseDown={onFechar}>
       <div
-        className="w-full rounded-xl bg-white shadow-2xl"
+        className="nunes-janela w-full rounded-[22px] bg-white shadow-2xl"
         style={{ maxWidth: largura }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -39,9 +39,9 @@ export function Modal({ titulo, onFechar, children, largura = 720 }: { titulo: s
 export const inputCls =
   'w-full rounded-lg border border-[#E7E1D9] bg-white px-3 py-2 text-sm text-[#2A2622] outline-none focus:border-[#C1503F] focus:ring-2 focus:ring-[#C1503F]/15'
 export const btnPrimario =
-  'inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#C1503F] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#A9412F] disabled:opacity-50'
+  'nunes-btn-primario inline-flex items-center justify-center gap-1.5 rounded-full bg-[#C1503F] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#A9412F] disabled:opacity-50'
 export const btnSecundario =
-  'inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#E7E1D9] bg-white px-3.5 py-2 text-sm font-semibold text-[#2A2622] hover:bg-[#F4F1EC] disabled:opacity-50'
+  'nunes-btn-secundario inline-flex items-center justify-center gap-1.5 rounded-full border border-[#E7E1D9] bg-white px-3.5 py-2 text-sm font-semibold text-[#2A2622] hover:bg-[#F4F1EC] disabled:opacity-50'
 
 export function MiniFoto({ produto, tamanho = 56 }: { produto: ProdutoCatalogo | null; tamanho?: number }) {
   const url = produto ? fotoDoProduto(produto) : null

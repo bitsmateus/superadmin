@@ -872,10 +872,12 @@ export function MercadoNunesPage() {
   // Prévia sempre cabendo na coluna, em qualquer tela.
   React.useEffect(() => {
     const ajustar = () => {
-      const largura = Math.min(window.innerWidth - 48, 620)
-      // No desktop a prévia é fixa na tela (105px do topo + legenda): a folha inteira precisa caber na altura
+      // screen.width segura o caso em que algo alarga a página no celular: innerWidth cresce junto e a
+      // prévia, calculada em cima dele, alargava ainda mais (rolagem pro lado).
+      const largura = Math.min(Math.min(window.innerWidth, window.screen.width || Infinity) - 48, 620)
+      // No desktop a prévia é fixa na tela (120px do topo + legenda): a folha inteira precisa caber na altura
       // visível, senão o rodapé some e só dá pra ver diminuindo o zoom do navegador.
-      const alturaLivre = window.innerWidth > 900 ? window.innerHeight - 105 - 44 : Infinity
+      const alturaLivre = window.innerWidth > 900 ? window.innerHeight - 120 - 44 : Infinity
       setEscala(Math.max(0.2, Math.min(0.62, Math.max(0.28, largura / A4_W), alturaLivre / A4_H)))
     }
     ajustar()
@@ -919,13 +921,13 @@ export function MercadoNunesPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F4F1EC', color: '#2A2622' }} className="mercadonunes">
+    <div className="mercadonunes nunes-app">
       <style>{estiloFontesLocais}</style>
       <style>{estiloResponsivo}</style>
       <style>{estiloImpressao}</style>
 
       {/* Cabeçalho com a logo */}
-      <header className="tela mn-header" style={{ background: '#fff', borderBottom: '3px solid #C1503F' }}>
+      <header className="tela mn-header nunes-header">
         <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 14 }}>
           <img
             src={LOGO_SRC}
@@ -973,8 +975,8 @@ export function MercadoNunesPage() {
                   style={{
                     textAlign: 'left',
                     border: '1px solid #DED8D0',
-                    borderRadius: 10,
-                    background: '#fff',
+                    borderRadius: 16,
+                    background: 'rgba(255,255,255,0.7)',
                     padding: '10px 12px',
                     cursor: 'pointer',
                   }}
@@ -1298,7 +1300,7 @@ export function MercadoNunesPage() {
             onClick={(e) => e.stopPropagation()}
             style={{
               background: '#F4F1EC',
-              borderRadius: 14,
+              borderRadius: 22,
               width: '100%',
               maxWidth: 640,
               maxHeight: '85vh',
@@ -1614,9 +1616,9 @@ const estiloResponsivo = `
    aconteceu com muitos layouts salvos, ou rolando o formulário: a placa sumia). Fixed nunca some. */
 .mercadonunes .mn-preview-col {
   position: fixed;
-  /* 85px = altura do cabeçalho (.mn-header) + 20px de respiro — sem isso a prévia fixa cobria o
+  /* ~100px = altura do cabeçalho de vidro (.mn-header, com a margem de 12px) + 20px de respiro — sem isso a prévia fixa cobria o
      próprio cabeçalho (logo, título e botão "Layouts") por trás dela. */
-  top: 105px;
+  top: 120px;
   right: max(20px, calc((100vw - 1180px) / 2));
   z-index: 5;
 }
@@ -1675,11 +1677,12 @@ export const inputEstilo: React.CSSProperties = {
 }
 
 export const botaoPrimario: React.CSSProperties = {
+  boxShadow: '0 10px 24px -12px rgba(193, 80, 63, 0.6)',
   background: '#C1503F',
   color: '#fff',
   border: 'none',
-  borderRadius: 10,
-  padding: '12px 18px',
+  borderRadius: 999,
+  padding: '12px 20px',
   fontSize: 14,
   fontWeight: 700,
   cursor: 'pointer',
@@ -1689,8 +1692,8 @@ export const botaoSecundario: React.CSSProperties = {
   background: '#fff',
   color: '#2A2622',
   border: '1px solid #DED8D0',
-  borderRadius: 10,
-  padding: '12px 18px',
+  borderRadius: 999,
+  padding: '12px 20px',
   fontSize: 14,
   fontWeight: 600,
   cursor: 'pointer',
@@ -1700,15 +1703,15 @@ export const botaoMini: React.CSSProperties = {
   background: '#fff',
   color: '#5B534D',
   border: '1px solid #DED8D0',
-  borderRadius: 6,
-  padding: '4px 8px',
+  borderRadius: 999,
+  padding: '4px 10px',
   fontSize: 11,
   cursor: 'pointer',
 }
 
 function Card({ titulo, dica, children }: { titulo: string; dica?: string; children: React.ReactNode }) {
   return (
-    <section style={{ background: '#fff', border: '1px solid #E7E1D9', borderRadius: 12, padding: 14 }}>
+    <section className="nunes-card" style={{ padding: 16 }}>
       <h2 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6, color: '#C1503F', margin: '0 0 4px' }}>
         {titulo}
       </h2>

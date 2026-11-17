@@ -10,6 +10,7 @@ import { registerServiceWorker } from './lib/registerServiceWorker'
 import { recarregarPorVersaoNova } from './lib/versaoNova'
 import './index.css'
 import './styles/visualNovo.css'
+import './styles/mercadoNunes.css'
 
 // Aplica tema salvo ANTES do React renderizar — evita flash de tema errado.
 applyStoredTheme()

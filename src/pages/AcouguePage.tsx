@@ -29,7 +29,7 @@ import {
  * Login próprio (e-mail + senha só desta ferramenta) porque a tela mostra custo e margem.
  */
 
-const LOGO_SRC = '/mercadonunes/logo.png'
+const LOGO_SRC = '/assets/mercadonunes-logo.jpg'
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const num = (v: string) => Number(String(v).replace(/\./g, '').replace(',', '.')) || 0
 /** Mostra número pro operador sem casas sobrando (2,5 e não 2,5000). */
@@ -151,8 +151,8 @@ export function Moldura({
   largura?: number
 }) {
   return (
-    <div style={{ minHeight: '100vh', background: '#F4F1EC', color: '#2A2622' }}>
-      <header style={{ background: '#fff', borderBottom: '3px solid #C1503F', padding: '14px 20px' }}>
+    <div className="nunes-app">
+      <header className="nunes-header" style={{ padding: '14px 20px' }}>
         <div style={{ maxWidth: largura, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <img
             src={LOGO_SRC}
@@ -222,13 +222,11 @@ export function TelaLogin({
     <Moldura titulo={titulo} subtitulo={subtitulo}>
       <form
         onSubmit={enviar}
+        className="nunes-card"
         style={{
           maxWidth: 380,
           margin: '40px auto',
-          background: '#fff',
-          border: '1px solid #E7E1D9',
-          borderRadius: 12,
-          padding: 20,
+          padding: 24,
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
@@ -1259,7 +1257,7 @@ function PainelAcessos({ usuarioId, onFechar }: { usuarioId: string; onFechar: (
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 12, padding: 18, width: 'min(460px, 100%)', maxHeight: '86vh', overflowY: 'auto' }}
+        className="nunes-janela" style={{ background: '#fff', borderRadius: 22, padding: 20, width: 'min(460px, 100%)', maxHeight: '86vh', overflowY: 'auto' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
           <h2 style={{ fontSize: 15, fontWeight: 800, margin: 0, flex: 1 }}>Quem pode entrar</h2>
@@ -1319,7 +1317,7 @@ function PainelAcessos({ usuarioId, onFechar }: { usuarioId: string; onFechar: (
 
 function Card({ titulo, dica, children }: { titulo?: string; dica?: string; children: React.ReactNode }) {
   return (
-    <section style={{ background: '#fff', border: '1px solid #E7E1D9', borderRadius: 12, padding: 14 }}>
+    <section className="nunes-card" style={{ padding: 16 }}>
       {titulo && (
         <h2 style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6, color: '#C1503F', margin: '0 0 4px' }}>
           {titulo}
@@ -1411,11 +1409,12 @@ const inputCelula: React.CSSProperties = {
 }
 
 const botaoPrimario: React.CSSProperties = {
+  boxShadow: '0 10px 24px -12px rgba(193, 80, 63, 0.6)',
   background: '#C1503F',
   color: '#fff',
   border: 'none',
-  borderRadius: 10,
-  padding: '12px 18px',
+  borderRadius: 999,
+  padding: '12px 20px',
   fontSize: 14,
   fontWeight: 700,
   cursor: 'pointer',
@@ -1425,8 +1424,8 @@ const botaoSecundario: React.CSSProperties = {
   background: '#fff',
   color: '#2A2622',
   border: '1px solid #DED8D0',
-  borderRadius: 10,
-  padding: '12px 18px',
+  borderRadius: 999,
+  padding: '12px 20px',
   fontSize: 14,
   fontWeight: 600,
   cursor: 'pointer',
@@ -1436,8 +1435,8 @@ const botaoMini: React.CSSProperties = {
   background: '#fff',
   color: '#5B534D',
   border: '1px solid #DED8D0',
-  borderRadius: 6,
-  padding: '6px 10px',
+  borderRadius: 999,
+  padding: '6px 12px',
   fontSize: 12,
   fontWeight: 600,
   cursor: 'pointer',

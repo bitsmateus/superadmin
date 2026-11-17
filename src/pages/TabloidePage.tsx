@@ -244,7 +244,7 @@ function Editor() {
         </div>
       }
     >
-      <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-white p-1 text-sm font-bold shadow-sm">
+      <div className="nunes-tabs mb-4 flex gap-1 overflow-x-auto text-sm font-bold">
         {(
           [
             ['montar', 'Montar tabloide'],
@@ -275,7 +275,7 @@ function Editor() {
           </div>
 
           <div className="flex flex-col gap-3 lg:sticky lg:top-4">
-            <div className="rounded-xl bg-white p-3 shadow-sm">
+            <div className="nunes-card p-3">
               <div className="grid grid-cols-2 gap-2">
                 <button className={btnPrimario} disabled={!!ocupado} onClick={() => void exportar('png')}>
                   {ocupado === 'png' ? 'Gerando…' : '⬇ Baixar imagem'}
@@ -373,7 +373,7 @@ function LarguraDisponivel({ children }: { children: (w: number) => React.ReactN
 
 function Bloco({ titulo, dica, children, direita }: { titulo: string; dica?: string; children: React.ReactNode; direita?: React.ReactNode }) {
   return (
-    <section className="rounded-xl bg-white p-4 shadow-sm">
+    <section className="nunes-card p-5">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-base font-extrabold text-[#2A2622]">{titulo}</h2>
@@ -1134,10 +1134,10 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
   }
 
   if (lista === null) return <p className="p-6 text-center text-sm text-[#9A928B]">Carregando…</p>
-  if (!lista.length) return <p className="rounded-xl bg-white p-8 text-center text-sm text-[#7A716A]">Nenhum tabloide salvo ainda. Eles aparecem aqui quando você salva ou baixa.</p>
+  if (!lista.length) return <p className="nunes-card p-8 text-center text-sm text-[#7A716A]">Nenhum tabloide salvo ainda. Eles aparecem aqui quando você salva ou baixa.</p>
   return (
     <>
-    <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-white p-3 shadow-sm">
+    <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 nunes-card p-3">
       <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">
         <input
           type="checkbox"
@@ -1195,7 +1195,7 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
         const n = t.dados?.itens?.length ?? 0
         const ordem = marcados.indexOf(t.id)
         return (
-          <div key={t.id} className={`relative flex flex-col overflow-hidden rounded-xl bg-white shadow-sm ${ordem >= 0 ? 'ring-2 ring-[#C1503F]' : ''}`}>
+          <div key={t.id} className={`relative flex flex-col overflow-hidden nunes-card ${ordem >= 0 ? 'ring-2 ring-[#C1503F]' : ''}`}>
             <label className="absolute left-2 top-2 z-[1] flex cursor-pointer items-center gap-1 rounded-md bg-white/90 px-1.5 py-1 text-[11px] font-bold text-[#2A2622] shadow">
               <input type="checkbox" checked={ordem >= 0} onChange={() => alternar(t.id)} />
               {ordem >= 0 ? ordem + 1 : ''}
@@ -1312,7 +1312,7 @@ function Templates({ temProdutos, onUsar }: { temProdutos: boolean; onUsar: (l: 
   if (lista === null) return <p className="p-6 text-center text-sm text-[#9A928B]">Carregando…</p>
   if (!lista.length) {
     return (
-      <p className="rounded-xl bg-white p-8 text-center text-sm text-[#7A716A]">
+      <p className="nunes-card p-8 text-center text-sm text-[#7A716A]">
         Nenhum layout salvo ainda. Monte um tabloide e clique em <b>⭐ Salvar como layout</b>: ele aparece aqui para usar de novo.
       </p>
     )
@@ -1323,7 +1323,7 @@ function Templates({ temProdutos, onUsar }: { temProdutos: boolean; onUsar: (l: 
         const d = { ...DADOS_VAZIOS(), ...l.dados }
         const n = d.itens.length
         return (
-          <div key={l.id} className="flex flex-col overflow-hidden rounded-xl bg-white shadow-sm">
+          <div key={l.id} className="flex flex-col overflow-hidden nunes-card">
             <div className="flex justify-center bg-[#EDE8E1] p-3">
               <MiniaturaTabloide dados={d} largura={220} />
             </div>

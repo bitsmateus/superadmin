@@ -47,7 +47,7 @@ export function CatalogoProdutos({ removeBg }: { removeBg: boolean }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {produtos === null && <p className="col-span-full p-6 text-center text-sm text-[#9A928B]">Carregando…</p>}
         {produtos?.length === 0 && (
-          <p className="col-span-full rounded-xl bg-white p-8 text-center text-sm text-[#7A716A]">
+          <p className="col-span-full nunes-card p-8 text-center text-sm text-[#7A716A]">
             {q ? 'Nenhum produto com esse nome.' : 'O catálogo está vazio. Cadastre os produtos com foto, ou cole a lista no tabloide e ponha as fotos por lá.'}
           </p>
         )}

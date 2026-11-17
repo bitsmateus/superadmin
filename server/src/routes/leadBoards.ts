@@ -727,7 +727,7 @@ async function etiquetaEquivalente(page: string, status: string, corOrigem: stri
     [page]
   );
   await query(
-    `INSERT INTO lead_labels (field, name, color, position, page_id) VALUES ('status', $1, $2, $3, $4)`,
+    `INSERT INTO lead_labels (field, name, color, position, page_id) VALUES ('status', $1, $2, $3, $4) ON CONFLICT DO NOTHING`,
     [status, corOrigem || '#9CA3AF', (max ?? -1) + 1, page]
   );
   console.log('[espelho] etiqueta de status criada no CRM parceiro:', page, '->', status);

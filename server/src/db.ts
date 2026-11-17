@@ -741,9 +741,21 @@ END; $$`);
     SELECT ll.field, ll.name, ll.color, ll.position, lp.id
     FROM lead_labels ll
     CROSS JOIN lead_pages lp
-    WHERE ll.page_id IS NULL AND ll.field <> 'sdr'`);
+    WHERE ll.page_id IS NULL AND ll.field <> 'sdr'
+    ON CONFLICT DO NOTHING`);
   await pool.query(`DELETE FROM lead_labels
     WHERE page_id IS NULL AND field <> 'sdr' AND EXISTS (SELECT 1 FROM lead_pages)`);
+  // Etiqueta repetida (mesmo campo, mesma aba, mesmo nome): fica só a mais antiga, e daqui pra frente o banco não deixa criar
+  // outra igual (duas gravações ao mesmo tempo — espelho do closer, clique duplo — chegavam a criar a mesma etiqueta duas vezes).
+  // As leads guardam o NOME da etiqueta, então apagar a repetida não muda nenhuma lead.
+  try {
+    await pool.query(`DELETE FROM lead_labels a USING lead_labels b
+      WHERE a.field = b.field AND a.page_id IS NOT DISTINCT FROM b.page_id AND a.name = b.name
+        AND (a.created_at, a.id::text) > (b.created_at, b.id::text)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_labels_unica_idx ON lead_labels (field, COALESCE(page_id, ''), name)`);
+  } catch (err) {
+    console.error('[etiquetas] não consegui garantir etiqueta única (não bloqueia o resto):', err);
+  }
 
   await pool.query(`ALTER TABLE lead_pages ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
   // Perfil Usuário (suporte) é sempre restrito: só vê as telas e abas que o admin marcar em Permissões.

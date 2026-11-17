@@ -79,7 +79,8 @@ export const leadLabelsService = {
       const row = await api.post<LabelRow>('/api/lead-labels', {
         field: fieldToColumn(field), name: trimmed, color, page_id: field === 'sdr' ? null : pageId,
       })
-      labels = [...labels, rowToLabel(row)]
+      // A atualização em tempo real pode já ter trazido essa etiqueta antes da resposta do POST chegar: não repete.
+      if (!labels.some((l) => l.id === row.id)) labels = [...labels, rowToLabel(row)]
       notify()
     } catch (err) {
       toast.error('Falha ao criar etiqueta: ' + (err as Error).message)

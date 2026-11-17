@@ -241,6 +241,7 @@ export function ManageLabelsModal({
               className="h-8 w-8 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
             />
             <input
+              key={`${l.id}:${l.name}`}
               defaultValue={l.name}
               onBlur={(e) => {
                 const trimmed = e.target.value.trim()

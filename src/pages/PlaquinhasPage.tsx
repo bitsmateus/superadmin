@@ -174,6 +174,10 @@ export function PlaquinhasPage() {
   const [temaMassa, setTemaMassa] = React.useState('')
   const [fonteMassa, setFonteMassa] = React.useState('')
   const [faixaMassa, setFaixaMassa] = React.useState('')
+  // Sempre tem um modelo escolhido (começa no primeiro, "Oferta de/por"); null = manter o de cada uma.
+  const [modeloMassa, setModeloMassa] = React.useState<number | null>(0)
+  // Qual plaquinha aparece na prévia do editor em massa (posição dentro das selecionadas / da lista).
+  const [amostra, setAmostra] = React.useState(0)
   // null = "não mexer" (só vai no patch o que a pessoa tocou)
   const [tamanhosMassa, setTamanhosMassa] = React.useState<Partial<Record<ChaveTamanho, number>>>({})
   const [opcoesMassa, setOpcoesMassa] = React.useState<Partial<Record<ChaveOpcao, boolean>>>({})
@@ -266,12 +270,6 @@ export function PlaquinhasPage() {
     }
   }
   const idsAlvo = () => (escolhidas.length ? escolhidas : []).map((p) => p.id)
-
-  const aplicarMassa = (patch: Partial<Cartaz>, rotulo: string) => {
-    const ids = idsAlvo()
-    if (!ids.length) return toast.error('Selecione as plaquinhas que vão receber a mudança.')
-    void lote(ids, 'aplicar', patch, `${rotulo} aplicado em ${ids.length} plaquinha(s).`)
-  }
 
   // ── Impressão ──
   const imprimir = (placas: Placa[]) => {
@@ -392,153 +390,198 @@ export function PlaquinhasPage() {
           )}
         </section>
 
-        {/* 3. Editor em massa */}
-        <section style={cartao}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#5B534D', marginBottom: 8 }}>
-            ✏️ Editar em massa {escolhidas.length ? `(${escolhidas.length} selecionadas)` : '— selecione as plaquinhas acima'}
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {MODELOS.map((m) => (
-              <button key={m.nome} title={m.descricao} disabled={ocupado || !escolhidas.length} onClick={() => aplicarMassa(m.patch, m.nome)} style={{ ...botaoSecundario, padding: '9px 14px', opacity: escolhidas.length ? 1 : 0.5 }}>
-                Tudo em “{m.nome}”
-              </button>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
-            <select value={temaMassa} onChange={(e) => setTemaMassa(e.target.value)} style={{ ...inputEstilo, width: 'auto' }}>
-              <option value="">Cor…</option>
-              {TEMAS.map((t) => (
-                <option key={t.id} value={t.id}>{t.nome}</option>
-              ))}
-            </select>
-            <select value={fonteMassa} onChange={(e) => setFonteMassa(e.target.value)} style={{ ...inputEstilo, width: 'auto', maxWidth: 220 }}>
-              <option value="">Fonte…</option>
-              {FONTES.map((f) => (
-                <option key={f.id} value={f.id}>{f.nome}</option>
-              ))}
-            </select>
-            <input value={faixaMassa} onChange={(e) => setFaixaMassa(e.target.value.toUpperCase())} placeholder="Texto da faixa (ex.: OFERTA)" style={{ ...inputEstilo, width: 220 }} />
-          </div>
+        {/* 3. Editor em massa — prévia ao vivo à esquerda, opções à direita, um botão pra aplicar em todas */}
+        {(() => {
+          const alvo = escolhidas.length ? escolhidas : visiveis
+          const patch: Partial<Cartaz> = {
+            ...(modeloMassa !== null ? MODELOS[modeloMassa].patch : {}),
+            ...(temaMassa ? { temaId: temaMassa } : {}),
+            ...(fonteMassa ? { fonte: fonteMassa } : {}),
+            ...(faixaMassa ? { textoFaixa: faixaMassa, mostrarFaixa: true } : {}),
+            ...tamanhosMassa,
+            ...opcoesMassa,
+          }
+          const mudancas = Object.keys(patch).length
+          const posAmostra = Math.min(amostra, Math.max(0, alvo.length - 1))
+          const placaAmostra = alvo[posAmostra] ?? null
+          const base: Cartaz = placaAmostra ? cartazDe(placaAmostra) : { ...CARTAZ_PADRAO, subtitulo: '', ajustePreco: AJUSTE_PRECO_PADRAO }
+          // Mesma regra do servidor: "de / por" só liga onde existe preço antigo.
+          const previa: Cartaz = {
+            ...base,
+            ...patch,
+            ...(patch.mostrarDePor !== undefined ? { mostrarDePor: patch.mostrarDePor && Boolean(base.precoDe.trim()) } : {}),
+          }
+          const desfazer = () => {
+            setModeloMassa(0)
+            setTemaMassa('')
+            setFonteMassa('')
+            setFaixaMassa('')
+            setTamanhosMassa({})
+            setOpcoesMassa({})
+          }
+          return (
+            <section style={cartao}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>✏️ Editar em massa</h2>
+                <span style={{ fontSize: 13, color: '#7A716A' }}>
+                  {escolhidas.length
+                    ? `vai mudar as ${escolhidas.length} selecionadas`
+                    : `nenhuma selecionada — vai mudar as ${visiveis.length} da lista`}
+                </span>
+              </div>
 
-          <div className="plaq-massa-grid">
-            {/* Tamanhos: só entra no ajuste o que foi mexido */}
-            <div style={subcartao}>
-              <div style={subtitulo}>Tamanho das escritas</div>
-              <p style={{ fontSize: 11, color: '#9A928B', margin: '0 0 8px' }}>Só muda o que você mexer. ↺ volta pra “não mexer”.</p>
-              {TAMANHOS.map((t) => {
-                const v = tamanhosMassa[t.chave]
-                const mexido = v !== undefined
-                return (
-                  <div key={t.chave} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 70px', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: mexido ? '#2A2622' : '#9A928B' }}>{t.rotulo}</span>
-                    <input
-                      type="range"
-                      min={-6}
-                      max={t.max}
-                      step={1}
-                      value={v ?? (t.chave === 'ajustePreco' ? AJUSTE_PRECO_PADRAO : 0)}
-                      onChange={(e) => setTamanhosMassa((s) => ({ ...s, [t.chave]: Number(e.target.value) }))}
-                      style={{ opacity: mexido ? 1 : 0.4 }}
-                    />
-                    <span style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
-                      {mexido ? (
-                        <>
-                          <b>{v! > 0 ? `+${v}` : v}</b>
-                          <button
-                            type="button"
-                            title="Não mexer nesse tamanho"
-                            onClick={() => setTamanhosMassa((s) => { const n = { ...s }; delete n[t.chave]; return n })}
-                            style={{ ...botaoMini, padding: '0 6px' }}
-                          >
-                            ↺
-                          </button>
-                        </>
-                      ) : (
-                        <span style={{ color: '#9A928B' }}>não mexer</span>
-                      )}
-                    </span>
+              <div className="plaq-editor">
+                {/* Prévia ao vivo */}
+                <div className="plaq-editor-previa">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 8 }}>
+                    <button style={botaoMini} disabled={posAmostra <= 0} onClick={() => setAmostra(posAmostra - 1)} title="Ver outra plaquinha">◀</button>
+                    <span style={{ fontSize: 12, color: '#7A716A', textAlign: 'center' }}>Prévia {alvo.length ? `${posAmostra + 1} de ${alvo.length}` : ''}</span>
+                    <button style={botaoMini} disabled={posAmostra >= alvo.length - 1} onClick={() => setAmostra(posAmostra + 1)} title="Ver outra plaquinha">▶</button>
                   </div>
-                )
-              })}
-            </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <Miniatura cartaz={previa} largura={260} />
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, textAlign: 'center', marginTop: 8, lineHeight: 1.25 }}>
+                    {placaAmostra ? placaAmostra.dados.produto || placaAmostra.nome_original : 'Exemplo'}
+                  </div>
+                  <p style={{ fontSize: 11, color: '#9A928B', textAlign: 'center', margin: '4px 0 0' }}>
+                    Muda na hora conforme você edita. Só grava quando clicar em aplicar.
+                  </p>
+                </div>
 
-            {/* Liga/desliga */}
-            <div style={subcartao}>
-              <div style={subtitulo}>Mostrar no cartaz</div>
-              <p style={{ fontSize: 11, color: '#9A928B', margin: '0 0 8px' }}>“De / por” só liga nas que têm preço antigo.</p>
-              {OPCOES.map((o) => {
-                const v = opcoesMassa[o.chave]
-                return (
-                  <div key={o.chave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: v === undefined ? '#7A716A' : '#2A2622' }}>{o.rotulo}</span>
-                    <span className="plaq-tri">
-                      {([
-                        [undefined, 'Manter'],
-                        [true, 'Ligar'],
-                        [false, 'Desligar'],
-                      ] as const).map(([valor, rot]) => (
-                        <button
-                          key={rot}
-                          type="button"
-                          className={v === valor ? 'on' : ''}
-                          onClick={() =>
-                            setOpcoesMassa((s) => {
-                              const n = { ...s }
-                              if (valor === undefined) delete n[o.chave]
-                              else n[o.chave] = valor
-                              return n
-                            })
-                          }
-                        >
-                          {rot}
+                {/* Opções */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+                  <div style={subcartao}>
+                    <div style={subtitulo}>Modelo</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                      {MODELOS.map((m, i) => (
+                        <button key={m.nome} type="button" onClick={() => setModeloMassa(i)} className={`plaq-modelo${modeloMassa === i ? ' on' : ''}`}>
+                          <b>{m.nome}</b>
+                          <span>{m.descricao}</span>
                         </button>
                       ))}
-                    </span>
+                      <button type="button" onClick={() => setModeloMassa(null)} className={`plaq-modelo${modeloMassa === null ? ' on' : ''}`}>
+                        <b>Manter o de cada uma</b>
+                        <span>Não troca o modelo, só o que mexer abaixo</span>
+                      </button>
+                    </div>
                   </div>
-                )
-              })}
-            </div>
-          </div>
 
-          {(() => {
-            const patch: Partial<Cartaz> = {
-              ...(temaMassa ? { temaId: temaMassa } : {}),
-              ...(fonteMassa ? { fonte: fonteMassa } : {}),
-              ...(faixaMassa ? { textoFaixa: faixaMassa, mostrarFaixa: true } : {}),
-              ...tamanhosMassa,
-              ...opcoesMassa,
-            }
-            const mudancas = Object.keys(patch).length
-            const temAlgo = mudancas > 0
-            return (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+                  <div style={subcartao}>
+                    <div style={subtitulo}>Cor, fonte e faixa</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+                      <select value={temaMassa} onChange={(e) => setTemaMassa(e.target.value)} style={inputEstilo}>
+                        <option value="">Cor: manter</option>
+                        {TEMAS.map((t) => (
+                          <option key={t.id} value={t.id}>{t.nome}</option>
+                        ))}
+                      </select>
+                      <select value={fonteMassa} onChange={(e) => setFonteMassa(e.target.value)} style={inputEstilo}>
+                        <option value="">Fonte: manter</option>
+                        {FONTES.map((f) => (
+                          <option key={f.id} value={f.id}>{f.nome}</option>
+                        ))}
+                      </select>
+                      <input value={faixaMassa} onChange={(e) => setFaixaMassa(e.target.value.toUpperCase())} placeholder="Texto da faixa: manter" style={inputEstilo} />
+                    </div>
+                  </div>
+
+                  <div className="plaq-massa-grid" style={{ marginTop: 0 }}>
+                    <div style={subcartao}>
+                      <div style={subtitulo}>Tamanho das escritas</div>
+                      <p style={{ fontSize: 11, color: '#9A928B', margin: '0 0 8px' }}>Cinza = mantém o de cada uma. ↺ volta a manter.</p>
+                      {TAMANHOS.map((t) => {
+                        const v = tamanhosMassa[t.chave]
+                        const mexido = v !== undefined
+                        const mostrado = v ?? previa[t.chave]
+                        const cor = mexido ? '#2A2622' : '#9A928B'
+                        return (
+                          <div key={t.chave} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 58px', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: cor }}>{t.rotulo}</span>
+                            <input
+                              type="range"
+                              min={-6}
+                              max={t.max}
+                              step={1}
+                              value={mostrado}
+                              onChange={(e) => setTamanhosMassa((s) => ({ ...s, [t.chave]: Number(e.target.value) }))}
+                              style={{ opacity: mexido ? 1 : 0.4 }}
+                            />
+                            <span style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', color: cor }}>
+                              <b>{mostrado > 0 ? `+${mostrado}` : mostrado}</b>
+                              {mexido && (
+                                <button
+                                  type="button"
+                                  title="Manter o tamanho de cada uma"
+                                  onClick={() => setTamanhosMassa((s) => { const n = { ...s }; delete n[t.chave]; return n })}
+                                  style={{ ...botaoMini, padding: '0 6px' }}
+                                >
+                                  ↺
+                                </button>
+                              )}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div style={subcartao}>
+                      <div style={subtitulo}>Mostrar no cartaz</div>
+                      <p style={{ fontSize: 11, color: '#9A928B', margin: '0 0 8px' }}>“De / por” só liga nas que têm preço antigo.</p>
+                      {OPCOES.map((o) => {
+                        const v = opcoesMassa[o.chave]
+                        return (
+                          <div key={o.chave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: v === undefined ? '#7A716A' : '#2A2622' }}>{o.rotulo}</span>
+                            <span className="plaq-tri">
+                              {([
+                                [undefined, 'Manter'],
+                                [true, 'Ligar'],
+                                [false, 'Desligar'],
+                              ] as const).map(([valor, rot]) => (
+                                <button
+                                  key={rot}
+                                  type="button"
+                                  className={v === valor ? 'on' : ''}
+                                  onClick={() =>
+                                    setOpcoesMassa((s) => {
+                                      const n = { ...s }
+                                      if (valor === undefined) delete n[o.chave]
+                                      else n[o.chave] = valor
+                                      return n
+                                    })
+                                  }
+                                >
+                                  {rot}
+                                </button>
+                              ))}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="plaq-editor-acoes">
                 <button
-                  style={{ ...botaoPrimario, padding: '10px 18px', opacity: escolhidas.length && temAlgo ? 1 : 0.5 }}
-                  disabled={ocupado || !escolhidas.length || !temAlgo}
-                  onClick={() => aplicarMassa(patch, 'Ajuste')}
+                  style={{ ...botaoPrimario, padding: '13px 22px', fontSize: 15, opacity: alvo.length && mudancas ? 1 : 0.5 }}
+                  disabled={ocupado || !alvo.length || !mudancas}
+                  onClick={() => {
+                    if (!escolhidas.length && !window.confirm(`Nenhuma plaquinha selecionada. Aplicar em todas as ${alvo.length} da lista?`)) return
+                    void lote(alvo.map((p) => p.id), 'aplicar', patch, `Aplicado em ${alvo.length} plaquinha(s).`)
+                  }}
                 >
-                  Aplicar {temAlgo ? `${mudancas} mudança${mudancas > 1 ? 's' : ''} ` : ''}nas {escolhidas.length ? `${escolhidas.length} ` : ''}selecionadas
+                  ✓ Aplicar em todas as {alvo.length} {escolhidas.length ? 'selecionadas' : 'da lista'}
                 </button>
-                {temAlgo && (
-                  <button
-                    style={botaoMini}
-                    onClick={() => {
-                      setTemaMassa('')
-                      setFonteMassa('')
-                      setFaixaMassa('')
-                      setTamanhosMassa({})
-                      setOpcoesMassa({})
-                    }}
-                  >
-                    Limpar escolhas
-                  </button>
-                )}
+                <button style={botaoMini} onClick={desfazer}>Desfazer escolhas</button>
                 <span style={{ flex: 1 }} />
                 <button style={botaoMini} disabled={ocupado || !escolhidas.length} onClick={() => void excluir(idsAlvo())}>🗑 Excluir selecionadas</button>
               </div>
-            )
-          })()}
-        </section>
+            </section>
+          )
+        })()}
 
         {/* 4. Grade */}
         {lista === null ? (
@@ -812,6 +855,18 @@ const estilo = `
 .mn-plaq * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .mn-plaq .area-impressao { position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none; }
 .mn-plaq button:disabled { cursor: not-allowed; }
+.mn-plaq .plaq-editor { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+.mn-plaq .plaq-editor-previa { position: sticky; top: 16px; border: 1px solid #E7E1D9; border-radius: 18px; padding: 12px; background: rgba(255, 255, 255, 0.7); }
+@media (max-width: 860px) {
+  .mn-plaq .plaq-editor { grid-template-columns: minmax(0, 1fr); }
+  .mn-plaq .plaq-editor-previa { position: static; }
+}
+.mn-plaq .plaq-editor-acoes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; padding-top: 14px; border-top: 1px solid #E7E1D9; }
+.mn-plaq .plaq-modelo { text-align: left; border: 1px solid #DED8D0; border-radius: 14px; background: #fff; padding: 9px 12px; cursor: pointer; font-family: inherit; display: flex; flex-direction: column; gap: 2px; transition: border-color 150ms ease, box-shadow 150ms ease; }
+.mn-plaq .plaq-modelo b { font-size: 13px; color: #2A2622; }
+.mn-plaq .plaq-modelo span { font-size: 11px; color: #7A716A; line-height: 1.25; }
+.mn-plaq .plaq-modelo:hover { border-color: rgba(193, 80, 63, 0.5); }
+.mn-plaq .plaq-modelo.on { border: 2px solid #C1503F; padding: 8px 11px; background: #FCEFEC; box-shadow: 0 6px 16px -10px rgba(193, 80, 63, 0.6); }
 .mn-plaq .plaq-massa-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
 @media (max-width: 760px) { .mn-plaq .plaq-massa-grid { grid-template-columns: minmax(0, 1fr); } }
 .mn-plaq .plaq-tri { display: inline-flex; flex-shrink: 0; border-radius: 999px; padding: 2px; background: rgba(42, 38, 34, 0.06); }

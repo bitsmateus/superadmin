@@ -52,8 +52,33 @@ interface ResultadoImportacao {
 type PorFolha = 1 | 2 | 4
 type Estado = 'todas' | 'fila' | 'fora' | 'novas' | 'impressas'
 
+// Preço já sai um pouco maior nas plaquinhas em massa (cada passo = +10%). Vale pra toda plaquinha que ainda
+// não teve o tamanho do preço mexido; quem já ajustou na mão continua com o valor dela.
+const AJUSTE_PRECO_PADRAO = 3
+
 // Plaquinha importada nunca herda o texto de exemplo do cartaz padrão (subtítulo "TRADICIONAL").
-const cartazDe = (p: Placa): Cartaz => ({ ...CARTAZ_PADRAO, subtitulo: '', ...p.dados, id: p.id })
+const cartazDe = (p: Placa): Cartaz => ({ ...CARTAZ_PADRAO, subtitulo: '', ajustePreco: AJUSTE_PRECO_PADRAO, ...p.dados, id: p.id })
+
+// Tamanhos que dá pra ajustar (mesmos do gerador avulso).
+type ChaveTamanho = 'ajusteNome' | 'ajusteSubtitulo' | 'ajusteFaixa' | 'ajustePeso' | 'ajustePreco'
+const TAMANHOS: { chave: ChaveTamanho; rotulo: string; max: number }[] = [
+  { chave: 'ajusteNome', rotulo: 'Título', max: 6 },
+  { chave: 'ajusteSubtitulo', rotulo: 'Subtítulo', max: 6 },
+  { chave: 'ajusteFaixa', rotulo: 'Faixa (topo)', max: 6 },
+  { chave: 'ajustePeso', rotulo: 'Peso / tamanho', max: 6 },
+  { chave: 'ajustePreco', rotulo: 'Preço', max: 15 },
+]
+
+// Liga/desliga que dá pra mudar em massa.
+type ChaveOpcao = 'mostrarBolinhaPreco' | 'mostrarLogo' | 'logoEsquerda' | 'mostrarFaixa' | 'mostrarDePor' | 'mostrarPrecoAvulsoCaixa'
+const OPCOES: { chave: ChaveOpcao; rotulo: string }[] = [
+  { chave: 'mostrarBolinhaPreco', rotulo: 'Círculo amarelo atrás do preço' },
+  { chave: 'mostrarFaixa', rotulo: 'Faixa no topo' },
+  { chave: 'mostrarDePor', rotulo: '“De / por” (preço riscado)' },
+  { chave: 'mostrarLogo', rotulo: 'Logo no cartaz' },
+  { chave: 'logoEsquerda', rotulo: 'Logo à esquerda' },
+  { chave: 'mostrarPrecoAvulsoCaixa', rotulo: 'Bloco avulso / caixa' },
+]
 const dataCurta = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 const pedacos = <T,>(lista: T[], n: number): T[][] => {
   const out: T[][] = []
@@ -149,6 +174,9 @@ export function PlaquinhasPage() {
   const [temaMassa, setTemaMassa] = React.useState('')
   const [fonteMassa, setFonteMassa] = React.useState('')
   const [faixaMassa, setFaixaMassa] = React.useState('')
+  // null = "não mexer" (só vai no patch o que a pessoa tocou)
+  const [tamanhosMassa, setTamanhosMassa] = React.useState<Partial<Record<ChaveTamanho, number>>>({})
+  const [opcoesMassa, setOpcoesMassa] = React.useState<Partial<Record<ChaveOpcao, boolean>>>({})
   // Impressão
   const [porFolha, setPorFolha] = React.useState<PorFolha>(4)
   const [corte, setCorte] = React.useState(true)
@@ -212,7 +240,7 @@ export function PlaquinhasPage() {
     setResultado(null)
     try {
       const pdf = await lerComoDataUrl(f)
-      const r = await api.post<ResultadoImportacao>(`${BASE}/importar`, { nome: f.name, pdf, padrao: MODELOS[modeloInicial].patch })
+      const r = await api.post<ResultadoImportacao>(`${BASE}/importar`, { nome: f.name, pdf, padrao: { ajustePreco: AJUSTE_PRECO_PADRAO, ...MODELOS[modeloInicial].patch } })
       setResultado(r)
       await carregar()
       toast.success(`${r.criadas} plaquinha(s) nova(s)${r.atualizadas ? ` e ${r.atualizadas} atualizada(s)` : ''}.`)
@@ -286,12 +314,12 @@ export function PlaquinhasPage() {
   const idx = vendo ? visiveis.findIndex((p) => p.id === vendo.id) : -1
 
   return (
-    <div className="mn-plaq" style={{ minHeight: '100vh', background: '#F4F1EC', color: '#2A2622', paddingBottom: 90 }}>
+    <div className="mn-plaq nunes-app" style={{ paddingBottom: 90 }}>
       <style>{estiloFontesLocais}</style>
       <style>{estilo}</style>
       <style>{`@media print { @page { size: A4 ${porFolha === 2 ? 'landscape' : 'portrait'}; margin: 0; } }`}</style>
 
-      <header className="tela" style={{ background: '#fff', borderBottom: '3px solid #C1503F', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <header className="tela nunes-header" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <img src="/assets/mercadonunes-logo.jpg" alt="Nunes" style={{ height: 44, objectFit: 'contain' }} />
         <div style={{ flex: 1, minWidth: 220 }}>
           <h1 style={{ fontSize: 20, margin: 0, color: '#C1503F' }}>Plaquinhas em massa</h1>
@@ -390,20 +418,126 @@ export function PlaquinhasPage() {
               ))}
             </select>
             <input value={faixaMassa} onChange={(e) => setFaixaMassa(e.target.value.toUpperCase())} placeholder="Texto da faixa (ex.: OFERTA)" style={{ ...inputEstilo, width: 220 }} />
-            <button
-              style={{ ...botaoPrimario, padding: '10px 16px', opacity: escolhidas.length && (temaMassa || fonteMassa || faixaMassa) ? 1 : 0.5 }}
-              disabled={ocupado || !escolhidas.length || !(temaMassa || fonteMassa || faixaMassa)}
-              onClick={() =>
-                aplicarMassa(
-                  { ...(temaMassa ? { temaId: temaMassa } : {}), ...(fonteMassa ? { fonte: fonteMassa } : {}), ...(faixaMassa ? { textoFaixa: faixaMassa, mostrarFaixa: true } : {}) },
-                  'Ajuste',
-                )
-              }
-            >
-              Aplicar nas selecionadas
-            </button>
-            <button style={botaoMini} disabled={ocupado || !escolhidas.length} onClick={() => void excluir(idsAlvo())}>🗑 Excluir selecionadas</button>
           </div>
+
+          <div className="plaq-massa-grid">
+            {/* Tamanhos: só entra no ajuste o que foi mexido */}
+            <div style={subcartao}>
+              <div style={subtitulo}>Tamanho das escritas</div>
+              <p style={{ fontSize: 11, color: '#9A928B', margin: '0 0 8px' }}>Só muda o que você mexer. ↺ volta pra “não mexer”.</p>
+              {TAMANHOS.map((t) => {
+                const v = tamanhosMassa[t.chave]
+                const mexido = v !== undefined
+                return (
+                  <div key={t.chave} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 70px', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: mexido ? '#2A2622' : '#9A928B' }}>{t.rotulo}</span>
+                    <input
+                      type="range"
+                      min={-6}
+                      max={t.max}
+                      step={1}
+                      value={v ?? (t.chave === 'ajustePreco' ? AJUSTE_PRECO_PADRAO : 0)}
+                      onChange={(e) => setTamanhosMassa((s) => ({ ...s, [t.chave]: Number(e.target.value) }))}
+                      style={{ opacity: mexido ? 1 : 0.4 }}
+                    />
+                    <span style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                      {mexido ? (
+                        <>
+                          <b>{v! > 0 ? `+${v}` : v}</b>
+                          <button
+                            type="button"
+                            title="Não mexer nesse tamanho"
+                            onClick={() => setTamanhosMassa((s) => { const n = { ...s }; delete n[t.chave]; return n })}
+                            style={{ ...botaoMini, padding: '0 6px' }}
+                          >
+                            ↺
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ color: '#9A928B' }}>não mexer</span>
+                      )}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Liga/desliga */}
+            <div style={subcartao}>
+              <div style={subtitulo}>Mostrar no cartaz</div>
+              <p style={{ fontSize: 11, color: '#9A928B', margin: '0 0 8px' }}>“De / por” só liga nas que têm preço antigo.</p>
+              {OPCOES.map((o) => {
+                const v = opcoesMassa[o.chave]
+                return (
+                  <div key={o.chave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: v === undefined ? '#7A716A' : '#2A2622' }}>{o.rotulo}</span>
+                    <span className="plaq-tri">
+                      {([
+                        [undefined, 'Manter'],
+                        [true, 'Ligar'],
+                        [false, 'Desligar'],
+                      ] as const).map(([valor, rot]) => (
+                        <button
+                          key={rot}
+                          type="button"
+                          className={v === valor ? 'on' : ''}
+                          onClick={() =>
+                            setOpcoesMassa((s) => {
+                              const n = { ...s }
+                              if (valor === undefined) delete n[o.chave]
+                              else n[o.chave] = valor
+                              return n
+                            })
+                          }
+                        >
+                          {rot}
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {(() => {
+            const patch: Partial<Cartaz> = {
+              ...(temaMassa ? { temaId: temaMassa } : {}),
+              ...(fonteMassa ? { fonte: fonteMassa } : {}),
+              ...(faixaMassa ? { textoFaixa: faixaMassa, mostrarFaixa: true } : {}),
+              ...tamanhosMassa,
+              ...opcoesMassa,
+            }
+            const mudancas = Object.keys(patch).length
+            const temAlgo = mudancas > 0
+            return (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+                <button
+                  style={{ ...botaoPrimario, padding: '10px 18px', opacity: escolhidas.length && temAlgo ? 1 : 0.5 }}
+                  disabled={ocupado || !escolhidas.length || !temAlgo}
+                  onClick={() => aplicarMassa(patch, 'Ajuste')}
+                >
+                  Aplicar {temAlgo ? `${mudancas} mudança${mudancas > 1 ? 's' : ''} ` : ''}nas {escolhidas.length ? `${escolhidas.length} ` : ''}selecionadas
+                </button>
+                {temAlgo && (
+                  <button
+                    style={botaoMini}
+                    onClick={() => {
+                      setTemaMassa('')
+                      setFonteMassa('')
+                      setFaixaMassa('')
+                      setTamanhosMassa({})
+                      setOpcoesMassa({})
+                    }}
+                  >
+                    Limpar escolhas
+                  </button>
+                )}
+                <span style={{ flex: 1 }} />
+                <button style={botaoMini} disabled={ocupado || !escolhidas.length} onClick={() => void excluir(idsAlvo())}>🗑 Excluir selecionadas</button>
+              </div>
+            )
+          })()}
         </section>
 
         {/* 4. Grade */}
@@ -585,15 +719,13 @@ function Visualizador({
           </div>
           <div style={{ fontSize: 11, color: '#9A928B' }}>Original no relatório: {placa.nome_original}{placa.grupo ? ` · ${placa.grupo}` : ''}</div>
           <Campo rotulo="Produto"><input value={c.produto} onChange={(e) => set('produto', e.target.value.toUpperCase())} style={inputEstilo} /></Campo>
+          <Campo rotulo="Subtítulo (opcional)"><input value={c.subtitulo} onChange={(e) => set('subtitulo', e.target.value.toUpperCase())} style={inputEstilo} placeholder="ex.: a marca" /></Campo>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <Campo rotulo="Peso"><input value={c.peso} onChange={(e) => set('peso', e.target.value.toUpperCase())} style={inputEstilo} /></Campo>
             <Campo rotulo="A partir de (un)"><input value={c.minUnidades} onChange={(e) => set('minUnidades', e.target.value)} style={inputEstilo} placeholder="vazio = não mostra" /></Campo>
             <Campo rotulo="Preço (R$)"><input value={c.preco} onChange={(e) => set('preco', e.target.value)} style={inputEstilo} /></Campo>
             <Campo rotulo="Preço de (riscado)"><input value={c.precoDe} onChange={(e) => set('precoDe', e.target.value)} style={inputEstilo} /></Campo>
           </div>
-          <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="checkbox" checked={c.mostrarDePor} onChange={(e) => set('mostrarDePor', e.target.checked)} /> Mostrar “de / por”
-          </label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <Campo rotulo="Faixa"><input value={c.textoFaixa} onChange={(e) => set('textoFaixa', e.target.value.toUpperCase())} style={inputEstilo} /></Campo>
             <Campo rotulo="Cor">
@@ -603,6 +735,33 @@ function Visualizador({
                 ))}
               </select>
             </Campo>
+          </div>
+          <Campo rotulo="Fonte">
+            <select value={c.fonte} onChange={(e) => set('fonte', e.target.value)} style={inputEstilo}>
+              {FONTES.map((f) => (
+                <option key={f.id} value={f.id}>{f.nome}</option>
+              ))}
+            </select>
+          </Campo>
+          <div style={subcartao}>
+            <div style={subtitulo}>Mostrar no cartaz</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '2px 10px' }}>
+              {OPCOES.map((o) => (
+                <label key={o.chave} style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={Boolean(c[o.chave])} onChange={(e) => set(o.chave, e.target.checked)} /> {o.rotulo}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div style={subcartao}>
+            <div style={subtitulo}>Tamanho das escritas</div>
+            {TAMANHOS.map((t) => (
+              <div key={t.chave} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 34px', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#5B534D' }}>{t.rotulo}</span>
+                <input type="range" min={-6} max={t.max} step={1} value={c[t.chave]} onChange={(e) => set(t.chave, Number(e.target.value))} />
+                <span style={{ fontSize: 12, textAlign: 'right' }}>{c[t.chave] > 0 ? `+${c[t.chave]}` : c[t.chave]}</span>
+              </div>
+            ))}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {MODELOS.map((m) => (
@@ -634,14 +793,32 @@ function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode
   )
 }
 
-const cartao: React.CSSProperties = { background: '#fff', borderRadius: 12, padding: 14, boxShadow: '0 1px 3px rgba(0,0,0,.08)' }
-const barraBtn: React.CSSProperties = { background: '#4A433D', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
+// Cartão de vidro, igual ao das outras telas do Nunes (ver styles/mercadoNunes.css).
+const cartao: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.78)',
+  WebkitBackdropFilter: 'blur(22px) saturate(150%)',
+  backdropFilter: 'blur(22px) saturate(150%)',
+  border: '1px solid rgba(255,255,255,0.8)',
+  borderRadius: 22,
+  padding: 16,
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.8), 0 24px 50px -32px rgba(60,40,25,0.4)',
+}
+const barraBtn: React.CSSProperties = { background: '#4A433D', color: '#fff', border: 'none', borderRadius: 999, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
+const subcartao: React.CSSProperties = { border: '1px solid #E7E1D9', borderRadius: 16, padding: 12, background: 'rgba(255,255,255,0.6)' }
+const subtitulo: React.CSSProperties = { fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6, color: '#C1503F', marginBottom: 4 }
 const selo = (bg: string, cor: string): React.CSSProperties => ({ background: bg, color: cor, borderRadius: 6, padding: '2px 6px', fontSize: 10, fontWeight: 700 })
 
 const estilo = `
 .mn-plaq * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .mn-plaq .area-impressao { position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none; }
 .mn-plaq button:disabled { cursor: not-allowed; }
+.mn-plaq .plaq-massa-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+@media (max-width: 760px) { .mn-plaq .plaq-massa-grid { grid-template-columns: minmax(0, 1fr); } }
+.mn-plaq .plaq-tri { display: inline-flex; flex-shrink: 0; border-radius: 999px; padding: 2px; background: rgba(42, 38, 34, 0.06); }
+.mn-plaq .plaq-tri button { border: none; background: none; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: #7A716A; cursor: pointer; font-family: inherit; }
+.mn-plaq .plaq-tri button.on { background: #fff; color: #2A2622; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.mn-plaq .plaq-tri button.on:last-child { color: #B42318; }
+.mn-plaq .plaq-tri button.on:nth-child(2) { color: #C1503F; }
 @media print {
   body > *:not(#root) { display: none !important; }
   .mn-plaq .tela { display: none !important; }

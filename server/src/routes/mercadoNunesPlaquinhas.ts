@@ -59,6 +59,9 @@ export async function mercadoNunesPlaquinhasRoutes(app: FastifyInstance) {
     const origem = String(req.body?.nome ?? '').slice(0, 200);
     let criadas = 0;
     let atualizadas = 0;
+    // Ids que esta importação mexeu — a tela usa pra selecionar/excluir "as desta importação".
+    const idsCriadas: string[] = [];
+    const idsAtualizadas: string[] = [];
     await withTransaction(async (client) => {
       for (const i of lido.itens) {
         // subtitulo vazio: o padrão do cartaz traz um texto de exemplo ("TRADICIONAL") que não pode vazar pra plaquinha.
@@ -75,13 +78,15 @@ export async function mercadoNunesPlaquinhasRoutes(app: FastifyInstance) {
             [rows[0].id, JSON.stringify(dados), i.grupo, i.nomeOriginal, i.ean, i.inicio, i.fim, origem, mudouPreco],
           );
           atualizadas++;
+          idsAtualizadas.push(rows[0].id);
         } else {
-          await client.query(
+          const novo = await client.query<{ id: string }>(
             `INSERT INTO mn_plaquinhas (produto_id, ean, grupo, nome_original, inicio, fim, dados, origem)
-             VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8) RETURNING id`,
             [i.produtoId, i.ean, i.grupo, i.nomeOriginal, i.inicio, i.fim, JSON.stringify({ ...novos, ...padrao, mostrarDePor: padrao.mostrarDePor === false ? false : novos.mostrarDePor }), origem],
           );
           criadas++;
+          if (novo.rows[0]) idsCriadas.push(novo.rows[0].id);
         }
       }
     });
@@ -93,6 +98,8 @@ export async function mercadoNunesPlaquinhasRoutes(app: FastifyInstance) {
       inativos: lido.inativos,
       vencidos: lido.vencidos,
       repetidos: lido.repetidos,
+      idsCriadas,
+      idsAtualizadas,
     };
   });
 

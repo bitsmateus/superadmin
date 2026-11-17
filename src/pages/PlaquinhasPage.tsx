@@ -47,6 +47,9 @@ interface ResultadoImportacao {
   inativos: number
   vencidos: number
   repetidos: number
+  // Servidores antigos não mandam — por isso opcionais.
+  idsCriadas?: string[]
+  idsAtualizadas?: string[]
 }
 
 type PorFolha = 1 | 2 | 4
@@ -310,6 +313,10 @@ export function PlaquinhasPage() {
   }
 
   const idx = vendo ? visiveis.findIndex((p) => p.id === vendo.id) : -1
+  // Barra de baixo: a seleção manda; sem seleção, "fila" usa a lista e "imprimir" usa a fila.
+  const alvoFila = escolhidas.length ? escolhidas : visiveis
+  const alvoImpressao = escolhidas.length ? escolhidas : naFila
+  const folhas = Math.ceil(alvoImpressao.length / porFolha)
 
   return (
     <div className="mn-plaq nunes-app" style={{ paddingBottom: 90 }}>
@@ -358,6 +365,25 @@ export function PlaquinhasPage() {
               {resultado.inativos > 0 && <> {resultado.inativos} inativo(s) ignorado(s).</>}
               {resultado.vencidos > 0 && <> {resultado.vencidos} promoção(ões) vencida(s) ignorada(s).</>}
               {resultado.repetidos > 0 && <> {resultado.repetidos} repetido(s) no arquivo.</>}
+              {(() => {
+                // Só as que ainda existem (alguma pode já ter sido excluída depois).
+                const existe = new Set((lista ?? []).map((p) => p.id))
+                const novas = (resultado.idsCriadas ?? []).filter((id) => existe.has(id))
+                const todas = [...novas, ...(resultado.idsAtualizadas ?? []).filter((id) => existe.has(id))]
+                if (!todas.length) return null
+                return (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button style={botaoMini} onClick={() => setSelecionadas(new Set(todas))}>
+                      ☑ Selecionar {todas.length > 1 ? `as ${todas.length}` : 'a 1'} desta importação
+                    </button>
+                    {novas.length > 0 && (
+                      <button style={botaoExcluir} disabled={ocupado} onClick={() => void excluir(novas)}>
+                        🗑 Excluir {novas.length > 1 ? `as ${novas.length} novas` : 'a 1 nova'} desta importação
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           )}
         </section>
@@ -386,7 +412,12 @@ export function PlaquinhasPage() {
             {escolhidas.length ? `${escolhidas.length} selecionada(s) · ` : ''}{lista?.length ?? 0} no total
           </span>
           {escolhidas.length > 0 && (
-            <button style={botaoMini} onClick={() => setSelecionadas(new Set())}>Limpar seleção</button>
+            <>
+              <button style={botaoMini} onClick={() => setSelecionadas(new Set())}>Limpar seleção</button>
+              <button style={{ ...botaoExcluir, marginLeft: 'auto' }} disabled={ocupado} onClick={() => void excluir(idsAlvo())}>
+                🗑 Excluir {escolhidas.length} selecionada{escolhidas.length > 1 ? 's' : ''}
+              </button>
+            </>
           )}
         </section>
 
@@ -577,7 +608,11 @@ export function PlaquinhasPage() {
                 </button>
                 <button style={botaoMini} onClick={desfazer}>Desfazer escolhas</button>
                 <span style={{ flex: 1 }} />
-                <button style={botaoMini} disabled={ocupado || !escolhidas.length} onClick={() => void excluir(idsAlvo())}>🗑 Excluir selecionadas</button>
+                {escolhidas.length > 0 && (
+                  <button style={botaoExcluir} disabled={ocupado} onClick={() => void excluir(idsAlvo())}>
+                    🗑 Excluir as {escolhidas.length} selecionadas
+                  </button>
+                )}
               </div>
             </section>
           )
@@ -616,6 +651,9 @@ export function PlaquinhasPage() {
                   <button style={{ ...botaoMini, flex: 1 }} disabled={ocupado} onClick={() => void lote([p.id], p.na_fila ? 'tirar_fila' : 'fila')}>
                     {p.na_fila ? '− Fila' : '+ Fila'}
                   </button>
+                  <button style={{ ...botaoMini, color: '#B42318' }} disabled={ocupado} title="Excluir esta plaquinha" onClick={() => void excluir([p.id])}>
+                    🗑
+                  </button>
                 </div>
               </div>
             ))}
@@ -626,8 +664,14 @@ export function PlaquinhasPage() {
       {/* Barra fixa: fila + impressão */}
       <div className="tela" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#2A2622', color: '#fff', padding: '10px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', zIndex: 20 }}>
         <b style={{ fontSize: 14 }}>🖨 Fila: {naFila.length}</b>
-        <button style={barraBtn} disabled={ocupado || !escolhidas.length} onClick={() => void lote(idsAlvo(), 'fila', undefined, 'Adicionadas à fila.')}>+ Selecionadas ({escolhidas.length})</button>
-        <button style={barraBtn} disabled={ocupado || !visiveis.length} onClick={() => void lote(visiveis.map((p) => p.id), 'fila', undefined, `${visiveis.length} adicionadas à fila.`)}>+ Todas as {visiveis.length} da lista</button>
+        {/* Um botão só: com seleção, põe as selecionadas; sem seleção, põe todas as da lista. */}
+        <button
+          style={barraBtn}
+          disabled={ocupado || !alvoFila.length}
+          onClick={() => void lote(alvoFila.map((p) => p.id), 'fila', undefined, `${alvoFila.length} adicionada(s) à fila.`)}
+        >
+          + Pôr na fila {escolhidas.length ? `as ${escolhidas.length} selecionadas` : `as ${visiveis.length} da lista`}
+        </button>
         <button style={barraBtn} disabled={ocupado || !naFila.length} onClick={() => void lote(naFila.map((p) => p.id), 'tirar_fila', undefined, 'Fila limpa (as plaquinhas continuam salvas).')}>Limpar fila</button>
         <span style={{ flex: 1 }} />
         <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -643,12 +687,10 @@ export function PlaquinhasPage() {
             <input type="checkbox" checked={corte} onChange={(e) => setCorte(e.target.checked)} /> linhas de corte
           </label>
         )}
-        <button style={{ ...botaoPrimario, padding: '9px 14px' }} disabled={!naFila.length} onClick={() => imprimir(naFila)}>
-          Imprimir fila ({naFila.length} → {Math.ceil(naFila.length / porFolha)} folha{Math.ceil(naFila.length / porFolha) !== 1 ? 's' : ''})
+        {/* Um botão só: com seleção, imprime as selecionadas; sem seleção, imprime a fila. */}
+        <button style={{ ...botaoPrimario, padding: '9px 16px' }} disabled={!alvoImpressao.length} onClick={() => imprimir(alvoImpressao)}>
+          🖨 Imprimir {escolhidas.length ? `as ${escolhidas.length} selecionadas` : `a fila (${naFila.length})`} → {folhas} folha{folhas !== 1 ? 's' : ''}
         </button>
-        {escolhidas.length > 0 && (
-          <button style={{ ...barraBtn, background: '#fff', color: '#2A2622' }} onClick={() => imprimir(escolhidas)}>Imprimir só as {escolhidas.length} selecionadas</button>
-        )}
       </div>
 
       {/* Visualizador / edição de uma */}
@@ -847,6 +889,16 @@ const cartao: React.CSSProperties = {
   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.8), 0 24px 50px -32px rgba(60,40,25,0.4)',
 }
 const barraBtn: React.CSSProperties = { background: '#4A433D', color: '#fff', border: 'none', borderRadius: 999, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
+const botaoExcluir: React.CSSProperties = {
+  background: '#fff',
+  color: '#B42318',
+  border: '1px solid #F2C4BE',
+  borderRadius: 999,
+  padding: '7px 14px',
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
+}
 const subcartao: React.CSSProperties = { border: '1px solid #E7E1D9', borderRadius: 16, padding: 12, background: 'rgba(255,255,255,0.6)' }
 const subtitulo: React.CSSProperties = { fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6, color: '#C1503F', marginBottom: 4 }
 const selo = (bg: string, cor: string): React.CSSProperties => ({ background: bg, color: cor, borderRadius: 6, padding: '2px 6px', fontSize: 10, fontWeight: 700 })

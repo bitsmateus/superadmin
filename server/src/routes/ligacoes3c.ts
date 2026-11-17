@@ -157,6 +157,16 @@ export async function ligacoes3cRoutes(app: FastifyInstance) {
     },
   );
 
+  /** Admin: manda o resumo de hoje (agendamentos, ligações, reuniões, retornos) no grupo LEADS agora. */
+  app.post('/api/leads/resumo-hoje/enviar', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { role } = req.user as { role?: string };
+    if (role !== 'admin') return reply.status(403).send({ message: 'Só admin pode enviar o resumo.' });
+    const { enviarResumoAgora, hojeEmSaoPaulo } = await import('../jobs/leadsDailyReport.js');
+    const r = await enviarResumoAgora(hojeEmSaoPaulo());
+    if ('motivo' in r) return reply.status(502).send({ message: r.motivo });
+    return { ok: true };
+  });
+
   /** O que o dono da aba está fazendo no discador agora (null = não está logado). */
   app.get<{ Querystring: { pagina?: string } }>('/api/ligacoes-3c/agora', { onRequest: [app.authenticate] }, async (req, reply) => {
     const quem = await donoDaPagina(req, reply, req.query.pagina);

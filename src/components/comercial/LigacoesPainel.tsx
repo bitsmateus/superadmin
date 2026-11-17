@@ -1,9 +1,11 @@
 import * as React from 'react'
-import { Download, Pause, Phone, PhoneCall, Play, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
+import { Download, Pause, Phone, PhoneCall, Play, RefreshCw, Send } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { api } from '@/services/api'
+import { useAuth } from '@/hooks/useAuth'
 import { downloadCsv } from '@/lib/csv'
 import { cn } from '@/lib/utils'
 
@@ -277,6 +279,20 @@ export function LigacoesPainel({ pagina, pessoa }: { pagina: string; pessoa?: st
   }, [pagina, incluiHoje, erro])
 
   const nome = dados?.pessoa || pessoa || ''
+  const { profile } = useAuth()
+  const [enviando, setEnviando] = React.useState(false)
+  const enviarResumo = async () => {
+    if (!window.confirm('Enviar agora o resumo de hoje no grupo LEADS do WhatsApp?')) return
+    setEnviando(true)
+    try {
+      await api.post('/api/leads/resumo-hoje/enviar', {})
+      toast.success('Resumo de hoje enviado no grupo LEADS.')
+    } catch (e) {
+      toast.error((e as Error).message || 'Não deu pra enviar o resumo.')
+    } finally {
+      setEnviando(false)
+    }
+  }
   const resumo = dados?.porAgente[0]
 
   const exportar = () => {
@@ -336,6 +352,11 @@ export function LigacoesPainel({ pagina, pessoa }: { pagina: string; pessoa?: st
           <Button variant="ghost" size="sm" onClick={() => void carregar(true)} loading={carregando} leftIcon={<RefreshCw className="h-3.5 w-3.5" />}>
             Atualizar
           </Button>
+          {profile?.role === 'admin' && (
+            <Button variant="secondary" size="sm" onClick={() => void enviarResumo()} loading={enviando} leftIcon={<Send className="h-3.5 w-3.5" />}>
+              Enviar resumo no grupo
+            </Button>
+          )}
           {dados && dados.totais.chamadas > 0 && (
             <Button variant="secondary" size="sm" onClick={exportar} leftIcon={<Download className="h-3.5 w-3.5" />}>
               CSV

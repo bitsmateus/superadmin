@@ -165,12 +165,30 @@ export async function montarResumoDoDia(dia: string): Promise<string> {
   ].join('\n');
 }
 
-async function enviar(dia: string): Promise<void> {
+async function conexaoDoGrupo() {
   const row = await queryOne<{ leads_group: Record<string, unknown> | null }>('SELECT leads_group FROM settings WHERE id = true');
   const g = (row?.leads_group ?? {}) as Record<string, unknown>;
   const conexao = { apiId: String(g.apiId ?? ''), token: String(g.token ?? ''), baseUrl: String(g.baseUrl ?? '') };
   const grupo = String(g.groupId ?? '');
-  if (!conexao.apiId || !conexao.token || !grupo) return;
+  return conexao.apiId && conexao.token && grupo ? { conexao, grupo } : null;
+}
+
+/**
+ * Envio na mão (botão de admin no painel de Ligações): manda o resumo do dia AGORA, fora do horário. Não mexe no
+ * traffic_report_log, então o envio automático das 19h continua igual.
+ */
+export async function enviarResumoAgora(dia: string): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const destino = await conexaoDoGrupo();
+  if (!destino) return { ok: false, motivo: 'O grupo LEADS não está configurado (settings.leads_group).' };
+  const res = await sendToGroupWith(destino.conexao, destino.grupo, await montarResumoDoDia(dia), `resumo-ag-manual-${Date.now()}`);
+  if (!res.ok) return { ok: false, motivo: String(res.reason ?? res.status ?? res.detail ?? 'falha no envio') };
+  return { ok: true };
+}
+
+async function enviar(dia: string): Promise<void> {
+  const destino = await conexaoDoGrupo();
+  if (!destino) return;
+  const { conexao, grupo } = destino;
 
   const reservou = await query(
     `INSERT INTO traffic_report_log (dia, kind) VALUES ($1::date, $2) ON CONFLICT DO NOTHING RETURNING dia`, [dia, KIND]);
@@ -185,6 +203,10 @@ async function enviar(dia: string): Promise<void> {
     console.error('[leads-report] erro', err instanceof Error ? err.message : err);
     await query(`DELETE FROM traffic_report_log WHERE dia = $1::date AND kind = $2`, [dia, KIND]);
   }
+}
+
+export function hojeEmSaoPaulo(): string {
+  return spAgora().dia;
 }
 
 export function startLeadsDailyReport(): void {

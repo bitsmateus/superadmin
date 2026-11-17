@@ -125,6 +125,8 @@ export const tabloideApi = {
     ),
   publicar: (p: {
     dados: DadosTabloide
+    /** Feed com vários tabloides: vira um único carrossel (até 10 imagens). */
+    dados_lista?: DadosTabloide[]
     formato: 'feed' | 'story' | 'reels'
     legenda: string
     agendado_para: string | null

@@ -529,6 +529,8 @@ ${lista}`;
   app.post<{
     Body: {
       dados?: Partial<DadosTabloide>;
+      /** Carrossel de vários tabloides (só feed): as páginas de cada um, na ordem, viram UM post (até 10 imagens). */
+      dados_lista?: Partial<DadosTabloide>[];
       formato?: 'feed' | 'story' | 'reels';
       legenda?: string;
       agendado_para?: string | null;
@@ -556,10 +558,27 @@ ${lista}`;
       return reply.status(400).send({ message: 'A Meta só baixa mídia de endereço https público (configure SOCIAL_MIDIA_BASE_URL no servidor).' });
     }
 
-    const dados = await prepararDados(b.dados);
+    const lista = Array.isArray(b.dados_lista) ? b.dados_lista.slice(0, 10) : [];
+    if (lista.length > 1 && formato !== 'feed') return reply.status(400).send({ message: 'Carrossel de vários tabloides só no feed.' });
+    const dados = await prepararDados(lista.length ? lista[0] : b.dados);
     if (!dados.itens.length) return reply.status(400).send({ message: 'Coloque pelo menos um produto.' });
     const anexos: { id: string; name: string; type: string; size: number; dataUrl: string }[] = [];
-    if (formato === 'reels') {
+    if (lista.length > 1) {
+      const logo = await logoDataUrl();
+      const png: Buffer[] = [];
+      for (const bruto of lista) {
+        const d = await prepararDados(bruto);
+        if (!d.itens.length) return reply.status(400).send({ message: 'Tem tabloide sem produto na seleção.' });
+        png.push(...(await renderizarImagens({ ...d, formato: 'feed' }, logo)));
+      }
+      if (png.length > 10) {
+        return reply.status(400).send({ message: `O carrossel do Instagram aceita até 10 imagens e a seleção tem ${png.length}. Selecione menos tabloides.` });
+      }
+      for (const [i, img] of png.entries()) {
+        const jpg = await sharp(img).jpeg({ quality: 92 }).toBuffer();
+        anexos.push({ id: crypto.randomUUID(), name: `${nomeArquivo(dados)}-carrossel-${i + 1}.jpg`, type: 'image/jpeg', size: jpg.length, dataUrl: `data:image/jpeg;base64,${jpg.toString('base64')}` });
+      }
+    } else if (formato === 'reels') {
       const job = b.video_id ? videos.get(b.video_id) : undefined;
       if (!job?.arquivo) return reply.status(400).send({ message: 'Gere o vídeo antes de publicar o Reels.' });
       anexos.push({ id: crypto.randomUUID(), name: job.nome, type: 'video/mp4', size: job.arquivo.length, dataUrl: `data:video/mp4;base64,${job.arquivo.toString('base64')}` });
@@ -572,7 +591,10 @@ ${lista}`;
       }
     }
     const legenda = texto(b.legenda, 2200);
-    const titulo = `Tabloide: ${dados.titulo || MODELOS.find((m) => m.id === dados.modeloId)?.tituloPadrao}${dados.validade ? ` (${dados.validade})` : ''}`;
+    const titulo =
+      lista.length > 1
+        ? `Carrossel de ${lista.length} tabloides: ${dados.titulo || MODELOS.find((m) => m.id === dados.modeloId)?.tituloPadrao}…`
+        : `Tabloide: ${dados.titulo || MODELOS.find((m) => m.id === dados.modeloId)?.tituloPadrao}${dados.validade ? ` (${dados.validade})` : ''}`;
     const producaoId = await withTransaction(async (client) => {
       const { rows } = await client.query<{ id: string }>(
         `INSERT INTO gc_social_producao (gc_cliente_id, titulo, descricao, status, anexos)

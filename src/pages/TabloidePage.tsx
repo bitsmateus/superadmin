@@ -27,6 +27,7 @@ import { Moldura } from '@/pages/AcouguePage'
 import { MiniaturaTabloide, PreviaTabloide } from '@/components/tabloide/Previa'
 import { EscolherFoto, Modal, XADREZ, btnPrimario, btnSecundario, inputCls } from '@/components/tabloide/EscolherFoto'
 import { CatalogoProdutos } from '@/components/tabloide/CatalogoProdutos'
+import { ModalBaixarEmMassa, ModalPostarEmMassa } from '@/components/tabloide/EmMassa'
 import { ModalLegenda, ModalPublicar, ModalVideo, type VideoPronto } from '@/components/tabloide/Saidas'
 import {
   DADOS_VAZIOS,
@@ -1112,6 +1113,12 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
   }, [])
   React.useEffect(carregar, [carregar])
 
+  // Seleção em massa: guarda na ORDEM do clique (é a ordem das imagens do carrossel).
+  const [marcados, setMarcados] = React.useState<string[]>([])
+  const [massa, setMassa] = React.useState<'baixar' | 'postar' | null>(null)
+  const alternar = (id: string) => setMarcados((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id]))
+  const selecionados = (lista ?? []).length ? marcados.map((id) => lista!.find((t) => t.id === id)).filter((t): t is TabloideSalvo => !!t) : []
+
   const remover = async (t: TabloideSalvo) => {
     if (!window.confirm(`Excluir "${t.titulo}" do histórico?`)) return
     await tabloideApi.removerTabloide(t.id).catch((e: Error) => toast.error(e.message))
@@ -1121,12 +1128,46 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
   if (lista === null) return <p className="p-6 text-center text-sm text-[#9A928B]">Carregando…</p>
   if (!lista.length) return <p className="rounded-xl bg-white p-8 text-center text-sm text-[#7A716A]">Nenhum tabloide salvo ainda. Eles aparecem aqui quando você salva ou baixa.</p>
   return (
+    <>
+    <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-white p-3 shadow-sm">
+      <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">
+        <input
+          type="checkbox"
+          checked={marcados.length === lista.length}
+          onChange={(e) => setMarcados(e.target.checked ? lista.map((t) => t.id) : [])}
+        />
+        Selecionar todos
+      </label>
+      <span className="text-xs text-[#7A716A]">
+        {selecionados.length ? `${selecionados.length} selecionado${selecionados.length > 1 ? 's' : ''}` : 'Marque os tabloides para baixar ou postar de uma vez.'}
+      </span>
+      <div className="ml-auto flex gap-2">
+        {selecionados.length > 0 && (
+          <button className="text-xs font-semibold text-[#7A716A] hover:underline" onClick={() => setMarcados([])}>
+            Limpar
+          </button>
+        )}
+        <button className={btnSecundario} disabled={!selecionados.length} onClick={() => setMassa('baixar')}>
+          ⬇ Baixar
+        </button>
+        <button className={btnPrimario} disabled={!selecionados.length} onClick={() => setMassa('postar')}>
+          📤 Postar
+        </button>
+      </div>
+    </div>
+    {massa === 'baixar' && <ModalBaixarEmMassa tabloides={selecionados} onFechar={() => setMassa(null)} />}
+    {massa === 'postar' && <ModalPostarEmMassa tabloides={selecionados} onFechar={() => setMassa(null)} />}
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {lista.map((t) => {
         const m = modeloPorId(t.dados?.modeloId ?? '')
         const n = t.dados?.itens?.length ?? 0
+        const ordem = marcados.indexOf(t.id)
         return (
-          <div key={t.id} className="flex flex-col overflow-hidden rounded-xl bg-white shadow-sm">
+          <div key={t.id} className={`relative flex flex-col overflow-hidden rounded-xl bg-white shadow-sm ${ordem >= 0 ? 'ring-2 ring-[#C1503F]' : ''}`}>
+            <label className="absolute left-2 top-2 z-[1] flex cursor-pointer items-center gap-1 rounded-md bg-white/90 px-1.5 py-1 text-[11px] font-bold text-[#2A2622] shadow">
+              <input type="checkbox" checked={ordem >= 0} onChange={() => alternar(t.id)} />
+              {ordem >= 0 ? ordem + 1 : ''}
+            </label>
             <div className="flex h-16 items-center justify-center px-2" style={{ background: m.fundo }}>
               <span className="truncate" style={{ color: m.titulo, fontFamily: 'Anton, Impact, sans-serif', fontSize: 18, textShadow: `0 2px 0 ${m.tituloSombra}` }}>
                 {t.dados?.titulo || m.tituloPadrao}
@@ -1157,6 +1198,7 @@ function Historico({ onAbrir }: { onAbrir: (t: TabloideSalvo, copia: boolean) =>
         )
       })}
     </div>
+    </>
   )
 }
 

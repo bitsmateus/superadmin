@@ -55,6 +55,7 @@ import { massCampaignRoutes } from './routes/massCampaigns.js';
 import { acougueRoutes } from './routes/acougue.js';
 import { mercadoNunesRoutes } from './routes/mercadoNunes.js';
 import { mercadoNunesTabloideRoutes } from './routes/mercadoNunesTabloide.js';
+import { mercadoNunesPlaquinhasRoutes } from './routes/mercadoNunesPlaquinhas.js';
 import { pulseRoutes } from './routes/pulses.js';
 import { churnRiskRoutes } from './routes/churnRisk.js';
 import { agendaRoutes } from './routes/agenda.js';
@@ -206,6 +207,7 @@ async function main() {
   await app.register(massCampaignRoutes);
   await app.register(mercadoNunesRoutes);
   await app.register(mercadoNunesTabloideRoutes);
+  await app.register(mercadoNunesPlaquinhasRoutes);
   await app.register(acougueRoutes);
   await app.register(pulseRoutes);
   await app.register(churnRiskRoutes);

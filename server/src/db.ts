@@ -1702,6 +1702,25 @@ END; $$`);
         FOR EACH ROW EXECUTE FUNCTION notify_db_change();
     END IF;
   END $$`);
+  // Plaquinhas em massa (/mercadonunes/plaquinhas): uma linha por produto do relatório de promoção do ERP.
+  // `dados` guarda só os campos do cartaz (o resto vem do padrão da tela); produto_id é a chave pra
+  // "fica sempre um só" quando o mesmo produto aparece em outro relatório. Imprimir não apaga nada.
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_plaquinhas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    produto_id TEXT UNIQUE,
+    ean TEXT NOT NULL DEFAULT '',
+    grupo TEXT NOT NULL DEFAULT '',
+    nome_original TEXT NOT NULL DEFAULT '',
+    inicio TEXT NOT NULL DEFAULT '',
+    fim TEXT NOT NULL DEFAULT '',
+    dados JSONB NOT NULL DEFAULT '{}',
+    na_fila BOOLEAN NOT NULL DEFAULT false,
+    impressa_em TIMESTAMPTZ,
+    impressoes INT NOT NULL DEFAULT 0,
+    origem TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
   // Cadastro das pastas em si — criadas explicitamente (não só "inferidas" de layouts que já usam
   // o nome), pra aparecerem no seletor mesmo antes de qualquer layout ser movido pra dentro delas.
   await pool.query(`CREATE TABLE IF NOT EXISTS mercadonunes_pastas (

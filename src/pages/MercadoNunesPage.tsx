@@ -20,12 +20,12 @@ import {
 
 // A4 a 96dpi — o cartaz é montado nessas medidas em px e o container fica em mm, então a prévia na
 // tela e a folha impressa batem exatamente.
-const A4_W = 794
-const A4_H = 1123
+export const A4_W = 794
+export const A4_H = 1123
 
 const LOGO_SRC = '/assets/mercadonunes-logo.jpg'
 
-interface Tema {
+export interface Tema {
   id: string
   nome: string
   faixaBg: string
@@ -35,7 +35,7 @@ interface Tema {
   destaque: string
 }
 
-const TEMAS: Tema[] = [
+export const TEMAS: Tema[] = [
   { id: 'laranja', nome: 'Laranja', faixaBg: '#E7110D', faixaTexto: '#FFD200', borda: '#E7110D', preco: '#E7110D', destaque: '#FFD200' },
   // Cor amostrada direto do arquivo da logo (public/assets/mercadonunes-logo.jpg) — o laranja do
   // selo/badge, diferente do "Laranja" acima (que é mais avermelhado).
@@ -50,7 +50,7 @@ const TEMAS: Tema[] = [
 // corte que a própria TypeType libera de graça (licença SIL OFL 1.1, uso comercial liberado) — é
 // esse arquivo que está em public/fonts/, self-hosted, sem depender de CDN nenhum. É a fonte de
 // verdade, não uma aproximação.
-const FONTES = [
+export const FONTES = [
   { id: "'MastersBlack', system-ui", nome: 'Masters Black (fonte oficial, grátis)' },
   { id: "'Titan One', system-ui", nome: 'Titan One' },
   { id: "'Baloo 2', system-ui", nome: 'Baloo 2' },
@@ -60,7 +60,7 @@ const FONTES = [
   { id: "'Archivo Black', system-ui", nome: 'Archivo Black' },
 ]
 
-interface Cartaz {
+export interface Cartaz {
   id: string
   produto: string
   subtitulo: string // opcional — vazio = mostra só o título, igual antes
@@ -92,7 +92,7 @@ interface Cartaz {
   ajustePeso: number
 }
 
-const CARTAZ_PADRAO: Cartaz = {
+export const CARTAZ_PADRAO: Cartaz = {
   id: '',
   produto: 'GRANOLA SHAMBALA',
   subtitulo: 'TRADICIONAL',
@@ -122,13 +122,13 @@ const CARTAZ_PADRAO: Cartaz = {
   ajustePeso: 0,
 }
 
-interface Modelo {
+export interface Modelo {
   nome: string
   descricao: string
   patch: Partial<Cartaz>
 }
 
-const MODELOS: Modelo[] = [
+export const MODELOS: Modelo[] = [
   {
     nome: 'Oferta de/por',
     descricao: 'Faixa OFERTA + preço antigo riscado',
@@ -947,6 +947,9 @@ export function MercadoNunesPage() {
           <a href="/mercadonunes/tabloide" style={{ ...botaoSecundario, whiteSpace: 'nowrap', textDecoration: 'none' }}>
             🗞️ Tabloide
           </a>
+          <a href="/mercadonunes/plaquinhas" style={{ ...botaoSecundario, whiteSpace: 'nowrap', textDecoration: 'none' }}>
+            🏷️ Plaquinhas em massa
+          </a>
           <button
             type="button"
             onClick={() => setMenuLayoutsAberto(true)}
@@ -1594,7 +1597,7 @@ export function MercadoNunesPage() {
 
 // Fontes self-hosted (public/fonts/) — cortes gratuitos da TypeType (licença SIL OFL 1.1, ver
 // public/fonts/LICENSE-masters.txt), sem depender de CDN externo.
-const estiloFontesLocais = `
+export const estiloFontesLocais = `
 @font-face { font-family: 'MastersBlack'; src: url('/fonts/masters-black.otf') format('opentype'); font-display: swap; }
 @font-face { font-family: 'MastersBirds'; src: url('/fonts/masters-birds.otf') format('opentype'); font-display: swap; }
 @font-face { font-family: 'MastersRoughThin'; src: url('/fonts/masters-rough-thin.otf') format('opentype'); font-display: swap; }
@@ -1656,7 +1659,7 @@ const estiloImpressao = `
 }
 `
 
-const inputEstilo: React.CSSProperties = {
+export const inputEstilo: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
   border: '1px solid #DED8D0',
@@ -1671,7 +1674,7 @@ const inputEstilo: React.CSSProperties = {
   fontFamily: 'inherit',
 }
 
-const botaoPrimario: React.CSSProperties = {
+export const botaoPrimario: React.CSSProperties = {
   background: '#C1503F',
   color: '#fff',
   border: 'none',
@@ -1682,7 +1685,7 @@ const botaoPrimario: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-const botaoSecundario: React.CSSProperties = {
+export const botaoSecundario: React.CSSProperties = {
   background: '#fff',
   color: '#2A2622',
   border: '1px solid #DED8D0',
@@ -1693,7 +1696,7 @@ const botaoSecundario: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-const botaoMini: React.CSSProperties = {
+export const botaoMini: React.CSSProperties = {
   background: '#fff',
   color: '#5B534D',
   border: '1px solid #DED8D0',

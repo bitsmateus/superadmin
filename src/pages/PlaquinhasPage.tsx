@@ -1,0 +1,653 @@
+import * as React from 'react'
+import { toast } from 'sonner'
+import { api } from '@/services/api'
+import {
+  A4_H,
+  A4_W,
+  CARTAZ_PADRAO,
+  CartazA4,
+  FONTES,
+  MODELOS,
+  TEMAS,
+  botaoMini,
+  botaoPrimario,
+  botaoSecundario,
+  estiloFontesLocais,
+  inputEstilo,
+  type Cartaz,
+} from '@/pages/MercadoNunesPage'
+
+/**
+ * Plaquinhas em massa do Mercado Nunes — /mercadonunes/plaquinhas (página pública, igual ao gerador de cartazes).
+ *
+ * Sobe o PDF de promoções do ERP → uma plaquinha por produto → ajusta tudo de uma vez (modelo, tema, fonte) →
+ * manda pra fila → imprime 1, 2 ou 4 por folha A4. Tudo fica salvo no servidor: imprimir só marca a data.
+ */
+
+const BASE = '/api/public/mercadonunes/plaquinhas'
+
+interface Placa {
+  id: string
+  produto_id: string | null
+  grupo: string
+  nome_original: string
+  inicio: string
+  fim: string
+  dados: Partial<Cartaz>
+  na_fila: boolean
+  impressa_em: string | null
+  impressoes: number
+  origem: string
+}
+
+interface ResultadoImportacao {
+  lidos: number
+  criadas: number
+  atualizadas: number
+  inativos: number
+  vencidos: number
+  repetidos: number
+}
+
+type PorFolha = 1 | 2 | 4
+type Estado = 'todas' | 'fila' | 'fora' | 'novas' | 'impressas'
+
+// Plaquinha importada nunca herda o texto de exemplo do cartaz padrão (subtítulo "TRADICIONAL").
+const cartazDe = (p: Placa): Cartaz => ({ ...CARTAZ_PADRAO, subtitulo: '', ...p.dados, id: p.id })
+const dataCurta = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+const pedacos = <T,>(lista: T[], n: number): T[][] => {
+  const out: T[][] = []
+  for (let i = 0; i < lista.length; i += n) out.push(lista.slice(i, i + n))
+  return out
+}
+const lerComoDataUrl = (f: File) =>
+  new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onerror = () => reject(new Error('Não consegui ler o arquivo.'))
+    r.onload = () => resolve(String(r.result))
+    r.readAsDataURL(f)
+  })
+
+// ── Miniatura (só desenha quando aparece na tela: são dezenas de cartazes) ──
+
+function Miniatura({ cartaz, largura }: { cartaz: Cartaz; largura: number }) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const [visivel, setVisivel] = React.useState(false)
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el || visivel) return
+    const io = new IntersectionObserver(
+      (e) => {
+        if (e[0].isIntersecting) {
+          setVisivel(true)
+          io.disconnect()
+        }
+      },
+      { rootMargin: '300px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [visivel])
+  const escala = largura / A4_W
+  return (
+    <div ref={ref} style={{ width: largura, height: A4_H * escala, background: '#eee', overflow: 'hidden', borderRadius: 4, boxShadow: '0 1px 4px rgba(0,0,0,.25)' }}>
+      {visivel && (
+        <div style={{ width: A4_W, height: A4_H, transform: `scale(${escala})`, transformOrigin: 'top left', pointerEvents: 'none' }}>
+          <CartazA4 dados={cartaz} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Folhas de impressão (1, 2 ou 4 plaquinhas por A4) ───────────────────────
+
+function Folhas({ cartazes, porFolha, corte }: { cartazes: Cartaz[]; porFolha: PorFolha; corte: boolean }) {
+  // 1 = A4 em pé; 4 = A4 em pé com 4 A6; 2 = A4 deitado com 2 A5 em pé. Mesma proporção do cartaz, só encolhe.
+  const escala = porFolha === 1 ? 1 : porFolha === 2 ? Math.SQRT1_2 : 0.5
+  const celW = A4_W * escala
+  const celH = A4_H * escala
+  const folhaW = porFolha === 2 ? A4_H : A4_W
+  const folhaH = porFolha === 2 ? A4_W : A4_H
+  const colunas = porFolha === 1 ? 1 : 2
+  return (
+    <>
+      {pedacos(cartazes, porFolha).map((grupo, i) => (
+        <div
+          key={i}
+          className="folha"
+          style={{ width: folhaW, height: folhaH - 1, overflow: 'hidden', display: 'grid', gridTemplateColumns: `repeat(${colunas}, ${celW}px)`, gridAutoRows: celH, background: '#fff' }}
+        >
+          {grupo.map((c) => (
+            <div key={c.id} style={{ width: celW, height: celH, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ width: A4_W, height: A4_H, transform: `scale(${escala})`, transformOrigin: 'top left' }}>
+                <CartazA4 dados={c} />
+              </div>
+              {corte && porFolha > 1 && <div style={{ position: 'absolute', inset: 0, border: '1px dashed #aaa', pointerEvents: 'none' }} />}
+            </div>
+          ))}
+        </div>
+      ))}
+    </>
+  )
+}
+
+// ── Página ──────────────────────────────────────────────────────────────────
+
+export function PlaquinhasPage() {
+  const [lista, setLista] = React.useState<Placa[] | null>(null)
+  const [selecionadas, setSelecionadas] = React.useState<Set<string>>(new Set())
+  const [busca, setBusca] = React.useState('')
+  const [grupo, setGrupo] = React.useState('')
+  const [estado, setEstado] = React.useState<Estado>('todas')
+  const [importando, setImportando] = React.useState(false)
+  const [resultado, setResultado] = React.useState<ResultadoImportacao | null>(null)
+  const [modeloInicial, setModeloInicial] = React.useState(0)
+  const [vendoId, setVendoId] = React.useState<string | null>(null)
+  const [ocupado, setOcupado] = React.useState(false)
+  // Edição em massa
+  const [temaMassa, setTemaMassa] = React.useState('')
+  const [fonteMassa, setFonteMassa] = React.useState('')
+  const [faixaMassa, setFaixaMassa] = React.useState('')
+  // Impressão
+  const [porFolha, setPorFolha] = React.useState<PorFolha>(4)
+  const [corte, setCorte] = React.useState(true)
+  const [paraImprimir, setParaImprimir] = React.useState<Placa[]>([])
+  const [aposImprimir, setAposImprimir] = React.useState<string[] | null>(null)
+
+  // Mesmas fontes do gerador de cartazes (Google + as locais da TypeType).
+  React.useEffect(() => {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = 'https://fonts.googleapis.com/css2?family=Titan+One&family=Baloo+2:wght@800&family=Luckiest+Guy&family=Bowlby+One+SC&family=Anton&family=Archivo+Black&display=swap'
+    document.head.appendChild(link)
+    return () => {
+      document.head.removeChild(link)
+    }
+  }, [])
+
+  const carregar = React.useCallback(async () => {
+    try {
+      setLista((await api.get<{ plaquinhas: Placa[] }>(BASE)).plaquinhas)
+    } catch (e) {
+      toast.error((e as Error).message)
+      setLista((l) => l ?? [])
+    }
+  }, [])
+  React.useEffect(() => {
+    void carregar()
+  }, [carregar])
+
+  const grupos = React.useMemo(() => [...new Set((lista ?? []).map((p) => p.grupo).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [lista])
+  const visiveis = React.useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    return (lista ?? []).filter((p) => {
+      if (grupo && p.grupo !== grupo) return false
+      if (estado === 'fila' && !p.na_fila) return false
+      if (estado === 'fora' && p.na_fila) return false
+      if (estado === 'novas' && p.impressa_em) return false
+      if (estado === 'impressas' && !p.impressa_em) return false
+      if (!q) return true
+      return `${p.dados.produto ?? ''} ${p.nome_original} ${p.grupo}`.toLowerCase().includes(q)
+    })
+  }, [lista, busca, grupo, estado])
+  const naFila = React.useMemo(() => (lista ?? []).filter((p) => p.na_fila), [lista])
+  const escolhidas = React.useMemo(() => (lista ?? []).filter((p) => selecionadas.has(p.id)), [lista, selecionadas])
+  const todasMarcadas = visiveis.length > 0 && visiveis.every((p) => selecionadas.has(p.id))
+  const vendo = vendoId ? visiveis.find((p) => p.id === vendoId) ?? (lista ?? []).find((p) => p.id === vendoId) ?? null : null
+
+  const alternar = (id: string) =>
+    setSelecionadas((s) => {
+      const n = new Set(s)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+
+  // ── Importar ──
+  const importar = async (f: File | undefined) => {
+    if (!f) return
+    if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') return toast.error('Escolha um arquivo PDF.')
+    setImportando(true)
+    setResultado(null)
+    try {
+      const pdf = await lerComoDataUrl(f)
+      const r = await api.post<ResultadoImportacao>(`${BASE}/importar`, { nome: f.name, pdf, padrao: MODELOS[modeloInicial].patch })
+      setResultado(r)
+      await carregar()
+      toast.success(`${r.criadas} plaquinha(s) nova(s)${r.atualizadas ? ` e ${r.atualizadas} atualizada(s)` : ''}.`)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setImportando(false)
+    }
+  }
+
+  // ── Ações em lote ──
+  const lote = async (ids: string[], acao: string, patch?: Partial<Cartaz>, msg?: string) => {
+    if (!ids.length) return toast.error('Escolha pelo menos uma plaquinha.')
+    setOcupado(true)
+    try {
+      await api.post(`${BASE}/lote`, { ids, acao, patch })
+      await carregar()
+      if (msg) toast.success(msg)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+  const idsAlvo = () => (escolhidas.length ? escolhidas : []).map((p) => p.id)
+
+  const aplicarMassa = (patch: Partial<Cartaz>, rotulo: string) => {
+    const ids = idsAlvo()
+    if (!ids.length) return toast.error('Selecione as plaquinhas que vão receber a mudança.')
+    void lote(ids, 'aplicar', patch, `${rotulo} aplicado em ${ids.length} plaquinha(s).`)
+  }
+
+  // ── Impressão ──
+  const imprimir = (placas: Placa[]) => {
+    if (!placas.length) return toast.error('Não tem plaquinha pra imprimir.')
+    setParaImprimir(placas)
+  }
+  React.useEffect(() => {
+    if (!paraImprimir.length) return
+    const ids = paraImprimir.map((p) => p.id)
+    const terminou = () => {
+      setParaImprimir([])
+      setAposImprimir(ids)
+    }
+    window.addEventListener('afterprint', terminou, { once: true })
+    const t = setTimeout(() => window.print(), 900) // dá tempo das fontes, da logo e do ajuste do preço
+    return () => {
+      clearTimeout(t)
+      window.removeEventListener('afterprint', terminou)
+    }
+  }, [paraImprimir])
+
+  // ── Salvar edição individual ──
+  const salvarUma = async (id: string, dados: Partial<Cartaz>) => {
+    try {
+      await api.patch(`${BASE}/${id}`, { dados })
+      await carregar()
+      toast.success('Plaquinha salva.')
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+  const excluir = async (ids: string[]) => {
+    if (!ids.length) return
+    if (!window.confirm(`Excluir ${ids.length} plaquinha(s)? Isso apaga de vez.`)) return
+    await lote(ids, 'excluir', undefined, 'Excluídas.')
+    setSelecionadas(new Set())
+    setVendoId(null)
+  }
+
+  const idx = vendo ? visiveis.findIndex((p) => p.id === vendo.id) : -1
+
+  return (
+    <div className="mn-plaq" style={{ minHeight: '100vh', background: '#F4F1EC', color: '#2A2622', paddingBottom: 90 }}>
+      <style>{estiloFontesLocais}</style>
+      <style>{estilo}</style>
+      <style>{`@media print { @page { size: A4 ${porFolha === 2 ? 'landscape' : 'portrait'}; margin: 0; } }`}</style>
+
+      <header className="tela" style={{ background: '#fff', borderBottom: '3px solid #C1503F', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <img src="/assets/mercadonunes-logo.jpg" alt="Nunes" style={{ height: 44, objectFit: 'contain' }} />
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <h1 style={{ fontSize: 20, margin: 0, color: '#C1503F' }}>Plaquinhas em massa</h1>
+          <p style={{ fontSize: 13, color: '#7A716A', margin: 0 }}>Suba o relatório de promoções (PDF) e imprima todas de uma vez.</p>
+        </div>
+        <a href="/mercadonunes" style={{ ...botaoSecundario, textDecoration: 'none', whiteSpace: 'nowrap' }}>← Plaquinha avulsa</a>
+      </header>
+
+      <main className="tela" style={{ maxWidth: 1280, margin: '0 auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* 1. Importar */}
+        <section style={cartao}>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+            <label
+              style={{ ...botaoPrimario, cursor: importando ? 'wait' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, opacity: importando ? 0.7 : 1 }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault()
+                void importar(e.dataTransfer.files?.[0])
+              }}
+            >
+              📄 {importando ? 'Lendo o relatório…' : 'Subir relatório de promoções (PDF)'}
+              <input type="file" accept="application/pdf,.pdf" hidden disabled={importando} onChange={(e) => { void importar(e.target.files?.[0]); e.target.value = '' }} />
+            </label>
+            <label style={{ fontSize: 13, color: '#5B534D', display: 'flex', alignItems: 'center', gap: 8 }}>
+              Modelo das novas:
+              <select value={modeloInicial} onChange={(e) => setModeloInicial(Number(e.target.value))} style={{ ...inputEstilo, width: 'auto', padding: '8px 10px', fontSize: 14 }}>
+                {MODELOS.map((m, i) => (
+                  <option key={m.nome} value={i}>{m.nome}</option>
+                ))}
+              </select>
+            </label>
+            <span style={{ fontSize: 12, color: '#9A928B' }}>Aceita "Itens em Promoção" e "Promoção de Produto". Mesmo produto em outro relatório = continua uma plaquinha só (o preço novo entra por cima).</span>
+          </div>
+          {resultado && (
+            <div style={{ marginTop: 12, background: '#EEF7EE', border: '1px solid #BFE0BF', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#245B24' }}>
+              ✅ {resultado.lidos} produto(s) lido(s): <b>{resultado.criadas} novas</b>
+              {resultado.atualizadas > 0 && <>, <b>{resultado.atualizadas} atualizadas</b> (já existiam)</>}.
+              {resultado.inativos > 0 && <> {resultado.inativos} inativo(s) ignorado(s).</>}
+              {resultado.vencidos > 0 && <> {resultado.vencidos} promoção(ões) vencida(s) ignorada(s).</>}
+              {resultado.repetidos > 0 && <> {resultado.repetidos} repetido(s) no arquivo.</>}
+            </div>
+          )}
+        </section>
+
+        {/* 2. Filtros */}
+        <section style={{ ...cartao, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar produto…" style={{ ...inputEstilo, width: 220 }} />
+          <select value={grupo} onChange={(e) => setGrupo(e.target.value)} style={{ ...inputEstilo, width: 'auto' }}>
+            <option value="">Todos os grupos</option>
+            {grupos.map((g) => (
+              <option key={g} value={g}>{g}</option>
+            ))}
+          </select>
+          <select value={estado} onChange={(e) => setEstado(e.target.value as Estado)} style={{ ...inputEstilo, width: 'auto' }}>
+            <option value="todas">Todas</option>
+            <option value="fila">Na fila de impressão</option>
+            <option value="fora">Fora da fila</option>
+            <option value="novas">Ainda não impressas</option>
+            <option value="impressas">Já impressas</option>
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600 }}>
+            <input type="checkbox" checked={todasMarcadas} onChange={(e) => setSelecionadas(e.target.checked ? new Set(visiveis.map((p) => p.id)) : new Set())} />
+            Selecionar todas ({visiveis.length})
+          </label>
+          <span style={{ fontSize: 13, color: '#7A716A' }}>
+            {escolhidas.length ? `${escolhidas.length} selecionada(s) · ` : ''}{lista?.length ?? 0} no total
+          </span>
+          {escolhidas.length > 0 && (
+            <button style={botaoMini} onClick={() => setSelecionadas(new Set())}>Limpar seleção</button>
+          )}
+        </section>
+
+        {/* 3. Editor em massa */}
+        <section style={cartao}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#5B534D', marginBottom: 8 }}>
+            ✏️ Editar em massa {escolhidas.length ? `(${escolhidas.length} selecionadas)` : '— selecione as plaquinhas acima'}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {MODELOS.map((m) => (
+              <button key={m.nome} title={m.descricao} disabled={ocupado || !escolhidas.length} onClick={() => aplicarMassa(m.patch, m.nome)} style={{ ...botaoSecundario, padding: '9px 14px', opacity: escolhidas.length ? 1 : 0.5 }}>
+                Tudo em “{m.nome}”
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+            <select value={temaMassa} onChange={(e) => setTemaMassa(e.target.value)} style={{ ...inputEstilo, width: 'auto' }}>
+              <option value="">Cor…</option>
+              {TEMAS.map((t) => (
+                <option key={t.id} value={t.id}>{t.nome}</option>
+              ))}
+            </select>
+            <select value={fonteMassa} onChange={(e) => setFonteMassa(e.target.value)} style={{ ...inputEstilo, width: 'auto', maxWidth: 220 }}>
+              <option value="">Fonte…</option>
+              {FONTES.map((f) => (
+                <option key={f.id} value={f.id}>{f.nome}</option>
+              ))}
+            </select>
+            <input value={faixaMassa} onChange={(e) => setFaixaMassa(e.target.value.toUpperCase())} placeholder="Texto da faixa (ex.: OFERTA)" style={{ ...inputEstilo, width: 220 }} />
+            <button
+              style={{ ...botaoPrimario, padding: '10px 16px', opacity: escolhidas.length && (temaMassa || fonteMassa || faixaMassa) ? 1 : 0.5 }}
+              disabled={ocupado || !escolhidas.length || !(temaMassa || fonteMassa || faixaMassa)}
+              onClick={() =>
+                aplicarMassa(
+                  { ...(temaMassa ? { temaId: temaMassa } : {}), ...(fonteMassa ? { fonte: fonteMassa } : {}), ...(faixaMassa ? { textoFaixa: faixaMassa, mostrarFaixa: true } : {}) },
+                  'Ajuste',
+                )
+              }
+            >
+              Aplicar nas selecionadas
+            </button>
+            <button style={botaoMini} disabled={ocupado || !escolhidas.length} onClick={() => void excluir(idsAlvo())}>🗑 Excluir selecionadas</button>
+          </div>
+        </section>
+
+        {/* 4. Grade */}
+        {lista === null ? (
+          <p style={{ textAlign: 'center', color: '#9A928B' }}>Carregando…</p>
+        ) : !visiveis.length ? (
+          <p style={{ ...cartao, textAlign: 'center', color: '#7A716A' }}>
+            {lista.length ? 'Nenhuma plaquinha com esse filtro.' : 'Nenhuma plaquinha ainda. Suba o PDF de promoções acima e elas aparecem aqui.'}
+          </p>
+        ) : (
+          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
+            {visiveis.map((p) => (
+              <div key={p.id} style={{ ...cartao, padding: 10, display: 'flex', flexDirection: 'column', gap: 6, outline: selecionadas.has(p.id) ? '2px solid #C1503F' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700 }}>
+                    <input type="checkbox" checked={selecionadas.has(p.id)} onChange={() => alternar(p.id)} />
+                    Selecionar
+                  </label>
+                  <span style={{ display: 'flex', gap: 4 }}>
+                    {p.na_fila && <span style={selo('#FCEFEC', '#C1503F')}>na fila</span>}
+                    {p.impressa_em && <span style={selo('#EEF7EE', '#245B24')}>impressa {dataCurta(p.impressa_em)}</span>}
+                  </span>
+                </div>
+                <button type="button" onClick={() => setVendoId(p.id)} title="Ver e editar" style={{ border: 'none', background: 'none', padding: 0, cursor: 'zoom-in', display: 'flex', justifyContent: 'center' }}>
+                  <Miniatura cartaz={cartazDe(p)} largura={160} />
+                </button>
+                <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>{p.dados.produto || p.nome_original}</div>
+                <div style={{ fontSize: 11, color: '#7A716A' }}>
+                  R$ {p.dados.preco}{p.dados.precoDe ? ` (de ${p.dados.precoDe})` : ''}{p.dados.minUnidades ? ` · a partir de ${p.dados.minUnidades} un` : ''}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 'auto' }}>
+                  <button style={{ ...botaoMini, flex: 1 }} onClick={() => setVendoId(p.id)}>👁 Ver / editar</button>
+                  <button style={{ ...botaoMini, flex: 1 }} disabled={ocupado} onClick={() => void lote([p.id], p.na_fila ? 'tirar_fila' : 'fila')}>
+                    {p.na_fila ? '− Fila' : '+ Fila'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Barra fixa: fila + impressão */}
+      <div className="tela" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#2A2622', color: '#fff', padding: '10px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', zIndex: 20 }}>
+        <b style={{ fontSize: 14 }}>🖨 Fila: {naFila.length}</b>
+        <button style={barraBtn} disabled={ocupado || !escolhidas.length} onClick={() => void lote(idsAlvo(), 'fila', undefined, 'Adicionadas à fila.')}>+ Selecionadas ({escolhidas.length})</button>
+        <button style={barraBtn} disabled={ocupado || !visiveis.length} onClick={() => void lote(visiveis.map((p) => p.id), 'fila', undefined, `${visiveis.length} adicionadas à fila.`)}>+ Todas as {visiveis.length} da lista</button>
+        <button style={barraBtn} disabled={ocupado || !naFila.length} onClick={() => void lote(naFila.map((p) => p.id), 'tirar_fila', undefined, 'Fila limpa (as plaquinhas continuam salvas).')}>Limpar fila</button>
+        <span style={{ flex: 1 }} />
+        <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+          Por folha:
+          <select value={porFolha} onChange={(e) => setPorFolha(Number(e.target.value) as PorFolha)} style={{ ...inputEstilo, width: 'auto', padding: '6px 8px', fontSize: 14 }}>
+            <option value={1}>1 (A4 inteira)</option>
+            <option value={2}>2 por folha</option>
+            <option value={4}>4 por folha</option>
+          </select>
+        </label>
+        {porFolha > 1 && (
+          <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <input type="checkbox" checked={corte} onChange={(e) => setCorte(e.target.checked)} /> linhas de corte
+          </label>
+        )}
+        <button style={{ ...botaoPrimario, padding: '9px 14px' }} disabled={!naFila.length} onClick={() => imprimir(naFila)}>
+          Imprimir fila ({naFila.length} → {Math.ceil(naFila.length / porFolha)} folha{Math.ceil(naFila.length / porFolha) !== 1 ? 's' : ''})
+        </button>
+        {escolhidas.length > 0 && (
+          <button style={{ ...barraBtn, background: '#fff', color: '#2A2622' }} onClick={() => imprimir(escolhidas)}>Imprimir só as {escolhidas.length} selecionadas</button>
+        )}
+      </div>
+
+      {/* Visualizador / edição de uma */}
+      {vendo && (
+        <Visualizador
+          key={vendo.id}
+          placa={vendo}
+          posicao={idx >= 0 ? `${idx + 1} de ${visiveis.length}` : ''}
+          onAnterior={idx > 0 ? () => setVendoId(visiveis[idx - 1].id) : undefined}
+          onProxima={idx >= 0 && idx < visiveis.length - 1 ? () => setVendoId(visiveis[idx + 1].id) : undefined}
+          onFechar={() => setVendoId(null)}
+          onSalvar={(d) => salvarUma(vendo.id, d)}
+          onFila={() => void lote([vendo.id], vendo.na_fila ? 'tirar_fila' : 'fila')}
+          onExcluir={() => void excluir([vendo.id])}
+        />
+      )}
+
+      {/* Depois de imprimir: perguntar se deu certo (o navegador não diz se imprimiu ou cancelou) */}
+      {aposImprimir && (
+        <div className="tela" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 60, display: 'grid', placeItems: 'center', padding: 16 }}>
+          <div style={{ ...cartao, maxWidth: 440 }}>
+            <h3 style={{ margin: '0 0 6px' }}>Imprimiu tudo certo?</h3>
+            <p style={{ fontSize: 14, color: '#5B534D', margin: '0 0 14px' }}>
+              Marcando como impressas, as {aposImprimir.length} plaquinhas saem da fila e ficam salvas com a data de hoje — você pode reimprimir quando quiser.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button style={botaoSecundario} onClick={() => setAposImprimir(null)}>Não, manter na fila</button>
+              <button
+                style={botaoPrimario}
+                onClick={() => {
+                  const ids = aposImprimir
+                  setAposImprimir(null)
+                  void lote(ids, 'imprimida', undefined, 'Marcadas como impressas.')
+                }}
+              >
+                Sim, marcar como impressas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Área de impressão — fora da tela, aparece só no papel */}
+      <div className="area-impressao">
+        {paraImprimir.length > 0 && <Folhas cartazes={paraImprimir.map(cartazDe)} porFolha={porFolha} corte={corte} />}
+      </div>
+    </div>
+  )
+}
+
+// ── Visualizador com edição ─────────────────────────────────────────────────
+
+function Visualizador({
+  placa,
+  posicao,
+  onAnterior,
+  onProxima,
+  onFechar,
+  onSalvar,
+  onFila,
+  onExcluir,
+}: {
+  placa: Placa
+  posicao: string
+  onAnterior?: () => void
+  onProxima?: () => void
+  onFechar: () => void
+  onSalvar: (d: Partial<Cartaz>) => Promise<void>
+  onFila: () => void
+  onExcluir: () => void
+}) {
+  const [c, setC] = React.useState<Cartaz>(() => cartazDe(placa))
+  const [salvando, setSalvando] = React.useState(false)
+  React.useEffect(() => setC(cartazDe(placa)), [placa])
+  React.useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'SELECT') return
+      if (e.key === 'Escape') onFechar()
+      if (e.key === 'ArrowLeft') onAnterior?.()
+      if (e.key === 'ArrowRight') onProxima?.()
+    }
+    window.addEventListener('keydown', tecla)
+    return () => window.removeEventListener('keydown', tecla)
+  }, [onAnterior, onProxima, onFechar])
+
+  const set = <K extends keyof Cartaz>(k: K, v: Cartaz[K]) => setC((x) => ({ ...x, [k]: v }))
+  const sujo = JSON.stringify(cartazDe(placa)) !== JSON.stringify(c)
+  const salvar = async () => {
+    setSalvando(true)
+    const { id: _id, ...dados } = c
+    void _id
+    await onSalvar(dados)
+    setSalvando(false)
+  }
+  const escala = Math.min(0.62, (window.innerHeight - 140) / A4_H)
+
+  return (
+    <div className="tela" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 50, overflowY: 'auto', padding: 16 }} onMouseDown={onFechar}>
+      <div style={{ ...cartao, maxWidth: 940, margin: '0 auto', display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }} onMouseDown={(e) => e.stopPropagation()}>
+        <div style={{ width: A4_W * escala, height: A4_H * escala, overflow: 'hidden', borderRadius: 6, boxShadow: '0 2px 10px rgba(0,0,0,.3)', flexShrink: 0 }}>
+          <div style={{ width: A4_W, height: A4_H, transform: `scale(${escala})`, transformOrigin: 'top left' }}>
+            <CartazA4 dados={c} />
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 260, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button style={botaoMini} disabled={!onAnterior} onClick={onAnterior}>◀</button>
+            <span style={{ fontSize: 12, color: '#7A716A' }}>{posicao}</span>
+            <button style={botaoMini} disabled={!onProxima} onClick={onProxima}>▶</button>
+            <button style={{ ...botaoMini, marginLeft: 'auto' }} onClick={onFechar}>✕ Fechar</button>
+          </div>
+          <div style={{ fontSize: 11, color: '#9A928B' }}>Original no relatório: {placa.nome_original}{placa.grupo ? ` · ${placa.grupo}` : ''}</div>
+          <Campo rotulo="Produto"><input value={c.produto} onChange={(e) => set('produto', e.target.value.toUpperCase())} style={inputEstilo} /></Campo>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Campo rotulo="Peso"><input value={c.peso} onChange={(e) => set('peso', e.target.value.toUpperCase())} style={inputEstilo} /></Campo>
+            <Campo rotulo="A partir de (un)"><input value={c.minUnidades} onChange={(e) => set('minUnidades', e.target.value)} style={inputEstilo} placeholder="vazio = não mostra" /></Campo>
+            <Campo rotulo="Preço (R$)"><input value={c.preco} onChange={(e) => set('preco', e.target.value)} style={inputEstilo} /></Campo>
+            <Campo rotulo="Preço de (riscado)"><input value={c.precoDe} onChange={(e) => set('precoDe', e.target.value)} style={inputEstilo} /></Campo>
+          </div>
+          <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={c.mostrarDePor} onChange={(e) => set('mostrarDePor', e.target.checked)} /> Mostrar “de / por”
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Campo rotulo="Faixa"><input value={c.textoFaixa} onChange={(e) => set('textoFaixa', e.target.value.toUpperCase())} style={inputEstilo} /></Campo>
+            <Campo rotulo="Cor">
+              <select value={c.temaId} onChange={(e) => set('temaId', e.target.value)} style={inputEstilo}>
+                {TEMAS.map((t) => (
+                  <option key={t.id} value={t.id}>{t.nome}</option>
+                ))}
+              </select>
+            </Campo>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {MODELOS.map((m) => (
+              <button key={m.nome} style={botaoMini} onClick={() => setC((x) => ({ ...x, ...m.patch, mostrarDePor: Boolean(m.patch.mostrarDePor) && Boolean(x.precoDe.trim()) }))}>{m.nome}</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+            <button style={{ ...botaoPrimario, opacity: sujo ? 1 : 0.5 }} disabled={!sujo || salvando} onClick={() => void salvar()}>
+              {salvando ? 'Salvando…' : 'Salvar alterações'}
+            </button>
+            <button style={botaoSecundario} onClick={onFila}>{placa.na_fila ? '− Tirar da fila' : '+ Adicionar à fila'}</button>
+            <button style={{ ...botaoSecundario, color: '#B42318' }} onClick={onExcluir}>Excluir</button>
+          </div>
+          <div style={{ fontSize: 11, color: '#9A928B' }}>
+            {placa.impressa_em ? `Impressa ${placa.impressoes}× · última em ${new Date(placa.impressa_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : 'Ainda não impressa'}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#5B534D' }}>
+      <span style={{ display: 'block', marginBottom: 3 }}>{rotulo}</span>
+      {children}
+    </label>
+  )
+}
+
+const cartao: React.CSSProperties = { background: '#fff', borderRadius: 12, padding: 14, boxShadow: '0 1px 3px rgba(0,0,0,.08)' }
+const barraBtn: React.CSSProperties = { background: '#4A433D', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
+const selo = (bg: string, cor: string): React.CSSProperties => ({ background: bg, color: cor, borderRadius: 6, padding: '2px 6px', fontSize: 10, fontWeight: 700 })
+
+const estilo = `
+.mn-plaq * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.mn-plaq .area-impressao { position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none; }
+.mn-plaq button:disabled { cursor: not-allowed; }
+@media print {
+  body > *:not(#root) { display: none !important; }
+  .mn-plaq .tela { display: none !important; }
+  .mn-plaq { background: #fff !important; padding: 0 !important; }
+  .mn-plaq .area-impressao { position: static !important; visibility: visible !important; display: block !important; }
+  .mn-plaq .folha { page-break-after: always; break-after: page; }
+  .mn-plaq .folha:last-child { page-break-after: auto; break-after: auto; }
+}
+`

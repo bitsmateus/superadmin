@@ -197,6 +197,7 @@ const RelatorioPublicoPage = React.lazy(() =>
 const PortalClientePage = React.lazy(() =>
   import('./pages/PortalClientePage').then((m) => ({ default: m.PortalClientePage })),
 )
+const PlaquinhasPage = React.lazy(() => import('./pages/PlaquinhasPage').then((m) => ({ default: m.PlaquinhasPage })))
 const BriefingNxPublicPage = React.lazy(() =>
   import('./pages/BriefingNxPublicPage').then((m) => ({ default: m.BriefingNxPublicPage })),
 )
@@ -260,6 +261,7 @@ export default function App() {
         <Route path="/laundry/:token" element={<LaundryPortalPage />} />
         <Route path="/mercadonunes" element={<MercadoNunesPage />} />
         <Route path="/mercadonunes/acougue" element={<AcouguePage />} />
+        <Route path="/mercadonunes/plaquinhas" element={<PlaquinhasPage />} />
         {/* :aba = montar (sem nada) | catalogo | historico | templates — mesma tela, a aba fica na URL. */}
         <Route path="/mercadonunes/tabloide/:aba?" element={<TabloidePage />} />
         <Route path="/engeenvio" element={<EngeEnvioPage />} />

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { gestaoClientes, type GcBriefingPublico } from '@/services/gestaoClientes'
 import { BRIEFING_MODELO } from '@/lib/gcBriefingModelo'
+import { chaveDaPergunta, etapasDoBriefing, itemPedido, type EtapaDoBriefing } from '@/lib/gcBriefingItens'
 import logoNx from '@/assets/logo-nx.jpg'
 
 /** Mesmo fundo do briefing do Suporte e da ficha de cadastro. */
@@ -16,25 +17,7 @@ const MAX_BYTES = 5 * 1024 * 1024
 // As etapas do formulário
 // ---------------------------------------------------------------------------------------------------
 
-/** Os blocos de perguntas, na ordem do modelo: cada bloco vira uma página. */
-const BLOCOS = Array.from(new Set(BRIEFING_MODELO.map((p) => p.bloco)))
-
-type Etapa =
-  | { tipo: 'empresa' }
-  | { tipo: 'acessos' }
-  | { tipo: 'contas' }
-  | { tipo: 'perguntas'; bloco: string }
-  | { tipo: 'materiais' }
-  | { tipo: 'revisao' }
-
-const ETAPAS: Etapa[] = [
-  { tipo: 'empresa' },
-  { tipo: 'acessos' },
-  { tipo: 'contas' },
-  ...BLOCOS.map((bloco) => ({ tipo: 'perguntas' as const, bloco })),
-  { tipo: 'materiais' },
-  { tipo: 'revisao' },
-]
+type Etapa = EtapaDoBriefing
 
 /** "Bloco 1 — Negócio e oferta" → "Negócio e oferta". */
 const tituloDoBloco = (bloco: string) => bloco.replace(/^Bloco\s+\d+\s+—\s+/, '')
@@ -152,6 +135,11 @@ export function BriefingNxPublicPage() {
   const [aviso, setAviso] = React.useState('')
   const inputArquivos = React.useRef<HTMLInputElement>(null)
   const inputLogo = React.useRef<HTMLInputElement>(null)
+  // Só as etapas e os itens que a equipe escolheu pedir neste link (sem escolha = o briefing completo).
+  const itens = dados?.itens ?? null
+  const ETAPAS = React.useMemo(() => etapasDoBriefing(itens), [itens])
+  const pedido = (chave: string) => itemPedido(itens, chave)
+  const completo = !itens
 
   React.useEffect(() => {
     gestaoClientes
@@ -176,7 +164,8 @@ export function BriefingNxPublicPage() {
     try {
       await gestaoClientes.salvarBriefingPublico(token, {
         campos: { ...campos, ...senhas },
-        perguntas: BRIEFING_MODELO.map((p) => ({ pergunta: p.pergunta, resposta: respostas[p.pergunta] ?? '' })),
+        // Só as perguntas pedidas: as demais ficam como estão no briefing (o servidor mantém o que não vem).
+        perguntas: BRIEFING_MODELO.filter((_, i) => pedido(chaveDaPergunta(i))).map((p) => ({ pergunta: p.pergunta, resposta: respostas[p.pergunta] ?? '' })),
         link_materiais: linkMateriais,
       })
       return true
@@ -276,12 +265,14 @@ export function BriefingNxPublicPage() {
                 Você já enviou este briefing em {new Date(dados.enviado_em).toLocaleDateString('pt-BR')}. Pode abrir de novo pra completar ou corrigir.
               </p>
             )}
-            <p className="mt-4 text-sm font-semibold text-slate-700">Leva em média de 15 a 20 minutos. 🕐</p>
+            <p className="mt-4 text-sm font-semibold text-slate-700">{completo ? 'Leva em média de 15 a 20 minutos. 🕐' : 'É rápido: leva poucos minutos. 🕐'}</p>
             <p className="mt-3 text-sm leading-relaxed text-slate-500">
               São {ETAPAS.length} etapas curtas. Suas respostas são salvas a cada etapa: se precisar parar, é só voltar neste mesmo link e continuar de onde parou.
             </p>
             <p className="mt-3 text-sm leading-relaxed text-slate-500">
-              É com essas informações que vamos montar a estratégia e as campanhas da sua empresa. Quanto mais completo, melhor o resultado — e se não souber alguma resposta, tudo bem: marque “Não sei”, isso também nos ajuda.
+              {completo
+                ? 'É com essas informações que vamos montar a estratégia e as campanhas da sua empresa. Quanto mais completo, melhor o resultado — e se não souber alguma resposta, tudo bem: marque “Não sei”, isso também nos ajuda.'
+                : 'Precisamos só de algumas informações pra começar. Se não souber alguma, pode deixar em branco e a gente combina depois.'}
             </p>
             <button
               type="button"
@@ -325,7 +316,9 @@ export function BriefingNxPublicPage() {
   // ------------------------------------------------------------------ o formulário
   const etapa = ETAPAS[passo]
   const ultimo = passo === ETAPAS.length - 1
-  const respondidas = BRIEFING_MODELO.filter((p) => (respostas[p.pergunta] ?? '').trim()).length
+  const pedidasDoModelo = BRIEFING_MODELO.filter((_, i) => pedido(chaveDaPergunta(i)))
+  const pedidas = pedidasDoModelo.length
+  const respondidas = pedidasDoModelo.filter((p) => (respostas[p.pergunta] ?? '').trim()).length
 
   return (
     <div className="min-h-screen text-slate-900" style={{ background: FUNDO }}>
@@ -365,7 +358,7 @@ export function BriefingNxPublicPage() {
           {/* ---------------- 1. empresa ---------------- */}
           {etapa.tipo === 'empresa' && (
             <div className="mt-5 space-y-5">
-              <div>
+              {pedido('logo') && <div>
                 <span className="mb-1.5 block text-sm font-medium text-slate-700">Logo da empresa</span>
                 <div className="flex items-center gap-4">
                   {logo ? (
@@ -389,13 +382,17 @@ export function BriefingNxPublicPage() {
                   </div>
                   <input ref={inputLogo} type="file" accept="image/*" className="hidden" onChange={(e) => { void subirLogo(e.target.files?.[0]); e.target.value = '' }} />
                 </div>
-              </div>
-              <Campo rotulo="Site da empresa" ajuda="Se não tiver site, deixe em branco.">
-                <Texto value={campos.site ?? ''} onChange={(v) => mudar('site', v)} placeholder="www.suaempresa.com.br" inputMode="url" />
-              </Campo>
-              <Campo rotulo="WhatsApp que vai receber os leads" ajuda="É pra esse número que os contatos dos anúncios vão chegar.">
-                <Texto value={campos.whatsapp_leads ?? ''} onChange={(v) => mudar('whatsapp_leads', v)} placeholder="(00) 00000-0000" inputMode="tel" />
-              </Campo>
+              </div>}
+              {pedido('site') && (
+                <Campo rotulo="Site da empresa" ajuda="Se não tiver site, deixe em branco.">
+                  <Texto value={campos.site ?? ''} onChange={(v) => mudar('site', v)} placeholder="www.suaempresa.com.br" inputMode="url" />
+                </Campo>
+              )}
+              {pedido('whatsapp_leads') && (
+                <Campo rotulo="WhatsApp que vai receber os leads" ajuda="É pra esse número que os contatos dos anúncios vão chegar.">
+                  <Texto value={campos.whatsapp_leads ?? ''} onChange={(v) => mudar('whatsapp_leads', v)} placeholder="(00) 00000-0000" inputMode="tel" />
+                </Campo>
+              )}
             </div>
           )}
 
@@ -406,20 +403,28 @@ export function BriefingNxPublicPage() {
                 Precisamos desses acessos pra configurar e rodar as campanhas. Só a equipe da NX vê essas informações. Se preferir passar as senhas por outro canal, deixe em branco e nos avise.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Campo rotulo="Instagram da empresa">
-                  <Texto value={campos.instagram ?? ''} onChange={(v) => mudar('instagram', v)} placeholder="@suaempresa" />
-                </Campo>
-                <Campo rotulo="Senha do Instagram">
-                  <Senha value={senhas.instagram_senha} onChange={(v) => setSenhas((s) => ({ ...s, instagram_senha: v }))} temSalva={!!dados.tem_senha.instagram_senha} />
-                </Campo>
-                <Campo rotulo="Facebook (login ou link da página)">
-                  <Texto value={campos.facebook ?? ''} onChange={(v) => mudar('facebook', v)} placeholder="e-mail de login ou facebook.com/suapagina" />
-                </Campo>
-                <Campo rotulo="Senha do Facebook">
-                  <Senha value={senhas.facebook_senha} onChange={(v) => setSenhas((s) => ({ ...s, facebook_senha: v }))} temSalva={!!dados.tem_senha.facebook_senha} />
-                </Campo>
+                {pedido('instagram') && (
+                  <>
+                    <Campo rotulo="Instagram da empresa">
+                      <Texto value={campos.instagram ?? ''} onChange={(v) => mudar('instagram', v)} placeholder="@suaempresa" />
+                    </Campo>
+                    <Campo rotulo="Senha do Instagram">
+                      <Senha value={senhas.instagram_senha} onChange={(v) => setSenhas((s) => ({ ...s, instagram_senha: v }))} temSalva={!!dados.tem_senha.instagram_senha} />
+                    </Campo>
+                  </>
+                )}
+                {pedido('facebook') && (
+                  <>
+                    <Campo rotulo="Facebook (login ou link da página)">
+                      <Texto value={campos.facebook ?? ''} onChange={(v) => mudar('facebook', v)} placeholder="e-mail de login ou facebook.com/suapagina" />
+                    </Campo>
+                    <Campo rotulo="Senha do Facebook">
+                      <Senha value={senhas.facebook_senha} onChange={(v) => setSenhas((s) => ({ ...s, facebook_senha: v }))} temSalva={!!dados.tem_senha.facebook_senha} />
+                    </Campo>
+                  </>
+                )}
               </div>
-              <div className="border-t border-slate-200 pt-4">
+              {pedido('crm') && <div className={pedido('instagram') || pedido('facebook') ? 'border-t border-slate-200 pt-4' : ''}>
                 <p className="mb-3 text-sm font-semibold text-slate-800">CRM ou sistema de vendas</p>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <Campo rotulo="Qual CRM você usa?" ajuda="Se não usa nenhum, escreva “não uso”.">
@@ -432,7 +437,7 @@ export function BriefingNxPublicPage() {
                     <Senha value={senhas.crm_senha} onChange={(v) => setSenhas((s) => ({ ...s, crm_senha: v }))} temSalva={!!dados.tem_senha.crm_senha} />
                   </Campo>
                 </div>
-              </div>
+              </div>}
             </div>
           )}
 
@@ -440,7 +445,7 @@ export function BriefingNxPublicPage() {
           {etapa.tipo === 'contas' && (
             <div className="mt-5 space-y-3">
               <p className="text-sm text-slate-500">Marque o que você já tem. Se quiser, anote ao lado o ID da conta ou o e-mail de acesso.</p>
-              {CHECKLIST.map((item) => (
+              {CHECKLIST.filter((item) => pedido(item.chave)).map((item) => (
                 <div key={item.chave} className="rounded-xl border border-slate-200 p-4">
                   <p className="text-sm font-medium text-slate-800">{item.pergunta}</p>
                   <div className="mt-2.5 flex flex-wrap gap-2" role="group" aria-label={item.pergunta}>
@@ -477,7 +482,7 @@ export function BriefingNxPublicPage() {
               <p className="text-sm text-slate-500">
                 Onde aparecer <strong className="text-amber-600">indicador</strong>, tente responder com número (R$, %, quantidade ou prazo). Não sabe? Marque “Não sei”.
               </p>
-              {BRIEFING_MODELO.map((p, i) => ({ p, i })).filter(({ p }) => p.bloco === etapa.bloco).map(({ p, i }) => (
+              {BRIEFING_MODELO.map((p, i) => ({ p, i })).filter(({ p, i }) => p.bloco === etapa.bloco && pedido(chaveDaPergunta(i))).map(({ p, i }) => (
                 <div key={p.pergunta}>
                   <p className="text-sm font-semibold text-slate-800">
                     <span className="mr-1.5 text-[#2F5BFF]">{i + 1}.</span>
@@ -564,21 +569,24 @@ export function BriefingNxPublicPage() {
               <p className="text-sm text-slate-500">Confira o resumo. Dá pra voltar em qualquer etapa antes de enviar — e também depois, por este mesmo link.</p>
               <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 text-sm">
                 {[
-                  { rotulo: 'Logo', ok: !!logo, texto: logo ? 'enviada' : 'não enviada', ir: 0 },
-                  { rotulo: 'Site', ok: !!campos.site, texto: campos.site || 'em branco', ir: 0 },
-                  { rotulo: 'WhatsApp dos leads', ok: !!campos.whatsapp_leads, texto: campos.whatsapp_leads || 'em branco', ir: 0 },
-                  { rotulo: 'Instagram', ok: !!campos.instagram, texto: campos.instagram || 'em branco', ir: 1 },
-                  { rotulo: 'Facebook', ok: !!campos.facebook, texto: campos.facebook || 'em branco', ir: 1 },
-                  { rotulo: 'CRM', ok: !!campos.crm, texto: campos.crm || 'em branco', ir: 1 },
+                  { chave: 'logo', rotulo: 'Logo', ok: !!logo, texto: logo ? 'enviada' : 'não enviada', ir: 'empresa' },
+                  { chave: 'site', rotulo: 'Site', ok: !!campos.site, texto: campos.site || 'em branco', ir: 'empresa' },
+                  { chave: 'whatsapp_leads', rotulo: 'WhatsApp dos leads', ok: !!campos.whatsapp_leads, texto: campos.whatsapp_leads || 'em branco', ir: 'empresa' },
+                  { chave: 'instagram', rotulo: 'Instagram', ok: !!campos.instagram, texto: campos.instagram || 'em branco', ir: 'acessos' },
+                  { chave: 'facebook', rotulo: 'Facebook', ok: !!campos.facebook, texto: campos.facebook || 'em branco', ir: 'acessos' },
+                  { chave: 'crm', rotulo: 'CRM', ok: !!campos.crm, texto: campos.crm || 'em branco', ir: 'acessos' },
                   {
+                    chave: 'contas',
                     rotulo: 'Contas e pagamento',
-                    ok: CHECKLIST.every((c) => campos[c.chave]),
-                    texto: `${CHECKLIST.filter((c) => campos[c.chave]).length} de ${CHECKLIST.length} respondidas`,
-                    ir: 2,
+                    ok: CHECKLIST.filter((c) => pedido(c.chave)).every((c) => campos[c.chave]),
+                    texto: `${CHECKLIST.filter((c) => pedido(c.chave) && campos[c.chave]).length} de ${CHECKLIST.filter((c) => pedido(c.chave)).length} respondidas`,
+                    ir: 'contas',
                   },
-                  { rotulo: 'Perguntas', ok: respondidas === BRIEFING_MODELO.length, texto: `${respondidas} de ${BRIEFING_MODELO.length} respondidas`, ir: 3 },
-                  { rotulo: 'Materiais', ok: arquivos.length > 0 || !!linkMateriais, texto: `${arquivos.length} arquivo(s)${linkMateriais ? ' + link da pasta' : ''}`, ir: ETAPAS.length - 2 },
-                ].map((l) => (
+                  { chave: 'perguntas', rotulo: 'Perguntas', ok: respondidas === pedidas, texto: `${respondidas} de ${pedidas} respondidas`, ir: 'perguntas' },
+                  { chave: 'materiais', rotulo: 'Materiais', ok: arquivos.length > 0 || !!linkMateriais, texto: `${arquivos.length} arquivo(s)${linkMateriais ? ' + link da pasta' : ''}`, ir: 'materiais' },
+                ]
+                  .filter((l) => (l.chave === 'contas' ? CHECKLIST.some((c) => pedido(c.chave)) : l.chave === 'perguntas' ? pedidas > 0 : pedido(l.chave)))
+                  .map((l) => (
                   <li key={l.rotulo} className="flex items-center gap-3 px-3 py-2.5">
                     <span className={'grid h-5 w-5 shrink-0 place-items-center rounded-full ' + (l.ok ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400')}>
                       <Check className="h-3 w-3" />
@@ -587,7 +595,7 @@ export function BriefingNxPublicPage() {
                       <span className="block font-medium text-slate-700">{l.rotulo}</span>
                       <span className="block truncate text-xs text-slate-500">{l.texto}</span>
                     </span>
-                    <button type="button" onClick={() => void ir(l.ir)} className="shrink-0 text-xs font-medium text-[#2F5BFF] hover:underline">
+                    <button type="button" onClick={() => void ir(Math.max(0, ETAPAS.findIndex((e) => e.tipo === l.ir)))} className="shrink-0 text-xs font-medium text-[#2F5BFF] hover:underline">
                       editar
                     </button>
                   </li>

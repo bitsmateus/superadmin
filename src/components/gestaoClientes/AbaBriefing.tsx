@@ -1,13 +1,18 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
-import { Copy, ExternalLink, Link2, Eye, EyeOff, KeyRound, Loader2, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Link2, Eye, EyeOff, KeyRound, ListChecks, Loader2, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
 import { BarraSalvar } from '@/components/gestaoClientes/BarraSalvar'
 import { ArquivosDoCliente } from '@/components/gestaoClientes/ArquivosDoCliente'
 import { LogoDoCliente } from '@/components/gestaoClientes/LogoDoCliente'
 import { BRIEFING_MODELO, comModeloDoBriefing } from '@/lib/gcBriefingModelo'
+import {
+  ITENS_ACESSOS, ITENS_CONTAS, ITENS_EMPRESA, ITEM_MATERIAIS, MODELOS_DO_BRIEFING, TODAS_AS_CHAVES,
+  chaveDaPergunta, normalizarItens, resumoDosItens, type ItensDoBriefing,
+} from '@/lib/gcBriefingItens'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import { gestaoClientes, type GcBriefing, type GcBriefingLink, type GcClienteLista } from '@/services/gestaoClientes'
 
@@ -105,22 +110,170 @@ function CampoSenha({ rotulo, valor, onChange }: { rotulo: string; valor: string
 }
 
 /**
+ * Escolher o que o link pergunta ao cliente: às vezes a equipe já tem parte das informações, ou o cliente só precisa mandar os acessos.
+ * Parte de um modelo pronto (completo, curto, tráfego pago) e dá pra marcar/desmarcar item por item. O mesmo link passa a mostrar só isso.
+ */
+function Caixa({ marcado, onMudar, rotulo, detalhe }: { marcado: boolean; onMudar: (v: boolean) => void; rotulo: string; detalhe?: string }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-elevate/[0.04]">
+      <input type="checkbox" checked={marcado} onChange={(e) => onMudar(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#2F5BFF]" />
+      <span className="min-w-0 text-sm text-foreground">
+        {rotulo}
+        {detalhe && <span className="block text-xs text-foreground/45">{detalhe}</span>}
+      </span>
+    </label>
+  )
+}
+
+function GrupoDeItens({ titulo, todos, onTodos, children }: { titulo: string; todos: boolean; onTodos: (v: boolean) => void; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-line p-2.5">
+      <label className="flex cursor-pointer items-center gap-2.5 px-2 pb-1.5">
+        <input type="checkbox" checked={todos} onChange={(e) => onTodos(e.target.checked)} className="h-4 w-4 accent-[#2F5BFF]" />
+        <span className="text-xs font-semibold uppercase tracking-wide text-foreground/60">{titulo}</span>
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function EscolherPerguntas({
+  aberto, itensAtuais, salvando, onFechar, onSalvar,
+}: {
+  aberto: boolean
+  itensAtuais: ItensDoBriefing
+  salvando: boolean
+  onFechar: () => void
+  onSalvar: (itens: ItensDoBriefing) => void
+}) {
+  const [marcados, setMarcados] = React.useState<Set<string>>(new Set())
+  React.useEffect(() => {
+    if (aberto) setMarcados(new Set(itensAtuais ?? TODAS_AS_CHAVES))
+  }, [aberto, itensAtuais])
+
+  const alternar = (chaves: string[], ligar: boolean) =>
+    setMarcados((m) => {
+      const n = new Set(m)
+      for (const c of chaves) {
+        if (ligar) n.add(c)
+        else n.delete(c)
+      }
+      return n
+    })
+  const todos = (chaves: string[]) => chaves.every((c) => marcados.has(c))
+
+  const blocos = Array.from(new Set(BRIEFING_MODELO.map((p) => p.bloco)))
+  const escolhidos = TODAS_AS_CHAVES.filter((c) => marcados.has(c))
+  const resultado = normalizarItens(escolhidos)
+  const grupoSimples = (titulo: string, lista: { chave: string; rotulo: string }[], detalhe?: string) => {
+    const chaves = lista.map((i) => i.chave)
+    return (
+      <GrupoDeItens titulo={titulo} todos={todos(chaves)} onTodos={(v) => alternar(chaves, v)}>
+        {lista.map((i) => <Caixa key={i.chave} marcado={marcados.has(i.chave)} onMudar={(v) => alternar([i.chave], v)} rotulo={i.rotulo} detalhe={detalhe} />)}
+      </GrupoDeItens>
+    )
+  }
+
+  return (
+    <Modal
+      open={aberto}
+      onClose={onFechar}
+      size="lg"
+      title="O que perguntar ao cliente"
+      description="Marque só o que você precisa. O cliente vê apenas isso, no mesmo link."
+      footer={
+        <div className="flex w-full items-center justify-between gap-3">
+          <span className="text-xs text-foreground/50">{escolhidos.length === 0 ? 'Marque pelo menos um item' : resumoDosItens(resultado)}</span>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onFechar}>Cancelar</Button>
+            <Button loading={salvando} disabled={escolhidos.length === 0} onClick={() => onSalvar(resultado)}>Salvar</Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-3">
+          {MODELOS_DO_BRIEFING.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setMarcados(new Set(m.itens ?? TODAS_AS_CHAVES))}
+              className="rounded-xl border border-line p-2.5 text-left hover:border-accent/50 hover:bg-accent/[0.04]"
+            >
+              <span className="block text-sm font-semibold text-foreground">{m.nome}</span>
+              <span className="mt-0.5 block text-xs text-foreground/50">{m.descricao}</span>
+            </button>
+          ))}
+        </div>
+
+        {grupoSimples('Dados da empresa', ITENS_EMPRESA)}
+        {grupoSimples('Acessos', ITENS_ACESSOS)}
+        {grupoSimples('Contas e pagamento', ITENS_CONTAS)}
+        {grupoSimples('Materiais', [ITEM_MATERIAIS])}
+        {blocos.map((bloco) => {
+          const doBloco = BRIEFING_MODELO.map((p, i) => ({ p, i })).filter(({ p }) => p.bloco === bloco)
+          const chaves = doBloco.map(({ i }) => chaveDaPergunta(i))
+          return (
+            <GrupoDeItens key={bloco} titulo={bloco} todos={todos(chaves)} onTodos={(v) => alternar(chaves, v)}>
+              {doBloco.map(({ p, i }) => (
+                <Caixa key={i} marcado={marcados.has(chaveDaPergunta(i))} onMudar={(v) => alternar([chaveDaPergunta(i)], v)} rotulo={p.pergunta} />
+              ))}
+            </GrupoDeItens>
+          )
+        })}
+      </div>
+    </Modal>
+  )
+}
+
+/**
  * O link público do briefing: o cliente abre, preenche em etapas e envia. Aqui a equipe gera, copia, abre e
  * revoga o link, e vê quando o cliente enviou.
  */
 function LinkDoBriefing({ clienteId, onRecarregar }: { clienteId: string; onRecarregar: () => void }) {
   const [link, setLink] = React.useState<GcBriefingLink | null>(null)
   const [ocupado, setOcupado] = React.useState(false)
+  // O que o link pergunta. Guardado aqui também pra poder escolher ANTES de gerar o link (vai junto na geração).
+  const [itens, setItens] = React.useState<ItensDoBriefing>(null)
+  const [escolhendo, setEscolhendo] = React.useState(false)
+  const [salvandoItens, setSalvandoItens] = React.useState(false)
 
   React.useEffect(() => {
-    gestaoClientes.briefingLink(clienteId).then(setLink).catch(() => setLink({ token: null, enviado_em: null }))
+    gestaoClientes
+      .briefingLink(clienteId)
+      .then((l) => { setLink(l); setItens(l.itens ?? null) })
+      .catch(() => setLink({ token: null, enviado_em: null, itens: null }))
   }, [clienteId])
+
+  const salvarItens = async (novos: ItensDoBriefing) => {
+    // Sem link ainda: só guarda, e o link nasce já com essa escolha.
+    if (!link?.token) {
+      setItens(novos)
+      setEscolhendo(false)
+      toast.success('Escolha guardada. Ao gerar o link, ele já pede só isso.')
+      return
+    }
+    setSalvandoItens(true)
+    try {
+      await gestaoClientes.salvarItensDoBriefing(clienteId, novos)
+      setItens(novos)
+      setLink({ ...link, itens: novos })
+      setEscolhendo(false)
+      toast.success('Pronto: o mesmo link agora pede só o que você marcou.')
+    } catch (err) {
+      toast.error('Não consegui salvar: ' + (err as Error).message)
+    } finally {
+      setSalvandoItens(false)
+    }
+  }
 
   const agir = async (fn: () => Promise<GcBriefingLink | void>, ok: string) => {
     setOcupado(true)
     try {
       const r = await fn()
-      setLink(r ?? (await gestaoClientes.briefingLink(clienteId)))
+      const l = r ?? (await gestaoClientes.briefingLink(clienteId))
+      setLink(l)
+      setItens(l.itens ?? null)
       toast.success(ok)
     } catch (err) {
       toast.error((err as Error).message)
@@ -139,7 +292,7 @@ function LinkDoBriefing({ clienteId, onRecarregar }: { clienteId: string; onReca
             <Link2 className="h-4 w-4 text-accent" /> Link pro cliente preencher
           </h2>
           <p className="text-xs text-foreground/55">
-            O cliente abre o link, preenche o briefing em etapas (empresa, acessos, contas, as 27 perguntas e materiais) e envia. As respostas caem aqui.
+            O cliente abre o link, preenche o briefing em etapas e envia. As respostas caem aqui.
           </p>
         </div>
         {link?.enviado_em ? (
@@ -150,6 +303,17 @@ function LinkDoBriefing({ clienteId, onRecarregar }: { clienteId: string; onReca
           <span className="rounded-full border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning">Aguardando o cliente</span>
         ) : null}
       </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface/60 px-3 py-2">
+        <ListChecks className="h-4 w-4 shrink-0 text-accent" />
+        <span className="min-w-0 flex-1 text-xs text-foreground/70">
+          <strong className="text-foreground">O que perguntar:</strong> {resumoDosItens(itens)}
+        </span>
+        <Button variant="secondary" size="sm" disabled={link === null} onClick={() => setEscolhendo(true)}>
+          Escolher perguntas
+        </Button>
+      </div>
+      <EscolherPerguntas aberto={escolhendo} itensAtuais={itens} salvando={salvandoItens} onFechar={() => setEscolhendo(false)} onSalvar={(n) => void salvarItens(n)} />
 
       {link === null ? (
         <p className="mt-3 flex items-center gap-2 text-xs text-foreground/50"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando…</p>
@@ -199,7 +363,7 @@ function LinkDoBriefing({ clienteId, onRecarregar }: { clienteId: string; onReca
           </div>
         </div>
       ) : (
-        <Button className="mt-3" size="sm" loading={ocupado} leftIcon={<Link2 className="h-4 w-4" />} onClick={() => void agir(() => gestaoClientes.gerarBriefingLink(clienteId), 'Link gerado')}>
+        <Button className="mt-3" size="sm" loading={ocupado} leftIcon={<Link2 className="h-4 w-4" />} onClick={() => void agir(() => gestaoClientes.gerarBriefingLink(clienteId, false, itens), 'Link gerado')}>
           Gerar link do briefing
         </Button>
       )}

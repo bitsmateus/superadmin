@@ -43,7 +43,7 @@ async function briefingDoToken(token: string) {
   if (!/^[A-Za-z0-9_-]{20,}$/.test(token)) return null;
   return queryOne<Record<string, unknown> & { gc_cliente_id: string }>(
     `SELECT b.gc_cliente_id, ${TODOS.map((c) => `b.${c}`).join(', ')}, b.extras, b.perguntas,
-            b.enviado_em, c.nome_empresa, c.logo_url
+            b.enviado_em, b.link_itens, c.nome_empresa, c.logo_url
      FROM gc_briefing b JOIN gc_clientes c ON c.id = b.gc_cliente_id
      WHERE b.link_token = $1`,
     [token]
@@ -75,6 +75,8 @@ export async function gcBriefingPublicoRoutes(app: FastifyInstance) {
       link_materiais: extras.find((e) => e.rotulo === ROTULO_LINK_MATERIAIS)?.valor ?? '',
       arquivos: await arquivosDoCliente(b.gc_cliente_id),
       enviado_em: b.enviado_em ?? null,
+      // O que a equipe escolheu perguntar neste link (null = o briefing completo).
+      itens: Array.isArray(b.link_itens) ? b.link_itens : null,
     };
   });
 

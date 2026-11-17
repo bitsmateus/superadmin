@@ -551,6 +551,8 @@ const TABELAS = [
   // Briefing preenchido pelo cliente: o link público (token), quando ele enviou, e a marca nos arquivos dele.
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS link_token TEXT`,
   `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS enviado_em TIMESTAMPTZ`,
+  // Quais itens o link pergunta ao cliente (lista de chaves). NULL = o briefing completo.
+  `ALTER TABLE gc_briefing ADD COLUMN IF NOT EXISTS link_itens JSONB`,
   `CREATE UNIQUE INDEX IF NOT EXISTS gc_briefing_link_token_idx ON gc_briefing (link_token) WHERE link_token IS NOT NULL`,
   `ALTER TABLE gc_social_materiais ADD COLUMN IF NOT EXISTS enviado_pelo_cliente BOOLEAN NOT NULL DEFAULT false`,
   `CREATE INDEX IF NOT EXISTS gc_social_materiais_cliente_idx ON gc_social_materiais (gc_cliente_id, created_at DESC)`,

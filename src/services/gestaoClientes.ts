@@ -307,6 +307,8 @@ export interface GcBriefingPublico {
   link_materiais: string
   arquivos: { id: string; titulo: string; tipo: string | null; tamanho: number | null }[]
   enviado_em: string | null
+  /** O que a equipe escolheu perguntar neste link (chaves de gcBriefingItens). null = o briefing completo. */
+  itens: string[] | null
 }
 
 /** O planejamento em texto: o que foi escrito, os itens do checklist já marcados e se vai pro link do cliente. */
@@ -333,6 +335,8 @@ export interface GcBriefingLink {
   token: string | null
   /** Quando o cliente clicou em "Enviar briefing" pela última vez. */
   enviado_em: string | null
+  /** Itens que o link pergunta (null = completo). */
+  itens: string[] | null
 }
 
 export interface GcBriefing {
@@ -1137,8 +1141,11 @@ export const gestaoClientes = {
   salvarBriefing: (clienteId: string, dados: GcBriefing) => api.put<GcBriefing>(`/api/gc/clientes/${clienteId}/briefing`, dados),
 
   briefingLink: (clienteId: string) => api.get<GcBriefingLink>(`/api/gc/clientes/${clienteId}/briefing/link`),
-  gerarBriefingLink: (clienteId: string, novo = false) =>
-    api.post<GcBriefingLink>(`/api/gc/clientes/${clienteId}/briefing/link`, { novo }),
+  /** `itens` só vai se for passado (undefined = não mexe no que o link já pede). */
+  gerarBriefingLink: (clienteId: string, novo = false, itens?: string[] | null) =>
+    api.post<GcBriefingLink>(`/api/gc/clientes/${clienteId}/briefing/link`, itens === undefined ? { novo } : { novo, itens }),
+  salvarItensDoBriefing: (clienteId: string, itens: string[] | null) =>
+    api.put<{ itens: string[] | null }>(`/api/gc/clientes/${clienteId}/briefing/link/itens`, { itens }),
   revogarBriefingLink: (clienteId: string) => api.delete(`/api/gc/clientes/${clienteId}/briefing/link`),
 
   // Briefing público (sem login): o cliente preenche pelo link

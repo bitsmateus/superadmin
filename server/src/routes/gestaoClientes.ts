@@ -372,6 +372,14 @@ function mesesDeReferencia(periodo?: string): [string, string] {
   return [`${mes}-01`, `${anterior}-01`];
 }
 
+/** Itens que o link do briefing pergunta: chaves simples ('site', 'instagram'…) ou 'p:<posição da pergunta>'. Qualquer outra coisa é descartada;
+ * lista vazia = null = o briefing completo. */
+function itensDoBriefing(bruto: unknown): string[] | null {
+  if (!Array.isArray(bruto)) return null;
+  const itens = Array.from(new Set(bruto.filter((c): c is string => typeof c === 'string' && /^([a-z_]{1,40}|p:\d{1,3})$/.test(c)))).slice(0, 120);
+  return itens.length ? itens : null;
+}
+
 /**
  * Usuário com acesso restrito só entra no módulo se a chave "nxdigital" estiver liberada pra ele
  * (Equipe → Permissões). Esconder o menu não basta: sem esta checagem, quem conhece a URL da API
@@ -3006,29 +3014,55 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
 
   // O link público do briefing (o cliente preenche sozinho — ver routes/gcBriefingPublico.ts).
   app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/briefing/link', autenticado, async (req) => {
-    const b = await queryOne<{ link_token: string | null; enviado_em: string | null }>(
-      'SELECT link_token, enviado_em FROM gc_briefing WHERE gc_cliente_id = $1',
+    const b = await queryOne<{ link_token: string | null; enviado_em: string | null; link_itens: string[] | null }>(
+      'SELECT link_token, enviado_em, link_itens FROM gc_briefing WHERE gc_cliente_id = $1',
       [req.params.id]
     );
-    return { token: b?.link_token ?? null, enviado_em: b?.enviado_em ?? null };
+    return { token: b?.link_token ?? null, enviado_em: b?.enviado_em ?? null, itens: b?.link_itens ?? null };
   });
 
+  // O que o link pergunta (lista de itens; null = completo). Vale pro mesmo link, sem trocar o endereço.
+  app.put<{ Params: { id: string }; Body: { itens?: unknown } }>(
+    '/api/gc/clientes/:id/briefing/link/itens',
+    autenticado,
+    async (req) => {
+      const { sub } = req.user as { sub: string };
+      const itens = itensDoBriefing(req.body?.itens);
+      await query(
+        `INSERT INTO gc_briefing (gc_cliente_id, link_itens, atualizado_por) VALUES ($1, $2::jsonb, $3)
+         ON CONFLICT (gc_cliente_id) DO UPDATE SET link_itens = EXCLUDED.link_itens`,
+        [req.params.id, itens ? JSON.stringify(itens) : null, sub]
+      );
+      await registrarEvento(
+        req.params.id,
+        'Perguntas do briefing ajustadas',
+        itens ? `O link agora pede só ${itens.length} itens.` : 'O link voltou a pedir o briefing completo.',
+        sub
+      );
+      return { itens };
+    }
+  );
+
   // Gera o link (ou devolve o que já existe). { novo: true } troca o token: o link antigo para de funcionar.
-  app.post<{ Params: { id: string }; Body: { novo?: boolean } }>(
+  app.post<{ Params: { id: string }; Body: { novo?: boolean; itens?: unknown } }>(
     '/api/gc/clientes/:id/briefing/link',
     autenticado,
     async (req) => {
       const { sub } = req.user as { sub: string };
       const token = crypto.randomBytes(24).toString('base64url');
-      const b = await queryOne<{ link_token: string; enviado_em: string | null }>(
-        `INSERT INTO gc_briefing (gc_cliente_id, link_token, atualizado_por) VALUES ($1, $2, $3)
+      // Só mexe nos itens se vieram no corpo (link novo continua pedindo o mesmo que o anterior).
+      const trocaItens = req.body !== undefined && req.body !== null && 'itens' in req.body;
+      const itens = itensDoBriefing(req.body?.itens);
+      const b = await queryOne<{ link_token: string; enviado_em: string | null; link_itens: string[] | null }>(
+        `INSERT INTO gc_briefing (gc_cliente_id, link_token, atualizado_por, link_itens) VALUES ($1, $2, $3, $5::jsonb)
          ON CONFLICT (gc_cliente_id) DO UPDATE SET
-           link_token = CASE WHEN $4::boolean THEN EXCLUDED.link_token ELSE COALESCE(gc_briefing.link_token, EXCLUDED.link_token) END
-         RETURNING link_token, enviado_em`,
-        [req.params.id, token, sub, req.body?.novo === true]
+           link_token = CASE WHEN $4::boolean THEN EXCLUDED.link_token ELSE COALESCE(gc_briefing.link_token, EXCLUDED.link_token) END,
+           link_itens = CASE WHEN $6::boolean THEN EXCLUDED.link_itens ELSE gc_briefing.link_itens END
+         RETURNING link_token, enviado_em, link_itens`,
+        [req.params.id, token, sub, req.body?.novo === true, itens ? JSON.stringify(itens) : null, trocaItens]
       );
       await registrarEvento(req.params.id, 'Link do briefing gerado', 'O cliente pode preencher o briefing pelo link público.', sub);
-      return { token: b!.link_token, enviado_em: b!.enviado_em };
+      return { token: b!.link_token, enviado_em: b!.enviado_em, itens: b!.link_itens ?? null };
     }
   );
 

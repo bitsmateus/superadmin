@@ -61,3 +61,32 @@ test('perguntas que a equipe acrescentou viram a etapa "Outras perguntas", antes
   assert.deepEqual(curto.map((x) => x.tipo === 'perguntas' ? x.bloco : x.tipo), ['empresa', 'acessos', 'Outras perguntas', 'revisao'])
   assert.equal(etapasDoBriefing(null).some((x) => x.tipo === 'perguntas' && x.bloco === 'Outras perguntas'), false)
 })
+
+test('perguntas acrescentadas são itens marcáveis: chave pelo texto, marca "decididas" e links antigos mostram todas', async () => {
+  const { chaveDaExtra, extraPedida, MARCA_EXTRAS } = await import('./gcBriefingItens')
+  const a = 'Como estruturar a identidade visual?'
+  const b = 'Qual o público do Instagram?'
+  assert.equal(chaveDaExtra(a), chaveDaExtra('  ' + a + '  '))
+  assert.notEqual(chaveDaExtra(a), chaveDaExtra(b))
+  assert.match(chaveDaExtra(a), /^x:[a-z0-9]{1,12}$/)
+  // completo e link antigo (sem a marca): todas entram
+  assert.equal(extraPedida(null, a), true)
+  assert.equal(extraPedida(['site'], a), true)
+  // depois de escolher: só as marcadas
+  assert.equal(extraPedida(['site', chaveDaExtra(a), MARCA_EXTRAS], a), true)
+  assert.equal(extraPedida(['site', chaveDaExtra(a), MARCA_EXTRAS], b), false)
+  assert.equal(extraPedida(['site', MARCA_EXTRAS], a), false)
+})
+
+test('normalizarItens com extras: tudo marcado = completo; sem as extras vira personalizado com a marca', async () => {
+  const { chaveDaExtra, MARCA_EXTRAS } = await import('./gcBriefingItens')
+  const x = [chaveDaExtra('pergunta um'), chaveDaExtra('pergunta dois')]
+  assert.equal(normalizarItens([...TODAS_AS_CHAVES, ...x], x), null)
+  const semExtras = normalizarItens(TODAS_AS_CHAVES, x)
+  assert.ok(semExtras && semExtras.includes(MARCA_EXTRAS) && !semExtras.includes(x[0]))
+  const soUma = normalizarItens(['site', x[1]], x)
+  assert.deepEqual(soUma, ['site', x[1], MARCA_EXTRAS])
+  assert.equal(resumoDosItens(soUma), 'Personalizado: 1 campo e 1 pergunta')
+  // sem nenhuma extra cadastrada, nada muda no formato antigo
+  assert.deepEqual(normalizarItens(['site', 'instagram']), ['site', 'instagram'])
+})

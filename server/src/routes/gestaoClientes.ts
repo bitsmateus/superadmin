@@ -372,11 +372,11 @@ function mesesDeReferencia(periodo?: string): [string, string] {
   return [`${mes}-01`, `${anterior}-01`];
 }
 
-/** Itens que o link do briefing pergunta: chaves simples ('site', 'instagram'…) ou 'p:<posição da pergunta>'. Qualquer outra coisa é descartada;
+/** Itens que o link do briefing pergunta: chaves simples ('site', 'instagram'…), 'p:<posição da pergunta>' ou 'x:<código>' (pergunta acrescentada pela equipe). Qualquer outra coisa é descartada;
  * lista vazia = null = o briefing completo. */
 function itensDoBriefing(bruto: unknown): string[] | null {
   if (!Array.isArray(bruto)) return null;
-  const itens = Array.from(new Set(bruto.filter((c): c is string => typeof c === 'string' && /^([a-z_]{1,40}|p:\d{1,3})$/.test(c)))).slice(0, 120);
+  const itens = Array.from(new Set(bruto.filter((c): c is string => typeof c === 'string' && /^([a-z_]{1,40}|p:\d{1,3}|x:[a-z0-9]{1,12})$/.test(c)))).slice(0, 120);
   return itens.length ? itens : null;
 }
 

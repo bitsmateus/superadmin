@@ -11,7 +11,7 @@ import { LogoDoCliente } from '@/components/gestaoClientes/LogoDoCliente'
 import { BRIEFING_MODELO, comModeloDoBriefing } from '@/lib/gcBriefingModelo'
 import {
   ITENS_ACESSOS, ITENS_CONTAS, ITENS_EMPRESA, ITEM_MATERIAIS, MODELOS_DO_BRIEFING, TODAS_AS_CHAVES,
-  chaveDaPergunta, normalizarItens, resumoDosItens, type ItensDoBriefing,
+  BLOCO_OUTRAS, MARCA_EXTRAS, chaveDaExtra, chaveDaPergunta, normalizarItens, resumoDosItens, type ItensDoBriefing,
 } from '@/lib/gcBriefingItens'
 import { useAvisoAoSair } from '@/hooks/useAvisoAoSair'
 import { gestaoClientes, type GcBriefing, type GcBriefingLink, type GcClienteLista } from '@/services/gestaoClientes'
@@ -138,18 +138,24 @@ function GrupoDeItens({ titulo, todos, onTodos, children }: { titulo: string; to
 }
 
 function EscolherPerguntas({
-  aberto, itensAtuais, salvando, onFechar, onSalvar,
+  aberto, itensAtuais, extras, salvando, onFechar, onSalvar,
 }: {
   aberto: boolean
   itensAtuais: ItensDoBriefing
+  /** Textos das perguntas que a equipe acrescentou (fora do modelo) e já estão salvas. */
+  extras: string[]
   salvando: boolean
   onFechar: () => void
   onSalvar: (itens: ItensDoBriefing) => void
 }) {
   const [marcados, setMarcados] = React.useState<Set<string>>(new Set())
+  const chavesExtras = React.useMemo(() => extras.map(chaveDaExtra), [extras])
   React.useEffect(() => {
-    if (aberto) setMarcados(new Set(itensAtuais ?? TODAS_AS_CHAVES))
-  }, [aberto, itensAtuais])
+    if (!aberto) return
+    // Link completo: tudo marcado. Link antigo (sem a marca das extras): as extras já entravam, então começam marcadas.
+    const base = itensAtuais ?? [...TODAS_AS_CHAVES, ...chavesExtras]
+    setMarcados(new Set(itensAtuais && !itensAtuais.includes(MARCA_EXTRAS) ? [...base, ...chavesExtras] : base))
+  }, [aberto, itensAtuais, chavesExtras])
 
   const alternar = (chaves: string[], ligar: boolean) =>
     setMarcados((m) => {
@@ -163,8 +169,8 @@ function EscolherPerguntas({
   const todos = (chaves: string[]) => chaves.every((c) => marcados.has(c))
 
   const blocos = Array.from(new Set(BRIEFING_MODELO.map((p) => p.bloco)))
-  const escolhidos = TODAS_AS_CHAVES.filter((c) => marcados.has(c))
-  const resultado = normalizarItens(escolhidos)
+  const escolhidos = [...TODAS_AS_CHAVES, ...chavesExtras].filter((c) => marcados.has(c))
+  const resultado = normalizarItens(escolhidos, chavesExtras)
   const grupoSimples = (titulo: string, lista: { chave: string; rotulo: string }[], detalhe?: string) => {
     const chaves = lista.map((i) => i.chave)
     return (
@@ -197,13 +203,24 @@ function EscolherPerguntas({
             <button
               key={m.id}
               type="button"
-              onClick={() => setMarcados(new Set(m.itens ?? TODAS_AS_CHAVES))}
+              onClick={() => setMarcados(new Set(m.itens ?? [...TODAS_AS_CHAVES, ...chavesExtras]))}
               className="rounded-xl border border-line p-2.5 text-left hover:border-accent/50 hover:bg-accent/[0.04]"
             >
               <span className="block text-sm font-semibold text-foreground">{m.nome}</span>
               <span className="mt-0.5 block text-xs text-foreground/50">{m.descricao}</span>
             </button>
           ))}
+          <button
+            type="button"
+            disabled={chavesExtras.length === 0}
+            onClick={() => setMarcados(new Set(chavesExtras))}
+            className="rounded-xl border border-line p-2.5 text-left hover:border-accent/50 hover:bg-accent/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="block text-sm font-semibold text-foreground">Outras perguntas</span>
+            <span className="mt-0.5 block text-xs text-foreground/50">
+              {chavesExtras.length ? `Só as ${chavesExtras.length} ${chavesExtras.length === 1 ? 'pergunta que a equipe acrescentou' : 'perguntas que a equipe acrescentou'}.` : 'Nenhuma pergunta acrescentada ainda.'}
+            </span>
+          </button>
         </div>
 
         {grupoSimples('Dados da empresa', ITENS_EMPRESA)}
@@ -221,6 +238,17 @@ function EscolherPerguntas({
             </GrupoDeItens>
           )
         })}
+        <GrupoDeItens titulo={BLOCO_OUTRAS} todos={chavesExtras.length > 0 && todos(chavesExtras)} onTodos={(v) => alternar(chavesExtras, v)}>
+          {extras.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-foreground/50">
+              Nenhuma ainda. As perguntas que você acrescentar na lista de baixo (“Adicionar outra pergunta”) e salvar aparecem aqui pra marcar.
+            </p>
+          ) : (
+            extras.map((texto) => (
+              <Caixa key={chaveDaExtra(texto)} marcado={marcados.has(chaveDaExtra(texto))} onMudar={(v) => alternar([chaveDaExtra(texto)], v)} rotulo={texto} />
+            ))
+          )}
+        </GrupoDeItens>
       </div>
     </Modal>
   )
@@ -230,7 +258,7 @@ function EscolherPerguntas({
  * O link público do briefing: o cliente abre, preenche em etapas e envia. Aqui a equipe gera, copia, abre e
  * revoga o link, e vê quando o cliente enviou.
  */
-function LinkDoBriefing({ clienteId, onRecarregar }: { clienteId: string; onRecarregar: () => void }) {
+function LinkDoBriefing({ clienteId, extras, onRecarregar }: { clienteId: string; extras: string[]; onRecarregar: () => void }) {
   const [link, setLink] = React.useState<GcBriefingLink | null>(null)
   const [ocupado, setOcupado] = React.useState(false)
   // O que o link pergunta. Guardado aqui também pra poder escolher ANTES de gerar o link (vai junto na geração).
@@ -313,7 +341,7 @@ function LinkDoBriefing({ clienteId, onRecarregar }: { clienteId: string; onReca
           Escolher perguntas
         </Button>
       </div>
-      <EscolherPerguntas aberto={escolhendo} itensAtuais={itens} salvando={salvandoItens} onFechar={() => setEscolhendo(false)} onSalvar={(n) => void salvarItens(n)} />
+      <EscolherPerguntas aberto={escolhendo} itensAtuais={itens} extras={extras} salvando={salvandoItens} onFechar={() => setEscolhendo(false)} onSalvar={(n) => void salvarItens(n)} />
 
       {link === null ? (
         <p className="mt-3 flex items-center gap-2 text-xs text-foreground/50"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando…</p>
@@ -401,6 +429,11 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
       extras: x.extras.filter((e) => e.rotulo.trim() || e.valor.trim()),
       perguntas: x.perguntas.filter((p) => p.pergunta.trim() || p.resposta.trim()),
     })
+  // As perguntas que a equipe acrescentou e JÁ estão salvas (as do rascunho ainda não chegam ao cliente): são as que o seletor lista.
+  const extrasSalvas = React.useMemo(
+    () => (gravado?.perguntas ?? []).map((p) => p.pergunta.trim()).filter((t) => t && !BRIEFING_MODELO.some((m) => m.pergunta === t)),
+    [gravado],
+  )
   const sujo =
     !!r && !!gravado &&
     limpo(r) !== limpo(gravado)
@@ -432,6 +465,7 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
     <div className="space-y-4">
       <LinkDoBriefing
         clienteId={cliente.id}
+        extras={extrasSalvas}
         onRecarregar={() => {
           if (sujo && !window.confirm('Há alterações não salvas nesta tela. Recarregar descarta essas alterações. Continuar?')) return
           void carregar().then(() => {

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { gestaoClientes, type GcBriefingPublico } from '@/services/gestaoClientes'
 import { BRIEFING_MODELO } from '@/lib/gcBriefingModelo'
-import { BLOCO_OUTRAS, chaveDaPergunta, etapasDoBriefing, itemPedido, respostaValida, type EtapaDoBriefing } from '@/lib/gcBriefingItens'
+import { BLOCO_OUTRAS, chaveDaPergunta, etapasDoBriefing, extraPedida, itemPedido, respostaValida, type EtapaDoBriefing } from '@/lib/gcBriefingItens'
 import logoNx from '@/assets/logo-nx.jpg'
 
 /** Mesmo fundo do briefing do Suporte e da ficha de cadastro. */
@@ -145,6 +145,7 @@ export function BriefingNxPublicPage() {
     const extras = (dados?.perguntas ?? [])
       .filter((p) => p.pergunta.trim() && !BRIEFING_MODELO.some((m) => m.pergunta === p.pergunta))
       .map((p, j) => ({ pergunta: p.pergunta, bloco: BLOCO_OUTRAS, indicador: undefined as string | undefined, i: BRIEFING_MODELO.length + j }))
+      .filter((q) => extraPedida(itens, q.pergunta))
     return [...doModelo, ...extras]
   }, [itens, dados])
   const ETAPAS = React.useMemo(() => etapasDoBriefing(itens, PERGUNTAS.some((q) => q.bloco === BLOCO_OUTRAS)), [itens, PERGUNTAS])

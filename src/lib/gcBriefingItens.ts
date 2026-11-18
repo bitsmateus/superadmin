@@ -46,13 +46,33 @@ export function itemPedido(itens: ItensDoBriefing | undefined, chave: string): b
   return !itens || itens.includes(chave)
 }
 
-/** Aceita só chaves conhecidas, sem repetir. Lista vazia ou chaves de fora → null (volta pro completo). */
-export function normalizarItens(bruto: unknown): ItensDoBriefing {
+/**
+ * Perguntas acrescentadas pela equipe (fora das 27 do modelo) também são itens que dá pra marcar. A chave vem do TEXTO da pergunta
+ * ('x:' + um código curto dele), então não muda se outra pergunta for apagada ou a ordem mudar.
+ */
+export function chaveDaExtra(pergunta: string): string {
+  let h = 5381
+  const t = pergunta.trim()
+  for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0
+  return `x:${h.toString(36)}`
+}
+
+/** Marca guardada junto com a escolha: "as perguntas extras foram decididas aqui". Sem ela (links antigos), as extras entram todas. */
+export const MARCA_EXTRAS = 'x_'
+
+/** A pergunta acrescentada pela equipe entra neste link? Link completo e links antigos mostram todas; depois de escolher, só as marcadas. */
+export function extraPedida(itens: ItensDoBriefing | undefined, pergunta: string): boolean {
+  return !itens || !itens.includes(MARCA_EXTRAS) || itens.includes(chaveDaExtra(pergunta))
+}
+
+/** Aceita só chaves conhecidas, sem repetir. Lista vazia ou tudo marcado → null (o briefing completo).
+ * `chavesExtras`: as chaves das perguntas acrescentadas que existem agora (chaveDaExtra de cada uma). */
+export function normalizarItens(bruto: unknown, chavesExtras: string[] = []): ItensDoBriefing {
   if (!Array.isArray(bruto)) return null
-  const validas = new Set(TODAS_AS_CHAVES)
-  const itens = TODAS_AS_CHAVES.filter((c) => bruto.includes(c) && validas.has(c))
-  if (itens.length === 0 || itens.length === TODAS_AS_CHAVES.length) return null
-  return itens
+  const todas = [...TODAS_AS_CHAVES, ...chavesExtras]
+  const itens = todas.filter((c) => bruto.includes(c))
+  if (itens.length === 0 || itens.length === todas.length) return null
+  return chavesExtras.length ? [...itens, MARCA_EXTRAS] : itens
 }
 
 const comecaCom = (texto: string) => BRIEFING_MODELO.map((p, i) => ({ p, i })).filter(({ p }) => p.pergunta.startsWith(texto)).map(({ i }) => chaveDaPergunta(i))
@@ -91,7 +111,7 @@ export type EtapaDoBriefing =
   | { tipo: 'materiais' }
   | { tipo: 'revisao' }
 
-/** Título do bloco das perguntas que a equipe acrescentou à mão (fora do modelo). Elas sempre aparecem pro cliente. */
+/** Título do bloco das perguntas que a equipe acrescentou à mão (fora do modelo). */
 export const BLOCO_OUTRAS = 'Outras perguntas'
 
 /** As etapas que o cliente vai ver: só as que têm algum item pedido. A revisão fica sempre por último.
@@ -115,8 +135,8 @@ export function etapasDoBriefing(itens: ItensDoBriefing | undefined, comExtras =
 /** Resumo curto pra mostrar na tela da equipe. */
 export function resumoDosItens(itens: ItensDoBriefing | undefined): string {
   if (!itens) return 'Briefing completo'
-  const perguntas = itens.filter((c) => c.startsWith('p:')).length
-  const soltos = itens.length - perguntas
+  const perguntas = itens.filter((c) => c.startsWith('p:') || c.startsWith('x:')).length
+  const soltos = itens.filter((c) => !c.startsWith('p:') && !c.startsWith('x:') && c !== MARCA_EXTRAS).length
   const partes = [soltos ? `${soltos} ${soltos === 1 ? 'campo' : 'campos'}` : '', perguntas ? `${perguntas} ${perguntas === 1 ? 'pergunta' : 'perguntas'}` : ''].filter(Boolean)
   return `Personalizado: ${partes.join(' e ')}`
 }

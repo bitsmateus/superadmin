@@ -91,8 +91,12 @@ export type EtapaDoBriefing =
   | { tipo: 'materiais' }
   | { tipo: 'revisao' }
 
-/** As etapas que o cliente vai ver: só as que têm algum item pedido. A revisão fica sempre por último. */
-export function etapasDoBriefing(itens: ItensDoBriefing | undefined): EtapaDoBriefing[] {
+/** Título do bloco das perguntas que a equipe acrescentou à mão (fora do modelo). Elas sempre aparecem pro cliente. */
+export const BLOCO_OUTRAS = 'Outras perguntas'
+
+/** As etapas que o cliente vai ver: só as que têm algum item pedido. A revisão fica sempre por último.
+ * `comExtras`: a equipe acrescentou perguntas além das 27 do modelo, que viram uma etapa "Outras perguntas". */
+export function etapasDoBriefing(itens: ItensDoBriefing | undefined, comExtras = false): EtapaDoBriefing[] {
   const pede = (lista: { chave: string }[]) => lista.some((i) => itemPedido(itens, i.chave))
   const etapas: EtapaDoBriefing[] = []
   if (pede(ITENS_EMPRESA)) etapas.push({ tipo: 'empresa' })
@@ -102,6 +106,7 @@ export function etapasDoBriefing(itens: ItensDoBriefing | undefined): EtapaDoBri
   for (const bloco of blocos) {
     if (BRIEFING_MODELO.some((p, i) => p.bloco === bloco && itemPedido(itens, chaveDaPergunta(i)))) etapas.push({ tipo: 'perguntas', bloco })
   }
+  if (comExtras) etapas.push({ tipo: 'perguntas', bloco: BLOCO_OUTRAS })
   if (itemPedido(itens, ITEM_MATERIAIS.chave)) etapas.push({ tipo: 'materiais' })
   etapas.push({ tipo: 'revisao' })
   return etapas

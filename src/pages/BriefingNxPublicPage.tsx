@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { gestaoClientes, type GcBriefingPublico } from '@/services/gestaoClientes'
 import { BRIEFING_MODELO } from '@/lib/gcBriefingModelo'
-import { chaveDaPergunta, etapasDoBriefing, itemPedido, respostaValida, type EtapaDoBriefing } from '@/lib/gcBriefingItens'
+import { BLOCO_OUTRAS, chaveDaPergunta, etapasDoBriefing, itemPedido, respostaValida, type EtapaDoBriefing } from '@/lib/gcBriefingItens'
 import logoNx from '@/assets/logo-nx.jpg'
 
 /** Mesmo fundo do briefing do Suporte e da ficha de cadastro. */
@@ -139,7 +139,15 @@ export function BriefingNxPublicPage() {
   const inputLogo = React.useRef<HTMLInputElement>(null)
   // Só as etapas e os itens que a equipe escolheu pedir neste link (sem escolha = o briefing completo).
   const itens = dados?.itens ?? null
-  const ETAPAS = React.useMemo(() => etapasDoBriefing(itens), [itens])
+  // As perguntas que o cliente responde: as do modelo que foram pedidas + as que a equipe acrescentou à mão (essas sempre entram).
+  const PERGUNTAS = React.useMemo(() => {
+    const doModelo = BRIEFING_MODELO.map((p, i) => ({ pergunta: p.pergunta, bloco: p.bloco, indicador: p.indicador, i })).filter((q) => itemPedido(itens, chaveDaPergunta(q.i)))
+    const extras = (dados?.perguntas ?? [])
+      .filter((p) => p.pergunta.trim() && !BRIEFING_MODELO.some((m) => m.pergunta === p.pergunta))
+      .map((p, j) => ({ pergunta: p.pergunta, bloco: BLOCO_OUTRAS, indicador: undefined as string | undefined, i: BRIEFING_MODELO.length + j }))
+    return [...doModelo, ...extras]
+  }, [itens, dados])
+  const ETAPAS = React.useMemo(() => etapasDoBriefing(itens, PERGUNTAS.some((q) => q.bloco === BLOCO_OUTRAS)), [itens, PERGUNTAS])
   const pedido = (chave: string) => itemPedido(itens, chave)
   const completo = !itens
 
@@ -168,7 +176,7 @@ export function BriefingNxPublicPage() {
       await gestaoClientes.salvarBriefingPublico(token, {
         campos: { ...campos, ...senhas },
         // Só as perguntas pedidas: as demais ficam como estão no briefing (o servidor mantém o que não vem).
-        perguntas: BRIEFING_MODELO.filter((_, i) => pedido(chaveDaPergunta(i))).map((p) => ({ pergunta: p.pergunta, resposta: respostas[p.pergunta] ?? '' })),
+        perguntas: PERGUNTAS.map((q) => ({ pergunta: q.pergunta, resposta: respostas[q.pergunta] ?? '' })),
         link_materiais: linkMateriais,
       })
       return true
@@ -182,7 +190,7 @@ export function BriefingNxPublicPage() {
 
   /** As perguntas são obrigatórias: as pedidas neste link (e, na etapa, as do bloco) que ainda não têm uma resposta de verdade. */
   const semResposta = (bloco?: string) =>
-    BRIEFING_MODELO.map((p, i) => ({ p, i })).filter(({ p, i }) => pedido(chaveDaPergunta(i)) && (!bloco || p.bloco === bloco) && !respostaValida(respostas[p.pergunta]))
+    PERGUNTAS.filter((q) => (!bloco || q.bloco === bloco) && !respostaValida(respostas[q.pergunta])).map((q) => ({ p: q, i: q.i }))
 
   const ir = async (novo: number) => {
     if (!(await salvar())) return
@@ -347,9 +355,8 @@ export function BriefingNxPublicPage() {
   // ------------------------------------------------------------------ o formulário
   const etapa = ETAPAS[passo]
   const ultimo = passo === ETAPAS.length - 1
-  const pedidasDoModelo = BRIEFING_MODELO.filter((_, i) => pedido(chaveDaPergunta(i)))
-  const pedidas = pedidasDoModelo.length
-  const respondidas = pedidasDoModelo.filter((p) => (respostas[p.pergunta] ?? '').trim()).length
+  const pedidas = PERGUNTAS.length
+  const respondidas = PERGUNTAS.filter((q) => respostaValida(respostas[q.pergunta])).length
 
   return (
     <div className="min-h-screen text-slate-900" style={{ background: FUNDO }}>
@@ -513,7 +520,7 @@ export function BriefingNxPublicPage() {
               <p className="text-sm text-slate-500">
                 Todas as perguntas são obrigatórias. Onde aparecer <strong className="text-amber-600">indicador</strong>, responda com número (R$, %, quantidade ou prazo); se não souber o valor exato, escreva uma estimativa.
               </p>
-              {BRIEFING_MODELO.map((p, i) => ({ p, i })).filter(({ p, i }) => p.bloco === etapa.bloco && pedido(chaveDaPergunta(i))).map(({ p, i }) => (
+              {PERGUNTAS.filter((q) => q.bloco === etapa.bloco).map((q) => ({ p: q, i: q.i })).map(({ p, i }) => (
                 <div key={p.pergunta} id={`pergunta-${i}`}>
                   <p className="text-sm font-semibold text-slate-800">
                     <span className="mr-1.5 text-[#2F5BFF]">{i + 1}.</span>

@@ -53,3 +53,11 @@ test('resposta obrigatória: vazio e "Não sei"/"Não sabe" não valem', async (
   for (const r of ['', '   ', undefined, null, 'Não sei', 'não sei.', 'NAO SEI', 'Não sabe', 'nao sabe']) assert.equal(respostaValida(r), false, String(r))
   for (const r of ['R$ 30 mil', '0', 'Não sei bem, uns 20', 'Sim']) assert.equal(respostaValida(r), true, r)
 })
+
+test('perguntas que a equipe acrescentou viram a etapa "Outras perguntas", antes dos materiais, mesmo num link personalizado', () => {
+  const completo = etapasDoBriefing(null, true)
+  assert.deepEqual(completo.slice(-3).map((x) => x.tipo === 'perguntas' ? x.bloco : x.tipo), ['Outras perguntas', 'materiais', 'revisao'])
+  const curto = etapasDoBriefing(['site', 'instagram'], true)
+  assert.deepEqual(curto.map((x) => x.tipo === 'perguntas' ? x.bloco : x.tipo), ['empresa', 'acessos', 'Outras perguntas', 'revisao'])
+  assert.equal(etapasDoBriefing(null).some((x) => x.tipo === 'perguntas' && x.bloco === 'Outras perguntas'), false)
+})

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
-import { Copy, ExternalLink, Link2, Eye, EyeOff, KeyRound, ListChecks, Loader2, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react'
+import { openBriefingSheet } from '@/lib/briefingSheet'
+import { Copy, Download, ExternalLink, Link2, Eye, EyeOff, KeyRound, ListChecks, Loader2, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
@@ -463,6 +464,19 @@ export function AbaBriefing({ cliente, onMudou }: { cliente: GcClienteLista; onM
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button
+          variant="secondary"
+          size="sm"
+          leftIcon={<Download className="h-4 w-4" />}
+          onClick={() => {
+            if (!openBriefingSheet(cliente.nome_empresa, r)) toast.error('O navegador bloqueou a janela. Libere pop-ups pra este site.')
+          }}
+        >
+          Baixar briefing em PDF
+        </Button>
+      </div>
+
       <LinkDoBriefing
         clienteId={cliente.id}
         extras={extrasSalvas}

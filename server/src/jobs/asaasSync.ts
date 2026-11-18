@@ -164,13 +164,23 @@ export async function sincronizarAsaas(opts: { dryRun?: boolean } = {}): Promise
   // ------------------------------------------------------------- 1. quem já está ligado
   const paraCancelar: typeof clientes = [];
 
+  // Quem esta sincronização já cancelou uma vez e alguém reativou à mão: a decisão humana vale,
+  // senão o cliente volta pra Cancelado a cada rodada (15 min) e nunca consegue ficar ativo.
+  // Pra o job voltar a cancelar, é só ligar o cadastro a outra assinatura e remover o registro.
+  const jaCanceladosPeloSync = new Set(
+    (await query<{ client_id: string }>(
+      `SELECT DISTINCT client_id FROM client_cancellations
+       WHERE asaas_removido = true AND motivo = 'Cobrança removida no Asaas'`
+    )).map((r) => r.client_id)
+  );
+
   for (const cl of clientes) {
     if (!cl.asaas_subscription_id) continue;
     const s = assinaturaPorId.get(cl.asaas_subscription_id);
 
     if (!estaAtiva(s)) {
       // A cobrança saiu do ar lá. Quem já está cancelado aqui não precisa de nada.
-      if (cl.stage !== 'churned') paraCancelar.push(cl);
+      if (cl.stage !== 'churned' && !jaCanceladosPeloSync.has(cl.id)) paraCancelar.push(cl);
       continue;
     }
 

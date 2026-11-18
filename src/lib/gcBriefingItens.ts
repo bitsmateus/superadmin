@@ -115,3 +115,10 @@ export function resumoDosItens(itens: ItensDoBriefing | undefined): string {
   const partes = [soltos ? `${soltos} ${soltos === 1 ? 'campo' : 'campos'}` : '', perguntas ? `${perguntas} ${perguntas === 1 ? 'pergunta' : 'perguntas'}` : ''].filter(Boolean)
   return `Personalizado: ${partes.join(' e ')}`
 }
+
+/** "Não sei" / "Não sabe" não conta como resposta: as perguntas do briefing são obrigatórias e o cliente precisa escrever algo. */
+export function respostaValida(resposta: string | null | undefined): boolean {
+  const r = String(resposta ?? '').trim()
+  if (!r) return false
+  return !/^n[aã]o\s+(sei|sabe)\.?$/i.test(r)
+}

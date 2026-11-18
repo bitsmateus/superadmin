@@ -47,3 +47,9 @@ test('resumo', () => {
   assert.equal(resumoDosItens(null), 'Briefing completo')
   assert.equal(resumoDosItens(['site', 'instagram', 'p:1']), 'Personalizado: 2 campos e 1 pergunta')
 })
+
+test('resposta obrigatória: vazio e "Não sei"/"Não sabe" não valem', async () => {
+  const { respostaValida } = await import('./gcBriefingItens')
+  for (const r of ['', '   ', undefined, null, 'Não sei', 'não sei.', 'NAO SEI', 'Não sabe', 'nao sabe']) assert.equal(respostaValida(r), false, String(r))
+  for (const r of ['R$ 30 mil', '0', 'Não sei bem, uns 20', 'Sim']) assert.equal(respostaValida(r), true, r)
+})

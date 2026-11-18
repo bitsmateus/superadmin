@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { gestaoClientes, type GcBriefingPublico } from '@/services/gestaoClientes'
 import { BRIEFING_MODELO } from '@/lib/gcBriefingModelo'
-import { chaveDaPergunta, etapasDoBriefing, itemPedido, type EtapaDoBriefing } from '@/lib/gcBriefingItens'
+import { chaveDaPergunta, etapasDoBriefing, itemPedido, respostaValida, type EtapaDoBriefing } from '@/lib/gcBriefingItens'
 import logoNx from '@/assets/logo-nx.jpg'
 
 /** Mesmo fundo do briefing do Suporte e da ficha de cadastro. */
@@ -133,6 +133,8 @@ export function BriefingNxPublicPage() {
   const [salvando, setSalvando] = React.useState(false)
   const [enviandoArquivo, setEnviandoArquivo] = React.useState(false)
   const [aviso, setAviso] = React.useState('')
+  // Depois de tentar avançar com pergunta sem resposta, as vazias ficam marcadas em vermelho.
+  const [tentou, setTentou] = React.useState(false)
   const inputArquivos = React.useRef<HTMLInputElement>(null)
   const inputLogo = React.useRef<HTMLInputElement>(null)
   // Só as etapas e os itens que a equipe escolheu pedir neste link (sem escolha = o briefing completo).
@@ -147,7 +149,8 @@ export function BriefingNxPublicPage() {
       .then((d) => {
         setDados(d)
         setCampos(d.campos)
-        setRespostas(Object.fromEntries(d.perguntas.map((p) => [p.pergunta, p.resposta])))
+        // "Não sei" de quando o botão existia não conta mais: a caixa abre vazia pra pessoa escrever uma resposta de verdade.
+        setRespostas(Object.fromEntries(d.perguntas.map((p) => [p.pergunta, respostaValida(p.resposta) ? p.resposta : ''])))
         setLinkMateriais(d.link_materiais)
         setArquivos(d.arquivos)
         setLogo(d.cliente.logo_url)
@@ -177,14 +180,42 @@ export function BriefingNxPublicPage() {
     }
   }
 
+  /** As perguntas são obrigatórias: as pedidas neste link (e, na etapa, as do bloco) que ainda não têm uma resposta de verdade. */
+  const semResposta = (bloco?: string) =>
+    BRIEFING_MODELO.map((p, i) => ({ p, i })).filter(({ p, i }) => pedido(chaveDaPergunta(i)) && (!bloco || p.bloco === bloco) && !respostaValida(respostas[p.pergunta]))
+
   const ir = async (novo: number) => {
     if (!(await salvar())) return
+    // Pra frente, a etapa de perguntas só libera com todas respondidas (voltar é livre).
+    const atual = ETAPAS[passo]
+    if (novo > passo && atual.tipo === 'perguntas') {
+      const faltam = semResposta(atual.bloco)
+      if (faltam.length) {
+        setTentou(true)
+        setAviso(faltam.length === 1 ? 'Falta responder 1 pergunta pra continuar. Ela está marcada em vermelho.' : `Faltam ${faltam.length} perguntas pra continuar. Elas estão marcadas em vermelho.`)
+        window.setTimeout(() => document.getElementById(`pergunta-${faltam[0].i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+        return
+      }
+    }
+    setTentou(false)
     setPasso(Math.max(0, Math.min(ETAPAS.length - 1, novo)))
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const enviar = async () => {
     if (!(await salvar())) return
+    // Só envia com todas as perguntas respondidas: se faltar alguma, leva pra primeira etapa que tem pergunta em branco.
+    const faltam = semResposta()
+    if (faltam.length) {
+      const alvo = ETAPAS.findIndex((e) => e.tipo === 'perguntas' && faltam.some(({ p }) => p.bloco === e.bloco))
+      setTentou(true)
+      setAviso(`Faltam ${faltam.length} ${faltam.length === 1 ? 'pergunta' : 'perguntas'} pra poder enviar. Elas estão marcadas em vermelho.`)
+      if (alvo >= 0) {
+        setPasso(alvo)
+        window.setTimeout(() => document.getElementById(`pergunta-${faltam.find(({ p }) => p.bloco === (ETAPAS[alvo] as { bloco: string }).bloco)!.i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+      }
+      return
+    }
     setSalvando(true)
     try {
       await gestaoClientes.enviarBriefingPublico(token)
@@ -271,7 +302,7 @@ export function BriefingNxPublicPage() {
             </p>
             <p className="mt-3 text-sm leading-relaxed text-slate-500">
               {completo
-                ? 'É com essas informações que vamos montar a estratégia e as campanhas da sua empresa. Quanto mais completo, melhor o resultado — e se não souber alguma resposta, tudo bem: marque “Não sei”, isso também nos ajuda.'
+                ? 'É com essas informações que vamos montar a estratégia e as campanhas da sua empresa. Todas as perguntas são obrigatórias: responda com o que você souber, mesmo que seja uma estimativa.'
                 : 'Precisamos só de algumas informações pra começar. Se não souber alguma, pode deixar em branco e a gente combina depois.'}
             </p>
             <button
@@ -480,13 +511,14 @@ export function BriefingNxPublicPage() {
           {etapa.tipo === 'perguntas' && (
             <div className="mt-5 space-y-5">
               <p className="text-sm text-slate-500">
-                Onde aparecer <strong className="text-amber-600">indicador</strong>, tente responder com número (R$, %, quantidade ou prazo). Não sabe? Marque “Não sei”.
+                Todas as perguntas são obrigatórias. Onde aparecer <strong className="text-amber-600">indicador</strong>, responda com número (R$, %, quantidade ou prazo); se não souber o valor exato, escreva uma estimativa.
               </p>
               {BRIEFING_MODELO.map((p, i) => ({ p, i })).filter(({ p, i }) => p.bloco === etapa.bloco && pedido(chaveDaPergunta(i))).map(({ p, i }) => (
-                <div key={p.pergunta}>
+                <div key={p.pergunta} id={`pergunta-${i}`}>
                   <p className="text-sm font-semibold text-slate-800">
                     <span className="mr-1.5 text-[#2F5BFF]">{i + 1}.</span>
                     {p.pergunta}
+                    <span className="ml-1 text-rose-500" aria-hidden="true">*</span>
                   </p>
                   {p.indicador && (
                     <p className="mt-0.5 text-xs">
@@ -499,15 +531,20 @@ export function BriefingNxPublicPage() {
                     rows={3}
                     placeholder="Sua resposta"
                     aria-label={`Resposta da pergunta ${i + 1}`}
-                    className="mt-2 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-base text-slate-800 sm:text-sm outline-none placeholder:text-slate-400 focus:border-[#2F5BFF] focus:ring-2 focus:ring-[#2F5BFF]/20"
+                    aria-required="true"
+                    aria-invalid={tentou && !respostaValida(respostas[p.pergunta])}
+                    className={
+                      'mt-2 w-full resize-y rounded-lg border bg-white px-3 py-2 text-base text-slate-800 sm:text-sm outline-none placeholder:text-slate-400 focus:ring-2 ' +
+                      (tentou && !respostaValida(respostas[p.pergunta])
+                        ? 'border-rose-400 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-200'
+                        : 'border-slate-300 focus:border-[#2F5BFF] focus:ring-[#2F5BFF]/20')
+                    }
                   />
-                  <button
-                    type="button"
-                    onClick={() => setRespostas((r) => ({ ...r, [p.pergunta]: 'Não sei' }))}
-                    className="mt-1.5 rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:border-amber-400 hover:text-amber-700"
-                  >
-                    Não sei
-                  </button>
+                  {tentou && !respostaValida(respostas[p.pergunta]) && (
+                    <p className="mt-1 text-xs font-medium text-rose-600">
+                      {/^n[aã]o\s+(sei|sabe)/i.test((respostas[p.pergunta] ?? '').trim()) ? 'Escreva uma resposta ou uma estimativa. “Não sei” não vale.' : 'Pergunta obrigatória.'}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -601,7 +638,7 @@ export function BriefingNxPublicPage() {
                   </li>
                 ))}
               </ul>
-              <p className="text-xs text-slate-500">Não precisa estar tudo preenchido pra enviar: o que faltar a gente combina depois.</p>
+              <p className="text-xs text-slate-500">As perguntas são obrigatórias: o envio só é liberado com todas respondidas. Os outros campos podem ficar em branco e a gente combina depois.</p>
             </div>
           )}
 

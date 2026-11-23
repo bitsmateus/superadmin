@@ -521,6 +521,9 @@ END $$`);
   END $$`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_mrr TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS valor_implementacao TEXT NOT NULL DEFAULT ''`);
+  // Categoria da demanda do suporte (SUPORTE / CONFIGURAÇÃO NOVA / CONFIGURAÇÃO NOVO CLIENTE), escolhida na "Nova demanda" antes do Tipo.
+  // Vazia nos cards antigos e nos demais CRMs.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS categoria TEXT NOT NULL DEFAULT ''`);
   // Fidelidade do contrato fechado (texto livre: "12 meses", "Sem fidelidade"…). Obrigatória pra marcar como Vendido.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS fidelidade TEXT NOT NULL DEFAULT ''`);
   // Exclusão de lead é sempre "soft delete" — marca deleted_at em vez de apagar a linha,
@@ -2297,6 +2300,27 @@ END; $$`);
          SELECT 'tipo', 'SUPORTE COMUM', '#64748B', 99, lp.id FROM lead_pages lp
          WHERE lp.no_pipeline AND lp.section = 'demandas' AND lp.archived_at IS NULL
            AND NOT EXISTS (SELECT 1 FROM lead_labels l WHERE l.field = 'tipo' AND l.page_id = lp.id AND lower(l.name) = 'suporte comum')`);
+    }
+  }
+
+  // O tipo "SUPORTE COMUM" (23/11, mais cedo) passou a se chamar só "SUPORTE": a Nova demanda agora pergunta primeiro a categoria
+  // (SUPORTE, CONFIGURAÇÃO NOVA, CONFIGURAÇÃO NOVO CLIENTE) e os 8 tipos de sempre só valem pras configurações. Uma vez só.
+  {
+    const { rows: reservou } = await pool.query(
+      `INSERT INTO traffic_report_log (dia, kind) VALUES ('2026-11-23'::date, 'crm_suporte_tipo_suporte') ON CONFLICT DO NOTHING RETURNING dia`);
+    if (reservou.length) {
+      // Renomeia onde o "SUPORTE COMUM" já existe (etiqueta e cards), sem duplicar se a aba já tiver "SUPORTE".
+      await pool.query(
+        `UPDATE lead_labels l SET name = 'SUPORTE' WHERE l.field = 'tipo' AND lower(l.name) = 'suporte comum'
+           AND NOT EXISTS (SELECT 1 FROM lead_labels o WHERE o.field = 'tipo' AND o.page_id IS NOT DISTINCT FROM l.page_id AND lower(o.name) = 'suporte')`);
+      await pool.query(
+        `UPDATE lead_rows SET tipo = 'SUPORTE', categoria = CASE WHEN categoria = '' THEN 'SUPORTE' ELSE categoria END WHERE lower(tipo) = 'suporte comum'`);
+      // Aba do suporte que ainda não tinha nenhum dos dois: ganha o "SUPORTE" no começo da lista.
+      await pool.query(
+        `INSERT INTO lead_labels (field, name, color, position, page_id)
+         SELECT 'tipo', 'SUPORTE', '#64748B', 99, lp.id FROM lead_pages lp
+         WHERE lp.no_pipeline AND lp.section = 'demandas' AND lp.archived_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM lead_labels l WHERE l.field = 'tipo' AND l.page_id = lp.id AND lower(l.name) IN ('suporte', 'suporte comum'))`);
     }
   }
 

@@ -9,7 +9,7 @@ import { leadLabelsService } from '@/services/leadLabels'
 import { addMonthsToId, currentMonthId, monthIdBounds } from '@/hooks/useMonthFilter'
 import { diaLocal } from '@/lib/diaLocal'
 import { todayKey } from '@/lib/leadDates'
-import { ehTipoSuporteComum } from '@/lib/demandaDoCliente'
+import { CATEGORIAS_DA_DEMANDA, ehTipoSuporte } from '@/lib/demandaDoCliente'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
@@ -128,8 +128,8 @@ export function DashboardDoSuporte({ rows, boards, onOpenLead }: { rows: LeadRow
       if (noPeriodo(diaLocal(r.createdAt))) per.entraram.push(r)
       if (fechada && noPeriodo(diaQueEntrou(r))) {
         if (etapa === 'finalizado') per.finalizadas.push(r)
-        // SUPORTE COMUM não é entrega: o card que cair no quadro de entregas conta como finalizado, não como entrega feita.
-        else if (etapa === 'entrega') (ehTipoSuporteComum(r.tipo) ? per.finalizadas : per.entregas).push(r)
+        // SUPORTE não é entrega: o card que cair no quadro de entregas conta como finalizado, não como entrega feita.
+        else if (etapa === 'entrega') (ehTipoSuporte(r.tipo) ? per.finalizadas : per.entregas).push(r)
         else per.vendas.push(r)
         if (etapa !== 'venda' && prazo) (diaQueEntrou(r) <= prazo ? per.noPrazo : per.foraDoPrazo).push(r)
       }
@@ -155,6 +155,23 @@ export function DashboardDoSuporte({ rows, boards, onOpenLead }: { rows: LeadRow
     // "Sem tipo" só aparece se tiver algum card nele.
     return linhas.filter((l) => l.nome || l.entraram.length + l.finalizadas.length + l.entregas.length + l.vendas.length > 0)
   }, [tipos, d.per])
+
+  // Por categoria (SUPORTE, CONFIGURAÇÃO NOVA, CONFIGURAÇÃO NOVO CLIENTE): quantos suportes e quantas configurações no período.
+  // Card de antes da categoria existir: tipo SUPORTE conta como SUPORTE; o resto fica em "Sem categoria".
+  const porCategoria = React.useMemo(() => {
+    const categoriaDe = (r: LeadRow) => r.categoria || (ehTipoSuporte(r.tipo) ? 'SUPORTE' : '')
+    const daCategoria = (lista: LeadRow[], nome: string) => lista.filter((r) => categoriaDe(r) === nome)
+    const cores: Record<string, string> = { 'SUPORTE': '#64748B', 'CONFIGURAÇÃO NOVA': '#2563EB', 'CONFIGURAÇÃO NOVO CLIENTE': '#16A34A' }
+    const linhas = [...CATEGORIAS_DA_DEMANDA, ''].map((nome) => ({
+      nome,
+      cor: cores[nome] ?? '#9CA3AF',
+      entraram: daCategoria(d.per.entraram, nome),
+      finalizadas: daCategoria(d.per.finalizadas, nome),
+      entregas: daCategoria(d.per.entregas, nome),
+      vendas: daCategoria(d.per.vendas, nome),
+    }))
+    return linhas.filter((l) => l.nome || l.entraram.length + l.finalizadas.length + l.entregas.length + l.vendas.length > 0)
+  }, [d.per])
 
   const porQuadro = React.useMemo(
     () => boards.map((b) => ({ id: b.id, nome: b.name, cor: b.color, cards: rows.filter((r) => r.boardId === b.id) })),
@@ -225,6 +242,39 @@ export function DashboardDoSuporte({ rows, boards, onOpenLead }: { rows: LeadRow
           onOpenLead={onOpenLead}
         />
       )}
+
+      <Bloco icon={<Tags className="h-4 w-4" />} title="Por categoria, no período">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-line text-[11px] text-foreground/45">
+                <th className="py-1.5 pr-2 font-medium">Categoria</th>
+                <th className="px-2 py-1.5 text-center font-medium">Entraram</th>
+                <th className="px-2 py-1.5 text-center font-medium">Finalizadas</th>
+                {temQuadroDeEntrega && <th className="px-2 py-1.5 text-center font-medium">Entregas</th>}
+                {temQuadroDeVenda && <th className="px-2 py-1.5 text-center font-medium">Vendas</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {porCategoria.map((l) => (
+                <tr key={l.nome || '—'} className="border-b border-line/60 last:border-0">
+                  <td className="py-1.5 pr-2">
+                    <span className="inline-flex items-center gap-2 font-medium text-foreground/75">
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: l.cor }} />
+                      {l.nome || 'Sem categoria'}
+                    </span>
+                  </td>
+                  <td className="px-2 py-1 text-center"><Numero matches={l.entraram} boards={boards} onOpenLead={onOpenLead} /></td>
+                  <td className="px-2 py-1 text-center"><Numero matches={l.finalizadas} boards={boards} onOpenLead={onOpenLead} /></td>
+                  {temQuadroDeEntrega && <td className="px-2 py-1 text-center"><Numero matches={l.entregas} boards={boards} onOpenLead={onOpenLead} /></td>}
+                  {temQuadroDeVenda && <td className="px-2 py-1 text-center"><Numero matches={l.vendas} boards={boards} onOpenLead={onOpenLead} /></td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-[11px] text-foreground/40">Suporte não conta como entrega nem gera comissão. Cards de antes da categoria existir ficam em "Sem categoria".</p>
+      </Bloco>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">

@@ -48,6 +48,8 @@ export interface LeadRow {
   boardId: string
   nome: string
   tipo: string
+  /** Categoria da demanda do suporte (SUPORTE / CONFIGURAÇÃO NOVA / CONFIGURAÇÃO NOVO CLIENTE). Vazia fora do CRM do suporte e nos cards antigos. */
+  categoria: string
   /** Etiqueta colorida do card (urgente/médio/baixo...), por aba — separada do Tipo. */
   etiqueta: string
   /** Cadência do quadro "Follow-up Propostas" (D1, D3, D5…) — só nos CRMs normais do Arthur e do Luis. */

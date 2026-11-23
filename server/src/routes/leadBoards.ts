@@ -1742,10 +1742,10 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           id, board_id, nome, tipo, empresa, telefone, dia_contato, ligacao, status,
           agendamento, retornar, responsavel, sdr, numero,
           dor_cliente, numero_atendentes, valor_mrr, valor_implementacao, position, created_at,
-          fechamento, venda_origem_id, mrr_pendente, impl_pendente, observacoes, veio_do_funil
+          fechamento, venda_origem_id, mrr_pendente, impl_pendente, observacoes, veio_do_funil, categoria
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19, COALESCE($20::timestamptz, NOW()),
-          $21,$22,$23,$24,$25,$26
+          $21,$22,$23,$24,$25,$26,$27
         ) RETURNING *`,
         [
           id, b.board_id, b.nome ?? '', b.tipo ?? '', b.empresa ?? '', b.telefone ?? '',
@@ -1754,7 +1754,7 @@ export async function leadBoardRoutes(app: FastifyInstance) {
           b.dor_cliente ?? '', b.numero_atendentes ?? '', b.valor_mrr ?? '', b.valor_implementacao ?? '',
           position, b.created_at ?? null,
           b.fechamento ?? '', b.venda_origem_id ?? null, b.mrr_pendente ?? true, b.impl_pendente ?? true,
-          b.observacoes ?? '', b.veio_do_funil ?? false,
+          b.observacoes ?? '', b.veio_do_funil ?? false, String(b.categoria ?? '').slice(0, 60),
         ]
       );
       // Criada sem SDR numa aba que é de um SDR: já sai marcada (a coluna SDR não aparece lá pra escolher).

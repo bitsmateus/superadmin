@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buscarClientes, descricaoDeOutroOk, finalizarPorExtenso, textoDaNotaDeDemanda } from './demandaDoCliente'
+import { CATEGORIAS_DA_DEMANDA, buscarClientes, descricaoDeOutroOk, ehCategoriaDeConfiguracao, ehTipoSuporte, finalizarPorExtenso, textoDaNotaDeDemanda } from './demandaDoCliente'
 
 const CLIENTES = [
   { id: '1', name: 'Fabio Alexandre Fagundes Domingos - ME', company: 'Fabio Alexandre Fagundes Domingos - ME', phone: '5548999112233', cnpj: '12345678000190' },
@@ -38,12 +38,31 @@ test('"Outro": recusa menos de 3 letras, só número e texto digitado sem pensar
   }
 })
 
-test('nota da demanda: quem criou, número ou grupo, tipo, finalizar até e o que fazer', () => {
-  const n = textoDaNotaDeDemanda({ criador: 'Mateus', telefone: '(48) 99999-0000', pelaGrupo: false, tipo: 'Configuração API Oficial', finalizar: '2026-11-25T17:00', demanda: 'Conectar o número novo\nTestar o envio' })
-  assert.equal(n, '📌 DEMANDA CRIADA — Configuração API Oficial\nCriada por: Mateus\nVeio por: (48) 99999-0000\nTipo: Configuração API Oficial\nFinalizar até: 25/11/2026 às 17:00\nO que fazer: Conectar o número novo\nTestar o envio')
-  const g = textoDaNotaDeDemanda({ criador: 'Jean', telefone: '', pelaGrupo: true, tipo: 'Ajuste IA', finalizar: '2026-11-26', demanda: '' })
+test('nota da demanda de configuração: categoria, tipo, quem criou, número, prazo e o que fazer', () => {
+  const n = textoDaNotaDeDemanda({ criador: 'Mateus', telefone: '(48) 99999-0000', pelaGrupo: false, categoria: 'CONFIGURAÇÃO NOVA', tipo: 'API OFICIAL', finalizar: '2026-11-25T17:00', demanda: 'Conectar o número novo\nTestar o envio' })
+  assert.equal(n, '📌 DEMANDA CRIADA — CONFIGURAÇÃO NOVA · API OFICIAL\nCriada por: Mateus\nVeio por: (48) 99999-0000\nCategoria: CONFIGURAÇÃO NOVA\nTipo: API OFICIAL\nFinalizar até: 25/11/2026 às 17:00\nO que fazer: Conectar o número novo\nTestar o envio')
+})
+
+test('nota da demanda de suporte: só a categoria (sem linha de Tipo), grupo do WhatsApp e sem "O que fazer" quando vazio', () => {
+  const g = textoDaNotaDeDemanda({ criador: 'Jean', telefone: '', pelaGrupo: true, categoria: 'SUPORTE', tipo: 'SUPORTE', finalizar: '2026-11-26', demanda: '' })
+  assert.match(g, /^📌 DEMANDA CRIADA — SUPORTE\n/)
   assert.match(g, /Veio por: Grupo do WhatsApp/)
+  assert.match(g, /Categoria: SUPORTE/)
+  assert.doesNotMatch(g, /Tipo:/)
   assert.match(g, /Finalizar até: 26\/11\/2026$/m)
   assert.doesNotMatch(g, /O que fazer/)
   assert.equal(finalizarPorExtenso('qualquer coisa'), 'qualquer coisa')
+})
+
+test('categorias da demanda: SUPORTE não pede Tipo; as duas de configuração pedem', () => {
+  assert.deepEqual([...CATEGORIAS_DA_DEMANDA], ['SUPORTE', 'CONFIGURAÇÃO NOVA', 'CONFIGURAÇÃO NOVO CLIENTE'])
+  assert.equal(ehCategoriaDeConfiguracao('SUPORTE'), false)
+  assert.equal(ehCategoriaDeConfiguracao('CONFIGURAÇÃO NOVA'), true)
+  assert.equal(ehCategoriaDeConfiguracao('CONFIGURAÇÃO NOVO CLIENTE'), true)
+  assert.equal(ehCategoriaDeConfiguracao(''), false)
+})
+
+test('ehTipoSuporte: SUPORTE (e o antigo SUPORTE COMUM) é suporte; os tipos de configuração não', () => {
+  for (const t of ['SUPORTE', 'suporte', 'SUPORTE COMUM']) assert.equal(ehTipoSuporte(t), true, t)
+  for (const t of ['API OFICIAL', 'IA BÁSICA', 'API COMUM + IA BÁSICA', '', null, undefined]) assert.equal(ehTipoSuporte(t), false, String(t))
 })

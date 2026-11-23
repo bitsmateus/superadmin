@@ -16,7 +16,7 @@ import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
 import { leadNotesService } from '@/services/leadNotes'
 import { db } from '@/services/db'
-import { buscarClientes, descricaoDeOutroOk, textoDaNotaDeDemanda } from '@/lib/demandaDoCliente'
+import { CATEGORIAS_DA_DEMANDA, buscarClientes, descricaoDeOutroOk, ehCategoriaDeConfiguracao, ehTipoSuporte, textoDaNotaDeDemanda } from '@/lib/demandaDoCliente'
 import type { Client } from '@/types/client'
 import type { LeadBoard } from '@/types/leadBoard'
 
@@ -79,7 +79,13 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
   const [telefone, setTelefone] = React.useState('')
   // O cliente chamou num número ou no grupo do WhatsApp: um dos dois.
   const [peloGrupo, setPeloGrupo] = React.useState(false)
-  const [tipo, setTipo] = React.useState('')
+  // Tipo em dois níveis: a categoria (SUPORTE, CONFIGURAÇÃO NOVA ou CONFIGURAÇÃO NOVO CLIENTE) e, só nas de configuração, o Tipo de
+  // sempre (API OFICIAL, IA BÁSICA…). SUPORTE fica só como SUPORTE.
+  const [categoria, setCategoria] = React.useState('')
+  const [tipoDeConfig, setTipoDeConfig] = React.useState('')
+  const ehConfig = ehCategoriaDeConfiguracao(categoria)
+  const tiposDeConfig = React.useMemo(() => tipos.filter((t) => !ehTipoSuporte(t.name)), [tipos])
+  const tipo = categoria === 'SUPORTE' ? 'SUPORTE' : ehConfig ? tipoDeConfig : ''
   const [finalizar, setFinalizar] = React.useState('')
   const [demanda, setDemanda] = React.useState('')
   const [tentou, setTentou] = React.useState(false)
@@ -87,8 +93,8 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
 
   // Trocou de responsável: o Tipo é de cada CRM, então escolhe de novo se ele não existir no outro.
   React.useEffect(() => {
-    if (tipo && tipos.length && !tipos.some((t) => t.name === tipo)) setTipo('')
-  }, [tipos, tipo])
+    if (tipoDeConfig && tipos.length && !tipos.some((t) => t.name === tipoDeConfig)) setTipoDeConfig('')
+  }, [tipos, tipoDeConfig])
 
   const escolherCliente = (id: string) => {
     setClienteId(id)
@@ -106,7 +112,8 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
     : modoCliente === 'outro' && motivoOutro ? motivoOutro
     : !nome.trim() ? 'Escreva o nome.'
     : !peloGrupo && !telefoneDaDemandaOk(telefone) ? 'Telefone: o número com DDD, ou marque "Grupo" se a demanda veio pelo grupo.'
-    : !tipo ? 'Escolha o tipo.'
+    : !categoria ? 'Escolha o tipo: Suporte, Configuração nova ou Configuração novo cliente.'
+    : ehConfig && !tipoDeConfig ? 'Escolha o tipo da configuração (API OFICIAL, IA BÁSICA…).'
     : !/^\d{4}-\d{2}-\d{2}/.test(finalizar) ? 'Escolha a data de "Finalizar até".'
     : ''
 
@@ -119,6 +126,7 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
       empresa: empresa.trim(),
       telefone: peloGrupo || /^grupo$/i.test(telefone.trim()) ? 'grupo' : telefone.trim(),
       tipo,
+      categoria,
       agendamento: finalizar,
       // O Status acompanha o quadro em que o card nasce (é por ele que o card muda de quadro depois).
       status: status.find((l) => mesmoStatus(l.name, board.name))?.name ?? '',
@@ -142,7 +150,7 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
       // Cliente que já existe: a demanda criada também aparece em "Notas internas" dele (quem criou, número ou grupo, tipo, prazo e o que fazer).
       if (modoCliente === 'cliente' && clienteEscolhido) {
         db.addInternalNote(clienteEscolhido.id, textoDaNotaDeDemanda({
-          criador: quem, telefone: dados.telefone, pelaGrupo: dados.telefone === 'grupo', tipo, finalizar, demanda: texto,
+          criador: quem, telefone: dados.telefone, pelaGrupo: dados.telefone === 'grupo', categoria, tipo, finalizar, demanda: texto,
         }), quem)
       }
       onCriada?.(row.id, board)
@@ -285,11 +293,19 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
         </div>
         <Select
           label="Tipo *"
-          value={tipo}
-          onChange={(e) => setTipo(e.target.value)}
+          value={categoria}
+          onChange={(e) => { setCategoria(e.target.value); setTipoDeConfig('') }}
           disabled={!pagina}
-          options={[{ value: '', label: pagina ? 'Escolha o tipo…' : 'Escolha o responsável antes' }, ...tipos.map((t) => ({ value: t.name, label: t.name }))]}
+          options={[{ value: '', label: pagina ? 'Escolha o tipo…' : 'Escolha o responsável antes' }, ...CATEGORIAS_DA_DEMANDA.map((c) => ({ value: c, label: c }))]}
         />
+        {ehConfig && (
+          <Select
+            label="Tipo da configuração *"
+            value={tipoDeConfig}
+            onChange={(e) => setTipoDeConfig(e.target.value)}
+            options={[{ value: '', label: 'Escolha o tipo da configuração…' }, ...tiposDeConfig.map((t) => ({ value: t.name, label: t.name }))]}
+          />
+        )}
         <div>
           <p className="mb-1.5 text-xs font-medium text-foreground/70">Finalizar até *</p>
           <div className="rounded-lg border border-line">

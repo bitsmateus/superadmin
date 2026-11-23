@@ -81,14 +81,23 @@ export function finalizarPorExtenso(valor: string): string {
   return `${m[3]}/${m[2]}/${m[1]}${m[4] ? ` às ${m[4]}:${m[5]}` : ''}`
 }
 
+/** As 3 categorias da demanda do suporte, na ordem em que aparecem. SUPORTE não tem Tipo embaixo; as duas de configuração escolhem um dos Tipos. */
+export const CATEGORIAS_DA_DEMANDA = ['SUPORTE', 'CONFIGURAÇÃO NOVA', 'CONFIGURAÇÃO NOVO CLIENTE'] as const
+export type CategoriaDaDemanda = (typeof CATEGORIAS_DA_DEMANDA)[number]
+
+/** Categoria de configuração (a que pede o Tipo: API OFICIAL, IA BÁSICA…). */
+export const ehCategoriaDeConfiguracao = (c: string): boolean => c === 'CONFIGURAÇÃO NOVA' || c === 'CONFIGURAÇÃO NOVO CLIENTE'
+
 /** A nota que aparece em "Notas internas" do cliente quando uma demanda é criada pra ele. */
-export function textoDaNotaDeDemanda(d: { criador: string; telefone: string; pelaGrupo: boolean; tipo: string; finalizar: string; demanda: string }): string {
+export function textoDaNotaDeDemanda(d: { criador: string; telefone: string; pelaGrupo: boolean; categoria: string; tipo: string; finalizar: string; demanda: string }): string {
   const contato = d.pelaGrupo ? 'Grupo do WhatsApp' : d.telefone.trim() || 'não informado'
+  const config = ehCategoriaDeConfiguracao(d.categoria)
   const linhas = [
-    `📌 DEMANDA CRIADA — ${d.tipo}`,
+    `📌 DEMANDA CRIADA — ${config && d.tipo ? `${d.categoria} · ${d.tipo}` : d.categoria || d.tipo}`,
     `Criada por: ${d.criador || 'Alguém'}`,
     `Veio por: ${contato}`,
-    `Tipo: ${d.tipo}`,
+    `Categoria: ${d.categoria || d.tipo}`,
+    ...(config && d.tipo ? [`Tipo: ${d.tipo}`] : []),
     `Finalizar até: ${finalizarPorExtenso(d.finalizar)}`,
   ]
   const texto = d.demanda.trim()
@@ -96,7 +105,8 @@ export function textoDaNotaDeDemanda(d: { criador: string; telefone: string; pel
   return linhas.join('\n')
 }
 
-/** Tipo "SUPORTE COMUM": atendimento do dia a dia — não é entrega, não gera comissão e não entra em "entregas feitas". */
-export function ehTipoSuporteComum(tipo: string | null | undefined): boolean {
-  return (tipo ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '') === 'suportecomum'
+/** Tipo "SUPORTE" (antes "SUPORTE COMUM"): atendimento do dia a dia — não é entrega, não gera comissão e não entra em "entregas feitas". */
+export function ehTipoSuporte(tipo: string | null | undefined): boolean {
+  const t = (tipo ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  return t === 'suporte' || t === 'suportecomum'
 }

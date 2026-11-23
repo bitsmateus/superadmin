@@ -14,6 +14,7 @@ import {
   Power,
   Send,
   Settings2,
+  StickyNote,
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -32,6 +33,7 @@ import { SetupPanel } from './setup/SetupPanel'
 import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
 import { FichaTab } from './tabs/FichaTab'
+import { NotasInternasTab } from './tabs/NotasInternasTab'
 import { CrmLeadTab } from './tabs/CrmLeadTab'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
@@ -56,6 +58,7 @@ interface TabDef {
 // Abas principais. "Entrega" é uma pasta: as abas de FOLDER_DEFS ficam só dentro dela.
 const TAB_DEFS: TabDef[] = [
   { value: 'overview', label: 'Visão Geral', icon: <Activity className="h-3.5 w-3.5" /> },
+  { value: 'notas', label: 'Notas internas', icon: <StickyNote className="h-3.5 w-3.5" /> },
   { value: 'setup', label: 'Configuração', icon: <Settings2 className="h-3.5 w-3.5" /> },
   { value: 'folder', label: 'Entrega', icon: <Folder className="h-3.5 w-3.5" /> },
   { value: 'ficha', label: 'Ficha de cadastro', icon: <ClipboardList className="h-3.5 w-3.5" /> },
@@ -83,7 +86,8 @@ export interface ClientDrawerProps {
 }
 
 export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLeadTab }: ClientDrawerProps) {
-  const folderDefs = showCrmLeadTab ? [...FOLDER_DEFS, CRM_LEAD_TAB_DEF] : FOLDER_DEFS
+  // Ordem: Lead do CRM, Briefing, Chatbot, Entrega, Follow-up (a do CRM só existe no Pipeline do Suporte).
+  const folderDefs = showCrmLeadTab ? [CRM_LEAD_TAB_DEF, ...FOLDER_DEFS] : FOLDER_DEFS
   const tabDefs = TAB_DEFS
   const client = useClient(clientId ?? undefined)
   // Carrega os campos pesados (ex.: contract_file) que a listagem em massa
@@ -367,6 +371,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
 
         <div className="p-4 sm:p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
+          {tab === 'notas' && <NotasInternasTab client={client} />}
           {tab === 'setup' && <SetupPanel client={client} onGoTo={goTo} showAdvanced />}
           {tab === 'folder' && (
             <div className="space-y-4">

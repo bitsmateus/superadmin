@@ -28,6 +28,8 @@ export interface NoteEntry {
   createdAt: string
   /** Quando true, nota só é visível pra time interno (não aparece em portais públicos). */
   internal?: boolean
+  /** 'notas_internas' = escrita na aba "Notas internas" do cliente (só aparece lá, além do Histórico). */
+  origem?: 'notas_internas'
   attachments?: NoteAttachment[]
 }
 
